@@ -1,0 +1,43 @@
+# Local repositories and agent state
+/~/
+/.agent/
+/.agents/
+/.local-backups/
+/docs/CHAT_HISTORY.md
+
+# .NET and IDE artifacts
+**/bin/
+**/obj/
+/.vs/
+/.vscode/
+*.user
+*.suo
+
+# Frontend artifacts
+**/node_modules/
+**/dist/
+**/coverage/
+
+# Test and runtime output
+**/TestResults/
+**/logs/
+**/Logs/
+*.log
+*.dmp
+*.dump
+*.sqlplan
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+
+# SQL Server local data and backups
+*.bak
+*.bacpac
+*.mdf
+*.ldf

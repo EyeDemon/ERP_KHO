@@ -1,0 +1,37 @@
+services:
+  erp-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: erp-kho-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Staging
+      - ConnectionStrings__DefaultConnection=${DB_CONNECTION_STRING}
+      - JwtSettings__Secret=${JWT_SECRET}
+      - JwtSettings__Issuer=ErpKhoApi
+      - JwtSettings__Audience=ErpKhoClient
+      - JwtSettings__ExpiryMinutes=15
+      - SessionSecurity__RefreshTokenDays=${REFRESH_TOKEN_DAYS:-14}
+      - SessionSecurity__RetentionDays=${SESSION_RETENTION_DAYS:-30}
+      - SessionSecurity__SameSite=${REFRESH_COOKIE_SAMESITE:-Strict}
+      - Cors__AllowedOrigins__0=${CORS_ALLOWED_ORIGIN}
+      - AuthSecurity__MaxFailedAttempts=${AUTH_MAX_FAILED_ATTEMPTS:-5}
+      - AuthSecurity__LockoutMinutes=${AUTH_LOCKOUT_MINUTES:-15}
+      - RateLimiting__Login__PermitLimit=${LOGIN_RATE_LIMIT:-5}
+      - RateLimiting__Login__WindowSeconds=${LOGIN_RATE_WINDOW_SECONDS:-60}
+      - RateLimiting__Api__PermitLimit=${API_RATE_LIMIT:-120}
+      - RateLimiting__Api__WindowSeconds=${API_RATE_WINDOW_SECONDS:-60}
+    restart: unless-stopped
+
+  erp-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: erp-kho-web
+    ports:
+      - "3000:80"
+    depends_on:
+      - erp-backend
+    restart: unless-stopped
