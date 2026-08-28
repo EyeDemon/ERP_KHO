@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../services/apiClient';
+import { canApproveExportImmediately, canManageCatalogs, canOperateWarehouse, currentRole } from '../services/authorization';
 
 interface ExportReceiptDetail {
   id: number;
@@ -25,6 +26,8 @@ interface ExportReceipt {
   dispatchMode?: string;
   reservationStatus?: string;
   allowPerReceiptDispatchMode?: boolean;
+  allowWarehouseStaffDirectDispatch: boolean;
+  writeEnabled: boolean;
   details: ExportReceiptDetail[];
 }
 
@@ -47,6 +50,9 @@ interface ReceiptDetailForm {
 }
 
 const ExportReceipts = () => {
+  const role = currentRole();
+  const canOperate = canOperateWarehouse(role);
+  const canApproveAndReserve = canManageCatalogs(role);
   const [receipts, setReceipts] = useState<ExportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -256,8 +262,9 @@ const ExportReceipts = () => {
       <h2>Quản Lý Phiếu Xuất Kho</h2>
       {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
       {successMsg && <div style={{ color: 'green', marginBottom: '10px' }}>{successMsg}</div>}
+      {receipts.some(receipt => !receipt.writeEnabled) && <div role="status" style={{ color: '#92400e', marginBottom: '10px' }}>Workflow xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.</div>}
       
-      <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
+      {canOperate && <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
         <h3>Tạo Phiếu Xuất Kho</h3>
         <form onSubmit={handleCreate}>
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
@@ -347,7 +354,7 @@ const ExportReceipts = () => {
             </button>
           </div>
         </form>
-      </div>
+      </div>}
 
       <hr style={{ margin: '30px 0' }} />
 
@@ -371,14 +378,14 @@ const ExportReceipts = () => {
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.createdByName}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
                 <button onClick={() => handleViewDetails(r.id)} style={{ cursor: 'pointer', marginRight: '5px' }}>Chi tiết</button>
-                {r.status === 'Draft' && (
+                {canOperate && r.status === 'Draft' && (
                   <>
-                    <button disabled={actionInFlight !== null} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')} style={{ cursor: 'pointer', marginRight: '5px' }}>Duyệt và giữ hàng</button>
-                    <button disabled={actionInFlight !== null} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Duyệt và xuất ngay</button>
+                    {canApproveAndReserve && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')} style={{ cursor: 'pointer', marginRight: '5px' }}>Duyệt và giữ hàng</button>}
+                    {canApproveExportImmediately(role, r.allowWarehouseStaffDirectDispatch) && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Duyệt và xuất ngay</button>}
                     <button disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy</button>
                   </>
                 )}
-                {r.status === 'Approved' && <><button disabled={actionInFlight !== null} onClick={() => handleWorkflowAction(r.id, 'dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Xác nhận xuất kho</button><button disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy và giải phóng hàng</button></>}
+                {canOperate && r.status === 'Approved' && <><button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Xác nhận xuất kho</button><button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy và giải phóng hàng</button></>}
               </td>
             </tr>
           ))}

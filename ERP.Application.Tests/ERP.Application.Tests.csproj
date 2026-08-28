@@ -27,6 +27,7 @@
     <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
     <ProjectReference Include="..\ERP.Domain\ERP.Domain.csproj" />
     <ProjectReference Include="..\ERP.Infrastructure\ERP.Infrastructure.csproj" />
+    <ProjectReference Include="..\tools\ERP.QaSeed\ERP.QaSeed.csproj" />
   </ItemGroup>
 
 </Project>

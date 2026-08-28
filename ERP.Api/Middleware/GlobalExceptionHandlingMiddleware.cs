@@ -35,6 +35,7 @@ public class GlobalExceptionHandlingMiddleware
         {
             BusinessRuleException business when business.Data["HttpStatusCode"] is 409 => (int)HttpStatusCode.Conflict,
             BusinessRuleException => (int)HttpStatusCode.BadRequest,
+            ServiceUnavailableException => (int)HttpStatusCode.ServiceUnavailable,
             NotFoundException => (int)HttpStatusCode.NotFound,
             ForbiddenException => (int)HttpStatusCode.Forbidden,
             UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,

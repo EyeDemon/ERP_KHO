@@ -154,6 +154,10 @@ public sealed class SqlServerRefreshTokenRotationTests
                 var admin = new UserSessionService(db, CreateTokenService(), new TestCurrentUser(owner.UserId, true), new SessionSecurityOptions());
                 await admin.RevokeUserSessionsAsAdminAsync(other.UserId);
                 (await db.UserSessions.CountAsync(x => x.UserId == other.UserId && x.RevokedAt == null)).Should().Be(0);
+                (await db.AuditLogs.CountAsync(x => x.UserId == owner.UserId
+                    && x.Action == "Authentication.AdminRevokedUserSessions"
+                    && x.EntityName == "User"
+                    && x.EntityId == other.UserId)).Should().Be(1);
             }
         }
         finally { await CleanupUserAsync(owner); await CleanupUserAsync(other); }

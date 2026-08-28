@@ -8,6 +8,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Xunit;
@@ -94,12 +95,21 @@ namespace ERP.Api.Tests
         {
             // Arrange
             var mockService = new Mock<IAuthService>();
-            var controller = new AuthController(mockService.Object);
+            var sessionService = new Mock<IUserSessionService>();
+            var environment = new Mock<IWebHostEnvironment>();
+            var controller = new AuthController(
+                mockService.Object,
+                sessionService.Object,
+                environment.Object,
+                new SessionSecurityOptions())
+            {
+                ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+            };
             using var cts = new CancellationTokenSource();
             var token = cts.Token;
 
             var dto = new LoginRequestDto { Username = "admin", Password = "password" };
-            mockService.Setup(s => s.LoginAsync(dto, token))
+            mockService.Setup(s => s.LoginAsync(dto, It.IsAny<SessionContextDto>(), token))
                 .ReturnsAsync(new LoginResponseDto { Token = "jwt", Username = "admin", Role = "Admin" });
 
             // Act
@@ -107,7 +117,13 @@ namespace ERP.Api.Tests
 
             // Assert
             var okResult = res.Should().BeOfType<OkObjectResult>().Subject;
-            mockService.Verify(s => s.LoginAsync(dto, token), Times.Once);
+            mockService.Verify(s => s.LoginAsync(dto, It.IsAny<SessionContextDto>(), token), Times.Once);
+        }
+
+        [Fact]
+        public void AuthController_HasSinglePublicConstructor_ForDependencyInjection()
+        {
+            typeof(AuthController).GetConstructors().Should().ContainSingle();
         }
     }
 }

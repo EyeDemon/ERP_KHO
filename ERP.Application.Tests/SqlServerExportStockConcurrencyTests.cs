@@ -5,6 +5,7 @@ using ERP.Domain.Exceptions;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Repositories;
+using ERP.Application.Options;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -101,6 +102,21 @@ public class SqlServerExportStockConcurrencyTests
         await scenario.AssertStateAsync([100m, 10m], 0m, dispatchedReceiptCount: 0);
     }
 
+    [SqlServerFact]
+    public async Task WriteDisabled_RejectsBeforeStockReceiptTransactionOrAuditMutation()
+    {
+        await using var scenario = await SqlServerScenario.CreateAsync(ConnectionString, [100m], [[(0, 40m)]]);
+
+        var error = await ApproveAsync(
+            scenario.ReceiptIds[0],
+            scenario.UserId,
+            options: new ExportReceiptOptions { WriteEnabled = false });
+
+        error.Should().BeOfType<ERP.Application.Exceptions.ServiceUnavailableException>();
+        await scenario.AssertStateAsync([100m], 0m, dispatchedReceiptCount: 0);
+        await scenario.AssertWriteDisabledStateAsync();
+    }
+
     private static async Task<Exception?[]> ApproveConcurrentlyAsync(int firstReceiptId, int secondReceiptId, int userId)
     {
         using var barrier = new Barrier(2);
@@ -109,7 +125,7 @@ public class SqlServerExportStockConcurrencyTests
         return await Task.WhenAll(firstTask, secondTask);
     }
 
-    private static async Task<Exception?> ApproveAsync(int receiptId, int userId, Barrier? barrier = null)
+    private static async Task<Exception?> ApproveAsync(int receiptId, int userId, Barrier? barrier = null, ExportReceiptOptions? options = null)
     {
         await using var context = CreateContext(ConnectionString);
         IExportReceiptRepository receiptRepository = new ExportReceiptRepository(context);
@@ -123,7 +139,8 @@ public class SqlServerExportStockConcurrencyTests
             new InventoryStockRepository(context),
             new InventoryTransactionRepository(context),
             new UnitOfWork(context),
-            new AuditLogRepository(context));
+            new AuditLogRepository(context),
+            options);
 
         try
         {
@@ -280,6 +297,23 @@ public class SqlServerExportStockConcurrencyTests
             var dispatched = await context.ExportReceipts
                 .CountAsync(receipt => ReceiptIds.Contains(receipt.Id) && receipt.Status == ReceiptStatus.Dispatched);
             dispatched.Should().Be(dispatchedReceiptCount);
+        }
+
+        public async Task AssertWriteDisabledStateAsync()
+        {
+            await using var context = CreateContext(_connectionString);
+            (await context.InventoryStocks
+                .Where(stock => ProductIds.Contains(stock.ProductId) && stock.WarehouseId == WarehouseId)
+                .SumAsync(stock => stock.ReservedQuantity)).Should().Be(0m);
+            (await context.ExportReceipts
+                .Where(receipt => ReceiptIds.Contains(receipt.Id))
+                .AllAsync(receipt => receipt.Status == ReceiptStatus.Draft)).Should().BeTrue();
+            (await context.StockReservations
+                .CountAsync(reservation => reservation.SourceType == "ExportReceipt" && reservation.SourceId.HasValue && ReceiptIds.Contains(reservation.SourceId.Value)))
+                .Should().Be(0);
+            (await context.AuditLogs
+                .CountAsync(log => log.EntityName == "ExportReceipt" && log.EntityId.HasValue && ReceiptIds.Contains(log.EntityId.Value)))
+                .Should().Be(0);
         }
 
         public async ValueTask DisposeAsync()

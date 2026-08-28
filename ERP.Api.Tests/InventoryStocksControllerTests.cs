@@ -57,5 +57,20 @@ namespace ERP.Api.Tests
             // Assert
             _mockInventoryQueryService.Verify(s => s.GetCurrentStockAsync(1, 2, "test", 10), Times.Once);
         }
+
+        [Fact]
+        public async Task GetCurrentStock_HasOnlyReadDependency()
+        {
+            _mockInventoryQueryService.Setup(s => s.GetCurrentStockAsync(null, null, null, null))
+                .ReturnsAsync(new List<InventoryStockDto>());
+
+            await _controller.GetCurrentStock(null, null, null, null);
+
+            _mockInventoryQueryService.Verify(s => s.GetCurrentStockAsync(null, null, null, null), Times.Once);
+            Assert.Single(typeof(InventoryStocksController).GetConstructors());
+            Assert.Equal(
+                typeof(IInventoryQueryService),
+                typeof(InventoryStocksController).GetConstructors()[0].GetParameters().Single().ParameterType);
+        }
     }
 }

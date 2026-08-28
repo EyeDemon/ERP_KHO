@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
+import { canManageCatalogs, currentRole } from '../services/authorization';
 
 interface Unit {
   id: number;
@@ -11,6 +12,7 @@ interface Unit {
 const PAGE_SIZE = 10;
 
 const Units = () => {
+  const canManage = canManageCatalogs(currentRole());
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -183,9 +185,7 @@ const Units = () => {
               onChange={handleSearchChange}
               style={{ padding: '8px', minWidth: '200px', flex: '1', maxWidth: '300px' }}
             />
-            <button onClick={handleAddNew} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}>
-              Thêm mới
-            </button>
+            {canManage && <button onClick={handleAddNew} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}>Thêm mới</button>}
           </div>
 
           {loading ? (
@@ -198,7 +198,7 @@ const Units = () => {
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã ĐVT</th>
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Tên ĐVT</th>
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>
+                    {canManage && <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -207,15 +207,15 @@ const Units = () => {
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{u.code}</td>
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7', wordBreak: 'break-word', maxWidth: '300px' }}>{u.name}</td>
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{u.isActive ? 'Hoạt động' : 'Khóa'}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
+                      {canManage && <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
                         <button onClick={() => handleEdit(u)} style={{ marginRight: '10px', cursor: 'pointer' }}>Sửa</button>
                         <button onClick={() => handleDelete(u.id)} style={{ color: 'red', cursor: 'pointer' }}>Xóa</button>
-                      </td>
+                      </td>}
                     </tr>
                   ))}
                   {filteredUnits.length === 0 && (
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                      <td colSpan={canManage ? 4 : 3} style={{ textAlign: 'center', padding: '20px' }}>
                         {units.length === 0 ? 'Chưa có đơn vị tính nào' : 'Không tìm thấy đơn vị tính nào phù hợp'}
                       </td>
                     </tr>

@@ -124,7 +124,22 @@ public sealed class UserSessionService(
     {
         EnsureAuthenticated();
         if (!currentUser.IsGlobalAdmin) throw new UnauthorizedAccessException("Chỉ quản trị viên toàn cục được thu hồi phiên người dùng.");
-        await RevokeWhereAsync(x => x.UserId == userId, currentUser.UserId.ToString(), "Administrator revoked all sessions", DateTime.UtcNow, cancellationToken);
+        await using var transaction = context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+        var now = DateTime.UtcNow;
+        var revokedCount = await RevokeWhereAsync(x => x.UserId == userId, currentUser.UserId.ToString(), "Administrator revoked all sessions", now, cancellationToken);
+        context.AuditLogs.Add(new AuditLog
+        {
+            UserId = currentUser.UserId,
+            Action = "Authentication.AdminRevokedUserSessions",
+            EntityName = "User",
+            EntityId = userId,
+            Timestamp = now,
+            NewValues = $"RevokedSessionCount={revokedCount}"
+        });
+        await context.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
     }
 
     public Task<int> CleanupAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default) =>
@@ -138,9 +153,9 @@ public sealed class UserSessionService(
         IpAddress = requestContext.IpAddress, UserAgent = Truncate(requestContext.UserAgent, 512)
     };
 
-    private async Task RevokeWhereAsync(System.Linq.Expressions.Expression<Func<UserSession, bool>> predicate, string actor, string reason, DateTime now, CancellationToken cancellationToken)
+    private async Task<int> RevokeWhereAsync(System.Linq.Expressions.Expression<Func<UserSession, bool>> predicate, string actor, string reason, DateTime now, CancellationToken cancellationToken)
     {
-        await context.UserSessions.Where(predicate).Where(x => x.RevokedAt == null)
+        return await context.UserSessions.Where(predicate).Where(x => x.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now).SetProperty(x => x.RevokedBy, actor).SetProperty(x => x.RevokeReason, reason), cancellationToken);
     }
 

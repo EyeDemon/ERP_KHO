@@ -20,7 +20,7 @@ namespace ERP.Application.Services
         private readonly IStockReservationService? _stockReservationService;
         private readonly ExportReceiptOptions _options;
 
-        internal ExportReceiptService(IExportReceiptRepository exportReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository)
+        internal ExportReceiptService(IExportReceiptRepository exportReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, ExportReceiptOptions? options = null)
         {
             _exportReceiptRepository = exportReceiptRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -28,7 +28,7 @@ namespace ERP.Application.Services
             _unitOfWork = unitOfWork;
             _auditLogRepository = auditLogRepository;
             _stockReservationService = null;
-            _options = new ExportReceiptOptions { DefaultDispatchMode = nameof(ExportDispatchMode.DispatchOnApproval) };
+            _options = options ?? new ExportReceiptOptions { DefaultDispatchMode = nameof(ExportDispatchMode.DispatchOnApproval) };
         }
 
         public ExportReceiptService(
@@ -157,6 +157,7 @@ namespace ERP.Application.Services
 
         private async Task ApproveCoreAsync(int id, int approvedByUserId, ExportDispatchMode requestedMode)
         {
+            EnsureWriteEnabled();
             if (_currentUser is not null) approvedByUserId = _currentUser.UserId;
             EnsureApprovalPermission(requestedMode);
             var mode = _options.AllowPerReceiptDispatchMode ? requestedMode : _options.GetDefaultMode();
@@ -240,6 +241,7 @@ namespace ERP.Application.Services
 
         public async Task DispatchAsync(int id, int userId)
         {
+            EnsureWriteEnabled();
             if (_currentUser is not null) userId = _currentUser.UserId;
             EnsureDispatchPermission();
             await _unitOfWork.BeginTransactionAsync();
@@ -328,6 +330,8 @@ namespace ERP.Application.Services
                 throw new BusinessRuleException("Không thể hủy phiếu xuất đã xuất kho hoặc đã bị hủy.");
             }
 
+            if (receipt.Status == ReceiptStatus.Approved) EnsureWriteEnabled();
+
             await _unitOfWork.BeginTransactionAsync();
             try
             {
@@ -377,6 +381,8 @@ namespace ERP.Application.Services
                 DispatchedByName = receipt.DispatchedByUser?.FullName ?? receipt.DispatchedByUser?.Username,
                 DispatchedAt = receipt.DispatchedAt,
                 AllowPerReceiptDispatchMode = _options.AllowPerReceiptDispatchMode,
+                AllowWarehouseStaffDirectDispatch = _options.AllowWarehouseStaffDirectDispatch,
+                WriteEnabled = _options.WriteEnabled,
                 ReservationStatus = receipt.Status == ReceiptStatus.Approved ? "Active" : receipt.Status == ReceiptStatus.Dispatched ? "Consumed" : receipt.Status == ReceiptStatus.Cancelled ? "Released" : "PendingApproval",
                 Details = receipt.Details.Select(d => new ExportReceiptDetailDto
                 {
@@ -389,6 +395,12 @@ namespace ERP.Application.Services
                     Note = d.Note
                 }).ToList()
             };
+        }
+
+        private void EnsureWriteEnabled()
+        {
+            if (!_options.WriteEnabled)
+                throw new ServiceUnavailableException("Workflow xuất kho đang tạm dừng để bảo trì. Vui lòng thử lại sau.");
         }
 
         private void EnsureApprovalPermission(ExportDispatchMode mode)

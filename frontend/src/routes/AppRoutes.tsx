@@ -1,4 +1,5 @@
-import { Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import MainLayout from '../layouts/MainLayout';
 import Dashboard from '../pages/Dashboard';
 import NotFound from '../pages/NotFound';
@@ -12,6 +13,10 @@ import Inventory from '../pages/Inventory';
 import Stocktakes from '../pages/Stocktakes';
 import StockTransfers from '../pages/StockTransfers';
 import StockReservations from '../pages/StockReservations';
+import { canViewStocktakes, currentRole } from '../services/authorization';
+
+const StocktakeRoute = ({ children }: { children: ReactNode }) =>
+  canViewStocktakes(currentRole()) ? children : <Navigate to="/" replace />;
 
 const AppRoutes = () => {
   return (
@@ -25,7 +30,7 @@ const AppRoutes = () => {
         <Route path="export-receipts" element={<ExportReceipts />} />
         <Route path="import-receipts" element={<ImportReceipts />} />
         <Route path="inventory" element={<Inventory />} />
-        <Route path="stocktakes" element={<Stocktakes />} />
+        <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
         <Route path="stock-reservations" element={<StockReservations />} />
       </Route>

@@ -4,6 +4,7 @@ using ERP.Application.Services;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Interfaces;
+using ERP.Application.Options;
 using FluentAssertions;
 using Moq;
 
@@ -39,6 +40,54 @@ namespace ERP.Application.Tests
                 _mockTransactionRepo.Object,
                 _mockUnitOfWork.Object,
                 _mockAuditRepo.Object);
+        }
+
+        [Theory]
+        [InlineData("approve-reserve")]
+        [InlineData("approve-dispatch")]
+        [InlineData("dispatch")]
+        public async Task ExportMutation_WhenWriteDisabled_ReturnsBeforeTransaction(string action)
+        {
+            var service = new ExportReceiptService(
+                _mockExportRepo.Object,
+                _mockStockRepo.Object,
+                _mockTransactionRepo.Object,
+                _mockUnitOfWork.Object,
+                _mockAuditRepo.Object,
+                new ExportReceiptOptions { WriteEnabled = false });
+
+            Func<Task> act = action switch
+            {
+                "approve-reserve" => () => service.ApproveAndReserveAsync(1, 1),
+                "approve-dispatch" => () => service.ApproveAndDispatchAsync(1, 1),
+                _ => () => service.DispatchAsync(1, 1)
+            };
+
+            await act.Should().ThrowAsync<ServiceUnavailableException>()
+                .WithMessage("*tạm dừng để bảo trì*");
+            _mockUnitOfWork.Verify(x => x.BeginTransactionAsync(), Times.Never);
+            _mockExportRepo.Verify(x => x.UpdateAsync(It.IsAny<ExportReceipt>(), It.IsAny<CancellationToken>()), Times.Never);
+            _mockTransactionRepo.Verify(x => x.AddAsync(It.IsAny<InventoryTransaction>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task CancelApproved_WhenWriteDisabled_DoesNotStartTransactionOrMutate()
+        {
+            _mockExportRepo.Setup(x => x.GetByIdAsync(1, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ExportReceipt { Id = 1, Status = ReceiptStatus.Approved });
+            var service = new ExportReceiptService(
+                _mockExportRepo.Object,
+                _mockStockRepo.Object,
+                _mockTransactionRepo.Object,
+                _mockUnitOfWork.Object,
+                _mockAuditRepo.Object,
+                new ExportReceiptOptions { WriteEnabled = false });
+
+            Func<Task> act = () => service.CancelAsync(1, 1);
+
+            await act.Should().ThrowAsync<ServiceUnavailableException>();
+            _mockUnitOfWork.Verify(x => x.BeginTransactionAsync(), Times.Never);
+            _mockExportRepo.Verify(x => x.UpdateAsync(It.IsAny<ExportReceipt>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
@@ -517,6 +566,24 @@ namespace ERP.Application.Tests
             
             _mockUnitOfWork.Verify(x => x.BeginTransactionAsync(), Times.Once);
             _mockUnitOfWork.Verify(x => x.CommitTransactionAsync(), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetByIdAsync_ExposesWarehouseStaffDirectDispatchOption()
+        {
+            _mockExportRepo.Setup(x => x.GetByIdWithDetailsAsync(1))
+                .ReturnsAsync(new ExportReceipt { Id = 1, Details = new List<ExportReceiptDetail>() });
+            var service = new ExportReceiptService(
+                _mockExportRepo.Object,
+                _mockStockRepo.Object,
+                _mockTransactionRepo.Object,
+                _mockUnitOfWork.Object,
+                _mockAuditRepo.Object,
+                new ExportReceiptOptions { AllowWarehouseStaffDirectDispatch = true });
+
+            var result = await service.GetByIdAsync(1);
+
+            result.AllowWarehouseStaffDirectDispatch.Should().BeTrue();
         }
 
         [Fact]

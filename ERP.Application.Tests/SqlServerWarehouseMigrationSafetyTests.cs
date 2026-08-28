@@ -54,7 +54,7 @@ public sealed class SqlServerWarehouseMigrationSafetyTests(ITestOutputHelper out
     }
 
     [SqlServerFact]
-    public async Task AppliedMigration_HasExpectedSchemaAndBackfill()
+    public async Task AppliedMigration_HasExpectedSchemaAndValidCurrentAssignments()
     {
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
@@ -75,7 +75,8 @@ public sealed class SqlServerWarehouseMigrationSafetyTests(ITestOutputHelper out
         var users = Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Users"));
         var warehouses = Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Warehouses"));
         var accesses = Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM UserWarehouses"));
-        accesses.Should().Be(users * warehouses);
+        accesses.Should().BeGreaterThanOrEqualTo(0);
+        accesses.Should().BeLessThanOrEqualTo(users * warehouses);
 
         Convert.ToInt32(await ScalarAsync(connection,
             "SELECT COUNT(*) FROM (SELECT UserId, WarehouseId FROM UserWarehouses GROUP BY UserId, WarehouseId HAVING COUNT(*) > 1) d"))
@@ -87,7 +88,7 @@ public sealed class SqlServerWarehouseMigrationSafetyTests(ITestOutputHelper out
         var fullAccessUsers = Convert.ToInt32(await ScalarAsync(connection,
             "SELECT COUNT(*) FROM Users u WHERE (SELECT COUNT(*) FROM UserWarehouses uw WHERE uw.UserId=u.Id) = @warehouses",
             new SqlParameter("@warehouses", warehouses)));
-        output.WriteLine("Users={0}; Warehouses={1}; Backfill={2}; FullAccessUsers={3}", users, warehouses, accesses, fullAccessUsers);
+        output.WriteLine("Users={0}; Warehouses={1}; CurrentAssignments={2}; FullAccessUsers={3}", users, warehouses, accesses, fullAccessUsers);
 
         await using var fullAccessCommand = connection.CreateCommand();
         fullAccessCommand.CommandText = "SELECT u.Username, r.RoleName, u.IsActive FROM Users u JOIN Roles r ON r.Id=u.RoleId WHERE (SELECT COUNT(*) FROM UserWarehouses uw WHERE uw.UserId=u.Id)=@warehouses ORDER BY u.Username";

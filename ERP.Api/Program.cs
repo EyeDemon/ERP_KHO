@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using ERP.Application.Common;
@@ -150,11 +151,13 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseAuthorizationSer
 builder.Services.AddScoped<ERP.Application.Interfaces.IUserWarehouseAccessService, ERP.Infrastructure.Services.UserWarehouseAccessService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IAccountAdminService, ERP.Infrastructure.Services.AccountAdminService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IUserSessionService, ERP.Infrastructure.Services.UserSessionService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IAccessTokenSessionValidator, ERP.Infrastructure.Services.AccessTokenSessionValidator>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockTransferService, ERP.Infrastructure.Services.StockTransferService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockReservationService, ERP.Infrastructure.Services.StockReservationService>();
 builder.Services.AddSingleton(builder.Configuration.GetSection("StockTransfer").Get<StockTransferOptions>() ?? new StockTransferOptions());
 builder.Services.AddSingleton(builder.Configuration.GetSection("StockReservation").Get<ERP.Application.Options.StockReservationOptions>() ?? new ERP.Application.Options.StockReservationOptions());
 var exportReceiptOptions = builder.Configuration.GetSection("ExportReceipt").Get<ERP.Application.Options.ExportReceiptOptions>() ?? new ERP.Application.Options.ExportReceiptOptions();
+exportReceiptOptions.WriteEnabled = builder.Configuration.GetValue("ExportWorkflow:WriteEnabled", true);
 _ = exportReceiptOptions.GetDefaultMode();
 builder.Services.AddSingleton(exportReceiptOptions);
 
@@ -183,6 +186,24 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+    };
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var jti = context.SecurityToken.Id;
+            if (!int.TryParse(userIdValue, out var userId) || string.IsNullOrWhiteSpace(jti))
+            {
+                context.Fail("Access token session is invalid.");
+                return;
+            }
+
+            var validator = context.HttpContext.RequestServices
+                .GetRequiredService<ERP.Application.Interfaces.IAccessTokenSessionValidator>();
+            if (!await validator.IsActiveAsync(userId, jti, context.HttpContext.RequestAborted))
+                context.Fail("Access token session is no longer active.");
+        }
     };
 });
 

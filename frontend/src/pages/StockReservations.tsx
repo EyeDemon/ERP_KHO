@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { RefreshCw, Unlock } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import './StockReservations.css';
+import { canOperateWarehouse, currentRole } from '../services/authorization';
 
 type Reservation = {
   id: number; reservationCode: string; productCode: string; productName: string;
@@ -12,6 +13,7 @@ type Reservation = {
 type Page = { items: Reservation[]; totalRecords: number; pageIndex: number; pageSize: number };
 
 export default function StockReservations() {
+  const canOperate = canOperateWarehouse(currentRole());
   const [data, setData] = useState<Page>({ items: [], totalRecords: 0, pageIndex: 1, pageSize: 20 });
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
@@ -34,11 +36,11 @@ export default function StockReservations() {
   const pages = Math.max(1, Math.ceil(data.totalRecords / data.pageSize));
 
   return <section className="reservations">
-    <header><div><h1>Giữ hàng</h1><p>Theo dõi lượng tồn đã cam kết theo kho và chứng từ.</p></div><button title="Dọn reservation hết hạn" onClick={() => void expire()}><RefreshCw size={17}/> Dọn hết hạn</button></header>
+    <header><div><h1>Giữ hàng</h1><p>Theo dõi lượng tồn đã cam kết theo kho và chứng từ.</p></div>{canOperate && <button title="Dọn reservation hết hạn" onClick={() => void expire()}><RefreshCw size={17}/> Dọn hết hạn</button>}</header>
     <div className="reservation-tools"><label>Trạng thái<select value={status} onChange={e => setStatus(e.target.value)}><option value="">Tất cả</option>{['Active','PartiallyConsumed','Consumed','Released','Expired','Cancelled'].map(x => <option key={x}>{x}</option>)}</select></label></div>
     {error && <div className="reservation-error">{error}</div>}
     <div className="reservation-table"><table><thead><tr><th>Mã giữ</th><th>Sản phẩm</th><th>Kho</th><th>Nguồn</th><th>Ban đầu</th><th>Còn giữ</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead><tbody>
-      {loading ? <tr><td colSpan={9}>Đang tải...</td></tr> : data.items.length === 0 ? <tr><td colSpan={9}>Không có reservation.</td></tr> : data.items.map(x => <tr key={x.id}><td>{x.reservationCode}</td><td>{x.productCode} - {x.productName}</td><td>{x.warehouseName}</td><td>{x.sourceType}{x.sourceCode ? ` / ${x.sourceCode}` : ''}</td><td>{x.quantity}</td><td><strong>{x.remainingQuantity}</strong></td><td>{new Date(x.expiresAt).toLocaleString()}</td><td><span className={`reservation-status ${x.status.toLowerCase()}`}>{x.status}</span></td><td>{['Active','PartiallyConsumed'].includes(x.status) && <button className="icon" title="Giải phóng" onClick={() => void release(x)}><Unlock size={17}/></button>}</td></tr>)}
+      {loading ? <tr><td colSpan={9}>Đang tải...</td></tr> : data.items.length === 0 ? <tr><td colSpan={9}>Không có reservation.</td></tr> : data.items.map(x => <tr key={x.id}><td>{x.reservationCode}</td><td>{x.productCode} - {x.productName}</td><td>{x.warehouseName}</td><td>{x.sourceType}{x.sourceCode ? ` / ${x.sourceCode}` : ''}</td><td>{x.quantity}</td><td><strong>{x.remainingQuantity}</strong></td><td>{new Date(x.expiresAt).toLocaleString()}</td><td><span className={`reservation-status ${x.status.toLowerCase()}`}>{x.status}</span></td><td>{canOperate && ['Active','PartiallyConsumed'].includes(x.status) && <button className="icon" title="Giải phóng" onClick={() => void release(x)}><Unlock size={17}/></button>}</td></tr>)}
     </tbody></table></div>
     <footer><button disabled={data.pageIndex <= 1} onClick={() => void load(data.pageIndex - 1)}>Trước</button><span>Trang {data.pageIndex}/{pages} · {data.totalRecords} bản ghi</span><button disabled={data.pageIndex >= pages} onClick={() => void load(data.pageIndex + 1)}>Sau</button></footer>
   </section>;

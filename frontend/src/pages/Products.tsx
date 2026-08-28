@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
+import { canManageCatalogs, currentRole } from '../services/authorization';
 
 interface Product {
   id: number;
@@ -21,6 +22,7 @@ interface Unit {
 const PAGE_SIZE = 10;
 
 const Products = () => {
+  const canManage = canManageCatalogs(currentRole());
   const [products, setProducts] = useState<Product[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
@@ -226,12 +228,12 @@ const Products = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               {unitsLoading && <span>Đang tải danh sách đơn vị...</span>}
               {unitsError && <span style={{ color: 'red' }}>{unitsError} <button onClick={fetchUnits} style={{cursor: 'pointer'}}>Thử lại</button></span>}
-              <button 
+              {canManage && <button
                 onClick={handleAddNew} 
                 disabled={unitsLoading || !!unitsError}
                 style={{ padding: '8px 16px', cursor: (unitsLoading || !!unitsError) ? 'not-allowed' : 'pointer', backgroundColor: (unitsLoading || !!unitsError) ? '#95a5a6' : '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}>
                 Thêm mới
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -247,7 +249,7 @@ const Products = () => {
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mô tả</th>
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Đơn vị</th>
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>
+                    {canManage && <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -258,19 +260,19 @@ const Products = () => {
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7', wordBreak: 'break-word', maxWidth: '300px' }}>{p.description}</td>
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{p.unitName || p.unitId}</td>
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{p.isActive ? 'Hoạt động' : 'Khóa'}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
+                      {canManage && <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
                         <button 
                           onClick={() => handleEdit(p)} 
                           disabled={unitsLoading || !!unitsError}
                           style={{ marginRight: '10px', cursor: (unitsLoading || !!unitsError) ? 'not-allowed' : 'pointer', opacity: (unitsLoading || !!unitsError) ? 0.6 : 1 }}
                         >Sửa</button>
                         <button onClick={() => handleDelete(p.id)} style={{ color: 'red', cursor: 'pointer' }}>Xóa</button>
-                      </td>
+                      </td>}
                     </tr>
                   ))}
                   {filteredProducts.length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>
+                      <td colSpan={canManage ? 6 : 5} style={{ textAlign: 'center', padding: '20px' }}>
                         Không tìm thấy sản phẩm nào
                       </td>
                     </tr>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
+import { canManageWarehouses, currentRole } from '../services/authorization';
 
 interface Warehouse {
   id: number;
@@ -12,6 +13,7 @@ interface Warehouse {
 const PAGE_SIZE = 10;
 
 const Warehouses = () => {
+  const canManage = canManageWarehouses(currentRole());
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -194,9 +196,7 @@ const Warehouses = () => {
               onChange={handleSearchChange}
               style={{ padding: '8px', minWidth: '250px', flex: '1', maxWidth: '400px' }}
             />
-            <button onClick={handleAddNew} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}>
-              Thêm mới
-            </button>
+            {canManage && <button onClick={handleAddNew} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}>Thêm mới</button>}
           </div>
 
           {loading ? (
@@ -210,7 +210,7 @@ const Warehouses = () => {
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Tên kho</th>
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Địa chỉ</th>
                     <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>
+                    {canManage && <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -220,15 +220,15 @@ const Warehouses = () => {
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7', wordBreak: 'break-word', maxWidth: '200px' }}>{w.name}</td>
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7', wordBreak: 'break-word', maxWidth: '300px' }}>{w.address || '-'}</td>
                       <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{w.isActive ? 'Hoạt động' : 'Khóa'}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
+                      {canManage && <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
                         <button onClick={() => handleEdit(w)} style={{ marginRight: '10px', cursor: 'pointer' }}>Sửa</button>
                         <button onClick={() => handleDelete(w.id)} style={{ color: 'red', cursor: 'pointer' }}>Xóa</button>
-                      </td>
+                      </td>}
                     </tr>
                   ))}
                   {filteredWarehouses.length === 0 && (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
+                      <td colSpan={canManage ? 5 : 4} style={{ textAlign: 'center', padding: '20px' }}>
                         {warehouses.length === 0 ? 'Chưa có kho nào' : 'Không tìm thấy kho nào phù hợp'}
                       </td>
                     </tr>

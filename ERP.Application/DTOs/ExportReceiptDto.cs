@@ -21,6 +21,8 @@ namespace ERP.Application.DTOs
         public string? DispatchedByName { get; set; }
         public DateTime? DispatchedAt { get; set; }
         public bool AllowPerReceiptDispatchMode { get; set; }
+        public bool AllowWarehouseStaffDirectDispatch { get; set; }
+        public bool WriteEnabled { get; set; }
         public List<ExportReceiptDetailDto> Details { get; set; } = new();
         public string ReservationStatus { get; set; } = "NotCreated";
     }

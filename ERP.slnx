@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/tools/">
+    <Project Path="tools/ERP.QaSeed/ERP.QaSeed.csproj" />
+  </Folder>
   <Project Path="ERP.Api.Tests/ERP.Api.Tests.csproj" />
   <Project Path="ERP.Api/ERP.Api.csproj" />
   <Project Path="ERP.Application.Tests/ERP.Application.Tests.csproj" />

@@ -12,8 +12,8 @@ namespace ERP.Api.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
-        private readonly IUserSessionService? _sessionService;
-        private readonly IWebHostEnvironment? _environment;
+        private readonly IUserSessionService _sessionService;
+        private readonly IWebHostEnvironment _environment;
         private readonly SessionSecurityOptions _sessionOptions;
         private const string RefreshCookieName = "erp_refresh";
 
@@ -25,21 +25,13 @@ namespace ERP.Api.Controllers
             _sessionOptions = sessionOptions;
         }
 
-        public AuthController(IAuthService authService)
-        {
-            _authService = authService;
-            _sessionOptions = new SessionSecurityOptions();
-        }
-
         [HttpPost("login")]
         [EnableRateLimiting("Login")]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto request, CancellationToken cancellationToken = default)
         {
             try
             {
-                var response = _sessionService is null
-                    ? await _authService.LoginAsync(request, cancellationToken)
-                    : await _authService.LoginAsync(request, RequestContext(), cancellationToken);
+                var response = await _authService.LoginAsync(request, RequestContext(), cancellationToken);
                 if (!string.IsNullOrEmpty(response.RefreshToken)) SetRefreshCookie(response.RefreshToken, response.RefreshTokenExpiresAtUtc);
                 return Ok(response);
             }
@@ -57,7 +49,7 @@ namespace ERP.Api.Controllers
             try
             {
                 var refreshToken = Request.Cookies[RefreshCookieName] ?? string.Empty;
-                var result = await _sessionService!.RefreshAsync(refreshToken, RequestContext(), cancellationToken);
+                var result = await _sessionService.RefreshAsync(refreshToken, RequestContext(), cancellationToken);
                 SetRefreshCookie(result.RefreshToken, result.RefreshTokenExpiresAtUtc);
                 return Ok(new { token = result.AccessToken, accessTokenExpiresAtUtc = result.AccessTokenExpiresAtUtc });
             }
@@ -74,7 +66,7 @@ namespace ERP.Api.Controllers
         public async Task<IActionResult> Logout(CancellationToken cancellationToken)
         {
             int? actor = User.Identity?.IsAuthenticated == true ? int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value) : null;
-            await _sessionService!.LogoutAsync(Request.Cookies[RefreshCookieName] ?? string.Empty, actor, cancellationToken);
+            await _sessionService.LogoutAsync(Request.Cookies[RefreshCookieName] ?? string.Empty, actor, cancellationToken);
             DeleteRefreshCookie();
             return NoContent();
         }
@@ -84,7 +76,7 @@ namespace ERP.Api.Controllers
         [EnableRateLimiting("SessionMutation")]
         public async Task<IActionResult> LogoutAll(CancellationToken cancellationToken)
         {
-            await _sessionService!.LogoutAllAsync(cancellationToken);
+            await _sessionService.LogoutAllAsync(cancellationToken);
             DeleteRefreshCookie();
             return NoContent();
         }
@@ -92,14 +84,14 @@ namespace ERP.Api.Controllers
         [HttpGet("sessions")]
         [Authorize]
         public async Task<IActionResult> Sessions(CancellationToken cancellationToken) =>
-            Ok(await _sessionService!.GetCurrentUserSessionsAsync(Request.Cookies[RefreshCookieName], cancellationToken));
+            Ok(await _sessionService.GetCurrentUserSessionsAsync(Request.Cookies[RefreshCookieName], cancellationToken));
 
         [HttpDelete("sessions/{sessionId:guid}")]
         [Authorize]
         [EnableRateLimiting("SessionMutation")]
         public async Task<IActionResult> RevokeSession(Guid sessionId, CancellationToken cancellationToken)
         {
-            await _sessionService!.RevokeSessionAsync(sessionId, cancellationToken);
+            await _sessionService.RevokeSessionAsync(sessionId, cancellationToken);
             return NoContent();
         }
 
@@ -119,7 +111,7 @@ namespace ERP.Api.Controllers
         private CookieOptions CookieOptions(DateTime expiresUtc) => new()
         {
             HttpOnly = true,
-            Secure = _environment is not null && !_environment.IsDevelopment() && !_environment.IsEnvironment("Testing"),
+            Secure = !_environment.IsDevelopment() && !_environment.IsEnvironment("Testing"),
             SameSite = Enum.TryParse<SameSiteMode>(_sessionOptions.SameSite, true, out var mode) ? mode : SameSiteMode.Strict,
             Path = "/api/Auth",
             Expires = new DateTimeOffset(DateTime.SpecifyKind(expiresUtc, DateTimeKind.Utc)),

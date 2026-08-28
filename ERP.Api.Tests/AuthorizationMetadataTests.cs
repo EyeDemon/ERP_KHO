@@ -120,6 +120,30 @@ namespace ERP.Api.Tests
         }
 
         [Fact]
+        public void InventoryStocksController_Get_RequiresAllRoles()
+        {
+            var classAttr = typeof(InventoryStocksController).GetCustomAttribute<AuthorizeAttribute>();
+            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
+        }
+
+        [Fact]
+        public void InventoryTransactionsController_Get_RequiresAllRoles()
+        {
+            var classAttr = typeof(InventoryTransactionsController).GetCustomAttribute<AuthorizeAttribute>();
+            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
+        }
+
+        [Fact]
+        public void StockReservationsController_Expire_RequiresAdminManagerOrStaff()
+        {
+            var method = typeof(StockReservationsController).GetMethod("Expire");
+
+            method!.GetCustomAttribute<AuthorizeAttribute>()!.Roles
+                .Should().Be(AppRoles.AdminManagerOrStaff);
+            AppRoles.AdminManagerOrStaff.Should().NotContain(AppRoles.Viewer);
+        }
+
+        [Fact]
         public void ViewerRole_CannotMutate()
         {
             // Verify Viewer is NOT in AdminOrManager or AdminManagerOrStaff

@@ -7,6 +7,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Queries;
 using ERP.Infrastructure.Repositories;
 using ERP.Infrastructure.Services;
 using FluentAssertions;
@@ -227,6 +228,106 @@ public sealed class SqlServerStockReservationTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task InventoryRead_DoesNotExpireReservationOrMutateInventoryLedger()
+    {
+        var fixture = await CreateFixtureAsync(100);
+        try
+        {
+            int reservationId;
+            await using (var setup = CreateContext())
+            {
+                reservationId = (await CreateService(setup, fixture.UserId).CreateAsync(new()
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    Quantity = 25,
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(5)
+                })).Id;
+                await setup.StockReservations.Where(x => x.Id == reservationId)
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.CreatedAt, DateTime.UtcNow.AddMinutes(-10))
+                        .SetProperty(x => x.ExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
+            }
+
+            await using var db = CreateContext();
+            var before = await CaptureReadInvariantAsync(db, fixture, reservationId);
+            var current = new CurrentUser(fixture.UserId, "WarehouseStaff");
+            var query = new InventoryQueryService(db, new WarehouseAuthorizationService(db, current));
+
+            var result = (await query.GetCurrentStockAsync(null, null, null, null)).ToList();
+
+            result.Should().ContainSingle(x => x.ProductId == fixture.ProductId);
+            result.Should().OnlyContain(x => x.WarehouseId == fixture.WarehouseId);
+            var after = await CaptureReadInvariantAsync(db, fixture, reservationId);
+            after.Should().Be(before);
+            after.OnHand.Should().Be(100);
+            after.Reserved.Should().Be(25);
+            after.ReservationStatus.Should().Be(StockReservationStatus.Active);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task ExpireEndpointService_ReleasesOnlyExpiredReservedQuantity_AndIsIdempotent()
+    {
+        var fixture = await CreateFixtureAsync(100);
+        try
+        {
+            int expiredId;
+            int activeId;
+            await using (var setup = CreateContext())
+            {
+                var service = CreateService(setup, fixture.UserId);
+                expiredId = (await service.CreateAsync(new()
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    Quantity = 25,
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(5)
+                })).Id;
+                activeId = (await service.CreateAsync(new()
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    Quantity = 15,
+                    ExpiresAt = DateTime.UtcNow.AddHours(1)
+                })).Id;
+                await setup.StockReservations.Where(x => x.Id == expiredId)
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.CreatedAt, DateTime.UtcNow.AddMinutes(-10))
+                        .SetProperty(x => x.ExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
+            }
+
+            int transactionsBefore;
+            int receiptsBefore;
+            await using (var before = CreateContext())
+            {
+                transactionsBefore = await before.InventoryTransactions.CountAsync();
+                receiptsBefore = await before.ExportReceipts.CountAsync();
+            }
+
+            await using (var first = CreateContext())
+                (await CreateService(first, fixture.UserId).ExpireAsync()).Should().Be(1);
+            await using (var second = CreateContext())
+                (await CreateService(second, fixture.UserId).ExpireAsync()).Should().Be(0);
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+            stock.Quantity.Should().Be(100);
+            stock.ReservedQuantity.Should().Be(15);
+            (await verify.StockReservations.AsNoTracking().SingleAsync(x => x.Id == expiredId)).Status
+                .Should().Be(StockReservationStatus.Expired);
+            (await verify.StockReservations.AsNoTracking().SingleAsync(x => x.Id == activeId)).Status
+                .Should().Be(StockReservationStatus.Active);
+            (await verify.InventoryTransactions.CountAsync()).Should().Be(transactionsBefore);
+            (await verify.ExportReceipts.CountAsync()).Should().Be(receiptsBefore);
+            (await CreateService(verify, fixture.UserId).ReconcileAsync()).Should().BeEmpty();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     private static async Task<int> CreateExportReceiptAsync(Fixture fixture, decimal quantity)
     {
         await using var db = CreateContext();
@@ -265,6 +366,21 @@ public sealed class SqlServerStockReservationTests
         return new(user.Id, role.Id, unit.Id, product.Id, warehouse.Id);
     }
 
+    private static async Task<ReadInvariant> CaptureReadInvariantAsync(ErpKhoDbContext db, Fixture fixture, int reservationId)
+    {
+        var stock = await db.InventoryStocks.AsNoTracking()
+            .SingleAsync(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+        var reservation = await db.StockReservations.AsNoTracking().SingleAsync(x => x.Id == reservationId);
+        return new(
+            stock.Quantity,
+            stock.ReservedQuantity,
+            reservation.Status,
+            await db.StockReservations.CountAsync(),
+            await db.InventoryTransactions.CountAsync(),
+            await db.ExportReceipts.CountAsync(),
+            await db.AuditLogs.CountAsync());
+    }
+
     private static async Task CleanupAsync(Fixture f)
     {
         await using var db = CreateContext();
@@ -284,6 +400,7 @@ public sealed class SqlServerStockReservationTests
     }
 
     private static ErpKhoDbContext CreateContext() => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(ConnectionString).Options);
-    private sealed record CurrentUser(int UserId) : ICurrentUser { public bool IsAuthenticated => true; public bool IsGlobalAdmin => false; public string Role => "Manager"; }
+    private sealed record CurrentUser(int UserId, string Role = "Manager") : ICurrentUser { public bool IsAuthenticated => true; public bool IsGlobalAdmin => false; }
     private sealed record Fixture(int UserId, int RoleId, int UnitId, int ProductId, int WarehouseId);
+    private sealed record ReadInvariant(decimal OnHand, decimal Reserved, StockReservationStatus ReservationStatus, int Reservations, int Transactions, int Receipts, int AuditLogs);
 }
