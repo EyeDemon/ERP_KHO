@@ -39,6 +39,7 @@ const clearAuthentication = (): void => {
   setAccessToken(null);
   localStorage.removeItem('username');
   localStorage.removeItem('role');
+  localStorage.removeItem('userId');
 };
 
 apiClient.interceptors.request.use((config) => {

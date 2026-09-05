@@ -16,9 +16,11 @@ namespace ERP.Infrastructure.Repositories
             _context = context;
         }
 
+        public bool HasExternalTransaction => _transaction == null && _context.Database.CurrentTransaction != null;
+
         public async Task BeginTransactionAsync()
         {
-            if (_transaction != null) return;
+            if (_transaction != null || _context.Database.CurrentTransaction != null) return;
             try
             {
                 _transaction = await _context.Database.BeginTransactionAsync();
@@ -65,9 +67,8 @@ namespace ERP.Infrastructure.Repositories
                 {
                     await _transaction.DisposeAsync();
                     _transaction = null;
+                    _context.ChangeTracker.Clear();
                 }
-
-                _context.ChangeTracker.Clear();
             }
         }
 

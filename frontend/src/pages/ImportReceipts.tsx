@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../services/apiClient';
+import { canManageCatalogs, currentRole, currentUserId } from '../services/authorization';
+import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 
 interface ImportReceiptDetail {
   id: number;
@@ -46,6 +48,8 @@ interface ReceiptDetailForm {
 }
 
 const ImportReceipts = () => {
+  const canApprove = canManageCatalogs(currentRole());
+  const userId = currentUserId();
   const [receipts, setReceipts] = useState<ImportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -94,7 +98,9 @@ const ImportReceipts = () => {
     setApprovingId(id);
     setError('');
     try {
-      await apiClient.post(`/api/importreceipts/${id}/approve`);
+      const action = `import-approve:${id}`;
+      await apiClient.post(`/api/importreceipts/${id}/approve`, undefined, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
       alert('Duyệt thành công');
       await fetchReceipts();
       if (selectedReceipt?.id === id) {
@@ -110,7 +116,9 @@ const ImportReceipts = () => {
   const handleCancel = async (id: number) => {
     if (!window.confirm('Bạn có chắc chắn muốn hủy phiếu nhập này?')) return;
     try {
-      await apiClient.put(`/api/importreceipts/${id}/cancel`);
+      const action = `import-cancel:${id}`;
+      await apiClient.put(`/api/importreceipts/${id}/cancel`, undefined, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
       alert('Hủy thành công');
       fetchReceipts();
       if (selectedReceipt?.id === id) {
@@ -174,7 +182,9 @@ const ImportReceipts = () => {
         }))
       };
 
-      await apiClient.post('/api/importreceipts', payload);
+      const action = `import-create:${JSON.stringify(payload)}`;
+      await apiClient.post('/api/importreceipts', payload, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
       setSuccessMsg('Tạo phiếu nháp thành công!');
       
       // Reset form
@@ -294,7 +304,7 @@ const ImportReceipts = () => {
                 <button onClick={() => handleViewDetails(r.id)} style={{ cursor: 'pointer', marginRight: '5px' }}>Chi tiết</button>
                 {r.status === 'Draft' && (
                   <>
-                    <button 
+                    {canApprove && r.createdBy !== userId && <button
                       onClick={() => handleApprove(r.id)} 
                       disabled={approvingId === r.id}
                       style={{ 
@@ -308,7 +318,7 @@ const ImportReceipts = () => {
                       }}
                     >
                       {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt'}
-                    </button>
+                    </button>}
                     <button onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '3px' }}>Hủy</button>
                   </>
                 )}

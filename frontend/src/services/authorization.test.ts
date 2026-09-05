@@ -6,6 +6,7 @@ import {
   canOperateWarehouse,
   canRunExportMutation,
   canViewStocktakes,
+  currentUserId,
   type AppRole,
 } from './authorization';
 
@@ -31,11 +32,28 @@ describe('frontend authorization matrix', () => {
       .toEqual(['Admin', 'Manager', 'WarehouseStaff']);
   });
 
-  it('aligns immediate export approval with the backend staff feature flag', () => {
+  it('limits immediate export approval to checker roles regardless of the legacy staff flag', () => {
     expect(canApproveExportImmediately('Admin', false)).toBe(true);
     expect(canApproveExportImmediately('Manager', false)).toBe(true);
     expect(canApproveExportImmediately('WarehouseStaff', false)).toBe(false);
-    expect(canApproveExportImmediately('WarehouseStaff', true)).toBe(true);
+    expect(canApproveExportImmediately('WarehouseStaff', true)).toBe(false);
     expect(canApproveExportImmediately('Viewer', true)).toBe(false);
+  });
+
+  it('reads only a valid positive integer user id from session metadata', () => {
+    const values = new Map<string, string>();
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+    });
+
+    expect(currentUserId()).toBeNull();
+    localStorage.setItem('userId', '17');
+    expect(currentUserId()).toBe(17);
+    localStorage.setItem('userId', '17.5');
+    expect(currentUserId()).toBeNull();
   });
 });

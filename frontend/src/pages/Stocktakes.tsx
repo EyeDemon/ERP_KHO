@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
+import { canManageCatalogs, currentRole, currentUserId } from '../services/authorization';
+import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 
 interface StocktakeSummary {
   id: number;
@@ -43,6 +45,8 @@ interface Warehouse {
 const PAGE_SIZE = 10;
 
 const Stocktakes = () => {
+  const canApprove = canManageCatalogs(currentRole());
+  const userId = currentUserId();
   const [stocktakes, setStocktakes] = useState<StocktakeSummary[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(false);
@@ -170,10 +174,13 @@ const Stocktakes = () => {
 
     setFormLoading(true);
     try {
-      const res = await apiClient.post('/api/stocktakes', {
+      const payload = {
         warehouseId: createWarehouseId,
         note: createNote
-      });
+      };
+      const action = `stocktake-create:${JSON.stringify(payload)}`;
+      const res = await apiClient.post('/api/stocktakes', payload, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
       setSuccessMsg(res.data.message || 'Tạo phiếu kiểm kê thành công.');
       await fetchStocktakes();
       if (res.data.id) {
@@ -234,10 +241,13 @@ const Stocktakes = () => {
     setRowLoading(true);
     setRowError('');
     try {
-      await apiClient.put(`/api/stocktakes/${currentDetail?.id}/details/${row.id}`, {
+      const payload = {
         actualQuantity: val,
         note: editNote
-      });
+      };
+      const action = `stocktake-detail:${currentDetail?.id}:${row.id}:${JSON.stringify(payload)}`;
+      await apiClient.put(`/api/stocktakes/${currentDetail?.id}/details/${row.id}`, payload, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
       // Refresh detail
       const res = await apiClient.get(`/api/stocktakes/${currentDetail?.id}`);
       setCurrentDetail(res.data);
@@ -262,7 +272,9 @@ const Stocktakes = () => {
     setLoading(true);
     setError('');
     try {
-      await apiClient.post(`/api/stocktakes/${currentDetail.id}/approve`);
+      const action = `stocktake-approve:${currentDetail.id}`;
+      await apiClient.post(`/api/stocktakes/${currentDetail.id}/approve`, undefined, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
       setSuccessMsg('Duyệt phiếu kiểm kê thành công.');
       await fetchStocktakes();
       await loadDetail(currentDetail.id, true);
@@ -416,7 +428,7 @@ const Stocktakes = () => {
           <button onClick={() => setViewMode('list')} style={{ marginBottom: '15px', padding: '6px 12px', cursor: 'pointer' }}>&larr; Quay lại danh sách</button>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginBottom: '15px' }}>
             <h2 style={{ margin: 0 }}>Chi tiết kiểm kê: {currentDetail.code}</h2>
-            {currentDetail.status === 0 && (
+            {currentDetail.status === 0 && canApprove && currentDetail.createdBy !== userId && (
               <button onClick={handleApprove} disabled={loading} style={{ padding: '8px 16px', backgroundColor: '#e67e22', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                 {loading ? 'Đang xử lý...' : 'Duyệt phiếu'}
               </button>

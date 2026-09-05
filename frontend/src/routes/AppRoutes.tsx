@@ -13,6 +13,7 @@ import Inventory from '../pages/Inventory';
 import Stocktakes from '../pages/Stocktakes';
 import StockTransfers from '../pages/StockTransfers';
 import StockReservations from '../pages/StockReservations';
+import Approvals from '../pages/Approvals';
 import { canViewStocktakes, currentRole } from '../services/authorization';
 
 const StocktakeRoute = ({ children }: { children: ReactNode }) =>
@@ -33,6 +34,7 @@ const AppRoutes = () => {
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
         <Route path="stock-reservations" element={<StockReservations />} />
+        <Route path="approvals" element={<Approvals />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

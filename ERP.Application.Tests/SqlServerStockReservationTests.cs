@@ -117,7 +117,7 @@ public sealed class SqlServerStockReservationTests
             int receiptId;
             await using (var setup = CreateContext())
             {
-                var receipt = new ExportReceipt { Code = $"ER-{Guid.NewGuid():N}"[..28], WarehouseId = fixture.WarehouseId, CreatedBy = fixture.UserId, Status = ReceiptStatus.Draft, Details = [new ExportReceiptDetail { ProductId = fixture.ProductId, Quantity = 35, UnitPrice = 1 }] };
+                var receipt = new ExportReceipt { Code = $"ER-{Guid.NewGuid():N}"[..28], WarehouseId = fixture.WarehouseId, CreatedBy = fixture.CreatorId, Status = ReceiptStatus.Draft, Details = [new ExportReceiptDetail { ProductId = fixture.ProductId, Quantity = 35, UnitPrice = 1 }] };
                 setup.ExportReceipts.Add(receipt); await setup.SaveChangesAsync(); receiptId = receipt.Id;
             }
             await using (var db = CreateContext())
@@ -331,7 +331,7 @@ public sealed class SqlServerStockReservationTests
     private static async Task<int> CreateExportReceiptAsync(Fixture fixture, decimal quantity)
     {
         await using var db = CreateContext();
-        var receipt = new ExportReceipt { Code = $"ER-{Guid.NewGuid():N}"[..28], WarehouseId = fixture.WarehouseId, CreatedBy = fixture.UserId, Status = ReceiptStatus.Draft, Details = [new ExportReceiptDetail { ProductId = fixture.ProductId, Quantity = quantity, UnitPrice = 1 }] };
+        var receipt = new ExportReceipt { Code = $"ER-{Guid.NewGuid():N}"[..28], WarehouseId = fixture.WarehouseId, CreatedBy = fixture.CreatorId, Status = ReceiptStatus.Draft, Details = [new ExportReceiptDetail { ProductId = fixture.ProductId, Quantity = quantity, UnitPrice = 1 }] };
         db.ExportReceipts.Add(receipt); await db.SaveChangesAsync();
         return receipt.Id;
     }
@@ -355,15 +355,18 @@ public sealed class SqlServerStockReservationTests
         await using var db = CreateContext();
         var suffix = Guid.NewGuid().ToString("N")[..10];
         var role = new Role { RoleName = $"RsvRole{suffix}" };
-        var user = new User { Username = $"RsvUser{suffix}", PasswordHash = "not-used", FullName = "Reservation test", Role = role };
+        var creator = new User { Username = $"RsvCreator{suffix}", PasswordHash = "not-used", FullName = "Reservation creator", Role = role };
+        var approver = new User { Username = $"RsvApprover{suffix}", PasswordHash = "not-used", FullName = "Reservation approver", Role = role };
         var unit = new Unit { Code = $"RU{suffix}", Name = "Reservation unit" };
         var product = new Product { Code = $"RP{suffix}", Name = "Reservation product", Unit = unit };
         var warehouse = new Warehouse { Code = $"RW{suffix}", Name = "Reservation warehouse" };
-        db.AddRange(user, product, warehouse); await db.SaveChangesAsync();
-        db.UserWarehouses.Add(new UserWarehouse { UserId = user.Id, WarehouseId = warehouse.Id, CreatedBy = user.Id });
+        db.AddRange(creator, approver, product, warehouse); await db.SaveChangesAsync();
+        db.UserWarehouses.AddRange(
+            new UserWarehouse { UserId = creator.Id, WarehouseId = warehouse.Id, CreatedBy = creator.Id },
+            new UserWarehouse { UserId = approver.Id, WarehouseId = warehouse.Id, CreatedBy = creator.Id });
         db.InventoryStocks.Add(new InventoryStock { ProductId = product.Id, WarehouseId = warehouse.Id, Quantity = quantity });
         await db.SaveChangesAsync();
-        return new(user.Id, role.Id, unit.Id, product.Id, warehouse.Id);
+        return new(creator.Id, approver.Id, role.Id, unit.Id, product.Id, warehouse.Id);
     }
 
     private static async Task<ReadInvariant> CaptureReadInvariantAsync(ErpKhoDbContext db, Fixture fixture, int reservationId)
@@ -384,23 +387,24 @@ public sealed class SqlServerStockReservationTests
     private static async Task CleanupAsync(Fixture f)
     {
         await using var db = CreateContext();
-        await db.AuditLogs.Where(x => x.UserId == f.UserId).ExecuteDeleteAsync();
-        var receiptIds = await db.ExportReceipts.Where(x => x.CreatedBy == f.UserId).Select(x => x.Id).ToListAsync();
+        var userIds = new[] { f.CreatorId, f.UserId };
+        await db.AuditLogs.Where(x => x.UserId.HasValue && userIds.Contains(x.UserId.Value)).ExecuteDeleteAsync();
+        var receiptIds = await db.ExportReceipts.Where(x => x.CreatedBy == f.CreatorId).Select(x => x.Id).ToListAsync();
         await db.InventoryTransactions.Where(x => x.ReferenceType == "ExportReceipt" && x.ReferenceId.HasValue && receiptIds.Contains(x.ReferenceId.Value)).ExecuteDeleteAsync();
         await db.StockReservations.Where(x => x.CreatedBy == f.UserId).ExecuteDeleteAsync();
         await db.ExportReceiptDetails.Where(x => receiptIds.Contains(x.ExportReceiptId)).ExecuteDeleteAsync();
         await db.ExportReceipts.Where(x => receiptIds.Contains(x.Id)).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == f.ProductId).ExecuteDeleteAsync();
-        await db.UserWarehouses.Where(x => x.UserId == f.UserId).ExecuteDeleteAsync();
+        await db.UserWarehouses.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == f.ProductId).ExecuteDeleteAsync();
         await db.Units.Where(x => x.Id == f.UnitId).ExecuteDeleteAsync();
         await db.Warehouses.Where(x => x.Id == f.WarehouseId).ExecuteDeleteAsync();
-        await db.Users.Where(x => x.Id == f.UserId).ExecuteDeleteAsync();
+        await db.Users.Where(x => userIds.Contains(x.Id)).ExecuteDeleteAsync();
         await db.Roles.Where(x => x.Id == f.RoleId).ExecuteDeleteAsync();
     }
 
     private static ErpKhoDbContext CreateContext() => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(ConnectionString).Options);
     private sealed record CurrentUser(int UserId, string Role = "Manager") : ICurrentUser { public bool IsAuthenticated => true; public bool IsGlobalAdmin => false; }
-    private sealed record Fixture(int UserId, int RoleId, int UnitId, int ProductId, int WarehouseId);
+    private sealed record Fixture(int CreatorId, int UserId, int RoleId, int UnitId, int ProductId, int WarehouseId);
     private sealed record ReadInvariant(decimal OnHand, decimal Reserved, StockReservationStatus ReservationStatus, int Reservations, int Transactions, int Receipts, int AuditLogs);
 }

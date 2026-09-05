@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <ItemGroup>
+    <Compile Remove="Operational/**/*.cs" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -28,6 +32,7 @@
     <ProjectReference Include="..\ERP.Domain\ERP.Domain.csproj" />
     <ProjectReference Include="..\ERP.Infrastructure\ERP.Infrastructure.csproj" />
     <ProjectReference Include="..\tools\ERP.QaSeed\ERP.QaSeed.csproj" />
+    <ProjectReference Include="..\tools\ERP.SqlIntegrationHarness\ERP.SqlIntegrationHarness.csproj" />
   </ItemGroup>
 
 </Project>

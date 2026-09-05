@@ -15,6 +15,7 @@ const Login = () => {
       setAccessToken(response.data.token);
       localStorage.setItem('username', response.data.username);
       localStorage.setItem('role', response.data.role);
+      localStorage.setItem('userId', String(response.data.userId));
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại');

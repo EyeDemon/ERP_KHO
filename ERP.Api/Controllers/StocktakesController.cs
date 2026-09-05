@@ -3,6 +3,7 @@ using ERP.Application.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 using System.Security.Claims;
 
 namespace ERP.Api.Controllers
@@ -36,6 +37,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
+        [IdempotentCommand("Stocktake.Create")]
         public async Task<IActionResult> Create([FromBody] CreateStocktakeDto dto)
         {
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("Id");
@@ -46,6 +48,8 @@ namespace ERP.Api.Controllers
             return Ok(new { message = "Tạo phiếu kiểm kê thành công", id });
         }
         [HttpPost("{id}/approve")]
+        [IdempotentCommand("Stocktake.Approve")]
+        [Authorize(Policy = ApprovalPolicies.Checker)]
         public async Task<IActionResult> Approve(int id)
         {
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("Id");
@@ -56,6 +60,7 @@ namespace ERP.Api.Controllers
             return Ok(new { message = "Duyệt phiếu kiểm kê thành công" });
         }
         [HttpPut("{id}/details/{detailId}")]
+        [IdempotentCommand("Stocktake.UpdateDetail")]
         public async Task<IActionResult> UpdateDetail(int id, int detailId, [FromBody] UpdateStocktakeDetailDto dto)
         {
             await _stocktakeService.UpdateStocktakeDetailAsync(id, detailId, dto);

@@ -48,15 +48,16 @@ public sealed class SqlServerStockTransferTests
             int id;
             await using (var db = CreateContext())
             {
-                var service = CreateService(db, fixture.UserId);
+                var service = CreateService(db, fixture.CreatorId);
                 id = (await service.CreateAsync(Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 8))).Id;
                 (await service.GetAsync(new StockTransferQueryDto { PageIndex = 1, PageSize = 10 })).Items.Should().Contain(x => x.Id == id);
                 await service.UpdateAsync(id, new UpdateStockTransferDto { SourceWarehouseId = fixture.SourceId, DestinationWarehouseId = fixture.DestinationId, Details = [new() { ProductId = fixture.ProductId, Quantity = 8 }] });
-                await service.ApproveAsync(id);
-                var updateAfterApproval = () => service.UpdateAsync(id, new UpdateStockTransferDto());
+                var approverService = CreateService(db, fixture.UserId);
+                await approverService.ApproveAsync(id);
+                var updateAfterApproval = () => approverService.UpdateAsync(id, new UpdateStockTransferDto());
                 await updateAfterApproval.Should().ThrowAsync<ConcurrencyException>();
-                await service.DispatchAsync(id);
-                var repeatedDispatch = () => service.DispatchAsync(id);
+                await approverService.DispatchAsync(id);
+                var repeatedDispatch = () => approverService.DispatchAsync(id);
                 await repeatedDispatch.Should().ThrowAsync<ConcurrencyException>();
             }
 
@@ -69,7 +70,7 @@ public sealed class SqlServerStockTransferTests
 
             await using (var db = CreateContext())
             {
-                var service = CreateService(db, fixture.UserId);
+                var service = CreateService(db, fixture.CreatorId);
                 await service.ReceiveAsync(id, new ReceiveStockTransferDto { Details = [new() { ProductId = fixture.ProductId, ReceivedQuantity = 7, MissingQuantity = 1, DamagedQuantity = 0 }] });
                 var repeatedReceive = () => service.ReceiveAsync(id, new ReceiveStockTransferDto());
                 await repeatedReceive.Should().ThrowAsync<ConcurrencyException>();
@@ -112,11 +113,12 @@ public sealed class SqlServerStockTransferTests
             int secondId;
             await using (var db = CreateContext())
             {
-                var service = CreateService(db, fixture.UserId);
+                var service = CreateService(db, fixture.CreatorId);
                 firstId = (await service.CreateAsync(Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 8))).Id;
                 secondId = (await service.CreateAsync(Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 8))).Id;
-                await service.ApproveAsync(firstId);
-                await service.ApproveAsync(secondId);
+                var approverService = CreateService(db, fixture.UserId);
+                await approverService.ApproveAsync(firstId);
+                await approverService.ApproveAsync(secondId);
             }
 
             async Task<bool> DispatchAsync(int id)
@@ -143,9 +145,10 @@ public sealed class SqlServerStockTransferTests
             int id;
             await using (var db = CreateContext())
             {
-                var service = CreateService(db, fixture.UserId);
+                var service = CreateService(db, fixture.CreatorId);
                 id = (await service.CreateAsync(Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 8))).Id;
-                await service.ApproveAsync(id); await service.DispatchAsync(id);
+                var approverService = CreateService(db, fixture.UserId);
+                await approverService.ApproveAsync(id); await approverService.DispatchAsync(id);
             }
             async Task<bool> ReceiveAsync()
             {
@@ -181,11 +184,12 @@ public sealed class SqlServerStockTransferTests
             await using (var db = CreateContext())
             {
                 await db.InventoryStocks.Where(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.DestinationId).ExecuteDeleteAsync();
-                var service = CreateService(db, fixture.UserId);
+                var service = CreateService(db, fixture.CreatorId);
                 firstId = (await service.CreateAsync(Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 3))).Id;
                 secondId = (await service.CreateAsync(Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 3))).Id;
-                await service.ApproveAsync(firstId); await service.ApproveAsync(secondId);
-                await service.DispatchAsync(firstId); await service.DispatchAsync(secondId);
+                var approverService = CreateService(db, fixture.UserId);
+                await approverService.ApproveAsync(firstId); await approverService.ApproveAsync(secondId);
+                await approverService.DispatchAsync(firstId); await approverService.DispatchAsync(secondId);
             }
 
             async Task ReceiveAsync(int id)
@@ -205,7 +209,7 @@ public sealed class SqlServerStockTransferTests
     {
         var user = new TestCurrentUser(userId, false, "Manager");
         var authorization = new WarehouseAuthorizationService(db, user);
-        return new StockTransferService(db, new InventoryStockRepository(db), authorization, user, new StockTransferOptions());
+        return new StockTransferService(db, new InventoryStockRepository(db), authorization, user);
     }
 
     private static CreateStockTransferDto Request(int source, int destination, int product, decimal quantity) => new()
@@ -216,14 +220,19 @@ public sealed class SqlServerStockTransferTests
         await using var db = CreateContext();
         var suffix = Guid.NewGuid().ToString("N")[..10];
         var role = new Role { RoleName = $"TRole{suffix}" };
-        var user = new User { Username = $"TUser{suffix}", PasswordHash = "not-used", FullName = "Transfer test", Role = role };
+        var creator = new User { Username = $"TCreator{suffix}", PasswordHash = "not-used", FullName = "Transfer creator", Role = role };
+        var approver = new User { Username = $"TApprover{suffix}", PasswordHash = "not-used", FullName = "Transfer approver", Role = role };
         var unit = new Unit { Code = $"U{suffix}", Name = "Transfer unit" };
         var product = new Product { Code = $"P{suffix}", Name = "Transfer product", Unit = unit };
         var source = new Warehouse { Code = $"S{suffix}", Name = "Source" };
         var destination = new Warehouse { Code = $"D{suffix}", Name = "Destination" };
-        db.AddRange(user, product, source, destination);
+        db.AddRange(creator, approver, product, source, destination);
         await db.SaveChangesAsync();
-        db.UserWarehouses.AddRange(new UserWarehouse { UserId = user.Id, WarehouseId = source.Id, CreatedBy = user.Id }, new UserWarehouse { UserId = user.Id, WarehouseId = destination.Id, CreatedBy = user.Id });
+        db.UserWarehouses.AddRange(
+            new UserWarehouse { UserId = creator.Id, WarehouseId = source.Id, CreatedBy = creator.Id },
+            new UserWarehouse { UserId = creator.Id, WarehouseId = destination.Id, CreatedBy = creator.Id },
+            new UserWarehouse { UserId = approver.Id, WarehouseId = source.Id, CreatedBy = creator.Id },
+            new UserWarehouse { UserId = approver.Id, WarehouseId = destination.Id, CreatedBy = creator.Id });
         db.InventoryStocks.AddRange(new InventoryStock { ProductId = product.Id, WarehouseId = source.Id, Quantity = sourceQuantity }, new InventoryStock { ProductId = product.Id, WarehouseId = destination.Id, Quantity = 0 });
         db.InventoryTransactions.Add(new InventoryTransaction
         {
@@ -233,31 +242,36 @@ public sealed class SqlServerStockTransferTests
             Quantity = sourceQuantity,
             ReferenceType = "TestSetup",
             TransactionDate = DateTime.UtcNow,
-            CreatedBy = user.Id
+            CreatedBy = creator.Id
         });
         await db.SaveChangesAsync();
-        return new Fixture(user.Id, role.Id, unit.Id, product.Id, source.Id, destination.Id);
+        return new Fixture(creator.Id, approver.Id, role.Id, unit.Id, product.Id, source.Id, destination.Id);
     }
 
     private static async Task CleanupAsync(Fixture fixture)
     {
         await using var db = CreateContext();
-        var transferIds = await db.StockTransfers.Where(x => x.CreatedBy == fixture.UserId).Select(x => x.Id).ToListAsync();
+        var userIds = new[] { fixture.CreatorId, fixture.UserId };
+        var transferIds = await db.StockTransferDetails
+            .Where(x => x.ProductId == fixture.ProductId)
+            .Select(x => x.StockTransferId)
+            .Distinct()
+            .ToListAsync();
         await db.InventoryTransactions.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
-        await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
-        await db.StockTransferDetails.Where(x => transferIds.Contains(x.StockTransferId)).ExecuteDeleteAsync();
+        await db.AuditLogs.Where(x => x.UserId.HasValue && userIds.Contains(x.UserId.Value)).ExecuteDeleteAsync();
+        await db.StockTransferDetails.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.StockTransfers.Where(x => transferIds.Contains(x.Id)).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
-        await db.UserWarehouses.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
+        await db.UserWarehouses.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == fixture.ProductId).ExecuteDeleteAsync();
         await db.Units.Where(x => x.Id == fixture.UnitId).ExecuteDeleteAsync();
         await db.Warehouses.Where(x => x.Id == fixture.SourceId || x.Id == fixture.DestinationId).ExecuteDeleteAsync();
-        await db.Users.Where(x => x.Id == fixture.UserId).ExecuteDeleteAsync();
+        await db.Users.Where(x => userIds.Contains(x.Id)).ExecuteDeleteAsync();
         await db.Roles.Where(x => x.Id == fixture.RoleId).ExecuteDeleteAsync();
     }
 
     private static Task<decimal> StockAsync(ErpKhoDbContext db, int product, int warehouse) => db.InventoryStocks.Where(x => x.ProductId == product && x.WarehouseId == warehouse).Select(x => x.Quantity).SingleAsync();
     private static ErpKhoDbContext CreateContext() => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(ConnectionString).Options);
     private sealed record TestCurrentUser(int UserId, bool IsGlobalAdmin, string Role) : ICurrentUser { public bool IsAuthenticated => true; }
-    private sealed record Fixture(int UserId, int RoleId, int UnitId, int ProductId, int SourceId, int DestinationId);
+    private sealed record Fixture(int CreatorId, int UserId, int RoleId, int UnitId, int ProductId, int SourceId, int DestinationId);
 }

@@ -77,13 +77,19 @@ namespace ERP.Api.Tests
 
         [Theory]
         [InlineData("Create")]
-        [InlineData("Approve")]
         [InlineData("Cancel")]
         public void ImportReceiptsController_Mutations_RequireAdminOrManager(string methodName)
         {
             var method = typeof(ImportReceiptsController).GetMethod(methodName);
             var methodAttr = method!.GetCustomAttribute<AuthorizeAttribute>();
             methodAttr!.Roles.Should().Be(AppRoles.AdminOrManager);
+        }
+
+        [Fact]
+        public void ImportReceiptsController_Approve_RequiresCheckerPolicy()
+        {
+            typeof(ImportReceiptsController).GetMethod("Approve")!
+                .GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(ApprovalPolicies.Checker);
         }
 
         [Fact]
@@ -94,22 +100,25 @@ namespace ERP.Api.Tests
         }
 
         [Fact]
-        public void ExportReceiptsController_CreateApproveCancel_RequiresAdminManagerOrStaff()
+        public void ExportReceiptsController_CreateCancel_RequiresAdminManagerOrStaff()
         {
             var createMethod = typeof(ExportReceiptsController).GetMethod("Create");
-            var approveMethod = typeof(ExportReceiptsController).GetMethod("Approve");
             var cancelMethod = typeof(ExportReceiptsController).GetMethod("Cancel");
 
             createMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
-            approveMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
             cancelMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
         }
 
-        [Fact]
-        public void StocktakesController_Approve_RequiresAdminManagerOrStaff()
+        [Theory]
+        [InlineData(typeof(ExportReceiptsController), "Approve")]
+        [InlineData(typeof(ExportReceiptsController), "ApproveAndReserve")]
+        [InlineData(typeof(ExportReceiptsController), "ApproveAndDispatch")]
+        [InlineData(typeof(StocktakesController), "Approve")]
+        [InlineData(typeof(StockTransfersController), "Approve")]
+        public void ApprovalEndpoints_RequireCheckerPolicy(Type controllerType, string methodName)
         {
-            var classAttr = typeof(StocktakesController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
+            controllerType.GetMethod(methodName)!
+                .GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(ApprovalPolicies.Checker);
         }
 
         [Fact]

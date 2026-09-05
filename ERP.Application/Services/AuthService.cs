@@ -82,7 +82,7 @@ namespace ERP.Application.Services
 
             if (_sessionService is null)
             {
-                return new LoginResponseDto { Token = _tokenService.GenerateToken(user), Username = user.Username, Role = user.Role?.RoleName ?? string.Empty };
+                return new LoginResponseDto { Token = _tokenService.GenerateToken(user), Username = user.Username, Role = user.Role?.RoleName ?? string.Empty, UserId = user.Id };
             }
 
             var tokens = await _sessionService.CreateAsync(user, context, cancellationToken);
@@ -100,7 +100,8 @@ namespace ERP.Application.Services
                 RefreshToken = tokens.RefreshToken,
                 RefreshTokenExpiresAtUtc = tokens.RefreshTokenExpiresAtUtc,
                 Username = user.Username,
-                Role = user.Role?.RoleName ?? string.Empty
+                Role = user.Role?.RoleName ?? string.Empty,
+                UserId = user.Id
             };
         }
 

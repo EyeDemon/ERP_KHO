@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit.Abstractions;
 
 namespace ERP.Application.Tests;
@@ -9,49 +12,6 @@ public sealed class SqlServerWarehouseMigrationSafetyTests(ITestOutputHelper out
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!;
-
-    [SqlServerFact]
-    public async Task PreMigration_BackupAndInventory()
-    {
-        if (Environment.GetEnvironmentVariable("ERP_KHO_RUN_MIGRATION_BACKUP_TEST") != "1")
-            return;
-        await using var connection = new SqlConnection(ConnectionString);
-        await connection.OpenAsync();
-
-        var identity = await ScalarRowAsync(connection,
-            "SELECT @@SERVERNAME, DB_NAME(), CAST(SERVERPROPERTY('MachineName') AS nvarchar(128)), CAST(SERVERPROPERTY('Edition') AS nvarchar(128))");
-        identity[1].Should().Be("ERP_KHO");
-        identity[2].Should().BeEquivalentTo(Environment.MachineName);
-        output.WriteLine("Server={0}; Database={1}; Machine={2}; Edition={3}", identity);
-
-        var users = Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Users"));
-        var lockedUsers = Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Users WHERE IsActive = 0"));
-        var warehouses = Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Warehouses"));
-        var migration = Convert.ToString(await ScalarAsync(connection, "SELECT TOP (1) MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC"));
-        output.WriteLine("Users={0}; LockedUsers={1}; Warehouses={2}; ExpectedBackfill={3}; CurrentMigration={4}",
-            users, lockedUsers, warehouses, users * warehouses, migration);
-
-        var backupDirectory = Convert.ToString(await ScalarAsync(connection,
-            "SELECT CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(4000))"));
-        if (string.IsNullOrWhiteSpace(backupDirectory))
-            backupDirectory = Environment.GetEnvironmentVariable("ERP_KHO_LOCAL_BACKUP_DIRECTORY");
-        backupDirectory.Should().NotBeNullOrWhiteSpace();
-        var backupPath = Path.Combine(backupDirectory!, $"ERP_KHO_pre_warehouse_isolation_{DateTime.UtcNow:yyyyMMdd_HHmmss}.bak");
-
-        await using var backup = connection.CreateCommand();
-        backup.CommandTimeout = 300;
-        backup.CommandText = "BACKUP DATABASE [ERP_KHO] TO DISK = @path WITH COPY_ONLY, CHECKSUM, INIT";
-        backup.Parameters.AddWithValue("@path", backupPath);
-        await backup.ExecuteNonQueryAsync();
-
-        await using var verify = connection.CreateCommand();
-        verify.CommandTimeout = 300;
-        verify.CommandText = "RESTORE VERIFYONLY FROM DISK = @path WITH CHECKSUM";
-        verify.Parameters.AddWithValue("@path", backupPath);
-        await verify.ExecuteNonQueryAsync();
-        output.WriteLine("Backup created: {0}", backupPath);
-        output.WriteLine("Backup verification: RESTORE VERIFYONLY WITH CHECKSUM passed");
-    }
 
     [SqlServerFact]
     public async Task AppliedMigration_HasExpectedSchemaAndValidCurrentAssignments()
@@ -101,17 +61,38 @@ public sealed class SqlServerWarehouseMigrationSafetyTests(ITestOutputHelper out
     [SqlServerFact]
     public async Task RolledBackMigration_RemovesOnlyWarehouseAccessSchema()
     {
-        if (Environment.GetEnvironmentVariable("ERP_KHO_EXPECT_WAREHOUSE_MIGRATION_ROLLED_BACK") != "1")
-            return;
-        await using var connection = new SqlConnection(ConnectionString);
-        await connection.OpenAsync();
+        await using var database = await OwnedTemporaryMigrationDatabase.CreateAsync(ConnectionString);
+        await using var context = database.CreateContext();
+        var migrator = context.GetService<IMigrator>();
+        const string previousMigration = "20260721063435_AddInventoryTransactionCompositeIndex";
+        await migrator.MigrateAsync(previousMigration);
+
+        await context.Database.OpenConnectionAsync();
+        await using var connection = (SqlConnection)context.Database.GetDbConnection();
+        var suffix = Guid.NewGuid().ToString("N");
+        var roleId = Convert.ToInt32(await ScalarAsync(connection,
+            "INSERT Roles (RoleName) OUTPUT INSERTED.Id VALUES (@name)",
+            new SqlParameter("@name", $"WHRole{suffix}")));
+        var warehouseId = Convert.ToInt32(await ScalarAsync(connection,
+            "INSERT Warehouses (Code,Name,IsActive,CreatedAt) OUTPUT INSERTED.Id VALUES (@code,@name,1,SYSUTCDATETIME())",
+            new SqlParameter("@code", $"WH{suffix}"[..20]),
+            new SqlParameter("@name", "Warehouse migration test")));
+        var userId = Convert.ToInt32(await ScalarAsync(connection,
+            "INSERT Users (Username,PasswordHash,FullName,RoleId,IsActive,CreatedAt) OUTPUT INSERTED.Id VALUES (@username,@hash,@name,@role,1,SYSUTCDATETIME())",
+            new SqlParameter("@username", $"wh_user_{suffix}"),
+            new SqlParameter("@hash", "test-only"),
+            new SqlParameter("@name", "Warehouse migration test"),
+            new SqlParameter("@role", roleId)));
+
+        await migrator.MigrateAsync("20260824110529_AddUserWarehouseAccess");
+        await migrator.MigrateAsync(previousMigration);
 
         Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM sys.tables WHERE name='UserWarehouses'"))
             .Should().Be(0);
         Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId='20260824110529_AddUserWarehouseAccess'"))
             .Should().Be(0);
-        Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Users")).Should().BeGreaterThan(0);
-        Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Warehouses")).Should().BeGreaterThan(0);
+        Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Users WHERE Id=@id", new SqlParameter("@id", userId))).Should().Be(1);
+        Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM Warehouses WHERE Id=@id", new SqlParameter("@id", warehouseId))).Should().Be(1);
         Convert.ToInt32(await ScalarAsync(connection, "SELECT COUNT(*) FROM InventoryStocks")).Should().BeGreaterThanOrEqualTo(0);
     }
 

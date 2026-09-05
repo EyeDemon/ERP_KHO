@@ -115,7 +115,6 @@ namespace ERP.Api.Tests
 
         [Theory]
         [InlineData(nameof(ImportReceiptsController.Create))]
-        [InlineData(nameof(ImportReceiptsController.Approve))]
         [InlineData(nameof(ImportReceiptsController.Cancel))]
         public void MutationEndpoints_HaveAdminOrManagerAuthorizeAttribute(string methodName)
         {
@@ -129,6 +128,17 @@ namespace ERP.Api.Tests
 
             authorizeAttr.Should().NotBeNull();
             authorizeAttr!.Roles.Should().Be(ERP.Api.Authorization.AppRoles.AdminOrManager);
+        }
+
+        [Fact]
+        public void ApproveEndpoint_UsesSharedCheckerPolicy()
+        {
+            var authorizeAttr = typeof(ImportReceiptsController).GetMethod(nameof(ImportReceiptsController.Approve))!
+                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+                .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+                .Single();
+
+            authorizeAttr.Policy.Should().Be(ERP.Api.Authorization.ApprovalPolicies.Checker);
         }
     }
 }

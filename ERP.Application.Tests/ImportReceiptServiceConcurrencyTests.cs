@@ -74,8 +74,9 @@ namespace ERP.Application.Tests
             var role = new Role { RoleName = "Admin" };
             ctx.Roles.Add(role);
 
-            var user = new User { Username = "test", PasswordHash = "x", FullName = "Test User", Role = role };
-            ctx.Users.Add(user);
+            var maker = new User { Username = "maker", PasswordHash = "x", FullName = "Test Maker", Role = role };
+            var checker = new User { Username = "checker", PasswordHash = "x", FullName = "Test Checker", Role = role };
+            ctx.Users.AddRange(maker, checker);
 
             var unit = new Unit { Code = "CAI", Name = "Cái" };
             ctx.Units.Add(unit);
@@ -90,7 +91,7 @@ namespace ERP.Application.Tests
             var stock = new InventoryStock { ProductId = product.Id, WarehouseId = warehouse.Id, Quantity = 50, LastUpdated = DateTime.UtcNow };
             ctx.InventoryStocks.Add(stock);
 
-            var receipt = new ImportReceipt { Code = "IR-CONC-001", WarehouseId = warehouse.Id, Status = ReceiptStatus.Draft, CreatedBy = user.Id };
+            var receipt = new ImportReceipt { Code = "IR-CONC-001", WarehouseId = warehouse.Id, Status = ReceiptStatus.Draft, CreatedBy = maker.Id };
             ctx.ImportReceipts.Add(receipt);
             await ctx.SaveChangesAsync();
 
@@ -98,7 +99,7 @@ namespace ERP.Application.Tests
             ctx.ImportReceiptDetails.Add(detail);
             await ctx.SaveChangesAsync();
 
-            return (receipt.Id, user.Id, product.Id, warehouse.Id);
+            return (receipt.Id, checker.Id, product.Id, warehouse.Id);
         }
 
         [Fact]

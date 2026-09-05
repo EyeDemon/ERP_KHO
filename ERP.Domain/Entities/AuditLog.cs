@@ -11,6 +11,15 @@ public class AuditLog
     public string? NewValues { get; set; }
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     public string? IpAddress { get; set; }
+    public int? WarehouseId { get; set; }
+    public int? SourceWarehouseId { get; set; }
+    public int? DestinationWarehouseId { get; set; }
+    public string? Result { get; set; }
+    public string? Reason { get; set; }
+    public string? CorrelationId { get; set; }
+    public string? IdempotencyKeyHash { get; set; }
+    public string? RequestFingerprint { get; set; }
+    public string Severity { get; set; } = "Information";
 
     // Navigation
     public User? User { get; set; }

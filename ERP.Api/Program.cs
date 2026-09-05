@@ -147,6 +147,8 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IPasswordHasherService, ER
 builder.Services.AddScoped<ERP.Application.Interfaces.ITokenService, ERP.Infrastructure.Services.TokenService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IAuthService, ERP.Application.Services.AuthService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.ICurrentUser, ERP.Api.Authorization.HttpCurrentUser>();
+builder.Services.AddScoped<ERP.Api.Infrastructure.RequestMetadata>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IRequestMetadata>(sp => sp.GetRequiredService<ERP.Api.Infrastructure.RequestMetadata>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseAuthorizationService, ERP.Infrastructure.Services.WarehouseAuthorizationService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IUserWarehouseAccessService, ERP.Infrastructure.Services.UserWarehouseAccessService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IAccountAdminService, ERP.Infrastructure.Services.AccountAdminService>();
@@ -154,7 +156,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IUserSessionService, ERP.I
 builder.Services.AddScoped<ERP.Application.Interfaces.IAccessTokenSessionValidator, ERP.Infrastructure.Services.AccessTokenSessionValidator>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockTransferService, ERP.Infrastructure.Services.StockTransferService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockReservationService, ERP.Infrastructure.Services.StockReservationService>();
-builder.Services.AddSingleton(builder.Configuration.GetSection("StockTransfer").Get<StockTransferOptions>() ?? new StockTransferOptions());
+builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
 builder.Services.AddSingleton(builder.Configuration.GetSection("StockReservation").Get<ERP.Application.Options.StockReservationOptions>() ?? new ERP.Application.Options.StockReservationOptions());
 var exportReceiptOptions = builder.Configuration.GetSection("ExportReceipt").Get<ERP.Application.Options.ExportReceiptOptions>() ?? new ERP.Application.Options.ExportReceiptOptions();
 exportReceiptOptions.WriteEnabled = builder.Configuration.GetValue("ExportWorkflow:WriteEnabled", true);
@@ -207,6 +209,14 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(ERP.Api.Authorization.ApprovalPolicies.Checker,
+        policy => policy.RequireAuthenticatedUser().RequireRole(
+            ERP.Api.Authorization.AppRoles.Admin,
+            ERP.Api.Authorization.AppRoles.Manager));
+});
+
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
@@ -216,6 +226,7 @@ var app = builder.Build();
 
 // Global Exception Handling
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+app.UseMiddleware<ERP.Api.Infrastructure.CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 
 app.UseRouting();

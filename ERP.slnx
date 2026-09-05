@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/tools/">
     <Project Path="tools/ERP.QaSeed/ERP.QaSeed.csproj" />
+    <Project Path="tools/ERP.SqlIntegrationHarness/ERP.SqlIntegrationHarness.csproj" />
   </Folder>
   <Project Path="ERP.Api.Tests/ERP.Api.Tests.csproj" />
   <Project Path="ERP.Api/ERP.Api.csproj" />

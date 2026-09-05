@@ -26,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ERP.Api\ERP.Api.csproj" />
     <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
+    <ProjectReference Include="..\tools\ERP.SqlIntegrationHarness\ERP.SqlIntegrationHarness.csproj" />
   </ItemGroup>
 
 </Project>

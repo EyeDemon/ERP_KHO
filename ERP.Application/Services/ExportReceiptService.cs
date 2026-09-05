@@ -125,6 +125,9 @@ namespace ERP.Application.Services
                     Action = "ExportReceipt.Created",
                     EntityName = "ExportReceipt",
                     EntityId = receipt.Id,
+                    WarehouseId = receipt.WarehouseId,
+                    Result = "Success",
+                    Severity = "Information",
                     Timestamp = DateTime.UtcNow
                 });
 
@@ -161,7 +164,7 @@ namespace ERP.Application.Services
             if (_currentUser is not null) approvedByUserId = _currentUser.UserId;
             EnsureApprovalPermission(requestedMode);
             var mode = _options.AllowPerReceiptDispatchMode ? requestedMode : _options.GetDefaultMode();
-            const int maxDeadlockAttempts = 2;
+            var maxDeadlockAttempts = _unitOfWork.HasExternalTransaction ? 1 : 2;
 
             for (var attempt = 1; attempt <= maxDeadlockAttempts; attempt++)
             {
@@ -171,6 +174,8 @@ namespace ERP.Application.Services
                     var receipt = await _exportReceiptRepository.GetByIdWithDetailsAsync(id);
                     if (receipt == null) throw new NotFoundException($"Không tìm thấy phiếu xuất id {id}");
                     if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+
+                    Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, approvedByUserId);
 
                     if (receipt.Status != ReceiptStatus.Draft)
                         throw new ConcurrencyException("Phiếu xuất đã được xử lý hoặc đang được xử lý bởi yêu cầu khác.");
@@ -219,6 +224,9 @@ namespace ERP.Application.Services
                         Action = mode == ExportDispatchMode.DispatchOnApproval ? "ExportReceipt.ApprovedAndDispatched" : "ExportReceipt.ApprovedAndReserved",
                         EntityName = "ExportReceipt",
                         EntityId = receipt.Id,
+                        WarehouseId = receipt.WarehouseId,
+                        Result = "Success",
+                        Severity = "Information",
                         Timestamp = DateTime.UtcNow,
                         OldValues = $"Status: {ReceiptStatus.Draft}",
                         NewValues = $"WarehouseId: {receipt.WarehouseId}; DispatchMode: {mode}; Status: {receipt.Status}"
@@ -273,6 +281,9 @@ namespace ERP.Application.Services
                     Action = "ExportReceipt.Dispatched",
                     EntityName = "ExportReceipt",
                     EntityId = receipt.Id,
+                    WarehouseId = receipt.WarehouseId,
+                    Result = "Success",
+                    Severity = "Information",
                     Timestamp = DateTime.UtcNow,
                     OldValues = $"Status: {ReceiptStatus.Approved}",
                     NewValues = $"WarehouseId: {receipt.WarehouseId}; DispatchMode: {receipt.DispatchMode}; Status: {ReceiptStatus.Dispatched}"
@@ -346,6 +357,10 @@ namespace ERP.Application.Services
                     Action = wasApproved ? "ExportReceipt.CancelledAndReleased" : "ExportReceipt.Cancelled",
                     EntityName = "ExportReceipt",
                     EntityId = receipt.Id,
+                    WarehouseId = receipt.WarehouseId,
+                    Result = "Success",
+                    Reason = "Export receipt cancelled",
+                    Severity = "Information",
                     Timestamp = DateTime.UtcNow,
                     OldValues = $"Status: {(wasApproved ? ReceiptStatus.Approved : ReceiptStatus.Draft)}",
                     NewValues = $"WarehouseId: {receipt.WarehouseId}; DispatchMode: {receipt.DispatchMode}; Status: {ReceiptStatus.Cancelled}"

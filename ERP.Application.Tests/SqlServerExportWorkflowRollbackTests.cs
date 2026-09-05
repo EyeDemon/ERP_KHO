@@ -17,7 +17,7 @@ public sealed class SqlServerExportWorkflowRollbackTests
     [SqlServerFact]
     public async Task EmptyDatabase_UpDownUp_PreservesExpectedSchemaTransitions()
     {
-        await using var database = await TemporaryMigrationDatabase.CreateAsync(BaseConnectionString());
+        await using var database = await OwnedTemporaryMigrationDatabase.CreateAsync(BaseConnectionString());
         await using var context = database.CreateContext();
         var migrator = context.GetService<IMigrator>();
 
@@ -34,7 +34,7 @@ public sealed class SqlServerExportWorkflowRollbackTests
     [SqlServerFact]
     public async Task DispatchedReceipt_DownIsBlockedBeforeAnySchemaOrDataMutation()
     {
-        await using var database = await TemporaryMigrationDatabase.CreateAsync(BaseConnectionString());
+        await using var database = await OwnedTemporaryMigrationDatabase.CreateAsync(BaseConnectionString());
         await using var context = database.CreateContext();
         await context.Database.MigrateAsync();
 
@@ -82,46 +82,4 @@ public sealed class SqlServerExportWorkflowRollbackTests
         return Convert.ToInt32(await command.ExecuteScalarAsync()) == 3;
     }
 
-    private sealed class TemporaryMigrationDatabase : IAsyncDisposable
-    {
-        private readonly string _masterConnection;
-        private readonly string _databaseName;
-        private readonly string _databaseConnection;
-
-        private TemporaryMigrationDatabase(string masterConnection, string databaseName, string databaseConnection)
-        {
-            _masterConnection = masterConnection;
-            _databaseName = databaseName;
-            _databaseConnection = databaseConnection;
-        }
-
-        public static async Task<TemporaryMigrationDatabase> CreateAsync(string baseConnection)
-        {
-            var baseBuilder = new SqlConnectionStringBuilder(baseConnection);
-            baseBuilder.IntegratedSecurity.Should().BeTrue("rollback tests may only use Windows authentication");
-            var databaseName = $"ERP_KHO_RollbackTest_{Guid.NewGuid():N}";
-            var masterBuilder = new SqlConnectionStringBuilder(baseConnection) { InitialCatalog = "master" };
-            await using var connection = new SqlConnection(masterBuilder.ConnectionString);
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE DATABASE [{databaseName}]";
-            await command.ExecuteNonQueryAsync();
-            var databaseBuilder = new SqlConnectionStringBuilder(baseConnection) { InitialCatalog = databaseName };
-            return new TemporaryMigrationDatabase(masterBuilder.ConnectionString, databaseName, databaseBuilder.ConnectionString);
-        }
-
-        public ErpKhoDbContext CreateContext() => new(
-            new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(_databaseConnection).Options);
-
-        public async ValueTask DisposeAsync()
-        {
-            if (!_databaseName.StartsWith("ERP_KHO_RollbackTest_", StringComparison.Ordinal))
-                throw new InvalidOperationException("Refusing to remove a database outside the rollback-test namespace.");
-            await using var connection = new SqlConnection(_masterConnection);
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"ALTER DATABASE [{_databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_databaseName}];";
-            await command.ExecuteNonQueryAsync();
-        }
-    }
 }

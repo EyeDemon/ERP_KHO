@@ -170,14 +170,21 @@ namespace ERP.Application.Tests
             ctx.Roles.Add(role);
             await ctx.SaveChangesAsync();
 
-            var user = new User
+            var maker = new User
             {
-                Username = "test",
+                Username = "maker",
                 PasswordHash = "x",
-                FullName = "Test User",
+                FullName = "Test Maker",
                 RoleId = role.Id,
             };
-            ctx.Users.Add(user);
+            var checker = new User
+            {
+                Username = "checker",
+                PasswordHash = "x",
+                FullName = "Test Checker",
+                RoleId = role.Id,
+            };
+            ctx.Users.AddRange(maker, checker);
 
             var unit = new Unit { Code = "CAI", Name = "Cái" };
             ctx.Units.Add(unit);
@@ -195,7 +202,7 @@ namespace ERP.Application.Tests
                 Code = "ST-CONC-001",
                 WarehouseId = warehouse.Id,
                 Status = ReceiptStatus.Draft,
-                CreatedBy = user.Id,
+                CreatedBy = maker.Id,
             };
             ctx.Stocktakes.Add(stocktake);
             await ctx.SaveChangesAsync();
@@ -233,7 +240,7 @@ namespace ERP.Application.Tests
             {
                 var st = await idCtx.Stocktakes.FirstAsync();
                 stocktakeId = st.Id;
-                var u = await idCtx.Users.FirstAsync();
+                var u = await idCtx.Users.SingleAsync(candidate => candidate.Username == "checker");
                 userId = u.Id;
             }
 
@@ -308,7 +315,7 @@ namespace ERP.Application.Tests
             using (var idCtx = CreateContext())
             {
                 stocktakeId = (await idCtx.Stocktakes.FirstAsync()).Id;
-                userId = (await idCtx.Users.FirstAsync()).Id;
+                userId = (await idCtx.Users.SingleAsync(candidate => candidate.Username == "checker")).Id;
             }
 
             // First approval - should succeed

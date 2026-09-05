@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace ERP.Application.Tests;
 
@@ -78,10 +81,12 @@ public sealed class SqlServerInventoryReportingTests
     [SqlServerFact]
     public async Task RolledBackMigration_RestoresPreviousStoredProcedureContract()
     {
-        if (Environment.GetEnvironmentVariable("ERP_KHO_EXPECT_REPORT_MIGRATION_ROLLED_BACK") != "1")
-            return;
-
-        await using var connection = new SqlConnection(ConnectionString);
+        await using var database = await OwnedTemporaryMigrationDatabase.CreateAsync(ConnectionString);
+        await using var context = database.CreateContext();
+        var migrator = context.GetService<IMigrator>();
+        await migrator.MigrateAsync("20260824131843_FixTransferInventoryReporting");
+        await migrator.MigrateAsync("20260824123633_AddStockReservations");
+        await using var connection = (SqlConnection)context.Database.GetDbConnection();
         await connection.OpenAsync();
         await using var command = new SqlCommand("sp_GetInventoryInOutReport", connection)
         {

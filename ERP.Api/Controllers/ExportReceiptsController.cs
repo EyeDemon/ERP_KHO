@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 
 namespace ERP.Api.Controllers
 {
@@ -41,6 +42,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
+        [IdempotentCommand("ExportReceipt.Create")]
         [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
         public async Task<IActionResult> Create([FromBody] ERP.Application.DTOs.CreateExportReceiptDto dto)
         {
@@ -61,6 +63,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("{id}/cancel")]
+        [IdempotentCommand("ExportReceipt.Cancel")]
         [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
         public async Task<IActionResult> Cancel(int id)
         {
@@ -74,7 +77,8 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("{id}/approve-and-reserve")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [IdempotentCommand("ExportReceipt.ApproveAndReserve")]
+        [Authorize(Policy = ApprovalPolicies.Checker)]
         public async Task<IActionResult> ApproveAndReserve(int id)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -83,7 +87,8 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("{id}/approve-and-dispatch")]
-        [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+        [IdempotentCommand("ExportReceipt.ApproveAndDispatch")]
+        [Authorize(Policy = ApprovalPolicies.Checker)]
         public async Task<IActionResult> ApproveAndDispatch(int id)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -92,6 +97,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("{id}/dispatch")]
+        [IdempotentCommand("ExportReceipt.Dispatch")]
         [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
         public async Task<IActionResult> Dispatch(int id)
         {
@@ -101,7 +107,8 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("{id}/approve")]
-        [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+        [IdempotentCommand("ExportReceipt.Approve")]
+        [Authorize(Policy = ApprovalPolicies.Checker)]
         public async Task<IActionResult> Approve(int id)
         {
             if (!TryGetUserId(out var userId))

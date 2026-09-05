@@ -5,8 +5,11 @@ namespace ERP.Infrastructure.Persistence;
 
 public class ErpKhoDbContext : DbContext
 {
-    public ErpKhoDbContext(DbContextOptions<ErpKhoDbContext> options) : base(options)
+    private readonly ERP.Application.Interfaces.IRequestMetadata? _requestMetadata;
+
+    public ErpKhoDbContext(DbContextOptions<ErpKhoDbContext> options, ERP.Application.Interfaces.IRequestMetadata? requestMetadata = null) : base(options)
     {
+        _requestMetadata = requestMetadata;
     }
 
     public DbSet<Role> Roles => Set<Role>();
@@ -28,6 +31,31 @@ public class ErpKhoDbContext : DbContext
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
     public DbSet<StockTransferDetail> StockTransferDetails => Set<StockTransferDetail>();
     public DbSet<StockReservation> StockReservations => Set<StockReservation>();
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+
+    public override int SaveChanges()
+    {
+        EnrichAuditLogs();
+        return base.SaveChanges();
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        EnrichAuditLogs();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void EnrichAuditLogs()
+    {
+        if (_requestMetadata is null) return;
+        foreach (var entry in ChangeTracker.Entries<AuditLog>().Where(x => x.State == EntityState.Added))
+        {
+            entry.Entity.CorrelationId ??= _requestMetadata.CorrelationId;
+            entry.Entity.IdempotencyKeyHash ??= _requestMetadata.IdempotencyKeyHash;
+            entry.Entity.RequestFingerprint ??= _requestMetadata.RequestFingerprint;
+            entry.Entity.Result ??= "Success";
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

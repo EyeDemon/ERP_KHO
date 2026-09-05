@@ -15,6 +15,12 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(x => x.OldValues).HasColumnType("nvarchar(max)");
         builder.Property(x => x.NewValues).HasColumnType("nvarchar(max)");
         builder.Property(x => x.IpAddress).HasMaxLength(50);
+        builder.Property(x => x.Result).HasMaxLength(32);
+        builder.Property(x => x.Reason).HasMaxLength(500);
+        builder.Property(x => x.CorrelationId).HasMaxLength(64);
+        builder.Property(x => x.IdempotencyKeyHash).HasMaxLength(64).IsFixedLength();
+        builder.Property(x => x.RequestFingerprint).HasMaxLength(64).IsFixedLength();
+        builder.Property(x => x.Severity).HasMaxLength(32).IsRequired().HasDefaultValue("Information");
         builder.HasIndex(x => x.Timestamp);
 
         builder.HasOne(x => x.User)

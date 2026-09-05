@@ -87,6 +87,10 @@ namespace ERP.Application.Services
                     Action = "Stocktake.Created",
                     EntityName = "Stocktake",
                     EntityId = stocktake.Id,
+                    WarehouseId = stocktake.WarehouseId,
+                    OldValues = $"Status: {ReceiptStatus.Draft}",
+                    Result = "Success",
+                    Severity = "Information",
                     Timestamp = DateTime.UtcNow,
                     NewValues = $"WarehouseId: {dto.WarehouseId}, Note: {dto.Note}"
                 });
@@ -110,6 +114,8 @@ namespace ERP.Application.Services
                 var stocktake = await _stocktakeRepository.GetByIdWithDetailsAsync(id);
                 if (stocktake == null) throw new NotFoundException($"Không tìm thấy phiếu kiểm kê id {id}");
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(stocktake.WarehouseId);
+
+                Security.ApprovalSafetyGuard.EnsureDifferentChecker(stocktake.CreatedBy, approvedByUserId);
 
                 if (stocktake.Status != ReceiptStatus.Draft)
                     throw new BusinessRuleException("Chỉ có thể duyệt phiếu ở trạng thái nháp");
@@ -178,6 +184,10 @@ namespace ERP.Application.Services
                     Action = "Stocktake.Approved",
                     EntityName = "Stocktake",
                     EntityId = stocktake.Id,
+                    WarehouseId = stocktake.WarehouseId,
+                    OldValues = $"Status: {ReceiptStatus.Draft}",
+                    Result = "Success",
+                    Severity = "Information",
                     Timestamp = DateTime.UtcNow,
                     NewValues = $"Status: Approved, TotalAdjustments: {totalAdjustments}"
                 });
@@ -214,14 +224,35 @@ namespace ERP.Application.Services
             if (detail == null)
                 throw new NotFoundException($"Không tìm thấy chi tiết phiếu id {detailId}");
 
-            detail.ActualQuantity = dto.ActualQuantity;
-            detail.DifferenceQuantity = dto.ActualQuantity - detail.SystemQuantity;
-            
-            if (dto.Note != null)
-                detail.Note = dto.Note;
+            var oldActualQuantity = detail.ActualQuantity;
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                detail.ActualQuantity = dto.ActualQuantity;
+                detail.DifferenceQuantity = dto.ActualQuantity - detail.SystemQuantity;
+                if (dto.Note != null) detail.Note = dto.Note;
 
-            await _stocktakeRepository.UpdateAsync(stocktake);
-            await _unitOfWork.SaveChangesAsync();
+                await _stocktakeRepository.UpdateAsync(stocktake);
+                await _auditLogRepository.AddAsync(new AuditLog
+                {
+                    UserId = _currentUser?.UserId,
+                    Action = "Stocktake.DetailUpdated",
+                    EntityName = "Stocktake",
+                    EntityId = stocktake.Id,
+                    WarehouseId = stocktake.WarehouseId,
+                    OldValues = $"DetailId: {detail.Id}; ActualQuantity: {oldActualQuantity}",
+                    NewValues = $"DetailId: {detail.Id}; ActualQuantity: {detail.ActualQuantity}",
+                    Result = "Success",
+                    Severity = "Information",
+                    Timestamp = DateTime.UtcNow
+                });
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
         }
     }
 }

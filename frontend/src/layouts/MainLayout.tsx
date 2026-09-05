@@ -20,6 +20,7 @@ const MainLayout = () => {
           {showStocktakes && <li style={{ margin: '10px 0' }}><Link to="/stocktakes" style={{ color: 'white', textDecoration: 'none' }}>Kiểm kê kho</Link></li>}
           <li style={{ margin: '10px 0' }}><Link to="/stock-transfers" style={{ color: 'white', textDecoration: 'none' }}>Điều chuyển kho</Link></li>
           <li style={{ margin: '10px 0' }}><Link to="/stock-reservations" style={{ color: 'white', textDecoration: 'none' }}>Giữ hàng</Link></li>
+          {(currentRole() === 'Admin' || currentRole() === 'Manager') && <li style={{ margin: '10px 0' }}><Link to="/approvals" style={{ color: 'white', textDecoration: 'none' }}>Phê duyệt</Link></li>}
         </ul>
       </aside>
 

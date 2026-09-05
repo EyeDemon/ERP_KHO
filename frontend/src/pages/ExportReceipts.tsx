@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../services/apiClient';
-import { canApproveExportImmediately, canManageCatalogs, canOperateWarehouse, currentRole } from '../services/authorization';
+import { canApproveExportImmediately, canManageCatalogs, canOperateWarehouse, currentRole, currentUserId } from '../services/authorization';
+import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 
 interface ExportReceiptDetail {
   id: number;
@@ -17,6 +18,7 @@ interface ExportReceipt {
   warehouseName: string;
   status: string;
   note?: string;
+  createdBy: number;
   createdByName: string;
   createdAt: string;
   approvedByName?: string;
@@ -51,6 +53,7 @@ interface ReceiptDetailForm {
 
 const ExportReceipts = () => {
   const role = currentRole();
+  const userId = currentUserId();
   const canOperate = canOperateWarehouse(role);
   const canApproveAndReserve = canManageCatalogs(role);
   const [receipts, setReceipts] = useState<ExportReceipt[]>([]);
@@ -124,7 +127,9 @@ const ExportReceipts = () => {
   const handleCancel = async (id: number) => {
     if (!confirm('Bạn có chắc muốn hủy phiếu xuất này?')) return;
     try {
-      await apiClient.post(`/api/exportreceipts/${id}/cancel`);
+      const action = `export-cancel:${id}`;
+      await apiClient.post(`/api/exportreceipts/${id}/cancel`, undefined, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
       alert('Hủy thành công');
       fetchReceipts();
       if (selectedReceipt?.id === id) {
@@ -153,7 +158,9 @@ const ExportReceipts = () => {
     if (!confirm(messages[action])) return;
     setActionInFlight(`${id}-${action}`);
     try {
-      await apiClient.post(`/api/exportreceipts/${id}/${action}`);
+      const logicalAction = `export-${action}:${id}`;
+      await apiClient.post(`/api/exportreceipts/${id}/${action}`, undefined, { headers: idempotencyHeaders(logicalAction) });
+      completeIdempotentAction(logicalAction);
       await refreshAfterAction(id);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Không thể xử lý phiếu xuất.');
@@ -234,7 +241,9 @@ const ExportReceipts = () => {
         }))
       };
 
-      await apiClient.post('/api/exportreceipts', payload);
+      const action = `export-create:${JSON.stringify(payload)}`;
+      await apiClient.post('/api/exportreceipts', payload, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
       setSuccessMsg('Tạo phiếu xuất (nháp) thành công!');
       
       setCode('');
@@ -380,8 +389,8 @@ const ExportReceipts = () => {
                 <button onClick={() => handleViewDetails(r.id)} style={{ cursor: 'pointer', marginRight: '5px' }}>Chi tiết</button>
                 {canOperate && r.status === 'Draft' && (
                   <>
-                    {canApproveAndReserve && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')} style={{ cursor: 'pointer', marginRight: '5px' }}>Duyệt và giữ hàng</button>}
-                    {canApproveExportImmediately(role, r.allowWarehouseStaffDirectDispatch) && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Duyệt và xuất ngay</button>}
+                    {canApproveAndReserve && r.createdBy !== userId && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')} style={{ cursor: 'pointer', marginRight: '5px' }}>Duyệt và giữ hàng</button>}
+                    {canApproveExportImmediately(role, r.allowWarehouseStaffDirectDispatch) && r.createdBy !== userId && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Duyệt và xuất ngay</button>}
                     <button disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy</button>
                   </>
                 )}

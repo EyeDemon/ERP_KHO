@@ -15,8 +15,7 @@ public sealed class StockTransferService(
     ErpKhoDbContext context,
     IInventoryStockRepository stockRepository,
     IWarehouseAuthorizationService warehouseAuthorization,
-    ICurrentUser currentUser,
-    StockTransferOptions options) : IStockTransferService
+    ICurrentUser currentUser) : IStockTransferService
 {
     public async Task<PagedResult<StockTransferDto>> GetAsync(StockTransferQueryDto request, CancellationToken cancellationToken = default)
     {
@@ -57,7 +56,7 @@ public sealed class StockTransferService(
         };
         context.StockTransfers.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
-        await AuditAsync(entity.Id, "StockTransfer.Created", cancellationToken);
+        await AuditAsync(entity, "StockTransfer.Created", entity.Status, entity.Status, cancellationToken);
         return await GetByIdAsync(entity.Id, cancellationToken);
     }
 
@@ -73,7 +72,7 @@ public sealed class StockTransferService(
         entity.Details.Clear();
         foreach (var line in request.Details) entity.Details.Add(new StockTransferDetail { ProductId = line.ProductId, RequestedQuantity = line.Quantity, Note = line.Note });
         await context.SaveChangesAsync(cancellationToken);
-        await AuditAsync(id, "StockTransfer.Updated", cancellationToken);
+        await AuditAsync(entity, "StockTransfer.Updated", entity.Status, entity.Status, cancellationToken);
     }
 
     public async Task ApproveAsync(int id, CancellationToken cancellationToken = default)
@@ -81,15 +80,17 @@ public sealed class StockTransferService(
         EnsureApproveRole();
         var entity = await GetScopedAsync(id, cancellationToken);
         await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
-        if (options.RequireDifferentApprover && entity.CreatedBy == currentUser.UserId) throw new BusinessRuleException("Người tạo không được tự duyệt phiếu.");
-        await TransitionAsync(id, StockTransferStatus.Draft, StockTransferStatus.Approved,
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
+        ERP.Application.Security.ApprovalSafetyGuard.EnsureDifferentChecker(entity.CreatedBy, currentUser.UserId);
+        await TransitionAsync(entity, StockTransferStatus.Draft, StockTransferStatus.Approved,
             "StockTransfer.Approved", cancellationToken);
     }
 
     public async Task DispatchAsync(int id, CancellationToken cancellationToken = default)
     {
         EnsureWriteRole();
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var ownsTransaction = context.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
         try
         {
             var entity = await GetScopedAsync(id, cancellationToken);
@@ -106,18 +107,19 @@ public sealed class StockTransferService(
                 context.InventoryTransactions.Add(Transaction(entity, line, entity.SourceWarehouseId, TransactionType.TransferOut, line.RequestedQuantity, now));
             }
             await context.SaveChangesAsync(cancellationToken);
-            context.AuditLogs.Add(Audit(id, "StockTransfer.Dispatched", now));
+            context.AuditLogs.Add(Audit(entity, "StockTransfer.Dispatched", StockTransferStatus.Approved, StockTransferStatus.InTransit, now));
             await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            context.ChangeTracker.Clear();
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction) context.ChangeTracker.Clear();
         }
-        catch { await transaction.RollbackAsync(cancellationToken); throw; }
+        catch { if (transaction is not null) await transaction.RollbackAsync(cancellationToken); throw; }
     }
 
     public async Task ReceiveAsync(int id, ReceiveStockTransferDto request, CancellationToken cancellationToken = default)
     {
         EnsureWriteRole();
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var ownsTransaction = context.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
         try
         {
             var entity = await GetScopedAsync(id, cancellationToken);
@@ -142,12 +144,12 @@ public sealed class StockTransferService(
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
-            context.AuditLogs.Add(Audit(id, "StockTransfer.Received", now));
+            context.AuditLogs.Add(Audit(entity, "StockTransfer.Received", StockTransferStatus.InTransit, StockTransferStatus.Received, now));
             await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            context.ChangeTracker.Clear();
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction) context.ChangeTracker.Clear();
         }
-        catch { await transaction.RollbackAsync(cancellationToken); throw; }
+        catch { if (transaction is not null) await transaction.RollbackAsync(cancellationToken); throw; }
     }
 
     public async Task CompleteAsync(int id, CancellationToken cancellationToken = default)
@@ -155,7 +157,7 @@ public sealed class StockTransferService(
         EnsureWriteRole();
         var entity = await GetScopedAsync(id, cancellationToken);
         await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
-        await TransitionAsync(id, StockTransferStatus.Received, StockTransferStatus.Completed,
+        await TransitionAsync(entity, StockTransferStatus.Received, StockTransferStatus.Completed,
             "StockTransfer.Completed", cancellationToken);
     }
 
@@ -165,7 +167,7 @@ public sealed class StockTransferService(
         var entity = await GetScopedAsync(id, cancellationToken);
         await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
         if (entity.Status is not (StockTransferStatus.Draft or StockTransferStatus.Approved)) throw Conflict("Chỉ phiếu chưa xuất kho mới được hủy.");
-        await TransitionAsync(id, entity.Status, StockTransferStatus.Cancelled,
+        await TransitionAsync(entity, entity.Status, StockTransferStatus.Cancelled,
             "StockTransfer.Cancelled", cancellationToken);
     }
 
@@ -206,8 +208,9 @@ WHEN NOT MATCHED THEN
     VALUES (source.ProductId, source.WarehouseId, source.Quantity, source.LastUpdated);", cancellationToken);
     }
 
-    private async Task TransitionAsync(int id, StockTransferStatus from, StockTransferStatus to, string action, CancellationToken cancellationToken)
+    private async Task TransitionAsync(StockTransfer entity, StockTransferStatus from, StockTransferStatus to, string action, CancellationToken cancellationToken)
     {
+        var id = entity.Id;
         var now = DateTime.UtcNow;
         var target = context.StockTransfers.Where(x => x.Id == id && x.Status == from);
         var affected = action switch
@@ -218,8 +221,8 @@ WHEN NOT MATCHED THEN
             _ => throw new InvalidOperationException("Unsupported stock-transfer transition.")
         };
         if (affected != 1) throw Conflict("Trạng thái phiếu đã thay đổi hoặc thao tác không hợp lệ.");
-        await AuditAsync(id, action, cancellationToken, now);
-        context.ChangeTracker.Clear();
+        await AuditAsync(entity, action, from, to, cancellationToken, now);
+        if (context.Database.CurrentTransaction is null) context.ChangeTracker.Clear();
     }
 
     private async Task<StockTransfer> GetScopedAsync(int id, CancellationToken cancellationToken)
@@ -242,8 +245,15 @@ WHEN NOT MATCHED THEN
 
     private InventoryTransaction Transaction(StockTransfer transfer, StockTransferDetail line, int warehouseId, TransactionType type, decimal quantity, DateTime now) => new()
         { ProductId = line.ProductId, WarehouseId = warehouseId, TransactionType = type, Quantity = quantity, ReferenceId = transfer.Id, ReferenceType = "StockTransfer", TransactionDate = now, CreatedBy = currentUser.UserId, Note = line.Note };
-    private AuditLog Audit(int id, string action, DateTime now) => new() { UserId = currentUser.UserId, Action = action, EntityName = "StockTransfer", EntityId = id, Timestamp = now };
-    private async Task AuditAsync(int id, string action, CancellationToken cancellationToken, DateTime? now = null) { context.AuditLogs.Add(Audit(id, action, now ?? DateTime.UtcNow)); await context.SaveChangesAsync(cancellationToken); }
+    private AuditLog Audit(StockTransfer entity, string action, StockTransferStatus from, StockTransferStatus to, DateTime now) => new()
+    {
+        UserId = currentUser.UserId, Action = action, EntityName = "StockTransfer", EntityId = entity.Id,
+        SourceWarehouseId = entity.SourceWarehouseId, DestinationWarehouseId = entity.DestinationWarehouseId,
+        OldValues = $"Status: {from}", NewValues = $"Status: {to}", Result = "Success",
+        Severity = "Information", Timestamp = now
+    };
+    private async Task AuditAsync(StockTransfer entity, string action, StockTransferStatus from, StockTransferStatus to, CancellationToken cancellationToken, DateTime? now = null)
+    { context.AuditLogs.Add(Audit(entity, action, from, to, now ?? DateTime.UtcNow)); await context.SaveChangesAsync(cancellationToken); }
     private static ConcurrencyException Conflict(string message) => new(message);
 
     private static StockTransferDto MapSummary(StockTransfer x) => new() { Id = x.Id, Code = x.Code, SourceWarehouseId = x.SourceWarehouseId, SourceWarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, Status = x.Status, Note = x.Note, CreatedBy = x.CreatedBy, CreatedAt = x.CreatedAt, ApprovedAt = x.ApprovedAt, DispatchedAt = x.DispatchedAt, ReceivedAt = x.ReceivedAt, CompletedAt = x.CompletedAt, CancelledAt = x.CancelledAt };

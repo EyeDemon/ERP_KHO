@@ -3,6 +3,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 
 namespace ERP.Api.Controllers
 {
@@ -28,6 +29,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
+        [IdempotentCommand("ImportReceipt.Create")]
         [Authorize(Roles = AppRoles.AdminOrManager)]
         public async Task<IActionResult> Create([FromBody] ERP.Application.DTOs.CreateImportReceiptDto dto)
         {
@@ -41,7 +43,8 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("{id}/approve")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [IdempotentCommand("ImportReceipt.Approve")]
+        [Authorize(Policy = ApprovalPolicies.Checker)]
         public async Task<IActionResult> Approve(int id)
         {
             if (!TryGetUserId(out var userId))
@@ -68,6 +71,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}/cancel")]
+        [IdempotentCommand("ImportReceipt.Cancel")]
         [Authorize(Roles = AppRoles.AdminOrManager)]
         public async Task<IActionResult> Cancel(int id)
         {

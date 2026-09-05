@@ -48,7 +48,7 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
-        public async Task UpdateStocktakeDetailAsync_ValidRequest_UpdatesDetailAndSaves()
+        public async Task UpdateStocktakeDetailAsync_ValidRequest_UpdatesDetailAndCommitsRequiredAudit()
         {
             var detail = new StocktakeDetail { Id = 1, SystemQuantity = 10, ActualQuantity = null };
             var stocktake = new Stocktake 
@@ -68,7 +68,13 @@ namespace ERP.Application.Tests
             detail.Note.Should().Be("Test");
 
             _mockStocktakeRepo.Verify(r => r.UpdateAsync(stocktake), Times.Once);
-            _mockUnitOfWork.Verify(u => u.SaveChangesAsync(), Times.Once);
+            _mockUnitOfWork.Verify(u => u.BeginTransactionAsync(), Times.Once);
+            _mockAuditLogRepo.Verify(r => r.AddAsync(It.Is<AuditLog>(audit =>
+                audit.Action == "Stocktake.DetailUpdated" &&
+                audit.EntityId == stocktake.Id &&
+                audit.Result == "Success")), Times.Once);
+            _mockUnitOfWork.Verify(u => u.CommitTransactionAsync(), Times.Once);
+            _mockUnitOfWork.Verify(u => u.RollbackTransactionAsync(), Times.Never);
         }
     }
 }

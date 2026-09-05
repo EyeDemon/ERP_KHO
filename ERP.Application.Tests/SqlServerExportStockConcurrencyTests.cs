@@ -14,29 +14,9 @@ namespace ERP.Application.Tests;
 
 [CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class SqlServerExportStockCollection
+    : ICollectionFixture<SqlServerIntegrationFixture>
 {
     public const string Name = "SQL Server export stock concurrency";
-}
-
-public sealed class SqlServerFactAttribute : FactAttribute
-{
-    public const string ConnectionVariable = "ERP_KHO_SQLSERVER_TEST_CONNECTION";
-
-    public SqlServerFactAttribute()
-    {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            Skip = $"Set {ConnectionVariable} to run SQL Server integration tests.";
-            return;
-        }
-
-        var database = new SqlConnectionStringBuilder(connectionString).InitialCatalog;
-        if (!string.Equals(database, "ERP_KHO", StringComparison.OrdinalIgnoreCase))
-        {
-            Skip = $"{ConnectionVariable} must target the ERP_KHO database.";
-        }
-    }
 }
 
 [Collection(SqlServerExportStockCollection.Name)]
@@ -50,7 +30,7 @@ public class SqlServerExportStockConcurrencyTests
     {
         await using var scenario = await SqlServerScenario.CreateAsync(ConnectionString, [100m], [[(0, 80m)], [(0, 80m)]]);
 
-        var outcomes = await ApproveConcurrentlyAsync(scenario.ReceiptIds[0], scenario.ReceiptIds[1], scenario.UserId);
+        var outcomes = await ApproveConcurrentlyAsync(scenario.ReceiptIds[0], scenario.ReceiptIds[1], scenario.ApproverUserId);
 
         outcomes.Count(error => error is null).Should().Be(1);
         outcomes.Count(error => error is ConcurrencyException).Should().Be(1);
@@ -62,7 +42,7 @@ public class SqlServerExportStockConcurrencyTests
     {
         await using var scenario = await SqlServerScenario.CreateAsync(ConnectionString, [100m], [[(0, 40m)], [(0, 60m)]]);
 
-        var outcomes = await ApproveConcurrentlyAsync(scenario.ReceiptIds[0], scenario.ReceiptIds[1], scenario.UserId);
+        var outcomes = await ApproveConcurrentlyAsync(scenario.ReceiptIds[0], scenario.ReceiptIds[1], scenario.ApproverUserId);
 
         outcomes.Should().AllSatisfy(error => error.Should().BeNull());
         await scenario.AssertStateAsync([0m], 100m, dispatchedReceiptCount: 2);
@@ -73,7 +53,7 @@ public class SqlServerExportStockConcurrencyTests
     {
         await using var scenario = await SqlServerScenario.CreateAsync(ConnectionString, [50m], [[(0, 60m)]]);
 
-        var error = await ApproveAsync(scenario.ReceiptIds[0], scenario.UserId);
+        var error = await ApproveAsync(scenario.ReceiptIds[0], scenario.ApproverUserId);
 
         error.Should().BeOfType<ConcurrencyException>();
         await scenario.AssertStateAsync([50m], 0m, dispatchedReceiptCount: 0);
@@ -84,7 +64,7 @@ public class SqlServerExportStockConcurrencyTests
     {
         await using var scenario = await SqlServerScenario.CreateAsync(ConnectionString, [100m], [[(0, 40m)]]);
 
-        var outcomes = await ApproveConcurrentlyAsync(scenario.ReceiptIds[0], scenario.ReceiptIds[0], scenario.UserId);
+        var outcomes = await ApproveConcurrentlyAsync(scenario.ReceiptIds[0], scenario.ReceiptIds[0], scenario.ApproverUserId);
 
         outcomes.Count(error => error is null).Should().Be(1);
         outcomes.Count(error => error is ConcurrencyException).Should().Be(1);
@@ -96,7 +76,7 @@ public class SqlServerExportStockConcurrencyTests
     {
         await using var scenario = await SqlServerScenario.CreateAsync(ConnectionString, [100m, 10m], [[(0, 40m), (1, 20m)]]);
 
-        var error = await ApproveAsync(scenario.ReceiptIds[0], scenario.UserId);
+        var error = await ApproveAsync(scenario.ReceiptIds[0], scenario.ApproverUserId);
 
         error.Should().BeOfType<ConcurrencyException>();
         await scenario.AssertStateAsync([100m, 10m], 0m, dispatchedReceiptCount: 0);
@@ -109,7 +89,7 @@ public class SqlServerExportStockConcurrencyTests
 
         var error = await ApproveAsync(
             scenario.ReceiptIds[0],
-            scenario.UserId,
+            scenario.ApproverUserId,
             options: new ExportReceiptOptions { WriteEnabled = false });
 
         error.Should().BeOfType<ERP.Application.Exceptions.ServiceUnavailableException>();
@@ -198,7 +178,7 @@ public class SqlServerExportStockConcurrencyTests
         private readonly string _connectionString;
         private readonly string _prefix;
 
-        public int UserId { get; private set; }
+        public int ApproverUserId { get; private set; }
         public int WarehouseId { get; private set; }
         public int[] ProductIds { get; private set; } = [];
         public int[] ReceiptIds { get; private set; } = [];
@@ -219,7 +199,7 @@ public class SqlServerExportStockConcurrencyTests
             await using var context = CreateContext(connectionString);
 
             (await context.Database.CanConnectAsync()).Should().BeTrue();
-            context.Database.GetDbConnection().Database.Should().Be("ERP_KHO");
+            ERP.SqlIntegrationHarness.OwnedDatabasePolicy.EnsureAllowedName(context.Database.GetDbConnection().Database);
 
             var role = new Role { RoleName = $"{prefix}R", Description = "SQL concurrency test" };
             var unit = new Unit { Code = $"{prefix}U", Name = "SQL concurrency unit", IsActive = true };
@@ -227,15 +207,23 @@ public class SqlServerExportStockConcurrencyTests
             context.AddRange(role, unit, warehouse);
             await context.SaveChangesAsync();
 
-            var user = new User
+            var creator = new User
             {
-                Username = $"{prefix}USR",
+                Username = $"{prefix}CRT",
                 PasswordHash = "integration-test-only",
-                FullName = "SQL concurrency user",
+                FullName = "SQL concurrency creator",
                 RoleId = role.Id,
                 IsActive = true
             };
-            context.Users.Add(user);
+            var approver = new User
+            {
+                Username = $"{prefix}APR",
+                PasswordHash = "integration-test-only",
+                FullName = "SQL concurrency approver",
+                RoleId = role.Id,
+                IsActive = true
+            };
+            context.Users.AddRange(creator, approver);
             await context.SaveChangesAsync();
 
             var products = initialStocks.Select((_, index) => new Product
@@ -260,7 +248,7 @@ public class SqlServerExportStockConcurrencyTests
                 Code = $"{prefix}E{receiptIndex}",
                 WarehouseId = warehouse.Id,
                 Status = ReceiptStatus.Draft,
-                CreatedBy = user.Id,
+                CreatedBy = creator.Id,
                 Details = lines.Select(line => new ExportReceiptDetail
                 {
                     ProductId = products[line.ProductIndex].Id,
@@ -271,7 +259,7 @@ public class SqlServerExportStockConcurrencyTests
             context.ExportReceipts.AddRange(receipts);
             await context.SaveChangesAsync();
 
-            scenario.UserId = user.Id;
+            scenario.ApproverUserId = approver.Id;
             scenario.WarehouseId = warehouse.Id;
             scenario.ProductIds = products.Select(product => product.Id).ToArray();
             scenario.ReceiptIds = receipts.Select(receipt => receipt.Id).ToArray();

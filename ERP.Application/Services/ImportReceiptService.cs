@@ -120,6 +120,11 @@ namespace ERP.Application.Services
                     Action = "ImportReceipt.Created",
                     EntityName = "ImportReceipt",
                     EntityId = receipt.Id,
+                    WarehouseId = receipt.WarehouseId,
+                    OldValues = "Status: None",
+                    NewValues = $"Status: {receipt.Status}",
+                    Result = "Success",
+                    Severity = "Information",
                     Timestamp = DateTime.UtcNow
                 });
 
@@ -174,6 +179,8 @@ namespace ERP.Application.Services
                 if (receipt == null) throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
 
+                Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, approvedByUserId);
+
                 if (receipt.Status != ReceiptStatus.Draft)
                     throw new BusinessRuleException("Chỉ có thể duyệt phiếu ở trạng thái nháp");
 
@@ -227,6 +234,11 @@ namespace ERP.Application.Services
                 Action = "ImportReceipt.Approved",
                 EntityName = "ImportReceipt",
                 EntityId = receipt.Id,
+                WarehouseId = receipt.WarehouseId,
+                OldValues = $"Status: {ReceiptStatus.Draft}",
+                NewValues = $"Status: {ReceiptStatus.Approved}",
+                Result = "Success",
+                Severity = "Information",
                 Timestamp = DateTime.UtcNow
             });
                 
@@ -329,6 +341,12 @@ namespace ERP.Application.Services
                     Action = "ImportReceipt.Cancelled",
                     EntityName = "ImportReceipt",
                     EntityId = receipt.Id,
+                    WarehouseId = receipt.WarehouseId,
+                    OldValues = $"Status: {Domain.Enums.ReceiptStatus.Draft}",
+                    NewValues = $"Status: {Domain.Enums.ReceiptStatus.Cancelled}",
+                    Result = "Success",
+                    Reason = "Import receipt cancelled",
+                    Severity = "Information",
                     Timestamp = DateTime.UtcNow
                 });
 
