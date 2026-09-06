@@ -1,5 +1,6 @@
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Application.Options;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Interfaces;
@@ -14,6 +15,45 @@ namespace ERP.Application.Tests;
 [Collection(SqlServerExportStockCollection.Name)]
 public sealed class SqlServerApprovalQueueRejectTests
 {
+    [SqlServerFact]
+    public async Task QueueAging_UsesControlledUtcClockAndPreservesWarehouseScope()
+    {
+        await using var db = CreateContext();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var now = new DateTimeOffset(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
+        var role = new Role { RoleName = $"QA-AGING-{suffix}" };
+        db.Roles.Add(role); await db.SaveChangesAsync();
+        var maker = new User { Username = $"qa-aging-maker-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
+        var checker = new User { Username = $"qa-aging-checker-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
+        db.Users.AddRange(maker, checker); await db.SaveChangesAsync();
+        var warehouse = new Warehouse { Code = $"QA-AGING-{suffix}", Name = "QA Aging" };
+        var outside = new Warehouse { Code = $"QA-OUT-{suffix}", Name = "QA Outside" };
+        db.Warehouses.AddRange(warehouse, outside); await db.SaveChangesAsync();
+        db.UserWarehouses.Add(new UserWarehouse { UserId = checker.Id, WarehouseId = warehouse.Id, CreatedBy = maker.Id });
+        var normal = new ImportReceipt { Code = $"QA-NORMAL-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-23).AddMinutes(-59) };
+        var warning = new ImportReceipt { Code = $"QA-WARNING-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-24) };
+        var overdue = new ImportReceipt { Code = $"QA-OVERDUE-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-48) };
+        var closed = new ImportReceipt { Code = $"QA-CLOSED-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddDays(-5), Status = ReceiptStatus.Cancelled };
+        var hidden = new ImportReceipt { Code = $"QA-HIDDEN-AGING-{suffix}", WarehouseId = outside.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddDays(-5) };
+        db.AddRange(normal, warning, overdue, closed, hidden); await db.SaveChangesAsync();
+
+        var current = new Current(checker.Id);
+        var service = new ApprovalWorkflowService(db, current, new WarehouseAuthorizationService(db, current), new Metadata(), new FixedTimeProvider(now), new ApprovalAgingOptions());
+        var queue = await service.GetQueueAsync(new ApprovalQueueQuery { Keyword = suffix, PageSize = 20 });
+
+        queue.Items.Should().ContainSingle(x => x.DocumentId == normal.Id && x.SlaStatus == "Normal" && x.WaitingMinutes == 1439);
+        queue.Items.Should().ContainSingle(x => x.DocumentId == warning.Id && x.SlaStatus == "Warning" && x.WaitingMinutes == 1440);
+        queue.Items.Should().ContainSingle(x => x.DocumentId == overdue.Id && x.SlaStatus == "Overdue" && x.WaitingMinutes == 2880);
+        queue.Items.Should().NotContain(x => x.DocumentId == closed.Id || x.DocumentId == hidden.Id);
+        (await service.GetQueueAsync(new ApprovalQueueQuery { Keyword = suffix, SlaStatus = "Overdue" })).Items.Should().ContainSingle(x => x.DocumentId == overdue.Id);
+        var closedDetail = await service.GetDetailAsync("ImportReceipt", closed.Id);
+        closedDetail.Summary.SlaStatus.Should().BeNull();
+        closedDetail.Summary.WaitingMinutes.Should().BeNull();
+
+        await transaction.RollbackAsync();
+    }
+
     [SqlServerFact]
     public async Task StockTransferApprove_RequiresBothWarehouseScopesAndCheckerRole()
     {
@@ -257,5 +297,6 @@ public sealed class SqlServerApprovalQueueRejectTests
         (await db.InventoryStocks.SumAsync(x => x.Quantity), await db.InventoryStocks.SumAsync(x => x.ReservedQuantity), await db.InventoryTransactions.CountAsync(), await db.StockReservations.CountAsync());
     private static ErpKhoDbContext CreateContext() => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!).Options);
     private sealed record Current(int UserId, string CurrentRole = "Manager") : ICurrentUser { public bool IsAuthenticated => true; public bool IsGlobalAdmin => false; public string Role => CurrentRole; }
+    private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider { public override DateTimeOffset GetUtcNow() => value; }
     private sealed class Metadata : IRequestMetadata { public string CorrelationId { get; set; } = string.Empty; public string? IdempotencyKeyHash { get; set; } public string? RequestFingerprint { get; set; } }
 }

@@ -157,6 +157,10 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IAccessTokenSessionValidat
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockTransferService, ERP.Infrastructure.Services.StockTransferService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockReservationService, ERP.Infrastructure.Services.StockReservationService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
+builder.Services.AddSingleton(TimeProvider.System);
+var approvalAgingOptions = builder.Configuration.GetSection("ApprovalAging").Get<ERP.Application.Options.ApprovalAgingOptions>() ?? new ERP.Application.Options.ApprovalAgingOptions();
+approvalAgingOptions.Validate();
+builder.Services.AddSingleton(approvalAgingOptions);
 builder.Services.AddSingleton(builder.Configuration.GetSection("StockReservation").Get<ERP.Application.Options.StockReservationOptions>() ?? new ERP.Application.Options.StockReservationOptions());
 var exportReceiptOptions = builder.Configuration.GetSection("ExportReceipt").Get<ERP.Application.Options.ExportReceiptOptions>() ?? new ERP.Application.Options.ExportReceiptOptions();
 exportReceiptOptions.WriteEnabled = builder.Configuration.GetValue("ExportWorkflow:WriteEnabled", true);

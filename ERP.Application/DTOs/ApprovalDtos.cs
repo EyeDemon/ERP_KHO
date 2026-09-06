@@ -29,6 +29,7 @@ public sealed class ApprovalQueueQuery
     public DateTime? FromUtc { get; set; }
     public DateTime? ToUtc { get; set; }
     public string? Keyword { get; set; }
+    public string? SlaStatus { get; set; }
     public string SortBy { get; set; } = "RequestedAt";
     public bool SortDescending { get; set; }
 }
@@ -42,6 +43,8 @@ public sealed class ApprovalQueueItem
     public int CreatorId { get; set; }
     public string CreatorName { get; set; } = string.Empty;
     public DateTime RequestedAtUtc { get; set; }
+    public long? WaitingMinutes { get; set; }
+    public string? SlaStatus { get; set; }
     public int WarehouseId { get; set; }
     public string WarehouseName { get; set; } = string.Empty;
     public int? DestinationWarehouseId { get; set; }

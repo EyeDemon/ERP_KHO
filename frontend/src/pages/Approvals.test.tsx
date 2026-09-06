@@ -6,7 +6,7 @@ import apiClient from '../services/apiClient';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../services/apiClient',()=>({default:{get:vi.fn(),post:vi.fn()}}));
-const item={documentType:'StockTransfer',documentId:7,documentCode:'TRF-7',pendingState:'Draft',creatorName:'Maker',requestedAtUtc:'2026-09-05T01:00:00Z',warehouseName:'WH01',destinationWarehouseName:'WH02',totalQuantity:5,canApprove:false,canReject:true};
+const item={documentType:'StockTransfer',documentId:7,documentCode:'TRF-7',pendingState:'Draft',creatorName:'Maker',requestedAtUtc:'2026-09-05T01:00:00Z',waitingMinutes:1500,slaStatus:'Warning' as const,warehouseName:'WH01',destinationWarehouseName:'WH02',totalQuantity:5,canApprove:false,canReject:true};
 const page=(items= [item])=>({items,totalRecords:items.length,pageIndex:1,pageSize:20,totalPages:items.length?2:0});
 
 describe('Approvals page',()=>{
@@ -38,11 +38,18 @@ describe('Approvals page',()=>{
     fireEvent.change(view.getByLabelText('Mã kho'),{target:{value:'2'}});
     fireEvent.change(view.getByLabelText('Mã người tạo'),{target:{value:'3'}});
     fireEvent.change(view.getByLabelText('Tìm mã chứng từ'),{target:{value:'TRF'}});
+    fireEvent.change(view.getByLabelText('Mức SLA'),{target:{value:'Overdue'}});
     fireEvent.change(view.getByLabelText('Từ ngày'),{target:{value:'2026-09-05T00:00'}});
     fireEvent.change(view.getByLabelText('Đến ngày'),{target:{value:'2026-09-05T23:59'}});
-    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/approvals/queue',{params:expect.objectContaining({documentType:'StockTransfer',warehouseId:'2',creatorId:'3',keyword:'TRF',fromUtc:new Date('2026-09-05T00:00').toISOString(),toUtc:new Date('2026-09-05T23:59').toISOString(),pageIndex:1})}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/approvals/queue',{params:expect.objectContaining({documentType:'StockTransfer',warehouseId:'2',creatorId:'3',keyword:'TRF',slaStatus:'Overdue',fromUtc:new Date('2026-09-05T00:00').toISOString(),toUtc:new Date('2026-09-05T23:59').toISOString(),pageIndex:1})}));
     await waitFor(()=>expect((view.getByText('Sau') as HTMLButtonElement).disabled).toBe(false));fireEvent.click(view.getByText('Sau'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/approvals/queue',{params:expect.objectContaining({pageIndex:2})}));
+  });
+  it('renders waiting time, textual SLA badge, and the UTC request instant tooltip',async()=>{
+    const view=render(<Approvals/>);await view.findByText('TRF-7');
+    expect(view.getByText('1 ngày 1 giờ')).toBeTruthy();
+    expect(view.container.querySelector('.approval-sla-warning')?.textContent).toBe('Sắp đến hạn');
+    expect(view.getByTitle(`UTC: ${item.requestedAtUtc}`)).toBeTruthy();
   });
   it('hides both actions when server denies capabilities and renders the instant in local time',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:page([{...item,canReject:false}])});

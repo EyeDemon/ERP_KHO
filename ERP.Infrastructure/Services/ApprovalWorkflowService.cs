@@ -2,6 +2,7 @@ using ERP.Application.Common;
 using ERP.Application.DTOs;
 using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
+using ERP.Application.Options;
 using ERP.Application.Security;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
@@ -15,7 +16,9 @@ public sealed class ApprovalWorkflowService(
     ErpKhoDbContext context,
     ICurrentUser currentUser,
     IWarehouseAuthorizationService warehouseAuthorization,
-    IRequestMetadata requestMetadata) : IApprovalWorkflowService
+    IRequestMetadata requestMetadata,
+    TimeProvider? timeProvider = null,
+    ApprovalAgingOptions? agingOptions = null) : IApprovalWorkflowService
 {
     private sealed class QueueRow
     {
@@ -36,6 +39,9 @@ public sealed class ApprovalWorkflowService(
     {
         EnsureChecker();
         ValidatePage(request.PageIndex, request.PageSize);
+        var nowUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        var options = agingOptions ?? new ApprovalAgingOptions();
+        options.Validate();
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
         var imports = context.ImportReceipts.AsNoTracking().Where(x => x.Status == ReceiptStatus.Draft && allowed.Contains(x.WarehouseId))
             .Select(x => new QueueRow { Type = "ImportReceipt", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.Quantity) });
@@ -52,6 +58,18 @@ public sealed class ApprovalWorkflowService(
         if (request.FromUtc.HasValue) query = query.Where(x => x.CreatedAt >= request.FromUtc);
         if (request.ToUtc.HasValue) query = query.Where(x => x.CreatedAt <= request.ToUtc);
         if (!string.IsNullOrWhiteSpace(request.Keyword)) { var keyword = request.Keyword.Trim(); query = query.Where(x => x.Code.Contains(keyword)); }
+        if (!string.IsNullOrWhiteSpace(request.SlaStatus))
+        {
+            var warningCutoff = nowUtc.AddHours(-options.WarningAfterHours);
+            var overdueCutoff = nowUtc.AddHours(-options.OverdueAfterHours);
+            query = request.SlaStatus.Trim() switch
+            {
+                ApprovalAgingCalculator.Normal => query.Where(x => x.CreatedAt > warningCutoff),
+                ApprovalAgingCalculator.Warning => query.Where(x => x.CreatedAt <= warningCutoff && x.CreatedAt > overdueCutoff),
+                ApprovalAgingCalculator.Overdue => query.Where(x => x.CreatedAt <= overdueCutoff),
+                _ => throw new BusinessRuleException("Trạng thái SLA không hợp lệ.")
+            };
+        }
         var total = await query.CountAsync(cancellationToken);
         var ordered = request.SortBy switch
         {
@@ -65,14 +83,19 @@ public sealed class ApprovalWorkflowService(
         return new PagedResult<ApprovalQueueItem>
         {
             TotalRecords = total, PageIndex = request.PageIndex, PageSize = request.PageSize,
-            Items = rows.Select(x => new ApprovalQueueItem
+            Items = rows.Select(x =>
             {
+                var aging = ApprovalAgingCalculator.Calculate(x.CreatedAt, nowUtc, true, options);
+                return new ApprovalQueueItem
+                {
                 DocumentType = x.Type, DocumentId = x.Id, DocumentCode = x.Code, CreatorId = x.CreatorId,
                 CreatorName = x.CreatorName, RequestedAtUtc = AsUtc(x.CreatedAt), WarehouseId = x.WarehouseId,
+                WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus,
                 WarehouseName = x.WarehouseName, DestinationWarehouseId = x.DestinationWarehouseId,
                 DestinationWarehouseName = x.DestinationWarehouseName, TotalQuantity = x.TotalQuantity,
                 CanApprove = x.CreatorId != currentUser.UserId, CanReject = x.CreatorId != currentUser.UserId,
                 DeniedReasonCode = x.CreatorId == currentUser.UserId ? "CREATOR_CANNOT_CHECK" : null
+                };
             }).ToList()
         };
     }
@@ -210,7 +233,8 @@ public sealed class ApprovalWorkflowService(
     private ApprovalQueueItem DetailSummary(string type, int id, string code, string state, int creatorId, string creatorName, DateTime createdAt, int warehouseId, string warehouseName, int? destinationId, string? destinationName)
     {
         var pending = state == "Draft"; var checker = creatorId != currentUser.UserId;
-        return new ApprovalQueueItem { DocumentType = type, DocumentId = id, DocumentCode = code, PendingState = state, CreatorId = creatorId, CreatorName = creatorName, RequestedAtUtc = AsUtc(createdAt), WarehouseId = warehouseId, WarehouseName = warehouseName, DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName, CanApprove = pending && checker, CanReject = pending && checker, DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
+        var aging = ApprovalAgingCalculator.Calculate(createdAt, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime, pending, agingOptions ?? new ApprovalAgingOptions());
+        return new ApprovalQueueItem { DocumentType = type, DocumentId = id, DocumentCode = code, PendingState = state, CreatorId = creatorId, CreatorName = creatorName, RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName, DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName, CanApprove = pending && checker, CanReject = pending && checker, DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
     }
     private static ApprovalDetailLine DetailLine(Product product, decimal quantity) => new() { ProductCode = product.Code, ProductName = product.Name, UnitName = product.Unit.Name, Quantity = quantity };
     private void EnsureChecker() { if (!currentUser.IsAuthenticated || (!currentUser.IsGlobalAdmin && currentUser.Role != "Manager")) throw new ForbiddenException("Bạn không có quyền phê duyệt chứng từ."); }

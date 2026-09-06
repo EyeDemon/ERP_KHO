@@ -205,6 +205,12 @@ public sealed class ApprovalHttpIntegrationTests
             var timestamps = Timestamps(json.RootElement).ToArray(); timestamps.Should().NotBeEmpty();
             timestamps.Should().OnlyContain(x => x == "2026-09-05T01:02:03Z");
         }
+        using (var agingJson = JsonDocument.Parse(await client.GetStringAsync("/api/approvals/queue?keyword=UTC-HTTP")))
+        {
+            var item = agingJson.RootElement.GetProperty("items")[0];
+            item.GetProperty("waitingMinutes").GetInt64().Should().BeGreaterThanOrEqualTo(0);
+            item.GetProperty("slaStatus").GetString().Should().BeOneOf("Normal", "Warning", "Overdue");
+        }
         foreach (var bounds in new[] { "fromUtc=2026-09-05T01:02:03Z&toUtc=2026-09-05T01:02:03Z", "fromUtc=2026-09-05T08:02:03%2B07:00&toUtc=2026-09-05T08:02:03%2B07:00" })
         {
             using var json = JsonDocument.Parse(await client.GetStringAsync("/api/approvals/queue?keyword=UTC-HTTP&" + bounds));
