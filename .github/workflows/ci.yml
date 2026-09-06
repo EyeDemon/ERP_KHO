@@ -72,9 +72,14 @@ jobs:
 
     - name: Test API
       timeout-minutes: 10
+      shell: pwsh
       env:
         ERP_KHO_APPROVAL_SQLSERVER_ADMIN_CONNECTION: ${{ env.ERP_KHO_CI_SQLSERVER_SOURCE }}
-      run: dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj --configuration Release --no-build
+      run: |
+        $env:JwtSettings__Secret = [Convert]::ToBase64String(
+          [Security.Cryptography.RandomNumberGenerator]::GetBytes(48)
+        )
+        dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj --configuration Release --no-build
 
     - name: Install Frontend Dependencies
       working-directory: ./frontend
