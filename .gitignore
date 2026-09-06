@@ -1,6 +1,7 @@
 # Local repositories and agent state
 /~/
-/.agent/
+/.agent/*
+!/.agent/encoding-baseline.json
 /.agents/
 /.local-backups/
 /docs/CHAT_HISTORY.md
