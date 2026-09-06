@@ -36,7 +36,7 @@ jobs:
       run: dotnet restore ERP.slnx
 
     - name: Build Backend
-      run: dotnet build ERP.slnx --no-restore
+      run: dotnet build ERP.slnx --configuration Release --no-restore
 
     - name: Verify Isolated SQL Server
       shell: pwsh
@@ -74,7 +74,7 @@ jobs:
       timeout-minutes: 10
       env:
         ERP_KHO_APPROVAL_SQLSERVER_ADMIN_CONNECTION: ${{ env.ERP_KHO_CI_SQLSERVER_SOURCE }}
-      run: dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj --no-build
+      run: dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj --configuration Release --no-build
 
     - name: Install Frontend Dependencies
       working-directory: ./frontend
