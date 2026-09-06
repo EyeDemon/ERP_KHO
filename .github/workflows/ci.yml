@@ -9,7 +9,9 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: windows-2025
+    env:
+      ERP_KHO_CI_SQLSERVER_SOURCE: 'Server=(localdb)\MSSQLLocalDB;Database=master;Integrated Security=True;Encrypt=False;Connect Timeout=5'
     
     steps:
     - name: Checkout repository
@@ -36,10 +38,42 @@ jobs:
     - name: Build Backend
       run: dotnet build ERP.slnx --no-restore
 
+    - name: Verify Isolated SQL Server
+      shell: pwsh
+      timeout-minutes: 2
+      run: |
+        $deadline = [DateTime]::UtcNow.AddSeconds(60)
+        do {
+          try {
+            $connection = [System.Data.SqlClient.SqlConnection]::new($env:ERP_KHO_CI_SQLSERVER_SOURCE)
+            $connection.Open()
+            $command = $connection.CreateCommand()
+            $command.CommandText = "SELECT CASE WHEN DB_NAME() = 'master' THEN 1 ELSE 0 END"
+            if ([int]$command.ExecuteScalar() -ne 1) { throw 'SQL readiness target mismatch.' }
+            $command.Dispose()
+            $connection.Dispose()
+            Write-Output 'Local SQL Server is ready; connection details redacted.'
+            exit 0
+          } catch {
+            if ($null -ne $connection) { $connection.Dispose() }
+            if ([DateTime]::UtcNow -ge $deadline) {
+              Write-Error 'Local SQL Server did not become ready within 60 seconds.'
+              exit 1
+            }
+            Start-Sleep -Seconds 3
+          }
+        } while ($true)
+
     - name: Test Application
-      run: dotnet test ERP.Application.Tests/ERP.Application.Tests.csproj --no-build
+      timeout-minutes: 10
+      env:
+        ERP_KHO_SQLSERVER_ADMIN_CONNECTION: ${{ env.ERP_KHO_CI_SQLSERVER_SOURCE }}
+      run: dotnet run --project tools/ERP.SqlIntegrationHarness/ERP.SqlIntegrationHarness.csproj --configuration Release --no-build
 
     - name: Test API
+      timeout-minutes: 10
+      env:
+        ERP_KHO_APPROVAL_SQLSERVER_ADMIN_CONNECTION: ${{ env.ERP_KHO_CI_SQLSERVER_SOURCE }}
       run: dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj --no-build
 
     - name: Install Frontend Dependencies
