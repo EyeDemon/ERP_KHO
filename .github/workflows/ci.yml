@@ -32,6 +32,9 @@ jobs:
     - name: Verify Encoding
       run: pwsh -NoProfile -File scripts/check-encoding.ps1
 
+    - name: Test Offline Capacity Guards
+      run: powershell.exe -NoProfile -NonInteractive -File tools/ERP.CapacityBaseline/Test-CapacityBaselineGuards.ps1
+
     - name: Restore Backend
       run: dotnet restore ERP.slnx
 
