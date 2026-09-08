@@ -79,7 +79,9 @@ powershell -NoProfile -File tools/ERP.CapacityBaseline/Test-CapacityBaselineGuar
 
 The checked-in sample intentionally contains placeholders, so the first command must fail closed until an owner-approved local copy supplies real non-secret target identities. A successful `-PrepareOnly` run means only that offline schema/limits are valid. It does not attest DNS/TLS, API deployment identity, SQL identity/ownership, isolation, credentials, owner approval or execution readiness.
 
-No executable load command is supplied yet. After approval, the implementation slice should use a pinned k6 version for HTTP load and read-only SQL/host collectors, generate the scenario from the reviewed manifest, and add an execution flag that still revalidates live API and SQL identities. This avoids treating an uninstalled or drifting load tool as approved.
+A reviewable runner is supplied in `tools/ERP.CapacityBaseline`, with Grafana k6 pinned by version and checksum. Live execution remains blocked until a controlled adapter independently verifies the API deployment and SQL ownership linkage, the decision sheet is approved, and exact-run seed, collector, reconciliation and cleanup implementations are reviewed. Offline mock tests do not attest a target or authorize execution.
+
+The owner has accepted this runner only as an offline package for design handoff. This acceptance covers offline orchestration, fail-closed guards, the workload skeleton, mock contracts and the hardened installer. Controlled live adapters, workload, thresholds, environment, paid resources, execution and production release remain unapproved and blocked.
 
 ## Capacity gate boundary
 
