@@ -8,7 +8,10 @@ using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using ERP.Application.Common;
+using ERP.Api.Health;
 
 using Serilog;
 using Serilog.Events;
@@ -106,6 +109,11 @@ builder.Services.AddRateLimiter(options =>
 // Database
 builder.Services.AddDbContext<ErpKhoDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseReadinessHealthCheck>(
+        "database",
+        tags: ["ready"],
+        timeout: TimeSpan.FromSeconds(5));
 
 // DI Registrations
 builder.Services.AddScoped<ERP.Domain.Interfaces.IProductRepository, ERP.Infrastructure.Repositories.ProductRepository>();
@@ -250,7 +258,34 @@ app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 
+var healthEndpointsEnabled = builder.Configuration.GetValue(
+    "Health:Enabled",
+    !app.Environment.IsDevelopment());
+if (healthEndpointsEnabled)
+{
+    app.MapHealthChecks("/health/live", new HealthCheckOptions
+    {
+        Predicate = _ => false,
+        ResponseWriter = WriteHealthResponseAsync
+    });
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready", StringComparer.Ordinal),
+        ResponseWriter = WriteHealthResponseAsync
+    });
+}
+
 app.Run();
+
+static Task WriteHealthResponseAsync(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+    context.Response.StatusCode = report.Status == HealthStatus.Healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable;
+    return context.Response.WriteAsJsonAsync(new
+    {
+        status = report.Status.ToString().ToLowerInvariant()
+    });
+}
 
 public partial class Program { }
 

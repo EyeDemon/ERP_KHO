@@ -24,6 +24,12 @@ services:
       - RateLimiting__Api__PermitLimit=${API_RATE_LIMIT:-120}
       - RateLimiting__Api__WindowSeconds=${API_RATE_WINDOW_SECONDS:-60}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
 
   erp-frontend:
     build:
@@ -33,5 +39,12 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - erp-backend
+      erp-backend:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider --quiet http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
