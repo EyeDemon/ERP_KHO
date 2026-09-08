@@ -35,6 +35,29 @@ jobs:
     - name: Test Offline Capacity Guards
       run: powershell.exe -NoProfile -NonInteractive -File tools/ERP.CapacityBaseline/Test-CapacityBaselineGuards.ps1
 
+    - name: Test Offline Capacity Runner
+      shell: powershell
+      run: |
+        $ErrorActionPreference = 'Stop'
+        Get-ChildItem -LiteralPath tools/ERP.CapacityBaseline -Filter '*.ps1' -File | ForEach-Object {
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            throw "PowerShell parser failed for $($_.Name): $($errors -join '; ')"
+          }
+        }
+        $workloadSyntaxPath = Join-Path $env:RUNNER_TEMP 'erp-kho-capacity-workload-syntax.mjs'
+        try {
+          Copy-Item -LiteralPath tools/ERP.CapacityBaseline/capacity-workload.js -Destination $workloadSyntaxPath
+          node --check $workloadSyntaxPath
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        } finally {
+          Remove-Item -LiteralPath $workloadSyntaxPath -Force -ErrorAction SilentlyContinue
+        }
+        powershell.exe -NoProfile -NonInteractive -File tools/ERP.CapacityBaseline/Test-CapacityRunner.ps1
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     - name: Restore Backend
       run: dotnet restore ERP.slnx
 
