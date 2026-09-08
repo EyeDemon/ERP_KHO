@@ -57,11 +57,16 @@ if ($env:ERP_CAPACITY_TEST_MODE -ne '1') { throw 'Test adapters are unavailable 
 if (-not $config.OwnerApproved -or -not $config.ExecutionEnabled) { throw 'CAPACITY_EXECUTION_BLOCKED: owner approval and execution enablement are required.' }
 if ([DateTimeOffset]::UtcNow -ge [DateTimeOffset]::Parse($config.ApprovalExpiresAtUtc)) { throw 'CAPACITY_EXECUTION_BLOCKED: approved execution window expired.' }
 
-$adapter = (Resolve-Path -LiteralPath $AdapterPath).Path
-$tempDirectory = (Resolve-Path -LiteralPath $env:TEMP).Path
-$testRoot = [IO.Path]::GetFullPath((Join-Path $tempDirectory 'erp-capacity-runner-'))
-if (-not $adapter.StartsWith($testRoot, [StringComparison]::OrdinalIgnoreCase) -or
-    (Get-Content -LiteralPath $adapter -Raw) -notmatch '^# ERP_CAPACITY_OFFLINE_TEST_ADAPTER') { throw 'Test adapter is outside the isolated offline-test boundary.' }
+$adapterFile = Get-Item -LiteralPath $AdapterPath
+$tempDirectory = Get-Item -LiteralPath $env:TEMP
+$testDirectory = Get-Item -LiteralPath $adapterFile.DirectoryName
+$expectedTestDirectory = "erp-capacity-runner-$($config.RunId)"
+if ($adapterFile.PSIsContainer -or $testDirectory.Name -cne $expectedTestDirectory -or
+    $null -eq $testDirectory.Parent -or $testDirectory.Parent.FullName -cne $tempDirectory.FullName -or
+    (Get-Content -LiteralPath $adapterFile.FullName -Raw) -notmatch '^# ERP_CAPACITY_OFFLINE_TEST_ADAPTER') {
+    throw 'Test adapter is outside the isolated offline-test boundary.'
+}
+$adapter = $adapterFile.FullName
 . $adapter
 foreach ($fn in @('Get-CapacityApiEvidence','Get-CapacitySqlEvidence','Invoke-CapacitySeed','Invoke-CapacityProcess','Get-CapacityCollectors','Invoke-CapacityReconciliation')) {
     if (-not (Get-Command $fn -CommandType Function -ErrorAction SilentlyContinue)) { throw "TARGET_VERIFICATION_BLOCKED: adapter lacks $fn" }

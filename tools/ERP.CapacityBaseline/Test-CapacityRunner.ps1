@@ -35,7 +35,7 @@ foreach($mockCase in @('timeout','cancelled','safety-stop','reconciliation','api
 
 $implementation=Get-Content $runner -Raw
 if($implementation -match 'continue-on-error|SkipVerification|Bypass'){throw 'Runner contains a verification bypass.'}
-if($implementation -notmatch 'Resolve-Path -LiteralPath \$env:TEMP'){throw 'Runner does not canonicalize the isolated test root.'}
+if($implementation -notmatch 'testDirectory\.Parent\.FullName' -or $implementation -notmatch 'expectedTestDirectory'){throw 'Runner does not enforce the exact isolated test directory boundary.'}
 $workload=Get-Content (Join-Path $PSScriptRoot 'capacity-workload.js') -Raw
 if($workload -match 'console\.log\(.+(token|password|cookie)'){throw 'Workload may log credentials.'}
 if($workload -notmatch 'expiresAtMs - 30000'){throw 'Workload lacks proactive token-expiry handling.'}
