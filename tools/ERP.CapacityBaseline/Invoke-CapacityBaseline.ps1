@@ -58,7 +58,8 @@ if (-not $config.OwnerApproved -or -not $config.ExecutionEnabled) { throw 'CAPAC
 if ([DateTimeOffset]::UtcNow -ge [DateTimeOffset]::Parse($config.ApprovalExpiresAtUtc)) { throw 'CAPACITY_EXECUTION_BLOCKED: approved execution window expired.' }
 
 $adapter = (Resolve-Path -LiteralPath $AdapterPath).Path
-$testRoot = [IO.Path]::GetFullPath((Join-Path $env:TEMP 'erp-capacity-runner-'))
+$tempDirectory = (Resolve-Path -LiteralPath $env:TEMP).Path
+$testRoot = [IO.Path]::GetFullPath((Join-Path $tempDirectory 'erp-capacity-runner-'))
 if (-not $adapter.StartsWith($testRoot, [StringComparison]::OrdinalIgnoreCase) -or
     (Get-Content -LiteralPath $adapter -Raw) -notmatch '^# ERP_CAPACITY_OFFLINE_TEST_ADAPTER') { throw 'Test adapter is outside the isolated offline-test boundary.' }
 . $adapter
