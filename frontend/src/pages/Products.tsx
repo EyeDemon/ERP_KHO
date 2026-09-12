@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { canManageCatalogs, currentRole } from '../services/authorization';
 import { categoryChanged, categoryRequest, normalizeBarcodeInput } from './productCatalog';
@@ -25,6 +25,15 @@ const Products = () => {
   const [form, setForm] = useState({ code: '', name: '', description: '', unitId: 0, categoryId: '' as number | '', isActive: true });
   const [categoryForm, setCategoryForm] = useState({ code: '', name: '' });
   const [barcode, setBarcode] = useState('');
+  const mutationLock = useRef(false);
+  const [mutating, setMutating] = useState(false);
+
+  const mutate = async (action: () => Promise<void>) => {
+    if (mutationLock.current) return;
+    mutationLock.current = true; setMutating(true); setError('');
+    try { await action(); }
+    finally { mutationLock.current = false; setMutating(false); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -46,33 +55,35 @@ const Products = () => {
   const editMode = (p: Product) => { setEditing(p); setForm({ code: p.code, name: p.name, description: p.description || '', unitId: p.unitId, categoryId: p.categoryId || '', isActive: p.isActive }); setBarcode(''); };
 
   const saveProduct = async (e: React.FormEvent) => {
-    e.preventDefault(); setError('');
-    try {
+    e.preventDefault(); await mutate(async () => {
+      try {
       if (editing) {
         await apiClient.put(`/api/products/${editing.id}`, { name: form.name, description: form.description || null, unitId: form.unitId, isActive: form.isActive });
         if (categoryChanged(editing.categoryId, form.categoryId)) await apiClient.put(`/api/products/${editing.id}/category`, categoryRequest(form.categoryId));
       } else await apiClient.post('/api/products', { ...form, description: form.description || null, ...categoryRequest(form.categoryId) });
       setNotice('Đã lưu sản phẩm.'); createMode(); await load();
-    } catch (e) { setError(messageOf(e, 'Không thể lưu sản phẩm.')); }
+      } catch (e) { setError(messageOf(e, 'Không thể lưu sản phẩm.')); }
+    });
   };
   const addCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try { await apiClient.post('/api/product-categories', categoryForm); setCategoryForm({ code: '', name: '' }); await load(); }
-    catch (e) { setError(messageOf(e, 'Không thể thêm danh mục.')); }
+    e.preventDefault(); await mutate(async () => {
+      try { await apiClient.post('/api/product-categories', categoryForm); setCategoryForm({ code: '', name: '' }); await load(); }
+      catch (e) { setError(messageOf(e, 'Không thể thêm danh mục.')); }
+    });
   };
-  const toggleCategory = async (c: Category) => { try { await apiClient.put(`/api/product-categories/${c.id}`, { name: c.name, isActive: !c.isActive }); await load(); } catch (e) { setError(messageOf(e, 'Không thể cập nhật danh mục.')); } };
-  const deleteCategory = async (id: number) => { try { await apiClient.delete(`/api/product-categories/${id}`); await load(); } catch (e) { setError(messageOf(e, 'Không thể xóa danh mục.')); } };
+  const toggleCategory = async (c: Category) => mutate(async () => { try { await apiClient.put(`/api/product-categories/${c.id}`, { name: c.name, isActive: !c.isActive }); await load(); } catch (e) { setError(messageOf(e, 'Không thể cập nhật danh mục.')); } });
+  const deleteCategory = async (id: number) => mutate(async () => { try { await apiClient.delete(`/api/product-categories/${id}`); await load(); } catch (e) { setError(messageOf(e, 'Không thể xóa danh mục.')); } });
   const refreshEditing = async () => { if (editing) editMode((await apiClient.get(`/api/products/${editing.id}`)).data); await load(); };
-  const addBarcode = async () => { if (!editing) return; try { await apiClient.post(`/api/products/${editing.id}/barcodes`, { value: normalizeBarcodeInput(barcode) }); await refreshEditing(); } catch (e) { setError(messageOf(e, 'Không thể thêm barcode.')); } };
-  const deleteBarcode = async (id: number) => { if (!editing) return; try { await apiClient.delete(`/api/products/${editing.id}/barcodes/${id}`); await refreshEditing(); } catch (e) { setError(messageOf(e, 'Không thể xóa barcode.')); } };
-  const deleteProduct = async (id: number) => { if (!window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return; try { await apiClient.delete(`/api/products/${id}`); setNotice('Đã xóa sản phẩm.'); await load(); } catch (e) { setError(messageOf(e, 'Không thể xóa sản phẩm.')); } };
+  const addBarcode = async () => { if (!editing) return; await mutate(async () => { try { await apiClient.post(`/api/products/${editing.id}/barcodes`, { value: normalizeBarcodeInput(barcode) }); await refreshEditing(); } catch (e) { setError(messageOf(e, 'Không thể thêm barcode.')); } }); };
+  const deleteBarcode = async (id: number) => { if (!editing) return; await mutate(async () => { try { await apiClient.delete(`/api/products/${editing.id}/barcodes/${id}`); await refreshEditing(); } catch (e) { setError(messageOf(e, 'Không thể xóa barcode.')); } }); };
+  const deleteProduct = async (id: number) => { if (!window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return; await mutate(async () => { try { await apiClient.delete(`/api/products/${id}`); setNotice('Đã xóa sản phẩm.'); await load(); } catch (e) { setError(messageOf(e, 'Không thể xóa sản phẩm.')); } }); };
   const lookup = async (e: React.FormEvent) => { e.preventDefault(); try { const p = (await apiClient.get('/api/product-barcodes/lookup', { params: { value: scan } })).data as Product; setSearch(p.code); setNotice(`Barcode thuộc sản phẩm ${p.code} – ${p.name}.`); } catch (e) { setError(messageOf(e, 'Không tìm thấy barcode.')); } };
 
   return <div><h2>Quản lý sản phẩm</h2>
-    {notice && <p style={{ color: 'green' }}>{notice}</p>}{error && <p style={{ color: 'red' }}>{error}</p>}
+    {notice && <p style={{ color: 'green' }}>{notice}</p>}{error && <p role="alert" style={{ color: 'red' }}>{error}</p>}{mutating && <p role="status">Đang xử lý...</p>}
     <form onSubmit={lookup}><input aria-label="Tra barcode" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập barcode" autoComplete="off" /><button>Tra barcode</button></form>
     <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Tìm mã, tên hoặc barcode" />
-    {canManage && <section><h3>Danh mục sản phẩm</h3><form onSubmit={addCategory}><input value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" required /><input value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required /><button>Thêm danh mục</button></form><ul>{categories.map(c => <li key={c.id}>{c.code} – {c.name} ({c.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}) <button onClick={() => toggleCategory(c)}>{c.isActive ? 'Ngừng' : 'Kích hoạt'}</button> <button onClick={() => deleteCategory(c.id)}>Xóa</button></li>)}</ul></section>}
+    {canManage && <section><h3>Danh mục sản phẩm</h3><form onSubmit={addCategory}><input value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" required /><input value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required /><button disabled={mutating}>Thêm danh mục</button></form><ul>{categories.map(c => <li key={c.id}>{c.code} – {c.name} ({c.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}) <button disabled={mutating} onClick={() => toggleCategory(c)}>{c.isActive ? 'Ngừng' : 'Kích hoạt'}</button> <button disabled={mutating} onClick={() => deleteCategory(c.id)}>Xóa</button></li>)}</ul></section>}
     {canManage && <form onSubmit={saveProduct} style={{ display: 'grid', gap: 8, maxWidth: 620 }}><h3>{editing ? `Sửa ${editing.code}` : 'Thêm sản phẩm'}</h3>
       <input value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã sản phẩm" disabled={!!editing} required /><input value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên sản phẩm" required /><textarea value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="Mô tả" />
       <select value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required><option value={0}>Chọn đơn vị</option>{units.filter(x => x.isActive).map(x => <option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}</select>

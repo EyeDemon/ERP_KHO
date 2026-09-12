@@ -38,7 +38,11 @@ public sealed class SqlServerProductCatalogTests
         await using var first = CreateContext(); await using var second = CreateContext();
         first.ProductBarcodes.Add(new ProductBarcode { ProductId = product1, Value = $"DUP{suffix}" });
         second.ProductBarcodes.Add(new ProductBarcode { ProductId = product2, Value = $"DUP{suffix}" });
-        var results = await Task.WhenAll(SaveResult(first), SaveResult(second));
+        using var ready = new CountdownEvent(2);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var results = await Task.WhenAll(
+            SaveAtBarrier(first, ready, timeout.Token),
+            SaveAtBarrier(second, ready, timeout.Token)).WaitAsync(timeout.Token);
         results.Count(x => x).Should().Be(1);
         await using var verify = CreateContext();
         (await verify.ProductBarcodes.CountAsync(x => x.Value == $"DUP{suffix}")).Should().Be(1);
@@ -48,15 +52,31 @@ public sealed class SqlServerProductCatalogTests
     public async Task CategoryForeignKey_RejectsDeleteWhileReferenced()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        await using var context = CreateContext();
-        var unit = new Unit { Code = $"V{suffix}", Name = "Unit" };
-        var category = new ProductCategory { Code = $"C{suffix}", Name = "Category" };
-        context.AddRange(unit, category); await context.SaveChangesAsync();
-        context.Products.Add(new Product { Code = $"Q{suffix}", Name = "Product", UnitId = unit.Id, CategoryId = category.Id });
-        await context.SaveChangesAsync(); context.ProductCategories.Remove(category);
-        await FluentActions.Awaiting(() => context.SaveChangesAsync()).Should().ThrowAsync<DbUpdateException>();
+        int categoryId;
+        await using (var seed = CreateContext())
+        {
+            var unit = new Unit { Code = $"V{suffix}", Name = "Unit" };
+            var category = new ProductCategory { Code = $"C{suffix}", Name = "Category" };
+            seed.AddRange(unit, category); await seed.SaveChangesAsync();
+            seed.Products.Add(new Product { Code = $"Q{suffix}", Name = "Product", UnitId = unit.Id, CategoryId = category.Id });
+            await seed.SaveChangesAsync();
+            categoryId = category.Id;
+        }
+
+        await using var deleting = CreateContext();
+        var categoryToDelete = await deleting.ProductCategories.SingleAsync(x => x.Id == categoryId);
+        deleting.ProductCategories.Remove(categoryToDelete);
+        await FluentActions.Awaiting(() => deleting.SaveChangesAsync()).Should().ThrowAsync<DbUpdateException>();
     }
 
     private static ErpKhoDbContext CreateContext() => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(ConnectionString).Options);
     private static async Task<bool> SaveResult(ErpKhoDbContext context) { try { await context.SaveChangesAsync(); return true; } catch (DbUpdateException) { return false; } }
+    private static async Task<bool> SaveAtBarrier(ErpKhoDbContext context, CountdownEvent ready, CancellationToken ct)
+    {
+        ready.Signal();
+        var synchronized = await Task.Run(() => ready.Wait(TimeSpan.FromSeconds(5), ct), ct);
+        if (!synchronized) throw new TimeoutException("Concurrent barcode writers did not reach the synchronization barrier.");
+        try { await context.SaveChangesAsync(ct); return true; }
+        catch (DbUpdateException) { return false; }
+    }
 }

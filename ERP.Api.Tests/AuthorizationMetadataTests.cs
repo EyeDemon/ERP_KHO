@@ -42,6 +42,7 @@ namespace ERP.Api.Tests
         [Theory]
         [InlineData(typeof(ProductsController))]
         [InlineData(typeof(UnitsController))]
+        [InlineData(typeof(ProductCategoriesController))]
         [InlineData(typeof(WarehousesController))]
         public void CatalogControllers_CreateUpdateDelete_RequiresAdminOrManager(Type controllerType)
         {
@@ -58,6 +59,7 @@ namespace ERP.Api.Tests
         [Theory]
         [InlineData(typeof(ProductsController))]
         [InlineData(typeof(UnitsController))]
+        [InlineData(typeof(ProductCategoriesController))]
         [InlineData(typeof(WarehousesController))]
         public void CatalogControllers_Get_RequiresAllRoles(Type controllerType)
         {
@@ -158,6 +160,15 @@ namespace ERP.Api.Tests
             // Verify Viewer is NOT in AdminOrManager or AdminManagerOrStaff
             AppRoles.AdminOrManager.Should().NotContain(AppRoles.Viewer);
             AppRoles.AdminManagerOrStaff.Should().NotContain(AppRoles.Viewer);
+        }
+
+        [Fact]
+        public void ProductBarcodeEndpoints_ReadForAllRoles_MutateForAdminOrManager()
+        {
+            typeof(ProductBarcodeLookupController).GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AllRoles);
+            typeof(ProductBarcodesController).GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AllRoles);
+            typeof(ProductBarcodesController).GetMethod("Create")!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminOrManager);
+            typeof(ProductBarcodesController).GetMethod("Delete")!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminOrManager);
         }
     }
 }
