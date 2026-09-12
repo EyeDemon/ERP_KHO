@@ -16,6 +16,8 @@ public class ErpKhoDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Unit> Units => Set<Unit>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
+    public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
@@ -61,5 +63,13 @@ public class ErpKhoDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ErpKhoDbContext).Assembly);
+        if (Database.IsSqlServer())
+        {
+            modelBuilder.Entity<ProductCategory>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
+            modelBuilder.Entity<ProductBarcode>().Property(x => x.Value).UseCollation("Latin1_General_100_BIN2");
+            modelBuilder.Entity<ProductBarcode>().ToTable("ProductBarcodes", t => t.HasCheckConstraint(
+                "CK_ProductBarcodes_Value",
+                "[Value] = LTRIM(RTRIM([Value])) AND [Value] NOT LIKE '%[^A-Za-z0-9._-]%' COLLATE Latin1_General_100_BIN2 AND LEN([Value]) BETWEEN 1 AND 64"));
+        }
     }
 }

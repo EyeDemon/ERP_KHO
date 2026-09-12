@@ -10,26 +10,18 @@ namespace ERP.Application.Services
     public class ProductService : IProductService
     {
         private readonly IProductRepository _productRepository;
+        private readonly IProductCatalogService _catalogService;
 
-        public ProductService(IProductRepository productRepository)
+        public ProductService(IProductRepository productRepository, IProductCatalogService catalogService)
         {
             _productRepository = productRepository;
+            _catalogService = catalogService;
         }
 
         public async Task<IEnumerable<ProductDto>> GetAllProductsAsync(CancellationToken cancellationToken = default)
         {
             var products = await _productRepository.GetProductsWithDetailsAsync(cancellationToken);
-            return products.Select(p => new ProductDto
-            {
-                Id = p.Id,
-                Code = p.Code,
-                Name = p.Name,
-                Description = p.Description,
-                UnitId = p.UnitId,
-                UnitName = p.Unit?.Name,
-                IsActive = p.IsActive,
-                CreatedAt = p.CreatedAt
-            });
+            return products.Select(Map);
         }
 
         public async Task<PagedResult<ProductDto>> GetPagedProductsAsync(int pageIndex, int pageSize, string? keyword, CancellationToken cancellationToken = default)
@@ -40,17 +32,7 @@ namespace ERP.Application.Services
 
             var (items, totalRecords) = await _productRepository.GetPagedAsync(pageIndex, pageSize, keyword, cancellationToken);
 
-            var dtos = items.Select(p => new ProductDto
-            {
-                Id = p.Id,
-                Code = p.Code,
-                Name = p.Name,
-                Description = p.Description,
-                UnitId = p.UnitId,
-                UnitName = p.Unit?.Name,
-                IsActive = p.IsActive,
-                CreatedAt = p.CreatedAt
-            }).ToList();
+            var dtos = items.Select(Map).ToList();
 
             return new PagedResult<ProductDto>
             {
@@ -66,16 +48,7 @@ namespace ERP.Application.Services
             var p = await _productRepository.GetByIdAsync(id, cancellationToken);
             if (p == null) throw new NotFoundException($"Không tìm thấy sản phẩm id {id}");
 
-            return new ProductDto
-            {
-                Id = p.Id,
-                Code = p.Code,
-                Name = p.Name,
-                Description = p.Description,
-                UnitId = p.UnitId,
-                IsActive = p.IsActive,
-                CreatedAt = p.CreatedAt
-            };
+            return Map(p);
         }
 
         public async Task<ProductDto> CreateProductAsync(CreateProductDto dto, string username, CancellationToken cancellationToken = default)
@@ -83,21 +56,30 @@ namespace ERP.Application.Services
             dto.Code = dto.Code.Trim();
             var exists = await _productRepository.ExistsByCodeAsync(dto.Code, null, cancellationToken);
             if (exists) throw new BusinessRuleException($"Mã sản phẩm {dto.Code} đã tồn tại");
-
             var product = new Product
             {
                 Code = dto.Code,
                 Name = dto.Name,
                 Description = dto.Description,
                 UnitId = dto.UnitId,
+                CategoryId = dto.CategoryId,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
 
-            await _productRepository.AddAsync(product, cancellationToken);
+            await _catalogService.AddProductAsync(product, cancellationToken);
 
             return await GetProductByIdAsync(product.Id, cancellationToken);
         }
+
+        public static ProductDto Map(Product p) => new()
+        {
+            Id = p.Id, Code = p.Code, Name = p.Name, Description = p.Description,
+            UnitId = p.UnitId, UnitName = p.Unit?.Name, CategoryId = p.CategoryId,
+            CategoryCode = p.Category?.Code, CategoryName = p.Category?.Name,
+            Barcodes = p.Barcodes.Select(x => new ProductBarcodeDto { Id = x.Id, ProductId = x.ProductId, Value = x.Value }).ToList(),
+            IsActive = p.IsActive, CreatedAt = p.CreatedAt
+        };
 
         public async Task UpdateProductAsync(int id, UpdateProductDto dto, string username, CancellationToken cancellationToken = default)
         {

@@ -21,7 +21,8 @@ namespace ERP.Application.Tests
         {
             // Arrange
             var mockRepo = new Mock<IProductRepository>();
-            var service = new ProductService(mockRepo.Object);
+            var catalog = new Mock<IProductCatalogService>();
+            var service = new ProductService(mockRepo.Object, catalog.Object);
             using var cts = new CancellationTokenSource();
             var token = cts.Token;
 
@@ -34,7 +35,7 @@ namespace ERP.Application.Tests
                 .ReturnsAsync(product);
             mockRepo.Setup(r => r.ExistsByCodeAsync("P10", null, token))
                 .ReturnsAsync(false);
-            mockRepo.Setup(r => r.AddAsync(It.IsAny<Product>(), token))
+            catalog.Setup(r => r.AddProductAsync(It.IsAny<Product>(), token))
                 .Callback<Product, CancellationToken>((p, ct) => p.Id = 10)
                 .ReturnsAsync((Product p, CancellationToken ct) => p);
             mockRepo.Setup(r => r.UpdateAsync(It.IsAny<Product>(), token))
@@ -60,7 +61,7 @@ namespace ERP.Application.Tests
             var created = await service.CreateProductAsync(new CreateProductDto { Code = "P10", Name = "Product 10", UnitId = 1 }, "admin", token);
             created.Should().NotBeNull();
             mockRepo.Verify(r => r.ExistsByCodeAsync("P10", null, token), Times.Once);
-            mockRepo.Verify(r => r.AddAsync(It.IsAny<Product>(), token), Times.Once);
+            catalog.Verify(r => r.AddProductAsync(It.IsAny<Product>(), token), Times.Once);
 
             await service.UpdateProductAsync(10, new UpdateProductDto { Name = "Product 10 Updated", UnitId = 1 }, "admin", token);
             mockRepo.Verify(r => r.UpdateAsync(It.IsAny<Product>(), token), Times.Once);

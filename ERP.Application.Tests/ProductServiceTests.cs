@@ -9,6 +9,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Exceptions;
 using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
+using ERP.Application.Interfaces;
 
 namespace ERP.Application.Tests
 {
@@ -16,11 +17,23 @@ namespace ERP.Application.Tests
     {
         private readonly Mock<IProductRepository> _mockRepo;
         private readonly ProductService _service;
+        private readonly Mock<IProductCatalogService> _catalog = new();
 
         public ProductServiceTests()
         {
             _mockRepo = new Mock<IProductRepository>();
-            _service = new ProductService(_mockRepo.Object);
+            _service = new ProductService(_mockRepo.Object, _catalog.Object);
+        }
+
+        [Fact]
+        public async Task UpdateProduct_FromLegacyPayload_PreservesCategoryAndBarcodes()
+        {
+            var barcode = new ProductBarcode { Id = 4, ProductId = 1, Value = "001Ab" };
+            var product = new Product { Id = 1, Code = "P1", CategoryId = 9, Barcodes = [barcode] };
+            _mockRepo.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(product);
+            await _service.UpdateProductAsync(1, new UpdateProductDto { Name = "Mới", UnitId = 2, IsActive = true }, "user");
+            product.CategoryId.Should().Be(9);
+            product.Barcodes.Should().ContainSingle().Which.Should().BeSameAs(barcode);
         }
 
         [Fact]
@@ -37,7 +50,7 @@ namespace ERP.Application.Tests
             _mockRepo.Setup(r => r.ExistsByCodeAsync("SP01", null)).ReturnsAsync(false);
             
             Product? capturedProduct = null;
-            _mockRepo.Setup(r => r.AddAsync(It.IsAny<Product>(), It.IsAny<CancellationToken>()))
+            _catalog.Setup(r => r.AddProductAsync(It.IsAny<Product>(), It.IsAny<CancellationToken>()))
                 .Callback<Product, CancellationToken>((p, ct) => 
                 {
                     p.Id = 1;
@@ -74,7 +87,7 @@ namespace ERP.Application.Tests
 
             // Assert
             await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("*tồn tại*");
-            _mockRepo.Verify(r => r.AddAsync(It.IsAny<Product>()), Times.Never);
+            _catalog.Verify(r => r.AddProductAsync(It.IsAny<Product>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]

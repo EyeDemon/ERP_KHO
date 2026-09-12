@@ -6,6 +6,7 @@ public class Product
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int UnitId { get; set; }
+    public int? CategoryId { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -13,5 +14,7 @@ public class Product
 
     // Navigation
     public Unit Unit { get; set; } = null!;
+    public ProductCategory? Category { get; set; }
+    public ICollection<ProductBarcode> Barcodes { get; set; } = new List<ProductBarcode>();
     public ICollection<InventoryStock> InventoryStocks { get; set; } = new List<InventoryStock>();
 }

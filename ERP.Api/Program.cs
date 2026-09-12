@@ -118,6 +118,8 @@ builder.Services.AddHealthChecks()
 // DI Registrations
 builder.Services.AddScoped<ERP.Domain.Interfaces.IProductRepository, ERP.Infrastructure.Repositories.ProductRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IProductService, ERP.Application.Services.ProductService>();
+builder.Services.AddScoped<ERP.Domain.Interfaces.IProductCatalogRepository, ERP.Infrastructure.Repositories.ProductCatalogRepository>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IProductCatalogService, ERP.Application.Services.ProductCatalogService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IWarehouseRepository, ERP.Infrastructure.Repositories.WarehouseRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseService, ERP.Application.Services.WarehouseService>();

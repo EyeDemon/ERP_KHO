@@ -68,5 +68,13 @@ namespace ERP.Api.Controllers
             await _productService.DeleteProductAsync(id, cancellationToken);
             return NoContent();
         }
+
+        [HttpPut("{id:int}/category")]
+        [Authorize(Roles = AppRoles.AdminOrManager)]
+        public async Task<IActionResult> SetCategory(int id, [FromBody] SetProductCategoryDto dto, [FromServices] IProductCatalogService catalogService, CancellationToken cancellationToken = default)
+        {
+            await catalogService.SetProductCategoryAsync(id, dto, cancellationToken);
+            return NoContent();
+        }
     }
 }
