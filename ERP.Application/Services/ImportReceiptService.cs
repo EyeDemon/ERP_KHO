@@ -291,6 +291,11 @@ namespace ERP.Application.Services
                 if (receipt.Status != Domain.Enums.ReceiptStatus.Draft)
                     throw new BusinessRuleException("Chỉ có thể hủy phiếu nhập ở trạng thái nháp");
 
+                if (receipt.Status == Domain.Enums.ReceiptStatus.Draft)
+                {
+                    receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
+                    receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
+                }
                 receipt.Status = Domain.Enums.ReceiptStatus.Cancelled;
                 await _importReceiptRepository.UpdateAsync(receipt);
 

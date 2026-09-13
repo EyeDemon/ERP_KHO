@@ -77,6 +77,33 @@ public sealed class SqlServerBusinessPartnerTests
         await FluentActions.Awaiting(() => service.SetImportSupplierAsync(fixture.ImportId, null)).Should().ThrowAsync<BusinessRuleException>();
     }
 
+    [SqlServerFact]
+    public async Task UpdateRequiresValidCurrentRowVersion()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        int id; string original;
+        await using (var seed = CreateContext())
+        {
+            var current = new Current(0, true);
+            var created = await new BusinessPartnerService(seed, new WarehouseAuthorizationService(seed, current), current)
+                .CreateAsync(new SaveBusinessPartnerDto { Code = $"V{suffix}", Name = "Original", IsSupplier = true });
+            id = created.Id; original = created.RowVersion;
+        }
+
+        async Task Update(string? token, string name)
+        {
+            await using var db = CreateContext(); var current = new Current(0, true);
+            await new BusinessPartnerService(db, new WarehouseAuthorizationService(db, current), current)
+                .UpdateAsync(id, new SaveBusinessPartnerDto { Code = $"V{suffix}", Name = name, IsSupplier = true, RowVersion = token });
+        }
+
+        await FluentActions.Awaiting(() => Update(null, "Missing")).Should().ThrowAsync<BusinessRuleException>().Where(x => Equals(x.Data["HttpStatusCode"], 409));
+        await FluentActions.Awaiting(() => Update("not-base64", "Malformed")).Should().ThrowAsync<BusinessRuleException>().Where(x => Equals(x.Data["HttpStatusCode"], 409));
+        await Update(original, "First writer");
+        await FluentActions.Awaiting(() => Update(original, "Stale writer")).Should().ThrowAsync<BusinessRuleException>().Where(x => Equals(x.Data["HttpStatusCode"], 409));
+        await using var verify = CreateContext(); (await verify.BusinessPartners.FindAsync(id))!.Name.Should().Be("First writer");
+    }
+
     private static async Task<(int ImportId,int ExportId,int UserId)> ReceiptFixtureAsync(ErpKhoDbContext db,string suffix,int? partnerId)
     {
         var role=new Role{RoleName=$"R{suffix}"}; var user=new User{Username=$"U{suffix}",PasswordHash="x",FullName="Synthetic",Role=role};
@@ -88,5 +115,5 @@ public sealed class SqlServerBusinessPartnerTests
     }
     private static async Task<bool> SaveAtBarrier(ErpKhoDbContext db,CountdownEvent barrier,CancellationToken ct){barrier.Signal();if(!await Task.Run(()=>barrier.Wait(TimeSpan.FromSeconds(5),ct),ct))throw new TimeoutException();try{await db.SaveChangesAsync(ct);return true;}catch(DbUpdateException){return false;}}
     private static ErpKhoDbContext CreateContext()=>new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(ConnectionString).Options);
-    private sealed record Current(int UserId):ICurrentUser{public bool IsAuthenticated=>true;public bool IsGlobalAdmin=>false;public string Role=>"Manager";}
+    private sealed record Current(int UserId,bool IsGlobalAdmin=false):ICurrentUser{public bool IsAuthenticated=>true;public string Role=>"Manager";}
 }

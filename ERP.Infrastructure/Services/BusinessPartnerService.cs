@@ -40,7 +40,8 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
         Roles(dto.IsSupplier,dto.IsCustomer);
         if(!dto.IsSupplier&&await context.ImportReceipts.AnyAsync(x=>x.SupplierId==id,ct))throw Conflict("Không thể tắt vai trò nhà cung cấp đang được phiếu nhập sử dụng.");
         if(!dto.IsCustomer&&await context.ExportReceipts.AnyAsync(x=>x.CustomerId==id,ct))throw Conflict("Không thể tắt vai trò khách hàng đang được phiếu xuất sử dụng.");
-        if(!string.IsNullOrEmpty(dto.RowVersion)){var expected=Convert.FromBase64String(dto.RowVersion);context.Entry(entity).Property(x=>x.RowVersion).OriginalValue=expected;}
+        var expected=RequiredRowVersion(dto.RowVersion);
+        context.Entry(entity).Property(x=>x.RowVersion).OriginalValue=expected;
         entity.Name=Text(dto.Name,200,"Tên đối tác");entity.IsSupplier=dto.IsSupplier;entity.IsCustomer=dto.IsCustomer;entity.IsActive=dto.IsActive;entity.Phone=Optional(dto.Phone,50,"Điện thoại");entity.Email=Optional(dto.Email,254,"Email");entity.Address=Optional(dto.Address,500,"Địa chỉ");entity.UpdatedAt=DateTime.UtcNow;
         await Save("Đối tác đã được thay đổi đồng thời.",ct);await tx.CommitAsync(ct);
     }
@@ -74,5 +75,11 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
     private static string Text(string? x,int max,string label){var v=(x??"").Trim();if(v.Length is<1||v.Length>max)throw new BusinessRuleException($"{label} phải có từ 1 đến {max} ký tự.");return v;}
     private static string? Optional(string? x,int max,string label){if(string.IsNullOrWhiteSpace(x))return null;var v=x.Trim();if(v.Length>max)throw new BusinessRuleException($"{label} không được vượt quá {max} ký tự.");return v;}
     private static void Roles(bool supplier,bool customer){if(!supplier&&!customer)throw new BusinessRuleException("Đối tác phải có ít nhất một vai trò nhà cung cấp hoặc khách hàng.");}
+    private static byte[] RequiredRowVersion(string? value)
+    {
+        if(string.IsNullOrWhiteSpace(value))throw Conflict("Thiếu phiên bản đối tác. Vui lòng tải lại dữ liệu trước khi lưu.");
+        try{var bytes=Convert.FromBase64String(value);if(bytes.Length!=8)throw new FormatException();return bytes;}
+        catch(FormatException ex){throw Conflict("Phiên bản đối tác không hợp lệ. Vui lòng tải lại dữ liệu trước khi lưu.",ex);}
+    }
     private static BusinessRuleException Conflict(string message,Exception? inner=null){var e=inner is null?new BusinessRuleException(message):new BusinessRuleException(message,inner);e.Data["HttpStatusCode"]=409;return e;}
 }

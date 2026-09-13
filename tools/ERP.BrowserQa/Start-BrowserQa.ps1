@@ -39,13 +39,12 @@ try {
 INSERT dbo.Roles(RoleName,Description) VALUES('Admin',N'Synthetic browser QA'),('Manager',N'Synthetic browser QA'),('WarehouseStaff',N'Synthetic browser QA'),('Viewer',N'Synthetic browser QA');
 DECLARE @admin int=(SELECT Id FROM dbo.Roles WHERE RoleName='Admin'), @manager int=(SELECT Id FROM dbo.Roles WHERE RoleName='Manager'), @viewer int=(SELECT Id FROM dbo.Roles WHERE RoleName='Viewer');
 INSERT dbo.Users(Username,PasswordHash,FullName,RoleId,IsActive,CreatedAt,FailedLoginCount) VALUES('qa_admin_browser',@hash,N'QA Admin',@admin,1,SYSUTCDATETIME(),0),('qa_manager_browser',@hash,N'QA Manager',@manager,1,SYSUTCDATETIME(),0),('qa_viewer_browser',@hash,N'QA Viewer',@viewer,1,SYSUTCDATETIME(),0);
-INSERT dbo.Warehouses(Code,Name,Address,IsActive,CreatedAt) VALUES('QA-WH01',N'Kho browser QA',N'Loopback synthetic target',1,SYSUTCDATETIME());
+INSERT dbo.Warehouses(Code,Name,Address,IsActive,CreatedAt) VALUES('QA-WH01',N'Kho browser QA A',N'Loopback synthetic target',1,SYSUTCDATETIME()),('QA-WH02',N'Kho browser QA B',N'Outside scoped users',1,SYSUTCDATETIME());
 DECLARE @warehouse int=(SELECT Id FROM dbo.Warehouses WHERE Code='QA-WH01'), @adminUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_admin_browser'), @managerUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_manager_browser'), @viewerUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_viewer_browser');
 INSERT dbo.UserWarehouses(UserId,WarehouseId,CreatedAt,CreatedBy) VALUES(@managerUser,@warehouse,SYSUTCDATETIME(),@adminUser),(@viewerUser,@warehouse,SYSUTCDATETIME(),@adminUser);
 INSERT dbo.Units(Code,Name,IsActive,CreatedAt) VALUES('EA',N'Each',1,SYSUTCDATETIME());
 INSERT dbo.Products(Code,Name,Description,UnitId,IsActive,CreatedAt) VALUES('LOOKUP-COLLIDE',N'Product code collision',NULL,(SELECT Id FROM dbo.Units WHERE Code='EA'),1,SYSUTCDATETIME()),('BARCODE-TARGET',N'Barcode target',NULL,(SELECT Id FROM dbo.Units WHERE Code='EA'),1,SYSUTCDATETIME());
 INSERT dbo.ProductBarcodes(ProductId,Value) VALUES((SELECT Id FROM dbo.Products WHERE Code='BARCODE-TARGET'),'LOOKUP-COLLIDE');
-INSERT dbo.InventoryStocks(ProductId,WarehouseId,Quantity,ReservedQuantity,LastUpdated) SELECT Id,@warehouse,100,0,SYSUTCDATETIME() FROM dbo.Products;
 '@
     [void]$command.Parameters.AddWithValue('@hash',$passwordHash)
     [void]$command.ExecuteNonQuery()
@@ -64,6 +63,19 @@ try { $frontend=Start-Process node -ArgumentList @("$repo/frontend/node_modules/
 finally { [Environment]::SetEnvironmentVariable('VITE_API_BASE_URL',$oldApi,'Process') }
 $manifest.ApiPid=$api.Id; $manifest.FrontendPid=$frontend.Id
 $manifest|ConvertTo-Json|Set-Content $manifestPath -Encoding UTF8
+
+# Establish exportable stock through the real import workflow (Admin maker, Manager checker).
+$apiBase='http://127.0.0.1:5265'
+for($attempt=0;$attempt -lt 30;$attempt++){try{Invoke-WebRequest "$apiBase/swagger/index.html" -UseBasicParsing|Out-Null;break}catch{if($attempt -eq 29){throw 'Browser QA API did not become ready.'};Start-Sleep -Milliseconds 200}}
+$adminLogin=Invoke-RestMethod "$apiBase/api/Auth/login" -Method Post -ContentType 'application/json' -Body (@{username='qa_admin_browser';password=$password}|ConvertTo-Json)
+$adminHeaders=@{Authorization="Bearer $($adminLogin.token)";'Idempotency-Key'=[guid]::NewGuid().ToString()}
+$warehouses=Invoke-RestMethod "$apiBase/api/warehouses" -Headers $adminHeaders
+$products=Invoke-RestMethod "$apiBase/api/products" -Headers $adminHeaders
+$seedReceipt=Invoke-RestMethod "$apiBase/api/importreceipts" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body (@{code="QA-SEED-$($RunId.Substring(0,8))";warehouseId=($warehouses|Where-Object code -eq 'QA-WH01').id;note='Synthetic browser QA stock seed';details=@(@{productId=$products[0].id;quantity=100;unitPrice=1;note='Synthetic'})}|ConvertTo-Json -Depth 5)
+$managerLogin=Invoke-RestMethod "$apiBase/api/Auth/login" -Method Post -ContentType 'application/json' -Body (@{username='qa_manager_browser';password=$password}|ConvertTo-Json)
+$managerHeaders=@{Authorization="Bearer $($managerLogin.token)";'Idempotency-Key'=[guid]::NewGuid().ToString()}
+Invoke-RestMethod "$apiBase/api/importreceipts/$($seedReceipt.id)/approve" -Method Post -Headers $managerHeaders|Out-Null
+$adminLogin=$null;$managerLogin=$null;$adminHeaders=$null;$managerHeaders=$null
 (ConvertTo-SecureString $password -AsPlainText -Force|ConvertFrom-SecureString)|Set-Content (Join-Path $artifactRoot 'credential.dpapi') -Encoding ascii
 [Array]::Clear($jwtBytes,0,$jwtBytes.Length); $jwt=$null; $password=$null; $databaseConnection=$null
 $manifest|ConvertTo-Json -Compress

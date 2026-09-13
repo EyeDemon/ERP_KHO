@@ -351,6 +351,11 @@ namespace ERP.Application.Services
             try
             {
                 var wasApproved = receipt.Status == ReceiptStatus.Approved;
+                if (receipt.Status == ReceiptStatus.Draft)
+                {
+                    receipt.CustomerCodeSnapshot = receipt.Customer?.Code;
+                    receipt.CustomerNameSnapshot = receipt.Customer?.Name;
+                }
                 receipt.Status = ReceiptStatus.Cancelled;
                 if (_stockReservationService is not null) await _stockReservationService.ReleaseSourceAsync("ExportReceipt", receipt.Id, userId, "Export receipt cancelled");
                 await _exportReceiptRepository.UpdateAsync(receipt);
