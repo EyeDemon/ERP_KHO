@@ -85,7 +85,7 @@ public sealed class ProductCatalogRepository(ErpKhoDbContext context) : IProduct
         await context.ProductBarcodes.AsNoTracking().Where(x => x.ProductId == productId).OrderBy(x => x.Id).ToListAsync(ct);
 
     public Task<ProductBarcode?> FindBarcodeAsync(string value, CancellationToken ct = default) =>
-        context.ProductBarcodes.AsNoTracking().Include(x => x.Product).ThenInclude(x => x.Unit)
+        context.ProductBarcodes.AsNoTrackingWithIdentityResolution().Include(x => x.Product).ThenInclude(x => x.Unit)
             .Include(x => x.Product).ThenInclude(x => x.Category).Include(x => x.Product).ThenInclude(x => x.Barcodes)
             .SingleOrDefaultAsync(x => x.Value == value, ct);
 

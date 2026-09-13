@@ -29,7 +29,7 @@ namespace ERP.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ProductBarcodes", x => x.Id);
-                    table.CheckConstraint("CK_ProductBarcodes_Value", "[Value] = LTRIM(RTRIM([Value])) AND [Value] NOT LIKE '%[^A-Za-z0-9._-]%' COLLATE Latin1_General_100_BIN2 AND LEN([Value]) BETWEEN 1 AND 64");
+                    table.CheckConstraint("CK_ProductBarcodes_Value", "[Value] = LTRIM(RTRIM([Value])) AND [Value] NOT LIKE '%[^-A-Za-z0-9._]%' COLLATE Latin1_General_100_BIN2 AND LEN([Value]) BETWEEN 1 AND 64");
                     table.ForeignKey(
                         name: "FK_ProductBarcodes_Products_ProductId",
                         column: x => x.ProductId,

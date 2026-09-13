@@ -1,5 +1,6 @@
 using ERP.Domain.Entities;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,6 +34,7 @@ public sealed class SqlServerProductCatalogTests
             var products = new[] { new Product { Code = $"P{suffix}A", Name = "A", UnitId = unit.Id }, new Product { Code = $"P{suffix}B", Name = "B", UnitId = unit.Id } };
             seed.Products.AddRange(products); await seed.SaveChangesAsync(); product1 = products[0].Id; product2 = products[1].Id;
             seed.ProductBarcodes.AddRange(new ProductBarcode { ProductId = product1, Value = "001Ab" }, new ProductBarcode { ProductId = product1, Value = "001ab" });
+            seed.ProductBarcodes.Add(new ProductBarcode { ProductId = product1, Value = "ABC-123" });
             await seed.SaveChangesAsync();
         }
         await using var first = CreateContext(); await using var second = CreateContext();
@@ -46,6 +48,29 @@ public sealed class SqlServerProductCatalogTests
         results.Count(x => x).Should().Be(1);
         await using var verify = CreateContext();
         (await verify.ProductBarcodes.CountAsync(x => x.Value == $"DUP{suffix}")).Should().Be(1);
+    }
+
+    [SqlServerFact]
+    public async Task FindBarcode_LoadsOwningProductAndBarcodeCollectionWithoutNoTrackingCycle()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        await using var context = CreateContext();
+        var unit = new Unit { Code = $"W{suffix}", Name = "Unit" };
+        var product = new Product { Code = $"R{suffix}", Name = "Product", Unit = unit };
+        product.Barcodes.Add(new ProductBarcode { Value = $"FIND-{suffix}" });
+        context.Products.Add(product);
+        await context.SaveChangesAsync();
+
+        var found = await new ProductCatalogRepository(context).FindBarcodeAsync($"FIND-{suffix}");
+
+        found.Should().NotBeNull();
+        found!.Product.Code.Should().Be($"R{suffix}");
+        found.Product.Barcodes.Should().ContainSingle(x => x.Value == $"FIND-{suffix}");
+
+        context.Products.Remove(product);
+        await context.SaveChangesAsync();
+        context.Units.Remove(unit);
+        await context.SaveChangesAsync();
     }
 
     [SqlServerFact]

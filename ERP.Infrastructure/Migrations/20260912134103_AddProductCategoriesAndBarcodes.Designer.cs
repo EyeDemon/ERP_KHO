@@ -533,7 +533,7 @@ namespace ERP.Infrastructure.Migrations
 
                     b.ToTable("ProductBarcodes", null, t =>
                         {
-                            t.HasCheckConstraint("CK_ProductBarcodes_Value", "[Value] = LTRIM(RTRIM([Value])) AND [Value] NOT LIKE '%[^A-Za-z0-9._-]%' COLLATE Latin1_General_100_BIN2 AND LEN([Value]) BETWEEN 1 AND 64");
+                            t.HasCheckConstraint("CK_ProductBarcodes_Value", "[Value] = LTRIM(RTRIM([Value])) AND [Value] NOT LIKE '%[^-A-Za-z0-9._]%' COLLATE Latin1_General_100_BIN2 AND LEN([Value]) BETWEEN 1 AND 64");
                         });
                 });
 

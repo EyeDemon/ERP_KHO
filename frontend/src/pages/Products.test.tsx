@@ -35,6 +35,32 @@ describe('Products category and barcode UI (mocked API)', () => {
     await view.findByRole('alert');
   });
 
+  it('clears a previous lookup result when the next barcode is not found', async () => {
+    let lookupCount = 0;
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url === '/api/product-barcodes/lookup' && lookupCount++ > 0) throw { response: { data: { message: 'Không tìm thấy barcode.' } } };
+      return { data: url === '/api/products' ? [product] : url === '/api/units' ? [{ id: 1, code: 'EA', name: 'Cái', isActive: true }] : url === '/api/product-barcodes/lookup' ? product : [] };
+    });
+    const view = render(<Products />); await view.findByText('P001');
+    const scanner = view.getByLabelText('Tra barcode');
+    fireEvent.submit(scanner.closest('form')!); await view.findByText(/Barcode thuộc sản phẩm/);
+    fireEvent.submit(scanner.closest('form')!); await view.findByRole('alert');
+    expect(view.queryByText(/Barcode thuộc sản phẩm/)).toBeNull();
+    expect((view.getByLabelText('Tìm sản phẩm') as HTMLInputElement).value).toBe('');
+  });
+
+  it('searches and edits a category without allowing its code to change', async () => {
+    const category = { id: 3, code: 'CAT', name: 'Danh mục cũ', isActive: true };
+    vi.mocked(apiClient.get).mockImplementation(async (url) => ({ data: url === '/api/products' ? [product] : url === '/api/units' ? [{ id: 1, code: 'EA', name: 'Cái', isActive: true }] : url === '/api/product-categories' ? [category] : [] }));
+    const view = render(<Products />); await view.findByRole('button', { name: 'Sửa danh mục' });
+    fireEvent.change(view.getByLabelText('Tìm danh mục'), { target: { value: 'cat' } });
+    fireEvent.click(view.getByText('Sửa danh mục'));
+    expect((view.getByPlaceholderText('Mã danh mục') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.change(view.getByPlaceholderText('Tên danh mục'), { target: { value: 'Danh mục mới' } });
+    fireEvent.submit(view.getByText('Lưu danh mục').closest('form')!);
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/product-categories/3', { name: 'Danh mục mới', isActive: true }));
+  });
+
   it('blocks a duplicate category submit while the first request is pending', async () => {
     let finish!: () => void;
     vi.mocked(apiClient.post).mockReturnValue(new Promise(resolve => { finish = () => resolve({ data: {} }); }) as never);
