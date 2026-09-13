@@ -44,7 +44,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ConfiguredOrigins", policy =>
     {
         policy.WithOrigins(allowedOrigins)
-              .WithHeaders("Authorization", "Content-Type", "Accept")
+              .WithHeaders("Authorization", "Content-Type", "Accept", "Idempotency-Key")
               .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
               .AllowCredentials();
     });
@@ -120,6 +120,7 @@ builder.Services.AddScoped<ERP.Domain.Interfaces.IProductRepository, ERP.Infrast
 builder.Services.AddScoped<ERP.Application.Interfaces.IProductService, ERP.Application.Services.ProductService>();
 builder.Services.AddScoped<ERP.Domain.Interfaces.IProductCatalogRepository, ERP.Infrastructure.Repositories.ProductCatalogRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IProductCatalogService, ERP.Application.Services.ProductCatalogService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IBusinessPartnerService, ERP.Infrastructure.Services.BusinessPartnerService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IWarehouseRepository, ERP.Infrastructure.Repositories.WarehouseRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseService, ERP.Application.Services.WarehouseService>();

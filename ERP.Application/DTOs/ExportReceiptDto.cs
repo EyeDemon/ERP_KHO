@@ -20,6 +20,9 @@ namespace ERP.Application.DTOs
         public int? DispatchedBy { get; set; }
         public string? DispatchedByName { get; set; }
         public DateTime? DispatchedAt { get; set; }
+        public int? CustomerId { get; set; }
+        public string? CustomerCode { get; set; }
+        public string? CustomerName { get; set; }
         public bool AllowPerReceiptDispatchMode { get; set; }
         public bool AllowWarehouseStaffDirectDispatch { get; set; }
         public bool WriteEnabled { get; set; }
@@ -43,6 +46,7 @@ namespace ERP.Application.DTOs
         public string Code { get; set; } = string.Empty;
         public int WarehouseId { get; set; }
         public string? Note { get; set; }
+        public int? CustomerId { get; set; }
         public List<CreateExportReceiptDetailDto> Details { get; set; } = new();
     }
 

@@ -15,6 +15,9 @@ public class ExportReceiptConfiguration : IEntityTypeConfiguration<ExportReceipt
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.Property(x => x.DispatchMode);
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.CustomerCodeSnapshot).HasMaxLength(50);
+        builder.Property(x => x.CustomerNameSnapshot).HasMaxLength(200);
+        builder.HasOne(x => x.Customer).WithMany(x => x.ExportReceipts).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.Warehouse)
                .WithMany(w => w.ExportReceipts)

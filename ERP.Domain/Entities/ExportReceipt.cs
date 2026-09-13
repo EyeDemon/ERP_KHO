@@ -19,11 +19,15 @@ public class ExportReceipt
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ApprovedAt { get; set; }
     public DateTime? DispatchedAt { get; set; }
+    public int? CustomerId { get; set; }
+    public string? CustomerCodeSnapshot { get; set; }
+    public string? CustomerNameSnapshot { get; set; }
 
     // Navigation
     public Warehouse Warehouse { get; set; } = null!;
     public User CreatedByUser { get; set; } = null!;
     public User? ApprovedByUser { get; set; }
     public User? DispatchedByUser { get; set; }
+    public BusinessPartner? Customer { get; set; }
     public ICollection<ExportReceiptDetail> Details { get; set; } = new List<ExportReceiptDetail>();
 }

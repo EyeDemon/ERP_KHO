@@ -26,6 +26,9 @@ interface ImportReceipt {
   approvedBy: number;
   approvedByName: string;
   approvedAt: string;
+  supplierId?: number;
+  supplierCode?: string;
+  supplierName?: string;
   details: ImportReceiptDetail[];
 }
 
@@ -39,6 +42,7 @@ interface Product {
   name: string;
   code: string;
 }
+interface Partner { id:number; code:string; name:string; isActive:boolean; }
 
 interface ReceiptDetailForm {
   productId: number | '';
@@ -53,6 +57,7 @@ const ImportReceipts = () => {
   const [receipts, setReceipts] = useState<ImportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Partner[]>([]);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceipt | null>(null);
@@ -62,16 +67,19 @@ const ImportReceipts = () => {
   const [code, setCode] = useState('');
   const [warehouseId, setWarehouseId] = useState<number | ''>('');
   const [note, setNote] = useState('');
+  const [supplierId, setSupplierId] = useState<number | ''>('');
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
 
   const fetchData = async () => {
     try {
-      const [whRes, prRes] = await Promise.all([
+      const [whRes, prRes, bpRes] = await Promise.all([
         apiClient.get('/api/warehouses'),
-        apiClient.get('/api/products')
+        apiClient.get('/api/products'),
+        apiClient.get('/api/business-partners', { params: { role: 'supplier', pageSize: 100 } })
       ]);
       setWarehouses(whRes.data);
       setProducts(prRes.data);
+      setSuppliers(bpRes.data.items);
     } catch (err: any) {
       console.error(err);
       setError('Lỗi khi tải dữ liệu khởi tạo');
@@ -173,6 +181,7 @@ const ImportReceipts = () => {
       const payload = {
         code: code.trim(),
         warehouseId: Number(warehouseId),
+        supplierId: supplierId === '' ? null : Number(supplierId),
         note,
         details: details.map(d => ({
           productId: Number(d.productId),
@@ -190,6 +199,7 @@ const ImportReceipts = () => {
       // Reset form
       setCode('');
       setWarehouseId('');
+      setSupplierId('');
       setNote('');
       setDetails([]);
       
@@ -224,6 +234,7 @@ const ImportReceipts = () => {
               <label style={{ display: 'block' }}>Ghi chú phiếu</label>
               <input value={note} onChange={e => setNote(e.target.value)} />
             </div>
+            <div><label style={{display:'block'}}>Nhà cung cấp</label><select aria-label="Nhà cung cấp" value={supplierId} onChange={e=>setSupplierId(e.target.value?Number(e.target.value):'')}><option value="">-- Không chọn --</option>{suppliers.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}</select></div>
           </div>
 
           <h4>Chi tiết phiếu</h4>
@@ -285,6 +296,7 @@ const ImportReceipts = () => {
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã phiếu</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Ngày tạo</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Kho</th>
+            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Nhà cung cấp</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Người tạo</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>
@@ -296,6 +308,7 @@ const ImportReceipts = () => {
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.code}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{new Date(r.createdAt).toLocaleString()}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.warehouseName}</td>
+              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.supplierCode ? `${r.supplierCode} - ${r.supplierName}` : '—'}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.createdByName}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7', fontWeight: 'bold', color: r.status === 'Draft' ? '#f39c12' : r.status === 'Approved' ? '#27ae60' : '#c0392b' }}>
                 {r.status === 'Draft' ? 'Nháp' : r.status === 'Approved' ? 'Đã duyệt' : 'Đã hủy'}
@@ -327,7 +340,7 @@ const ImportReceipts = () => {
           ))}
           {receipts.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ textAlign: 'center', padding: '10px' }}>Chưa có phiếu nhập</td>
+              <td colSpan={7} style={{ textAlign: 'center', padding: '10px' }}>Chưa có phiếu nhập</td>
             </tr>
           )}
         </tbody>
@@ -338,6 +351,8 @@ const ImportReceipts = () => {
           <h3>Chi Tiết Phiếu Nhập: {selectedReceipt.code}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
             <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
+            <div><strong>Nhà cung cấp:</strong> {selectedReceipt.supplierCode ? `${selectedReceipt.supplierCode} - ${selectedReceipt.supplierName}` : '—'}</div>
+            {selectedReceipt.status === 'Draft' && <div><label>Đổi nhà cung cấp <select aria-label="Đổi nhà cung cấp" value={selectedReceipt.supplierId||''} onChange={async e=>{const value=e.target.value?Number(e.target.value):null;try{await apiClient.put(`/api/importreceipts/${selectedReceipt.id}/supplier`,{partnerId:value});await fetchReceipts();await handleViewDetails(selectedReceipt.id)}catch(x:any){setError(x.response?.data?.message||'Không đổi được nhà cung cấp.')}}}><option value="">-- Gỡ liên kết --</option>{suppliers.filter(x=>x.isActive||x.id===selectedReceipt.supplierId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label></div>}
             <div><strong>Trạng thái:</strong> {selectedReceipt.status === 'Draft' ? 'Nháp' : selectedReceipt.status === 'Approved' ? 'Đã duyệt' : 'Đã hủy'}</div>
             <div><strong>Người tạo:</strong> {selectedReceipt.createdByName}</div>
             <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</div>

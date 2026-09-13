@@ -83,5 +83,9 @@ namespace ERP.Api.Controllers
             await _importReceiptService.CancelAsync(id, userId);
             return Ok(new { message = "Hủy phiếu nhập thành công" });
         }
+
+        [HttpPut("{id:int}/supplier"), Authorize(Roles = AppRoles.AdminOrManager)]
+        public async Task<IActionResult> SetSupplier(int id, [FromBody] ERP.Application.DTOs.SetReceiptPartnerDto dto, [FromServices] IBusinessPartnerService partners, CancellationToken ct)
+        { await partners.SetImportSupplierAsync(id, dto.PartnerId, ct); return NoContent(); }
     }
 }

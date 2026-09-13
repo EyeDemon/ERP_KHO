@@ -18,6 +18,7 @@ public class ErpKhoDbContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
     public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
+    public DbSet<BusinessPartner> BusinessPartners => Set<BusinessPartner>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();

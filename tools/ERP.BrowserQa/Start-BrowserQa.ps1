@@ -39,9 +39,13 @@ try {
 INSERT dbo.Roles(RoleName,Description) VALUES('Admin',N'Synthetic browser QA'),('Manager',N'Synthetic browser QA'),('WarehouseStaff',N'Synthetic browser QA'),('Viewer',N'Synthetic browser QA');
 DECLARE @admin int=(SELECT Id FROM dbo.Roles WHERE RoleName='Admin'), @manager int=(SELECT Id FROM dbo.Roles WHERE RoleName='Manager'), @viewer int=(SELECT Id FROM dbo.Roles WHERE RoleName='Viewer');
 INSERT dbo.Users(Username,PasswordHash,FullName,RoleId,IsActive,CreatedAt,FailedLoginCount) VALUES('qa_admin_browser',@hash,N'QA Admin',@admin,1,SYSUTCDATETIME(),0),('qa_manager_browser',@hash,N'QA Manager',@manager,1,SYSUTCDATETIME(),0),('qa_viewer_browser',@hash,N'QA Viewer',@viewer,1,SYSUTCDATETIME(),0);
+INSERT dbo.Warehouses(Code,Name,Address,IsActive,CreatedAt) VALUES('QA-WH01',N'Kho browser QA',N'Loopback synthetic target',1,SYSUTCDATETIME());
+DECLARE @warehouse int=(SELECT Id FROM dbo.Warehouses WHERE Code='QA-WH01'), @adminUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_admin_browser'), @managerUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_manager_browser'), @viewerUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_viewer_browser');
+INSERT dbo.UserWarehouses(UserId,WarehouseId,CreatedAt,CreatedBy) VALUES(@managerUser,@warehouse,SYSUTCDATETIME(),@adminUser),(@viewerUser,@warehouse,SYSUTCDATETIME(),@adminUser);
 INSERT dbo.Units(Code,Name,IsActive,CreatedAt) VALUES('EA',N'Each',1,SYSUTCDATETIME());
 INSERT dbo.Products(Code,Name,Description,UnitId,IsActive,CreatedAt) VALUES('LOOKUP-COLLIDE',N'Product code collision',NULL,(SELECT Id FROM dbo.Units WHERE Code='EA'),1,SYSUTCDATETIME()),('BARCODE-TARGET',N'Barcode target',NULL,(SELECT Id FROM dbo.Units WHERE Code='EA'),1,SYSUTCDATETIME());
 INSERT dbo.ProductBarcodes(ProductId,Value) VALUES((SELECT Id FROM dbo.Products WHERE Code='BARCODE-TARGET'),'LOOKUP-COLLIDE');
+INSERT dbo.InventoryStocks(ProductId,WarehouseId,Quantity,ReservedQuantity,LastUpdated) SELECT Id,@warehouse,100,0,SYSUTCDATETIME() FROM dbo.Products;
 '@
     [void]$command.Parameters.AddWithValue('@hash',$passwordHash)
     [void]$command.ExecuteNonQuery()

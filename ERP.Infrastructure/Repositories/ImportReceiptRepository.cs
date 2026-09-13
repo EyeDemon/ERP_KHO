@@ -38,6 +38,7 @@ namespace ERP.Infrastructure.Repositories
         {
             var query = _dbSet
                 .Include(i => i.Warehouse)
+                .Include(i => i.Supplier)
                 .Include(i => i.Details)
                     .ThenInclude(d => d.Product).AsQueryable();
             if (_warehouseAuthorization is not null)
@@ -52,6 +53,7 @@ namespace ERP.Infrastructure.Repositories
         {
             var query = _dbSet
                 .Include(i => i.Warehouse)
+                .Include(i => i.Supplier)
                 .AsQueryable();
 
             if (_warehouseAuthorization is not null)
@@ -82,6 +84,8 @@ namespace ERP.Infrastructure.Repositories
         {
             try
             {
+                if (entity.SupplierId.HasValue && !await _context.BusinessPartners.AnyAsync(x => x.Id == entity.SupplierId && x.IsActive && x.IsSupplier, cancellationToken))
+                    throw new BusinessRuleException("Nhà cung cấp không tồn tại, không hoạt động hoặc sai vai trò.");
                 return await base.AddAsync(entity, cancellationToken);
             }
             catch (DbUpdateException ex)

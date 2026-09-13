@@ -16,6 +16,9 @@ namespace ERP.Application.DTOs
         public string? ApprovedByName { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
+        public int? SupplierId { get; set; }
+        public string? SupplierCode { get; set; }
+        public string? SupplierName { get; set; }
         public List<ImportReceiptDetailDto> Details { get; set; } = new();
     }
 
@@ -35,6 +38,7 @@ namespace ERP.Application.DTOs
         public string Code { get; set; } = string.Empty;
         public int WarehouseId { get; set; }
         public string? Note { get; set; }
+        public int? SupplierId { get; set; }
         public List<CreateImportReceiptDetailDto> Details { get; set; } = new();
     }
 

@@ -80,6 +80,7 @@ namespace ERP.Application.Services
                 WarehouseId = dto.WarehouseId,
                 Status = ReceiptStatus.Draft,
                 Note = dto.Note,
+                SupplierId = dto.SupplierId,
                 CreatedBy = userId,
                 CreatedAt = DateTime.UtcNow,
                 Details = new List<ImportReceiptDetail>()
@@ -156,6 +157,9 @@ namespace ERP.Application.Services
                 ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
                 CreatedAt = receipt.CreatedAt,
                 ApprovedAt = receipt.ApprovedAt,
+                SupplierId = receipt.SupplierId,
+                SupplierCode = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Code : receipt.SupplierCodeSnapshot,
+                SupplierName = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Name : receipt.SupplierNameSnapshot,
                 Details = receipt.Details.Select(d => new ImportReceiptDetailDto
                 {
                     Id = d.Id,
@@ -183,6 +187,9 @@ namespace ERP.Application.Services
 
                 if (receipt.Status != ReceiptStatus.Draft)
                     throw new BusinessRuleException("Chỉ có thể duyệt phiếu ở trạng thái nháp");
+
+                receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
+                receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
 
                 receipt.Status = ReceiptStatus.Approved;
                 receipt.ApprovedBy = approvedByUserId;
@@ -258,31 +265,7 @@ namespace ERP.Application.Services
         public async Task<IEnumerable<ImportReceiptDto>> GetAllAsync(Domain.Enums.ReceiptStatus? status = null)
         {
             var receipts = await _importReceiptRepository.GetAllWithDetailsAsync(status);
-            return receipts.Select(receipt => new ImportReceiptDto
-            {
-                Id = receipt.Id,
-                Code = receipt.Code,
-                WarehouseId = receipt.WarehouseId,
-                WarehouseName = receipt.Warehouse?.Name,
-                Status = receipt.Status.ToString(),
-                Note = receipt.Note,
-                CreatedBy = receipt.CreatedBy,
-                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
-                ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
-                CreatedAt = receipt.CreatedAt,
-                ApprovedAt = receipt.ApprovedAt,
-                Details = receipt.Details.Select(d => new ImportReceiptDetailDto
-                {
-                    Id = d.Id,
-                    ProductId = d.ProductId,
-                    ProductCode = d.Product?.Code,
-                    ProductName = d.Product?.Name,
-                    Quantity = d.Quantity,
-                    UnitPrice = d.UnitPrice,
-                    Note = d.Note
-                }).ToList()
-            });
+            return receipts.Select(MapToDto);
         }
 
         public async Task<ImportReceiptDto> GetByIdAsync(int id)
@@ -291,31 +274,7 @@ namespace ERP.Application.Services
             if (receipt == null)
                 throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
 
-            return new ImportReceiptDto
-            {
-                Id = receipt.Id,
-                Code = receipt.Code,
-                WarehouseId = receipt.WarehouseId,
-                WarehouseName = receipt.Warehouse?.Name,
-                Status = receipt.Status.ToString(),
-                Note = receipt.Note,
-                CreatedBy = receipt.CreatedBy,
-                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
-                ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
-                CreatedAt = receipt.CreatedAt,
-                ApprovedAt = receipt.ApprovedAt,
-                Details = receipt.Details.Select(d => new ImportReceiptDetailDto
-                {
-                    Id = d.Id,
-                    ProductId = d.ProductId,
-                    ProductCode = d.Product?.Code,
-                    ProductName = d.Product?.Name,
-                    Quantity = d.Quantity,
-                    UnitPrice = d.UnitPrice,
-                    Note = d.Note
-                }).ToList()
-            };
+            return MapToDto(receipt);
         }
 
         public async Task CancelAsync(int id, int cancelledByUserId)

@@ -31,6 +31,9 @@ interface ExportReceipt {
   allowWarehouseStaffDirectDispatch: boolean;
   writeEnabled: boolean;
   details: ExportReceiptDetail[];
+  customerId?: number;
+  customerCode?: string;
+  customerName?: string;
 }
 
 interface Warehouse {
@@ -43,6 +46,7 @@ interface Product {
   name: string;
   code: string;
 }
+interface Partner { id:number; code:string; name:string; isActive:boolean; }
 
 interface ReceiptDetailForm {
   productId: number | '';
@@ -59,6 +63,7 @@ const ExportReceipts = () => {
   const [receipts, setReceipts] = useState<ExportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Partner[]>([]);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ExportReceipt | null>(null);
@@ -68,6 +73,7 @@ const ExportReceipts = () => {
   const [code, setCode] = useState('');
   const [warehouseId, setWarehouseId] = useState<number | ''>('');
   const [note, setNote] = useState('');
+  const [customerId, setCustomerId] = useState<number | ''>('');
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
   
   // Stock cache
@@ -75,12 +81,14 @@ const ExportReceipts = () => {
 
   const fetchData = async () => {
     try {
-      const [whRes, prRes] = await Promise.all([
+      const [whRes, prRes, bpRes] = await Promise.all([
         apiClient.get('/api/warehouses'),
-        apiClient.get('/api/products')
+        apiClient.get('/api/products'),
+        apiClient.get('/api/business-partners', { params: { role: 'customer', pageSize: 100 } })
       ]);
       setWarehouses(whRes.data);
       setProducts(prRes.data);
+      setCustomers(bpRes.data.items);
     } catch (err: any) {
       console.error(err);
       setError('Lỗi khi tải dữ liệu khởi tạo');
@@ -232,6 +240,7 @@ const ExportReceipts = () => {
       const payload = {
         code: code.trim(),
         warehouseId: Number(warehouseId),
+        customerId: customerId === '' ? null : Number(customerId),
         note,
         details: details.map(d => ({
           productId: Number(d.productId),
@@ -248,6 +257,7 @@ const ExportReceipts = () => {
       
       setCode('');
       setWarehouseId('');
+      setCustomerId('');
       setNote('');
       setDetails([]);
       
@@ -292,6 +302,7 @@ const ExportReceipts = () => {
               <label style={{ display: 'block' }}>Ghi chú phiếu</label>
               <input value={note} onChange={e => setNote(e.target.value)} />
             </div>
+            <div><label style={{display:'block'}}>Khách hàng</label><select aria-label="Khách hàng" value={customerId} onChange={e=>setCustomerId(e.target.value?Number(e.target.value):'')}><option value="">-- Không chọn --</option>{customers.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}</select></div>
           </div>
 
           <h4>Chi tiết phiếu</h4>
@@ -373,6 +384,7 @@ const ExportReceipts = () => {
           <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã phiếu</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Kho</th>
+            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Khách hàng</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Người tạo</th>
             <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>
@@ -383,6 +395,7 @@ const ExportReceipts = () => {
             <tr key={r.id}>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.code}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.warehouseName}</td>
+              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.customerCode ? `${r.customerCode} - ${r.customerName}` : '—'}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.status}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.createdByName}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
@@ -398,7 +411,7 @@ const ExportReceipts = () => {
               </td>
             </tr>
           ))}
-          {receipts.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: '10px' }}>Chưa có phiếu xuất nào</td></tr>}
+          {receipts.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '10px' }}>Chưa có phiếu xuất nào</td></tr>}
         </tbody>
       </table>
 
@@ -406,6 +419,8 @@ const ExportReceipts = () => {
         <div style={{ padding: '15px', border: '1px solid #34495e', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>
           <h3>Chi Tiết Phiếu Xuất: {selectedReceipt.code}</h3>
           <p><strong>Kho:</strong> {selectedReceipt.warehouseName}</p>
+          <p><strong>Khách hàng:</strong> {selectedReceipt.customerCode ? `${selectedReceipt.customerCode} - ${selectedReceipt.customerName}` : '—'}</p>
+          {selectedReceipt.status === 'Draft' && canOperate && <p><label>Đổi khách hàng <select aria-label="Đổi khách hàng" value={selectedReceipt.customerId||''} onChange={async e=>{const value=e.target.value?Number(e.target.value):null;try{await apiClient.put(`/api/exportreceipts/${selectedReceipt.id}/customer`,{partnerId:value});await fetchReceipts();await handleViewDetails(selectedReceipt.id)}catch(x:any){setError(x.response?.data?.message||'Không đổi được khách hàng.')}}}><option value="">-- Gỡ liên kết --</option>{customers.filter(x=>x.isActive||x.id===selectedReceipt.customerId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label></p>}
           <p><strong>Trạng thái:</strong> {selectedReceipt.status}</p>
           <p><strong>Ghi chú:</strong> {selectedReceipt.note || '-'}</p>
           <p><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</p>

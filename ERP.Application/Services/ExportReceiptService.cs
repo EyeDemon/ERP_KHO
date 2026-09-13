@@ -78,6 +78,7 @@ namespace ERP.Application.Services
                 WarehouseId = dto.WarehouseId,
                 Status = ReceiptStatus.Draft,
                 Note = dto.Note,
+                CustomerId = dto.CustomerId,
                 CreatedBy = userId,
                 CreatedAt = DateTime.UtcNow,
                 Details = new List<ERP.Domain.Entities.ExportReceiptDetail>()
@@ -182,6 +183,9 @@ namespace ERP.Application.Services
 
                     if (receipt.Details == null || !receipt.Details.Any())
                         throw new BusinessRuleException("Phiếu xuất phải có ít nhất 1 sản phẩm để duyệt");
+
+                    receipt.CustomerCodeSnapshot = receipt.Customer?.Code;
+                    receipt.CustomerNameSnapshot = receipt.Customer?.Name;
 
                     receipt.DispatchMode = mode;
                     receipt.ApprovedBy = approvedByUserId;
@@ -395,6 +399,9 @@ namespace ERP.Application.Services
                 DispatchedBy = receipt.DispatchedBy,
                 DispatchedByName = receipt.DispatchedByUser?.FullName ?? receipt.DispatchedByUser?.Username,
                 DispatchedAt = receipt.DispatchedAt,
+                CustomerId = receipt.CustomerId,
+                CustomerCode = receipt.Status == ReceiptStatus.Draft ? receipt.Customer?.Code : receipt.CustomerCodeSnapshot,
+                CustomerName = receipt.Status == ReceiptStatus.Draft ? receipt.Customer?.Name : receipt.CustomerNameSnapshot,
                 AllowPerReceiptDispatchMode = _options.AllowPerReceiptDispatchMode,
                 AllowWarehouseStaffDirectDispatch = _options.AllowWarehouseStaffDirectDispatch,
                 WriteEnabled = _options.WriteEnabled,
