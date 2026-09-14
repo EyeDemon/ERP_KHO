@@ -21,13 +21,19 @@ All authenticated roles may read partner master data. Admin and Manager may muta
 
 `GET /api/business-partners?page=1&pageSize=20&search=ACME&role=supplier&active=true` returns the normal `PagedResult` shape. `role` accepts `supplier` or `customer`.
 
-`POST /api/business-partners` and `PUT /api/business-partners/{id}` use:
+`POST /api/business-partners` does not use a concurrency token:
 
 ```json
-{"code":" sup-01 ","name":"Nhà cung cấp mẫu","isSupplier":true,"isCustomer":false,"isActive":true,"phone":null,"email":null,"address":null,"rowVersion":null}
+{"code":" sup-01 ","name":"Nhà cung cấp mẫu","isSupplier":true,"isCustomer":false,"isActive":true,"phone":null,"email":null,"address":null}
 ```
 
-The stored code is `SUP-01`. Update must repeat the immutable code and must send the last returned Base64 `rowVersion` (exactly eight decoded bytes). Missing, null, malformed, or stale tokens return HTTP 409 and the UI instructs the user to reload; the server never silently falls back to last-write-wins. Validation is reported as the repository's Vietnamese business-rule response. `DELETE /api/business-partners/{id}` succeeds only for an unreferenced record.
+The stored code is `SUP-01`. `PUT /api/business-partners/{id}` must repeat the immutable code and send the valid Base64 `rowVersion` returned by the latest GET/create/update response:
+
+```json
+{"code":"SUP-01","name":"Nhà cung cấp mẫu cập nhật","isSupplier":true,"isCustomer":false,"isActive":true,"phone":null,"email":null,"address":null,"rowVersion":"AAAAAAAAB9E="}
+```
+
+The token shown above is only an example shape; a client must not copy, invent, or send `null` for it. The decoded token must be exactly eight bytes. Missing, null, malformed, or stale tokens return HTTP 409 and the UI instructs the user to reload; the server never silently falls back to last-write-wins. Validation is reported as the repository's Vietnamese business-rule response. `DELETE /api/business-partners/{id}` succeeds only for an unreferenced record.
 
 Create receipt DTOs accept nullable `supplierId` or `customerId`. Existing clients that omit these fields create an unassociated receipt. Association changes are explicit and Draft-only:
 
@@ -49,18 +55,43 @@ Content-Type: application/json
 
 ## Snapshot, migration, and compatibility
 
-Import approval copies supplier Code/Name onto the receipt immediately before status becomes `Approved`. Export approval copies customer Code/Name on the first transition from `Draft` to `Approved` or `Dispatched`. A direct Draft-to-Cancelled transition also captures the current Code/Name in the cancellation transaction. Later transitions from Approved keep the original snapshot. Draft DTOs show current partner data; all non-Draft DTOs show the snapshot. Old receipts remain nullable and are not backfilled with invented partners or snapshots.
+Snapshots are captured in the same transaction as the first transition out of Draft:
+
+| Receipt | Transition | Snapshot behavior |
+|---|---|---|
+| Import | Draft → Approved | Capture Supplier Code/Name |
+| Import | Draft → Cancelled | Capture Supplier Code/Name |
+| Export | Draft → Approved | Capture Customer Code/Name |
+| Export | Draft → Dispatched | Capture Customer Code/Name |
+| Export | Draft → Cancelled | Capture Customer Code/Name |
+
+Later transitions do not overwrite the snapshot. Draft DTOs show current partner data; all non-Draft DTOs show the snapshot. Old receipts remain nullable and are not backfilled with invented partners or snapshots.
 
 Migration `AddBusinessPartnersAndReceiptAssociations` only adds the partner table, nullable receipt columns, indexes, checks, and restrictive foreign keys. It does not update inventory, reservation, ledger, document status, or historical migrations.
 
 ## Verification record
 
-Checkpoint verification used owned `SQLEXPRESS` database Run ID `b89c766051b54f52b858706d124e3acf`: Application 323/323 passed, API 150/150 passed, and frontend 40/40 passed.
+The feature checkpoint and follow-up at revision `7a7a1359558c0bfc060c7affbe8c38131b297025` supplied these inherited results; they were not rerun for the controlled-delay UI change:
 
-Follow-up verification on 2026-09-13 covered the mandatory row-version contract, Draft cancellation snapshots, and the remaining full-stack matrix. Application tests passed 324/324 on owned Run ID `a54e79228d1142fa9772a7e98bab8e0a`; API tests passed 150/150; frontend tests passed 41/41 with lint and production build passing. Browser and direct HTTP checks ran against loopback-only Run ID `bf813fe88b9d4e8a8a0ff0e1e0fcd770` with frontend → API → owned SQLEXPRESS: export customer assign/change/unlink, active/role validation, maker/checker, closed snapshot stability after partner rename, closed-link rejection, inactive linked supplier workflow, dual-role filters, Viewer 403, warehouse-B direct-ID denial with unchanged data, referenced/unreferenced deletion, and double-submit create behavior all passed. The verified export had one receipt, one inventory transaction, and one consumed reservation; no duplicate stock mutation was observed.
+| Evidence type | Result |
+|---|---|
+| SQL integration | Application 324/324 PASS on owned SQLEXPRESS Run ID `a54e79228d1142fa9772a7e98bab8e0a` |
+| Direct HTTP | API 150/150 PASS; real authorization/workflow checks included Viewer 403, warehouse scope, maker/checker, inactive/role validation, explicit unlink, snapshots, and unchanged rejected-request data |
+| Component tests | Frontend 41/41 PASS, lint PASS, production build PASS |
+| Browser UI | Loopback frontend → real API → owned SQLEXPRESS verified partner management, import Supplier workflow, export Customer workflow, reload persistence, inactive linked display, errors, snapshots, and authorization UI; HTTP assertions are classified separately above |
 
-The browser target and SQL harness databases were removed after exact ownership checks. Final owned QA database inventory, target process inventory, and persisted synthetic credential inventory were all zero. Keyboard/browser automation verifies web behavior; it is not physical scanner-device certification.
+Controlled-delay browser QA on 2026-09-14 used the working-tree candidate based on `7a7a1359558c0bfc060c7affbe8c38131b297025`, Run ID `23e2c5bc5be5481497691691d83a006a`, and database `ERP_KHO_BrowserQA_23e2c5bc5be5481497691691d83a006a`. A loopback-only Node reverse proxy forwarded each request to the real API and delayed mutation responses by 2500 ms after receiving the real response; it did not mock success or modify production code. Observed mutation elapsed times were 2529–3576 ms.
 
-Browser target Run ID `1a54e2cab31c4b8982095ba646889983` bound API/frontend to loopback and used synthetic accounts/data. Verified through the real frontend/API/SQL path: dual-role create and uppercase normalization; duplicate conflict; Import Supplier create and reload; checker approval; closed-receipt snapshot after partner rename; Viewer read UI and real HTTP mutation denial (403). The run also found and fixed missing CORS permission for `Idempotency-Key`.
+| Browser UI case | Mutation requests | UI and final data |
+|---|---:|---|
+| Create import receipt | 1 POST | Button disabled with `Đang lưu...`; one `DELAY-IMP-02` receipt after reload |
+| Create export receipt | 1 POST | Button disabled with `Đang lưu...`; one `DELAY-EXP-01` receipt after reload |
+| Assign Supplier on Draft | 1 PUT | Selector disabled with progress status; rapid unlink blocked; Supplier assigned |
+| Unlink Supplier on Draft | 1 PUT | Selector disabled with progress status; rapid reassign blocked; SupplierId null |
+| Assign Customer on Draft | 1 PUT | Selector disabled with progress status; rapid unlink blocked; Customer assigned |
+| Unlink Customer on Draft | 1 PUT | Selector disabled with progress status; rapid reassign blocked; CustomerId null before the final assign check |
+| Delayed duplicate Partner error | 1 POST, HTTP 409 | Form left enabled and reusable, values retained, Vietnamese error shown, no false success |
 
-Remaining browser matrix: Export Customer create/assign/remove/snapshot, inactive selection retention, referenced-delete UI, explicit remove on both receipt types, double-submit under network delay, and full role/warehouse permutations. Status: **TESTING INCOMPLETE**. Runtime artifacts and credentials are excluded from Git. Physical scanner behavior is represented by keyboard input only.
+Before the UI fix, the same delayed import double-click sent two POST requests while backend idempotency produced only one row. The fix adds a synchronous in-flight guard plus disabled/loading feedback for receipt creation and partner assign/unlink. Final component regression tests cover all four mutation groups; the full frontend result is 45/45 PASS with lint and production build PASS. Final SQL evidence for the controlled-delay run recorded one import, one export, the expected final partner links, one pre-existing synthetic stock-seed transaction, and zero reservations; Draft catalog mutations created no inventory, reservation, or ledger side effect.
+
+Runtime artifacts and credentials are excluded from Git. Browser automation used synthetic data and keyboard/mouse input; it is not physical scanner-device certification.

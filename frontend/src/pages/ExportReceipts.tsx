@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import apiClient from '../services/apiClient';
 import { canApproveExportImmediately, canManageCatalogs, canOperateWarehouse, currentRole, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -68,6 +68,10 @@ const ExportReceipts = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ExportReceipt | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
+  const createInFlight = useRef(false);
+  const partnerMutationInFlight = useRef(false);
+  const [creating, setCreating] = useState(false);
+  const [partnerUpdating, setPartnerUpdating] = useState(false);
 
   // Form states
   const [code, setCode] = useState('');
@@ -214,6 +218,7 @@ const ExportReceipts = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (createInFlight.current) return;
     setError('');
     setSuccessMsg('');
 
@@ -236,6 +241,7 @@ const ExportReceipts = () => {
       }
     }
 
+    createInFlight.current = true; setCreating(true);
     try {
       const payload = {
         code: code.trim(),
@@ -264,7 +270,17 @@ const ExportReceipts = () => {
       fetchReceipts();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Lỗi khi tạo phiếu xuất');
+    } finally {
+      createInFlight.current = false; setCreating(false);
     }
+  };
+
+  const changeCustomer = async (value: number | null) => {
+    if (!selectedReceipt || partnerMutationInFlight.current) return;
+    partnerMutationInFlight.current = true; setPartnerUpdating(true); setError('');
+    try { await apiClient.put(`/api/exportreceipts/${selectedReceipt.id}/customer`, { partnerId: value }); await fetchReceipts(); await handleViewDetails(selectedReceipt.id); }
+    catch (x: any) { setError(x.response?.data?.message || 'Không đổi được khách hàng.'); }
+    finally { partnerMutationInFlight.current = false; setPartnerUpdating(false); }
   };
 
   const getStockDisplay = (wId: number | '', pId: number | '') => {
@@ -361,16 +377,16 @@ const ExportReceipts = () => {
           <div style={{ marginTop: '15px' }}>
             <button 
               type="submit" 
-              disabled={isFormInvalid()}
+              disabled={creating || isFormInvalid()}
               style={{ 
-                backgroundColor: isFormInvalid() ? '#95a5a6' : '#2ecc71', 
+                backgroundColor: creating || isFormInvalid() ? '#95a5a6' : '#2ecc71',
                 color: '#fff', 
                 padding: '10px 20px', 
                 border: 'none', 
-                cursor: isFormInvalid() ? 'not-allowed' : 'pointer' 
+                cursor: creating || isFormInvalid() ? 'not-allowed' : 'pointer'
               }}
             >
-              Tạo Phiếu Xuất
+              {creating ? 'Đang lưu...' : 'Tạo Phiếu Xuất'}
             </button>
           </div>
         </form>
@@ -420,7 +436,7 @@ const ExportReceipts = () => {
           <h3>Chi Tiết Phiếu Xuất: {selectedReceipt.code}</h3>
           <p><strong>Kho:</strong> {selectedReceipt.warehouseName}</p>
           <p><strong>Khách hàng:</strong> {selectedReceipt.customerCode ? `${selectedReceipt.customerCode} - ${selectedReceipt.customerName}` : '—'}</p>
-          {selectedReceipt.status === 'Draft' && canOperate && <p><label>Đổi khách hàng <select aria-label="Đổi khách hàng" value={selectedReceipt.customerId||''} onChange={async e=>{const value=e.target.value?Number(e.target.value):null;try{await apiClient.put(`/api/exportreceipts/${selectedReceipt.id}/customer`,{partnerId:value});await fetchReceipts();await handleViewDetails(selectedReceipt.id)}catch(x:any){setError(x.response?.data?.message||'Không đổi được khách hàng.')}}}><option value="">-- Gỡ liên kết --</option>{customers.filter(x=>x.isActive||x.id===selectedReceipt.customerId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label></p>}
+          {selectedReceipt.status === 'Draft' && canOperate && <p><label>Đổi khách hàng <select aria-label="Đổi khách hàng" disabled={partnerUpdating} value={selectedReceipt.customerId||''} onChange={e=>void changeCustomer(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{customers.filter(x=>x.isActive||x.id===selectedReceipt.customerId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</p>}
           <p><strong>Trạng thái:</strong> {selectedReceipt.status}</p>
           <p><strong>Ghi chú:</strong> {selectedReceipt.note || '-'}</p>
           <p><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</p>

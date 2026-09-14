@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import apiClient from '../services/apiClient';
 import { canManageCatalogs, currentRole, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -62,6 +62,10 @@ const ImportReceipts = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceipt | null>(null);
   const [approvingId, setApprovingId] = useState<number | null>(null);
+  const createInFlight = useRef(false);
+  const partnerMutationInFlight = useRef(false);
+  const [creating, setCreating] = useState(false);
+  const [partnerUpdating, setPartnerUpdating] = useState(false);
 
   // Form states
   const [code, setCode] = useState('');
@@ -162,6 +166,7 @@ const ImportReceipts = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (createInFlight.current) return;
     setError('');
     setSuccessMsg('');
 
@@ -177,6 +182,7 @@ const ImportReceipts = () => {
       if (d.unitPrice === '' || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
     }
 
+    createInFlight.current = true; setCreating(true);
     try {
       const payload = {
         code: code.trim(),
@@ -206,7 +212,17 @@ const ImportReceipts = () => {
       fetchReceipts();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Lỗi khi tạo phiếu nhập');
+    } finally {
+      createInFlight.current = false; setCreating(false);
     }
+  };
+
+  const changeSupplier = async (value: number | null) => {
+    if (!selectedReceipt || partnerMutationInFlight.current) return;
+    partnerMutationInFlight.current = true; setPartnerUpdating(true); setError('');
+    try { await apiClient.put(`/api/importreceipts/${selectedReceipt.id}/supplier`, { partnerId: value }); await fetchReceipts(); await handleViewDetails(selectedReceipt.id); }
+    catch (x: any) { setError(x.response?.data?.message || 'Không đổi được nhà cung cấp.'); }
+    finally { partnerMutationInFlight.current = false; setPartnerUpdating(false); }
   };
 
   return (
@@ -282,7 +298,7 @@ const ImportReceipts = () => {
           <button type="button" onClick={handleAddDetail} style={{ marginBottom: '15px' }}>+ Thêm dòng</button>
           
           <div style={{ marginTop: '15px' }}>
-            <button type="submit" style={{ backgroundColor: '#2ecc71', color: '#fff', padding: '10px 20px', border: 'none', cursor: 'pointer' }}>Lưu Phiếu Nháp</button>
+            <button type="submit" disabled={creating} style={{ backgroundColor: creating ? '#95a5a6' : '#2ecc71', color: '#fff', padding: '10px 20px', border: 'none', cursor: creating ? 'not-allowed' : 'pointer' }}>{creating ? 'Đang lưu...' : 'Lưu Phiếu Nháp'}</button>
           </div>
         </form>
       </div>
@@ -352,7 +368,7 @@ const ImportReceipts = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
             <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
             <div><strong>Nhà cung cấp:</strong> {selectedReceipt.supplierCode ? `${selectedReceipt.supplierCode} - ${selectedReceipt.supplierName}` : '—'}</div>
-            {selectedReceipt.status === 'Draft' && <div><label>Đổi nhà cung cấp <select aria-label="Đổi nhà cung cấp" value={selectedReceipt.supplierId||''} onChange={async e=>{const value=e.target.value?Number(e.target.value):null;try{await apiClient.put(`/api/importreceipts/${selectedReceipt.id}/supplier`,{partnerId:value});await fetchReceipts();await handleViewDetails(selectedReceipt.id)}catch(x:any){setError(x.response?.data?.message||'Không đổi được nhà cung cấp.')}}}><option value="">-- Gỡ liên kết --</option>{suppliers.filter(x=>x.isActive||x.id===selectedReceipt.supplierId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label></div>}
+            {selectedReceipt.status === 'Draft' && <div><label>Đổi nhà cung cấp <select aria-label="Đổi nhà cung cấp" disabled={partnerUpdating} value={selectedReceipt.supplierId||''} onChange={e=>void changeSupplier(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{suppliers.filter(x=>x.isActive||x.id===selectedReceipt.supplierId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</div>}
             <div><strong>Trạng thái:</strong> {selectedReceipt.status === 'Draft' ? 'Nháp' : selectedReceipt.status === 'Approved' ? 'Đã duyệt' : 'Đã hủy'}</div>
             <div><strong>Người tạo:</strong> {selectedReceipt.createdByName}</div>
             <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</div>
