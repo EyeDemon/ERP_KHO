@@ -417,6 +417,7 @@ namespace ERP.Application.Services
                     ProductId = d.ProductId,
                     ProductCode = d.Product?.Code,
                     ProductName = d.Product?.Name,
+                    UnitName = d.Product?.Unit?.Name,
                     Quantity = d.Quantity,
                     UnitPrice = d.UnitPrice,
                     Note = d.Note

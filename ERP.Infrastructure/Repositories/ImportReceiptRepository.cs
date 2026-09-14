@@ -40,7 +40,11 @@ namespace ERP.Infrastructure.Repositories
                 .Include(i => i.Warehouse)
                 .Include(i => i.Supplier)
                 .Include(i => i.Details)
-                    .ThenInclude(d => d.Product).AsQueryable();
+                    .ThenInclude(d => d.Product)
+                        .ThenInclude(p => p.Unit)
+                .Include(i => i.CreatedByUser)
+                .Include(i => i.ApprovedByUser)
+                .AsQueryable();
             if (_warehouseAuthorization is not null)
             {
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();

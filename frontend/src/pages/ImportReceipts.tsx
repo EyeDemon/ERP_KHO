@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import apiClient from '../services/apiClient';
 import { canManageCatalogs, currentRole, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 
 interface ImportReceiptDetail {
   id: number;
@@ -66,6 +67,10 @@ const ImportReceipts = () => {
   const partnerMutationInFlight = useRef(false);
   const [creating, setCreating] = useState(false);
   const [partnerUpdating, setPartnerUpdating] = useState(false);
+  const [printReceipt, setPrintReceipt] = useState<ImportReceipt | null>(null);
+  const [printFetchedAt, setPrintFetchedAt] = useState<Date | null>(null);
+  const [printLoadingId, setPrintLoadingId] = useState<number | null>(null);
+  const printTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Form states
   const [code, setCode] = useState('');
@@ -225,6 +230,14 @@ const ImportReceipts = () => {
     finally { partnerMutationInFlight.current = false; setPartnerUpdating(false); }
   };
 
+  const openPrintPreview = async (id: number, trigger: HTMLButtonElement) => {
+    printTriggerRef.current = trigger; setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(id); setError('');
+    try { const res = await apiClient.get(`/api/importreceipts/${id}`); setPrintReceipt(res.data); setPrintFetchedAt(new Date()); }
+    catch (x: any) { setError(x.response?.data?.message || 'Không tải được dữ liệu bản in.'); }
+    finally { setPrintLoadingId(null); }
+  };
+  const closePrintPreview = () => { setPrintReceipt(null); setPrintFetchedAt(null); queueMicrotask(() => printTriggerRef.current?.focus()); };
+
   return (
     <div>
       <h2>Quản Lý Nhập Kho</h2>
@@ -331,6 +344,7 @@ const ImportReceipts = () => {
               </td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
                 <button onClick={() => handleViewDetails(r.id)} style={{ cursor: 'pointer', marginRight: '5px' }}>Chi tiết</button>
+                <button disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)} style={{ cursor: 'pointer', marginRight: '5px' }}>{printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}</button>
                 {r.status === 'Draft' && (
                   <>
                     {canApprove && r.createdBy !== userId && <button
@@ -418,6 +432,7 @@ const ImportReceipts = () => {
           <button onClick={() => setSelectedReceipt(null)} style={{ marginTop: '15px', cursor: 'pointer', padding: '8px 15px' }}>Đóng chi tiết</button>
         </div>
       )}
+      {printReceipt && printFetchedAt && <ReceiptPrintPreview kind="import" receipt={printReceipt} fetchedAt={printFetchedAt} onClose={closePrintPreview} />}
     </div>
   );
 };
