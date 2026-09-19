@@ -1,6 +1,6 @@
 # UX Screen Traceability
 
-The 154 PNG artifacts are illustrative UI/UX references. Notion specifications and backend command/state rules are authoritative.
+The current ZIP contains 168 PNG artifacts. They are illustrative UI/UX references; Notion specifications and backend command/state rules are authoritative. This review opened only the 13 Inbound images listed in `INBOUND_RECEIVING.md`; no coverage claim is made for the other 155 files.
 
 | Screen ID | Module | Route / component | Goal | State / variant | API / command | Permission | Warehouse scope | Sensitive data | Loading / error / 403 / 409 | Desktop / mobile | Spec | Artifact | Coverage | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
