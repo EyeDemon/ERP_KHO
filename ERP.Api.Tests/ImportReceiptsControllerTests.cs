@@ -57,8 +57,22 @@ namespace ERP.Api.Tests
             SetUserClaims(new Claim("Id", "99"));
             var result = await _controller.Approve(1);
             var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(new { message = "Duyệt phiếu nhập thành công" });
+            okResult.Value.Should().BeEquivalentTo(new { message = "Phiếu nhập đã sẵn sàng post" });
             _mockService.Verify(x => x.ApproveImportReceiptAsync(1, 99), Times.Once);
+        }
+
+        [Theory]
+        [InlineData("receive")]
+        [InlineData("post")]
+        public async Task WorkflowCommand_ValidUserIdClaim_ReturnsOkAndCallsService(string command)
+        {
+            SetUserClaims(new Claim("Id", "99"));
+
+            var result = command == "receive" ? await _controller.Receive(1) : await _controller.Post(1);
+
+            result.Should().BeOfType<OkObjectResult>();
+            if (command == "receive") _mockService.Verify(x => x.ReceiveAsync(1, 99), Times.Once);
+            else _mockService.Verify(x => x.PostAsync(1, 99), Times.Once);
         }
 
         [Fact]
@@ -116,6 +130,7 @@ namespace ERP.Api.Tests
         [Theory]
         [InlineData(nameof(ImportReceiptsController.Create))]
         [InlineData(nameof(ImportReceiptsController.Cancel))]
+        [InlineData(nameof(ImportReceiptsController.Receive))]
         public void MutationEndpoints_HaveAdminOrManagerAuthorizeAttribute(string methodName)
         {
             var method = typeof(ImportReceiptsController).GetMethod(methodName);
@@ -134,6 +149,17 @@ namespace ERP.Api.Tests
         public void ApproveEndpoint_UsesSharedCheckerPolicy()
         {
             var authorizeAttr = typeof(ImportReceiptsController).GetMethod(nameof(ImportReceiptsController.Approve))!
+                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+                .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+                .Single();
+
+            authorizeAttr.Policy.Should().Be(ERP.Api.Authorization.ApprovalPolicies.Checker);
+        }
+
+        [Fact]
+        public void PostEndpoint_UsesSharedCheckerPolicy()
+        {
+            var authorizeAttr = typeof(ImportReceiptsController).GetMethod(nameof(ImportReceiptsController.Post))!
                 .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
                 .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
                 .Single();

@@ -261,20 +261,20 @@ namespace ERP.Application.Tests
             var receipt = new ImportReceipt { Id = 1, Status = ReceiptStatus.Approved };
             _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
             Func<Task> act = async () => await _service.ApproveImportReceiptAsync(1, 1);
-            await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Chỉ có thể duyệt phiếu ở trạng thái nháp");
+            await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Chỉ có thể duyệt phiếu đã hoàn tất nhận hàng");
             _mockAuditRepo.Verify(x => x.AddAsync(It.IsAny<AuditLog>()), Times.Never);
             _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
             _mockAuditRepo.Verify(x => x.AddAsync(It.IsAny<AuditLog>()), Times.Never);
         }
 
         [Fact]
-        public async Task ApproveImportReceiptAsync_DraftWithExistingStock_CommitsAndUpdatesStockAndCreatesImportTransactions()
+        public async Task ApproveImportReceiptAsync_Received_CommitsWithoutChangingInventory()
         {
             var receipt = new ImportReceipt
             {
                 Id = 1,
                 WarehouseId = 1,
-                Status = ReceiptStatus.Draft,
+                Status = ReceiptStatus.Received,
                 Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10 } }
             };
             var stock = new InventoryStock { ProductId = 1, WarehouseId = 1, Quantity = 5 };
@@ -283,13 +283,12 @@ namespace ERP.Application.Tests
 
             await _service.ApproveImportReceiptAsync(1, 99);
 
-            receipt.Status.Should().Be(ReceiptStatus.Approved);
+            receipt.Status.Should().Be(ReceiptStatus.ReadyToPost);
             receipt.ApprovedBy.Should().Be(99);
-            stock.Quantity.Should().Be(15);
+            stock.Quantity.Should().Be(5);
             
-            _mockStockRepo.Verify(x => x.UpdateAsync(stock), Times.Once);
-            _mockTransactionRepo.Verify(x => x.AddAsync(It.Is<InventoryTransaction>(t => 
-                t.TransactionType == TransactionType.Import && t.Quantity == 10 && t.ReferenceId == 1 && t.CreatedBy == 99)), Times.Once);
+            _mockStockRepo.Verify(x => x.UpdateAsync(It.IsAny<InventoryStock>()), Times.Never);
+            _mockTransactionRepo.Verify(x => x.AddAsync(It.IsAny<InventoryTransaction>()), Times.Never);
             _mockImportRepo.Verify(x => x.UpdateAsync(receipt), Times.Once);
             
             var expectedTime = DateTime.UtcNow;
@@ -305,22 +304,21 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
-        public async Task ApproveImportReceiptAsync_DraftWithoutStock_CommitsAndCreatesStockAndImportTransactions()
+        public async Task PostAsync_ReadyToPostWithoutStock_CommitsAndCreatesStockAndImportTransaction()
         {
             var receipt = new ImportReceipt
             {
                 Id = 1,
                 WarehouseId = 1,
-                Status = ReceiptStatus.Draft,
+                Status = ReceiptStatus.ReadyToPost,
                 Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10 } }
             };
             _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
             _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(1, 1)).ReturnsAsync((InventoryStock?)null);
 
-            await _service.ApproveImportReceiptAsync(1, 99);
+            await _service.PostAsync(1, 99);
 
-            receipt.Status.Should().Be(ReceiptStatus.Approved);
-            receipt.ApprovedBy.Should().Be(99);
+            receipt.Status.Should().Be(ReceiptStatus.Posted);
             
             _mockStockRepo.Verify(x => x.AddAsync(It.Is<InventoryStock>(s => s.Quantity == 10 && s.ProductId == 1 && s.WarehouseId == 1)), Times.Once);
             _mockTransactionRepo.Verify(x => x.AddAsync(It.Is<InventoryTransaction>(t => 
@@ -330,23 +328,37 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
-        public async Task ApproveImportReceiptAsync_WhenStockUpdateOrTransactionFails_RollsBackAndThrows()
+        public async Task PostAsync_WhenStockReadFails_RollsBackAndThrows()
         {
             var receipt = new ImportReceipt
             {
                 Id = 1,
                 WarehouseId = 1,
-                Status = ReceiptStatus.Draft,
+                Status = ReceiptStatus.ReadyToPost,
                 Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10 } }
             };
             _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
             _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(1, 1)).ThrowsAsync(new Exception("DB Error"));
 
-            Func<Task> act = async () => await _service.ApproveImportReceiptAsync(1, 99);
+            Func<Task> act = async () => await _service.PostAsync(1, 99);
             await act.Should().ThrowAsync<Exception>().WithMessage("DB Error");
             _mockAuditRepo.Verify(x => x.AddAsync(It.IsAny<AuditLog>()), Times.Never);
             _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
             _mockAuditRepo.Verify(x => x.AddAsync(It.IsAny<AuditLog>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task PostAsync_ByReceiptCreator_IsRejectedBeforeStockMutation()
+        {
+            var receipt = new ImportReceipt { Id = 1, WarehouseId = 1, CreatedBy = 99, Status = ReceiptStatus.ReadyToPost };
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
+
+            var act = () => _service.PostAsync(1, 99);
+
+            await act.Should().ThrowAsync<ForbiddenException>();
+            _mockStockRepo.Verify(x => x.AddAsync(It.IsAny<InventoryStock>(), It.IsAny<CancellationToken>()), Times.Never);
+            _mockTransactionRepo.Verify(x => x.AddAsync(It.IsAny<InventoryTransaction>()), Times.Never);
+            _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
         }
 
         [Fact]

@@ -53,7 +53,27 @@ namespace ERP.Api.Controllers
             }
 
             await _importReceiptService.ApproveImportReceiptAsync(id, userId);
-            return Ok(new { message = "Duyệt phiếu nhập thành công" });
+            return Ok(new { message = "Phiếu nhập đã sẵn sàng post" });
+        }
+
+        [HttpPost("{id}/receive")]
+        [IdempotentCommand("ImportReceipt.Receive")]
+        [Authorize(Roles = AppRoles.AdminOrManager)]
+        public async Task<IActionResult> Receive(int id)
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
+            await _importReceiptService.ReceiveAsync(id, userId);
+            return Ok(new { message = "Hoàn tất nhận hàng; tồn kho chưa thay đổi" });
+        }
+
+        [HttpPost("{id}/post")]
+        [IdempotentCommand("ImportReceipt.Post")]
+        [Authorize(Policy = ApprovalPolicies.Checker)]
+        public async Task<IActionResult> Post(int id)
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
+            await _importReceiptService.PostAsync(id, userId);
+            return Ok(new { message = "Post phiếu nhập thành công" });
         }
 
         [HttpGet]

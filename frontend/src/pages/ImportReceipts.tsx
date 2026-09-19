@@ -63,6 +63,7 @@ const ImportReceipts = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceipt | null>(null);
   const [approvingId, setApprovingId] = useState<number | null>(null);
+  const [workflowId, setWorkflowId] = useState<number | null>(null);
   const createInFlight = useRef(false);
   const partnerMutationInFlight = useRef(false);
   const [creating, setCreating] = useState(false);
@@ -222,6 +223,22 @@ const ImportReceipts = () => {
     }
   };
 
+  const runWorkflow = async (id: number, command: 'receive' | 'post') => {
+    if (workflowId === id) return;
+    setWorkflowId(id); setError('');
+    try {
+      const action = `import-${command}:${id}`;
+      await apiClient.post(`/api/importreceipts/${id}/${command}`, undefined, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
+      setSuccessMsg(command === 'receive' ? 'Đã hoàn tất nhận hàng. Tồn kho chưa thay đổi.' : 'Đã post phiếu và ghi tăng tồn kho.');
+      await fetchReceipts();
+      if (selectedReceipt?.id === id) await handleViewDetails(id);
+    } catch (err: any) { setError(err.response?.data?.message || 'Không thể xử lý phiếu nhập'); }
+    finally { setWorkflowId(null); }
+  };
+
+  const statusLabel = (status: string) => ({ Draft: 'Nháp', Received: 'Đã nhận — chưa ghi tồn', ReadyToPost: 'Sẵn sàng post', Posted: 'Đã post', Approved: 'Đã duyệt (dữ liệu cũ)', Cancelled: 'Đã hủy' }[status] || status);
+
   const changeSupplier = async (value: number | null) => {
     if (!selectedReceipt || partnerMutationInFlight.current) return;
     partnerMutationInFlight.current = true; setPartnerUpdating(true); setError('');
@@ -339,15 +356,19 @@ const ImportReceipts = () => {
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.warehouseName}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.supplierCode ? `${r.supplierCode} - ${r.supplierName}` : '—'}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.createdByName}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7', fontWeight: 'bold', color: r.status === 'Draft' ? '#f39c12' : r.status === 'Approved' ? '#27ae60' : '#c0392b' }}>
-                {r.status === 'Draft' ? 'Nháp' : r.status === 'Approved' ? 'Đã duyệt' : 'Đã hủy'}
+              <td style={{ padding: '10px', border: '1px solid #bdc3c7', fontWeight: 'bold', color: r.status === 'Draft' ? '#f39c12' : r.status === 'Cancelled' ? '#c0392b' : '#27ae60' }}>
+                {statusLabel(r.status)}
               </td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
                 <button onClick={() => handleViewDetails(r.id)} style={{ cursor: 'pointer', marginRight: '5px' }}>Chi tiết</button>
                 <button disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)} style={{ cursor: 'pointer', marginRight: '5px' }}>{printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}</button>
                 {r.status === 'Draft' && (
                   <>
-                    {canApprove && r.createdBy !== userId && <button
+                    <button disabled={workflowId === r.id} onClick={() => void runWorkflow(r.id, 'receive')}>{workflowId === r.id ? 'Đang xử lý...' : 'Hoàn tất nhận hàng'}</button>
+                    <button onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '3px' }}>Hủy</button>
+                  </>
+                )}
+                {r.status === 'Received' && canApprove && r.createdBy !== userId && <button
                       onClick={() => handleApprove(r.id)} 
                       disabled={approvingId === r.id}
                       style={{ 
@@ -360,11 +381,9 @@ const ImportReceipts = () => {
                         borderRadius: '3px' 
                       }}
                     >
-                      {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt'}
+                      {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt để post'}
                     </button>}
-                    <button onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '3px' }}>Hủy</button>
-                  </>
-                )}
+                {r.status === 'ReadyToPost' && canApprove && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => void runWorkflow(r.id, 'post')}>{workflowId === r.id ? 'Đang post...' : 'Post ghi tồn'}</button>}
               </td>
             </tr>
           ))}
@@ -383,10 +402,10 @@ const ImportReceipts = () => {
             <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
             <div><strong>Nhà cung cấp:</strong> {selectedReceipt.supplierCode ? `${selectedReceipt.supplierCode} - ${selectedReceipt.supplierName}` : '—'}</div>
             {selectedReceipt.status === 'Draft' && <div><label>Đổi nhà cung cấp <select aria-label="Đổi nhà cung cấp" disabled={partnerUpdating} value={selectedReceipt.supplierId||''} onChange={e=>void changeSupplier(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{suppliers.filter(x=>x.isActive||x.id===selectedReceipt.supplierId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</div>}
-            <div><strong>Trạng thái:</strong> {selectedReceipt.status === 'Draft' ? 'Nháp' : selectedReceipt.status === 'Approved' ? 'Đã duyệt' : 'Đã hủy'}</div>
+            <div><strong>Trạng thái:</strong> {statusLabel(selectedReceipt.status)}</div>
             <div><strong>Người tạo:</strong> {selectedReceipt.createdByName}</div>
             <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</div>
-            {selectedReceipt.status === 'Approved' && (
+            {['Approved', 'ReadyToPost', 'Posted'].includes(selectedReceipt.status) && selectedReceipt.approvedAt && (
               <>
                 <div><strong>Người duyệt:</strong> {selectedReceipt.approvedByName}</div>
                 <div><strong>Ngày duyệt:</strong> {new Date(selectedReceipt.approvedAt).toLocaleString()}</div>

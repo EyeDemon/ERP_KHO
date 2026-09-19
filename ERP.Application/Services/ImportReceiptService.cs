@@ -186,53 +186,15 @@ namespace ERP.Application.Services
 
                 Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, approvedByUserId);
 
-                if (receipt.Status != ReceiptStatus.Draft)
-                    throw new BusinessRuleException("Chỉ có thể duyệt phiếu ở trạng thái nháp");
+                if (receipt.Status != ReceiptStatus.Received)
+                    throw new BusinessRuleException("Chỉ có thể duyệt phiếu đã hoàn tất nhận hàng");
 
                 receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
                 receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
 
-                receipt.Status = ReceiptStatus.Approved;
+                receipt.Status = ReceiptStatus.ReadyToPost;
                 receipt.ApprovedBy = approvedByUserId;
                 receipt.ApprovedAt = DateTime.UtcNow;
-
-                foreach (var detail in receipt.Details)
-                {
-                    // Update Stock
-                    var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId);
-                    if (stock == null)
-                    {
-                        stock = new InventoryStock
-                        {
-                            ProductId = detail.ProductId,
-                            WarehouseId = receipt.WarehouseId,
-                            Quantity = detail.Quantity,
-                            LastUpdated = DateTime.UtcNow
-                        };
-                        await _inventoryStockRepository.AddAsync(stock);
-                    }
-                    else
-                    {
-                        stock.Quantity += detail.Quantity;
-                        stock.LastUpdated = DateTime.UtcNow;
-                        await _inventoryStockRepository.UpdateAsync(stock);
-                    }
-
-                    // Create Transaction
-                    var tx = new InventoryTransaction
-                    {
-                        ProductId = detail.ProductId,
-                        WarehouseId = receipt.WarehouseId,
-                        TransactionType = TransactionType.Import,
-                        Quantity = detail.Quantity,
-                        ReferenceId = receipt.Id,
-                        ReferenceType = "ImportReceipt",
-                        TransactionDate = DateTime.UtcNow,
-                        CreatedBy = approvedByUserId,
-                        Note = detail.Note
-                    };
-                    await _inventoryTransactionRepository.AddAsync(tx);
-                }
 
                 await _importReceiptRepository.UpdateAsync(receipt);
                 
@@ -243,8 +205,8 @@ namespace ERP.Application.Services
                 EntityName = "ImportReceipt",
                 EntityId = receipt.Id,
                 WarehouseId = receipt.WarehouseId,
-                OldValues = $"Status: {ReceiptStatus.Draft}",
-                NewValues = $"Status: {ReceiptStatus.Approved}",
+                OldValues = $"Status: {ReceiptStatus.Received}",
+                NewValues = $"Status: {ReceiptStatus.ReadyToPost}",
                 Result = "Success",
                 Severity = "Information",
                 Timestamp = DateTime.UtcNow
@@ -262,6 +224,56 @@ namespace ERP.Application.Services
                 await _unitOfWork.RollbackTransactionAsync();
                 throw;
             }
+        }
+
+        public async Task ReceiveAsync(int id, int receivedByUserId)
+        {
+            if (_currentUser is not null) receivedByUserId = _currentUser.UserId;
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                var receipt = await _importReceiptRepository.GetByIdWithDetailsAsync(id)
+                    ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
+                if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                if (receipt.Status != ReceiptStatus.Draft)
+                    throw new BusinessRuleException("Chỉ có thể hoàn tất nhận hàng cho phiếu nháp");
+                if (receipt.Details.Count == 0 || receipt.Details.Any(x => x.Quantity <= 0))
+                    throw new BusinessRuleException("Phiếu nhận phải có ít nhất một dòng số lượng hợp lệ");
+                receipt.Status = ReceiptStatus.Received;
+                await _importReceiptRepository.UpdateAsync(receipt);
+                await _auditLogRepository.AddAsync(new AuditLog { UserId = receivedByUserId, Action = "ImportReceipt.Received", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.Draft}", NewValues = $"Status: {ReceiptStatus.Received}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
+        }
+
+        public async Task PostAsync(int id, int postedByUserId)
+        {
+            if (_currentUser is not null) postedByUserId = _currentUser.UserId;
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                var receipt = await _importReceiptRepository.GetByIdWithDetailsAsync(id)
+                    ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
+                if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, postedByUserId);
+                if (receipt.Status != ReceiptStatus.ReadyToPost)
+                    throw new BusinessRuleException("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
+                foreach (var detail in receipt.Details)
+                {
+                    var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId);
+                    if (stock is null)
+                        await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Quantity = detail.Quantity, LastUpdated = DateTime.UtcNow });
+                    else { stock.Quantity += detail.Quantity; stock.LastUpdated = DateTime.UtcNow; await _inventoryStockRepository.UpdateAsync(stock); }
+                    await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, TransactionType = TransactionType.Import, Quantity = detail.Quantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = postedByUserId, Note = detail.Note });
+                }
+                receipt.Status = ReceiptStatus.Posted;
+                await _importReceiptRepository.UpdateAsync(receipt);
+                await _auditLogRepository.AddAsync(new AuditLog { UserId = postedByUserId, Action = "ImportReceipt.Posted", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.ReadyToPost}", NewValues = $"Status: {ReceiptStatus.Posted}", Result = "Success", Severity = "Warning", Timestamp = DateTime.UtcNow });
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch (ConcurrencyException) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new BusinessRuleException("Phiếu nhập đã được xử lý bởi yêu cầu khác. Vui lòng tải lại."); }
+            catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
         }
         public async Task<IEnumerable<ImportReceiptDto>> GetAllAsync(Domain.Enums.ReceiptStatus? status = null)
         {

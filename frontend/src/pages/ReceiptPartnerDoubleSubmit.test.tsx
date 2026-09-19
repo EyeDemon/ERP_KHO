@@ -24,6 +24,15 @@ describe('receipt mutation locks (mocked API)', () => {
     const save = view.getByText('Lưu Phiếu Nháp'); fireEvent.click(save); fireEvent.click(save); expect(post).toHaveBeenCalledTimes(1); expect((view.getByText('Đang lưu...') as HTMLButtonElement).disabled).toBe(true); request.finish(); await waitFor(() => expect(view.queryByText('Đang lưu...')).toBeNull());
   });
 
+  it('locks inbound receive while the command is pending', async () => {
+    const receipt = { id: 3, code: 'I3', status: 'Draft', createdBy: 2, details: [] };
+    get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : [receipt] }) as never);
+    const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ImportReceipts />); await view.findByText('I3');
+    const receive = view.getByText('Hoàn tất nhận hàng'); fireEvent.click(receive); fireEvent.click(receive);
+    expect(post).toHaveBeenCalledTimes(1); expect(post).toHaveBeenCalledWith('/api/importreceipts/3/receive', undefined, expect.objectContaining({ headers: expect.any(Object) }));
+    expect((view.getByText('Đang xử lý...') as HTMLButtonElement).disabled).toBe(true); request.finish();
+  });
+
   it('locks export create synchronously while the first request is pending', async () => {
     get.mockImplementation(async (url) => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url.includes('inventorystocks') ? [{ availableQuantity: 10 }] : [] }) as never);
     const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ExportReceipts />);
