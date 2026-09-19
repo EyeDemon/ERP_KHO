@@ -38,4 +38,23 @@ Self-review found and fixed a print-media isolation defect before commit: the in
 
 The synthetic browser target used loopback ports only and an exact ownership marker. No Docker, tunnel, real ERP_KHO database, physical printer, or real credentials/data were used. Runtime artifacts and protected credentials remain excluded from Git.
 
-Status: **TESTING INCOMPLETE** until a supported browser can export a real PDF and the first, middle and last pages of a multi-page receipt are inspected for repeated table header, wrapping, clipping and row breaks.
+## Chrome PDF pagination verification
+
+Follow-up verification on 2026-09-19 used installed Google Chrome `153.0.8010.48` in headless mode and the DevTools `Page.printToPDF` command. The browser loaded the real React preview from the loopback frontend after it fetched each receipt from the real API and owned SQLEXPRESS database. `preferCSSPageSize`, A4 portrait, print backgrounds, and disabled browser headers/footers were used. Run ID: `c19d7e4a2b8f46d590a13c7e84b2f601`.
+
+| PDF | Pages | Bytes | SHA-256 |
+|---|---:|---:|---|
+| `approved-import.pdf` | 3 | 202680 | `DD6F6D5F401905CCABA631DD7F789188EDF9C4D76136005A84B7D36D9C8912A1` |
+| `draft-export.pdf` | 5 | 219507 | `82697055EDDCBC930EEBCE75B138B5FC69E3D94F653FE519D4CB3E9546643240` |
+| `cancelled-export.pdf` | 1 | 86059 | `7923BA0DAB05248C83A295AF9EBC32BF63BC84996FC30E3AB4BA9F033A00A524` |
+| `approved-import-repeat.pdf` | 3 | 202680 | `632C803ADAF97D0CDED6F34F88295A871B7F25B0161B6F536230E68C5F85DF06` |
+
+All pages were rendered with the existing Poppler runtime and inspected individually. Approved Import pages 1/2/3 contained rows 1–24, 25–54, and 55–75 plus summary/notes. Draft Export pages 1/2/3/4 contained rows 1–15, 16–35, 36–55, and 56–75; page 5 contained the intentional line-count, multi-line note, and fetch-time footer rather than a blank page. Cancelled Export fit on one page. Each continued table page repeated the table header. No row was split, lost, duplicated, clipped, or reordered.
+
+The renders contained only the preview subtree: no sidebar, navigation, modal backdrop, control, URL, or browser-generated header/footer. A4 portrait dimensions, black-and-white status text, Vietnamese glyphs, long code/name wrapping, units, decimal quantities, notes, and footer separation were visually correct. Approved displayed the stored Supplier snapshot, Draft displayed current Customer data, and Cancelled without a partner displayed `Chưa ghi nhận`.
+
+Both long receipts contained exactly 75 backend detail rows. Database evidence after four print operations remained 76 inventory transactions (one helper seed plus 75 approved import lines), zero reservations, and unchanged receipt statuses: Approved Import, Draft Export, Cancelled Export. The repeated Approved Import export retained three pages and identical rendered pages 1 and 2; page 3 differed only in the displayed fetch timestamp, as designed. PDF metadata/hash equality is not required.
+
+The earlier in-app-browser limitation remains historical evidence only; Chrome DevTools removed the pagination blocker. QA artifacts are retained locally under the ignored Run ID artifact directory and are not committed. Physical printer output remains untested.
+
+Status: **READY FOR OWNER REVIEW**.
