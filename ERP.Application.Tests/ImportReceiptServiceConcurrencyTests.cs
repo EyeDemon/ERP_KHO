@@ -165,7 +165,7 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
-        public async Task Service_CatchesDomainConcurrencyException_ThrowsBusinessRuleException_AndRollsBack()
+        public async Task Service_PreservesDomainConcurrencyException_AndRollsBack()
         {
             var (receiptId, userId, productId, warehouseId) = await SeedTestDataAsync();
 
@@ -185,7 +185,7 @@ namespace ERP.Application.Tests
             await ctx.SaveChangesAsync();
             var act = () => service.ApproveImportReceiptAsync(receiptId, userId);
 
-            await act.Should().ThrowAsync<BusinessRuleException>("because the service maps ConcurrencyException to a business error");
+            await act.Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>("because stale writes are HTTP 409 conflicts");
 
             // Verify rollback using a fresh context
             using var verifyCtx = CreateContext();
@@ -405,9 +405,9 @@ namespace ERP.Application.Tests
             await Task.WhenAll(task1, task2);
 
             successCount.Should().Be(1, "exactly one concurrent post must succeed");
-            errorCount.Should().Be(1, "losing concurrent post must fail with BusinessRuleException");
-            (errorException is BusinessRuleException || errorException is ERP.Domain.Exceptions.ConcurrencyException).Should().BeTrue(
-                "the losing concurrent post must surface as a concurrency conflict");
+            errorCount.Should().Be(1, "losing concurrent post must fail");
+            errorException.Should().BeOfType<ERP.Domain.Exceptions.ConcurrencyException>(
+                "the losing concurrent post must map to HTTP 409 at the API boundary");
 
             using var verifyCtx = CreateContext();
 

@@ -230,7 +230,7 @@ namespace ERP.Application.Services
                 Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, approvedByUserId);
 
                 if (receipt.Status != ReceiptStatus.Received)
-                    throw new BusinessRuleException("Chỉ có thể duyệt phiếu đã hoàn tất nhận hàng");
+                    throw Conflict("Chỉ có thể duyệt phiếu đã hoàn tất nhận hàng");
 
                 receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
                 receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
@@ -257,10 +257,10 @@ namespace ERP.Application.Services
                 
                 await _unitOfWork.CommitTransactionAsync();
             }
-            catch (ConcurrencyException)
+            catch (ConcurrencyException ex)
             {
                 await _unitOfWork.RollbackTransactionAsync();
-                throw new BusinessRuleException("Phiếu nhập đang được duyệt bởi một người khác. Vui lòng thử lại.");
+                throw new ConcurrencyException("Phiếu nhập đang được duyệt bởi một người khác. Vui lòng thử lại.", ex);
             }
             catch
             {
@@ -279,7 +279,7 @@ namespace ERP.Application.Services
                     ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
                 if (receipt.Status != ReceiptStatus.Draft)
-                    throw new BusinessRuleException("Chỉ có thể hoàn tất nhận hàng cho phiếu nháp");
+                    throw Conflict("Chỉ có thể hoàn tất nhận hàng cho phiếu nháp");
                 if (receipt.Details.Count == 0 || dto.Lines.Count != receipt.Details.Count || dto.Lines.Select(x => x.LineId).Distinct().Count() != receipt.Details.Count)
                     throw new BusinessRuleException("Dữ liệu nhận hàng phải bao phủ chính xác tất cả dòng phiếu");
                 foreach (var detail in receipt.Details)
@@ -322,7 +322,7 @@ namespace ERP.Application.Services
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
                 Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, postedByUserId);
                 if (receipt.Status != ReceiptStatus.ReadyToPost)
-                    throw new BusinessRuleException("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
+                    throw Conflict("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
                 foreach (var detail in receipt.Details)
                 {
                     if (detail.BaseAcceptedQuantity <= 0)
@@ -340,7 +340,7 @@ namespace ERP.Application.Services
                 await _auditLogRepository.AddAsync(new AuditLog { UserId = postedByUserId, Action = "ImportReceipt.Posted", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.ReadyToPost}", NewValues = $"Status: {ReceiptStatus.Posted}", Result = "Success", Severity = "Warning", Timestamp = DateTime.UtcNow });
                 await _unitOfWork.CommitTransactionAsync();
             }
-            catch (ConcurrencyException) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new BusinessRuleException("Phiếu nhập đã được xử lý bởi yêu cầu khác. Vui lòng tải lại."); }
+            catch (ConcurrencyException ex) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new ConcurrencyException("Phiếu nhập đã được xử lý bởi yêu cầu khác. Vui lòng tải lại.", ex); }
             catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
         }
 
@@ -355,6 +355,13 @@ namespace ERP.Application.Services
         {
             if (decimalPlaces is < 0 or > 4 || decimal.Round(value, decimalPlaces) != value)
                 throw new BusinessRuleException($"{field} vượt quá {decimalPlaces} chữ số thập phân; hệ thống không tự làm tròn");
+        }
+
+        private static BusinessRuleException Conflict(string message)
+        {
+            var exception = new BusinessRuleException(message);
+            exception.Data["HttpStatusCode"] = 409;
+            return exception;
         }
         public async Task<IEnumerable<ImportReceiptDto>> GetAllAsync(Domain.Enums.ReceiptStatus? status = null)
         {
