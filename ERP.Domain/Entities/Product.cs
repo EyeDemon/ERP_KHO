@@ -16,5 +16,6 @@ public class Product
     public Unit Unit { get; set; } = null!;
     public ProductCategory? Category { get; set; }
     public ICollection<ProductBarcode> Barcodes { get; set; } = new List<ProductBarcode>();
+    public ICollection<ProductUom> Uoms { get; set; } = new List<ProductUom>();
     public ICollection<InventoryStock> InventoryStocks { get; set; } = new List<InventoryStock>();
 }

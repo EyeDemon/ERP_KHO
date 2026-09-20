@@ -71,10 +71,16 @@ $adminLogin=Invoke-RestMethod "$apiBase/api/Auth/login" -Method Post -ContentTyp
 $adminHeaders=@{Authorization="Bearer $($adminLogin.token)";'Idempotency-Key'=[guid]::NewGuid().ToString()}
 $warehouses=Invoke-RestMethod "$apiBase/api/warehouses" -Headers $adminHeaders
 $products=Invoke-RestMethod "$apiBase/api/products" -Headers $adminHeaders
-$seedReceipt=Invoke-RestMethod "$apiBase/api/importreceipts" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body (@{code="QA-SEED-$($RunId.Substring(0,8))";warehouseId=($warehouses|Where-Object code -eq 'QA-WH01').id;note='Synthetic browser QA stock seed';details=@(@{productId=$products[0].id;quantity=100;unitPrice=1;note='Synthetic'})}|ConvertTo-Json -Depth 5)
+$seedProduct=$products[0]
+$seedReceipt=Invoke-RestMethod "$apiBase/api/importreceipts" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body (@{code="QA-SEED-$($RunId.Substring(0,8))";warehouseId=($warehouses|Where-Object code -eq 'QA-WH01').id;note='Synthetic browser QA stock seed';details=@(@{productId=$seedProduct.id;operationUnitId=$seedProduct.unitId;expectedQuantity=100;unitPrice=1;note='Synthetic'})}|ConvertTo-Json -Depth 5)
+$seedDetail=$seedReceipt.details[0]
+$adminHeaders['Idempotency-Key']=[guid]::NewGuid().ToString()
+Invoke-RestMethod "$apiBase/api/importreceipts/$($seedReceipt.id)/receive" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body (@{lines=@(@{lineId=$seedDetail.id;receivedQuantity=100;acceptedQuantity=100;damagedQuantity=0;rejectedQuantity=0})}|ConvertTo-Json -Depth 5)|Out-Null
 $managerLogin=Invoke-RestMethod "$apiBase/api/Auth/login" -Method Post -ContentType 'application/json' -Body (@{username='qa_manager_browser';password=$password}|ConvertTo-Json)
 $managerHeaders=@{Authorization="Bearer $($managerLogin.token)";'Idempotency-Key'=[guid]::NewGuid().ToString()}
 Invoke-RestMethod "$apiBase/api/importreceipts/$($seedReceipt.id)/approve" -Method Post -Headers $managerHeaders|Out-Null
+$managerHeaders['Idempotency-Key']=[guid]::NewGuid().ToString()
+Invoke-RestMethod "$apiBase/api/importreceipts/$($seedReceipt.id)/post" -Method Post -Headers $managerHeaders|Out-Null
 $adminLogin=$null;$managerLogin=$null;$adminHeaders=$null;$managerHeaders=$null
 (ConvertTo-SecureString $password -AsPlainText -Force|ConvertFrom-SecureString)|Set-Content (Join-Path $artifactRoot 'credential.dpapi') -Encoding ascii
 [Array]::Clear($jwtBytes,0,$jwtBytes.Length); $jwt=$null; $password=$null; $databaseConnection=$null

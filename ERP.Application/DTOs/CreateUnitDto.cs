@@ -12,5 +12,8 @@ namespace ERP.Application.DTOs
         [StringLength(200)]
         public string Name { get; set; } = string.Empty;
 
+        [Range(0, 4)]
+        public int DecimalPlaces { get; set; } = 4;
+
     }
 }

@@ -31,9 +31,9 @@ public sealed class SqlServerApprovalQueueRejectTests
         var outside = new Warehouse { Code = $"QA-OUT-{suffix}", Name = "QA Outside" };
         db.Warehouses.AddRange(warehouse, outside); await db.SaveChangesAsync();
         db.UserWarehouses.Add(new UserWarehouse { UserId = checker.Id, WarehouseId = warehouse.Id, CreatedBy = maker.Id });
-        var normal = new ImportReceipt { Code = $"QA-NORMAL-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-23).AddMinutes(-59) };
-        var warning = new ImportReceipt { Code = $"QA-WARNING-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-24) };
-        var overdue = new ImportReceipt { Code = $"QA-OVERDUE-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-48) };
+        var normal = new ImportReceipt { Code = $"QA-NORMAL-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-23).AddMinutes(-59), Status = ReceiptStatus.Received };
+        var warning = new ImportReceipt { Code = $"QA-WARNING-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-24), Status = ReceiptStatus.Received };
+        var overdue = new ImportReceipt { Code = $"QA-OVERDUE-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-48), Status = ReceiptStatus.Received };
         var closed = new ImportReceipt { Code = $"QA-CLOSED-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddDays(-5), Status = ReceiptStatus.Cancelled };
         var hidden = new ImportReceipt { Code = $"QA-HIDDEN-AGING-{suffix}", WarehouseId = outside.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddDays(-5) };
         db.AddRange(normal, warning, overdue, closed, hidden); await db.SaveChangesAsync();
@@ -204,7 +204,7 @@ public sealed class SqlServerApprovalQueueRejectTests
             seed.Users.AddRange(maker, one, two); await seed.SaveChangesAsync(); makerId = maker.Id; checkerOneId = one.Id; checkerTwoId = two.Id;
             var warehouse = new Warehouse { Code = $"QA-RACE-{suffix}", Name = "Race Warehouse" }; seed.Warehouses.Add(warehouse); await seed.SaveChangesAsync(); warehouseId = warehouse.Id;
             seed.UserWarehouses.AddRange(new UserWarehouse { UserId = one.Id, WarehouseId = warehouse.Id, CreatedBy = maker.Id }, new UserWarehouse { UserId = two.Id, WarehouseId = warehouse.Id, CreatedBy = maker.Id });
-            var receipt = new ImportReceipt { Code = $"QA-RACE-IMP-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id }; seed.ImportReceipts.Add(receipt); await seed.SaveChangesAsync(); receiptId = receipt.Id;
+            var receipt = new ImportReceipt { Code = $"QA-RACE-IMP-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, Status = ReceiptStatus.Received }; seed.ImportReceipts.Add(receipt); await seed.SaveChangesAsync(); receiptId = receipt.Id;
         }
         try
         {
@@ -252,12 +252,12 @@ public sealed class SqlServerApprovalQueueRejectTests
         db.UserWarehouses.AddRange(
             new UserWarehouse { UserId = checker.Id, WarehouseId = source.Id, CreatedBy = creator.Id },
             new UserWarehouse { UserId = checker.Id, WarehouseId = destination.Id, CreatedBy = creator.Id });
-        var import = new ImportReceipt { Code = $"QA-IMP-{suffix}", WarehouseId = source.Id, CreatedBy = creator.Id };
+        var import = new ImportReceipt { Code = $"QA-IMP-{suffix}", WarehouseId = source.Id, CreatedBy = creator.Id, Status = ReceiptStatus.Received };
         var export = new ExportReceipt { Code = $"QA-EXP-{suffix}", WarehouseId = source.Id, CreatedBy = creator.Id };
         var stocktake = new Stocktake { Code = $"QA-STK-{suffix}", WarehouseId = source.Id, CreatedBy = creator.Id };
         var transfer = new StockTransfer { Code = $"QA-TRF-{suffix}", SourceWarehouseId = source.Id, DestinationWarehouseId = destination.Id, CreatedBy = creator.Id };
-        var own = new ImportReceipt { Code = $"QA-SELF-{suffix}-X", WarehouseId = source.Id, CreatedBy = checker.Id };
-        var hidden = new ImportReceipt { Code = $"QA-HIDDEN-{suffix}-X", WarehouseId = outside.Id, CreatedBy = creator.Id };
+        var own = new ImportReceipt { Code = $"QA-SELF-{suffix}-X", WarehouseId = source.Id, CreatedBy = checker.Id, Status = ReceiptStatus.Received };
+        var hidden = new ImportReceipt { Code = $"QA-HIDDEN-{suffix}-X", WarehouseId = outside.Id, CreatedBy = creator.Id, Status = ReceiptStatus.Received };
         db.AddRange(import, export, stocktake, transfer, own, hidden); await db.SaveChangesAsync();
 
         var before = await InventorySnapshotAsync(db);

@@ -23,6 +23,7 @@ namespace ERP.Application.Services
                 Id = u.Id,
                 Code = u.Code,
                 Name = u.Name,
+                DecimalPlaces = u.DecimalPlaces,
                 IsActive = u.IsActive,
                 CreatedAt = u.CreatedAt
             });
@@ -38,6 +39,7 @@ namespace ERP.Application.Services
                 Id = u.Id,
                 Code = u.Code,
                 Name = u.Name,
+                DecimalPlaces = u.DecimalPlaces,
                 IsActive = u.IsActive,
                 CreatedAt = u.CreatedAt
             };
@@ -53,6 +55,7 @@ namespace ERP.Application.Services
             {
                 Code = dto.Code,
                 Name = dto.Name,
+                DecimalPlaces = dto.DecimalPlaces,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
@@ -68,6 +71,7 @@ namespace ERP.Application.Services
             if (unit == null) throw new NotFoundException($"Không tìm thấy đơn vị tính id {id}");
 
             unit.Name = dto.Name;
+            unit.DecimalPlaces = dto.DecimalPlaces;
             unit.IsActive = dto.IsActive;
             unit.UpdatedAt = DateTime.UtcNow;
 

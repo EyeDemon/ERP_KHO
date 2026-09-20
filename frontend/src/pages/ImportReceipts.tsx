@@ -9,8 +9,10 @@ interface ImportReceiptDetail {
   productId: number;
   productCode: string;
   productName: string;
-  quantity: number;
-  unitPrice: number;
+  operationUnitId: number; operationUnitCode: string; baseUnitCode: string; conversionFactor: number; conversionVersion: number;
+  expectedQuantity: number; receivedQuantity: number; acceptedQuantity: number; damagedQuantity: number; rejectedQuantity: number;
+  postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; basePostedQuantity: number;
+  unitPrice?: number;
   note: string;
 }
 
@@ -42,15 +44,19 @@ interface Product {
   id: number;
   name: string;
   code: string;
+  unitId: number; unitCode: string; unitName: string; unitDecimalPlaces: number;
+  uoms: Array<{ unitId:number; unitCode:string; unitName:string; decimalPlaces:number; conversionFactor:number; version:number }>;
 }
 interface Partner { id:number; code:string; name:string; isActive:boolean; }
 
 interface ReceiptDetailForm {
   productId: number | '';
-  quantity: number | '';
+  operationUnitId: number | '';
+  expectedQuantity: number | '';
   unitPrice: number | '';
   note: string;
 }
+type ReceiveLineForm = { receivedQuantity: number; acceptedQuantity: number; damagedQuantity: 0; rejectedQuantity: 0 };
 
 const ImportReceipts = () => {
   const canApprove = canManageCatalogs(currentRole());
@@ -62,9 +68,13 @@ const ImportReceipts = () => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceipt | null>(null);
+  const [receiveLines, setReceiveLines] = useState<Record<number, ReceiveLineForm>>({});
   const [approvingId, setApprovingId] = useState<number | null>(null);
   const [workflowId, setWorkflowId] = useState<number | null>(null);
   const createInFlight = useRef(false);
+  const approveInFlight = useRef<number | null>(null);
+  const cancelInFlight = useRef<number | null>(null);
+  const workflowInFlight = useRef<number | null>(null);
   const partnerMutationInFlight = useRef(false);
   const [creating, setCreating] = useState(false);
   const [partnerUpdating, setPartnerUpdating] = useState(false);
@@ -112,7 +122,8 @@ const ImportReceipts = () => {
   }, []);
 
   const handleApprove = async (id: number) => {
-    if (approvingId === id) return;
+    if (approveInFlight.current !== null) return;
+    approveInFlight.current = id;
     setApprovingId(id);
     setError('');
     try {
@@ -125,14 +136,18 @@ const ImportReceipts = () => {
         await handleViewDetails(id);
       }
     } catch (err: any) {
+      if (selectedReceipt?.id === id) setSelectedReceipt(null);
       setError(err.response?.data?.message || 'Lỗi khi duyệt phiếu');
     } finally {
+      approveInFlight.current = null;
       setApprovingId(null);
     }
   };
 
   const handleCancel = async (id: number) => {
+    if (cancelInFlight.current !== null) return;
     if (!window.confirm('Bạn có chắc chắn muốn hủy phiếu nhập này?')) return;
+    cancelInFlight.current = id;
     try {
       const action = `import-cancel:${id}`;
       await apiClient.put(`/api/importreceipts/${id}/cancel`, undefined, { headers: idempotencyHeaders(action) });
@@ -143,21 +158,24 @@ const ImportReceipts = () => {
           handleViewDetails(id);
       }
     } catch (err: any) {
+      if (selectedReceipt?.id === id) setSelectedReceipt(null);
       setError(err.response?.data?.message || 'Lỗi khi hủy phiếu');
-    }
+    } finally { cancelInFlight.current = null; }
   };
 
   const handleViewDetails = async (id: number) => {
     try {
       const res = await apiClient.get(`/api/importreceipts/${id}`);
       setSelectedReceipt(res.data);
+      setReceiveLines(Object.fromEntries((res.data.details as ImportReceiptDetail[]).map(d => [d.id, { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }])));
     } catch (err: any) {
+      setSelectedReceipt(null);
       setError(err.response?.data?.message || 'Lỗi khi tải chi tiết phiếu');
     }
   };
 
   const handleAddDetail = () => {
-    setDetails([...details, { productId: '', quantity: '', unitPrice: '', note: '' }]);
+    setDetails([...details, { productId: '', operationUnitId: '', expectedQuantity: '', unitPrice: '', note: '' }]);
   };
 
   const handleRemoveDetail = (index: number) => {
@@ -184,7 +202,8 @@ const ImportReceipts = () => {
     for (let i = 0; i < details.length; i++) {
       const d = details[i];
       if (d.productId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn sản phẩm`);
-      if (d.quantity === '' || Number(d.quantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng phải > 0`);
+      if (d.expectedQuantity === '' || Number(d.expectedQuantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng dự kiến phải > 0`);
+      if (d.operationUnitId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn UOM thao tác`);
       if (d.unitPrice === '' || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
     }
 
@@ -197,7 +216,8 @@ const ImportReceipts = () => {
         note,
         details: details.map(d => ({
           productId: Number(d.productId),
-          quantity: Number(d.quantity),
+          operationUnitId: Number(d.operationUnitId),
+          expectedQuantity: Number(d.expectedQuantity),
           unitPrice: Number(d.unitPrice),
           note: d.note
         }))
@@ -223,18 +243,23 @@ const ImportReceipts = () => {
     }
   };
 
-  const runWorkflow = async (id: number, command: 'receive' | 'post') => {
-    if (workflowId === id) return;
+  const runWorkflow = async (id: number, command: 'receive' | 'post', receipt?: ImportReceipt) => {
+    if (workflowInFlight.current !== null) return;
+    workflowInFlight.current = id;
     setWorkflowId(id); setError('');
     try {
       const action = `import-${command}:${id}`;
-      await apiClient.post(`/api/importreceipts/${id}/${command}`, undefined, { headers: idempotencyHeaders(action) });
+      const source = command === 'receive' && !receipt ? (await apiClient.get(`/api/importreceipts/${id}`)).data as ImportReceipt : receipt;
+      const body = command === 'receive' ? { lines: (source?.details || []).map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }) })) } : undefined;
+      if (body?.lines.some(line => line.receivedQuantity <= 0 || line.acceptedQuantity < 0 || line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== line.receivedQuantity))
+        throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận.');
+      await apiClient.post(`/api/importreceipts/${id}/${command}`, body, { headers: idempotencyHeaders(action) });
       completeIdempotentAction(action);
       setSuccessMsg(command === 'receive' ? 'Đã hoàn tất nhận hàng. Tồn kho chưa thay đổi.' : 'Đã post phiếu và ghi tăng tồn kho.');
       await fetchReceipts();
       if (selectedReceipt?.id === id) await handleViewDetails(id);
-    } catch (err: any) { setError(err.response?.data?.message || 'Không thể xử lý phiếu nhập'); }
-    finally { setWorkflowId(null); }
+    } catch (err: any) { if (err.response && selectedReceipt?.id === id) setSelectedReceipt(null); setError(err.response?.status === 409 ? 'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.' : err.response?.data?.message || err.message || 'Không thể xử lý phiếu nhập'); }
+    finally { workflowInFlight.current = null; setWorkflowId(null); }
   };
 
   const statusLabel = (status: string) => ({ Draft: 'Nháp', Received: 'Đã nhận — chưa ghi tồn', ReadyToPost: 'Sẵn sàng post', Posted: 'Đã post', Approved: 'Đã duyệt (dữ liệu cũ)', Cancelled: 'Đã hủy' }[status] || status);
@@ -288,22 +313,29 @@ const ImportReceipts = () => {
             <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
               <select 
                 value={d.productId} 
-                onChange={e => handleDetailChange(i, 'productId', e.target.value ? Number(e.target.value) : '')}
+                onChange={e => { const productId = e.target.value ? Number(e.target.value) : ''; const product = products.find(x => x.id === productId); const next = [...details]; next[i] = { ...next[i], productId, operationUnitId: product?.unitId || '' }; setDetails(next); }}
                 required
               >
                 <option value="">-- Chọn sản phẩm --</option>
                 {products.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
               </select>
               
+              <select aria-label={`UOM thao tác dòng ${i + 1}`} value={d.operationUnitId} onChange={e => handleDetailChange(i, 'operationUnitId', e.target.value ? Number(e.target.value) : '')} required>
+                <option value="">-- UOM thao tác --</option>
+                {(products.find(x => x.id === d.productId)?.uoms || []).map(u => <option key={`${u.unitId}-${u.version}`} value={u.unitId}>{u.unitCode} — × {u.conversionFactor}</option>)}
+              </select>
+
               <input 
                 type="number" 
-                placeholder="Số lượng" 
-                value={d.quantity} 
-                onChange={e => handleDetailChange(i, 'quantity', e.target.value ? Number(e.target.value) : '')}
+                aria-label={`Số lượng dự kiến dòng ${i + 1}`}
+                placeholder="Số lượng dự kiến"
+                value={d.expectedQuantity}
+                onChange={e => handleDetailChange(i, 'expectedQuantity', e.target.value ? Number(e.target.value) : '')}
                 required
                 min="0.01"
                 step="0.01"
               />
+              {(() => { const p=products.find(x=>x.id===d.productId); const u=p?.uoms?.find(x=>x.unitId===d.operationUnitId); return p&&u&&d.expectedQuantity!=='' ? <span>{d.expectedQuantity} {u.unitCode} = {Number(d.expectedQuantity)*u.conversionFactor} {p.unitCode} Base UOM</span> : null; })()}
               
               <input 
                 type="number" 
@@ -383,7 +415,7 @@ const ImportReceipts = () => {
                     >
                       {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt để post'}
                     </button>}
-                {r.status === 'ReadyToPost' && canApprove && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => void runWorkflow(r.id, 'post')}>{workflowId === r.id ? 'Đang post...' : 'Post ghi tồn'}</button>}
+                {r.status === 'ReadyToPost' && canApprove && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => { if (window.confirm('Post sẽ ghi tăng tồn theo Base UOM đã lưu trên phiếu. Tiếp tục?')) void runWorkflow(r.id, 'post'); }}>{workflowId === r.id ? 'Đang post...' : 'Post ghi tồn'}</button>}
               </td>
             </tr>
           ))}
@@ -419,9 +451,9 @@ const ImportReceipts = () => {
               <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
                 <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã SP</th>
                 <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Tên SP</th>
-                <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Số lượng</th>
-                <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Đơn giá</th>
-                <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Thành tiền</th>
+                <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Dự kiến</th>
+                <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Nhận / Chấp nhận</th>
+                <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Base UOM</th>
                 <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Ghi chú</th>
               </tr>
             </thead>
@@ -430,28 +462,26 @@ const ImportReceipts = () => {
                 <tr key={d.id}>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productCode}</td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productName}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>{d.quantity}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>{d.unitPrice.toLocaleString()}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>{(d.quantity * d.unitPrice).toLocaleString()}</td>
+                  <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>{d.expectedQuantity} {d.operationUnitCode}</td>
+                  <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>
+                    {selectedReceipt.status === 'Draft' ? <div style={{display:'grid', gap:'4px'}}>
+                      <label>Số lượng nhận <input aria-label={`Số lượng nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.receivedQuantity ?? d.expectedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...(x[d.id]||{receivedQuantity:d.expectedQuantity,acceptedQuantity:d.expectedQuantity,damagedQuantity:0,rejectedQuantity:0}),receivedQuantity:Number(e.target.value)}}))}/></label>
+                      <label>Số lượng chấp nhận <input aria-label={`Số lượng chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...(x[d.id]||{receivedQuantity:d.expectedQuantity,acceptedQuantity:d.expectedQuantity,damagedQuantity:0,rejectedQuantity:0}),acceptedQuantity:Number(e.target.value)}}))}/></label>
+                      <span>Hư hỏng: 0 · Từ chối: 0 <small>(no-QC)</small></span>
+                    </div> : <>{d.receivedQuantity} / {d.acceptedQuantity} {d.operationUnitCode}<br/><small>Hư hỏng: {d.damagedQuantity}; Từ chối: {d.rejectedQuantity}</small></>}
+                  </td>
+                  <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>× {d.conversionFactor} (v{d.conversionVersion})<br/>{selectedReceipt.status === 'Draft' ? (receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor : d.baseAcceptedQuantity || d.baseExpectedQuantity} {d.baseUnitCode}</td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.note}</td>
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr style={{ backgroundColor: '#e8f6f3', fontWeight: 'bold' }}>
-                <td colSpan={4} style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Tổng cộng:</td>
-                <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>
-                  {selectedReceipt.details.reduce((sum, d) => sum + (d.quantity * d.unitPrice), 0).toLocaleString()}
-                </td>
-                <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}></td>
-              </tr>
-            </tfoot>
           </table>
+          {selectedReceipt.status === 'Draft' && <button disabled={workflowId === selectedReceipt.id} onClick={() => void runWorkflow(selectedReceipt.id, 'receive', selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang xử lý...' : 'Hoàn tất nhận hàng (no-QC)'}</button>}
           
           <button onClick={() => setSelectedReceipt(null)} style={{ marginTop: '15px', cursor: 'pointer', padding: '8px 15px' }}>Đóng chi tiết</button>
         </div>
       )}
-      {printReceipt && printFetchedAt && <ReceiptPrintPreview kind="import" receipt={printReceipt} fetchedAt={printFetchedAt} onClose={closePrintPreview} />}
+      {printReceipt && printFetchedAt && <ReceiptPrintPreview kind="import" receipt={{...printReceipt, details: printReceipt.details.map(d => ({...d, unitName: d.operationUnitCode, quantity: d.postedQuantity || d.receivedQuantity || d.expectedQuantity}))}} fetchedAt={printFetchedAt} onClose={closePrintPreview} />}
     </div>
   );
 };

@@ -215,7 +215,8 @@ namespace ERP.Application.Tests
                     new ImportReceiptRepository(ctx), new InventoryStockRepository(ctx), new InventoryTransactionRepository(ctx),
                     new WarehouseRepository(ctx), new ProductRepository(ctx), new UnitOfWork(ctx), new AuditLogRepository(ctx));
                 
-                await service.ReceiveAsync(receiptId, userId);
+                var lineId = await ctx.ImportReceiptDetails.Where(x => x.ImportReceiptId == receiptId).Select(x => x.Id).SingleAsync();
+                await service.ReceiveAsync(receiptId, new ReceiveImportReceiptDto { Lines = [new() { LineId = lineId, ReceivedQuantity = 10, AcceptedQuantity = 10 }] }, userId);
                 await service.ApproveImportReceiptAsync(receiptId, userId);
                 await service.PostAsync(receiptId, userId);
             }
@@ -343,6 +344,9 @@ namespace ERP.Application.Tests
             using (var prepare = CreateContext())
             {
                 (await prepare.ImportReceipts.FindAsync(receiptId))!.Status = ReceiptStatus.ReadyToPost;
+                var detail = await prepare.ImportReceiptDetails.SingleAsync(x => x.ImportReceiptId == receiptId);
+                detail.AcceptedQuantity = detail.Quantity;
+                detail.BaseAcceptedQuantity = detail.Quantity;
                 await prepare.SaveChangesAsync();
             }
 

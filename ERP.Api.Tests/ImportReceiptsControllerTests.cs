@@ -68,10 +68,11 @@ namespace ERP.Api.Tests
         {
             SetUserClaims(new Claim("Id", "99"));
 
-            var result = command == "receive" ? await _controller.Receive(1) : await _controller.Post(1);
+            var receiveDto = new ERP.Application.DTOs.ReceiveImportReceiptDto();
+            var result = command == "receive" ? await _controller.Receive(1, receiveDto) : await _controller.Post(1);
 
             result.Should().BeOfType<OkObjectResult>();
-            if (command == "receive") _mockService.Verify(x => x.ReceiveAsync(1, 99), Times.Once);
+            if (command == "receive") _mockService.Verify(x => x.ReceiveAsync(1, receiveDto, 99), Times.Once);
             else _mockService.Verify(x => x.PostAsync(1, 99), Times.Once);
         }
 

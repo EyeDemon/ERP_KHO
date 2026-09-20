@@ -95,8 +95,23 @@ namespace ERP.Application.Services
                 if (product == null)
                     throw new BusinessRuleException($"Không tìm thấy sản phẩm với ID {detailDto.ProductId}");
 
-                if (detailDto.Quantity <= 0)
-                    throw new BusinessRuleException($"Số lượng nhập của sản phẩm ID {detailDto.ProductId} phải lớn hơn 0");
+                if (!product.IsActive)
+                    throw new BusinessRuleException($"Sản phẩm ID {detailDto.ProductId} không hoạt động");
+                if (detailDto.ExpectedQuantity <= 0)
+                    throw new BusinessRuleException($"Số lượng dự kiến của sản phẩm ID {detailDto.ProductId} phải lớn hơn 0");
+                var operationUnitId = detailDto.OperationUnitId > 0 ? detailDto.OperationUnitId : product.UnitId;
+
+                var conversion = operationUnitId == product.UnitId
+                    ? new { Unit = product.Unit, Factor = 1m, Version = 1 }
+                    : product.Uoms.Where(x => x.IsActive && x.EffectiveFromUtc <= DateTime.UtcNow && x.UnitId == operationUnitId)
+                        .OrderByDescending(x => x.Version)
+                        .Select(x => new { x.Unit, Factor = x.ConversionFactor, x.Version })
+                        .FirstOrDefault();
+                if (conversion is null || conversion.Factor <= 0)
+                    throw new BusinessRuleException($"UOM thao tác không hợp lệ cho sản phẩm ID {detailDto.ProductId}");
+                EnsurePrecision(detailDto.ExpectedQuantity, conversion.Unit.DecimalPlaces, "Số lượng dự kiến");
+                var baseExpected = detailDto.ExpectedQuantity * conversion.Factor;
+                EnsurePrecision(baseExpected, product.Unit.DecimalPlaces, "Số lượng Base UOM");
 
                 if (detailDto.UnitPrice < 0)
                     throw new BusinessRuleException($"Đơn giá của sản phẩm ID {detailDto.ProductId} không được âm");
@@ -104,7 +119,17 @@ namespace ERP.Application.Services
                 receipt.Details.Add(new ImportReceiptDetail
                 {
                     ProductId = detailDto.ProductId,
-                    Quantity = detailDto.Quantity,
+                    Quantity = detailDto.ExpectedQuantity,
+                    ExpectedQuantity = detailDto.ExpectedQuantity,
+                    OperationUnitId = conversion.Unit.Id,
+                    OperationUnitCodeSnapshot = conversion.Unit.Code,
+                    OperationUnitDecimalPlaces = conversion.Unit.DecimalPlaces,
+                    BaseUnitId = product.UnitId,
+                    BaseUnitCodeSnapshot = product.Unit.Code,
+                    BaseUnitDecimalPlaces = product.Unit.DecimalPlaces,
+                    ConversionFactor = conversion.Factor,
+                    ConversionVersion = conversion.Version,
+                    BaseExpectedQuantity = baseExpected,
                     UnitPrice = detailDto.UnitPrice,
                     Note = detailDto.Note
                 });
@@ -143,6 +168,7 @@ namespace ERP.Application.Services
 
         private ImportReceiptDto MapToDto(ImportReceipt receipt)
         {
+            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role == "Manager";
             return new ImportReceiptDto
             {
                 Id = receipt.Id,
@@ -166,9 +192,26 @@ namespace ERP.Application.Services
                     ProductId = d.ProductId,
                     ProductCode = d.Product?.Code,
                     ProductName = d.Product?.Name,
-                    UnitName = d.Product?.Unit?.Name,
-                    Quantity = d.Quantity,
-                    UnitPrice = d.UnitPrice,
+                    UnitName = d.OperationUnitCodeSnapshot.Length > 0 ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Name,
+                    OperationUnitId = d.OperationUnitId > 0 ? d.OperationUnitId : d.Product?.UnitId ?? 0,
+                    OperationUnitCode = d.OperationUnitCodeSnapshot.Length > 0 ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Code ?? string.Empty,
+                    OperationUnitDecimalPlaces = d.OperationUnitDecimalPlaces,
+                    BaseUnitId = d.BaseUnitId > 0 ? d.BaseUnitId : d.Product?.UnitId ?? 0,
+                    BaseUnitCode = d.BaseUnitCodeSnapshot.Length > 0 ? d.BaseUnitCodeSnapshot : d.Product?.Unit?.Code ?? string.Empty,
+                    BaseUnitDecimalPlaces = d.BaseUnitDecimalPlaces,
+                    ConversionFactor = d.ConversionFactor > 0 ? d.ConversionFactor : 1,
+                    ConversionVersion = d.ConversionVersion > 0 ? d.ConversionVersion : 1,
+                    ExpectedQuantity = d.ExpectedQuantity > 0 ? d.ExpectedQuantity : d.Quantity,
+                    ReceivedQuantity = d.ReceivedQuantity,
+                    AcceptedQuantity = d.AcceptedQuantity,
+                    DamagedQuantity = d.DamagedQuantity,
+                    RejectedQuantity = d.RejectedQuantity,
+                    PostedQuantity = d.PostedQuantity,
+                    BaseExpectedQuantity = d.BaseExpectedQuantity > 0 ? d.BaseExpectedQuantity : d.Quantity,
+                    BaseReceivedQuantity = d.BaseReceivedQuantity,
+                    BaseAcceptedQuantity = d.BaseAcceptedQuantity,
+                    BasePostedQuantity = d.BasePostedQuantity,
+                    UnitPrice = canReadCost ? d.UnitPrice : null,
                     Note = d.Note
                 }).ToList()
             };
@@ -226,7 +269,7 @@ namespace ERP.Application.Services
             }
         }
 
-        public async Task ReceiveAsync(int id, int receivedByUserId)
+        public async Task ReceiveAsync(int id, ReceiveImportReceiptDto dto, int receivedByUserId)
         {
             if (_currentUser is not null) receivedByUserId = _currentUser.UserId;
             await _unitOfWork.BeginTransactionAsync();
@@ -237,8 +280,29 @@ namespace ERP.Application.Services
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
                 if (receipt.Status != ReceiptStatus.Draft)
                     throw new BusinessRuleException("Chỉ có thể hoàn tất nhận hàng cho phiếu nháp");
-                if (receipt.Details.Count == 0 || receipt.Details.Any(x => x.Quantity <= 0))
-                    throw new BusinessRuleException("Phiếu nhận phải có ít nhất một dòng số lượng hợp lệ");
+                if (receipt.Details.Count == 0 || dto.Lines.Count != receipt.Details.Count || dto.Lines.Select(x => x.LineId).Distinct().Count() != receipt.Details.Count)
+                    throw new BusinessRuleException("Dữ liệu nhận hàng phải bao phủ chính xác tất cả dòng phiếu");
+                foreach (var detail in receipt.Details)
+                {
+                    var line = dto.Lines.SingleOrDefault(x => x.LineId == detail.Id)
+                        ?? throw new BusinessRuleException($"Thiếu dữ liệu nhận cho dòng {detail.Id}");
+                    if (line.ReceivedQuantity <= 0 || line.AcceptedQuantity < 0 || line.DamagedQuantity < 0 || line.RejectedQuantity < 0)
+                        throw new BusinessRuleException($"Số lượng dòng {detail.Id} không hợp lệ");
+                    if (line.AcceptedQuantity + line.DamagedQuantity + line.RejectedQuantity != line.ReceivedQuantity)
+                        throw new BusinessRuleException($"Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận ở dòng {detail.Id}");
+                    if (line.DamagedQuantity != 0 || line.RejectedQuantity != 0)
+                        throw new BusinessRuleException("Nhánh no-QC chưa hỗ trợ ghi nhận hàng hư hỏng hoặc từ chối; cần quy trình QC/disposition");
+                    EnsurePrecision(line.ReceivedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng nhận");
+                    var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1;
+                    detail.ReceivedQuantity = line.ReceivedQuantity;
+                    detail.AcceptedQuantity = line.AcceptedQuantity;
+                    detail.DamagedQuantity = line.DamagedQuantity;
+                    detail.RejectedQuantity = line.RejectedQuantity;
+                    detail.BaseReceivedQuantity = ConvertToBase(line.ReceivedQuantity, factor, detail);
+                    detail.BaseAcceptedQuantity = ConvertToBase(line.AcceptedQuantity, factor, detail);
+                    detail.BaseDamagedQuantity = 0;
+                    detail.BaseRejectedQuantity = 0;
+                }
                 receipt.Status = ReceiptStatus.Received;
                 await _importReceiptRepository.UpdateAsync(receipt);
                 await _auditLogRepository.AddAsync(new AuditLog { UserId = receivedByUserId, Action = "ImportReceipt.Received", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.Draft}", NewValues = $"Status: {ReceiptStatus.Received}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
@@ -261,11 +325,15 @@ namespace ERP.Application.Services
                     throw new BusinessRuleException("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
                 foreach (var detail in receipt.Details)
                 {
+                    if (detail.BaseAcceptedQuantity <= 0)
+                        throw new BusinessRuleException($"Dòng {detail.Id} chưa có số lượng Base UOM được chấp nhận");
                     var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId);
                     if (stock is null)
-                        await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Quantity = detail.Quantity, LastUpdated = DateTime.UtcNow });
-                    else { stock.Quantity += detail.Quantity; stock.LastUpdated = DateTime.UtcNow; await _inventoryStockRepository.UpdateAsync(stock); }
-                    await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, TransactionType = TransactionType.Import, Quantity = detail.Quantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = postedByUserId, Note = detail.Note });
+                        await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Quantity = detail.BaseAcceptedQuantity, LastUpdated = DateTime.UtcNow });
+                    else { stock.Quantity += detail.BaseAcceptedQuantity; stock.LastUpdated = DateTime.UtcNow; await _inventoryStockRepository.UpdateAsync(stock); }
+                    await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, TransactionType = TransactionType.Import, Quantity = detail.BaseAcceptedQuantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = postedByUserId, Note = detail.Note });
+                    detail.PostedQuantity = detail.AcceptedQuantity;
+                    detail.BasePostedQuantity = detail.BaseAcceptedQuantity;
                 }
                 receipt.Status = ReceiptStatus.Posted;
                 await _importReceiptRepository.UpdateAsync(receipt);
@@ -274,6 +342,19 @@ namespace ERP.Application.Services
             }
             catch (ConcurrencyException) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new BusinessRuleException("Phiếu nhập đã được xử lý bởi yêu cầu khác. Vui lòng tải lại."); }
             catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
+        }
+
+        private static decimal ConvertToBase(decimal quantity, decimal factor, ImportReceiptDetail detail)
+        {
+            var result = quantity * factor;
+            EnsurePrecision(result, detail.BaseUnitDecimalPlaces, $"Số lượng Base UOM dòng {detail.Id}");
+            return result;
+        }
+
+        private static void EnsurePrecision(decimal value, int decimalPlaces, string field)
+        {
+            if (decimalPlaces is < 0 or > 4 || decimal.Round(value, decimalPlaces) != value)
+                throw new BusinessRuleException($"{field} vượt quá {decimalPlaces} chữ số thập phân; hệ thống không tự làm tròn");
         }
         public async Task<IEnumerable<ImportReceiptDto>> GetAllAsync(Domain.Enums.ReceiptStatus? status = null)
         {

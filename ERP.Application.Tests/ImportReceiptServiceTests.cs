@@ -56,7 +56,7 @@ namespace ERP.Application.Tests
             };
             
             _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1, Name = "WH1" });
-            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Product { Id = 1, Name = "P1" });
+            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(ProductWithBaseUnit(1, "P1"));
             _mockImportRepo.Setup(x => x.ExistsByCodeAsync("IM001", null)).ReturnsAsync(false);
             
             var savedReceipt = new ImportReceipt { Id = 1, Code = "IM001", Status = ReceiptStatus.Draft };
@@ -106,6 +106,53 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
+        public async Task CreateAsync_OperationUom_SnapshotsConversionAndBaseExpectedQuantity()
+        {
+            var each = new Unit { Id = 1, Code = "EA", Name = "Each", DecimalPlaces = 0 };
+            var box = new Unit { Id = 2, Code = "BOX", Name = "Box", DecimalPlaces = 0 };
+            var product = new Product { Id = 1, UnitId = 1, Unit = each, IsActive = true, Uoms = [new ProductUom { UnitId = 2, Unit = box, ConversionFactor = 24, Version = 4, EffectiveFromUtc = DateTime.UtcNow.AddDays(1), IsActive = true }, new ProductUom { UnitId = 2, Unit = box, ConversionFactor = 12, Version = 3, EffectiveFromUtc = DateTime.UtcNow.AddDays(-1), IsActive = true }] };
+            _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1 });
+            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(product);
+            _mockImportRepo.Setup(x => x.ExistsByCodeAsync("IM-UOM", null)).ReturnsAsync(false);
+            _mockImportRepo.Setup(x => x.AddAsync(It.IsAny<ImportReceipt>(), It.IsAny<CancellationToken>())).ReturnsAsync((ImportReceipt r, CancellationToken _) => r);
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(It.IsAny<int>())).ReturnsAsync(new ImportReceipt { Code = "IM-UOM" });
+
+            await _service.CreateAsync(new CreateImportReceiptDto { Code = "IM-UOM", WarehouseId = 1, Details = [new() { ProductId = 1, OperationUnitId = 2, ExpectedQuantity = 2 }] }, 99);
+
+            _mockImportRepo.Verify(x => x.AddAsync(It.Is<ImportReceipt>(r => r.Details.Single().ConversionFactor == 12 && r.Details.Single().ConversionVersion == 3 && r.Details.Single().BaseExpectedQuantity == 24 && r.Details.Single().OperationUnitCodeSnapshot == "BOX" && r.Details.Single().BaseUnitCodeSnapshot == "EA"), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task ReceiveAsync_NoQc_SnapshotsBaseAcceptedAndRejectsDamage()
+        {
+            var detail = new ImportReceiptDetail { Id = 7, ExpectedQuantity = 2, ConversionFactor = 12, OperationUnitDecimalPlaces = 0, BaseUnitDecimalPlaces = 0 };
+            var receipt = new ImportReceipt { Id = 1, Status = ReceiptStatus.Draft, Details = [detail] };
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
+
+            await _service.ReceiveAsync(1, new ReceiveImportReceiptDto { Lines = [new() { LineId = 7, ReceivedQuantity = 2, AcceptedQuantity = 2 }] }, 99);
+
+            detail.BaseReceivedQuantity.Should().Be(24);
+            detail.BaseAcceptedQuantity.Should().Be(24);
+            receipt.Status.Should().Be(ReceiptStatus.Received);
+
+            receipt.Status = ReceiptStatus.Draft;
+            var damaged = () => _service.ReceiveAsync(1, new ReceiveImportReceiptDto { Lines = [new() { LineId = 7, ReceivedQuantity = 2, AcceptedQuantity = 1, DamagedQuantity = 1 }] }, 99);
+            await damaged.Should().ThrowAsync<BusinessRuleException>().WithMessage("*no-QC*");
+        }
+
+        [Fact]
+        public async Task ReceiveAsync_ConversionWithTrailingZeroScale_AcceptsWholeBaseQuantity()
+        {
+            var detail = new ImportReceiptDetail { Id = 8, ExpectedQuantity = 100, ConversionFactor = 1.00000000m, OperationUnitDecimalPlaces = 4, BaseUnitDecimalPlaces = 4 };
+            var receipt = new ImportReceipt { Id = 2, Status = ReceiptStatus.Draft, Details = [detail] };
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(2)).ReturnsAsync(receipt);
+
+            await _service.ReceiveAsync(2, new ReceiveImportReceiptDto { Lines = [new() { LineId = 8, ReceivedQuantity = 100, AcceptedQuantity = 100 }] }, 99);
+
+            detail.BaseAcceptedQuantity.Should().Be(100);
+        }
+
+        [Fact]
         public async Task CreateAsync_AuditLogFails_RollsBackTransactionAndThrows()
         {
             var dto = new CreateImportReceiptDto
@@ -119,7 +166,7 @@ namespace ERP.Application.Tests
             };
 
             _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1 });
-            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Product { Id = 1 });
+            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(ProductWithBaseUnit());
             _mockImportRepo.Setup(x => x.ExistsByCodeAsync("IM001", null)).ReturnsAsync(false);
             _mockImportRepo.Setup(x => x.AddAsync(It.IsAny<ImportReceipt>(), It.IsAny<CancellationToken>()))
                 .Callback<ImportReceipt, CancellationToken>((r, ct) => r.Id = 1)
@@ -173,9 +220,9 @@ namespace ERP.Application.Tests
         {
             var dto = new CreateImportReceiptDto { Code = "IM001", WarehouseId = 1, Details = new List<CreateImportReceiptDetailDto> { new CreateImportReceiptDetailDto { ProductId = 1, Quantity = quantity } } };
             _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1 });
-            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Product { Id = 1 });
+            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(ProductWithBaseUnit());
             Func<Task> act = async () => await _service.CreateAsync(dto, 1);
-            await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Số lượng nhập của sản phẩm ID 1 phải lớn hơn 0");
+            await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Số lượng dự kiến của sản phẩm ID 1 phải lớn hơn 0");
             _mockAuditRepo.Verify(x => x.AddAsync(It.IsAny<AuditLog>()), Times.Never);
         }
         
@@ -216,7 +263,7 @@ namespace ERP.Application.Tests
         {
             var dto = new CreateImportReceiptDto { Code = "IM001", WarehouseId = 1, Details = new List<CreateImportReceiptDetailDto> { new CreateImportReceiptDetailDto { ProductId = 1, Quantity = 10, UnitPrice = -5 } } };
             _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1 });
-            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Product { Id = 1 });
+            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(ProductWithBaseUnit());
             Func<Task> act = async () => await _service.CreateAsync(dto, 1);
             await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Đơn giá của sản phẩm ID 1 không được âm");
             _mockAuditRepo.Verify(x => x.AddAsync(It.IsAny<AuditLog>()), Times.Never);
@@ -275,7 +322,7 @@ namespace ERP.Application.Tests
                 Id = 1,
                 WarehouseId = 1,
                 Status = ReceiptStatus.Received,
-                Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10 } }
+                Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10, AcceptedQuantity = 10, BaseAcceptedQuantity = 10 } }
             };
             var stock = new InventoryStock { ProductId = 1, WarehouseId = 1, Quantity = 5 };
             _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
@@ -311,7 +358,7 @@ namespace ERP.Application.Tests
                 Id = 1,
                 WarehouseId = 1,
                 Status = ReceiptStatus.ReadyToPost,
-                Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10 } }
+                Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10, AcceptedQuantity = 10, BaseAcceptedQuantity = 10 } }
             };
             _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
             _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(1, 1)).ReturnsAsync((InventoryStock?)null);
@@ -335,7 +382,7 @@ namespace ERP.Application.Tests
                 Id = 1,
                 WarehouseId = 1,
                 Status = ReceiptStatus.ReadyToPost,
-                Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10 } }
+                Details = new List<ImportReceiptDetail> { new ImportReceiptDetail { ProductId = 1, Quantity = 10, AcceptedQuantity = 10, BaseAcceptedQuantity = 10 } }
             };
             _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
             _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(1, 1)).ThrowsAsync(new Exception("DB Error"));
@@ -444,7 +491,7 @@ namespace ERP.Application.Tests
         public async Task CreateAsync_AuditLogFails_RollsBackTransactionAndLeavesNoAuditLog()
         {
             var warehouse = new Warehouse { Id = 1, IsActive = true };
-            var product = new Product { Id = 10, IsActive = true };
+            var product = ProductWithBaseUnit(10);
 
             _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(warehouse);
             _mockProductRepo.Setup(x => x.GetByIdAsync(10)).ReturnsAsync(product);
@@ -477,7 +524,7 @@ namespace ERP.Application.Tests
         public async Task CreateAsync_CommitTransactionFails_RollsBackTransactionAndThrows()
         {
             var warehouse = new Warehouse { Id = 1, IsActive = true };
-            var product = new Product { Id = 10, IsActive = true };
+            var product = ProductWithBaseUnit(10);
 
             _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(warehouse);
             _mockProductRepo.Setup(x => x.GetByIdAsync(10)).ReturnsAsync(product);
@@ -523,6 +570,12 @@ namespace ERP.Application.Tests
             _mockStockRepo.Verify(x => x.AddAsync(It.IsAny<InventoryStock>()), Times.Never);
             _mockTransactionRepo.Verify(x => x.AddAsync(It.IsAny<InventoryTransaction>()), Times.Never);
         }
+
+        private static Product ProductWithBaseUnit(int id = 1, string name = "P1") => new()
+        {
+            Id = id, Name = name, IsActive = true, UnitId = 1,
+            Unit = new Unit { Id = 1, Code = "EA", Name = "Each", DecimalPlaces = 4 }
+        };
 
         [Fact]
         public async Task CancelAsync_CommitTransactionFails_RollsBackTransactionAndThrows()

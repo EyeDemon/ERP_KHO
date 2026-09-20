@@ -9,7 +9,7 @@ vi.mock('../services/apiClient', () => ({ default: { get: vi.fn(), post: vi.fn()
 const get = vi.mocked(apiClient.get); const post = vi.mocked(apiClient.post); const put = vi.mocked(apiClient.put);
 const partner = { id: 9, code: 'BP-9', name: 'Partner', isActive: true };
 const warehouse = { id: 1, code: 'WH1', name: 'Warehouse', isActive: true };
-const product = { id: 2, code: 'P2', name: 'Product', isActive: true };
+const product = { id: 2, code: 'P2', name: 'Product', isActive: true, unitId: 1, unitCode: 'EA', unitName: 'Each', unitDecimalPlaces: 4, uoms: [{ unitId: 1, unitCode: 'EA', unitName: 'Each', decimalPlaces: 4, conversionFactor: 1, version: 1 }] };
 const pending = () => { let finish!: () => void; const promise = new Promise(resolve => { finish = () => resolve({ data: {} }); }); return { promise, finish }; };
 
 describe('receipt mutation locks (mocked API)', () => {
@@ -29,7 +29,7 @@ describe('receipt mutation locks (mocked API)', () => {
     get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : [receipt] }) as never);
     const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ImportReceipts />); await view.findByText('I3');
     const receive = view.getByText('Hoàn tất nhận hàng'); fireEvent.click(receive); fireEvent.click(receive);
-    expect(post).toHaveBeenCalledTimes(1); expect(post).toHaveBeenCalledWith('/api/importreceipts/3/receive', undefined, expect.objectContaining({ headers: expect.any(Object) }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1)); expect(post).toHaveBeenCalledWith('/api/importreceipts/3/receive', expect.objectContaining({ lines: expect.any(Array) }), expect.objectContaining({ headers: expect.any(Object) }));
     expect((view.getByText('Đang xử lý...') as HTMLButtonElement).disabled).toBe(true); request.finish();
   });
 

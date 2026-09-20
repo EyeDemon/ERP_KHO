@@ -75,7 +75,12 @@ namespace ERP.Application.Services
         public static ProductDto Map(Product p) => new()
         {
             Id = p.Id, Code = p.Code, Name = p.Name, Description = p.Description,
-            UnitId = p.UnitId, UnitName = p.Unit?.Name, CategoryId = p.CategoryId,
+            UnitId = p.UnitId, UnitName = p.Unit?.Name, UnitCode = p.Unit?.Code, UnitDecimalPlaces = p.Unit?.DecimalPlaces ?? 4,
+            Uoms = new[] { new ProductUomDto { UnitId = p.UnitId, UnitCode = p.Unit?.Code ?? string.Empty, UnitName = p.Unit?.Name ?? string.Empty, DecimalPlaces = p.Unit?.DecimalPlaces ?? 4, ConversionFactor = 1, Version = 1 } }
+                .Concat(p.Uoms.Where(x => x.IsActive && x.EffectiveFromUtc <= DateTime.UtcNow && x.UnitId != p.UnitId)
+                    .GroupBy(x => x.UnitId).Select(group => group.OrderByDescending(x => x.Version).First())
+                    .Select(x => new ProductUomDto { UnitId = x.UnitId, UnitCode = x.Unit.Code, UnitName = x.Unit.Name, DecimalPlaces = x.Unit.DecimalPlaces, ConversionFactor = x.ConversionFactor, Version = x.Version })).ToList(),
+            CategoryId = p.CategoryId,
             CategoryCode = p.Category?.Code, CategoryName = p.Category?.Name,
             Barcodes = p.Barcodes.Select(x => new ProductBarcodeDto { Id = x.Id, ProductId = x.ProductId, Value = x.Value }).ToList(),
             IsActive = p.IsActive, CreatedAt = p.CreatedAt

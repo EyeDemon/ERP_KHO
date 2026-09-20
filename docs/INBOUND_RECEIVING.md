@@ -74,7 +74,7 @@ Draft --receive--> Received --checker approval--> ReadyToPost --post--> Posted
 
 Fresh baseline checks run in this review: solution build passed with 0 warnings/errors; owned SQL Run ID `7cae4e33d75e4940a2df288bb5fcc90d` passed Application 325/325 and API 154/154, then removed its owned database; frontend passed 50/50, lint, and production build. Earlier checkpoint counts are inherited evidence and are not used as the fresh run.
 
-Foundation findings to fix before extending the slice: receipt detail UI retains stale data after a failed reload; workflow double-submit uses React state rather than a synchronous ref; and `UnitPrice` is returned to Viewer responses even though Notion classifies cost as financial-confidential. These are implementation findings from this review, not independent review findings.
+Foundation findings found and fixed before extending the slice: failed detail/command loads now clear stale receipt data; mutation guards use synchronous refs; `UnitPrice` is filtered server-side for Viewer; and the shared approval queue/reject path now treats Import Receipt `Received`, rather than `Draft`, as pending approval. These are implementation findings from this review, not independent review findings.
 
 ## Quantity and UOM audit
 
@@ -90,9 +90,18 @@ Foundation findings to fix before extending the slice: receipt detail UI retains
 | Legacy rows | only `Quantity` and product Unit | no guessed historical conversion | migration required | backfill factor 1 because the old model had exactly one product unit; retain legacy `Approved` state |
 | Cost visibility | `UnitPrice` always maps to response | server-side field authorization | leak to Viewer | omit cost server-side unless current implemented Admin/Manager mapping permits it |
 
+## Implemented quantity and UOM contract
+
+- New writes use explicit expected, received, accepted, damaged, rejected and posted fields. Legacy `Quantity` remains only for storage/source compatibility and is not exposed as the new write contract.
+- `Product.UnitId` is the Base UOM. `ProductUom` versions alternate operation UOM conversions; factor must be positive.
+- Receipt creation snapshots operation/Base UOM IDs, codes, decimal precision, conversion factor/version, and Base Expected Quantity. Receive persists Base Received/Accepted quantities from that snapshot. Post consumes the persisted Base Accepted Quantity and never reads live conversion master data.
+- No-QC requires `accepted + damaged + rejected = received`, then rejects non-zero damaged/rejected because inventory status/QC disposition is outside this slice. This prevents rejected or damaged stock from increasing available stock.
+- Values beyond the configured operation/Base UOM precision are rejected server-side. Trailing-zero decimal scale is accepted; no silent rounding is performed.
+- Migration `20260919164747_AddInboundQuantityAndUomSnapshots` backfills legacy rows with factor/version 1 only because the old schema had exactly one product Unit. It does not infer historical alternate-UOM conversions.
+
 ## Deliberately deferred gaps
 
-The codebase has no receipt-level expected/received/accepted/damaged/rejected quantities, UOM conversion version, lot/serial dimensions, QC inspection aggregate, location-level balance, outbox, or Putaway task aggregate. Implementing those safely requires schema and migration work beyond this foundation. The current `Quantity` is treated as the persisted received quantity for the all-lines slice. No-QC is the only executable path; the QC path remains documented but unavailable.
+Lot/serial dimensions, QC inspection aggregate, location-level balance, outbox, Putaway task aggregate, and Product UOM administration UI remain outside this slice. No-QC is the only executable path; the QC path remains documented but unavailable.
 
 Product, unit and warehouse names use current master data. Only supplier Code/Name is snapshotted after Draft, so historical reconstruction is limited accordingly. Unit price remains confidential operational data and is not added to the new command responses.
 
@@ -123,6 +132,14 @@ The deployment still uses role-backed API policies. Mapping these to the Notion 
 - warehouse isolation and maker/checker policy;
 - frontend loading, error and double-submit guards;
 - SQL integration and browser full-stack path using an owned synthetic database.
+
+Fresh completion evidence on `2026-09-20`:
+
+- solution Release build: 0 warnings, 0 errors;
+- owned SQL Application Run ID `9d9266a302004ad7b0e73b9cca31db2f`: 328/328, owned database removed;
+- API SQL suite: 154/154 (`TestResults/SqlIntegration/api-final-20260920/api-final-2.trx`); each test creates and removes only its ownership-verified database;
+- frontend: 50/50, lint PASS, production build PASS;
+- browser full-stack Run ID `6164fd03188442409aff53e9d7dbfae5`: `2 BOX × 12 = 24 EA`; receive left stock/ledger unchanged and a double click produced one receive audit; post produced one ledger row of 24 EA and stock 24 EA; processes, database, and synthetic credential were removed by the ownership-checked cleanup script.
 
 ## Next gaps
 

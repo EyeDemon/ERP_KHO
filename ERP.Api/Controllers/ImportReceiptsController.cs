@@ -59,10 +59,10 @@ namespace ERP.Api.Controllers
         [HttpPost("{id}/receive")]
         [IdempotentCommand("ImportReceipt.Receive")]
         [Authorize(Roles = AppRoles.AdminOrManager)]
-        public async Task<IActionResult> Receive(int id)
+        public async Task<IActionResult> Receive(int id, [FromBody] ERP.Application.DTOs.ReceiveImportReceiptDto dto)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
-            await _importReceiptService.ReceiveAsync(id, userId);
+            await _importReceiptService.ReceiveAsync(id, dto, userId);
             return Ok(new { message = "Hoàn tất nhận hàng; tồn kho chưa thay đổi" });
         }
 
