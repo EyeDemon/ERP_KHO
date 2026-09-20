@@ -22,7 +22,7 @@ try {
     [void]$marker.Parameters.AddWithValue('@run',$RunId); [void]$marker.Parameters.AddWithValue('@database',$database); [void]$marker.ExecuteNonQuery()
 } finally { $connection.Dispose() }
 $manifestPath = Join-Path $artifactRoot 'manifest.json'
-$manifest=[ordered]@{RunId=$RunId;Database=$database;MarkerType='LocalBrowserFullStackQA';ApiPid=$null;FrontendPid=$null;ApiUrl='http://127.0.0.1:5265';FrontendUrl='http://127.0.0.1:4175';ArtifactRoot=$artifactRoot;CreatedAtUtc=[DateTime]::UtcNow.ToString('o')}
+$manifest=[ordered]@{RunId=$RunId;Database=$database;MarkerType='LocalBrowserFullStackQA';ApiPid=$null;FrontendPid=$null;ApiUrl='http://127.0.0.1:5265';FrontendUrl='http://127.0.0.1:4175';ArtifactRoot=$artifactRoot;CreatedAtUtc=[DateTime]::UtcNow.ToString('o');RetryReceiptId=$null;ConcurrentReceiptId=$null;UiReceiptId=$null}
 $manifest|ConvertTo-Json|Set-Content $manifestPath -Encoding UTF8
 $env:ConnectionStrings__DefaultConnection = $databaseConnection
 try { dotnet ef database update --project "$repo/ERP.Infrastructure/ERP.Infrastructure.csproj" --startup-project "$repo/ERP.Api/ERP.Api.csproj" --configuration Release --no-build }
@@ -81,6 +81,20 @@ $managerHeaders=@{Authorization="Bearer $($managerLogin.token)";'Idempotency-Key
 Invoke-RestMethod "$apiBase/api/importreceipts/$($seedReceipt.id)/approve" -Method Post -Headers $managerHeaders|Out-Null
 $managerHeaders['Idempotency-Key']=[guid]::NewGuid().ToString()
 Invoke-RestMethod "$apiBase/api/importreceipts/$($seedReceipt.id)/post" -Method Post -Headers $managerHeaders|Out-Null
+
+function New-ReadyReceipt([string]$suffix,[decimal]$quantity) {
+    $adminHeaders['Idempotency-Key']=[guid]::NewGuid().ToString()
+    $receipt=Invoke-RestMethod "$apiBase/api/importreceipts" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body (@{code="QA-$suffix-$($RunId.Substring(0,8))";warehouseId=($warehouses|Where-Object code -eq 'QA-WH01').id;note='Synthetic inbound closure QA';details=@(@{productId=$seedProduct.id;operationUnitId=$seedProduct.unitId;expectedQuantity=$quantity;unitPrice=7.5;note='Synthetic closure'})}|ConvertTo-Json -Depth 5)
+    $adminHeaders['Idempotency-Key']=[guid]::NewGuid().ToString()
+    Invoke-RestMethod "$apiBase/api/importreceipts/$($receipt.id)/receive" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body (@{lines=@(@{lineId=$receipt.details[0].id;receivedQuantity=$quantity;acceptedQuantity=$quantity;damagedQuantity=0;rejectedQuantity=0})}|ConvertTo-Json -Depth 5)|Out-Null
+    $managerHeaders['Idempotency-Key']=[guid]::NewGuid().ToString()
+    Invoke-RestMethod "$apiBase/api/importreceipts/$($receipt.id)/approve" -Method Post -Headers $managerHeaders|Out-Null
+    return $receipt.id
+}
+$manifest.RetryReceiptId=New-ReadyReceipt 'RETRY' 11
+$manifest.ConcurrentReceiptId=New-ReadyReceipt 'CONCURRENT' 13
+$manifest.UiReceiptId=New-ReadyReceipt 'UI' 17
+$manifest|ConvertTo-Json|Set-Content $manifestPath -Encoding UTF8
 $adminLogin=$null;$managerLogin=$null;$adminHeaders=$null;$managerHeaders=$null
 (ConvertTo-SecureString $password -AsPlainText -Force|ConvertFrom-SecureString)|Set-Content (Join-Path $artifactRoot 'credential.dpapi') -Encoding ascii
 [Array]::Clear($jwtBytes,0,$jwtBytes.Length); $jwt=$null; $password=$null; $databaseConnection=$null

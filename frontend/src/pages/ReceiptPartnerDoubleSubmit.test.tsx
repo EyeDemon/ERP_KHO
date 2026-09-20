@@ -33,6 +33,27 @@ describe('receipt mutation locks (mocked API)', () => {
     expect((view.getByText('Đang xử lý...') as HTMLButtonElement).disabled).toBe(true); request.finish();
   });
 
+  it('locks inbound post synchronously while the first request is pending', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const receipt = { id: 5, code: 'I5', status: 'ReadyToPost', createdBy: 2, details: [] };
+    get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : [receipt] }) as never);
+    const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ImportReceipts />); await view.findByText('I5');
+    const postButton = view.getByText('Post ghi tồn'); fireEvent.click(postButton); fireEvent.click(postButton);
+    expect(post).toHaveBeenCalledTimes(1); expect(post).toHaveBeenCalledWith('/api/importreceipts/5/post', undefined, expect.objectContaining({ headers: expect.any(Object) }));
+    expect((view.getByText('Đang post...') as HTMLButtonElement).disabled).toBe(true); request.finish();
+  });
+
+  it('clears a selected receipt after a post conflict', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const receipt = { id: 6, code: 'I6', status: 'ReadyToPost', createdBy: 2, details: [] };
+    get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url === '/api/importreceipts/6' ? receipt : [receipt] }) as never);
+    post.mockRejectedValue({ response: { status: 409, data: { message: 'conflict' } } });
+    const view = render(<ImportReceipts />); await view.findByText('I6'); fireEvent.click(view.getByText('Chi tiết')); await view.findByText(/Chi Tiết Phiếu Nhập:/);
+    fireEvent.click(view.getAllByText('Post ghi tồn')[0]);
+    await view.findByText('Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.');
+    expect(view.queryByText(/Chi Tiết Phiếu Nhập:/)).toBeNull();
+  });
+
   it('locks export create synchronously while the first request is pending', async () => {
     get.mockImplementation(async (url) => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url.includes('inventorystocks') ? [{ availableQuantity: 10 }] : [] }) as never);
     const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ExportReceipts />);

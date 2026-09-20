@@ -1,5 +1,37 @@
 # Inbound Receiving and Posting
 
+## Closure freshness evidence — 2026-09-20
+
+Checked directly through the connected Notion workspace at `2026-09-20T03:55Z`. `UNCHANGED` below means the provider timestamp exactly matches the stored baseline. The root page's previously stored value was the checkpoint's "as of" timestamp rather than its native edit timestamp, so its status cannot be reconstructed safely.
+
+| Notion source | Checked at | Current last edited/version | Stored baseline | Change status | Relevant change | Impact |
+|---|---|---|---|---|---|---|
+| ERP WMS – Tài liệu Thiết kế Kỹ thuật Hệ thống | 2026-09-20T03:55Z | 2026-09-17T20:20:06.707Z; v1.0 | 2026-09-19T11:26:26.650Z; v1.0 | CHANGE STATUS UNKNOWN | Stored baseline used the fetch/checkpoint timestamp, not native metadata | No quantity/UOM conflict found; baseline metadata corrected prospectively |
+| 01. Business Rules & State Machine Specification | 2026-09-20T03:55Z | 2026-09-17T19:03:14.380Z | 2026-09-17T19:03:14.380Z | UNCHANGED | None | None |
+| 17. Permission Registry | 2026-09-20T03:55Z | 2026-09-17T19:40:55.996Z | 2026-09-17T19:40:55.996Z | UNCHANGED | None | Role-backed policies remain the implemented mapping; permission-code migration remains separate |
+| 29. Inventory Ledger Posting Algorithm | 2026-09-20T03:55Z | 2026-09-17T19:47:03.149Z | 2026-09-17T19:47:03.149Z | UNCHANGED | None | None |
+| 34. Goods Receipt Posting & Inbound Execution | 2026-09-20T03:55Z | 2026-09-17T19:49:07.648Z | 2026-09-17T19:49:07.648Z | UNCHANGED | None | None |
+| 41. QC Hold & Quarantine | 2026-09-20T03:55Z | 2026-09-17T19:50:14.902Z | 2026-09-17T19:50:14.902Z | UNCHANGED | None | QC remains outside this slice |
+| 84. Master Data Governance | 2026-09-20T03:55Z | 2026-09-17T20:01:13.919Z | 2026-09-17T20:01:13.919Z | UNCHANGED | None | None |
+| 162. ERP Master Data Synchronization | 2026-09-20T03:55Z | 2026-09-17T20:21:11.335Z | 2026-09-17T20:21:11.335Z | UNCHANGED | None | None |
+| 228. UX Specification by Core Business Flow | 2026-09-20T03:55Z | 2026-09-17T20:32:34.688Z | 2026-09-17T20:32:34.688Z | UNCHANGED | None | None |
+| 229. Screen Inventory & Coverage Matrix | 2026-09-20T03:55Z | 2026-09-19T11:26:10.775Z | 2026-09-19T11:26:10.775Z | UNCHANGED | None | No bulk matrix update made |
+| 282. UX Governance & Screen Matrix handoff | 2026-09-20T03:55Z | 2026-09-19T11:26:26.650Z | 2026-09-19T11:26:26.650Z | UNCHANGED | None | None |
+| INB-RECEIVING-WORKBENCH | 2026-09-20T03:55Z | 2026-09-19T20:26:15.435Z; ZIP6-2026-09-19 | 2026-09-19T15:40:03.529Z; ZIP6-2026-09-19 | CHANGED | Row now links corrected/enriched Drive artifact; visual QA conflict marked resolved | No state/API/UOM conflict |
+| INB-RECEIPT-DETAIL | 2026-09-20T03:55Z | 2026-09-19T20:25:42.539Z; ZIP6-2026-09-19 | 2026-09-19T15:40:01.492Z; ZIP6-2026-09-19 | CHANGED | Row now links corrected Drive artifact; visual QA conflict marked resolved | No state/API/UOM conflict |
+| INB-RECEIPT-POST-CONFIRM | 2026-09-20T03:55Z | 2026-09-19T20:26:19.729Z; ZIP6-2026-09-19 | 2026-09-19T15:40:13.000Z; ZIP6-2026-09-19 | CHANGED | Row now links enriched Drive artifact and retains READY_TO_POST/idempotency contract | No implementation conflict |
+
+## Dynamic Google Drive artifact baseline
+
+Source: `https://drive.google.com/drive/folders/10qedIMZCw-_ZVjGbXVENqiBZQfqeBGKI`, checked recursively at `2026-09-20T04:06Z`. Provider pagination was followed rather than inferring totals from the 100-item folder listing cap. The root has 140 direct PNG files; the five child folders contain 13 (`01_Corrected`), 24 (`02_Enriched`), 56 (`03_Merged_and_Split`), 9 (`04_New_Screens`), and 136 (`00_Deprecated_Reference`) PNG files. No additional child folder was present. These counts overlap by design history and do not replace the historical ZIP count. Drive remains `Illustrative UI/UX Reference`; `00_Deprecated_Reference` is excluded from current design authority.
+
+| File ID | Filename | Parent folder | MIME type | Size | Modified time | Previous baseline | Change status | Review status |
+|---|---|---|---|---:|---|---|---|---|
+| `1KCu8otBkkA9hfYlRbFi_BEQh76KPJsTs` | Nhận hàng (Receiving Workbench)_v2_enriched.png | 02_Enriched | image/png | 1,306,029 | 2026-09-19T19:47:04.872Z | No prior Drive manifest; Notion row previously referenced ZIP6 | STATUS UNKNOWN | REVIEWED 2026-09-20 |
+| `14afMcuGrBOe1F2TkEM6trdCG-l_TLf7g` | Chi tiết phiếu nhập_v2_corrected.png | 01_Corrected | image/png | 1,556,166 | 2026-09-19T18:56:39.013Z | No prior Drive manifest; Notion row previously referenced ZIP6 | STATUS UNKNOWN | REVIEWED 2026-09-20 |
+| `14QiquYq8qjBvA-OTbMaFC3k1M3W8gsHv` | Modal xác nhận post receipt_v2_enriched.png | 02_Enriched | image/png | 1,312,433 | 2026-09-19T19:22:57.899Z | No prior Drive manifest; Notion row previously referenced ZIP6 | STATUS UNKNOWN | REVIEWED 2026-09-20 |
+Only the first three files were actually opened. The workbench image shows receiving quantities/UOM, the detail image includes a broader QC state chain, and the post modal describes the inventory effect. The QC elements are outside the executable no-QC slice and do not override Notion or API contracts.
+
 ## Specification freshness evidence
 
 Checked directly through the connected Notion workspace at `2026-09-19T16:36:38Z`. The previous implementation checkpoint did not persist comparable Notion `page_last_edited_at` values, so recency alone cannot prove that a page is unchanged; all accessible sources are therefore recorded as `CHANGE STATUS UNKNOWN`.
@@ -143,4 +175,15 @@ Fresh completion evidence on `2026-09-20`:
 
 ## Next gaps
 
-Add receipt-line quantity buckets and UOM conversion first, then QC/no-QC branching. Putaway should start from posted inventory in a receiving/QC location and move it internally; it must not be bundled into receipt posting.
+1. QC/no-QC branching and inventory-status disposition.
+2. Receiving discrepancy and reason-code workflow.
+3. Putaway from posted receiving/QC location.
+4. Permission-code migration as a separate sprint when prioritized.
+
+## Closure verification — 2026-09-20
+
+- HTTP cost filtering: fresh SQL-backed API tests verify Admin/Manager receive `unitPrice`, while Viewer list contains no cost property and Viewer detail serializes `unitPrice: null`; the raw 404 response contains no receipt, supplier, or price data.
+- HTTP warehouse isolation: a Manager scoped only to Warehouse A receives 404 for Warehouse B detail/receive/approve/post and replay; Warehouse B is absent from list results. Receipt states, stock, ledger, audit and idempotency records remain unchanged.
+- Browser full-stack Run ID `82db12c6d17b4765af8d2e7061688d8c`: retry with the same key returned 200/200 and posted 11 Base UOM once; concurrent distinct keys returned 200/400 and posted 13 Base UOM once; UI double-click posted 17 Base UOM once. Each receipt ended `Posted` with one ledger row and one post audit. Final stock was 141 Base UOM: 100 seed + 11 retry + 13 concurrent + 17 UI.
+- Fresh suites: Release solution build 0 warnings/errors; Application SQL 328/328 (Run ID `1b84aab588f54bb49ca1e2b51fd3b411`); API SQL 156/156; frontend 52/52; lint PASS; production build PASS; EF pending-model check PASS.
+- Cleanup: the browser Run ID database, API/frontend processes, synthetic credential and temporary browser page were removed. Interrupted owned Application run databases were ownership-verified and removed. Database `ERP_KHO` remained ONLINE; no business data was read or written.
