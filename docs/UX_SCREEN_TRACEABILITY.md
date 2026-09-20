@@ -18,3 +18,11 @@ The current dynamic source is the Google Drive folder recorded in `INBOUND_RECEI
 | INB-MOBILE-RECEIVING | Inbound | none | scan-first receiving | Receiving | Unknown | Unknown | required | internal quantities | Unknown | Mobile | 34, 223 | Mobile Receiving.png | Missing | No mobile API contract proven. |
 
 The generic legacy receipt image is retained as a reference variant only. It does not override the state-specific rows above.
+
+## QC disposition checkpoint — 2026-09-20
+
+- `INB-RECEIPT-STATE-QC` remains Missing/Blocked. Notion 01/34 and the screen row require QC before READY_TO_POST, while Notion 41 requires Post into QC_HOLD before QC disposition.
+- `INB-RECEIPT-STATE-NO-QC` remains the only executable path. No UI is added until backend state and inventory-status semantics are canonical.
+- Dynamic Drive counts are 140 / 16 / 24 / 56 / 10 / 176 for root, Corrected, Enriched, Merged, New Screens, and Deprecated. Only `Phiếu nhập – Phiếu nhập CÓ yêu cầu QC.png` (`1TTf_FBM5CFYV0sJWKrVgL7Z8iHqHqL8J`) and `Phiếu nhập – Phiếu nhập KHÔNG yêu cầu QC.png` (`14GkuRbmX1YNnaNfufI-0svafYq-DP5io`) were successfully rendered and reviewed in this checkpoint. They show the pre-Post QC/no-QC branches and remain illustrative references.
+- The current workbench (`11No9JgfuXEczp2Rhd_TBXBax4GMpCwZK`) and corrected detail (`1G3_AsgVijBgt7VCmiwYTFby8L5MMqxBO`) changed by File ID relative to the prior baseline, but their viewers did not render during this checkpoint; they are recorded as metadata-only, `NOT REVIEWED`.
+- Concurrent receipt stale-write behavior is now aligned with the documented 409 path; the QC UI remains unchanged.

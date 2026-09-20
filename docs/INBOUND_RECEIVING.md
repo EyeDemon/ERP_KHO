@@ -187,3 +187,45 @@ Fresh completion evidence on `2026-09-20`:
 - Browser full-stack Run ID `82db12c6d17b4765af8d2e7061688d8c`: retry with the same key returned 200/200 and posted 11 Base UOM once; concurrent distinct keys returned 200/400 and posted 13 Base UOM once; UI double-click posted 17 Base UOM once. Each receipt ended `Posted` with one ledger row and one post audit. Final stock was 141 Base UOM: 100 seed + 11 retry + 13 concurrent + 17 UI.
 - Fresh suites: Release solution build 0 warnings/errors; Application SQL 328/328 (Run ID `1b84aab588f54bb49ca1e2b51fd3b411`); API SQL 156/156; frontend 52/52; lint PASS; production build PASS; EF pending-model check PASS.
 - Cleanup: the browser Run ID database, API/frontend processes, synthetic credential and temporary browser page were removed. Interrupted owned Application run databases were ownership-verified and removed. Database `ERP_KHO` remained ONLINE; no business data was read or written.
+
+## QC disposition audit checkpoint — 2026-09-20
+
+The branch `feature/inbound-qc-disposition` was created from accepted commit `9261205c6790cb9b8d8c3a04155ef0cdb3673933`. No QC schema or state mutation was added because the current authoritative specifications disagree about whether QC occurs before or after receipt posting.
+
+| Notion source | Checked at | Current version | Stored baseline | Change status | Relevant change | Impact |
+|---|---|---|---|---|---|---|
+| 01. Business Rules & State Machine | 2026-09-20T16:00Z | 2026-09-17T19:03:14.380Z | same | UNCHANGED | `RECEIVED → QC_PENDING → QC_COMPLETED → READY_TO_POST`; POST writes AVAILABLE/QC_HOLD/REJECTED buckets | Requires completed QC before Post |
+| 17. Permission Registry | 2026-09-20T16:00Z | 2026-09-17T19:40:55.996Z | same | UNCHANGED | `receipt.complete`, `quality_inspection.execute/complete`, `receipt.post` | Target permission codes remain unimplemented role-backed targets |
+| 29. Inventory Ledger Posting Algorithm | 2026-09-20T16:00Z | 2026-09-17T19:47:03.149Z | same | UNCHANGED | Ledger/balance atomicity and status dimension | Current stock model lacks status/location dimensions |
+| 34. Goods Receipt Posting | 2026-09-20T16:00Z | 2026-09-17T19:49:07.648Z | same | UNCHANGED | QC requirement must be satisfied before READY_TO_POST; Post routes quantities by status | Supports pre-Post QC |
+| 35. Putaway Engine | 2026-09-20T16:00Z | 2026-09-17T19:49:07.648Z | no stored baseline | CHANGE STATUS UNKNOWN | Putaway is a post-receipt internal move | No Putaway implementation in this sprint |
+| 41. Inventory Status, QC Hold & Quarantine | 2026-09-20T16:00Z | 2026-09-17T19:50:14.902Z | same | UNCHANGED | `Receipt POST → QC_HOLD → QC PASS/FAIL` | Conflicts with 01/34 and the current QC screen row |
+| 71. Exception Management | 2026-09-20T16:00Z | 2026-09-17T19:58:47.518Z | no stored baseline | CHANGE STATUS UNKNOWN | Disposition resolution needs reason/note/evidence per policy | Reason/evidence policy is not concrete enough for schema |
+| 84. Master Data Governance | 2026-09-20T16:00Z | 2026-09-17T20:01:13.919Z | same | UNCHANGED | Inventory-status flags and reason codes are governed master data | Do not encode statuses as receipt booleans |
+| 162. ERP Master Data Synchronization | 2026-09-20T16:00Z | 2026-09-17T20:21:11.335Z | same | UNCHANGED | Master changes must preserve transaction history | QC rule source/version remains unspecified |
+| 228. UX Core Business Flow | 2026-09-20T16:00Z | 2026-09-17T20:32:34.688Z | same | UNCHANGED | Receipt → QC → Post → Putaway | Supports pre-Post QC |
+| 229. Screen Matrix | 2026-09-20T16:00Z | 2026-09-19T11:26:10.775Z | same | UNCHANGED | Current rows remain illustrative governance | No bulk update made |
+| 282. UX Governance handoff | 2026-09-20T16:00Z | 2026-09-19T11:26:26.650Z | same | UNCHANGED | Explicit QC/no-QC split; Putaway after Post | Supports pre-Post QC |
+| INB-RECEIVING-WORKBENCH | 2026-09-20T16:00Z | 2026-09-20T15:24:36.707Z | 2026-09-19T20:26:15.435Z | CHANGED | Updated artifact and UOM QA metadata; commands still receive/complete | No new QC contract |
+| INB-RECEIPT-DETAIL | 2026-09-20T16:00Z | 2026-09-19T20:25:42.539Z | same | UNCHANGED | State-driven actions | None |
+| INB-RECEIPT-STATE-QC | 2026-09-20T16:00Z | 2026-09-19T15:40:09.724Z | no stored baseline | CHANGE STATUS UNKNOWN | Complete receiving to QC_PENDING; inspection completion to READY_TO_POST | Supports pre-Post QC but does not resolve page 41 |
+| INB-RECEIPT-STATE-NO-QC | 2026-09-20T16:00Z | 2026-09-19T15:40:06.588Z | no stored baseline | CHANGE STATUS UNKNOWN | Complete receiving advances to READY_TO_POST | Clear no-QC target |
+| INB-RECEIPT-POST-CONFIRM | 2026-09-20T16:00Z | 2026-09-19T20:26:19.729Z | same | UNCHANGED | READY_TO_POST and idempotency required | None |
+| INB-RECEIPT-DISCREPANCY | 2026-09-20T16:00Z | 2026-09-19T15:40:17.774Z | no stored baseline | CHANGE STATUS UNKNOWN | Under-receipt example only | Over-receipt and reason workflow remain deferred |
+
+### Drive delta
+
+The dynamic Drive source was enumerated recursively with provider pagination. Current image counts are root 140, `01_Corrected` 16, `02_Enriched` 24, `03_Merged_and_Split` 56, `04_New_Screens` 10, and `00_Deprecated_Reference` 176. Compared with the previous baseline, Corrected increased 13→16, New Screens 9→10, and Deprecated 136→176. The current workbench is file `11No9JgfuXEczp2Rhd_TBXBax4GMpCwZK` (1,258,528 bytes, modified 2026-09-20T15:22:49.125Z); the prior file `1KCu8otBkkA9hfYlRbFi_BEQh76KPJsTs` is now deprecated. The current corrected receipt detail is file `1G3_AsgVijBgt7VCmiwYTFby8L5MMqxBO` (1,326,909 bytes, modified 2026-09-20T05:30:23.695Z). The post-confirm file `14QiquYq8qjBvA-OTbMaFC3k1M3W8gsHv` is unchanged. Metadata was read for all files; only the QC-required and no-QC receipt state images were successfully rendered and visually reviewed in this checkpoint. Other attempted Drive viewers did not render content and remain `NOT REVIEWED`. Drive remains illustrative only.
+
+### Code audit and blocking decision
+
+Current code has no `RequiresQc` snapshot, quality-inspection aggregate, QC states, reason-code relation, inventory-status dimension, location/bin dimension, or status-aware ledger line. `InventoryStock` is only Product + Warehouse + Quantity; `InventoryTransaction` has no status or location. The receipt line already persists expected/received/accepted/damaged/rejected quantities and Base-UOM snapshots, but the no-QC receive command deliberately rejects non-zero damaged/rejected quantities. Post consumes persisted `BaseAcceptedQuantity` and is the only inventory boundary.
+
+The unresolved specification choice changes the schema, command order, inventory total, and migration strategy:
+
+- pre-Post QC: no physical stock exists while `QC_PENDING`; Post creates accepted available and any supported non-available buckets together;
+- post-then-QC: Post creates physical stock in `QC_HOLD`; later status-change ledger entries move it to AVAILABLE/QUARANTINE/DAMAGED.
+
+Implementing either model would contradict one current Notion source. Owner/spec-owner must designate the canonical sequence and define whether rejected goods are warehouse On Hand, whether mixed line-level QC is allowed, and where the QC rule/version is snapshotted. Until then this slice is **BLOCKED BY NOTION CHANGE/CONFLICT**.
+
+The independent API error decision is clear: Notion 03 and 18 define stale concurrency and invalid-state conflicts as HTTP 409. The service now preserves `ConcurrencyException` after rollback instead of converting it to a generic 400 business error. A focused Application regression passed 5/5. Full closure suites and browser QA are deferred because the QC implementation is blocked.
