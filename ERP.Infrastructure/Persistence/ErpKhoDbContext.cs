@@ -17,6 +17,7 @@ public class ErpKhoDbContext : DbContext
     public DbSet<Unit> Units => Set<Unit>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductUom> ProductUoms => Set<ProductUom>();
+    public DbSet<QcPolicy> QcPolicies => Set<QcPolicy>();
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
     public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
     public DbSet<BusinessPartner> BusinessPartners => Set<BusinessPartner>();

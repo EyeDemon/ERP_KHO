@@ -19,6 +19,7 @@ namespace ERP.Application.DTOs
         public int? SupplierId { get; set; }
         public string? SupplierCode { get; set; }
         public string? SupplierName { get; set; }
+        public bool RequiresQc { get; set; }
         public List<ImportReceiptDetailDto> Details { get; set; } = new();
     }
 
@@ -49,6 +50,14 @@ namespace ERP.Application.DTOs
         public decimal BasePostedQuantity { get; set; }
         public decimal? UnitPrice { get; set; }
         public string? Note { get; set; }
+        public bool RequiresQc { get; set; }
+        public string QcState { get; set; } = string.Empty;
+        public int? QcPolicyId { get; set; }
+        public int? QcPolicyVersion { get; set; }
+        public string? QcPolicySource { get; set; }
+        public DateTime? QcPolicyEffectiveAtUtc { get; set; }
+        public string? QcDispositionReasonCode { get; set; }
+        public string? QcDispositionNote { get; set; }
     }
     
     public class CreateImportReceiptDto
@@ -83,5 +92,20 @@ namespace ERP.Application.DTOs
         public decimal AcceptedQuantity { get; set; }
         public decimal DamagedQuantity { get; set; }
         public decimal RejectedQuantity { get; set; }
+    }
+
+    public class RecordQcDispositionDto
+    {
+        public List<RecordQcDispositionLineDto> Lines { get; set; } = new();
+    }
+
+    public class RecordQcDispositionLineDto
+    {
+        public int LineId { get; set; }
+        public decimal AcceptedQuantity { get; set; }
+        public decimal DamagedQuantity { get; set; }
+        public decimal RejectedQuantity { get; set; }
+        public string? ReasonCode { get; set; }
+        public string? Note { get; set; }
     }
 }

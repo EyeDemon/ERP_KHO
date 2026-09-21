@@ -13,6 +13,7 @@ public class InventoryTransactionConfiguration : IEntityTypeConfiguration<Invent
         builder.Property(x => x.Quantity).HasPrecision(18, 4);
         builder.Property(x => x.ReferenceType).HasMaxLength(50);
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.InventoryStatus).HasConversion<int>();
         builder.HasIndex(x => x.ProductId);
         builder.HasIndex(x => x.WarehouseId);
         builder.HasIndex(x => x.TransactionDate);

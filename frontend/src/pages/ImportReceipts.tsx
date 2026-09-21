@@ -14,6 +14,8 @@ interface ImportReceiptDetail {
   postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; basePostedQuantity: number;
   unitPrice?: number;
   note: string;
+  requiresQc: boolean; qcState: string; qcPolicyId?: number; qcPolicyVersion?: number; qcPolicySource?: string;
+  qcDispositionReasonCode?: string; qcDispositionNote?: string;
 }
 
 interface ImportReceipt {
@@ -32,6 +34,7 @@ interface ImportReceipt {
   supplierId?: number;
   supplierCode?: string;
   supplierName?: string;
+  requiresQc: boolean;
   details: ImportReceiptDetail[];
 }
 
@@ -56,7 +59,7 @@ interface ReceiptDetailForm {
   unitPrice: number | '';
   note: string;
 }
-type ReceiveLineForm = { receivedQuantity: number; acceptedQuantity: number; damagedQuantity: 0; rejectedQuantity: 0 };
+type ReceiveLineForm = { receivedQuantity: number; acceptedQuantity: number; damagedQuantity: number; rejectedQuantity: number; reasonCode?: string; note?: string };
 
 const ImportReceipts = () => {
   const canApprove = canManageCatalogs(currentRole());
@@ -167,7 +170,7 @@ const ImportReceipts = () => {
     try {
       const res = await apiClient.get(`/api/importreceipts/${id}`);
       setSelectedReceipt(res.data);
-      setReceiveLines(Object.fromEntries((res.data.details as ImportReceiptDetail[]).map(d => [d.id, { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }])));
+      setReceiveLines(Object.fromEntries((res.data.details as ImportReceiptDetail[]).map(d => [d.id, { receivedQuantity: d.receivedQuantity || d.expectedQuantity, acceptedQuantity: d.requiresQc ? d.acceptedQuantity : d.expectedQuantity, damagedQuantity: d.damagedQuantity, rejectedQuantity: d.rejectedQuantity, reasonCode: d.qcDispositionReasonCode || '', note: d.qcDispositionNote || '' }])));
     } catch (err: any) {
       setSelectedReceipt(null);
       setError(err.response?.data?.message || 'Lỗi khi tải chi tiết phiếu');
@@ -243,26 +246,29 @@ const ImportReceipts = () => {
     }
   };
 
-  const runWorkflow = async (id: number, command: 'receive' | 'post', receipt?: ImportReceipt) => {
+  const runWorkflow = async (id: number, command: 'receive' | 'qc-disposition' | 'post', receipt?: ImportReceipt) => {
     if (workflowInFlight.current !== null) return;
     workflowInFlight.current = id;
     setWorkflowId(id); setError('');
     try {
       const action = `import-${command}:${id}`;
-      const source = command === 'receive' && !receipt ? (await apiClient.get(`/api/importreceipts/${id}`)).data as ImportReceipt : receipt;
-      const body = command === 'receive' ? { lines: (source?.details || []).map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }) })) } : undefined;
-      if (body?.lines.some(line => line.receivedQuantity <= 0 || line.acceptedQuantity < 0 || line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== line.receivedQuantity))
+      const source = (command === 'receive' || command === 'qc-disposition') && !receipt ? (await apiClient.get(`/api/importreceipts/${id}`)).data as ImportReceipt : receipt;
+      const body = command === 'receive' ? { lines: (source?.details || []).map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.requiresQc ? 0 : d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }) })) }
+        : command === 'qc-disposition' ? { lines: (source?.details || []).filter(d => d.requiresQc && d.qcState === 'QcPending').map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { acceptedQuantity: 0, damagedQuantity: 0, rejectedQuantity: 0 }), reasonCode: receiveLines[d.id]?.reasonCode, note: receiveLines[d.id]?.note })) } : undefined;
+      if (command === 'receive' && body?.lines.some(line => line.receivedQuantity <= 0 || line.acceptedQuantity < 0 || (!source?.details.find(d => d.id === line.lineId)?.requiresQc && line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== line.receivedQuantity)))
         throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận.');
+      if (command === 'qc-disposition' && body?.lines.some(line => line.acceptedQuantity < 0 || line.damagedQuantity < 0 || line.rejectedQuantity < 0 || line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== source?.details.find(d => d.id === line.lineId)?.receivedQuantity || ((line.damagedQuantity > 0 || line.rejectedQuantity > 0) && !line.reasonCode?.trim())))
+        throw new Error('QC cần Accepted + Damaged + Rejected = Received và reason code cho lượng hư hỏng/từ chối.');
       await apiClient.post(`/api/importreceipts/${id}/${command}`, body, { headers: idempotencyHeaders(action) });
       completeIdempotentAction(action);
-      setSuccessMsg(command === 'receive' ? 'Đã hoàn tất nhận hàng. Tồn kho chưa thay đổi.' : 'Đã post phiếu và ghi tăng tồn kho.');
+      setSuccessMsg(command === 'receive' ? 'Đã hoàn tất nhận hàng. Tồn kho chưa thay đổi.' : command === 'qc-disposition' ? 'Đã ghi nhận QC disposition. Tồn kho chưa thay đổi.' : 'Đã post phiếu theo từng trạng thái tồn kho.');
       await fetchReceipts();
       if (selectedReceipt?.id === id) await handleViewDetails(id);
     } catch (err: any) { if (err.response && selectedReceipt?.id === id) setSelectedReceipt(null); setError(err.response?.status === 409 ? 'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.' : err.response?.data?.message || err.message || 'Không thể xử lý phiếu nhập'); }
     finally { workflowInFlight.current = null; setWorkflowId(null); }
   };
 
-  const statusLabel = (status: string) => ({ Draft: 'Nháp', Received: 'Đã nhận — chưa ghi tồn', ReadyToPost: 'Sẵn sàng post', Posted: 'Đã post', Approved: 'Đã duyệt (dữ liệu cũ)', Cancelled: 'Đã hủy' }[status] || status);
+  const statusLabel = (status: string) => ({ Draft: 'Nháp', Received: 'Đã nhận — chưa ghi tồn', QcPending: 'Chờ QC disposition', QcCompleted: 'QC đã hoàn tất — chờ duyệt', ReadyToPost: 'Sẵn sàng post', Posted: 'Đã post', Approved: 'Đã duyệt (dữ liệu cũ)', Cancelled: 'Đã hủy' }[status] || status);
 
   const changeSupplier = async (value: number | null) => {
     if (!selectedReceipt || partnerMutationInFlight.current) return;
@@ -400,7 +406,7 @@ const ImportReceipts = () => {
                     <button onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '3px' }}>Hủy</button>
                   </>
                 )}
-                {r.status === 'Received' && canApprove && r.createdBy !== userId && <button
+                {(r.status === 'Received' || r.status === 'QcCompleted') && canApprove && r.createdBy !== userId && <button
                       onClick={() => handleApprove(r.id)} 
                       disabled={approvingId === r.id}
                       style={{ 
@@ -415,7 +421,7 @@ const ImportReceipts = () => {
                     >
                       {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt để post'}
                     </button>}
-                {r.status === 'ReadyToPost' && canApprove && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => { if (window.confirm('Post sẽ ghi tăng tồn theo Base UOM đã lưu trên phiếu. Tiếp tục?')) void runWorkflow(r.id, 'post'); }}>{workflowId === r.id ? 'Đang post...' : 'Post ghi tồn'}</button>}
+                {r.status === 'ReadyToPost' && canApprove && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => { const a=r.details.reduce((s,d)=>s+d.baseAcceptedQuantity,0), d=r.details.reduce((s,x)=>s+x.damagedQuantity*x.conversionFactor,0), j=r.details.reduce((s,x)=>s+x.rejectedQuantity*x.conversionFactor,0); if (window.confirm(`Post sẽ tăng AVAILABLE ${a}, DAMAGED ${d}, REJECTED ${j} theo Base UOM đã snapshot. Tiếp tục?`)) void runWorkflow(r.id, 'post'); }}>{workflowId === r.id ? 'Đang post...' : 'Post ghi tồn'}</button>}
               </td>
             </tr>
           ))}
@@ -461,13 +467,19 @@ const ImportReceipts = () => {
               {selectedReceipt.details.map(d => (
                 <tr key={d.id}>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productCode}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productName}</td>
+                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productName}<br/><small>QC: {d.requiresQc ? `Bắt buộc · ${d.qcState} · policy ${d.qcPolicyId ?? '—'} v${d.qcPolicyVersion ?? '—'} (${d.qcPolicySource ?? '—'})` : 'Không yêu cầu'}</small></td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>{d.expectedQuantity} {d.operationUnitCode}</td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>
                     {selectedReceipt.status === 'Draft' ? <div style={{display:'grid', gap:'4px'}}>
                       <label>Số lượng nhận <input aria-label={`Số lượng nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.receivedQuantity ?? d.expectedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...(x[d.id]||{receivedQuantity:d.expectedQuantity,acceptedQuantity:d.expectedQuantity,damagedQuantity:0,rejectedQuantity:0}),receivedQuantity:Number(e.target.value)}}))}/></label>
-                      <label>Số lượng chấp nhận <input aria-label={`Số lượng chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...(x[d.id]||{receivedQuantity:d.expectedQuantity,acceptedQuantity:d.expectedQuantity,damagedQuantity:0,rejectedQuantity:0}),acceptedQuantity:Number(e.target.value)}}))}/></label>
-                      <span>Hư hỏng: 0 · Từ chối: 0 <small>(no-QC)</small></span>
+                      {!d.requiresQc && <label>Số lượng chấp nhận <input aria-label={`Số lượng chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...(x[d.id]||{receivedQuantity:d.expectedQuantity,acceptedQuantity:d.expectedQuantity,damagedQuantity:0,rejectedQuantity:0}),acceptedQuantity:Number(e.target.value)}}))}/></label>}
+                      <span>{d.requiresQc ? 'Disposition sẽ được nhập sau khi nhận; chưa ghi tồn.' : 'Hư hỏng: 0 · Từ chối: 0 (no-QC)'}</span>
+                    </div> : selectedReceipt.status === 'QcPending' && d.requiresQc && d.qcState === 'QcPending' ? <div style={{display:'grid', gap:'4px'}}>
+                      <label>Chấp nhận <input aria-label={`QC chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],acceptedQuantity:Number(e.target.value)}}))}/></label>
+                      <label>Hư hỏng <input aria-label={`QC hư hỏng ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.damagedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],damagedQuantity:Number(e.target.value)}}))}/></label>
+                      <label>Từ chối giữ tại kho <input aria-label={`QC từ chối ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.rejectedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],rejectedQuantity:Number(e.target.value)}}))}/></label>
+                      <label>Reason code <input aria-label={`QC reason ${d.productCode}`} value={receiveLines[d.id]?.reasonCode ?? ''} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],reasonCode:e.target.value}}))}/></label>
+                      <small>Tổng phải bằng {d.receivedQuantity} {d.operationUnitCode}</small>
                     </div> : <>{d.receivedQuantity} / {d.acceptedQuantity} {d.operationUnitCode}<br/><small>Hư hỏng: {d.damagedQuantity}; Từ chối: {d.rejectedQuantity}</small></>}
                   </td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>× {d.conversionFactor} (v{d.conversionVersion})<br/>{selectedReceipt.status === 'Draft' ? (receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor : d.baseAcceptedQuantity || d.baseExpectedQuantity} {d.baseUnitCode}</td>
@@ -476,7 +488,8 @@ const ImportReceipts = () => {
               ))}
             </tbody>
           </table>
-          {selectedReceipt.status === 'Draft' && <button disabled={workflowId === selectedReceipt.id} onClick={() => void runWorkflow(selectedReceipt.id, 'receive', selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang xử lý...' : 'Hoàn tất nhận hàng (no-QC)'}</button>}
+          {selectedReceipt.status === 'Draft' && <button disabled={workflowId === selectedReceipt.id} onClick={() => void runWorkflow(selectedReceipt.id, 'receive', selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang xử lý...' : 'Hoàn tất nhận hàng'}</button>}
+          {selectedReceipt.status === 'QcPending' && <button disabled={workflowId === selectedReceipt.id} onClick={() => void runWorkflow(selectedReceipt.id, 'qc-disposition', selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang lưu QC...' : 'Ghi nhận QC disposition'}</button>}
           
           <button onClick={() => setSelectedReceipt(null)} style={{ marginTop: '15px', cursor: 'pointer', padding: '8px 15px' }}>Đóng chi tiết</button>
         </div>

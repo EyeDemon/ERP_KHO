@@ -1,3 +1,5 @@
+using ERP.Domain.Enums;
+
 namespace ERP.Domain.Entities;
 
 public class InventoryStock
@@ -5,6 +7,7 @@ public class InventoryStock
     public int Id { get; set; }
     public int ProductId { get; set; }
     public int WarehouseId { get; set; }
+    public InventoryStatus Status { get; set; } = InventoryStatus.Available;
     
     [System.ComponentModel.DataAnnotations.ConcurrencyCheck]
     public decimal Quantity { get; set; }

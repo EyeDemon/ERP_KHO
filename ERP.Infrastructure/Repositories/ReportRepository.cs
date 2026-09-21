@@ -2,6 +2,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using ERP.Domain.Enums;
 
 namespace ERP.Infrastructure.Repositories
 {
@@ -17,6 +18,7 @@ namespace ERP.Infrastructure.Repositories
         public async Task<IEnumerable<InventoryStock>> GetCurrentStocksAsync(int? warehouseId, int? productId, CancellationToken cancellationToken = default)
         {
             var query = _context.InventoryStocks
+                .Where(s => s.Status == InventoryStatus.Available)
                 .AsNoTracking()
                 .Include(s => s.Product).ThenInclude(p => p.Unit)
                 .Include(s => s.Warehouse)

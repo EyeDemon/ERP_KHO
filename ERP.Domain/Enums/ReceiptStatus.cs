@@ -8,5 +8,7 @@ public enum ReceiptStatus
     Dispatched = 3,
     Received = 4,
     ReadyToPost = 5,
-    Posted = 6
+    Posted = 6,
+    QcPending = 7,
+    QcCompleted = 8
 }

@@ -159,7 +159,7 @@ public class StockReservationService(
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
         var issues = new List<ReservationReconciliationIssueDto>();
         var ledger = await context.StockReservations.AsNoTracking().Where(x => allowed.Contains(x.WarehouseId) && (x.Status == StockReservationStatus.Active || x.Status == StockReservationStatus.PartiallyConsumed)).GroupBy(x => new { x.ProductId, x.WarehouseId }).Select(g => new { g.Key.ProductId, g.Key.WarehouseId, Reserved = g.Sum(x => x.Quantity - x.ConsumedQuantity - x.ReleasedQuantity) }).ToListAsync(cancellationToken);
-        var stocks = await context.InventoryStocks.AsNoTracking().Where(x => allowed.Contains(x.WarehouseId)).ToListAsync(cancellationToken);
+        var stocks = await context.InventoryStocks.AsNoTracking().Where(x => allowed.Contains(x.WarehouseId) && x.Status == ERP.Domain.Enums.InventoryStatus.Available).ToListAsync(cancellationToken);
         foreach (var key in ledger.Select(x => (x.ProductId, x.WarehouseId)).Union(stocks.Select(x => (x.ProductId, x.WarehouseId))))
         {
             var l = ledger.FirstOrDefault(x => x.ProductId == key.ProductId && x.WarehouseId == key.WarehouseId)?.Reserved ?? 0;

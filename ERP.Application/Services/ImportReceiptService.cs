@@ -116,6 +116,13 @@ namespace ERP.Application.Services
                 if (detailDto.UnitPrice < 0)
                     throw new BusinessRuleException($"Đơn giá của sản phẩm ID {detailDto.ProductId} không được âm");
 
+                var now = DateTime.UtcNow;
+                var policy = product.QcPolicies
+                    .Where(x => x.IsActive && x.EffectiveFromUtc <= now && (x.SupplierId == dto.SupplierId || x.SupplierId == null))
+                    .OrderByDescending(x => x.SupplierId == dto.SupplierId && dto.SupplierId.HasValue)
+                    .ThenByDescending(x => x.Version)
+                    .FirstOrDefault();
+
                 receipt.Details.Add(new ImportReceiptDetail
                 {
                     ProductId = detailDto.ProductId,
@@ -131,7 +138,14 @@ namespace ERP.Application.Services
                     ConversionVersion = conversion.Version,
                     BaseExpectedQuantity = baseExpected,
                     UnitPrice = detailDto.UnitPrice,
-                    Note = detailDto.Note
+                    Note = detailDto.Note,
+                    RequiresQc = policy?.RequiresQc == true,
+                    QcPolicyId = policy?.Id,
+                    QcPolicyVersion = policy?.Version,
+                    QcPolicySourceSnapshot = policy is null ? "None" : policy.SupplierId.HasValue ? "ProductSupplier" : "Product",
+                    QcPolicyEffectiveAtUtc = policy?.EffectiveFromUtc,
+                    QcRuleSnapshot = policy?.Rule,
+                    QcState = policy?.RequiresQc == true ? ReceiptLineQcState.QcPending : ReceiptLineQcState.NoQcRequired
                 });
             }
 
@@ -186,6 +200,7 @@ namespace ERP.Application.Services
                 SupplierId = receipt.SupplierId,
                 SupplierCode = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Code : receipt.SupplierCodeSnapshot,
                 SupplierName = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Name : receipt.SupplierNameSnapshot,
+                RequiresQc = receipt.Details.Any(x => x.RequiresQc),
                 Details = receipt.Details.Select(d => new ImportReceiptDetailDto
                 {
                     Id = d.Id,
@@ -212,7 +227,15 @@ namespace ERP.Application.Services
                     BaseAcceptedQuantity = d.BaseAcceptedQuantity,
                     BasePostedQuantity = d.BasePostedQuantity,
                     UnitPrice = canReadCost ? d.UnitPrice : null,
-                    Note = d.Note
+                    Note = d.Note,
+                    RequiresQc = d.RequiresQc,
+                    QcState = d.QcState.ToString(),
+                    QcPolicyId = d.QcPolicyId,
+                    QcPolicyVersion = d.QcPolicyVersion,
+                    QcPolicySource = d.QcPolicySourceSnapshot,
+                    QcPolicyEffectiveAtUtc = d.QcPolicyEffectiveAtUtc,
+                    QcDispositionReasonCode = d.QcDispositionReasonCode,
+                    QcDispositionNote = d.QcDispositionNote
                 }).ToList()
             };
         }
@@ -229,9 +252,10 @@ namespace ERP.Application.Services
 
                 Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, approvedByUserId);
 
-                if (receipt.Status != ReceiptStatus.Received)
+                if (receipt.Status != ReceiptStatus.Received && receipt.Status != ReceiptStatus.QcCompleted)
                     throw Conflict("Chỉ có thể duyệt phiếu đã hoàn tất nhận hàng");
 
+                var previousStatus = receipt.Status;
                 receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
                 receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
 
@@ -248,7 +272,7 @@ namespace ERP.Application.Services
                 EntityName = "ImportReceipt",
                 EntityId = receipt.Id,
                 WarehouseId = receipt.WarehouseId,
-                OldValues = $"Status: {ReceiptStatus.Received}",
+                OldValues = $"Status: {previousStatus}",
                 NewValues = $"Status: {ReceiptStatus.ReadyToPost}",
                 Result = "Success",
                 Severity = "Information",
@@ -288,26 +312,76 @@ namespace ERP.Application.Services
                         ?? throw new BusinessRuleException($"Thiếu dữ liệu nhận cho dòng {detail.Id}");
                     if (line.ReceivedQuantity <= 0 || line.AcceptedQuantity < 0 || line.DamagedQuantity < 0 || line.RejectedQuantity < 0)
                         throw new BusinessRuleException($"Số lượng dòng {detail.Id} không hợp lệ");
-                    if (line.AcceptedQuantity + line.DamagedQuantity + line.RejectedQuantity != line.ReceivedQuantity)
+                    if (!detail.RequiresQc && line.AcceptedQuantity + line.DamagedQuantity + line.RejectedQuantity != line.ReceivedQuantity)
                         throw new BusinessRuleException($"Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận ở dòng {detail.Id}");
-                    if (line.DamagedQuantity != 0 || line.RejectedQuantity != 0)
-                        throw new BusinessRuleException("Nhánh no-QC chưa hỗ trợ ghi nhận hàng hư hỏng hoặc từ chối; cần quy trình QC/disposition");
+                    if (!detail.RequiresQc && (line.DamagedQuantity != 0 || line.RejectedQuantity != 0))
+                        throw new BusinessRuleException("Nhánh no-QC chỉ chấp nhận toàn bộ số lượng nhận");
+                    if (detail.RequiresQc && (line.AcceptedQuantity != 0 || line.DamagedQuantity != 0 || line.RejectedQuantity != 0))
+                        throw new BusinessRuleException("Disposition của dòng yêu cầu QC phải được ghi bằng command QC riêng");
                     EnsurePrecision(line.ReceivedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng nhận");
                     var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1;
                     detail.ReceivedQuantity = line.ReceivedQuantity;
-                    detail.AcceptedQuantity = line.AcceptedQuantity;
-                    detail.DamagedQuantity = line.DamagedQuantity;
-                    detail.RejectedQuantity = line.RejectedQuantity;
+                    detail.AcceptedQuantity = detail.RequiresQc ? 0 : line.AcceptedQuantity;
+                    detail.DamagedQuantity = detail.RequiresQc ? 0 : line.DamagedQuantity;
+                    detail.RejectedQuantity = detail.RequiresQc ? 0 : line.RejectedQuantity;
                     detail.BaseReceivedQuantity = ConvertToBase(line.ReceivedQuantity, factor, detail);
-                    detail.BaseAcceptedQuantity = ConvertToBase(line.AcceptedQuantity, factor, detail);
+                    detail.BaseAcceptedQuantity = detail.RequiresQc ? 0 : ConvertToBase(line.AcceptedQuantity, factor, detail);
                     detail.BaseDamagedQuantity = 0;
                     detail.BaseRejectedQuantity = 0;
                 }
-                receipt.Status = ReceiptStatus.Received;
+                receipt.Status = receipt.Details.Any(x => x.RequiresQc) ? ReceiptStatus.QcPending : ReceiptStatus.Received;
                 await _importReceiptRepository.UpdateAsync(receipt);
                 await _auditLogRepository.AddAsync(new AuditLog { UserId = receivedByUserId, Action = "ImportReceipt.Received", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.Draft}", NewValues = $"Status: {ReceiptStatus.Received}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
                 await _unitOfWork.CommitTransactionAsync();
             }
+            catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
+        }
+
+        public async Task RecordQcDispositionAsync(int id, RecordQcDispositionDto dto, int completedByUserId)
+        {
+            if (_currentUser is not null) completedByUserId = _currentUser.UserId;
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                var receipt = await _importReceiptRepository.GetByIdWithDetailsAsync(id)
+                    ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
+                if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                if (receipt.Status != ReceiptStatus.QcPending) throw Conflict("Chỉ có thể ghi disposition khi phiếu đang chờ QC");
+                if (dto.Lines.Count == 0 || dto.Lines.Select(x => x.LineId).Distinct().Count() != dto.Lines.Count)
+                    throw new BusinessRuleException("Danh sách disposition không hợp lệ");
+                foreach (var line in dto.Lines)
+                {
+                    var detail = receipt.Details.SingleOrDefault(x => x.Id == line.LineId && x.RequiresQc)
+                        ?? throw new BusinessRuleException($"Dòng {line.LineId} không thuộc QC của phiếu");
+                    if (detail.QcState != ReceiptLineQcState.QcPending) throw Conflict($"Dòng {line.LineId} đã được disposition");
+                    if (line.AcceptedQuantity < 0 || line.DamagedQuantity < 0 || line.RejectedQuantity < 0 ||
+                        line.AcceptedQuantity + line.DamagedQuantity + line.RejectedQuantity != detail.ReceivedQuantity)
+                        throw new BusinessRuleException($"Accepted + Damaged + Rejected phải bằng Received ở dòng {line.LineId}");
+                    if ((line.DamagedQuantity > 0 || line.RejectedQuantity > 0) && string.IsNullOrWhiteSpace(line.ReasonCode))
+                        throw new BusinessRuleException($"Dòng {line.LineId} cần reason code cho lượng hư hỏng hoặc từ chối");
+                    EnsurePrecision(line.AcceptedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng chấp nhận");
+                    EnsurePrecision(line.DamagedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng hư hỏng");
+                    EnsurePrecision(line.RejectedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng từ chối");
+                    var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1;
+                    detail.AcceptedQuantity = line.AcceptedQuantity;
+                    detail.DamagedQuantity = line.DamagedQuantity;
+                    detail.RejectedQuantity = line.RejectedQuantity;
+                    detail.BaseAcceptedQuantity = ConvertToBase(line.AcceptedQuantity, factor, detail);
+                    detail.BaseDamagedQuantity = ConvertToBase(line.DamagedQuantity, factor, detail);
+                    detail.BaseRejectedQuantity = ConvertToBase(line.RejectedQuantity, factor, detail);
+                    detail.QcDispositionReasonCode = line.ReasonCode?.Trim();
+                    detail.QcDispositionNote = line.Note?.Trim();
+                    detail.QcCompletedBy = completedByUserId;
+                    detail.QcCompletedAt = DateTime.UtcNow;
+                    detail.QcState = ReceiptLineQcState.QcCompleted;
+                }
+                if (receipt.Details.Where(x => x.RequiresQc).All(x => x.QcState == ReceiptLineQcState.QcCompleted))
+                    receipt.Status = ReceiptStatus.QcCompleted;
+                await _importReceiptRepository.UpdateAsync(receipt);
+                await _auditLogRepository.AddAsync(new AuditLog { UserId = completedByUserId, Action = "ImportReceipt.QcDispositionRecorded", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.QcPending}", NewValues = $"Status: {receipt.Status}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch (ConcurrencyException ex) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new ConcurrencyException("Disposition đã được cập nhật bởi yêu cầu khác. Vui lòng tải lại.", ex); }
             catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
         }
 
@@ -325,15 +399,14 @@ namespace ERP.Application.Services
                     throw Conflict("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
                 foreach (var detail in receipt.Details)
                 {
-                    if (detail.BaseAcceptedQuantity <= 0)
-                        throw new BusinessRuleException($"Dòng {detail.Id} chưa có số lượng Base UOM được chấp nhận");
-                    var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId);
-                    if (stock is null)
-                        await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Quantity = detail.BaseAcceptedQuantity, LastUpdated = DateTime.UtcNow });
-                    else { stock.Quantity += detail.BaseAcceptedQuantity; stock.LastUpdated = DateTime.UtcNow; await _inventoryStockRepository.UpdateAsync(stock); }
-                    await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, TransactionType = TransactionType.Import, Quantity = detail.BaseAcceptedQuantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = postedByUserId, Note = detail.Note });
-                    detail.PostedQuantity = detail.AcceptedQuantity;
-                    detail.BasePostedQuantity = detail.BaseAcceptedQuantity;
+                    var legacyNoQc = !detail.RequiresQc && detail.BaseReceivedQuantity == 0 && detail.BaseAcceptedQuantity > 0;
+                    if (!legacyNoQc && detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity != detail.BaseReceivedQuantity)
+                        throw new BusinessRuleException($"Dòng {detail.Id} chưa có disposition hợp lệ");
+                    await PostBucketAsync(receipt, detail, InventoryStatus.Available, detail.BaseAcceptedQuantity, postedByUserId);
+                    await PostBucketAsync(receipt, detail, InventoryStatus.Damaged, detail.BaseDamagedQuantity, postedByUserId);
+                    await PostBucketAsync(receipt, detail, InventoryStatus.Rejected, detail.BaseRejectedQuantity, postedByUserId);
+                    detail.PostedQuantity = detail.AcceptedQuantity + detail.DamagedQuantity + detail.RejectedQuantity;
+                    detail.BasePostedQuantity = detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity;
                 }
                 receipt.Status = ReceiptStatus.Posted;
                 await _importReceiptRepository.UpdateAsync(receipt);
@@ -342,6 +415,18 @@ namespace ERP.Application.Services
             }
             catch (ConcurrencyException ex) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new ConcurrencyException("Phiếu nhập đã được xử lý bởi yêu cầu khác. Vui lòng tải lại.", ex); }
             catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
+        }
+
+        private async Task PostBucketAsync(ImportReceipt receipt, ImportReceiptDetail detail, InventoryStatus status, decimal quantity, int userId)
+        {
+            if (quantity <= 0) return;
+            var stock = status == InventoryStatus.Available
+                ? await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId)
+                : await _inventoryStockRepository.GetByProductWarehouseAndStatusAsync(detail.ProductId, receipt.WarehouseId, status);
+            if (stock is null)
+                await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Status = status, Quantity = quantity, LastUpdated = DateTime.UtcNow });
+            else { stock.Quantity += quantity; stock.LastUpdated = DateTime.UtcNow; await _inventoryStockRepository.UpdateAsync(stock); }
+            await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, InventoryStatus = status, TransactionType = TransactionType.Import, Quantity = quantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = userId, Note = detail.Note });
         }
 
         private static decimal ConvertToBase(decimal quantity, decimal factor, ImportReceiptDetail detail)

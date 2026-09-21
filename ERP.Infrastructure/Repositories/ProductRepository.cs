@@ -13,7 +13,7 @@ namespace ERP.Infrastructure.Repositories
 
         public override Task<Product?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
         {
-            return _dbSet.Include(p => p.Unit).Include(p => p.Uoms).ThenInclude(x => x.Unit).Include(p => p.Category).Include(p => p.Barcodes)
+            return _dbSet.Include(p => p.Unit).Include(p => p.Uoms).ThenInclude(x => x.Unit).Include(p => p.Category).Include(p => p.Barcodes).Include(p => p.QcPolicies)
                 .SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
         }
 

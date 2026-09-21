@@ -1,3 +1,5 @@
+using ERP.Domain.Enums;
+
 namespace ERP.Domain.Entities;
 
 public class ImportReceiptDetail
@@ -28,6 +30,17 @@ public class ImportReceiptDetail
     public decimal BasePostedQuantity { get; set; }
     public decimal UnitPrice { get; set; }
     public string? Note { get; set; }
+    public bool RequiresQc { get; set; }
+    public int? QcPolicyId { get; set; }
+    public int? QcPolicyVersion { get; set; }
+    public string? QcPolicySourceSnapshot { get; set; }
+    public DateTime? QcPolicyEffectiveAtUtc { get; set; }
+    public string? QcRuleSnapshot { get; set; }
+    public ReceiptLineQcState QcState { get; set; }
+    public string? QcDispositionReasonCode { get; set; }
+    public string? QcDispositionNote { get; set; }
+    public int? QcCompletedBy { get; set; }
+    public DateTime? QcCompletedAt { get; set; }
 
     // Navigation
     public ImportReceipt ImportReceipt { get; set; } = null!;

@@ -18,4 +18,5 @@ public class Product
     public ICollection<ProductBarcode> Barcodes { get; set; } = new List<ProductBarcode>();
     public ICollection<ProductUom> Uoms { get; set; } = new List<ProductUom>();
     public ICollection<InventoryStock> InventoryStocks { get; set; } = new List<InventoryStock>();
+    public ICollection<QcPolicy> QcPolicies { get; set; } = new List<QcPolicy>();
 }

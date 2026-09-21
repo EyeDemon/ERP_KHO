@@ -199,13 +199,13 @@ public sealed class StockTransferService(
     {
         await context.Database.ExecuteSqlInterpolatedAsync($@"
 MERGE INTO InventoryStocks WITH (HOLDLOCK) AS target
-USING (SELECT {productId} AS ProductId, {warehouseId} AS WarehouseId, {quantity} AS Quantity, {now} AS LastUpdated) AS source
-ON target.ProductId = source.ProductId AND target.WarehouseId = source.WarehouseId
+USING (SELECT {productId} AS ProductId, {warehouseId} AS WarehouseId, {quantity} AS Quantity, {now} AS LastUpdated, 0 AS Status) AS source
+ON target.ProductId = source.ProductId AND target.WarehouseId = source.WarehouseId AND target.Status = source.Status
 WHEN MATCHED THEN
     UPDATE SET Quantity = target.Quantity + source.Quantity, LastUpdated = source.LastUpdated
 WHEN NOT MATCHED THEN
-    INSERT (ProductId, WarehouseId, Quantity, LastUpdated)
-    VALUES (source.ProductId, source.WarehouseId, source.Quantity, source.LastUpdated);", cancellationToken);
+    INSERT (ProductId, WarehouseId, Status, Quantity, ReservedQuantity, LastUpdated)
+    VALUES (source.ProductId, source.WarehouseId, source.Status, source.Quantity, 0, source.LastUpdated);", cancellationToken);
     }
 
     private async Task TransitionAsync(StockTransfer entity, StockTransferStatus from, StockTransferStatus to, string action, CancellationToken cancellationToken)

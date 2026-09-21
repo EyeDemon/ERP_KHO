@@ -66,6 +66,16 @@ namespace ERP.Api.Controllers
             return Ok(new { message = "Hoàn tất nhận hàng; tồn kho chưa thay đổi" });
         }
 
+        [HttpPost("{id}/qc-disposition")]
+        [IdempotentCommand("ImportReceipt.QcDisposition")]
+        [Authorize(Roles = AppRoles.AdminOrManager)]
+        public async Task<IActionResult> RecordQcDisposition(int id, [FromBody] ERP.Application.DTOs.RecordQcDispositionDto dto)
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
+            await _importReceiptService.RecordQcDispositionAsync(id, dto, userId);
+            return Ok(new { message = "Đã ghi nhận disposition QC; tồn kho chưa thay đổi" });
+        }
+
         [HttpPost("{id}/post")]
         [IdempotentCommand("ImportReceipt.Post")]
         [Authorize(Policy = ApprovalPolicies.Checker)]
