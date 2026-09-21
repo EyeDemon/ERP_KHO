@@ -18,4 +18,4 @@ Invalid/stale transitions return 409. All mutations retain warehouse scope, idem
 
 Migration `20260920163928_AddInboundQcDisposition` backfills legacy balances/ledger as AVAILABLE and does not infer historical QC policies or alter legacy receipt states.
 
-Verification as of 2026-09-21: Release build, EF model check, 281 non-SQL Application tests, 52 frontend tests, lint and production build pass. Full owned-SQL and browser QA remain blocked because `ERP_KHO_SQLSERVER_ADMIN_CONNECTION` is not configured.
+Verification as of 2026-09-21: Release build, EF model check, 282 non-SQL Application tests, 52 frontend tests, lint and production build pass. Full owned-SQL and browser QA remain blocked because `ERP_KHO_SQLSERVER_ADMIN_CONNECTION` is not configured.

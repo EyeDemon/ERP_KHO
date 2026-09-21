@@ -275,7 +275,7 @@ The last recursive metadata baseline remains root 140, Corrected 16, Enriched 24
 Fresh evidence on the current working tree:
 
 - Release solution build: PASS, 0 warnings and 0 errors.
-- Application tests that do not require owned SQL: 281/281 PASS, including Product–Supplier snapshot, mixed receipt, QC disposition invariant, status-bucket posting and pending-QC conflict.
+- Application tests that do not require owned SQL: 282/282 PASS, including Product–Supplier snapshot, mixed receipt, QC disposition invariant, status-bucket posting and pending-QC conflict.
 - Frontend: 52/52 PASS; lint PASS; production build PASS.
 - EF pending-model check: PASS.
 - Full Application SQL and API SQL suites: BLOCKED because `ERP_KHO_SQLSERVER_ADMIN_CONNECTION` is not configured. A full Application invocation reported 274 passes plus the expected owned-harness failures; API discovery likewise refuses to run SQL-backed HTTP tests without an isolated database source.
