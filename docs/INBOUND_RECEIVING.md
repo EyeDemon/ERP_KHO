@@ -229,3 +229,56 @@ The unresolved specification choice changes the schema, command order, inventory
 Implementing either model would contradict one current Notion source. Owner/spec-owner must designate the canonical sequence and define whether rejected goods are warehouse On Hand, whether mixed line-level QC is allowed, and where the QC rule/version is snapshotted. Until then this slice is **BLOCKED BY NOTION CHANGE/CONFLICT**.
 
 The independent API error decision is clear: Notion 03 and 18 define stale concurrency and invalid-state conflicts as HTTP 409. The service now preserves `ConcurrencyException` after rollback instead of converting it to a generic 400 business error. A focused Application regression passed 5/5. Full closure suites and browser QA are deferred because the QC implementation is blocked.
+
+## Canonical QC disposition implementation checkpoint — 2026-09-21
+
+Owner decisions were written to Notion before implementation and then fetched again successfully. The former Goods Receipt `Post → QC_HOLD → PASS/FAIL` wording in page 41 is explicitly marked `SUPERSEDED FOR GOODS RECEIPT`; it remains only as a possible future non-canonical exception.
+
+| Notion source | Checked at | Current version after write/read-back | Previous baseline | Change status | Relevant change | Impact |
+|---|---|---|---|---|---|---|
+| 01. Business Rules & State Machine | 2026-09-20T16:32Z | 2026-09-20T16:31:50.443Z | 2026-09-17T19:03:14.380Z | CHANGED | QC before Post, mixed line QC, quantity invariant and 409 | Canonical state machine established |
+| 17. Permission Registry | 2026-09-20T16:32Z | 2026-09-20T16:31:51.292Z | 2026-09-17T19:40:55.996Z | CHANGED | execute/complete QC, approve disposition and post target permissions | Current implementation remains role-backed and documents the gap |
+| 29. Inventory Ledger Posting Algorithm | 2026-09-20T16:32Z | 2026-09-17T19:47:03.149Z | same | UNCHANGED | Atomic status-aware ledger remains authoritative | Post transaction covers receipt, balances and ledger |
+| 34. Goods Receipt Posting | 2026-09-20T16:32Z | 2026-09-20T16:31:53.872Z | 2026-09-17T19:49:07.648Z | CHANGED | Pre-Post QC and status bucket posting | Implementation follows this sequence |
+| 41. Inventory Status, QC Hold & Quarantine | 2026-09-20T16:32Z | 2026-09-20T16:31:54.616Z | 2026-09-17T19:50:14.902Z | CHANGED | Old post-to-QC flow superseded for Goods Receipt; status flags defined | Specification conflict removed |
+| 84. Master Data Governance | 2026-09-20T16:32Z | 2026-09-20T16:31:55.831Z | 2026-09-17T20:01:13.919Z | CHANGED | Product–Supplier then Product precedence; line snapshot/version | `QcPolicy` and receipt-line snapshots implement it |
+| 162. ERP Master Data Synchronization | 2026-09-20T16:32Z | 2026-09-17T20:21:11.335Z | same | UNCHANGED | Historical snapshots must survive master changes | Post never reads live QC/UOM master data |
+| 228. UX Core Business Flow | 2026-09-20T16:32Z | 2026-09-20T16:31:56.622Z | 2026-09-17T20:32:34.688Z | CHANGED | QC/no-QC UI and status-bucket confirmation | UI exposes line QC and bucket totals |
+| 229. Screen Matrix | 2026-09-20T16:32Z | 2026-09-19T11:26:10.775Z | same | UNCHANGED | No bulk matrix rewrite | Row updates were limited to the six affected records |
+| 282. UX Governance handoff | 2026-09-20T16:32Z | 2026-09-20T16:31:57.510Z | 2026-09-19T11:26:26.650Z | CHANGED | Canonical QC governance | Drive remains illustrative |
+| Affected six screen rows | 2026-09-20T16:32Z | 2026-09-20T16:32:13.773Z–16:32:19.232Z | prior row timestamps in the QC checkpoint | CHANGED | Commands, conflicts, revision and QC permission aligned | No contradictory screen-state contract remains |
+
+### Implemented state, policy and quantity contract
+
+```text
+Draft --receive--> Received --------------------> ReadyToPost --post--> Posted
+                    (all lines no-QC)                 ^
+Draft --receive--> QcPending --disposition--> QcCompleted --approve--|
+                    (one or more QC lines)
+```
+
+- `QcPolicy` versions Product and optional Supplier rules. At receipt creation an active Product–Supplier policy takes precedence over Product policy. No explicit receipt-line override exists.
+- Every line snapshots `RequiresQc`, policy ID/version/source/effective time/rule and line state. Receipt-level QC is derived from its lines, so mixed receipts are supported.
+- QC lines receive with zero disposition quantities. `record-qc-disposition` accepts partial line batches, requires `Accepted + Damaged + Rejected = Received`, requires a reason code for damaged/rejected quantities, and leaves the receipt `QcPending` until all QC lines complete.
+- Receive and QC disposition do not mutate balances or ledger. Approve accepts `Received` or `QcCompleted`; unresolved QC cannot advance or Post.
+- Post uses persisted Base UOM buckets: accepted → `AVAILABLE`, damaged → `DAMAGED`, rejected retained → `REJECTED`. This slice does not model rejected-at-door as inventory. `QC_HOLD` and `QUARANTINE` are defined status values but canonical pre-Post QC creates no balance in them.
+- Stock uniqueness is Product + Warehouse + InventoryStatus. Reservation, export/decrement, transfer destination, stocktake compatibility and current-stock reporting stay scoped to `AVAILABLE`; non-available buckets cannot be allocated or picked through those paths.
+- Migration `20260920163928_AddInboundQcDisposition` assigns all legacy stock and ledger rows status `AVAILABLE`, preserves receipt states and leaves legacy receipt QC snapshots empty/false. No historical QC decision is inferred.
+- Invalid/stale state remains HTTP 409. The new QC command uses the existing user/command/key/fingerprint idempotency filter and warehouse authorization. Deployed authorization is still role-backed Admin/Manager plus existing checker/maker separation; Notion permission codes remain targets.
+
+### Drive evidence
+
+The last recursive metadata baseline remains root 140, Corrected 16, Enriched 24, Merged/Split 56, New Screens 10 and Deprecated 176. File IDs and timestamps listed in the preceding Drive checkpoint remain the comparison baseline. The QC-required and no-QC state images were visually reviewed. A raw connector fetch was retried for Post confirmation file `14QiquYq8qjBvA-OTbMaFC3k1M3W8gsHv`; the connector completed but did not return renderable image content, so it remains `NOT REVIEWED` for this checkpoint. No Drive image was committed. Drive remains `Illustrative UI/UX Reference`.
+
+### Verification status
+
+Fresh evidence on the current working tree:
+
+- Release solution build: PASS, 0 warnings and 0 errors.
+- Application tests that do not require owned SQL: 281/281 PASS, including Product–Supplier snapshot, mixed receipt, QC disposition invariant, status-bucket posting and pending-QC conflict.
+- Frontend: 52/52 PASS; lint PASS; production build PASS.
+- EF pending-model check: PASS.
+- Full Application SQL and API SQL suites: BLOCKED because `ERP_KHO_SQLSERVER_ADMIN_CONNECTION` is not configured. A full Application invocation reported 274 passes plus the expected owned-harness failures; API discovery likewise refuses to run SQL-backed HTTP tests without an isolated database source.
+- Browser full-stack QC runs were not started because they require that owned SQL environment. Database `ERP_KHO` was not accessed.
+
+This checkpoint therefore remains **INBOUND QC DISPOSITION TESTING INCOMPLETE — OWNED SQL ADMIN CONNECTION NOT CONFIGURED**. Implementation, migration, UI, SQL-backed authorization/concurrency and browser evidence must be rerun once the supported admin connection is available.
