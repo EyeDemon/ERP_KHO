@@ -153,6 +153,78 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
+        public async Task CreateAsync_ProductSupplierQcPolicy_WinsAndIsSnapshotted()
+        {
+            var product = ProductWithBaseUnit(1, "P1");
+            product.QcPolicies =
+            [
+                new QcPolicy { Id = 10, ProductId = 1, Version = 2, RequiresQc = true, IsActive = true, EffectiveFromUtc = DateTime.UtcNow.AddDays(-2), Rule = "product" },
+                new QcPolicy { Id = 11, ProductId = 1, SupplierId = 7, Version = 3, RequiresQc = true, IsActive = true, EffectiveFromUtc = DateTime.UtcNow.AddDays(-1), Rule = "supplier" }
+            ];
+            _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1 });
+            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(product);
+            _mockImportRepo.Setup(x => x.ExistsByCodeAsync("QC-1", null)).ReturnsAsync(false);
+            _mockImportRepo.Setup(x => x.AddAsync(It.IsAny<ImportReceipt>(), It.IsAny<CancellationToken>())).ReturnsAsync((ImportReceipt x, CancellationToken _) => x);
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(It.IsAny<int>())).ReturnsAsync(new ImportReceipt { Code = "QC-1" });
+
+            await _service.CreateAsync(new CreateImportReceiptDto { Code = "QC-1", WarehouseId = 1, SupplierId = 7, Details = [new() { ProductId = 1, ExpectedQuantity = 2 }] }, 99);
+
+            _mockImportRepo.Verify(x => x.AddAsync(It.Is<ImportReceipt>(r => r.Details.Single().RequiresQc && r.Details.Single().QcPolicyId == 11 && r.Details.Single().QcPolicyVersion == 3 && r.Details.Single().QcPolicySourceSnapshot == "ProductSupplier" && r.Details.Single().QcRuleSnapshot == "supplier"), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateAsync_ProductSupplierNoQcPolicy_OverridesProductQcPolicy()
+        {
+            var product = ProductWithBaseUnit(1, "P1");
+            product.QcPolicies =
+            [
+                new QcPolicy { Id = 10, ProductId = 1, Version = 5, RequiresQc = true, IsActive = true, EffectiveFromUtc = DateTime.UtcNow.AddDays(-2) },
+                new QcPolicy { Id = 11, ProductId = 1, SupplierId = 7, Version = 1, RequiresQc = false, IsActive = true, EffectiveFromUtc = DateTime.UtcNow.AddDays(-1) }
+            ];
+            _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1 });
+            _mockProductRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(product);
+            _mockImportRepo.Setup(x => x.ExistsByCodeAsync("QC-OVERRIDE", null)).ReturnsAsync(false);
+            _mockImportRepo.Setup(x => x.AddAsync(It.IsAny<ImportReceipt>(), It.IsAny<CancellationToken>())).ReturnsAsync((ImportReceipt x, CancellationToken _) => x);
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(It.IsAny<int>())).ReturnsAsync(new ImportReceipt { Code = "QC-OVERRIDE" });
+
+            await _service.CreateAsync(new CreateImportReceiptDto { Code = "QC-OVERRIDE", WarehouseId = 1, SupplierId = 7, Details = [new() { ProductId = 1, ExpectedQuantity = 2 }] }, 99);
+
+            _mockImportRepo.Verify(x => x.AddAsync(It.Is<ImportReceipt>(r => !r.Details.Single().RequiresQc && r.Details.Single().QcPolicyId == 11 && r.Details.Single().QcState == ReceiptLineQcState.NoQcRequired), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task QcMixedReceipt_DispositionCompletesThenPostSplitsInventoryStatuses()
+        {
+            var noQc = new ImportReceiptDetail { Id = 1, ProductId = 1, ReceivedQuantity = 5, AcceptedQuantity = 5, BaseReceivedQuantity = 5, BaseAcceptedQuantity = 5 };
+            var qc = new ImportReceiptDetail { Id = 2, ProductId = 2, RequiresQc = true, QcState = ReceiptLineQcState.QcPending, ReceivedQuantity = 10, BaseReceivedQuantity = 10, ConversionFactor = 1, OperationUnitDecimalPlaces = 0, BaseUnitDecimalPlaces = 0 };
+            var receipt = new ImportReceipt { Id = 9, WarehouseId = 4, Status = ReceiptStatus.QcPending, Details = [noQc, qc] };
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(9)).ReturnsAsync(receipt);
+            _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(It.IsAny<int>(), 4)).ReturnsAsync((InventoryStock?)null);
+            _mockStockRepo.Setup(x => x.GetByProductWarehouseAndStatusAsync(It.IsAny<int>(), 4, It.IsAny<InventoryStatus>())).ReturnsAsync((InventoryStock?)null);
+
+            await _service.RecordQcDispositionAsync(9, new RecordQcDispositionDto { Lines = [new() { LineId = 2, AcceptedQuantity = 6, DamagedQuantity = 2, RejectedQuantity = 2, ReasonCode = "QC-DISPOSITION" }] }, 33);
+            receipt.Status.Should().Be(ReceiptStatus.QcCompleted);
+            await _service.ApproveImportReceiptAsync(9, 34);
+            await _service.PostAsync(9, 35);
+
+            receipt.Status.Should().Be(ReceiptStatus.Posted);
+            _mockStockRepo.Verify(x => x.AddAsync(It.Is<InventoryStock>(s => s.ProductId == 2 && s.Status == InventoryStatus.Available && s.Quantity == 6), It.IsAny<CancellationToken>()), Times.Once);
+            _mockStockRepo.Verify(x => x.AddAsync(It.Is<InventoryStock>(s => s.ProductId == 2 && s.Status == InventoryStatus.Damaged && s.Quantity == 2), It.IsAny<CancellationToken>()), Times.Once);
+            _mockStockRepo.Verify(x => x.AddAsync(It.Is<InventoryStock>(s => s.ProductId == 2 && s.Status == InventoryStatus.Rejected && s.Quantity == 2), It.IsAny<CancellationToken>()), Times.Once);
+            _mockTransactionRepo.Verify(x => x.AddAsync(It.Is<InventoryTransaction>(t => t.ProductId == 2 && t.InventoryStatus != InventoryStatus.Available && t.Quantity == 2)), Times.Exactly(2));
+        }
+
+        [Fact]
+        public async Task PostAsync_QcPending_ReturnsConflictWithoutInventoryEffect()
+        {
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(3)).ReturnsAsync(new ImportReceipt { Id = 3, Status = ReceiptStatus.QcPending });
+            var act = () => _service.PostAsync(3, 99);
+            var error = await act.Should().ThrowAsync<BusinessRuleException>();
+            error.Which.Data["HttpStatusCode"].Should().Be(409);
+            _mockStockRepo.Verify(x => x.AddAsync(It.IsAny<InventoryStock>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
         public async Task CreateAsync_AuditLogFails_RollsBackTransactionAndThrows()
         {
             var dto = new CreateImportReceiptDto
