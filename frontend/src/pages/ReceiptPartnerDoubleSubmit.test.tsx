@@ -35,11 +35,11 @@ describe('receipt mutation locks (mocked API)', () => {
 
   it('locks inbound post synchronously while the first request is pending', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const receipt = { id: 5, code: 'I5', status: 'ReadyToPost', createdBy: 2, details: [] };
-    get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : [receipt] }) as never);
+    const receipt = { id: 5, code: 'I5', status: 'ReadyToPost', createdBy: 2, details: [{ baseAcceptedQuantity: 7, damagedQuantity: 2, rejectedQuantity: 1, conversionFactor: 3 }] };
+    get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url === '/api/importreceipts/5' ? receipt : [{ ...receipt, details: [] }] }) as never);
     const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ImportReceipts />); await view.findByText('I5');
     const postButton = view.getByText('Post ghi tồn'); fireEvent.click(postButton); fireEvent.click(postButton);
-    expect(post).toHaveBeenCalledTimes(1); expect(post).toHaveBeenCalledWith('/api/importreceipts/5/post', undefined, expect.objectContaining({ headers: expect.any(Object) }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1)); expect(window.confirm).toHaveBeenCalledWith('Post sẽ tăng AVAILABLE 7, DAMAGED 6, REJECTED 3 theo Base UOM đã snapshot. Tiếp tục?'); expect(post).toHaveBeenCalledWith('/api/importreceipts/5/post', undefined, expect.objectContaining({ headers: expect.any(Object) }));
     expect((view.getByText('Đang post...') as HTMLButtonElement).disabled).toBe(true); request.finish();
   });
 

@@ -252,13 +252,19 @@ const ImportReceipts = () => {
     setWorkflowId(id); setError('');
     try {
       const action = `import-${command}:${id}`;
-      const source = (command === 'receive' || command === 'qc-disposition') && !receipt ? (await apiClient.get(`/api/importreceipts/${id}`)).data as ImportReceipt : receipt;
+      const source = !receipt && (command === 'receive' || command === 'qc-disposition' || command === 'post') ? (await apiClient.get(`/api/importreceipts/${id}`)).data as ImportReceipt : receipt;
       const body = command === 'receive' ? { lines: (source?.details || []).map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.requiresQc ? 0 : d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }) })) }
         : command === 'qc-disposition' ? { lines: (source?.details || []).filter(d => d.requiresQc && d.qcState === 'QcPending').map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { acceptedQuantity: 0, damagedQuantity: 0, rejectedQuantity: 0 }), reasonCode: receiveLines[d.id]?.reasonCode, note: receiveLines[d.id]?.note })) } : undefined;
       if (command === 'receive' && body?.lines.some(line => line.receivedQuantity <= 0 || line.acceptedQuantity < 0 || (!source?.details.find(d => d.id === line.lineId)?.requiresQc && line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== line.receivedQuantity)))
         throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận.');
       if (command === 'qc-disposition' && body?.lines.some(line => line.acceptedQuantity < 0 || line.damagedQuantity < 0 || line.rejectedQuantity < 0 || line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== source?.details.find(d => d.id === line.lineId)?.receivedQuantity || ((line.damagedQuantity > 0 || line.rejectedQuantity > 0) && !line.reasonCode?.trim())))
         throw new Error('QC cần Accepted + Damaged + Rejected = Received và reason code cho lượng hư hỏng/từ chối.');
+      if (command === 'post') {
+        const available = source?.details.reduce((sum, line) => sum + line.baseAcceptedQuantity, 0) ?? 0;
+        const damaged = source?.details.reduce((sum, line) => sum + line.damagedQuantity * line.conversionFactor, 0) ?? 0;
+        const rejected = source?.details.reduce((sum, line) => sum + line.rejectedQuantity * line.conversionFactor, 0) ?? 0;
+        if (!window.confirm(`Post sẽ tăng AVAILABLE ${available}, DAMAGED ${damaged}, REJECTED ${rejected} theo Base UOM đã snapshot. Tiếp tục?`)) return;
+      }
       await apiClient.post(`/api/importreceipts/${id}/${command}`, body, { headers: idempotencyHeaders(action) });
       completeIdempotentAction(action);
       setSuccessMsg(command === 'receive' ? 'Đã hoàn tất nhận hàng. Tồn kho chưa thay đổi.' : command === 'qc-disposition' ? 'Đã ghi nhận QC disposition. Tồn kho chưa thay đổi.' : 'Đã post phiếu theo từng trạng thái tồn kho.');
@@ -421,7 +427,7 @@ const ImportReceipts = () => {
                     >
                       {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt để post'}
                     </button>}
-                {r.status === 'ReadyToPost' && canApprove && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => { const a=r.details.reduce((s,d)=>s+d.baseAcceptedQuantity,0), d=r.details.reduce((s,x)=>s+x.damagedQuantity*x.conversionFactor,0), j=r.details.reduce((s,x)=>s+x.rejectedQuantity*x.conversionFactor,0); if (window.confirm(`Post sẽ tăng AVAILABLE ${a}, DAMAGED ${d}, REJECTED ${j} theo Base UOM đã snapshot. Tiếp tục?`)) void runWorkflow(r.id, 'post'); }}>{workflowId === r.id ? 'Đang post...' : 'Post ghi tồn'}</button>}
+                {r.status === 'ReadyToPost' && canApprove && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => void runWorkflow(r.id, 'post')}>{workflowId === r.id ? 'Đang post...' : 'Post ghi tồn'}</button>}
               </td>
             </tr>
           ))}

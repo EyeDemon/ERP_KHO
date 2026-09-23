@@ -38,7 +38,7 @@ namespace ERP.Infrastructure.Repositories
                 .AsNoTracking()
                 .Include(t => t.Product).ThenInclude(p => p.Unit)
                 .Include(t => t.Warehouse)
-                .Where(t => t.TransactionDate <= asOfDate);
+                .Where(t => t.InventoryStatus == InventoryStatus.Available && t.TransactionDate <= asOfDate);
 
             if (warehouseId.HasValue)
                 query = query.Where(t => t.WarehouseId == warehouseId.Value);

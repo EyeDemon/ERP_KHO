@@ -2,6 +2,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using ERP.Domain.Enums;
 
 namespace ERP.Infrastructure.Queries
 {
@@ -23,7 +24,7 @@ namespace ERP.Infrastructure.Queries
 
         public async Task<IEnumerable<InventoryStockDto>> GetCurrentStockAsync(int? warehouseId, int? productId, string? keyword, decimal? lowStockThreshold)
         {
-            var query = _context.InventoryStocks.AsNoTracking();
+            var query = _context.InventoryStocks.AsNoTracking().Where(s => s.Status == InventoryStatus.Available);
             if (_warehouseAuthorization is not null)
             {
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();

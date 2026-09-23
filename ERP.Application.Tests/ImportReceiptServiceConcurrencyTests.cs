@@ -406,8 +406,11 @@ namespace ERP.Application.Tests
 
             successCount.Should().Be(1, "exactly one concurrent post must succeed");
             errorCount.Should().Be(1, "losing concurrent post must fail");
-            errorException.Should().BeOfType<ERP.Domain.Exceptions.ConcurrencyException>(
-                "the losing concurrent post must map to HTTP 409 at the API boundary");
+            var mapsToConflict = errorException is ERP.Domain.Exceptions.ConcurrencyException
+                || errorException is ERP.Application.Exceptions.BusinessRuleException business
+                    && Equals(business.Data["HttpStatusCode"], 409);
+            mapsToConflict.Should().BeTrue(
+                "the losing concurrent post may observe either a stale write or the already-posted state, and both map to HTTP 409");
 
             using var verifyCtx = CreateContext();
 

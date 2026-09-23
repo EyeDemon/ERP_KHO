@@ -33,8 +33,8 @@ namespace ERP.Infrastructure.Queries
             int pageIndex = 1,
             int pageSize = 20)
         {
-            var stockQuery = _context.InventoryStocks.AsNoTracking();
-            var transactionQuery = _context.InventoryTransactions.AsNoTracking();
+            var stockQuery = _context.InventoryStocks.AsNoTracking().Where(s => s.Status == InventoryStatus.Available);
+            var transactionQuery = _context.InventoryTransactions.AsNoTracking().Where(t => t.InventoryStatus == InventoryStatus.Available);
             if (_warehouseAuthorization is not null)
             {
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
@@ -81,12 +81,12 @@ namespace ERP.Infrastructure.Queries
 
             var stocks = await _context.InventoryStocks
                 .AsNoTracking()
-                .Where(s => productIds.Contains(s.ProductId) && warehouseIds.Contains(s.WarehouseId))
+                .Where(s => s.Status == InventoryStatus.Available && productIds.Contains(s.ProductId) && warehouseIds.Contains(s.WarehouseId))
                 .ToListAsync();
 
             var transactions = await _context.InventoryTransactions
                 .AsNoTracking()
-                .Where(t => productIds.Contains(t.ProductId) && warehouseIds.Contains(t.WarehouseId))
+                .Where(t => t.InventoryStatus == InventoryStatus.Available && productIds.Contains(t.ProductId) && warehouseIds.Contains(t.WarehouseId))
                 .GroupBy(t => new { t.ProductId, t.WarehouseId, t.TransactionType })
                 .Select(g => new 
                 {
