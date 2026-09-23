@@ -175,10 +175,11 @@ Fresh completion evidence on `2026-09-20`:
 
 ## Next gaps
 
-1. QC/no-QC branching and inventory-status disposition.
-2. Receiving discrepancy and reason-code workflow.
-3. Putaway from posted receiving/QC location.
-4. Permission-code migration as a separate sprint when prioritized.
+1. Receiving discrepancy and reason-code workflow.
+2. Putaway/location-level internal movement.
+3. Permission-code migration as a separate sprint when prioritized.
+4. Rejected-at-door workflow.
+5. Laboratory/evidence engine if prioritized.
 
 ## Closure verification — 2026-09-20
 
@@ -189,6 +190,8 @@ Fresh completion evidence on `2026-09-20`:
 - Cleanup: the browser Run ID database, API/frontend processes, synthetic credential and temporary browser page were removed. Interrupted owned Application run databases were ownership-verified and removed. Database `ERP_KHO` remained ONLINE; no business data was read or written.
 
 ## QC disposition audit checkpoint — 2026-09-20
+
+**SUPERSEDED HISTORICAL CHECKPOINT.** This section records the specification conflict that existed before the canonical contract was corrected. The current implementation and verification state is recorded below.
 
 The branch `feature/inbound-qc-disposition` was created from accepted commit `9261205c6790cb9b8d8c3a04155ef0cdb3673933`. No QC schema or state mutation was added because the current authoritative specifications disagree about whether QC occurs before or after receipt posting.
 
@@ -278,7 +281,26 @@ Fresh evidence on the current working tree:
 - Application tests that do not require owned SQL: 282/282 PASS, including Product–Supplier snapshot, mixed receipt, QC disposition invariant, status-bucket posting and pending-QC conflict.
 - Frontend: 52/52 PASS; lint PASS; production build PASS.
 - EF pending-model check: PASS.
-- Full Application SQL and API SQL suites: BLOCKED because `ERP_KHO_SQLSERVER_ADMIN_CONNECTION` is not configured. A full Application invocation reported 274 passes plus the expected owned-harness failures; API discovery likewise refuses to run SQL-backed HTTP tests without an isolated database source.
-- Browser full-stack QC runs were not started because they require that owned SQL environment. Database `ERP_KHO` was not accessed.
+- **Superseded recovery checkpoint:** full Application SQL and API SQL suites were blocked here because the admin connection was not yet supplied to the harness. The later worktree recovery verification below records the fresh owned-SQL results.
+- Browser full-stack QC was not started at this historical checkpoint. Database `ERP_KHO` was not accessed.
 
 This checkpoint therefore remains **INBOUND QC DISPOSITION TESTING INCOMPLETE — OWNED SQL ADMIN CONNECTION NOT CONFIGURED**. Implementation, migration, UI, SQL-backed authorization/concurrency and browser evidence must be rerun once the supported admin connection is available.
+
+## Worktree recovery verification — 2026-09-23
+
+The feature worktree was accidentally removed with Shift+Delete after commit `710cfbd635e7f0ae1f2e1362a3b4c27c7156eea4`. Recovery Phases B/C preserved three exact uncommitted patches on drive C:, validated every hunk against `710cfbd`, and identified the migration Designer and documentation as files requiring regeneration. The stale registration was the only item reported by `git worktree prune --dry-run`; it was removed with Git-supported pruning and the worktree was recreated from the unchanged feature ref.
+
+Recovered source now restores Available-only current-stock, reconciliation and historical report queries plus their regression test. Migration `20260921090830_ScopeInventoryReportsToAvailable` was regenerated with repository EF tooling: Up recreates `sp_GetInventoryInOutReport` with exactly two `InventoryStatus = 0` predicates, Down restores the complete prior procedure, the Designer was regenerated, and the model snapshot remained unchanged. The migration source hash matches the Phase C deterministic candidate; no truncated recovery output was copied.
+
+Fresh post-recovery evidence currently available:
+
+- Release solution build: PASS, 0 warnings and 0 errors.
+- EF pending-model check: PASS.
+- Application owned-SQL suite: 333/333 PASS; Run ID `eee50f950d6e4c27a1e38a48be902c9f`; database `ERP_KHO_Integration_20260923_100927_eee50f95` cleaned after exact marker verification.
+- API SQL/HTTP suite: 156/156 PASS. Its six isolated database runs all reported exact owned cleanup; Run IDs are recorded in `INBOUND_QC_DISPOSITION.md`.
+- Frontend: 52/52 PASS; lint PASS; production build PASS.
+- **SUPERSEDED HISTORICAL BROWSER BLOCKER.** Run ID `59d90fc735634fec8ca124fb8843f94c` ended before interaction and was fully cleaned. Fresh browser closure is recorded below.
+
+Fresh browser Run `2f151b80af5344f09d2fffc5da613b1b` used the official Codex in-app browser, loopback API/frontend, isolated marker-owned SQLEXPRESS database and synthetic users. It passed no-QC, QC accepted, mixed line QC, mixed AVAILABLE/DAMAGED/REJECTED disposition, retry/concurrent QC and Post, warehouse isolation, Viewer filtering, Available-only reservation/export rejection, UI double-click/loading guards and stale 409 clearing. QC-product balances were AVAILABLE 7, DAMAGED 4 and REJECTED 3; no QC_HOLD/QUARANTINE balance was created. Every posted test receipt had one post audit. A discovered zero-bucket Post confirmation bug was fixed by loading authoritative detail after taking the synchronous mutation lock; the post-fix frontend suite remains 52/52.
+
+Post-fix verification: Release build 0 warnings/errors; EF pending-model PASS; Application SQL 333/333 (Run `df61902fa7724bb497598096251b41c6`, owned database cleaned); API SQL/HTTP 156/156; frontend 52/52, lint and production build PASS. Exact BrowserQA cleanup stopped PIDs 4600/18368, removed the synthetic credential and dropped the marker-matched database; no owned QA database remained and `ERP_KHO` was ONLINE. Commit `65a65da` records source, migration and regression changes. Historical browser Run IDs elsewhere remain historical evidence only. Current status is **INBOUND QC DISPOSITION READY FOR OWNER REVIEW**.
