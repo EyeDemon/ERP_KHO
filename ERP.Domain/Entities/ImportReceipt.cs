@@ -26,4 +26,5 @@ public class ImportReceipt
     public User? ApprovedByUser { get; set; }
     public BusinessPartner? Supplier { get; set; }
     public ICollection<ImportReceiptDetail> Details { get; set; } = new List<ImportReceiptDetail>();
+    public ICollection<ReceivingDiscrepancy> Discrepancies { get; set; } = new List<ReceivingDiscrepancy>();
 }

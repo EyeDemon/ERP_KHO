@@ -24,6 +24,12 @@ public class ImportReceiptDetailConfiguration : IEntityTypeConfiguration<ImportR
         builder.Property(x => x.BaseDamagedQuantity).HasPrecision(18, 4);
         builder.Property(x => x.BaseRejectedQuantity).HasPrecision(18, 4);
         builder.Property(x => x.BasePostedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.ObservedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.BaseObservedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.DoorRejectedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.BaseDoorRejectedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.FinalReceivedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.BaseFinalReceivedQuantity).HasPrecision(18, 4);
         builder.Property(x => x.OperationUnitCodeSnapshot).HasMaxLength(20);
         builder.Property(x => x.BaseUnitCodeSnapshot).HasMaxLength(20);
         builder.Property(x => x.UnitPrice).HasPrecision(18, 2);
@@ -42,5 +48,10 @@ public class ImportReceiptDetailConfiguration : IEntityTypeConfiguration<ImportR
                .WithMany()
                .HasForeignKey(x => x.ProductId)
                .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.FinalResolutionVersion)
+               .WithMany()
+               .HasForeignKey(x => x.FinalResolutionVersionId)
+               .OnDelete(DeleteBehavior.NoAction);
     }
 }

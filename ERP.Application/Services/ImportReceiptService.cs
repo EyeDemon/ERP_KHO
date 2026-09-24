@@ -226,6 +226,10 @@ namespace ERP.Application.Services
                     BaseReceivedQuantity = d.BaseReceivedQuantity,
                     BaseAcceptedQuantity = d.BaseAcceptedQuantity,
                     BasePostedQuantity = d.BasePostedQuantity,
+                    ObservedQuantity = d.ObservedQuantity,
+                    DoorRejectedQuantity = d.DoorRejectedQuantity,
+                    FinalReceivedQuantity = d.FinalReceivedQuantity > 0 ? d.FinalReceivedQuantity : d.ReceivedQuantity,
+                    BaseFinalReceivedQuantity = d.BaseFinalReceivedQuantity > 0 ? d.BaseFinalReceivedQuantity : d.BaseReceivedQuantity,
                     UnitPrice = canReadCost ? d.UnitPrice : null,
                     Note = d.Note,
                     RequiresQc = d.RequiresQc,
@@ -312,6 +316,9 @@ namespace ERP.Application.Services
                         ?? throw new BusinessRuleException($"Thiếu dữ liệu nhận cho dòng {detail.Id}");
                     if (line.ReceivedQuantity <= 0 || line.AcceptedQuantity < 0 || line.DamagedQuantity < 0 || line.RejectedQuantity < 0)
                         throw new BusinessRuleException($"Số lượng dòng {detail.Id} không hợp lệ");
+                    var expected = detail.ExpectedQuantity > 0 ? detail.ExpectedQuantity : detail.Quantity;
+                    if (line.ReceivedQuantity != expected)
+                        throw Conflict("Số lượng quan sát khác số lượng dự kiến; hãy dùng workflow receiving discrepancy.");
                     if (!detail.RequiresQc && line.AcceptedQuantity + line.DamagedQuantity + line.RejectedQuantity != line.ReceivedQuantity)
                         throw new BusinessRuleException($"Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận ở dòng {detail.Id}");
                     if (!detail.RequiresQc && (line.DamagedQuantity != 0 || line.RejectedQuantity != 0))
@@ -321,10 +328,14 @@ namespace ERP.Application.Services
                     EnsurePrecision(line.ReceivedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng nhận");
                     var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1;
                     detail.ReceivedQuantity = line.ReceivedQuantity;
+                    detail.ObservedQuantity = line.ReceivedQuantity;
+                    detail.FinalReceivedQuantity = line.ReceivedQuantity;
                     detail.AcceptedQuantity = detail.RequiresQc ? 0 : line.AcceptedQuantity;
                     detail.DamagedQuantity = detail.RequiresQc ? 0 : line.DamagedQuantity;
                     detail.RejectedQuantity = detail.RequiresQc ? 0 : line.RejectedQuantity;
                     detail.BaseReceivedQuantity = ConvertToBase(line.ReceivedQuantity, factor, detail);
+                    detail.BaseObservedQuantity = detail.BaseReceivedQuantity;
+                    detail.BaseFinalReceivedQuantity = detail.BaseReceivedQuantity;
                     detail.BaseAcceptedQuantity = detail.RequiresQc ? 0 : ConvertToBase(line.AcceptedQuantity, factor, detail);
                     detail.BaseDamagedQuantity = 0;
                     detail.BaseRejectedQuantity = 0;

@@ -28,6 +28,14 @@ public class ImportReceiptDetail
     public decimal BaseDamagedQuantity { get; set; }
     public decimal BaseRejectedQuantity { get; set; }
     public decimal BasePostedQuantity { get; set; }
+    public decimal ObservedQuantity { get; set; }
+    public decimal BaseObservedQuantity { get; set; }
+    public decimal DoorRejectedQuantity { get; set; }
+    public decimal BaseDoorRejectedQuantity { get; set; }
+    public decimal FinalReceivedQuantity { get; set; }
+    public decimal BaseFinalReceivedQuantity { get; set; }
+    public int? FinalResolutionVersionId { get; set; }
+    public ReceivingResolutionVersion? FinalResolutionVersion { get; set; }
     public decimal UnitPrice { get; set; }
     public string? Note { get; set; }
     public bool RequiresQc { get; set; }
@@ -45,4 +53,5 @@ public class ImportReceiptDetail
     // Navigation
     public ImportReceipt ImportReceipt { get; set; } = null!;
     public Product Product { get; set; } = null!;
+    public ICollection<ReceivingDiscrepancy> ReceivingDiscrepancies { get; set; } = [];
 }

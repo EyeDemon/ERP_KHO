@@ -13,10 +13,14 @@ namespace ERP.Api.Controllers
     public class ImportReceiptsController : ControllerBase
     {
         private readonly IImportReceiptService _importReceiptService;
+        private readonly IReceivingDiscrepancyService? _discrepancies;
+        private IReceivingDiscrepancyService Discrepancies => _discrepancies
+            ?? throw new InvalidOperationException("Receiving discrepancy service is not configured.");
 
-        public ImportReceiptsController(IImportReceiptService importReceiptService)
+        public ImportReceiptsController(IImportReceiptService importReceiptService, IReceivingDiscrepancyService? discrepancies = null)
         {
             _importReceiptService = importReceiptService;
+            _discrepancies = discrepancies;
         }
 
         private bool TryGetUserId(out int userId)
@@ -99,6 +103,42 @@ namespace ERP.Api.Controllers
             var result = await _importReceiptService.GetByIdAsync(id);
             return Ok(result);
         }
+
+        [HttpGet("{id:int}/discrepancies")]
+        public async Task<IActionResult> GetDiscrepancies(int id, CancellationToken token) => Ok(await Discrepancies.GetAsync(id, token));
+
+        [HttpGet("discrepancy-reasons")]
+        public async Task<IActionResult> GetDiscrepancyReasons(CancellationToken token) => Ok(await Discrepancies.GetActiveReasonsAsync(token));
+
+        [HttpPost("{id:int}/discrepancies/observe")]
+        [IdempotentCommand("ImportReceipt.Discrepancy.Observe")]
+        [Authorize(Roles = AppRoles.AdminOrManager)]
+        public async Task<IActionResult> Observe(int id, [FromBody] ERP.Application.DTOs.ObserveReceivingDto dto, CancellationToken token)
+            => Ok(await Discrepancies.ObserveAsync(id, dto, token));
+
+        [HttpPost("{id:int}/discrepancies/{discrepancyId:int}/submit")]
+        [IdempotentCommand("ImportReceipt.Discrepancy.Submit")]
+        [Authorize(Roles = AppRoles.AdminOrManager)]
+        public async Task<IActionResult> SubmitDiscrepancy(int id, int discrepancyId, [FromBody] ERP.Application.DTOs.SubmitReceivingDiscrepancyDto dto, CancellationToken token)
+            => Ok(await Discrepancies.SubmitAsync(id, discrepancyId, dto, token));
+
+        [HttpPost("{id:int}/discrepancies/{discrepancyId:int}/approve")]
+        [IdempotentCommand("ImportReceipt.Discrepancy.Approve")]
+        [Authorize(Policy = ApprovalPolicies.Checker)]
+        public async Task<IActionResult> ApproveDiscrepancy(int id, int discrepancyId, [FromBody] byte[] rowVersion, CancellationToken token)
+            => Ok(await Discrepancies.ApproveAsync(id, discrepancyId, rowVersion, token));
+
+        [HttpPost("{id:int}/discrepancies/{discrepancyId:int}/reject")]
+        [IdempotentCommand("ImportReceipt.Discrepancy.Reject")]
+        [Authorize(Policy = ApprovalPolicies.Checker)]
+        public async Task<IActionResult> RejectDiscrepancy(int id, int discrepancyId, [FromBody] byte[] rowVersion, CancellationToken token)
+            => Ok(await Discrepancies.RejectAsync(id, discrepancyId, rowVersion, token));
+
+        [HttpPost("{id:int}/discrepancies/{discrepancyId:int}/recount")]
+        [IdempotentCommand("ImportReceipt.Discrepancy.Recount")]
+        [Authorize(Roles = AppRoles.AdminOrManager)]
+        public async Task<IActionResult> RecountDiscrepancy(int id, int discrepancyId, [FromBody] ERP.Application.DTOs.RecountReceivingDto dto, CancellationToken token)
+            => Ok(await Discrepancies.RecountAsync(id, discrepancyId, dto, token));
 
         [HttpPut("{id}/cancel")]
         [IdempotentCommand("ImportReceipt.Cancel")]

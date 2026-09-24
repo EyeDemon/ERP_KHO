@@ -48,6 +48,10 @@ namespace ERP.Application.DTOs
         public decimal BaseReceivedQuantity { get; set; }
         public decimal BaseAcceptedQuantity { get; set; }
         public decimal BasePostedQuantity { get; set; }
+        public decimal ObservedQuantity { get; set; }
+        public decimal DoorRejectedQuantity { get; set; }
+        public decimal FinalReceivedQuantity { get; set; }
+        public decimal BaseFinalReceivedQuantity { get; set; }
         public decimal? UnitPrice { get; set; }
         public string? Note { get; set; }
         public bool RequiresQc { get; set; }

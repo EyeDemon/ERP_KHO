@@ -10,5 +10,10 @@ public enum ReceiptStatus
     ReadyToPost = 5,
     Posted = 6,
     QcPending = 7,
-    QcCompleted = 8
+    QcCompleted = 8,
+    DiscrepancyPending = 9,
+    DiscrepancySubmitted = 10,
+    DiscrepancyPendingApproval = 11,
+    DiscrepancyResolved = 12,
+    DiscrepancyRejected = 13
 }

@@ -24,13 +24,13 @@ describe('receipt mutation locks (mocked API)', () => {
     const save = view.getByText('Lưu Phiếu Nháp'); fireEvent.click(save); fireEvent.click(save); expect(post).toHaveBeenCalledTimes(1); expect((view.getByText('Đang lưu...') as HTMLButtonElement).disabled).toBe(true); request.finish(); await waitFor(() => expect(view.queryByText('Đang lưu...')).toBeNull());
   });
 
-  it('locks inbound receive while the command is pending', async () => {
+  it('locks inbound observation while the command is pending', async () => {
     const receipt = { id: 3, code: 'I3', status: 'Draft', createdBy: 2, details: [] };
     get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : [receipt] }) as never);
     const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ImportReceipts />); await view.findByText('I3');
-    const receive = view.getByText('Hoàn tất nhận hàng'); fireEvent.click(receive); fireEvent.click(receive);
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(1)); expect(post).toHaveBeenCalledWith('/api/importreceipts/3/receive', expect.objectContaining({ lines: expect.any(Array) }), expect.objectContaining({ headers: expect.any(Object) }));
-    expect((view.getByText('Đang xử lý...') as HTMLButtonElement).disabled).toBe(true); request.finish();
+    const receive = view.getByText('Ghi nhận số lượng thực tế'); fireEvent.click(receive); fireEvent.click(receive);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1)); expect(post).toHaveBeenCalledWith('/api/importreceipts/3/discrepancies/observe', expect.objectContaining({ lines: expect.any(Array) }), expect.objectContaining({ headers: expect.any(Object) }));
+    expect((view.getByText('Đang ghi nhận...') as HTMLButtonElement).disabled).toBe(true); request.finish();
   });
 
   it('locks inbound post synchronously while the first request is pending', async () => {
@@ -41,6 +41,22 @@ describe('receipt mutation locks (mocked API)', () => {
     const postButton = view.getByText('Post ghi tồn'); fireEvent.click(postButton); fireEvent.click(postButton);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1)); expect(window.confirm).toHaveBeenCalledWith('Post sẽ tăng AVAILABLE 7, DAMAGED 6, REJECTED 3 theo Base UOM đã snapshot. Tiếp tục?'); expect(post).toHaveBeenCalledWith('/api/importreceipts/5/post', undefined, expect.objectContaining({ headers: expect.any(Object) }));
     expect((view.getByText('Đang post...') as HTMLButtonElement).disabled).toBe(true); request.finish();
+  });
+
+  it('locks discrepancy resolution synchronously while the first request is pending', async () => {
+    const detail = { id: 31, productCode: 'P2', productName: 'Product', expectedQuantity: 10, operationUnitId: 1, operationUnitCode: 'EA', baseUnitCode: 'EA', conversionFactor: 1, conversionVersion: 1, requiresQc: false };
+    const receipt = { id: 30, code: 'I30', status: 'DiscrepancyPending', createdBy: 2, details: [detail] };
+    const discrepancy = { id: 7, receiptLineId: 31, status: 'Pending', expectedQuantity: 10, observedQuantity: 24, normalizedObservedQuantity: 8, differenceQuantity: -2, operationUnitId: 1, observedUnitId: 2, observedUnitCode: 'BOX', operationUnitCode: 'EA', baseUnitCode: 'EA', conversionFactor: 3, conversionVersion: 1, rowVersion: 'AQ==' };
+    get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url === '/api/importreceipts/30' ? receipt : url === '/api/importreceipts/30/discrepancies' ? [discrepancy] : url === '/api/importreceipts/discrepancy-reasons' ? [{ code: 'UNDER_RECEIPT', name: 'Nhận thiếu', version: 1 }] : [receipt] }) as never);
+    const request = pending(); post.mockReturnValue(request.promise as never);
+    const view = render(<ImportReceipts />); await view.findByText('I30'); fireEvent.click(view.getByText('Chi tiết'));
+    expect(await view.findByText(/Final dự kiến: 8 EA/)).toBeTruthy();
+    const reason = await view.findByDisplayValue('-- Chọn reason --'); fireEvent.change(reason, { target: { value: 'UNDER_RECEIPT' } });
+    const responsibility = view.getByDisplayValue('Chưa xác định'); fireEvent.change(responsibility, { target: { value: 'SUPPLIER' } });
+    const submit = view.getByText('Gửi resolution'); fireEvent.click(submit); fireEvent.click(submit);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledWith('/api/importreceipts/30/discrepancies/7/submit', expect.objectContaining({ reasonCode: 'UNDER_RECEIPT', rowVersion: 'AQ==' }), expect.objectContaining({ headers: expect.any(Object) }));
+    expect((view.getByText('Đang gửi...') as HTMLButtonElement).disabled).toBe(true); request.finish();
   });
 
   it('clears a selected receipt after a post conflict', async () => {
