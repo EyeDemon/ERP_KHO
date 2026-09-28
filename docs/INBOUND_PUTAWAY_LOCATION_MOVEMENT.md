@@ -39,4 +39,3 @@ Cleanup của Browser Run đã marker-verify và xóa database owned, credential
 Browser QA phát hiện và sửa hai production defect: PutawayService từng mở transaction lồng với idempotency middleware; service nay tái sử dụng ambient transaction. Frontend từng giữ logical idempotency key sau mutation thành công; nay giải phóng key sau success. Hai fix có runnable regression tests.
 
 Deferred: lot/serial/HU, weight/volume capacity, optimization/scoring, wave/routing, native/offline mobile, reverse completed movement, generic location transfer và advanced rule engine.
-
