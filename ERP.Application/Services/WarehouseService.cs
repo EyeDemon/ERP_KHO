@@ -3,6 +3,7 @@ using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
+using ERP.Domain.Enums;
 
 namespace ERP.Application.Services
 {
@@ -77,6 +78,8 @@ namespace ERP.Application.Services
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
+            warehouse.Locations.Add(new WarehouseLocation { Code="RECEIVING", Name="Vị trí nhận hàng", LocationType=WarehouseLocationType.Receiving, IsActive=true, IsReceivable=true, IsSystemManaged=true });
+            warehouse.Locations.Add(new WarehouseLocation { Code="LEGACY", Name="Vị trí tương thích nghiệp vụ kho", LocationType=WarehouseLocationType.Legacy, IsActive=true, IsPickable=true, IsSystemManaged=true });
 
             await _warehouseRepository.AddAsync(warehouse);
 

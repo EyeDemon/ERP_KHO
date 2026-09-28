@@ -206,6 +206,9 @@ public class SqlServerExportStockConcurrencyTests
             var warehouse = new Warehouse { Code = $"{prefix}W", Name = "SQL concurrency warehouse", IsActive = true };
             context.AddRange(role, unit, warehouse);
             await context.SaveChangesAsync();
+            var location = new WarehouseLocation { WarehouseId = warehouse.Id, Code = "LEGACY", Name = "Legacy stock", LocationType = WarehouseLocationType.Legacy, IsActive = true, IsPickable = true, IsSystemManaged = true };
+            context.Add(location);
+            await context.SaveChangesAsync();
 
             var creator = new User
             {
@@ -240,6 +243,7 @@ public class SqlServerExportStockConcurrencyTests
             {
                 ProductId = product.Id,
                 WarehouseId = warehouse.Id,
+                LocationId = location.Id,
                 Quantity = initialStocks[index]
             }));
 
@@ -324,6 +328,7 @@ public class SqlServerExportStockConcurrencyTests
                 .ExecuteDeleteAsync();
             await context.Products.Where(product => product.Code.StartsWith(_prefix)).ExecuteDeleteAsync();
             await context.Users.Where(user => user.Username.StartsWith(_prefix)).ExecuteDeleteAsync();
+            await context.WarehouseLocations.Where(location => location.WarehouseId == WarehouseId).ExecuteDeleteAsync();
             await context.Warehouses.Where(warehouse => warehouse.Code.StartsWith(_prefix)).ExecuteDeleteAsync();
             await context.Units.Where(unit => unit.Code.StartsWith(_prefix)).ExecuteDeleteAsync();
             await context.Roles.Where(role => role.RoleName.StartsWith(_prefix)).ExecuteDeleteAsync();

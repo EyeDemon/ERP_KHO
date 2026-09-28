@@ -42,6 +42,14 @@ INSERT dbo.Users(Username,PasswordHash,FullName,RoleId,IsActive,CreatedAt,Failed
 INSERT dbo.Warehouses(Code,Name,Address,IsActive,CreatedAt) VALUES('QA-WH01',N'Kho browser QA A',N'Loopback synthetic target',1,SYSUTCDATETIME()),('QA-WH02',N'Kho browser QA B',N'Outside scoped users',1,SYSUTCDATETIME());
 DECLARE @warehouse int=(SELECT Id FROM dbo.Warehouses WHERE Code='QA-WH01'), @adminUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_admin_browser'), @managerUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_manager_browser'), @viewerUser int=(SELECT Id FROM dbo.Users WHERE Username='qa_viewer_browser');
 INSERT dbo.UserWarehouses(UserId,WarehouseId,CreatedAt,CreatedBy) VALUES(@managerUser,@warehouse,SYSUTCDATETIME(),@adminUser),(@viewerUser,@warehouse,SYSUTCDATETIME(),@adminUser);
+INSERT dbo.WarehouseLocations(WarehouseId,Code,Name,LocationType,IsActive,IsBlocked,IsPickable,IsReceivable,IsSystemManaged,CreatedAt,CreatedBy)
+SELECT Id,'RECEIVING',N'Vị trí nhận hàng',0,1,0,0,1,1,SYSUTCDATETIME(),@adminUser FROM dbo.Warehouses
+UNION ALL SELECT Id,'LEGACY',N'Vị trí tương thích nghiệp vụ kho',4,1,0,1,0,1,SYSUTCDATETIME(),@adminUser FROM dbo.Warehouses;
+INSERT dbo.WarehouseLocations(WarehouseId,Code,Name,LocationType,IsActive,IsBlocked,IsPickable,IsReceivable,IsSystemManaged,CreatedAt,CreatedBy) VALUES
+(@warehouse,'STORAGE-A',N'Ô lưu trữ A',1,1,0,1,0,0,SYSUTCDATETIME(),@adminUser),
+(@warehouse,'STORAGE-B',N'Ô lưu trữ B',1,1,0,1,0,0,SYSUTCDATETIME(),@adminUser),
+(@warehouse,'DAMAGED-A',N'Khu hàng hư hỏng',2,1,0,0,0,0,SYSUTCDATETIME(),@adminUser),
+(@warehouse,'REJECTED-A',N'Khu hàng bị từ chối',3,1,0,0,0,0,SYSUTCDATETIME(),@adminUser);
 INSERT dbo.Units(Code,Name,IsActive,CreatedAt) VALUES('EA',N'Each',1,SYSUTCDATETIME());
 INSERT dbo.Products(Code,Name,Description,UnitId,IsActive,CreatedAt) VALUES('LOOKUP-COLLIDE',N'Product code collision',NULL,(SELECT Id FROM dbo.Units WHERE Code='EA'),1,SYSUTCDATETIME()),('BARCODE-TARGET',N'Barcode target',NULL,(SELECT Id FROM dbo.Units WHERE Code='EA'),1,SYSUTCDATETIME());
 INSERT dbo.ProductBarcodes(ProductId,Value) VALUES((SELECT Id FROM dbo.Products WHERE Code='BARCODE-TARGET'),'LOOKUP-COLLIDE');

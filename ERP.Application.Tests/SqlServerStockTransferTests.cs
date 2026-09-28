@@ -228,12 +228,16 @@ public sealed class SqlServerStockTransferTests
         var destination = new Warehouse { Code = $"D{suffix}", Name = "Destination" };
         db.AddRange(creator, approver, product, source, destination);
         await db.SaveChangesAsync();
+        var sourceLocation = new WarehouseLocation { WarehouseId = source.Id, Code = "LEGACY", Name = "Legacy stock", LocationType = WarehouseLocationType.Legacy, IsActive = true, IsPickable = true, IsSystemManaged = true, CreatedBy = creator.Id };
+        var destinationLocation = new WarehouseLocation { WarehouseId = destination.Id, Code = "LEGACY", Name = "Legacy stock", LocationType = WarehouseLocationType.Legacy, IsActive = true, IsPickable = true, IsSystemManaged = true, CreatedBy = creator.Id };
+        db.AddRange(sourceLocation, destinationLocation);
+        await db.SaveChangesAsync();
         db.UserWarehouses.AddRange(
             new UserWarehouse { UserId = creator.Id, WarehouseId = source.Id, CreatedBy = creator.Id },
             new UserWarehouse { UserId = creator.Id, WarehouseId = destination.Id, CreatedBy = creator.Id },
             new UserWarehouse { UserId = approver.Id, WarehouseId = source.Id, CreatedBy = creator.Id },
             new UserWarehouse { UserId = approver.Id, WarehouseId = destination.Id, CreatedBy = creator.Id });
-        db.InventoryStocks.AddRange(new InventoryStock { ProductId = product.Id, WarehouseId = source.Id, Quantity = sourceQuantity }, new InventoryStock { ProductId = product.Id, WarehouseId = destination.Id, Quantity = 0 });
+        db.InventoryStocks.AddRange(new InventoryStock { ProductId = product.Id, WarehouseId = source.Id, LocationId = sourceLocation.Id, Quantity = sourceQuantity }, new InventoryStock { ProductId = product.Id, WarehouseId = destination.Id, LocationId = destinationLocation.Id, Quantity = 0 });
         db.InventoryTransactions.Add(new InventoryTransaction
         {
             ProductId = product.Id,
@@ -265,6 +269,7 @@ public sealed class SqlServerStockTransferTests
         await db.UserWarehouses.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == fixture.ProductId).ExecuteDeleteAsync();
         await db.Units.Where(x => x.Id == fixture.UnitId).ExecuteDeleteAsync();
+        await db.WarehouseLocations.Where(x => x.WarehouseId == fixture.SourceId || x.WarehouseId == fixture.DestinationId).ExecuteDeleteAsync();
         await db.Warehouses.Where(x => x.Id == fixture.SourceId || x.Id == fixture.DestinationId).ExecuteDeleteAsync();
         await db.Users.Where(x => userIds.Contains(x.Id)).ExecuteDeleteAsync();
         await db.Roles.Where(x => x.Id == fixture.RoleId).ExecuteDeleteAsync();

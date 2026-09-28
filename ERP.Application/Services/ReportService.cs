@@ -60,17 +60,17 @@ namespace ERP.Application.Services
                 foreach (var allowedWarehouseId in warehouseIds)
                     stocks.AddRange(await _reportRepository.GetCurrentStocksAsync(allowedWarehouseId, productId, cancellationToken));
 
-                return stocks.Select(s => new InventoryReportDto
+                return stocks.GroupBy(s => new { s.ProductId, s.WarehouseId }).Select(g => new InventoryReportDto
                 {
-                    ProductId = s.ProductId,
-                    ProductCode = s.Product.Code,
-                    ProductName = s.Product.Name,
-                    UnitName = s.Product.Unit?.Name ?? "",
-                    WarehouseId = s.WarehouseId,
-                    WarehouseName = s.Warehouse.Name,
-                    Quantity = s.Quantity,
+                    ProductId = g.Key.ProductId,
+                    ProductCode = g.First().Product.Code,
+                    ProductName = g.First().Product.Name,
+                    UnitName = g.First().Product.Unit?.Name ?? "",
+                    WarehouseId = g.Key.WarehouseId,
+                    WarehouseName = g.First().Warehouse.Name,
+                    Quantity = g.Sum(s => s.Quantity),
                     ReportDate = reportDate,
-                    LastUpdated = s.LastUpdated
+                    LastUpdated = g.Max(s => s.LastUpdated)
                 })
                 .OrderBy(x => x.ProductCode)
                 .ThenBy(x => x.WarehouseName)
@@ -144,11 +144,11 @@ namespace ERP.Application.Services
             }
 
             var stocks = await _reportRepository.GetCurrentStocksAsync(warehouseId, productId, cancellationToken);
-            return stocks.Select(s => new InventoryReportDto
+            return stocks.GroupBy(s => new { s.ProductId, s.WarehouseId }).Select(g => new InventoryReportDto
             {
-                ProductId = s.ProductId, ProductCode = s.Product.Code, ProductName = s.Product.Name,
-                UnitName = s.Product.Unit?.Name ?? "", WarehouseId = s.WarehouseId, WarehouseName = s.Warehouse.Name,
-                Quantity = s.Quantity, ReportDate = DateTime.UtcNow, LastUpdated = s.LastUpdated
+                ProductId = g.Key.ProductId, ProductCode = g.First().Product.Code, ProductName = g.First().Product.Name,
+                UnitName = g.First().Product.Unit?.Name ?? "", WarehouseId = g.Key.WarehouseId, WarehouseName = g.First().Warehouse.Name,
+                Quantity = g.Sum(s => s.Quantity), ReportDate = DateTime.UtcNow, LastUpdated = g.Max(s => s.LastUpdated)
             }).OrderBy(x => x.ProductCode).ThenBy(x => x.WarehouseName).ToList();
         }
     }

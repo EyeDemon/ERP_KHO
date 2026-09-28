@@ -24,7 +24,7 @@ namespace ERP.Infrastructure.Queries
 
         public async Task<IEnumerable<InventoryStockDto>> GetCurrentStockAsync(int? warehouseId, int? productId, string? keyword, decimal? lowStockThreshold)
         {
-            var query = _context.InventoryStocks.AsNoTracking().Where(s => s.Status == InventoryStatus.Available);
+            var query = _context.InventoryStocks.AsNoTracking().Where(s => s.Status == InventoryStatus.Available && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
             if (_warehouseAuthorization is not null)
             {
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
@@ -53,19 +53,11 @@ namespace ERP.Infrastructure.Queries
                 query = query.Where(s => s.Quantity - s.ReservedQuantity <= lowStockThreshold.Value);
             }
 
-            var projectedQuery = query.Select(s => new InventoryStockDto
+            var projectedQuery = query.GroupBy(s=>new{s.ProductId,s.Product.Code,s.Product.Name,UnitName=s.Product.Unit!=null?s.Product.Unit.Name:string.Empty,s.WarehouseId,WarehouseName=s.Warehouse.Name}).Select(g => new InventoryStockDto
             {
-                ProductId = s.ProductId,
-                ProductCode = s.Product.Code,
-                ProductName = s.Product.Name,
-                UnitName = s.Product.Unit != null ? s.Product.Unit.Name : string.Empty,
-                WarehouseId = s.WarehouseId,
-                WarehouseName = s.Warehouse.Name,
-                Quantity = s.Quantity,
-                OnHandQuantity = s.Quantity,
-                ReservedQuantity = s.ReservedQuantity,
-                AvailableQuantity = s.Quantity - s.ReservedQuantity,
-                LastUpdated = s.LastUpdated
+                ProductId = g.Key.ProductId, ProductCode=g.Key.Code, ProductName=g.Key.Name, UnitName=g.Key.UnitName,
+                WarehouseId=g.Key.WarehouseId, WarehouseName=g.Key.WarehouseName, Quantity=g.Sum(s=>s.Quantity), OnHandQuantity=g.Sum(s=>s.Quantity),
+                ReservedQuantity=g.Sum(s=>s.ReservedQuantity), AvailableQuantity=g.Sum(s=>s.Quantity-s.ReservedQuantity), LastUpdated=g.Max(s=>s.LastUpdated)
             });
 
             return await projectedQuery.ToListAsync();

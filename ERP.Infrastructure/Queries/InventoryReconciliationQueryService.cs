@@ -99,8 +99,9 @@ namespace ERP.Infrastructure.Queries
 
             var results = pagedPairs.Select(pair => 
             {
-                var currentStock = stocks.FirstOrDefault(s => s.ProductId == pair.ProductId && s.WarehouseId == pair.WarehouseId);
-                var currentQuantity = currentStock?.Quantity ?? 0;
+                var currentQuantity = stocks
+                    .Where(s => s.ProductId == pair.ProductId && s.WarehouseId == pair.WarehouseId)
+                    .Sum(s => s.Quantity);
 
                 var stockTransactions = transactions
                     .Where(t => t.ProductId == pair.ProductId && t.WarehouseId == pair.WarehouseId)

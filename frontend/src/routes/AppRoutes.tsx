@@ -15,6 +15,7 @@ import StockTransfers from '../pages/StockTransfers';
 import StockReservations from '../pages/StockReservations';
 import Approvals from '../pages/Approvals';
 import BusinessPartners from '../pages/BusinessPartners';
+import PutawayTasks from '../pages/PutawayTasks';
 import { canViewStocktakes, currentRole } from '../services/authorization';
 
 const StocktakeRoute = ({ children }: { children: ReactNode }) =>
@@ -37,6 +38,7 @@ const AppRoutes = () => {
         <Route path="stock-transfers" element={<StockTransfers />} />
         <Route path="stock-reservations" element={<StockReservations />} />
         <Route path="approvals" element={<Approvals />} />
+        <Route path="putaway-tasks" element={<PutawayTasks />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

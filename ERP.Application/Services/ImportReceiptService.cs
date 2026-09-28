@@ -19,6 +19,7 @@ namespace ERP.Application.Services
         private readonly IAuditLogRepository _auditLogRepository;
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
         private readonly ICurrentUser? _currentUser;
+        private readonly IReceiptPutawayIntegration? _putaway;
 
         internal ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository)
         {
@@ -52,6 +53,9 @@ namespace ERP.Application.Services
             _warehouseAuthorization = warehouseAuthorization;
             _currentUser = currentUser;
         }
+
+        public ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, IWarehouseAuthorizationService warehouseAuthorization, ICurrentUser currentUser, IReceiptPutawayIntegration putaway)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser) => _putaway = putaway;
 
         public async Task<ImportReceiptDto> CreateAsync(CreateImportReceiptDto dto, int userId)
         {
@@ -408,18 +412,20 @@ namespace ERP.Application.Services
                 Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, postedByUserId);
                 if (receipt.Status != ReceiptStatus.ReadyToPost)
                     throw Conflict("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
+                int? receivingLocationId = _putaway is null ? null : await _putaway.GetReceivingLocationIdAsync(receipt.WarehouseId);
                 foreach (var detail in receipt.Details)
                 {
                     var legacyNoQc = !detail.RequiresQc && detail.BaseReceivedQuantity == 0 && detail.BaseAcceptedQuantity > 0;
                     if (!legacyNoQc && detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity != detail.BaseReceivedQuantity)
                         throw new BusinessRuleException($"Dòng {detail.Id} chưa có disposition hợp lệ");
-                    await PostBucketAsync(receipt, detail, InventoryStatus.Available, detail.BaseAcceptedQuantity, postedByUserId);
-                    await PostBucketAsync(receipt, detail, InventoryStatus.Damaged, detail.BaseDamagedQuantity, postedByUserId);
-                    await PostBucketAsync(receipt, detail, InventoryStatus.Rejected, detail.BaseRejectedQuantity, postedByUserId);
+                    await PostBucketAsync(receipt, detail, InventoryStatus.Available, detail.BaseAcceptedQuantity, postedByUserId, receivingLocationId);
+                    await PostBucketAsync(receipt, detail, InventoryStatus.Damaged, detail.BaseDamagedQuantity, postedByUserId, receivingLocationId);
+                    await PostBucketAsync(receipt, detail, InventoryStatus.Rejected, detail.BaseRejectedQuantity, postedByUserId, receivingLocationId);
                     detail.PostedQuantity = detail.AcceptedQuantity + detail.DamagedQuantity + detail.RejectedQuantity;
                     detail.BasePostedQuantity = detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity;
                 }
                 receipt.Status = ReceiptStatus.Posted;
+                if (_putaway is not null) await _putaway.CreateForPostedReceiptAsync(receipt, receivingLocationId!.Value, postedByUserId);
                 await _importReceiptRepository.UpdateAsync(receipt);
                 await _auditLogRepository.AddAsync(new AuditLog { UserId = postedByUserId, Action = "ImportReceipt.Posted", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.ReadyToPost}", NewValues = $"Status: {ReceiptStatus.Posted}", Result = "Success", Severity = "Warning", Timestamp = DateTime.UtcNow });
                 await _unitOfWork.CommitTransactionAsync();
@@ -428,16 +434,16 @@ namespace ERP.Application.Services
             catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
         }
 
-        private async Task PostBucketAsync(ImportReceipt receipt, ImportReceiptDetail detail, InventoryStatus status, decimal quantity, int userId)
+        private async Task PostBucketAsync(ImportReceipt receipt, ImportReceiptDetail detail, InventoryStatus status, decimal quantity, int userId, int? locationId)
         {
             if (quantity <= 0) return;
-            var stock = status == InventoryStatus.Available
+            var stock = locationId.HasValue ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, receipt.WarehouseId, status, locationId.Value) : status == InventoryStatus.Available
                 ? await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId)
                 : await _inventoryStockRepository.GetByProductWarehouseAndStatusAsync(detail.ProductId, receipt.WarehouseId, status);
             if (stock is null)
-                await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Status = status, Quantity = quantity, LastUpdated = DateTime.UtcNow });
+                await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Status = status, LocationId = locationId, Quantity = quantity, LastUpdated = DateTime.UtcNow });
             else { stock.Quantity += quantity; stock.LastUpdated = DateTime.UtcNow; await _inventoryStockRepository.UpdateAsync(stock); }
-            await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, InventoryStatus = status, TransactionType = TransactionType.Import, Quantity = quantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = userId, Note = detail.Note });
+            await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, LocationId = locationId, InventoryStatus = status, TransactionType = TransactionType.Import, Quantity = quantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = userId, Note = detail.Note });
         }
 
         private static decimal ConvertToBase(decimal quantity, decimal factor, ImportReceiptDetail detail)

@@ -38,10 +38,11 @@ public sealed class InventoryAvailableStatusQueryTests
         db.Units.Add(new Unit { Id = 1, Code = "EA", Name = "Each" });
         db.Products.Add(new Product { Id = 1, Code = "P1", Name = "Product", UnitId = 1 });
         db.Warehouses.Add(new Warehouse { Id = 1, Code = "W1", Name = "Warehouse" });
+        db.WarehouseLocations.Add(new WarehouseLocation { Id = 1, WarehouseId = 1, Code = "LEGACY", Name = "Legacy", LocationType = WarehouseLocationType.Legacy, IsActive = true, IsPickable = true, IsSystemManaged = true });
         db.InventoryStocks.AddRange(
-            new InventoryStock { ProductId = 1, WarehouseId = 1, Status = InventoryStatus.Available, Quantity = 10 },
-            new InventoryStock { ProductId = 1, WarehouseId = 1, Status = InventoryStatus.Damaged, Quantity = 4 },
-            new InventoryStock { ProductId = 1, WarehouseId = 1, Status = InventoryStatus.Rejected, Quantity = 3 });
+            new InventoryStock { ProductId = 1, WarehouseId = 1, LocationId = 1, Status = InventoryStatus.Available, Quantity = 10 },
+            new InventoryStock { ProductId = 1, WarehouseId = 1, LocationId = 1, Status = InventoryStatus.Damaged, Quantity = 4 },
+            new InventoryStock { ProductId = 1, WarehouseId = 1, LocationId = 1, Status = InventoryStatus.Rejected, Quantity = 3 });
         db.InventoryTransactions.AddRange(
             new InventoryTransaction { ProductId = 1, WarehouseId = 1, InventoryStatus = InventoryStatus.Available, TransactionType = TransactionType.Import, Quantity = 10, TransactionDate = DateTime.UtcNow },
             new InventoryTransaction { ProductId = 1, WarehouseId = 1, InventoryStatus = InventoryStatus.Damaged, TransactionType = TransactionType.Import, Quantity = 4, TransactionDate = DateTime.UtcNow },

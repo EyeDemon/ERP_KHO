@@ -3,6 +3,7 @@ using System.Text.Json;
 using ERP.Application.Common;
 using ERP.Application.Exceptions;
 using ERP.Domain.Exceptions;
+using Microsoft.Data.SqlClient;
 
 namespace ERP.Api.Middleware;
 
@@ -31,6 +32,7 @@ public class GlobalExceptionHandlingMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
+        var isSqlServerConcurrencyError = IsSqlServerConcurrencyError(FindSqlException(exception)?.Number);
         var statusCode = exception switch
         {
             BusinessRuleException business when business.Data["HttpStatusCode"] is 409 => (int)HttpStatusCode.Conflict,
@@ -40,6 +42,7 @@ public class GlobalExceptionHandlingMiddleware
             ForbiddenException => (int)HttpStatusCode.Forbidden,
             UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
             ConcurrencyException => (int)HttpStatusCode.Conflict,
+            _ when isSqlServerConcurrencyError => (int)HttpStatusCode.Conflict,
             _ => (int)HttpStatusCode.InternalServerError
         };
 
@@ -52,12 +55,13 @@ public class GlobalExceptionHandlingMiddleware
             _logger.LogWarning(exception, "Handled exception: {Message}", exception.Message);
         }
 
+        var publicMessage = PublicMessage(exception.Message, isSqlServerConcurrencyError);
         var response = new ErrorResponse
         {
             Success = false,
-            Message = exception.Message,
+            Message = publicMessage,
             StatusCode = statusCode,
-            Detail = statusCode == (int)HttpStatusCode.InternalServerError ? null : exception.Message
+            Detail = statusCode == (int)HttpStatusCode.InternalServerError ? null : publicMessage
         };
 
         context.Response.ContentType = "application/json";
@@ -69,5 +73,20 @@ public class GlobalExceptionHandlingMiddleware
         });
 
         await context.Response.WriteAsync(json);
+    }
+
+    internal static bool IsSqlServerConcurrencyError(int? number) => number == 1205;
+
+    internal static string PublicMessage(string message, bool isSqlServerConcurrencyError)
+        => isSqlServerConcurrencyError ? "Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại." : message;
+
+    private static SqlException? FindSqlException(Exception? error)
+    {
+        while (error is not null)
+        {
+            if (error is SqlException sql) return sql;
+            error = error.InnerException;
+        }
+        return null;
     }
 }

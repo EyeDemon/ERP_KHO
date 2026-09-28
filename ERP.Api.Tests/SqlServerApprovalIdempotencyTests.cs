@@ -177,9 +177,10 @@ public sealed class SqlServerApprovalIdempotencyTests
             var unit = new Unit { Code = "IDEM_UNIT", Name = "Idempotency unit" };
             var product = new Product { Code = "IDEM_PRODUCT", Name = "Idempotency product", Unit = unit };
             var warehouse = new Warehouse { Code = "IDEM_WH", Name = "Idempotency warehouse" };
+            var location = new WarehouseLocation { Warehouse = warehouse, Code = "LEGACY", Name = "Legacy stock", LocationType = WarehouseLocationType.Legacy, IsActive = true, IsPickable = true, IsSystemManaged = true };
             context.InventoryStocks.Add(new InventoryStock
             {
-                Product = product, Warehouse = warehouse, Quantity = 100m,
+                Product = product, Warehouse = warehouse, Location = location, Quantity = 100m,
                 ReservedQuantity = 0m, LastUpdated = DateTime.UtcNow
             });
             await context.SaveChangesAsync();
