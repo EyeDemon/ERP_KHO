@@ -45,3 +45,9 @@ Notion 01/17/20/34/71/84/228/282 and the discrepancy row were re-read at their 2
 ## Receiving discrepancy closure — 2026-09-24
 
 Fresh Application owned-SQL passes 338/338, API SQL/HTTP passes 156/156, and frontend passes 53/53. Browser Runs `cb87071aca7a470685a099336fe57c3e` and `6ac961abc1ba44709f9ebb5b0d1edb96` verify alternate-UOM conversion/precision, tolerance, retry/fingerprint mismatch, a true concurrent terminal race, raw Viewer filtering, warehouse isolation, Post-only inventory effects and one ledger/Post audit. The Drive artifact is still metadata-only `NOT REVIEWED`.
+
+## Cất hàng implementation traceability — 2026-09-27
+
+`INB-PUTAWAY-LIST` maps to `/putaway-tasks`, `PutawayTasks.tsx`, `GET /api/putaway-tasks`, detail/destinations and typed assign/start/move/exception/resume/cancel endpoints. The implemented Vietnamese states are Chưa phân công, Đã phân công, Đang thực hiện, Cần xử lý, Đã hoàn thành and Đã hủy. Fresh Browser Run `148ba598820e479298fa1fdfbf4cbd90` reviewed the implemented loopback UI; the Drive artifact `1Pluwl2RQk3fRujU_JpOiUUWJiejyjGi4` was metadata-only and remains `NOT REVIEWED`.
+
+Closure Runs `0f5ec2aae31c4e6ab370ca60f33397bc`, `14eb93c5ea2f46b6b0681618010b08fa` and `9dfb6177fbeb4da1a415f385bd15b080` add true concurrency, replay/fingerprint, post-fix raw Viewer filtering, destination validation, pickable availability, alternate-UOM snapshot and complete warehouse isolation evidence. The implemented UI remains Vietnamese; the Drive image itself was not rendered and remains `NOT REVIEWED`.

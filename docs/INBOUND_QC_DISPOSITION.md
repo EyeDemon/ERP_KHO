@@ -50,6 +50,8 @@ Drive metadata also remained unchanged: 140 root files plus the five named folde
 
 No business data in database `ERP_KHO` was accessed. Historical runs remain supporting history only. Exact helper cleanup closed the QA tabs, stopped API PID 4600 and frontend PID 18368, removed the DPAPI credential and marker-verified/dropped the BrowserQA database; no owned QA database remained and `ERP_KHO` was ONLINE. Commit `65a65da` records the recovered Available-only changes, migration/tests and the Post-confirmation fix. Current status is **INBOUND QC DISPOSITION READY FOR OWNER REVIEW**.
 
+Cất hàng compatibility was verified after this closure: Posted AVAILABLE/DAMAGED/REJECTED buckets keep their status while moving from RECEIVING to eligible locations. QC-before-Post and the single receipt inventory boundary remain unchanged.
+
 Next gaps after QC closure are receiving discrepancy/reason codes, Putaway/location movement, permission-code migration, rejected-at-door handling, and an optional laboratory/evidence engine. They do not expand this recovery slice.
 
 ## Successor slice note — 2026-09-24
@@ -59,3 +61,7 @@ Receiving discrepancy/reason-code implementation is now present on its dedicated
 Fresh successor evidence is Application SQL 338/338, API SQL/HTTP 156/156, frontend 53/53 and complete browser closure. Discrepancy observation/resolution remains inventory-neutral; only the existing Post command writes persisted Base UOM quantities. The QC invariant and AVAILABLE/DAMAGED/REJECTED behavior are unchanged.
 
 The remaining functional gaps after discrepancy closure are Putaway/location movement, permission-code migration, and the optional laboratory/evidence engine. Rejected-at-door is modeled by discrepancy custody exclusion in the successor slice; supplier/carrier claim execution remains deferred.
+
+## Cất hàng compatibility — 2026-09-27
+
+Cất hàng is a post-Post location-only movement. It does not restore Post-then-QC, change a QC disposition, or create QC_HOLD/QUARANTINE in the canonical receipt flow. AVAILABLE/DAMAGED/REJECTED totals remain invariant while their location balances move from RECEIVING to eligible destinations.

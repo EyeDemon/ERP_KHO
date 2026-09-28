@@ -72,9 +72,15 @@ Putaway/location movement, permission-code migration, supplier/carrier claim exe
 
 **RECEIVING DISCREPANCY READY FOR OWNER REVIEW.** The earlier SQL-admin and browser-coverage blockers above are superseded historical checkpoints.
 
+Cất hàng closure preserves the discrepancy custody boundary: Door Rejected creates no stock or task item, while only persisted FinalReceived status buckets create RECEIVING balances and Cất hàng items at Post.
+
 - Canonical Notion sources were re-read and remained unchanged: 01 `2026-09-23T15:38:52.543Z`, 17 `15:38:54.657Z`, 20 `15:38:55.859Z`, 34 `15:38:57.552Z`, 41 `2026-09-20T16:31:54.616Z`, 71 `2026-09-23T15:38:59.281Z`, 84 `15:39:00.941Z`, 228 `15:39:01.746Z`, 229 `2026-09-19T11:26:10.775Z`, 282 `2026-09-23T15:39:04.510Z`, and the discrepancy row `15:39:06.751Z`.
 - Drive metadata remained root 140, Corrected 16, Enriched 24, Merged/Split 56, New Screens 10 and Deprecated 176. Artifact `1VgvBwWHLgKqAaqqJBwpoSs5slQCMLRBk` remained unchanged and metadata-only `NOT REVIEWED`.
 - A browser-discovered alternate-UOM defect was fixed at the service boundary: raw observations retain their observed UOM, workflow quantities are normalized to the receipt operation UOM, and Base UOM values use the persisted receipt-line conversion snapshot. Invalid unit and precision inputs return 400. Regression coverage raises focused discrepancy tests to 5/5.
 - Application owned-SQL passed 338/338, Run `275fd4239b3342c0a1f1bb497a14655c`; its marker-owned database was cleaned. API SQL/HTTP passed 156/156 using isolated self-cleaning databases. Frontend passed 53/53; lint and production build passed.
 - Browser Runs `cb87071aca7a470685a099336fe57c3e` and `6ac961abc1ba44709f9ebb5b0d1edb96` close the five browser-only gaps. They prove `24 EA = 2 BOX`, persisted `24 EA` Base quantity at Post despite a later master conversion change, non-zero tolerance auto-resolution, same-key replay `200/200`, fingerprint mismatch `409`, concurrent terminal action `200/409`, raw Viewer filtering, and warehouse isolation `404` for read and every mutation/replay.
 - Database evidence for the final UOM run shows one AVAILABLE transaction of 24 Base EA, one `ImportReceipt.Posted` audit, no invalid-observation discrepancy rows, and no pre-Post stock/ledger effect. Both BrowserQA databases, credentials and owned processes were cleaned after marker verification; `ERP_KHO` remained ONLINE without business-table access.
+
+## Cất hàng compatibility — 2026-09-27
+
+Only Final Received quantities accepted into custody reach Post and automatic Cất hàng items. Door Rejected remains excluded. Observation/resolution/approval remain inventory-neutral; Cất hàng begins only after the existing Post boundary.

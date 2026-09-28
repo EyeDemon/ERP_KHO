@@ -305,6 +305,8 @@ Fresh browser Run `2f151b80af5344f09d2fffc5da613b1b` used the official Codex in-
 
 Post-fix verification: Release build 0 warnings/errors; EF pending-model PASS; Application SQL 333/333 (Run `df61902fa7724bb497598096251b41c6`, owned database cleaned); API SQL/HTTP 156/156; frontend 52/52, lint and production build PASS. Exact BrowserQA cleanup stopped PIDs 4600/18368, removed the synthetic credential and dropped the marker-matched database; no owned QA database remained and `ERP_KHO` was ONLINE. Commit `65a65da` records source, migration and regression changes. Historical browser Run IDs elsewhere remain historical evidence only. Current status is **INBOUND QC DISPOSITION READY FOR OWNER REVIEW**.
 
+The subsequent Cất hàng slice preserves Post as the receipt inventory boundary and atomically creates one location task with RECEIVING balances. Fresh closure on 2026-09-28 verifies location-only movement, pickable availability, persisted UOM snapshots and no duplicate receipt ledger/Post audit; see `INBOUND_PUTAWAY_LOCATION_MOVEMENT.md`.
+
 ## Receiving discrepancy implementation checkpoint — 2026-09-24
 
 The canonical contract is implemented on `feature/inbound-receiving-discrepancy` but is not yet closure-verified. A receiving count now stores append-only observation versions. Exact counts route to the existing Received/QC path; mismatches route to `DiscrepancyPending`. Typed resolution versions snapshot reason and tolerance policy, preserve maker/checker audit data, and produce the current Final Received quantity. Approval-required resolutions cannot be self-approved. Rejected approval returns the discrepancy for recount/resubmit without overwriting history.
@@ -322,3 +324,7 @@ Application owned-SQL passes 338/338 (Run `275fd4239b3342c0a1f1bb497a14655c`), A
 The alternate-UOM closure found and fixed one production defect: raw observed quantity was being reused as operation-UOM Final Received quantity. The service now preserves raw observed UOM evidence while normalizing workflow quantities to the receipt operation UOM and persisting Base UOM from the line snapshot. Final browser/database evidence shows `24 EA = 2 BOX`, Post uses persisted `24 EA`, creates one AVAILABLE transaction and one Post audit, and invalid unit/precision observations create no discrepancy.
 
 Notion timestamps and Drive metadata remained unchanged; the discrepancy artifact remains metadata-only `NOT REVIEWED`. Current state is **RECEIVING DISCREPANCY READY FOR OWNER REVIEW**. Next gaps remain Putaway/location movement, permission-code migration, and optional laboratory/evidence storage; supplier/carrier claim execution remains deferred.
+
+## Cất hàng successor slice — 2026-09-27
+
+Post now creates location-aware balances at system RECEIVING and exactly one Cất hàng task/items in the same transaction. Cất hàng changes only location; receipt/QC/discrepancy quantities and status buckets remain unchanged. Fresh evidence and deferred scope are recorded in `INBOUND_PUTAWAY_LOCATION_MOVEMENT.md`.
