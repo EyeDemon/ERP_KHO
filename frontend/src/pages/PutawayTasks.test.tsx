@@ -5,7 +5,7 @@ import PutawayTasks from './PutawayTasks';
 import apiClient from '../services/apiClient';
 
 vi.mock('../services/apiClient',()=>({default:{get:vi.fn(),post:vi.fn()}}));
-vi.mock('../services/authorization',()=>({currentRole:()=> 'Manager',currentUserId:()=>7}));
+vi.mock('../services/authorization',()=>({usePermission:()=>true,currentUserId:()=>7}));
 const {completeIdempotentAction}=vi.hoisted(()=>({completeIdempotentAction:vi.fn()}));
 vi.mock('../services/idempotency',()=>({idempotencyHeaders:()=>({'Idempotency-Key':'masked-test-key'}),completeIdempotentAction}));
 const summary={id:1,receiptCode:'PN-1',warehouseName:'Kho A',status:'Open',assignedUserId:null,requiredBaseQuantity:10,movedBaseQuantity:0,rowVersion:'AQ==',items:[]};

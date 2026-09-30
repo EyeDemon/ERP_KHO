@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Moq;
 using System.Security.Claims;
 
@@ -29,6 +31,90 @@ public sealed class ApprovalSqlServerFactAttribute : FactAttribute
 
 public sealed class SqlServerApprovalIdempotencyTests
 {
+    [ApprovalSqlServerFact]
+    public async Task PermissionMigrationRequiresCanonicalUnlockedBootstrapAndRollsBackFailure()
+    {
+        const string previous = "20260927014531_AddInboundPutawayLocationMovement";
+        foreach (var scenario in new[] { "missing", "inactive", "locked", "ambiguous", "valid" })
+        {
+            await using var owned = await ApprovalSafetyDatabase.CreateAsync(
+                Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
+            await using var db = new ErpKhoDbContext(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(owned.ConnectionString).Options);
+            var migrator = db.GetService<IMigrator>();
+            await migrator.MigrateAsync(previous);
+            await db.Database.ExecuteSqlRawAsync("INSERT Roles(RoleName,Description) VALUES('Admin',N'Owned bootstrap fixture'),('UnmappedFixture',N'Unknown role fixture');");
+            if (scenario != "missing")
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT Users(Username,PasswordHash,FullName,RoleId,IsActive,CreatedAt,FailedLoginCount,LockoutEnd)
+                    SELECT 'bootstrap_migration_fixture','QA_FIXTURE_NOT_A_LOGIN',N'Owned bootstrap',Id,{scenario != "inactive"},SYSUTCDATETIME(),0,{(scenario == "locked" ? DateTime.UtcNow.AddDays(1) : (DateTime?)null)}
+                    FROM Roles WHERE RoleName='Admin';
+                    """);
+            if (scenario == "ambiguous")
+                await db.Database.ExecuteSqlRawAsync("INSERT Roles(RoleName,Description) VALUES(' admin ',N'Ambiguous canonical role fixture');");
+            if (scenario == "valid")
+            {
+                await db.Database.ExecuteSqlRawAsync("""
+                    INSERT Units(Code,Name,IsActive,CreatedAt) VALUES('QA-EA',N'Đơn vị fixture',1,SYSUTCDATETIME());
+                    INSERT Products(Code,Name,UnitId,IsActive,CreatedAt) SELECT 'QA-MIGRATION',N'Sản phẩm fixture',Id,1,SYSUTCDATETIME() FROM Units WHERE Code='QA-EA';
+                    INSERT Warehouses(Code,Name,IsActive,CreatedAt) VALUES('QA-MIGRATION',N'Kho fixture',1,SYSUTCDATETIME());
+                    INSERT WarehouseLocations(WarehouseId,Code,Name,LocationType,IsActive,IsBlocked,IsPickable,IsReceivable,IsSystemManaged,CreatedAt,CreatedBy)
+                    SELECT w.Id,'LEGACY',N'Vị trí fixture',4,1,0,1,0,1,SYSUTCDATETIME(),u.Id FROM Warehouses w CROSS JOIN Users u WHERE w.Code='QA-MIGRATION';
+                    INSERT InventoryStocks(ProductId,WarehouseId,LocationId,Status,Quantity,ReservedQuantity,LastUpdated)
+                    SELECT p.Id,w.Id,l.Id,s.Status,s.Quantity,0,SYSUTCDATETIME() FROM Products p CROSS JOIN Warehouses w JOIN WarehouseLocations l ON l.WarehouseId=w.Id
+                    CROSS JOIN (VALUES(0,12),(1,3)) s(Status,Quantity) WHERE p.Code='QA-MIGRATION' AND w.Code='QA-MIGRATION';
+                    """);
+                var before = await db.InventoryStocks.AsNoTracking().OrderBy(s => s.Id)
+                    .Select(s => new { s.ProductId, s.WarehouseId, s.LocationId, s.Status, s.Quantity, s.ReservedQuantity }).ToListAsync();
+                await migrator.MigrateAsync();
+                Assert.Equal(53, await db.Permissions.CountAsync());
+                Assert.Equal(53, await db.RolePermissions.CountAsync(p => p.Role.RoleName == "Admin"));
+                Assert.False(await db.RolePermissions.AnyAsync(p => p.Role.RoleName == "UnmappedFixture"));
+                // Owned fixture only, before any grant administration: exercise additive Down/Up.
+                await migrator.MigrateAsync(previous);
+                Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.tables WHERE name IN ('Permissions','RolePermissions')").SingleAsync());
+                await migrator.MigrateAsync();
+                Assert.Equal(53, await db.Permissions.CountAsync());
+                var after = await db.InventoryStocks.AsNoTracking().OrderBy(s => s.Id)
+                    .Select(s => new { s.ProductId, s.WarehouseId, s.LocationId, s.Status, s.Quantity, s.ReservedQuantity }).ToListAsync();
+                Assert.Equal(before, after);
+            }
+            else
+            {
+                await Assert.ThrowsAsync<SqlException>(() => migrator.MigrateAsync());
+                Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.tables WHERE name IN ('Permissions','RolePermissions')").SingleAsync());
+                Assert.DoesNotContain("20260930032852_AddPermissionCodeAuthorization", await db.Database.GetAppliedMigrationsAsync());
+            }
+            Assert.Equal(scenario == "valid" ? 2 : 0, await db.InventoryStocks.CountAsync());
+            Assert.Equal(0, await db.InventoryTransactions.CountAsync());
+            Console.WriteLine($"Permission migration scenario {scenario}: PASS; owned target cleanup follows.");
+        }
+    }
+
+    [ApprovalSqlServerFact]
+    public async Task ActionResultDenialsLeaveNoDurableClaimAuditOrBusinessEffect()
+    {
+        await using var database = await ApprovalSafetyDatabase.CreateAsync(
+            Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
+        await database.MigrateAndSeedAsync();
+        var actor = (await database.UserIdsAsync())[0];
+        var before = await database.CountsAsync();
+        var stockBefore = await database.InventoryEvidenceAsync();
+        foreach (var status in new[] { 401, 403, 404 })
+        {
+            var result = await database.ExecuteFilterAsync(actor, $"denied-{status}", 41, async context =>
+            {
+                var stock = await context.InventoryStocks.SingleAsync();
+                stock.Quantity -= 1;
+                context.AuditLogs.Add(new AuditLog { UserId = actor, Action = "Denied.MustRollback", EntityName = "InventoryStock", EntityId = stock.Id, WarehouseId = stock.WarehouseId });
+                await context.SaveChangesAsync();
+                return new ObjectResult(new { message = "Bạn không có quyền thực hiện thao tác này." }) { StatusCode = status };
+            });
+            Assert.Equal(status, Assert.IsType<ObjectResult>(result).StatusCode);
+            Assert.Equal(before, await database.CountsAsync());
+            Assert.Equal(stockBefore, await database.InventoryEvidenceAsync());
+        }
+    }
+
     [ApprovalSqlServerFact]
     public async Task UniqueScopeRaceAndAuditFailureRollback_AreEnforcedBySqlServer()
     {
@@ -168,12 +254,9 @@ public sealed class SqlServerApprovalIdempotencyTests
         public async Task MigrateAndSeedAsync()
         {
             await using var context = Context();
-            await context.Database.MigrateAsync();
-            var role = new Role { RoleName = "ApprovalTestRole" };
-            context.Roles.Add(role);
-            context.Users.AddRange(
-                new User { Username = "approval_test_user_1", FullName = "Test One", PasswordHash = "TEST_HASH_ONLY", Role = role },
-                new User { Username = "approval_test_user_2", FullName = "Test Two", PasswordHash = "TEST_HASH_ONLY", Role = role });
+            await ERP.TestSupport.PermissionMigrationBootstrap.MigrateAsync(context, _runId, "approval_test_user_1");
+            var role = await context.Roles.SingleAsync(r => r.RoleName == "Manager");
+            context.Users.Add(new User { Username = "approval_test_user_2", FullName = "Test Two", PasswordHash = "TEST_HASH_ONLY", Role = role });
             var unit = new Unit { Code = "IDEM_UNIT", Name = "Idempotency unit" };
             var product = new Product { Code = "IDEM_PRODUCT", Name = "Idempotency product", Unit = unit };
             var warehouse = new Warehouse { Code = "IDEM_WH", Name = "Idempotency warehouse" };

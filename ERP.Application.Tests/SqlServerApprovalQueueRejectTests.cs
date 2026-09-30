@@ -24,6 +24,7 @@ public sealed class SqlServerApprovalQueueRejectTests
         var now = new DateTimeOffset(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
         var role = new Role { RoleName = $"QA-AGING-{suffix}" };
         db.Roles.Add(role); await db.SaveChangesAsync();
+        await GrantInboundAsync(db, role.Id);
         var maker = new User { Username = $"qa-aging-maker-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
         var checker = new User { Username = $"qa-aging-checker-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
         db.Users.AddRange(maker, checker); await db.SaveChangesAsync();
@@ -62,6 +63,7 @@ public sealed class SqlServerApprovalQueueRejectTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var role = new Role { RoleName = $"QA-SCOPE-{suffix}" };
         db.Roles.Add(role); await db.SaveChangesAsync();
+        await GrantInboundAsync(db, role.Id);
         var maker = new User { Username = $"qa-scope-maker-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
         var sourceOnly = new User { Username = $"qa-scope-source-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
         var destinationOnly = new User { Username = $"qa-scope-destination-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
@@ -186,6 +188,7 @@ public sealed class SqlServerApprovalQueueRejectTests
             await cleanup.UserWarehouses.Where(x => users.Contains(x.UserId)).ExecuteDeleteAsync();
             await cleanup.Warehouses.Where(x => x.Id == warehouseOneId || x.Id == warehouseTwoId).ExecuteDeleteAsync();
             await cleanup.Users.Where(x => users.Contains(x.Id)).ExecuteDeleteAsync();
+            await cleanup.RolePermissions.Where(x => x.RoleId == roleId).ExecuteDeleteAsync();
             await cleanup.Roles.Where(x => x.Id == roleId).ExecuteDeleteAsync();
         }
     }
@@ -198,6 +201,7 @@ public sealed class SqlServerApprovalQueueRejectTests
         await using (var seed = CreateContext())
         {
             var role = new Role { RoleName = $"QA-RACE-{suffix}" }; seed.Roles.Add(role); await seed.SaveChangesAsync(); roleId = role.Id;
+            await GrantInboundAsync(seed, role.Id);
             var maker = new User { Username = $"qa-race-maker-{suffix}", FullName = "Maker", PasswordHash = "test-only", RoleId = role.Id };
             var one = new User { Username = $"qa-race-one-{suffix}", FullName = "One", PasswordHash = "test-only", RoleId = role.Id };
             var two = new User { Username = $"qa-race-two-{suffix}", FullName = "Two", PasswordHash = "test-only", RoleId = role.Id };
@@ -230,6 +234,7 @@ public sealed class SqlServerApprovalQueueRejectTests
             await cleanup.UserWarehouses.Where(x => users.Contains(x.UserId)).ExecuteDeleteAsync();
             await cleanup.Warehouses.Where(x => x.Id == warehouseId).ExecuteDeleteAsync();
             await cleanup.Users.Where(x => users.Contains(x.Id)).ExecuteDeleteAsync();
+            await cleanup.RolePermissions.Where(x => x.RoleId == roleId).ExecuteDeleteAsync();
             await cleanup.Roles.Where(x => x.Id == roleId).ExecuteDeleteAsync();
         }
     }
@@ -242,6 +247,7 @@ public sealed class SqlServerApprovalQueueRejectTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var role = new Role { RoleName = $"QA-MANAGER-{suffix}" };
         db.Roles.Add(role); await db.SaveChangesAsync();
+        await GrantInboundAsync(db, role.Id);
         var creator = new User { Username = $"qa-maker-{suffix}", FullName = "QA Maker", PasswordHash = "test-only", RoleId = role.Id };
         var checker = new User { Username = $"qa-checker-{suffix}", FullName = "QA Checker", PasswordHash = "test-only", RoleId = role.Id };
         db.Users.AddRange(creator, checker); await db.SaveChangesAsync();
@@ -264,7 +270,7 @@ public sealed class SqlServerApprovalQueueRejectTests
         var current = new Current(checker.Id);
         var metadata = new Metadata { CorrelationId = "qa-correlation", IdempotencyKeyHash = "hashed", RequestFingerprint = "fingerprint" };
         var service = new ApprovalWorkflowService(db, current, new WarehouseAuthorizationService(db, current), metadata);
-        var staff = new Current(checker.Id, "WarehouseStaff");
+        var staff = new Current(0, "WarehouseStaff");
         await FluentActions.Awaiting(() => new ApprovalWorkflowService(db, staff, new WarehouseAuthorizationService(db, staff), metadata).GetQueueAsync(new ApprovalQueueQuery()))
             .Should().ThrowAsync<ERP.Application.Exceptions.ForbiddenException>();
         var queue = await service.GetQueueAsync(new ApprovalQueueQuery { PageSize = 20 });
@@ -293,6 +299,12 @@ public sealed class SqlServerApprovalQueueRejectTests
         await transaction.RollbackAsync();
     }
 
+    private static async Task GrantInboundAsync(ErpKhoDbContext db, int roleId)
+    {
+        foreach (var permission in await db.Permissions.Where(p => p.Code == "receipt.read" || p.Code == "approval.reject" || p.Code == "receipt.complete").ToListAsync())
+            db.RolePermissions.Add(new RolePermission { RoleId = roleId, PermissionId = permission.Id });
+        await db.SaveChangesAsync();
+    }
     private static async Task<(decimal OnHand, decimal Reserved, int Transactions, int Reservations)> InventorySnapshotAsync(ErpKhoDbContext db) =>
         (await db.InventoryStocks.SumAsync(x => x.Quantity), await db.InventoryStocks.SumAsync(x => x.ReservedQuantity), await db.InventoryTransactions.CountAsync(), await db.StockReservations.CountAsync());
     private static ErpKhoDbContext CreateContext() => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!).Options);

@@ -88,9 +88,10 @@ public sealed class IdempotentCommandFilter(
         }
 
         var statusCode = ResultStatus(executed.Result);
-        if (statusCode >= 500)
+        if (statusCode >= 500 || statusCode is 401 or 403 or 404)
         {
             await transaction.RollbackAsync(CancellationToken.None);
+            context.ChangeTracker.Clear();
             return;
         }
 

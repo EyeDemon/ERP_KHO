@@ -14,7 +14,7 @@ const pending = () => { let finish!: () => void; const promise = new Promise(res
 
 describe('receipt mutation locks (mocked API)', () => {
   afterEach(cleanup);
-  beforeEach(() => { vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin'); localStorage.setItem('userId', '1'); });
+  beforeEach(() => { vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin'); localStorage.setItem('userId', '1'); localStorage.setItem('permissions', JSON.stringify(['receipt.read', 'receipt.create', 'receipt.update', 'receipt.complete', 'receipt.post', 'product.update', 'warehouse.read', 'product.read', 'partner.read', 'receiving_discrepancy.read', 'receiving_discrepancy.create', 'receiving_discrepancy.submit', 'reason_code.read'])); });
 
   it('locks import create synchronously while the first request is pending', async () => {
     get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : [] }) as never);
@@ -38,9 +38,9 @@ describe('receipt mutation locks (mocked API)', () => {
     const receipt = { id: 5, code: 'I5', status: 'ReadyToPost', createdBy: 2, details: [{ baseAcceptedQuantity: 7, damagedQuantity: 2, rejectedQuantity: 1, conversionFactor: 3 }] };
     get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url === '/api/importreceipts/5' ? receipt : [{ ...receipt, details: [] }] }) as never);
     const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ImportReceipts />); await view.findByText('I5');
-    const postButton = view.getByText('Post ghi tồn'); fireEvent.click(postButton); fireEvent.click(postButton);
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(1)); expect(window.confirm).toHaveBeenCalledWith('Post sẽ tăng AVAILABLE 7, DAMAGED 6, REJECTED 3 theo Base UOM đã snapshot. Tiếp tục?'); expect(post).toHaveBeenCalledWith('/api/importreceipts/5/post', undefined, expect.objectContaining({ headers: expect.any(Object) }));
-    expect((view.getByText('Đang post...') as HTMLButtonElement).disabled).toBe(true); request.finish();
+    const postButton = view.getByText('Ghi nhận tồn kho'); fireEvent.click(postButton); fireEvent.click(postButton);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1)); expect(window.confirm).toHaveBeenCalledWith('Ghi nhận tồn kho sẽ tăng lượng có thể sử dụng 7, hư hỏng 6, hàng bị từ chối 3 theo đơn vị cơ sở đã lưu. Tiếp tục?'); expect(post).toHaveBeenCalledWith('/api/importreceipts/5/post', undefined, expect.objectContaining({ headers: expect.any(Object) }));
+    expect((view.getByText('Đang ghi nhận tồn kho...') as HTMLButtonElement).disabled).toBe(true); request.finish();
   });
 
   it('locks discrepancy resolution synchronously while the first request is pending', async () => {
@@ -50,10 +50,10 @@ describe('receipt mutation locks (mocked API)', () => {
     get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url === '/api/importreceipts/30' ? receipt : url === '/api/importreceipts/30/discrepancies' ? [discrepancy] : url === '/api/importreceipts/discrepancy-reasons' ? [{ code: 'UNDER_RECEIPT', name: 'Nhận thiếu', version: 1 }] : [receipt] }) as never);
     const request = pending(); post.mockReturnValue(request.promise as never);
     const view = render(<ImportReceipts />); await view.findByText('I30'); fireEvent.click(view.getByText('Chi tiết'));
-    expect(await view.findByText(/Final dự kiến: 8 EA/)).toBeTruthy();
-    const reason = await view.findByDisplayValue('-- Chọn reason --'); fireEvent.change(reason, { target: { value: 'UNDER_RECEIPT' } });
+    expect(await view.findByText(/Số lượng cuối dự kiến: 8 EA/)).toBeTruthy();
+    const reason = await view.findByDisplayValue('-- Chọn lý do --'); fireEvent.change(reason, { target: { value: 'UNDER_RECEIPT' } });
     const responsibility = view.getByDisplayValue('Chưa xác định'); fireEvent.change(responsibility, { target: { value: 'SUPPLIER' } });
-    const submit = view.getByText('Gửi resolution'); fireEvent.click(submit); fireEvent.click(submit);
+    const submit = view.getByText('Gửi phương án xử lý'); fireEvent.click(submit); fireEvent.click(submit);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post).toHaveBeenCalledWith('/api/importreceipts/30/discrepancies/7/submit', expect.objectContaining({ reasonCode: 'UNDER_RECEIPT', rowVersion: 'AQ==' }), expect.objectContaining({ headers: expect.any(Object) }));
     expect((view.getByText('Đang gửi...') as HTMLButtonElement).disabled).toBe(true); request.finish();
@@ -65,7 +65,7 @@ describe('receipt mutation locks (mocked API)', () => {
     get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url === '/api/importreceipts/6' ? receipt : [receipt] }) as never);
     post.mockRejectedValue({ response: { status: 409, data: { message: 'conflict' } } });
     const view = render(<ImportReceipts />); await view.findByText('I6'); fireEvent.click(view.getByText('Chi tiết')); await view.findByText(/Chi Tiết Phiếu Nhập:/);
-    fireEvent.click(view.getAllByText('Post ghi tồn')[0]);
+    fireEvent.click(view.getAllByText('Ghi nhận tồn kho')[0]);
     await view.findByText('Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.');
     expect(view.queryByText(/Chi Tiết Phiếu Nhập:/)).toBeNull();
   });

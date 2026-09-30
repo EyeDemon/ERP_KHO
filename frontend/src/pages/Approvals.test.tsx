@@ -83,7 +83,7 @@ describe('Approvals page',()=>{
     const view=render(<Approvals/>);await view.findByText('TRF-7');fireEvent.click(view.getByTitle('Xem chi tiết'));
     expect(view.getByRole('status').textContent).toBe('Đang tải chi tiết...');
     finish({data:{summary:item,lines:[],history:['Bị từ chối','Đã hủy','StockTransfer.Approve.Rejected'].map((displayAction,id)=>({id,displayAction,actorName:'Checker',timestampUtc:'2026-09-05T01:00:00+00:00',reason:id===0?'<img src=x onerror=alert(1)>':undefined}))}});
-    await view.findByText('Bị từ chối');expect(view.getByText('Đã hủy')).toBeTruthy();expect(view.getByText('StockTransfer.Approve.Rejected')).toBeTruthy();
+    await view.findByText('Bị từ chối');expect(view.getByText('Đã hủy')).toBeTruthy();expect(view.getByText('Thao tác không được chấp nhận')).toBeTruthy();expect(view.queryByText('StockTransfer.Approve.Rejected')).toBeNull();
     expect(view.getByText('<img src=x onerror=alert(1)>')).toBeTruthy();expect(view.getByRole('dialog').querySelector('img')).toBeNull();
   });
   it('supports reject keyboard focus cycle and restores focus on Escape',async()=>{

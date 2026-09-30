@@ -123,10 +123,14 @@ public sealed class UserSessionService(
     public async Task RevokeUserSessionsAsAdminAsync(int userId, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        if (!currentUser.IsGlobalAdmin) throw new UnauthorizedAccessException("Chỉ quản trị viên toàn cục được thu hồi phiên người dùng.");
+        var checkTime = DateTime.UtcNow;
+        if (!await context.Users.AnyAsync(u => u.Id == currentUser.UserId && u.IsActive &&
+            (u.LockoutEnd == null || u.LockoutEnd <= checkTime) && u.Role.Permissions.Any(p => p.Permission.Code == "user.manage"), cancellationToken))
+            throw new ERP.Application.Exceptions.ForbiddenException("Bạn không có quyền thu hồi phiên người dùng.");
         await using var transaction = context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
             : null;
+        await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
         var now = DateTime.UtcNow;
         var revokedCount = await RevokeWhereAsync(x => x.UserId == userId, currentUser.UserId.ToString(), "Administrator revoked all sessions", now, cancellationToken);
         context.AuditLogs.Add(new AuditLog
@@ -139,6 +143,7 @@ public sealed class UserSessionService(
             NewValues = $"RevokedSessionCount={revokedCount}"
         });
         await context.SaveChangesAsync(cancellationToken);
+        await PermissionAdministrationGuard.EnsureAdministratorAsync(context, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
     }
 

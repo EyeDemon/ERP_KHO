@@ -16,10 +16,18 @@ import StockReservations from '../pages/StockReservations';
 import Approvals from '../pages/Approvals';
 import BusinessPartners from '../pages/BusinessPartners';
 import PutawayTasks from '../pages/PutawayTasks';
-import { canViewStocktakes, currentRole } from '../services/authorization';
+import Permissions from '../pages/Permissions';
+import { canViewApprovals, canViewStocktakes, usePermission, usePermissionSet } from '../services/authorization';
+
+const PermissionRoute = ({ permission, children }: { permission: string; children: ReactNode }) =>
+  usePermission(permission) ? children : <p role="alert">Bạn không có quyền thực hiện thao tác này.</p>;
 
 const StocktakeRoute = ({ children }: { children: ReactNode }) =>
-  canViewStocktakes(currentRole()) ? children : <Navigate to="/" replace />;
+  canViewStocktakes() ? children : <Navigate to="/" replace />;
+const ApprovalRoute = () => {
+  usePermissionSet();
+  return canViewApprovals() ? <Approvals /> : <p role="alert">Bạn không có quyền thực hiện thao tác này.</p>;
+};
 
 const AppRoutes = () => {
   return (
@@ -27,18 +35,19 @@ const AppRoutes = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<MainLayout />}>
         <Route index element={<Dashboard />} />
-        <Route path="products" element={<Products />} />
-        <Route path="warehouses" element={<Warehouses />} />
-        <Route path="units" element={<Units />} />
-        <Route path="business-partners" element={<BusinessPartners />} />
+        <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
+        <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
+        <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
+        <Route path="business-partners" element={<PermissionRoute permission="partner.read"><BusinessPartners /></PermissionRoute>} />
         <Route path="export-receipts" element={<ExportReceipts />} />
-        <Route path="import-receipts" element={<ImportReceipts />} />
+        <Route path="import-receipts" element={<PermissionRoute permission="receipt.read"><ImportReceipts /></PermissionRoute>} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
         <Route path="stock-reservations" element={<StockReservations />} />
-        <Route path="approvals" element={<Approvals />} />
-        <Route path="putaway-tasks" element={<PutawayTasks />} />
+        <Route path="approvals" element={<ApprovalRoute />} />
+        <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
+        <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

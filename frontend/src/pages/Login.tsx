@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient, { setAccessToken } from '../services/apiClient';
+import { setCurrentPermissions } from '../services/authorization';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -16,6 +17,8 @@ const Login = () => {
       localStorage.setItem('username', response.data.username);
       localStorage.setItem('role', response.data.role);
       localStorage.setItem('userId', String(response.data.userId));
+      const identity = await apiClient.get('/api/auth/me');
+      setCurrentPermissions(identity.data.permissions || []);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại');

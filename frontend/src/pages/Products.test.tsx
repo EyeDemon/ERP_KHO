@@ -11,41 +11,41 @@ const product = { id: 1, code: 'P001', name: 'Sản phẩm', unitId: 1, unitName
 describe('Products category and barcode UI (mocked API)', () => {
   afterEach(cleanup);
   beforeEach(() => {
-    vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin');
+    vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin'); localStorage.setItem('permissions','["product.read","product.update","product.create","product.deactivate","product_category.read","product_category.manage","product_barcode.manage","uom.read"]');
     vi.mocked(apiClient.get).mockImplementation(async (url) => ({ data: url === '/api/products' ? [product] : url === '/api/units' ? [{ id: 1, code: 'EA', name: 'Cái', isActive: true }] : url === '/api/product-barcodes/lookup' ? product : [] }));
   });
 
   it('submits Enter in scanner only to exact barcode lookup and preserves leading zeroes and case', async () => {
     const view = render(<Products />); await view.findByText('P001');
-    fireEvent.change(view.getByLabelText('Tra barcode'), { target: { value: '001Ab' } });
-    fireEvent.submit(view.getByLabelText('Tra barcode').closest('form')!);
+    fireEvent.change(view.getByLabelText('Tra mã vạch'), { target: { value: '001Ab' } });
+    fireEvent.submit(view.getByLabelText('Tra mã vạch').closest('form')!);
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith('/api/product-barcodes/lookup', { params: { value: '001Ab' } }));
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
   it('shows lookup network/not-found errors and hides mutations from Viewer', async () => {
-    localStorage.setItem('role', 'Viewer');
+    localStorage.setItem('role', 'Viewer'); localStorage.setItem('permissions','["product.read"]');
     vi.mocked(apiClient.get).mockImplementation(async (url) => {
-      if (url === '/api/product-barcodes/lookup') throw { response: { data: { message: 'Không tìm thấy barcode.' } } };
+      if (url === '/api/product-barcodes/lookup') throw { response: { data: { message: 'Không tìm thấy mã vạch.' } } };
       return { data: url === '/api/products' ? [product] : url === '/api/units' ? [{ id: 1, code: 'EA', name: 'Cái', isActive: true }] : [] };
     });
     const view = render(<Products />); await view.findByText('P001');
     expect(view.queryByText('Thêm danh mục')).toBeNull(); expect(view.queryByText('Sửa')).toBeNull();
-    fireEvent.submit(view.getByLabelText('Tra barcode').closest('form')!);
+    fireEvent.submit(view.getByLabelText('Tra mã vạch').closest('form')!);
     await view.findByRole('alert');
   });
 
   it('clears a previous lookup result when the next barcode is not found', async () => {
     let lookupCount = 0;
     vi.mocked(apiClient.get).mockImplementation(async (url) => {
-      if (url === '/api/product-barcodes/lookup' && lookupCount++ > 0) throw { response: { data: { message: 'Không tìm thấy barcode.' } } };
+      if (url === '/api/product-barcodes/lookup' && lookupCount++ > 0) throw { response: { data: { message: 'Không tìm thấy mã vạch.' } } };
       return { data: url === '/api/products' ? [product] : url === '/api/units' ? [{ id: 1, code: 'EA', name: 'Cái', isActive: true }] : url === '/api/product-barcodes/lookup' ? product : [] };
     });
     const view = render(<Products />); await view.findByText('P001');
-    const scanner = view.getByLabelText('Tra barcode');
-    fireEvent.submit(scanner.closest('form')!); await view.findByText(/Barcode thuộc sản phẩm/);
+    const scanner = view.getByLabelText('Tra mã vạch');
+    fireEvent.submit(scanner.closest('form')!); await view.findByText(/Mã vạch thuộc sản phẩm/);
     fireEvent.submit(scanner.closest('form')!); await view.findByRole('alert');
-    expect(view.queryByText(/Barcode thuộc sản phẩm/)).toBeNull();
+    expect(view.queryByText(/Mã vạch thuộc sản phẩm/)).toBeNull();
     expect((view.getByLabelText('Tìm sản phẩm') as HTMLInputElement).value).toBe('');
   });
 
@@ -71,5 +71,24 @@ describe('Products category and barcode UI (mocked API)', () => {
     fireEvent.submit(form); fireEvent.submit(form);
     expect(apiClient.post).toHaveBeenCalledTimes(1); finish();
     await waitFor(() => expect(view.queryByText('Đang xử lý...')).toBeNull());
+  });
+
+  it('product update does not expose category or barcode management', async () => {
+    localStorage.setItem('permissions', '["product.read","product.update","uom.read"]');
+    const view = render(<Products />); await view.findByText('P001');
+    expect(view.queryByText('Thêm danh mục')).toBeNull();
+    expect(apiClient.get).not.toHaveBeenCalledWith('/api/product-categories');
+    fireEvent.click(view.getByText('Sửa'));
+    expect(view.queryByText('Thêm mã vạch')).toBeNull();
+    expect((view.getByLabelText('Danh mục') as HTMLSelectElement).disabled).toBe(true);
+  });
+
+  it('barcode management does not expose product save or category management', async () => {
+    localStorage.setItem('permissions', '["product.read","product_barcode.manage","uom.read"]');
+    const view = render(<Products />); await view.findByText('P001');
+    fireEvent.click(view.getByText('Sửa'));
+    expect(view.queryByText('Lưu')).toBeNull();
+    expect(view.queryByText('Thêm danh mục')).toBeNull();
+    expect(view.getByText('Thêm mã vạch')).toBeTruthy();
   });
 });

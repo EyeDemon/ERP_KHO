@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import apiClient from '../services/apiClient';
-import { canManageCatalogs, currentRole, currentUserId } from '../services/authorization';
+import { usePermission, currentUserId, hasPermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
+import { permissionError } from '../services/permissionPresentation';
 
 interface ImportReceiptDetail {
   id: number;
@@ -70,7 +71,24 @@ interface ReasonCode { code:string; name:string; version:number; requiresNote:bo
 type ResolutionForm = { action:string; doorRejectedQuantity:number; reasonCode:string; responsibleParty:string; supplierClaimRequired:boolean; note:string; evidenceReference:string; confirmNormalizedObservation:boolean };
 
 const ImportReceipts = () => {
-  const canApprove = canManageCatalogs(currentRole());
+  const canApprove = usePermission('receipt.complete');
+  const canRead = usePermission('receipt.read');
+  const canCreate = usePermission('receipt.create');
+  const canUpdate = usePermission('receipt.update');
+  const canCancel = usePermission('receipt.cancel');
+  const canReceive = usePermission('receipt.receive');
+  const canPost = usePermission('receipt.post');
+  const canQc = usePermission('quality_inspection.execute');
+  const canReadDiscrepancy = usePermission('receiving_discrepancy.read');
+  const canObserve = usePermission('receiving_discrepancy.create');
+  const canSubmit = usePermission('receiving_discrepancy.submit');
+  const canApproveDiscrepancy = usePermission('receiving_discrepancy.approve');
+  const canRejectDiscrepancy = usePermission('receiving_discrepancy.reject');
+  const canResolve = usePermission('receiving_discrepancy.resolve');
+  const canReadReasons = usePermission('reason_code.read');
+  const canReadWarehouses = usePermission('warehouse.read');
+  const canReadProducts = usePermission('product.read');
+  const canReadPartners = usePermission('partner.read');
   const userId = currentUserId();
   const [receipts, setReceipts] = useState<ImportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -90,6 +108,7 @@ const ImportReceipts = () => {
   const cancelInFlight = useRef<number | null>(null);
   const workflowInFlight = useRef<number | null>(null);
   const partnerMutationInFlight = useRef(false);
+  const detailRequest = useRef(0);
   const [creating, setCreating] = useState(false);
   const [partnerUpdating, setPartnerUpdating] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<ImportReceipt | null>(null);
@@ -104,39 +123,51 @@ const ImportReceipts = () => {
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [whRes, prRes, bpRes] = await Promise.all([
-        apiClient.get('/api/warehouses'),
-        apiClient.get('/api/products'),
-        apiClient.get('/api/business-partners', { params: { role: 'supplier', pageSize: 100 } })
+        canReadWarehouses ? apiClient.get('/api/warehouses') : Promise.resolve({ data: [] }),
+        canReadProducts ? apiClient.get('/api/products') : Promise.resolve({ data: [] }),
+        canReadPartners ? apiClient.get('/api/business-partners', { params: { role: 'supplier', pageSize: 100 } }) : Promise.resolve({ data: { items: [] } })
       ]);
-      setWarehouses(whRes.data);
-      setProducts(prRes.data);
-      setSuppliers(bpRes.data.items);
+      setWarehouses(hasPermission('warehouse.read') ? whRes.data : []);
+      setProducts(hasPermission('product.read') ? prRes.data : []);
+      setSuppliers(hasPermission('partner.read') ? bpRes.data.items : []);
     } catch (err: any) {
       console.error(err);
-      setError('Lỗi khi tải dữ liệu khởi tạo');
+      setWarehouses([]); setProducts([]); setSuppliers([]);
+      setError(permissionError(err, 'Không thể tải dữ liệu tham khảo. Vui lòng thử lại.'));
     }
-  };
+  }, [canReadWarehouses, canReadProducts, canReadPartners]);
 
-  const fetchReceipts = async () => {
+  const fetchReceipts = useCallback(async () => {
+    if (!hasPermission('receipt.read')) return;
     try {
       const res = await apiClient.get('/api/importreceipts');
-      setReceipts(res.data);
+      setReceipts(hasPermission('receipt.read') ? res.data : []);
     } catch (err: any) {
       console.error(err);
-      setError('Lỗi khi tải danh sách phiếu nhập');
+      setReceipts([]); setSelectedReceipt(null); setPrintReceipt(null);
+      setError(permissionError(err, 'Không thể tải danh sách phiếu nhập. Vui lòng thử lại.'));
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     fetchReceipts();
-  }, []);
+  }, [fetchData, fetchReceipts]);
+
+  useEffect(() => {
+    if (!canRead) { detailRequest.current++; setReceipts([]); setSelectedReceipt(null); setPrintReceipt(null); setReceiveLines({}); }
+    if (!canReadDiscrepancy) { setDiscrepancies([]); setResolutionForms({}); }
+    if (!canReadReasons) setReasonCodes([]);
+    if (!canReadPartners) setSuppliers([]);
+    if (!canReadProducts) setProducts([]);
+    if (!canReadWarehouses) setWarehouses([]);
+  }, [canRead, canReadDiscrepancy, canReadReasons, canReadPartners, canReadProducts, canReadWarehouses]);
 
   const handleApprove = async (id: number) => {
-    if (approveInFlight.current !== null) return;
+    if (!canApprove || approveInFlight.current !== null) return;
     approveInFlight.current = id;
     setApprovingId(id);
     setError('');
@@ -151,7 +182,7 @@ const ImportReceipts = () => {
       }
     } catch (err: any) {
       if (selectedReceipt?.id === id) setSelectedReceipt(null);
-      setError(err.response?.data?.message || 'Lỗi khi duyệt phiếu');
+      setError(permissionError(err) || 'Lỗi khi duyệt phiếu');
     } finally {
       approveInFlight.current = null;
       setApprovingId(null);
@@ -159,7 +190,7 @@ const ImportReceipts = () => {
   };
 
   const handleCancel = async (id: number) => {
-    if (cancelInFlight.current !== null) return;
+    if (!canCancel || cancelInFlight.current !== null) return;
     if (!window.confirm('Bạn có chắc chắn muốn hủy phiếu nhập này?')) return;
     cancelInFlight.current = id;
     try {
@@ -173,30 +204,37 @@ const ImportReceipts = () => {
       }
     } catch (err: any) {
       if (selectedReceipt?.id === id) setSelectedReceipt(null);
-      setError(err.response?.data?.message || 'Lỗi khi hủy phiếu');
+      setError(permissionError(err) || 'Lỗi khi hủy phiếu');
     } finally { cancelInFlight.current = null; }
   };
 
   const handleViewDetails = async (id: number) => {
+    if (!canRead) return;
+    const request = ++detailRequest.current;
+    setSelectedReceipt(null); setDiscrepancies([]); setReasonCodes([]); setResolutionForms({});
     try {
-      const [res, discrepancyRes, reasonRes] = await Promise.all([
-        apiClient.get(`/api/importreceipts/${id}`),
-        apiClient.get(`/api/importreceipts/${id}/discrepancies`),
-        apiClient.get('/api/importreceipts/discrepancy-reasons')
-      ]);
+      const res = await apiClient.get(`/api/importreceipts/${id}`);
+      if (request !== detailRequest.current || !hasPermission('receipt.read')) return;
       setSelectedReceipt(res.data);
-      setDiscrepancies(discrepancyRes.data);
-      setReasonCodes(reasonRes.data);
+      setDiscrepancies([]); setReasonCodes([]); setResolutionForms({});
       setReceiveLines(Object.fromEntries((res.data.details as ImportReceiptDetail[]).map(d => [d.id, { receivedQuantity: d.receivedQuantity || d.expectedQuantity, acceptedQuantity: d.requiresQc ? d.acceptedQuantity : d.expectedQuantity, damagedQuantity: d.damagedQuantity, rejectedQuantity: d.rejectedQuantity, reasonCode: d.qcDispositionReasonCode || '', note: d.qcDispositionNote || '' }])));
+      const [discrepancyRes, reasonRes] = await Promise.allSettled([
+        canReadDiscrepancy ? apiClient.get(`/api/importreceipts/${id}/discrepancies`) : Promise.resolve({ data: [] }),
+        canReadReasons ? apiClient.get('/api/importreceipts/discrepancy-reasons') : Promise.resolve({ data: [] }),
+      ]);
+      if (request !== detailRequest.current || !hasPermission('receipt.read')) return;
+      setDiscrepancies(hasPermission('receiving_discrepancy.read') && discrepancyRes.status === 'fulfilled' ? discrepancyRes.value.data : []);
+      setReasonCodes(hasPermission('reason_code.read') && reasonRes.status === 'fulfilled' ? reasonRes.value.data : []);
     } catch (err: any) {
+      if (request !== detailRequest.current) return;
       setSelectedReceipt(null);
       setDiscrepancies([]);
-      setError(err.response?.data?.message || 'Lỗi khi tải chi tiết phiếu');
+      setError(permissionError(err) || 'Lỗi khi tải chi tiết phiếu');
     }
   };
 
   const observeReceipt = async (id:number, receipt?:ImportReceipt) => {
-    if (workflowInFlight.current !== null) return;
+    if (!canObserve || workflowInFlight.current !== null) return;
     workflowInFlight.current=id; setWorkflowId(id); setError('');
     try {
       const source=receipt || (await apiClient.get(`/api/importreceipts/${id}`)).data as ImportReceipt;
@@ -208,28 +246,29 @@ const ImportReceipts = () => {
       await fetchReceipts(); if(selectedReceipt?.id===id) await handleViewDetails(id);
     } catch(err:any) {
       if(err.response && selectedReceipt?.id===id) setSelectedReceipt(null);
-      setError(err.response?.status===409?'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.':err.response?.data?.message||err.message||'Không thể ghi nhận số lượng.');
+      setError(err.response?.status===409?'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.':permissionError(err)||err.message||'Không thể ghi nhận số lượng.');
     } finally { workflowInFlight.current=null; setWorkflowId(null); }
   };
 
   const submitResolution = async (d:Discrepancy) => {
-    if(workflowInFlight.current!==null || !selectedReceipt) return;
+    if(!canSubmit || workflowInFlight.current!==null || !selectedReceipt) return;
     workflowInFlight.current=selectedReceipt.id; setWorkflowId(selectedReceipt.id); setError('');
     try {
       const form=resolutionForms[d.id]||{action:'ACCEPT_OBSERVED',doorRejectedQuantity:0,reasonCode:'',responsibleParty:'UNKNOWN',supplierClaimRequired:false,note:'',evidenceReference:'',confirmNormalizedObservation:false};
-      if(!form.reasonCode) throw new Error('Chọn reason code.');
-      if((form.responsibleParty==='UNKNOWN'||reasonCodes.find(x=>x.code===form.reasonCode)?.requiresNote)&&!form.note.trim()) throw new Error('Reason/responsible party này yêu cầu ghi chú.');
+      if(!form.reasonCode) throw new Error('Chọn mã lý do.');
+      if((form.responsibleParty==='UNKNOWN'||reasonCodes.find(x=>x.code===form.reasonCode)?.requiresNote)&&!form.note.trim()) throw new Error('Lý do hoặc bên chịu trách nhiệm này yêu cầu ghi chú.');
       const action=`import-discrepancy-submit:${selectedReceipt.id}:${d.id}`;
       await apiClient.post(`/api/importreceipts/${selectedReceipt.id}/discrepancies/${d.id}/submit`,{...form,rowVersion:d.rowVersion},{headers:idempotencyHeaders(action)});
-      completeIdempotentAction(action); setSuccessMsg('Đã gửi resolution. Tồn kho chưa thay đổi.');
+      completeIdempotentAction(action); setSuccessMsg('Đã gửi phương án xử lý. Tồn kho chưa thay đổi.');
       await fetchReceipts(); await handleViewDetails(selectedReceipt.id);
     } catch(err:any) {
       if(err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status===409?'Resolution đã thay đổi. Vui lòng tải lại phiếu.':err.response?.data?.message||err.message||'Không thể gửi resolution.');
+      setError(err.response?.status===409?'Phương án xử lý đã thay đổi. Vui lòng tải lại phiếu.':permissionError(err)||err.message||'Không thể gửi phương án xử lý.');
     } finally { workflowInFlight.current=null; setWorkflowId(null); }
   };
 
   const reviewResolution = async (d:Discrepancy, decision:'approve'|'reject') => {
+    if (decision === 'approve' ? !canApproveDiscrepancy : !canRejectDiscrepancy) return;
     if(workflowInFlight.current!==null || !selectedReceipt) return;
     workflowInFlight.current=selectedReceipt.id; setWorkflowId(selectedReceipt.id); setError('');
     try {
@@ -238,11 +277,12 @@ const ImportReceipts = () => {
       completeIdempotentAction(action); await fetchReceipts(); await handleViewDetails(selectedReceipt.id);
     } catch(err:any) {
       if(err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status===409?'Resolution đã thay đổi. Vui lòng tải lại phiếu.':err.response?.data?.message||'Không thể duyệt resolution.');
+      setError(err.response?.status===409?'Phương án xử lý đã thay đổi. Vui lòng tải lại phiếu.':permissionError(err)||'Không thể duyệt phương án xử lý.');
     } finally { workflowInFlight.current=null; setWorkflowId(null); }
   };
 
   const recountDiscrepancy = async (d:Discrepancy) => {
+    if (!canResolve) return;
     if(workflowInFlight.current!==null || !selectedReceipt) return;
     workflowInFlight.current=selectedReceipt.id; setWorkflowId(selectedReceipt.id); setError('');
     try {
@@ -252,7 +292,7 @@ const ImportReceipts = () => {
       completeIdempotentAction(action); await handleViewDetails(selectedReceipt.id);
     } catch(err:any) {
       if(err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status===409?'Observation đã thay đổi. Vui lòng tải lại phiếu.':err.response?.data?.message||'Không thể recount.');
+      setError(err.response?.status===409?'Số lượng quan sát đã thay đổi. Vui lòng tải lại phiếu.':permissionError(err)||'Không thể kiểm đếm lại.');
     } finally { workflowInFlight.current=null; setWorkflowId(null); }
   };
 
@@ -272,7 +312,7 @@ const ImportReceipts = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (createInFlight.current) return;
+    if (!canCreate || createInFlight.current) return;
     setError('');
     setSuccessMsg('');
 
@@ -285,7 +325,7 @@ const ImportReceipts = () => {
       const d = details[i];
       if (d.productId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn sản phẩm`);
       if (d.expectedQuantity === '' || Number(d.expectedQuantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng dự kiến phải > 0`);
-      if (d.operationUnitId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn UOM thao tác`);
+      if (d.operationUnitId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn Đơn vị thao tác`);
       if (d.unitPrice === '' || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
     }
 
@@ -319,13 +359,14 @@ const ImportReceipts = () => {
       
       fetchReceipts();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi tạo phiếu nhập');
+      setError(permissionError(err) || 'Lỗi khi tạo phiếu nhập');
     } finally {
       createInFlight.current = false; setCreating(false);
     }
   };
 
   const runWorkflow = async (id: number, command: 'receive' | 'qc-disposition' | 'post', receipt?: ImportReceipt) => {
+    if (command === 'receive' ? !canReceive : command === 'qc-disposition' ? !canQc : !canPost) return;
     if (workflowInFlight.current !== null) return;
     workflowInFlight.current = id;
     setWorkflowId(id); setError('');
@@ -337,36 +378,36 @@ const ImportReceipts = () => {
       if (command === 'receive' && body?.lines.some(line => line.receivedQuantity <= 0 || line.acceptedQuantity < 0 || (!source?.details.find(d => d.id === line.lineId)?.requiresQc && line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== line.receivedQuantity)))
         throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận.');
       if (command === 'qc-disposition' && body?.lines.some(line => line.acceptedQuantity < 0 || line.damagedQuantity < 0 || line.rejectedQuantity < 0 || line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== source?.details.find(d => d.id === line.lineId)?.receivedQuantity || ((line.damagedQuantity > 0 || line.rejectedQuantity > 0) && !line.reasonCode?.trim())))
-        throw new Error('QC cần Accepted + Damaged + Rejected = Received và reason code cho lượng hư hỏng/từ chối.');
+        throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận; lượng hư hỏng hoặc từ chối cần mã lý do.');
       if (command === 'post') {
         const available = source?.details.reduce((sum, line) => sum + line.baseAcceptedQuantity, 0) ?? 0;
         const damaged = source?.details.reduce((sum, line) => sum + line.damagedQuantity * line.conversionFactor, 0) ?? 0;
         const rejected = source?.details.reduce((sum, line) => sum + line.rejectedQuantity * line.conversionFactor, 0) ?? 0;
-        if (!window.confirm(`Post sẽ tăng AVAILABLE ${available}, DAMAGED ${damaged}, REJECTED ${rejected} theo Base UOM đã snapshot. Tiếp tục?`)) return;
+        if (!window.confirm(`Ghi nhận tồn kho sẽ tăng lượng có thể sử dụng ${available}, hư hỏng ${damaged}, hàng bị từ chối ${rejected} theo đơn vị cơ sở đã lưu. Tiếp tục?`)) return;
       }
       await apiClient.post(`/api/importreceipts/${id}/${command}`, body, { headers: idempotencyHeaders(action) });
       completeIdempotentAction(action);
-      setSuccessMsg(command === 'receive' ? 'Đã hoàn tất nhận hàng. Tồn kho chưa thay đổi.' : command === 'qc-disposition' ? 'Đã ghi nhận QC disposition. Tồn kho chưa thay đổi.' : 'Đã post phiếu theo từng trạng thái tồn kho.');
+      setSuccessMsg(command === 'receive' ? 'Đã hoàn tất nhận hàng. Tồn kho chưa thay đổi.' : command === 'qc-disposition' ? 'Đã ghi nhận kết quả kiểm tra chất lượng. Tồn kho chưa thay đổi.' : 'Đã ghi nhận tồn kho phiếu theo từng trạng thái tồn kho.');
       await fetchReceipts();
       if (selectedReceipt?.id === id) await handleViewDetails(id);
-    } catch (err: any) { if (err.response && selectedReceipt?.id === id) setSelectedReceipt(null); setError(err.response?.status === 409 ? 'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.' : err.response?.data?.message || err.message || 'Không thể xử lý phiếu nhập'); }
+    } catch (err: any) { if (err.response && selectedReceipt?.id === id) setSelectedReceipt(null); setError(err.response?.status === 409 ? 'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.' : permissionError(err) || 'Không thể xử lý phiếu nhập'); }
     finally { workflowInFlight.current = null; setWorkflowId(null); }
   };
 
-  const statusLabel = (status: string) => ({ Draft: 'Nháp', DiscrepancyPending:'Chờ xử lý sai lệch',DiscrepancySubmitted:'Đã gửi xử lý sai lệch',DiscrepancyPendingApproval:'Chờ duyệt sai lệch',DiscrepancyResolved:'Sai lệch đã xử lý',DiscrepancyRejected:'Sai lệch bị trả lại', Received: 'Đã nhận — chưa ghi tồn', QcPending: 'Chờ QC disposition', QcCompleted: 'QC đã hoàn tất — chờ duyệt', ReadyToPost: 'Sẵn sàng post', Posted: 'Đã post', Approved: 'Đã duyệt (dữ liệu cũ)', Cancelled: 'Đã hủy' }[status] || status);
+  const statusLabel = (status: string) => ({ Draft: 'Nháp', DiscrepancyPending:'Chờ xử lý sai lệch',DiscrepancySubmitted:'Đã gửi xử lý sai lệch',DiscrepancyPendingApproval:'Chờ duyệt sai lệch',DiscrepancyResolved:'Sai lệch đã xử lý',DiscrepancyRejected:'Sai lệch bị trả lại', Received: 'Đã nhận — chưa ghi tồn', QcPending: 'Chờ kết quả kiểm tra chất lượng', QcCompleted: 'Kiểm tra chất lượng đã hoàn tất — chờ duyệt', ReadyToPost: 'Sẵn sàng ghi nhận tồn kho', Posted: 'Đã ghi nhận tồn kho', Approved: 'Đã duyệt (dữ liệu cũ)', Cancelled: 'Đã hủy' }[status] || 'Trạng thái chưa xác định');
 
   const changeSupplier = async (value: number | null) => {
-    if (!selectedReceipt || partnerMutationInFlight.current) return;
+    if (!canUpdate || !canReadPartners || !selectedReceipt || partnerMutationInFlight.current) return;
     partnerMutationInFlight.current = true; setPartnerUpdating(true); setError('');
     try { await apiClient.put(`/api/importreceipts/${selectedReceipt.id}/supplier`, { partnerId: value }); await fetchReceipts(); await handleViewDetails(selectedReceipt.id); }
-    catch (x: any) { setError(x.response?.data?.message || 'Không đổi được nhà cung cấp.'); }
+    catch (x: any) { setError(permissionError(x) || 'Không đổi được nhà cung cấp.'); }
     finally { partnerMutationInFlight.current = false; setPartnerUpdating(false); }
   };
 
   const openPrintPreview = async (id: number, trigger: HTMLButtonElement) => {
     printTriggerRef.current = trigger; setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(id); setError('');
-    try { const res = await apiClient.get(`/api/importreceipts/${id}`); setPrintReceipt(res.data); setPrintFetchedAt(new Date()); }
-    catch (x: any) { setError(x.response?.data?.message || 'Không tải được dữ liệu bản in.'); }
+    try { const res = await apiClient.get(`/api/importreceipts/${id}`); if (hasPermission('receipt.read')) { setPrintReceipt(res.data); setPrintFetchedAt(new Date()); } }
+    catch (x: any) { setError(permissionError(x, 'Không tải được dữ liệu bản in.')); }
     finally { setPrintLoadingId(null); }
   };
   const closePrintPreview = () => { setPrintReceipt(null); setPrintFetchedAt(null); queueMicrotask(() => printTriggerRef.current?.focus()); };
@@ -377,7 +418,7 @@ const ImportReceipts = () => {
       {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
       {successMsg && <div style={{ color: 'green', marginBottom: '10px' }}>{successMsg}</div>}
       
-      <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
+      {canCreate && <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
         <h3>Tạo Phiếu Nhập (Nháp)</h3>
         <form onSubmit={handleCreate}>
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
@@ -411,8 +452,8 @@ const ImportReceipts = () => {
                 {products.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
               </select>
               
-              <select aria-label={`UOM thao tác dòng ${i + 1}`} value={d.operationUnitId} onChange={e => handleDetailChange(i, 'operationUnitId', e.target.value ? Number(e.target.value) : '')} required>
-                <option value="">-- UOM thao tác --</option>
+              <select aria-label={`Đơn vị thao tác dòng ${i + 1}`} value={d.operationUnitId} onChange={e => handleDetailChange(i, 'operationUnitId', e.target.value ? Number(e.target.value) : '')} required>
+                <option value="">-- Đơn vị thao tác --</option>
                 {(products.find(x => x.id === d.productId)?.uoms || []).map(u => <option key={`${u.unitId}-${u.version}`} value={u.unitId}>{u.unitCode} — × {u.conversionFactor}</option>)}
               </select>
 
@@ -426,7 +467,7 @@ const ImportReceipts = () => {
                 min="0.01"
                 step="0.01"
               />
-              {(() => { const p=products.find(x=>x.id===d.productId); const u=p?.uoms?.find(x=>x.unitId===d.operationUnitId); return p&&u&&d.expectedQuantity!=='' ? <span>{d.expectedQuantity} {u.unitCode} = {Number(d.expectedQuantity)*u.conversionFactor} {p.unitCode} Base UOM</span> : null; })()}
+              {(() => { const p=products.find(x=>x.id===d.productId); const u=p?.uoms?.find(x=>x.unitId===d.operationUnitId); return p&&u&&d.expectedQuantity!=='' ? <span>{d.expectedQuantity} {u.unitCode} = {Number(d.expectedQuantity)*u.conversionFactor} {p.unitCode} Đơn vị cơ sở</span> : null; })()}
               
               <input 
                 type="number" 
@@ -454,7 +495,7 @@ const ImportReceipts = () => {
             <button type="submit" disabled={creating} style={{ backgroundColor: creating ? '#95a5a6' : '#2ecc71', color: '#fff', padding: '10px 20px', border: 'none', cursor: creating ? 'not-allowed' : 'pointer' }}>{creating ? 'Đang lưu...' : 'Lưu Phiếu Nháp'}</button>
           </div>
         </form>
-      </div>
+      </div>}
 
       <hr style={{ margin: '30px 0' }} />
 
@@ -487,8 +528,8 @@ const ImportReceipts = () => {
                 <button disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)} style={{ cursor: 'pointer', marginRight: '5px' }}>{printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}</button>
                 {r.status === 'Draft' && (
                   <>
-                    <button disabled={workflowId === r.id} onClick={() => void observeReceipt(r.id)}>{workflowId === r.id ? 'Đang ghi nhận...' : 'Ghi nhận số lượng thực tế'}</button>
-                    <button onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '3px' }}>Hủy</button>
+                    {canObserve && <button disabled={workflowId === r.id} onClick={() => void observeReceipt(r.id)}>{workflowId === r.id ? 'Đang ghi nhận...' : 'Ghi nhận số lượng thực tế'}</button>}
+                    {canCancel && <button onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '3px' }}>Hủy</button>}
                   </>
                 )}
                 {(r.status === 'Received' || r.status === 'QcCompleted') && canApprove && r.createdBy !== userId && <button
@@ -504,9 +545,9 @@ const ImportReceipts = () => {
                         borderRadius: '3px' 
                       }}
                     >
-                      {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt để post'}
+                      {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt để ghi nhận tồn kho'}
                     </button>}
-                {r.status === 'ReadyToPost' && canApprove && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => void runWorkflow(r.id, 'post')}>{workflowId === r.id ? 'Đang post...' : 'Post ghi tồn'}</button>}
+                {r.status === 'ReadyToPost' && canPost && r.createdBy !== userId && <button disabled={workflowId === r.id} onClick={() => void runWorkflow(r.id, 'post')}>{workflowId === r.id ? 'Đang ghi nhận tồn kho...' : 'Ghi nhận tồn kho'}</button>}
               </td>
             </tr>
           ))}
@@ -524,7 +565,7 @@ const ImportReceipts = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
             <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
             <div><strong>Nhà cung cấp:</strong> {selectedReceipt.supplierCode ? `${selectedReceipt.supplierCode} - ${selectedReceipt.supplierName}` : '—'}</div>
-            {selectedReceipt.status === 'Draft' && <div><label>Đổi nhà cung cấp <select aria-label="Đổi nhà cung cấp" disabled={partnerUpdating} value={selectedReceipt.supplierId||''} onChange={e=>void changeSupplier(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{suppliers.filter(x=>x.isActive||x.id===selectedReceipt.supplierId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</div>}
+            {selectedReceipt.status === 'Draft' && canUpdate && canReadPartners && <div><label>Đổi nhà cung cấp <select aria-label="Đổi nhà cung cấp" disabled={partnerUpdating} value={selectedReceipt.supplierId||''} onChange={e=>void changeSupplier(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{suppliers.filter(x=>x.isActive||x.id===selectedReceipt.supplierId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</div>}
             <div><strong>Trạng thái:</strong> {statusLabel(selectedReceipt.status)}</div>
             <div><strong>Người tạo:</strong> {selectedReceipt.createdByName}</div>
             <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</div>
@@ -544,7 +585,7 @@ const ImportReceipts = () => {
                 <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Tên SP</th>
                 <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Dự kiến</th>
                 <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Nhận / Chấp nhận</th>
-                <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Base UOM</th>
+                <th style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>Đơn vị cơ sở</th>
                 <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Ghi chú</th>
               </tr>
             </thead>
@@ -552,18 +593,18 @@ const ImportReceipts = () => {
               {selectedReceipt.details.map(d => (
                 <tr key={d.id}>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productCode}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productName}<br/><small>QC: {d.requiresQc ? `Bắt buộc · ${d.qcState} · policy ${d.qcPolicyId ?? '—'} v${d.qcPolicyVersion ?? '—'} (${d.qcPolicySource ?? '—'})` : 'Không yêu cầu'}</small></td>
+                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productName}<br/><small>Kiểm tra chất lượng: {d.requiresQc ? `Bắt buộc · ${statusLabel(d.qcState)} · chính sách ${d.qcPolicyId ?? '—'} phiên bản ${d.qcPolicyVersion ?? '—'}` : 'Không yêu cầu'}</small></td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>{d.expectedQuantity} {d.operationUnitCode}</td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>
-                    {selectedReceipt.status === 'Draft' ? <div style={{display:'grid', gap:'4px'}}>
+                    {selectedReceipt.status === 'Draft' && (canReceive || canObserve) ? <div style={{display:'grid', gap:'4px'}}>
                       <label>Số lượng nhận <input aria-label={`Số lượng nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.receivedQuantity ?? d.expectedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...(x[d.id]||{receivedQuantity:d.expectedQuantity,acceptedQuantity:d.expectedQuantity,damagedQuantity:0,rejectedQuantity:0}),receivedQuantity:Number(e.target.value)}}))}/></label>
                       {!d.requiresQc && <label>Số lượng chấp nhận <input aria-label={`Số lượng chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...(x[d.id]||{receivedQuantity:d.expectedQuantity,acceptedQuantity:d.expectedQuantity,damagedQuantity:0,rejectedQuantity:0}),acceptedQuantity:Number(e.target.value)}}))}/></label>}
-                      <span>{d.requiresQc ? 'Disposition sẽ được nhập sau khi nhận; chưa ghi tồn.' : 'Hư hỏng: 0 · Từ chối: 0 (no-QC)'}</span>
-                    </div> : selectedReceipt.status === 'QcPending' && d.requiresQc && d.qcState === 'QcPending' ? <div style={{display:'grid', gap:'4px'}}>
-                      <label>Chấp nhận <input aria-label={`QC chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],acceptedQuantity:Number(e.target.value)}}))}/></label>
-                      <label>Hư hỏng <input aria-label={`QC hư hỏng ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.damagedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],damagedQuantity:Number(e.target.value)}}))}/></label>
-                      <label>Từ chối giữ tại kho <input aria-label={`QC từ chối ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.rejectedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],rejectedQuantity:Number(e.target.value)}}))}/></label>
-                      <label>Reason code <input aria-label={`QC reason ${d.productCode}`} value={receiveLines[d.id]?.reasonCode ?? ''} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],reasonCode:e.target.value}}))}/></label>
+                      <span>{d.requiresQc ? 'Kết quả kiểm tra được nhập sau khi nhận; chưa ghi tồn.' : 'Hư hỏng: 0 · Từ chối: 0 (không kiểm tra chất lượng)'}</span>
+                    </div> : selectedReceipt.status === 'QcPending' && canQc && d.requiresQc && d.qcState === 'QcPending' ? <div style={{display:'grid', gap:'4px'}}>
+                      <label>Chấp nhận <input aria-label={`Kiểm tra chất lượng: chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],acceptedQuantity:Number(e.target.value)}}))}/></label>
+                      <label>Hư hỏng <input aria-label={`Kiểm tra chất lượng: hư hỏng ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.damagedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],damagedQuantity:Number(e.target.value)}}))}/></label>
+                      <label>Từ chối giữ tại kho <input aria-label={`Kiểm tra chất lượng: từ chối ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.rejectedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],rejectedQuantity:Number(e.target.value)}}))}/></label>
+                      <label>Mã lý do <input aria-label={`Lý do kiểm tra ${d.productCode}`} value={receiveLines[d.id]?.reasonCode ?? ''} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],reasonCode:e.target.value}}))}/></label>
                       <small>Tổng phải bằng {d.receivedQuantity} {d.operationUnitCode}</small>
                     </div> : <>{d.receivedQuantity} / {d.acceptedQuantity} {d.operationUnitCode}<br/><small>Hư hỏng: {d.damagedQuantity}; Từ chối: {d.rejectedQuantity}</small></>}
                   </td>
@@ -573,33 +614,33 @@ const ImportReceipts = () => {
               ))}
             </tbody>
           </table>
-          {selectedReceipt.status === 'Draft' && <button disabled={workflowId === selectedReceipt.id} onClick={() => void observeReceipt(selectedReceipt.id, selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang ghi nhận...' : 'Ghi nhận số lượng thực tế'}</button>}
-          {['DiscrepancyPending','DiscrepancyRejected'].includes(selectedReceipt.status) && <section aria-labelledby="discrepancy-heading" style={{marginTop:'16px',padding:'12px',border:'1px solid #d4a017'}}>
+          {selectedReceipt.status === 'Draft' && canObserve && <button disabled={workflowId === selectedReceipt.id} onClick={() => void observeReceipt(selectedReceipt.id, selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang ghi nhận...' : 'Ghi nhận số lượng thực tế'}</button>}
+          {canReadDiscrepancy && ['DiscrepancyPending','DiscrepancyRejected'].includes(selectedReceipt.status) && <section aria-labelledby="discrepancy-heading" style={{marginTop:'16px',padding:'12px',border:'1px solid #d4a017'}}>
             <h4 id="discrepancy-heading">Xử lý sai lệch nhận hàng</h4>
-            <p>Resolution không ghi tồn kho. Post vẫn là bước duy nhất tạo inventory và ledger.</p>
+            <p>Xử lý sai lệch không ghi tồn kho. Ghi nhận tồn kho là bước duy nhất tạo tồn kho và sổ kho.</p>
             {discrepancies.filter(d=>d.status==='Pending'||d.status==='Rejected').map(d=>{const line=selectedReceipt.details.find(x=>x.id===d.receiptLineId);const form=resolutionForms[d.id]||{action:'ACCEPT_OBSERVED',doorRejectedQuantity:0,reasonCode:'',responsibleParty:'UNKNOWN',supplierClaimRequired:false,note:'',evidenceReference:'',confirmNormalizedObservation:false};const set=(next:Partial<ResolutionForm>)=>setResolutionForms(x=>({...x,[d.id]:{...form,...next}}));return <fieldset key={d.id} style={{marginBottom:'12px'}}>
               <legend>{line?.productCode}: dự kiến {d.expectedQuantity} {d.operationUnitCode}, quan sát {d.observedQuantity} {d.observedUnitCode}, chênh lệch chuẩn hóa {d.differenceQuantity} {d.operationUnitCode}</legend>
-              <label>Hành động <select value={form.action} onChange={e=>set({action:e.target.value})}><option value="ACCEPT_OBSERVED">Chấp nhận số lượng quan sát</option><option value="ACCEPT_EXPECTED_REJECT_EXCESS">Nhận dự kiến, từ chối phần thừa</option><option value="REJECT_AT_DOOR">Từ chối tại cửa</option><option value="REJECT_WRONG_PRODUCT">Từ chối sai sản phẩm</option><option value="ROUTE_TO_QC">Chuyển sang QC</option></select></label>
+              <label>Hành động <select value={form.action} onChange={e=>set({action:e.target.value})}><option value="ACCEPT_OBSERVED">Chấp nhận số lượng quan sát</option><option value="ACCEPT_EXPECTED_REJECT_EXCESS">Nhận dự kiến, từ chối phần thừa</option><option value="REJECT_AT_DOOR">Từ chối tại cửa</option><option value="REJECT_WRONG_PRODUCT">Từ chối sai sản phẩm</option><option value="ROUTE_TO_QC">Chuyển sang kiểm tra chất lượng</option></select></label>
               <label> Từ chối tại cửa <input aria-label={`Từ chối tại cửa ${line?.productCode}`} type="number" min="0" step="any" value={form.doorRejectedQuantity} onChange={e=>set({doorRejectedQuantity:Number(e.target.value)})}/></label>
-              <label> Reason <select value={form.reasonCode} onChange={e=>set({reasonCode:e.target.value})}><option value="">-- Chọn reason --</option>{reasonCodes.map(x=><option key={x.code} value={x.code}>{x.code} — {x.name} (v{x.version})</option>)}</select></label>
+              <label> Lý do <select value={form.reasonCode} onChange={e=>set({reasonCode:e.target.value})}><option value="">-- Chọn lý do --</option>{reasonCodes.map(x=><option key={x.code} value={x.code}>{x.code} — {x.name} (v{x.version})</option>)}</select></label>
               <label> Chịu trách nhiệm <select value={form.responsibleParty} onChange={e=>set({responsibleParty:e.target.value})}><option value="SUPPLIER">Nhà cung cấp</option><option value="CARRIER">Đơn vị vận chuyển</option><option value="WAREHOUSE">Kho</option><option value="CUSTOMER_RETURN">Khách trả hàng</option><option value="UNKNOWN">Chưa xác định</option></select></label>
               <label> Ghi chú <input value={form.note} onChange={e=>set({note:e.target.value})}/></label>
-              <label> Evidence reference <input value={form.evidenceReference} onChange={e=>set({evidenceReference:e.target.value})}/></label>
-              {d.observedUnitId!==d.operationUnitId&&<label><input type="checkbox" checked={form.confirmNormalizedObservation} onChange={e=>set({confirmNormalizedObservation:e.target.checked})}/> Xác nhận normalized observation × {d.conversionFactor} v{d.conversionVersion}</label>}
-              <div>Final dự kiến: {Math.max(0,d.normalizedObservedQuantity-form.doorRejectedQuantity)} {d.operationUnitCode}; phần từ chối tại cửa không tạo inventory.</div>
-              <label> Recount <input aria-label={`Recount ${line?.productCode}`} type="number" min="0" step="any" value={receiveLines[d.receiptLineId]?.receivedQuantity ?? d.observedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.receiptLineId]:{...(x[d.receiptLineId]||{acceptedQuantity:0,damagedQuantity:0,rejectedQuantity:0}),receivedQuantity:Number(e.target.value)}}))}/></label>
-              <button disabled={workflowId===selectedReceipt.id} onClick={()=>void recountDiscrepancy(d)}>Lưu recount version mới</button>
-              <button disabled={workflowId===selectedReceipt.id} onClick={()=>void submitResolution(d)}>{workflowId===selectedReceipt.id?'Đang gửi...':'Gửi resolution'}</button>
+              <label> Tham chiếu bằng chứng <input value={form.evidenceReference} onChange={e=>set({evidenceReference:e.target.value})}/></label>
+              {d.observedUnitId!==d.operationUnitId&&<label><input type="checkbox" checked={form.confirmNormalizedObservation} onChange={e=>set({confirmNormalizedObservation:e.target.checked})}/> Xác nhận số lượng quan sát đã quy đổi × {d.conversionFactor} v{d.conversionVersion}</label>}
+              <div>Số lượng cuối dự kiến: {Math.max(0,d.normalizedObservedQuantity-form.doorRejectedQuantity)} {d.operationUnitCode}; phần từ chối tại cửa không tạo tồn kho.</div>
+              <label> Kiểm đếm lại <input aria-label={`Kiểm đếm lại ${line?.productCode}`} type="number" min="0" step="any" value={receiveLines[d.receiptLineId]?.receivedQuantity ?? d.observedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.receiptLineId]:{...(x[d.receiptLineId]||{acceptedQuantity:0,damagedQuantity:0,rejectedQuantity:0}),receivedQuantity:Number(e.target.value)}}))}/></label>
+              {canResolve && <button disabled={workflowId===selectedReceipt.id} onClick={()=>void recountDiscrepancy(d)}>Lưu phiên bản kiểm đếm mới</button>}
+              {canSubmit && <button disabled={workflowId===selectedReceipt.id} onClick={()=>void submitResolution(d)}>{workflowId===selectedReceipt.id?'Đang gửi...':'Gửi phương án xử lý'}</button>}
             </fieldset>})}
           </section>}
-          {selectedReceipt.status==='DiscrepancyPendingApproval'&&<section aria-labelledby="discrepancy-approval-heading" style={{marginTop:'16px',padding:'12px',border:'1px solid #8e44ad'}}>
-            <h4 id="discrepancy-approval-heading">Duyệt resolution sai lệch</h4>
+          {canReadDiscrepancy && selectedReceipt.status==='DiscrepancyPendingApproval'&&<section aria-labelledby="discrepancy-approval-heading" style={{marginTop:'16px',padding:'12px',border:'1px solid #8e44ad'}}>
+            <h4 id="discrepancy-approval-heading">Duyệt phương án xử lý sai lệch</h4>
             {discrepancies.filter(d=>d.status==='PendingApproval').map(d=><div key={d.id}>Dòng {d.receiptLineId}: {d.differenceQuantity} {d.operationUnitCode}
-              <button disabled={workflowId===selectedReceipt.id} onClick={()=>void reviewResolution(d,'approve')}>Duyệt resolution</button>
-              <button disabled={workflowId===selectedReceipt.id} onClick={()=>void reviewResolution(d,'reject')}>Trả lại để recount</button>
+              {canApproveDiscrepancy && <button disabled={workflowId===selectedReceipt.id} onClick={()=>void reviewResolution(d,'approve')}>Duyệt phương án xử lý</button>}
+              {canRejectDiscrepancy && <button disabled={workflowId===selectedReceipt.id} onClick={()=>void reviewResolution(d,'reject')}>Trả lại để kiểm đếm</button>}
             </div>)}
           </section>}
-          {selectedReceipt.status === 'QcPending' && <button disabled={workflowId === selectedReceipt.id} onClick={() => void runWorkflow(selectedReceipt.id, 'qc-disposition', selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang lưu QC...' : 'Ghi nhận QC disposition'}</button>}
+          {selectedReceipt.status === 'QcPending' && canQc && <button disabled={workflowId === selectedReceipt.id} onClick={() => void runWorkflow(selectedReceipt.id, 'qc-disposition', selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang lưu kết quả kiểm tra chất lượng...' : 'Ghi nhận kết quả kiểm tra chất lượng'}</button>}
           
           <button onClick={() => setSelectedReceipt(null)} style={{ marginTop: '15px', cursor: 'pointer', padding: '8px 15px' }}>Đóng chi tiết</button>
         </div>

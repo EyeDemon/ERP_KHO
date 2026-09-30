@@ -8,6 +8,7 @@ using FluentAssertions;
 
 namespace ERP.Application.Tests;
 
+[Collection(SqlServerExportStockCollection.Name)]
 public class WarehouseAuthorizationServiceTests
 {
     [Fact]
@@ -48,20 +49,29 @@ public class WarehouseAuthorizationServiceTests
         (await service.GetAccessibleWarehouseIdsAsync()).Should().BeEquivalentTo([1, 2]);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task GrantDuplicateAndRevoke_AreEnforcedAndAudited()
     {
-        await using var context = CreateContext();
-        Seed(context);
-        var service = new UserWarehouseAccessService(context, new TestCurrentUser(99, true));
-
-        await service.GrantAsync(10, 1);
-        var duplicate = () => service.GrantAsync(10, 1);
+        await using var context = new ErpKhoDbContext(new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseSqlServer(Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!).Options);
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        var role = new Role { RoleName = "WarehouseGrant_" + Guid.NewGuid().ToString("N") };
+        role.Permissions.Add(new RolePermission { Permission = await context.Permissions.SingleAsync(p => p.Code == "user_warehouse.manage") });
+        var actor = new User { Username = "scope_actor_" + Guid.NewGuid().ToString("N"), PasswordHash = "QA_FIXTURE_NOT_A_LOGIN", Role = role };
+        var target = new User { Username = "scope_target_" + Guid.NewGuid().ToString("N"), PasswordHash = "QA_FIXTURE_NOT_A_LOGIN", Role = role };
+        var warehouse = new Warehouse { Code = "QA_SCOPE_" + Guid.NewGuid().ToString("N")[..8], Name = "Kho kiểm thử" };
+        context.AddRange(actor, target, warehouse); await context.SaveChangesAsync();
+        context.UserWarehouses.Add(new UserWarehouse { UserId = actor.Id, WarehouseId = warehouse.Id, CreatedBy = actor.Id });
+        await context.SaveChangesAsync();
+        var service = new UserWarehouseAccessService(context, new TestCurrentUser(actor.Id, false));
+        await service.GrantAsync(target.Id, warehouse.Id);
+        var duplicate = () => service.GrantAsync(target.Id, warehouse.Id);
         await duplicate.Should().ThrowAsync<BusinessRuleException>();
-        await service.RevokeAsync(10, 1);
-
-        context.UserWarehouses.Should().BeEmpty();
-        context.AuditLogs.Select(x => x.Action).Should().Equal("UserWarehouse.Granted", "UserWarehouse.Revoked");
+        await service.RevokeAsync(target.Id, warehouse.Id);
+        (await context.UserWarehouses.AnyAsync(w => w.UserId == target.Id)).Should().BeFalse();
+        (await context.AuditLogs.Where(a => a.UserId == actor.Id).Select(x => x.Action).ToListAsync())
+            .Should().Equal("UserWarehouse.Granted", "UserWarehouse.Revoked");
+        await transaction.RollbackAsync();
     }
 
     [Fact]

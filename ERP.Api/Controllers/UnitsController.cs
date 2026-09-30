@@ -6,7 +6,7 @@ using ERP.Api.Authorization;
 
 namespace ERP.Api.Controllers
 {
-    [Authorize(Roles = AppRoles.AllRoles)]
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class UnitsController : ControllerBase
@@ -19,6 +19,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet]
+        [PermissionAuthorize(AppPermissions.UomRead)]
         public async Task<IActionResult> GetAll()
         {
             var units = await _unitService.GetAllUnitsAsync();
@@ -26,6 +27,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("{id}")]
+        [PermissionAuthorize(AppPermissions.UomRead)]
         public async Task<IActionResult> GetById(int id)
         {
             var unit = await _unitService.GetUnitByIdAsync(id);
@@ -33,7 +35,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Create([FromBody] CreateUnitDto dto)
         {
             var username = User.Identity?.Name ?? "system";
@@ -42,7 +44,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateUnitDto dto)
         {
             var username = User.Identity?.Name ?? "system";
@@ -51,7 +53,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Delete(int id)
         {
             await _unitService.DeleteUnitAsync(id);

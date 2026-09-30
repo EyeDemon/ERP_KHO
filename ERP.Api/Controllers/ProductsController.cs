@@ -6,7 +6,7 @@ using ERP.Api.Authorization;
 
 namespace ERP.Api.Controllers
 {
-    [Authorize(Roles = AppRoles.AllRoles)]
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class ProductsController : ControllerBase
@@ -19,6 +19,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet]
+        [PermissionAuthorize(AppPermissions.ProductRead)]
         public async Task<IActionResult> GetAll(CancellationToken cancellationToken = default)
         {
             var products = await _productService.GetAllProductsAsync(cancellationToken);
@@ -26,6 +27,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("paged")]
+        [PermissionAuthorize(AppPermissions.ProductRead)]
         public async Task<IActionResult> GetPaged(
             [FromQuery] int pageIndex = 1, 
             [FromQuery] int pageSize = 20, 
@@ -37,6 +39,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("{id}")]
+        [PermissionAuthorize(AppPermissions.ProductRead)]
         public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken = default)
         {
             var product = await _productService.GetProductByIdAsync(id, cancellationToken);
@@ -44,7 +47,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.ProductCreate)]
         public async Task<IActionResult> Create([FromBody] CreateProductDto dto, CancellationToken cancellationToken = default)
         {
             var username = User?.Identity?.Name ?? "system";
@@ -53,7 +56,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.ProductUpdate)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateProductDto dto, CancellationToken cancellationToken = default)
         {
             var username = User?.Identity?.Name ?? "system";
@@ -62,7 +65,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.ProductDeactivate)]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken = default)
         {
             await _productService.DeleteProductAsync(id, cancellationToken);
@@ -70,7 +73,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id:int}/category")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.ProductUpdate)]
         public async Task<IActionResult> SetCategory(int id, [FromBody] SetProductCategoryDto dto, [FromServices] IProductCatalogService catalogService, CancellationToken cancellationToken = default)
         {
             await catalogService.SetProductCategoryAsync(id, dto, cancellationToken);

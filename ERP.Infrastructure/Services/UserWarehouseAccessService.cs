@@ -13,10 +13,11 @@ public sealed class UserWarehouseAccessService(
 {
     public async Task<IReadOnlyList<UserWarehouseAccessDto>> GetForUserAsync(int userId, CancellationToken cancellationToken = default)
     {
-        EnsureGlobalAdmin();
+        await EnsurePermissionAsync("user_warehouse.read", cancellationToken);
         await EnsureUserExistsAsync(userId, cancellationToken);
+        var scope = await AccessibleWarehousesAsync(cancellationToken);
         return await context.UserWarehouses.AsNoTracking()
-            .Where(x => x.UserId == userId)
+            .Where(x => x.UserId == userId && scope.Contains(x.WarehouseId))
             .OrderBy(x => x.Warehouse.Code)
             .Select(x => new UserWarehouseAccessDto(x.WarehouseId, x.Warehouse.Code, x.Warehouse.Name, x.CreatedAt))
             .ToListAsync(cancellationToken);
@@ -24,7 +25,11 @@ public sealed class UserWarehouseAccessService(
 
     public async Task GrantAsync(int userId, int warehouseId, CancellationToken cancellationToken = default)
     {
-        EnsureGlobalAdmin();
+        await EnsurePermissionAsync("user_warehouse.manage", cancellationToken);
+        await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
+        await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
+        if (!(await AccessibleWarehousesAsync(cancellationToken)).Contains(warehouseId))
+            throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
         await EnsureUserExistsAsync(userId, cancellationToken);
         if (!await context.Warehouses.AnyAsync(x => x.Id == warehouseId, cancellationToken))
             throw new NotFoundException("Không tìm thấy kho.");
@@ -41,11 +46,17 @@ public sealed class UserWarehouseAccessService(
         });
         context.AuditLogs.Add(CreateAudit("UserWarehouse.Granted", userId, warehouseId));
         await context.SaveChangesAsync(cancellationToken);
+        await PermissionAdministrationGuard.EnsureAdministratorAsync(context, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task RevokeAsync(int userId, int warehouseId, CancellationToken cancellationToken = default)
     {
-        EnsureGlobalAdmin();
+        await EnsurePermissionAsync("user_warehouse.manage", cancellationToken);
+        await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
+        await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
+        if (!(await AccessibleWarehousesAsync(cancellationToken)).Contains(warehouseId))
+            throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
         var access = await context.UserWarehouses
             .FirstOrDefaultAsync(x => x.UserId == userId && x.WarehouseId == warehouseId, cancellationToken);
         if (access is null)
@@ -54,6 +65,8 @@ public sealed class UserWarehouseAccessService(
         context.UserWarehouses.Remove(access);
         context.AuditLogs.Add(CreateAudit("UserWarehouse.Revoked", userId, warehouseId));
         await context.SaveChangesAsync(cancellationToken);
+        await PermissionAdministrationGuard.EnsureAdministratorAsync(context, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
     }
 
     private async Task EnsureUserExistsAsync(int userId, CancellationToken cancellationToken)
@@ -62,10 +75,19 @@ public sealed class UserWarehouseAccessService(
             throw new NotFoundException("Không tìm thấy người dùng.");
     }
 
-    private void EnsureGlobalAdmin()
+    private async Task EnsurePermissionAsync(string permission, CancellationToken token)
     {
-        if (!currentUser.IsAuthenticated || !currentUser.IsGlobalAdmin)
+        var now = DateTime.UtcNow;
+        if (!currentUser.IsAuthenticated || !await context.Users.AnyAsync(u => u.Id == currentUser.UserId && u.IsActive &&
+            (u.LockoutEnd == null || u.LockoutEnd <= now) && u.Role.Permissions.Any(p => p.Permission.Code == permission), token))
             throw new ForbiddenException("Bạn không có quyền quản lý phạm vi kho.");
+    }
+
+    private async Task<int[]> AccessibleWarehousesAsync(CancellationToken token)
+    {
+        var admin = await context.Users.AnyAsync(u => u.Id == currentUser.UserId && u.Role.RoleName.Trim().ToLower() == "admin", token);
+        return admin ? await context.Warehouses.Select(w => w.Id).ToArrayAsync(token)
+            : await context.UserWarehouses.Where(w => w.UserId == currentUser.UserId).Select(w => w.WarehouseId).ToArrayAsync(token);
     }
 
     private AuditLog CreateAudit(string action, int userId, int warehouseId) => new()
@@ -74,6 +96,7 @@ public sealed class UserWarehouseAccessService(
         Action = action,
         EntityName = "UserWarehouse",
         EntityId = userId,
+        WarehouseId = warehouseId,
         NewValues = $"WarehouseId: {warehouseId}",
         Timestamp = DateTime.UtcNow
     };

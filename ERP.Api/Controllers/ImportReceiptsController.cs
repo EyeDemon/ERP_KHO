@@ -7,7 +7,7 @@ using ERP.Api.Infrastructure;
 
 namespace ERP.Api.Controllers
 {
-    [Authorize(Roles = AppRoles.AdminManagerOrViewer)]
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class ImportReceiptsController : ControllerBase
@@ -34,7 +34,7 @@ namespace ERP.Api.Controllers
 
         [HttpPost]
         [IdempotentCommand("ImportReceipt.Create")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.ReceiptCreate)]
         public async Task<IActionResult> Create([FromBody] ERP.Application.DTOs.CreateImportReceiptDto dto)
         {
             if (!TryGetUserId(out var userId))
@@ -48,7 +48,7 @@ namespace ERP.Api.Controllers
 
         [HttpPost("{id}/approve")]
         [IdempotentCommand("ImportReceipt.Approve")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
+        [PermissionAuthorize(AppPermissions.ReceiptComplete)]
         public async Task<IActionResult> Approve(int id)
         {
             if (!TryGetUserId(out var userId))
@@ -62,7 +62,7 @@ namespace ERP.Api.Controllers
 
         [HttpPost("{id}/receive")]
         [IdempotentCommand("ImportReceipt.Receive")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.ReceiptReceive)]
         public async Task<IActionResult> Receive(int id, [FromBody] ERP.Application.DTOs.ReceiveImportReceiptDto dto)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
@@ -72,7 +72,7 @@ namespace ERP.Api.Controllers
 
         [HttpPost("{id}/qc-disposition")]
         [IdempotentCommand("ImportReceipt.QcDisposition")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.QualityExecute)]
         public async Task<IActionResult> RecordQcDisposition(int id, [FromBody] ERP.Application.DTOs.RecordQcDispositionDto dto)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
@@ -82,7 +82,7 @@ namespace ERP.Api.Controllers
 
         [HttpPost("{id}/post")]
         [IdempotentCommand("ImportReceipt.Post")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
+        [PermissionAuthorize(AppPermissions.ReceiptPost)]
         public async Task<IActionResult> Post(int id)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
@@ -91,6 +91,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet]
+        [PermissionAuthorize(AppPermissions.ReceiptRead)]
         public async Task<IActionResult> GetAll([FromQuery] ERP.Domain.Enums.ReceiptStatus? status)
         {
             var result = await _importReceiptService.GetAllAsync(status);
@@ -98,51 +99,52 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("{id}")]
+        [PermissionAuthorize(AppPermissions.ReceiptRead)]
         public async Task<IActionResult> GetById(int id)
         {
             var result = await _importReceiptService.GetByIdAsync(id);
             return Ok(result);
         }
 
-        [HttpGet("{id:int}/discrepancies")]
+        [HttpGet("{id:int}/discrepancies"), PermissionAuthorize(AppPermissions.DiscrepancyRead)]
         public async Task<IActionResult> GetDiscrepancies(int id, CancellationToken token) => Ok(await Discrepancies.GetAsync(id, token));
 
-        [HttpGet("discrepancy-reasons")]
+        [HttpGet("discrepancy-reasons"), PermissionAuthorize(AppPermissions.ReasonRead)]
         public async Task<IActionResult> GetDiscrepancyReasons(CancellationToken token) => Ok(await Discrepancies.GetActiveReasonsAsync(token));
 
         [HttpPost("{id:int}/discrepancies/observe")]
         [IdempotentCommand("ImportReceipt.Discrepancy.Observe")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.DiscrepancyCreate)]
         public async Task<IActionResult> Observe(int id, [FromBody] ERP.Application.DTOs.ObserveReceivingDto dto, CancellationToken token)
             => Ok(await Discrepancies.ObserveAsync(id, dto, token));
 
         [HttpPost("{id:int}/discrepancies/{discrepancyId:int}/submit")]
         [IdempotentCommand("ImportReceipt.Discrepancy.Submit")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.DiscrepancySubmit)]
         public async Task<IActionResult> SubmitDiscrepancy(int id, int discrepancyId, [FromBody] ERP.Application.DTOs.SubmitReceivingDiscrepancyDto dto, CancellationToken token)
             => Ok(await Discrepancies.SubmitAsync(id, discrepancyId, dto, token));
 
         [HttpPost("{id:int}/discrepancies/{discrepancyId:int}/approve")]
         [IdempotentCommand("ImportReceipt.Discrepancy.Approve")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
+        [PermissionAuthorize(AppPermissions.DiscrepancyApprove)]
         public async Task<IActionResult> ApproveDiscrepancy(int id, int discrepancyId, [FromBody] byte[] rowVersion, CancellationToken token)
             => Ok(await Discrepancies.ApproveAsync(id, discrepancyId, rowVersion, token));
 
         [HttpPost("{id:int}/discrepancies/{discrepancyId:int}/reject")]
         [IdempotentCommand("ImportReceipt.Discrepancy.Reject")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
+        [PermissionAuthorize(AppPermissions.DiscrepancyReject)]
         public async Task<IActionResult> RejectDiscrepancy(int id, int discrepancyId, [FromBody] byte[] rowVersion, CancellationToken token)
             => Ok(await Discrepancies.RejectAsync(id, discrepancyId, rowVersion, token));
 
         [HttpPost("{id:int}/discrepancies/{discrepancyId:int}/recount")]
         [IdempotentCommand("ImportReceipt.Discrepancy.Recount")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.DiscrepancyResolve)]
         public async Task<IActionResult> RecountDiscrepancy(int id, int discrepancyId, [FromBody] ERP.Application.DTOs.RecountReceivingDto dto, CancellationToken token)
             => Ok(await Discrepancies.RecountAsync(id, discrepancyId, dto, token));
 
         [HttpPut("{id}/cancel")]
         [IdempotentCommand("ImportReceipt.Cancel")]
-        [Authorize(Roles = AppRoles.AdminOrManager)]
+        [PermissionAuthorize(AppPermissions.ReceiptCancel)]
         public async Task<IActionResult> Cancel(int id)
         {
             if (!TryGetUserId(out var userId))
@@ -154,7 +156,7 @@ namespace ERP.Api.Controllers
             return Ok(new { message = "Hủy phiếu nhập thành công" });
         }
 
-        [HttpPut("{id:int}/supplier"), Authorize(Roles = AppRoles.AdminOrManager)]
+        [HttpPut("{id:int}/supplier"), PermissionAuthorize(AppPermissions.ReceiptUpdate)]
         public async Task<IActionResult> SetSupplier(int id, [FromBody] ERP.Application.DTOs.SetReceiptPartnerDto dto, [FromServices] IBusinessPartnerService partners, CancellationToken ct)
         { await partners.SetImportSupplierAsync(id, dto.PartnerId, ct); return NoContent(); }
     }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
-import { currentRole, currentUserId } from '../services/authorization';
+import { usePermission, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import './PutawayTasks.css';
 
@@ -13,7 +13,7 @@ const message=(e:unknown)=>{const status=(e as {response?:{status?:number}})?.re
 
 export default function PutawayTasks(){
  const [tasks,setTasks]=useState<Task[]>([]),[selected,setSelected]=useState<Task|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState('');
- const [locations,setLocations]=useState<Record<number,Location[]>>({}),[destination,setDestination]=useState<Record<number,number>>({}),[quantity,setQuantity]=useState<Record<number,number>>({}); const lock=useRef(new Set<string>()); const mutable=currentRole()!=='Viewer';
+ const [locations,setLocations]=useState<Record<number,Location[]>>({}),[destination,setDestination]=useState<Record<number,number>>({}),[quantity,setQuantity]=useState<Record<number,number>>({}); const lock=useRef(new Set<string>()); const mutable=usePermission('putaway.execute');
  const [exceptionReason,setExceptionReason]=useState('');
  const load=async()=>{setLoading(true);setError('');try{setTasks((await apiClient.get('/api/putaway-tasks')).data)}catch{setTasks([]);setSelected(null);setError('Không thể tải dữ liệu. Vui lòng thử lại.')}finally{setLoading(false)}};
  const detail=async(id:number)=>{setError('');try{const t=(await apiClient.get(`/api/putaway-tasks/${id}`)).data as Task;setSelected(t);const entries=await Promise.all(t.items.filter(i=>i.remainingBaseQuantity>0).map(async i=>[i.id,(await apiClient.get(`/api/putaway-tasks/${id}/items/${i.id}/destinations`)).data] as const));setLocations(Object.fromEntries(entries))}catch{setSelected(null);setError('Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.')}};

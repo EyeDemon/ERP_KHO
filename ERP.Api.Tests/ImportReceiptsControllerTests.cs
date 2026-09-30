@@ -125,7 +125,7 @@ namespace ERP.Api.Tests
                 .FirstOrDefault();
 
             authorizeAttr.Should().NotBeNull();
-            authorizeAttr!.Roles.Should().Be(ERP.Api.Authorization.AppRoles.AdminManagerOrViewer);
+            authorizeAttr!.Roles.Should().BeNull();
         }
 
         [Theory]
@@ -138,34 +138,39 @@ namespace ERP.Api.Tests
             method.Should().NotBeNull();
 
             var authorizeAttr = method!
-                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
-                .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+                .GetCustomAttributes(typeof(ERP.Api.Authorization.PermissionAuthorizeAttribute), false)
+                .Cast<ERP.Api.Authorization.PermissionAuthorizeAttribute>()
                 .FirstOrDefault();
 
             authorizeAttr.Should().NotBeNull();
-            authorizeAttr!.Roles.Should().Be(ERP.Api.Authorization.AppRoles.AdminOrManager);
+            authorizeAttr!.Permission.Should().Be(methodName switch
+            {
+                nameof(ImportReceiptsController.Create) => ERP.Api.Authorization.AppPermissions.ReceiptCreate,
+                nameof(ImportReceiptsController.Cancel) => ERP.Api.Authorization.AppPermissions.ReceiptCancel,
+                _ => ERP.Api.Authorization.AppPermissions.ReceiptReceive
+            });
         }
 
         [Fact]
         public void ApproveEndpoint_UsesSharedCheckerPolicy()
         {
             var authorizeAttr = typeof(ImportReceiptsController).GetMethod(nameof(ImportReceiptsController.Approve))!
-                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
-                .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+                .GetCustomAttributes(typeof(ERP.Api.Authorization.PermissionAuthorizeAttribute), false)
+                .Cast<ERP.Api.Authorization.PermissionAuthorizeAttribute>()
                 .Single();
 
-            authorizeAttr.Policy.Should().Be(ERP.Api.Authorization.ApprovalPolicies.Checker);
+            authorizeAttr.Permission.Should().Be(ERP.Api.Authorization.AppPermissions.ReceiptComplete);
         }
 
         [Fact]
         public void PostEndpoint_UsesSharedCheckerPolicy()
         {
             var authorizeAttr = typeof(ImportReceiptsController).GetMethod(nameof(ImportReceiptsController.Post))!
-                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
-                .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+                .GetCustomAttributes(typeof(ERP.Api.Authorization.PermissionAuthorizeAttribute), false)
+                .Cast<ERP.Api.Authorization.PermissionAuthorizeAttribute>()
                 .Single();
 
-            authorizeAttr.Policy.Should().Be(ERP.Api.Authorization.ApprovalPolicies.Checker);
+            authorizeAttr.Permission.Should().Be(ERP.Api.Authorization.AppPermissions.ReceiptPost);
         }
     }
 }

@@ -10,6 +10,29 @@ namespace ERP.Api.Tests
 {
     public class AuthorizationMetadataTests
     {
+        [Fact]
+        public void MigratedHttpActionsHaveCataloguedPermissionsWithoutRoleAlternatives()
+        {
+            var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController),
+                typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
+                typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
+                typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
+                typeof(PermissionsController) };
+            var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
+            foreach (var controller in controllers)
+            foreach (var action in controller.GetMethods().Where(m => m.GetCustomAttributes<Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute>().Any()))
+            {
+                var grants = controller.GetCustomAttributes<PermissionAuthorizeAttribute>()
+                    .Concat(action.GetCustomAttributes<PermissionAuthorizeAttribute>()).Select(p => p.Permission).ToArray();
+                grants.Should().NotBeEmpty($"{controller.Name}.{action.Name} is a migrated HTTP action");
+                grants.Should().OnlyContain(code => catalog.Contains(code));
+                controller.GetCustomAttributes<AuthorizeAttribute>().Concat(action.GetCustomAttributes<AuthorizeAttribute>())
+                    .Should().OnlyContain(a => string.IsNullOrEmpty(a.Roles) && string.IsNullOrEmpty(a.Policy));
+                Console.WriteLine($"Endpoint permission: {controller.Name}.{action.Name} => {string.Join(",", grants)}");
+            }
+        }
+
         private AuthorizeAttribute? GetAuthorizeAttribute(Type controllerType, string? methodName = null, Type[]? methodParams = null)
         {
             if (methodName != null)
@@ -50,10 +73,16 @@ namespace ERP.Api.Tests
             var updateMethod = controllerType.GetMethod("Update");
             var deleteMethod = controllerType.GetMethod("Delete");
 
-        var expectedRoles = controllerType == typeof(WarehousesController) ? AppRoles.Admin : AppRoles.AdminOrManager;
-        createMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(expectedRoles);
-        updateMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(expectedRoles);
-        deleteMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(expectedRoles);
+        var expected = controllerType == typeof(WarehousesController)
+            ? new[] { AppPermissions.WarehouseManage, AppPermissions.WarehouseManage, AppPermissions.WarehouseManage }
+            : controllerType == typeof(UnitsController)
+                ? new[] { AppPermissions.UomManage, AppPermissions.UomManage, AppPermissions.UomManage }
+                : controllerType == typeof(ProductCategoriesController)
+                    ? new[] { AppPermissions.CategoryManage, AppPermissions.CategoryManage, AppPermissions.CategoryManage }
+                    : new[] { AppPermissions.ProductCreate, AppPermissions.ProductUpdate, AppPermissions.ProductDeactivate };
+        createMethod!.GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(expected[0]);
+        updateMethod!.GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(expected[1]);
+        deleteMethod!.GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(expected[2]);
         }
 
         [Theory]
@@ -64,17 +93,22 @@ namespace ERP.Api.Tests
         public void CatalogControllers_Get_RequiresAllRoles(Type controllerType)
         {
             var classAttr = controllerType.GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
+            classAttr.Should().NotBeNull();
+            classAttr!.Roles.Should().BeNull();
             
             var getMethod = controllerType.GetMethod("GetAll");
-            getMethod!.GetCustomAttribute<AuthorizeAttribute>().Should().BeNull("Because class level is sufficient");
+            var permission = controllerType == typeof(WarehousesController) ? AppPermissions.WarehouseRead
+                : controllerType == typeof(UnitsController) ? AppPermissions.UomRead
+                : controllerType == typeof(ProductCategoriesController) ? AppPermissions.CategoryRead : AppPermissions.ProductRead;
+            getMethod!.GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
         }
 
         [Fact]
         public void ImportReceiptsController_Class_RequiresAdminManagerOrViewer()
         {
             var classAttr = typeof(ImportReceiptsController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AdminManagerOrViewer);
+            classAttr.Should().NotBeNull();
+            classAttr!.Roles.Should().BeNull();
         }
 
         [Theory]
@@ -83,15 +117,15 @@ namespace ERP.Api.Tests
         public void ImportReceiptsController_Mutations_RequireAdminOrManager(string methodName)
         {
             var method = typeof(ImportReceiptsController).GetMethod(methodName);
-            var methodAttr = method!.GetCustomAttribute<AuthorizeAttribute>();
-            methodAttr!.Roles.Should().Be(AppRoles.AdminOrManager);
+            var methodAttr = method!.GetCustomAttribute<PermissionAuthorizeAttribute>();
+            methodAttr!.Permission.Should().Be(methodName == "Create" ? AppPermissions.ReceiptCreate : AppPermissions.ReceiptCancel);
         }
 
         [Fact]
         public void ImportReceiptsController_Approve_RequiresCheckerPolicy()
         {
             typeof(ImportReceiptsController).GetMethod("Approve")!
-                .GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(ApprovalPolicies.Checker);
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.ReceiptComplete);
         }
 
         [Fact]
@@ -165,10 +199,10 @@ namespace ERP.Api.Tests
         [Fact]
         public void ProductBarcodeEndpoints_ReadForAllRoles_MutateForAdminOrManager()
         {
-            typeof(ProductBarcodeLookupController).GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AllRoles);
-            typeof(ProductBarcodesController).GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AllRoles);
-            typeof(ProductBarcodesController).GetMethod("Create")!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminOrManager);
-            typeof(ProductBarcodesController).GetMethod("Delete")!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminOrManager);
+            typeof(ProductBarcodeLookupController).GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.ProductRead);
+            typeof(ProductBarcodesController).GetMethod("GetAll")!.GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.ProductRead);
+            typeof(ProductBarcodesController).GetMethod("Create")!.GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.BarcodeManage);
+            typeof(ProductBarcodesController).GetMethod("Delete")!.GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.BarcodeManage);
         }
     }
 }

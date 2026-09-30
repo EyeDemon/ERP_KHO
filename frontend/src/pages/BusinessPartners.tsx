@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
-import { canManageCatalogs, currentRole } from '../services/authorization';
+import { usePermission } from '../services/authorization';
 
 export interface BusinessPartner {
   id: number; code: string; name: string; isSupplier: boolean; isCustomer: boolean;
@@ -10,7 +10,7 @@ export interface BusinessPartner {
 const empty = { code: '', name: '', isSupplier: true, isCustomer: false, isActive: true, phone: '', email: '', address: '', rowVersion: '' };
 
 const BusinessPartners = () => {
-  const canManage = canManageCatalogs(currentRole());
+  const canManage = usePermission('partner.update');
   const [items, setItems] = useState<BusinessPartner[]>([]);
   const [page, setPage] = useState(1); const [pages, setPages] = useState(1);
   const [search, setSearch] = useState(''); const [role, setRole] = useState(''); const [active, setActive] = useState('');

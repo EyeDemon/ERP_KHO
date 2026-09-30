@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ERP.Api.Controllers;
 
-[Authorize(Roles = AppRoles.AllRoles)]
+[Authorize, PermissionAuthorize(AppPermissions.ProductRead)]
 [ApiController]
 [Route("api/product-barcodes")]
 public sealed class ProductBarcodeLookupController(IProductCatalogService service) : ControllerBase

@@ -151,6 +151,9 @@ public sealed class SqlServerRefreshTokenRotationTests
             await using (var db = CreateContext())
             {
                 (await db.UserSessions.CountAsync(x => x.UserId == owner.UserId && x.RevokedAt == null)).Should().Be(0);
+                var permissionId = await db.Permissions.Where(p => p.Code == "user.manage").Select(p => p.Id).SingleAsync();
+                db.RolePermissions.Add(new RolePermission { RoleId = owner.RoleId, PermissionId = permissionId });
+                await db.SaveChangesAsync();
                 var admin = new UserSessionService(db, CreateTokenService(), new TestCurrentUser(owner.UserId, true), new SessionSecurityOptions());
                 await admin.RevokeUserSessionsAsAdminAsync(other.UserId);
                 (await db.UserSessions.CountAsync(x => x.UserId == other.UserId && x.RevokedAt == null)).Should().Be(0);

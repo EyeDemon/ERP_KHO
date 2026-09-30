@@ -13,6 +13,8 @@ public class ErpKhoDbContext : DbContext
     }
 
     public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Unit> Units => Set<Unit>();
     public DbSet<Product> Products => Set<Product>();
@@ -78,6 +80,9 @@ public class ErpKhoDbContext : DbContext
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ErpKhoDbContext).Assembly);
         if (Database.IsSqlServer())
         {
+            modelBuilder.Entity<Permission>().Property(x => x.Code).UseCollation("Latin1_General_100_BIN2");
+            modelBuilder.Entity<Role>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<RolePermission>().Property(x => x.RowVersion).IsRowVersion();
             // SQL deployments backfill LocationId before enforcing the final required relationship.
             // The nullable CLR shape also lets pre-migration compatibility tests represent legacy rows.
             modelBuilder.Entity<InventoryStock>().Property(x => x.LocationId).IsRequired();

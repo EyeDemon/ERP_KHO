@@ -18,6 +18,71 @@ namespace ERP.Api.Tests;
 public sealed class InboundHttpIntegrationTests
 {
     [ApprovalSqlServerFact]
+    public async Task MixedApprovalInboundRequiresIndependentReadAndRejectGrantsOnEveryRequest()
+    {
+        await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(
+            Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
+        await database.MigrateAndSeedAsync();
+        await using var db = Context(database.ConnectionString);
+        var users = await db.Users.OrderBy(u => u.Id).ToArrayAsync();
+        var warehouse = await db.Warehouses.SingleAsync();
+        db.UserWarehouses.Add(new UserWarehouse { UserId = users[1].Id, WarehouseId = warehouse.Id, CreatedBy = users[0].Id });
+        var receipt = Receipt("QA-APPROVAL-GRANTS", warehouse.Id, users[0].Id, await db.Products.Include(p => p.Unit).SingleAsync(), ReceiptStatus.Received, 12m);
+        db.ImportReceipts.Add(receipt);
+        await db.SaveChangesAsync();
+        await using var factory = Factory(database.ConnectionString);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        var roleId = users[1].RoleId;
+        var rejectId = await db.Permissions.Where(p => p.Code == "approval.reject").Select(p => p.Id).SingleAsync();
+        var readId = await db.Permissions.Where(p => p.Code == "receipt.read").Select(p => p.Id).SingleAsync();
+        await db.RolePermissions.Where(g => g.RoleId == roleId && g.PermissionId == rejectId).ExecuteDeleteAsync();
+        var path = $"/api/approvals/ImportReceipt/{receipt.Id}/reject";
+        using (var denied = await Send(client, HttpMethod.Post, path, users[1].Id, "Admin", "qa-denied-reject", "{\"reason\":\"Không đạt yêu cầu\"}"))
+            denied.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await db.IdempotencyRecords.CountAsync(r => r.UserId == users[1].Id)).Should().Be(0);
+        db.RolePermissions.Add(new RolePermission { RoleId = roleId, PermissionId = rejectId });
+        await db.SaveChangesAsync();
+        await db.RolePermissions.Where(g => g.RoleId == roleId && g.PermissionId == readId).ExecuteDeleteAsync();
+        using (var deniedRead = await Send(client, HttpMethod.Get, $"/api/approvals/ImportReceipt/{receipt.Id}", users[1].Id, "Admin"))
+            deniedRead.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        using (var queue = await Send(client, HttpMethod.Get, "/api/approvals/queue?documentType=ImportReceipt", users[1].Id, "Admin"))
+        {
+            queue.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var json = JsonDocument.Parse(await queue.Content.ReadAsStringAsync());
+            json.RootElement.GetProperty("totalRecords").GetInt32().Should().Be(0);
+        }
+        db.RolePermissions.Add(new RolePermission { RoleId = roleId, PermissionId = readId });
+        await db.SaveChangesAsync();
+        using (var maker = await Send(client, HttpMethod.Post, path, users[0].Id, "Admin", "qa-maker-reject", "{\"reason\":\"Không đạt yêu cầu\"}"))
+            maker.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var outside = new Warehouse { Code = "QA-APPROVAL-OUTSIDE", Name = "Kho ngoài phạm vi" };
+        db.Warehouses.Add(outside); await db.SaveChangesAsync();
+        var foreign = Receipt("QA-APPROVAL-FOREIGN", outside.Id, users[0].Id, await db.Products.Include(p => p.Unit).SingleAsync(), ReceiptStatus.Received, 987m);
+        db.ImportReceipts.Add(foreign); await db.SaveChangesAsync();
+        foreach (var suffix in new[] { "", "/history" })
+        {
+            using var hidden = await Send(client, HttpMethod.Get, $"/api/approvals/ImportReceipt/{foreign.Id}{suffix}", users[1].Id, "Admin");
+            hidden.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await hidden.Content.ReadAsStringAsync()).Should().NotContain(foreign.Code);
+        }
+        using (var hidden = await Send(client, HttpMethod.Post, $"/api/approvals/ImportReceipt/{foreign.Id}/reject", users[1].Id, "Admin", "qa-foreign-reject", "{\"reason\":\"Không đạt yêu cầu\"}"))
+            hidden.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        using (var success = await Send(client, HttpMethod.Post, path, users[1].Id, "Admin", "qa-success-reject", "{\"reason\":\"Không đạt yêu cầu\"}"))
+            success.StatusCode.Should().Be(HttpStatusCode.OK, await success.Content.ReadAsStringAsync());
+        using (var replay = await Send(client, HttpMethod.Post, path, users[1].Id, "Admin", "qa-success-reject", "{\"reason\":\"Không đạt yêu cầu\"}"))
+            replay.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await db.AuditLogs.CountAsync(a => a.EntityName == "ImportReceipt" && a.EntityId == receipt.Id && a.Action == "ApprovalRejected")).Should().Be(1);
+        using (var mismatch = await Send(client, HttpMethod.Post, path, users[1].Id, "Admin", "qa-success-reject", "{\"reason\":\"Lý do khác\"}"))
+            mismatch.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        await db.UserWarehouses.Where(w => w.UserId == users[1].Id).ExecuteDeleteAsync();
+        using (var revokedScopeReplay = await Send(client, HttpMethod.Post, path, users[1].Id, "Admin", "qa-success-reject", "{\"reason\":\"Không đạt yêu cầu\"}"))
+            revokedScopeReplay.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        await db.RolePermissions.Where(g => g.RoleId == roleId && g.PermissionId == rejectId).ExecuteDeleteAsync();
+        using (var revokedReplay = await Send(client, HttpMethod.Post, path, users[1].Id, "Admin", "qa-success-reject", "{\"reason\":\"Không đạt yêu cầu\"}"))
+            revokedReplay.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [ApprovalSqlServerFact]
     public async Task ViewerResponses_FilterCostAtTheHttpBoundary()
     {
         await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(
@@ -48,6 +113,9 @@ public sealed class InboundHttpIntegrationTests
             using var json = JsonDocument.Parse(await manager.Content.ReadAsStringAsync());
             json.RootElement.GetProperty("details")[0].GetProperty("unitPrice").GetDecimal().Should().Be(123.45m);
         }
+        // Classification follows the current database role, not the test JWT/header role.
+        users[1].RoleId = await db.Roles.Where(r => r.RoleName == "Viewer").Select(r => r.Id).SingleAsync();
+        await db.SaveChangesAsync();
         using (var list = await Send(client, HttpMethod.Get, "/api/importreceipts", users[1].Id, "Viewer"))
         {
             list.StatusCode.Should().Be(HttpStatusCode.OK);
