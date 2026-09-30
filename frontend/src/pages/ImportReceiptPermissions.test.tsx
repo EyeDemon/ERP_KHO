@@ -56,4 +56,31 @@ describe('quyền độc lập trên phiếu nhập', () => {
     await waitFor(() => expect(view.queryByText('QA_RECEIPT')).toBeNull());
     expect(view.queryByText(/Chi Tiết Phiếu Nhập:/)).toBeNull();
   });
+
+  it('response danh sách cũ không ghi đè dữ liệu mới sau revoke rồi regrant', async () => {
+    let finish!: (value: unknown) => void;
+    get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }) as never);
+    const view = render(<ImportReceipts />);
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/api/importreceipts'));
+    act(() => setCurrentPermissions([]));
+    act(() => setCurrentPermissions(['receipt.read']));
+    await view.findByText('QA_RECEIPT');
+    await act(async () => finish({ data: [{ ...receipt, code: 'STALE_PRIVATE_RECEIPT' }] }));
+    expect(view.queryByText('STALE_PRIVATE_RECEIPT')).toBeNull();
+    expect(view.getByText('QA_RECEIPT')).toBeTruthy();
+  });
+
+  it('bản in đến muộn không mở lại sau revoke rồi regrant', async () => {
+    let finish!: (value: unknown) => void;
+    get.mockImplementation(url => url === '/api/importreceipts' ? Promise.resolve({ data: [receipt] }) as never
+      : new Promise(resolve => { finish = resolve; }) as never);
+    const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
+    fireEvent.click(view.getByText('Xem bản in'));
+    act(() => setCurrentPermissions([]));
+    act(() => setCurrentPermissions(['receipt.read']));
+    await view.findByText('QA_RECEIPT');
+    await act(async () => finish({ data: { ...receipt, code: 'STALE_PRIVATE_PRINT' } }));
+    expect(view.queryByRole('dialog')).toBeNull();
+    expect(view.queryByText('STALE_PRIVATE_PRINT')).toBeNull();
+  });
 });

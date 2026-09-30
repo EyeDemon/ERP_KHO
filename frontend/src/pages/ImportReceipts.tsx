@@ -109,6 +109,9 @@ const ImportReceipts = () => {
   const workflowInFlight = useRef<number | null>(null);
   const partnerMutationInFlight = useRef(false);
   const detailRequest = useRef(0);
+  const listRequest = useRef(0);
+  const referenceRequest = useRef(0);
+  const printRequest = useRef(0);
   const [creating, setCreating] = useState(false);
   const [partnerUpdating, setPartnerUpdating] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<ImportReceipt | null>(null);
@@ -124,16 +127,19 @@ const ImportReceipts = () => {
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
 
   const fetchData = useCallback(async () => {
+    const request = ++referenceRequest.current;
     try {
       const [whRes, prRes, bpRes] = await Promise.all([
         canReadWarehouses ? apiClient.get('/api/warehouses') : Promise.resolve({ data: [] }),
         canReadProducts ? apiClient.get('/api/products') : Promise.resolve({ data: [] }),
         canReadPartners ? apiClient.get('/api/business-partners', { params: { role: 'supplier', pageSize: 100 } }) : Promise.resolve({ data: { items: [] } })
       ]);
+      if (request !== referenceRequest.current) return;
       setWarehouses(hasPermission('warehouse.read') ? whRes.data : []);
       setProducts(hasPermission('product.read') ? prRes.data : []);
       setSuppliers(hasPermission('partner.read') ? bpRes.data.items : []);
     } catch (err: any) {
+      if (request !== referenceRequest.current) return;
       console.error(err);
       setWarehouses([]); setProducts([]); setSuppliers([]);
       setError(permissionError(err, 'Không thể tải dữ liệu tham khảo. Vui lòng thử lại.'));
@@ -141,24 +147,34 @@ const ImportReceipts = () => {
   }, [canReadWarehouses, canReadProducts, canReadPartners]);
 
   const fetchReceipts = useCallback(async () => {
-    if (!hasPermission('receipt.read')) return;
+    const request = ++listRequest.current;
+    if (!canRead) return;
     try {
       const res = await apiClient.get('/api/importreceipts');
+      if (request !== listRequest.current) return;
       setReceipts(hasPermission('receipt.read') ? res.data : []);
     } catch (err: any) {
+      if (request !== listRequest.current) return;
       console.error(err);
       setReceipts([]); setSelectedReceipt(null); setPrintReceipt(null);
       setError(permissionError(err, 'Không thể tải danh sách phiếu nhập. Vui lòng thử lại.'));
     }
-  }, []);
+  }, [canRead]);
 
   useEffect(() => {
     fetchData();
     fetchReceipts();
+    const references = referenceRequest, lists = listRequest;
+    return () => { references.current++; lists.current++; };
   }, [fetchData, fetchReceipts]);
 
   useEffect(() => {
-    if (!canRead) { detailRequest.current++; setReceipts([]); setSelectedReceipt(null); setPrintReceipt(null); setReceiveLines({}); }
+    const details = detailRequest, prints = printRequest;
+    return () => { details.current++; prints.current++; };
+  }, [canRead]);
+
+  useEffect(() => {
+    if (!canRead) { detailRequest.current++; setReceipts([]); setSelectedReceipt(null); setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(null); setReceiveLines({}); }
     if (!canReadDiscrepancy) { setDiscrepancies([]); setResolutionForms({}); }
     if (!canReadReasons) setReasonCodes([]);
     if (!canReadPartners) setSuppliers([]);
@@ -405,12 +421,13 @@ const ImportReceipts = () => {
   };
 
   const openPrintPreview = async (id: number, trigger: HTMLButtonElement) => {
+    const request = ++printRequest.current;
     printTriggerRef.current = trigger; setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(id); setError('');
-    try { const res = await apiClient.get(`/api/importreceipts/${id}`); if (hasPermission('receipt.read')) { setPrintReceipt(res.data); setPrintFetchedAt(new Date()); } }
-    catch (x: any) { setError(permissionError(x, 'Không tải được dữ liệu bản in.')); }
-    finally { setPrintLoadingId(null); }
+    try { const res = await apiClient.get(`/api/importreceipts/${id}`); if (request === printRequest.current && hasPermission('receipt.read')) { setPrintReceipt(res.data); setPrintFetchedAt(new Date()); } }
+    catch (x: any) { if (request === printRequest.current) setError(permissionError(x, 'Không tải được dữ liệu bản in.')); }
+    finally { if (request === printRequest.current) setPrintLoadingId(null); }
   };
-  const closePrintPreview = () => { setPrintReceipt(null); setPrintFetchedAt(null); queueMicrotask(() => printTriggerRef.current?.focus()); };
+  const closePrintPreview = () => { printRequest.current++; setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(null); queueMicrotask(() => printTriggerRef.current?.focus()); };
 
   return (
     <div>

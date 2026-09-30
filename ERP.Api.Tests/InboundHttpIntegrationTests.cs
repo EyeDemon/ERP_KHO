@@ -18,6 +18,75 @@ namespace ERP.Api.Tests;
 public sealed class InboundHttpIntegrationTests
 {
     [ApprovalSqlServerFact]
+    public async Task SessionOwnershipAndAdministrativeReplayUseDatabaseAuthority()
+    {
+        await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(
+            Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
+        await database.MigrateAndSeedAsync();
+        await using var db = Context(database.ConnectionString);
+        var admin = await db.Users.SingleAsync(u => u.Role.RoleName == "Admin");
+        var manager = await db.Users.SingleAsync(u => u.Role.RoleName == "Manager");
+        UserSession Session(int owner) => new()
+        {
+            Id = Guid.NewGuid(), UserId = owner, RefreshTokenFamilyId = Guid.NewGuid(),
+            RefreshTokenHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
+            AccessTokenJti = Guid.NewGuid().ToString("N"), CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(1)
+        };
+        var own = Session(manager.Id);
+        var foreign = Session(admin.Id);
+        db.UserSessions.AddRange(own, foreign); await db.SaveChangesAsync();
+        await using var factory = Factory(database.ConnectionString);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        using (var list = await Send(client, HttpMethod.Get, "/api/auth/sessions", manager.Id, "Admin"))
+        {
+            Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+            var raw = await list.Content.ReadAsStringAsync();
+            Assert.Contains(own.Id.ToString(), raw);
+            Assert.DoesNotContain(foreign.Id.ToString(), raw);
+            Assert.DoesNotContain("refreshTokenHash", raw);
+            Assert.DoesNotContain("accessTokenJti", raw);
+        }
+        foreach (var request in new[] { (manager.Id, foreign.Id), (admin.Id, own.Id), (manager.Id, Guid.NewGuid()) })
+        {
+            using var denied = await Send(client, HttpMethod.Delete, $"/api/auth/sessions/{request.Item2}", request.Item1, "Admin");
+            Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+            var raw = await denied.Content.ReadAsStringAsync();
+            Assert.DoesNotContain(foreign.Id.ToString(), raw);
+            Assert.DoesNotContain(own.Id.ToString(), raw);
+            Assert.DoesNotContain("SqlException", raw);
+        }
+        Assert.False(await db.UserSessions.AnyAsync(s => s.RevokedAt != null));
+        Assert.Equal(0, await db.AuditLogs.CountAsync(a => a.Action.StartsWith("Authentication.")));
+        Assert.Equal(0, await db.IdempotencyRecords.CountAsync());
+        using (var success = await Send(client, HttpMethod.Delete, $"/api/auth/sessions/{own.Id}", manager.Id, "Manager"))
+            Assert.Equal(HttpStatusCode.NoContent, success.StatusCode);
+        Assert.True(await db.UserSessions.AnyAsync(s => s.Id == own.Id && s.RevokedAt != null));
+        Assert.False(await db.UserSessions.AnyAsync(s => s.Id == foreign.Id && s.RevokedAt != null));
+
+        var path = $"/api/users/{admin.Id}/security/revoke-sessions";
+        using (var denied = await Send(client, HttpMethod.Post, path, manager.Id, "Admin", "qa-session-denied"))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Equal(0, await db.IdempotencyRecords.CountAsync());
+        var permissionId = await db.Permissions.Where(p => p.Code == "user.manage").Select(p => p.Id).SingleAsync();
+        db.RolePermissions.Add(new RolePermission { RoleId = manager.RoleId, PermissionId = permissionId });
+        await db.SaveChangesAsync();
+        foreach (var retry in Enumerable.Range(0, 2))
+        {
+            using var success = await Send(client, HttpMethod.Post, path, manager.Id, "Manager", "qa-session-success");
+            Assert.Equal(HttpStatusCode.NoContent, success.StatusCode);
+        }
+        Assert.True(await db.UserSessions.AnyAsync(s => s.Id == foreign.Id && s.RevokedAt != null));
+        Assert.Equal(1, await db.AuditLogs.CountAsync(a => a.Action == "Authentication.AdminRevokedUserSessions"));
+        Assert.Equal(1, await db.IdempotencyRecords.CountAsync(r => r.UserId == manager.Id));
+        await db.RolePermissions.Where(g => g.RoleId == manager.RoleId && g.PermissionId == permissionId).ExecuteDeleteAsync();
+        using (var revokedReplay = await Send(client, HttpMethod.Post, path, manager.Id, "Admin", "qa-session-success"))
+            Assert.Equal(HttpStatusCode.Forbidden, revokedReplay.StatusCode);
+        Assert.Equal(1, await db.AuditLogs.CountAsync(a => a.Action == "Authentication.AdminRevokedUserSessions"));
+        Assert.Equal(1, await db.IdempotencyRecords.CountAsync(r => r.UserId == manager.Id));
+    }
+
+    [ApprovalSqlServerFact]
     public async Task MembershipTokensProtectEmptySetsStaleRequestsAndReauthorizedReplay()
     {
         await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(

@@ -115,9 +115,9 @@ public sealed class UserSessionService(
     {
         EnsureAuthenticated();
         var ownerId = await context.UserSessions.Where(x => x.Id == sessionId).Select(x => (int?)x.UserId).SingleOrDefaultAsync(cancellationToken);
-        if (!ownerId.HasValue) return;
-        if (ownerId.Value != currentUser.UserId && !currentUser.IsGlobalAdmin) throw new UnauthorizedAccessException("Bạn không có quyền thu hồi phiên này.");
-        await RevokeWhereAsync(x => x.Id == sessionId, currentUser.UserId.ToString(), "Session revoked", DateTime.UtcNow, cancellationToken);
+        if (!ownerId.HasValue || ownerId.Value != currentUser.UserId)
+            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
+        await RevokeWhereAsync(x => x.Id == sessionId && x.UserId == currentUser.UserId, currentUser.UserId.ToString(), "Session revoked", DateTime.UtcNow, cancellationToken);
     }
 
     public async Task RevokeUserSessionsAsAdminAsync(int userId, CancellationToken cancellationToken = default)

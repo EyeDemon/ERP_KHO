@@ -143,7 +143,7 @@ public sealed class SqlServerRefreshTokenRotationTests
                 var ownerService = CreateService(db, owner.UserId);
                 (await ownerService.GetCurrentUserSessionsAsync(ownerToken)).Should().HaveCount(2);
                 var denied = () => ownerService.RevokeSessionAsync(otherSessionId);
-                await denied.Should().ThrowAsync<UnauthorizedAccessException>();
+                await denied.Should().ThrowAsync<ERP.Application.Exceptions.NotFoundException>();
                 await ownerService.LogoutAsync(ownerToken, owner.UserId);
                 await ownerService.LogoutAllAsync();
             }
