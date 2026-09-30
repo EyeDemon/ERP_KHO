@@ -2,7 +2,41 @@
 
 Status: **PERMISSION CODE AUTHORIZATION TESTING INCOMPLETE**. This is an owner-review checkpoint, not release closure.
 
-## Current authority and changes — 2026-09-30
+## Browser/security successor — checkpoint a4f4556c, 2026-09-30
+
+Status remains **TESTING INCOMPLETE**. No runtime/schema changes were made in this successor; automated evidence is associated with a4f4556c (API 180/180, Application 346/346 as previously qualified, frontend 65/65, build/EF/lint/build PASS), not a new test execution.
+
+Fresh browser Run **39d474c6d89a4e4faf6bd34e0e58e730** used the official configured harness, strict pre-permission bootstrap and a fresh marker-owned database. Admin browser login occurred once. Browser UI title **Quản lý kho ERP**, permission catalog/bundle labels and safe route-denial copy were verified after the earlier fixes.
+
+| Group | Fresh browser coverage | Remaining closure evidence |
+| --- | --- | --- |
+| A — effective permissions | Same-session receipt.read revoke removed the menu; direct route showed Vietnamese denial. Regrant restored menu and loaded receipt list/detail without login again. | Token renewal, controlled late auth/me and receipt responses, stale JWT role downgrade and raw next-request assertions. |
+| B — administration concurrency | Explicit Admin catalog/bundle observed. | True overlapping grant/revoke, stale aggregate token, concurrent last-admin, fully granted Manager and locked/inactive Admin browser assertions. Existing SQL tests are separate evidence. |
+| C — authorization/idempotency | Revoke and regrant each produced one audit and one completed claim; persisted response statuses 200/200. | Unauthorized replay after permission/membership revocation, raw 401/403/404 absence of claims and fingerprint assertions. |
+| D — mixed Approval Center | Vietnamese queue/empty state observed; fixture had zero pending queue entries. | Independent read/reject grant, nonzero mixed count/pagination, isolation, SoD and exactly-once replay. Empty queue is not filtering proof. |
+| E — granular capabilities | Receipt route recovered after regrant. | Category/Barcode/Warehouse/Location separation, receipt-only reader, warehouse/assignment and maker/checker/poster browser matrix. |
+| F — raw Viewer/errors | Safe Vietnamese route-denial UI only. | Raw Viewer payloads and HTTP 401/403/404/409 assertions. Hidden UI is not server filtering evidence. |
+| G — Vietnamese UX | Title, administration labels, receipt states and Approval Center labels observed. | Full accessibility/history scan, double-submit network counts, sensitive-state clearing and controlled late-response browser evidence. |
+
+Final database evidence before cleanup: **53 Admin grants, one Permission.Revoke audit, one Permission.Grant audit, two completed permission claims with persisted HTTP 200**. No raw idempotency key/token/credential is recorded. Native confirm interrupted browser click; Enter resolved it, and no mutation was retried. Thus this run is not double-click or replay evidence.
+
+The official browser API exposes read-only evaluate, DOM/AX interaction, logs and pageAssets/webmcp capabilities; it does not expose network interception or raw request replay on this surface. No unsupported interception, mutating evaluate or alternative browser driver was used. Raw-network and controlled-overlap gates remain not verified. Screenshot is an ignored run artifact, not source evidence committed to Git.
+
+### Static security review finding still open
+
+**Membership administration optimistic concurrency is incomplete.** UserWarehouseAccess grant/revoke share the global transaction lock and last-admin guard, but read DTOs and mutation payloads carry no aggregate RowVersion. The lock serializes execution; it does not reject a stale caller after a completed membership change. This fails the canonical administration optimistic-concurrency requirement (§33.6). No claim of security closure or membership stale-token PASS is made. A minimal aggregate-token implementation and SQL/HTTP/browser regressions remain required; existing migrations were not rewritten to conceal this gap.
+
+Static inspection reconfirmed DB permission authorization precedes the idempotency action filter; resource denial rolls back its transaction-contained claim, and successful replay reauthorizes recorded warehouse metadata. These are static findings and existing automated evidence, not a substitute for fresh browser coverage. Ponytail assessment found no need for an override/DSL/cache/designer or new dependency; retained security controls are not simplification candidates. Whole-diff correctness/security approval is still pending.
+
+### Freshness, cleanup and remote handoff
+
+Native final Notion precheck matched Page 17 **2026-09-30T10:05:59.344Z**, Page 18 **2026-09-28T10:04:28.018Z**, Page 282 **2026-09-28T10:04:39.216Z**, Page 41 **2026-09-20T16:31:54.616Z**. No contract mutation. Drive pagination completed: root 140 images + 5 folders, children 16/24/56/10/176 images and no nested folders. All illustrative images remain metadata-only **NOT REVIEWED**.
+
+Exact owned cleanup succeeded: API/frontend PIDs 2388/11308 verified by manifest and stopped; run database absent; credential.dpapi removed; browser tabs absent; target listeners zero. Metadata census showed no BrowserQA/Integration databases and ERP_KHO ONLINE; no business tables were read. Ignored run manifests/logs/screenshots remain unstaged. The previously policy-blocked %TEMP%/erp-permission-audit-ae38b9232abf496d8d9ed964027a2b04 folder was left untouched.
+
+Origin remains EyeDemon/ERP_KHO. Fresh TCP probe failed and git ls-remote failed connecting github.com:443 after 21121 ms. Live remote baseline is unverified; no push, Draft PR, TLS/proxy/credential alteration or transport switch occurred. This network blocker is separate from incomplete browser/security verification.
+
+## Historical checkpoint a4f4556c — authority and changes
 
 Notion native recheck: Page 17 **2026-09-30T10:05:59.344Z**, Page 18 **2026-09-28T10:04:28.018Z**, Page 282 **2026-09-28T10:04:39.216Z**, Page 41 **2026-09-20T16:31:54.616Z**, all matched their supplied baselines. No Notion mutation this successor; approval.reject remains separate from receipt.cancel/complete, inbound read requires receipt.read, scope/SoD remain independent, QC-before-Post and Post-only receipt inventory boundary are preserved.
 
