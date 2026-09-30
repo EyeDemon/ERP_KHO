@@ -2,6 +2,63 @@
 
 Status: **PERMISSION CODE AUTHORIZATION TESTING INCOMPLETE**. This is an owner-review checkpoint, not release closure.
 
+## Current dependency/security successor — 2026-10-01
+
+Runtime/test source: `349f1ac2d03ab48542a34dcd2e5a1512b5fc72c5`, with sequential frontend execution in `f1902ae`. The preserved checkpoints below are historical where their findings or counts are superseded here. No permission schema, migration, bundle, receipt/QC/discrepancy/Putaway state machine or inventory boundary changed in this successor.
+
+### Dependency audit and CI
+
+- Axios alone was updated from 1.18.1 to 1.20.0 in commit `d85da312c57fe822d9811383614ed43d785d6265`. The lockfile changes its version/integrity and required form-data range; the installed related dependency versions were already compatible. No bulk upgrade, audit bypass or new dependency. apiClient runtime remains unchanged.
+- Local `npm ci` PASS and audit reports **zero vulnerabilities**. Four real-Axios-adapter regressions verify authentication/Idempotency-Key preservation, one 401 refresh/retry, permission refresh after 403 without replaying the rejected mutation, and no retry on 404/409.
+- Original GitHub run `36761205881` failed dependency audit. Successor run `36763003436` at d85da312 passed Release build, Application **347/347**, API **181/181**, dependency install/audit and lint. Its frontend result was **68/69**, with one Approvals test exceeding the unchanged 5-second timeout; production build was skipped. This is a CI failure, not frontend closure.
+- The timed-out Approvals file passes **11/11** when run independently. The official npm test command now uses documented `--no-file-parallelism`, preserving every assertion and timeout while avoiding simultaneous jsdom files. Final local full frontend passes **72/72 across 18 files**. A new remote successor run must establish CI PASS; local PASS does not establish it.
+
+### Owner-approved session boundary and fixes
+
+- Notion Page 17 was read before writing at **2026-09-30T10:05:59.344Z**. Only the owner-approved session ownership decision was added as §33.4.3. Read-back native timestamp is **2026-09-30T19:10:52.027Z**. The connector supplied page content and timestamp but no truncation flag; no `truncated=false` claim is made.
+- `DELETE /api/Auth/sessions/{sessionId}` is self-service only. Missing/foreign sessions return isolated 404; database ownership also remains in the UPDATE predicate. Admin and stale JWT Admin have no ownership exception. Session list already filters by authenticated user ID and omits refresh hashes/access-token identifiers.
+- Other-user administration remains only `POST /api/users/{userId}/security/revoke-sessions`, requiring database `user.manage` and existing shared administration guards. No permission or endpoint was added.
+- New SQL-backed HTTP regression proves own revoke 204; foreign, missing and stale-Admin attempts 404 with no mutation/audit/claim; administrative missing-grant 403; successful same-key administration 204/204 with exactly one audit/claim; revoked-grant replay 403 without another effect/audit/claim. Authentication is the existing owned HTTP test scheme; grants, sessions and effects are real SQL data. This is automated HTTP evidence, not raw browser evidence.
+- Receipt list/reference/print requests now have generation guards. Pending responses cannot repopulate data after revoke/regrant or reopen a closed print preview. Two runnable component regressions preserve the existing detail guard. Vietnamese login labels are now associated with inputs, password-manager autocomplete is retained, and an announced safe error replaces raw backend text. Login accessibility/error regression passes; post-fix browser login-label coverage is not claimed.
+
+### Fresh local automated evidence
+
+- Release solution build PASS, **0 warnings/errors**; EF pending-model PASS. No restore/dependency upgrade beyond Axios.
+- Application SQL **347/347**, **0 failed/skipped**, owned Run `bd55d262977944b68980c034306c412b`; TRX `5ffbd3ba-0da6-46c3-b9f8-3392a16e0b44`, `TestResults/SqlIntegration/bd55d262977944b68980c034306c412b/application.trx`. Official harness dropped its exact marker-owned database.
+- Focused session HTTP **1/1**, **0 failed/skipped**, TRX `fab92e4d-8cfb-444a-9306-c7a9b0cf248d`, `TestResults/Permission/SessionOwnership/session-ownership.trx`.
+- Full API SQL/HTTP **182/182**, **0 failed/skipped**, TRX `0222622a-883c-4c41-a4bd-1f411eaa5a52`, `TestResults/Permission/SessionSuccessor/api-session-successor.trx`. Fixture-owned SQL databases were disposed under exact ownership checks. Existing aggregate concurrency, canonical last-admin, bootstrap-negative, warehouse isolation, SoD and Viewer tests remain in this full suite.
+- Frontend **72/72**, no failed/skipped, sequential full suite; lint, production build and `npm audit --audit-level=high` PASS. Backend source was unchanged by the later login-label/component-test change. Results belong to the runtime/test revision above, not to a pre-fix snapshot.
+
+### Fresh browser matrix: supporting DOM evidence
+
+Owned Run **a023c84c570141dcb8d88e3723d97f1a** used the official configured local Integrated Security helper, strict pre-permission bootstrap and additive migrations, loopback API/frontend and synthetic identities. Each browser persona logged in once; no rate-limit bypass. Its backend assemblies preceded the new session ownership fix, so this run is not post-fix session browser evidence. Setup added 22 warehouse-A pending receipts, one warehouse-B hidden receipt and one compatibility outbound entry. A setup INSERT initially omitted GrantedAt; the missing reader grant alone was repaired in the owned database, without recreating fixtures. This setup error is not a production finding or passing test.
+
+| Group | Status and observed evidence | Mandatory gaps |
+| --- | --- | --- |
+| Effective permissions | PARTIAL: reader grant changes applied through QA setup; same-session navigation added Product/Warehouse menus. After receipt.read revoke and reload, receipt/approval menus disappeared and direct receipt route showed safe Vietnamese denial; one refresh rotation and one active reader session persisted. | Raw next-request statuses, stale JWT Admin, controlled late auth/me responses. Setup grant/revoke is not browser administration evidence. |
+| Administration concurrency/last-admin | Automated suites PASS separately. | BLOCKED_BY_TOOL_CAPABILITY for browser raw requests, controlled overlap and timing. |
+| Replay/idempotency | New session HTTP and existing full-suite regressions PASS separately. | BLOCKED_BY_TOOL_CAPABILITY for authenticated browser replay/fingerprint and network counts. |
+| Mixed Approval Center | DOM PASS: Manager sees **23** scoped pending entries (20 + 3), including one outbound compatibility entry. receipt.read-only user sees **22** inbound entries (20 + 2), no outbound/warehouse-B entry, and no approve/reject controls. Vietnamese detail/history empty state observed. This replaces earlier empty-queue-only evidence. | Raw responses, independent reject mutation, SoD/replay/network assertions and nonempty history still incomplete. |
+| Granular capabilities | DOM PASS: receipt.read-only detail loads without discrepancy/reason/master grants; no mutation buttons. Product update shows edit but no barcode mutation/category management; Category selector disabled without read. Exact barcode lookup succeeds under product.read. location.manage plus warehouse.read shows only warehouse A and no warehouse mutation. | Full direct-HTTP browser separation matrix and every independent grant combination still incomplete. |
+| Viewer/safe errors | DOM PARTIAL: safe Vietnamese route denial, title, labels and loading states. | BLOCKED_BY_TOOL_CAPABILITY for raw Viewer list/detail/history/destinations and 401/403/404/409 payloads. Hidden buttons are not server authorization evidence. |
+| Vietnamese/accessibility/races | PARTIAL: Vietnamese approval/receipt/product/warehouse screens and page title observed; receipt-only and revoked-route screenshots saved. Synthetic product/unit/note names are fixture business data, not presentation labels. Component delayed-list/print regressions PASS. | Full accessibility/history sweep, post-fix login labels, controlled delayed responses and double-submit network/effect counts. |
+
+The documented browser API exposes DOM/AX/keyboard/screenshots and read-only evaluate, not authenticated raw HTTP, interception or controlled overlap. No mutating evaluate, alternate driver or transport workaround was used. SQL/API/component PASS does not replace these browser gates.
+
+### Security review, freshness and cleanup
+
+Targeted static review traced permission authorization before the idempotency filter, the wholly transaction-contained claim and rollback on thrown/action-result denial, warehouse reauthorization on successful replay, database role context on the mixed Approval Center, pre-count/pagination document filtering, active/unlocked session validation, shared SQL administration lock and canonical-Admin invariant. Existing outbound/transfer/stocktake compatibility stays outside inbound cutover. The session JWT bypass is closed by the new regression; whole-feature security/browser closure is not declared. Ponytail review found no speculative dependency/override/DSL/cache/designer to add or remove; generation guards and security checks are retained. This is internal static review, not independent verification.
+
+**Remaining security/contract gate:** account unlock and administrative revoke-all-sessions still lack an optimistic-concurrency payload/read contract. §33.6 requires concurrency, but §33.4.3 ownership approval explicitly does not waive or define that separate contract. `WarehouseAccessRevision` must not be reused for unrelated security state. The spec-owner question on the exact aggregate/token/read boundary remains unanswered. No membership frontend caller exists; whether a dedicated membership UI is required in this MVP remains unconfirmed, so no screen was invented to manufacture coverage.
+
+Final native read matches the new Page 17 timestamp above; Pages 18/282/41 remain **2026-09-28T10:04:28.018Z / 2026-09-28T10:04:39.216Z / 2026-09-20T16:31:54.616Z**. QC-before-Post, Post-only inventory boundary, approval.reject separation, warehouse/SoD and Viewer rules remain unchanged. Drive pagination completed: **140 root images + 5 folders = 145 entries**; children **16/24/56/10/176** images, no new nested folders. User.Role.Permission and corrected Putaway artifacts remain metadata-only **NOT REVIEWED**.
+
+Browser run cleanup verified exact manifest PID/start time/command/executable for API/frontend **9564/8224**, stopped both, dropped the exact marker-owned database and removed its DPAPI credential; tabs 1/2 closed. Final metadata census: QA-named databases **0**, target listeners **0**, run credential absent, ERP_KHO **ONLINE**, npm cache retained. Run logs/TRX/screenshots/manifests are ignored and unstaged. No business tables of ERP_KHO were accessed. Unknown main cache and the previously policy-blocked helper remain untouched.
+
+Safety review validated **561 text files** as UTF-8, found no forbidden tracked/untracked source artifact path, and reviewed loose credential matches as variables, DOM locators, rejected connection examples, configuration placeholders and unit fixtures. Private-key/strong-token scan covers **411 distinct outgoing historical blobs in 33 commits** through runtime HEAD 349f1ac; no hit. The first history enumeration counted paths as object IDs and yielded zero blobs, so it was rejected and rerun using exact object hashes. Documentation and the exact staged set are reviewed separately; no scan PASS is inferred from zero scanned blobs. Origin/live base remain EyeDemon/ERP_KHO and 699f7a1e7eb338eabdf17666b187a43133ab8af0. Feature push/PR update are source-review handoff only; PR stays Draft and mandatory browser/security gaps keep production NO-GO.
+
+## Historical checkpoints — superseded where contradicted above
+
 ## Membership concurrency successor — 2026-10-01
 
 Status remains **TESTING INCOMPLETE**. Runtime changes below supersede the earlier membership concurrency finding; full browser/security closure is still missing. Checkpoints `a4f4556c` and `9f0d8b7` are preserved.
