@@ -57,6 +57,7 @@ public class WarehouseAuthorizationServiceTests
         await using var transaction = await context.Database.BeginTransactionAsync();
         var role = new Role { RoleName = "WarehouseGrant_" + Guid.NewGuid().ToString("N") };
         role.Permissions.Add(new RolePermission { Permission = await context.Permissions.SingleAsync(p => p.Code == "user_warehouse.manage") });
+        role.Permissions.Add(new RolePermission { Permission = await context.Permissions.SingleAsync(p => p.Code == "user_warehouse.read") });
         var actor = new User { Username = "scope_actor_" + Guid.NewGuid().ToString("N"), PasswordHash = "QA_FIXTURE_NOT_A_LOGIN", Role = role };
         var target = new User { Username = "scope_target_" + Guid.NewGuid().ToString("N"), PasswordHash = "QA_FIXTURE_NOT_A_LOGIN", Role = role };
         var warehouse = new Warehouse { Code = "QA_SCOPE_" + Guid.NewGuid().ToString("N")[..8], Name = "Kho kiểm thử" };
@@ -64,10 +65,16 @@ public class WarehouseAuthorizationServiceTests
         context.UserWarehouses.Add(new UserWarehouse { UserId = actor.Id, WarehouseId = warehouse.Id, CreatedBy = actor.Id });
         await context.SaveChangesAsync();
         var service = new UserWarehouseAccessService(context, new TestCurrentUser(actor.Id, false));
-        await service.GrantAsync(target.Id, warehouse.Id);
-        var duplicate = () => service.GrantAsync(target.Id, warehouse.Id);
+        var empty = await service.GetForUserAsync(target.Id);
+        empty.Memberships.Should().BeEmpty();
+        Convert.FromBase64String(empty.RowVersion!).Should().HaveCount(8);
+        await service.GrantAsync(target.Id, warehouse.Id, empty.RowVersion);
+        var stale = () => service.RevokeAsync(target.Id, warehouse.Id, empty.RowVersion);
+        await stale.Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>();
+        var current = await service.GetForUserAsync(target.Id);
+        var duplicate = () => service.GrantAsync(target.Id, warehouse.Id, current.RowVersion);
         await duplicate.Should().ThrowAsync<BusinessRuleException>();
-        await service.RevokeAsync(target.Id, warehouse.Id);
+        await service.RevokeAsync(target.Id, warehouse.Id, current.RowVersion);
         (await context.UserWarehouses.AnyAsync(w => w.UserId == target.Id)).Should().BeFalse();
         (await context.AuditLogs.Where(a => a.UserId == actor.Id).Select(x => x.Action).ToListAsync())
             .Should().Equal("UserWarehouse.Granted", "UserWarehouse.Revoked");
@@ -81,7 +88,7 @@ public class WarehouseAuthorizationServiceTests
         Seed(context);
         var service = new UserWarehouseAccessService(context, new TestCurrentUser(10, false));
 
-        var action = () => service.GrantAsync(10, 1);
+        var action = () => service.GrantAsync(10, 1, null);
 
         await action.Should().ThrowAsync<ForbiddenException>();
         context.UserWarehouses.Should().BeEmpty();

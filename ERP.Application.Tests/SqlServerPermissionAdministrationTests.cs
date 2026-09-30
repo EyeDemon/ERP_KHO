@@ -13,6 +13,44 @@ public sealed class SqlServerPermissionAdministrationTests
         .UseSqlServer(Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!).Options);
 
     [SqlServerFact]
+    public async Task EmptyMembershipAggregateRejectsConcurrentAndMalformedTokens()
+    {
+        await using var setup = Context();
+        var actor = await setup.Users.SingleAsync(u => u.Username == "qa_permission_bootstrap");
+        var target = new User { Username = "QA_MEMBERSHIP_" + Guid.NewGuid().ToString("N"), RoleId = actor.RoleId, PasswordHash = "QA_FIXTURE_NOT_A_LOGIN" };
+        var warehouse = new Warehouse { Code = "QA_MEM_" + Guid.NewGuid().ToString("N")[..8], Name = "Kho kiểm thử" };
+        setup.AddRange(target, warehouse); await setup.SaveChangesAsync();
+        var reader = new UserWarehouseAccessService(setup, new MembershipActor(actor.Id));
+        var empty = await reader.GetForUserAsync(target.Id);
+        Assert.Empty(empty.Memberships);
+        Assert.Equal(8, Convert.FromBase64String(empty.RowVersion!).Length);
+        foreach (var invalid in new string?[] { null, "invalid", Convert.ToBase64String(new byte[7]) })
+            await Assert.ThrowsAsync<ConcurrencyException>(() => reader.GrantAsync(target.Id, warehouse.Id, invalid));
+        await using var winner = Context();
+        await using var transaction = await winner.Database.BeginTransactionAsync();
+        await PermissionAdministrationGuard.LockAsync(winner, default);
+        await using var loser = Context();
+        var losing = new UserWarehouseAccessService(loser, new MembershipActor(actor.Id))
+            .GrantAsync(target.Id, warehouse.Id, empty.RowVersion);
+        await Task.Delay(100);
+        Assert.False(losing.IsCompleted);
+        await new UserWarehouseAccessService(winner, new MembershipActor(actor.Id))
+            .GrantAsync(target.Id, warehouse.Id, empty.RowVersion);
+        await transaction.CommitAsync();
+        await Assert.ThrowsAsync<ConcurrencyException>(() => losing);
+        await using var verify = Context();
+        Assert.Equal(1, await verify.UserWarehouses.CountAsync(w => w.UserId == target.Id));
+        Assert.Equal(1, await verify.AuditLogs.CountAsync(a => a.EntityName == "UserWarehouse" && a.EntityId == target.Id));
+        Assert.Equal(1, (await verify.Users.SingleAsync(u => u.Id == target.Id)).WarehouseAccessRevision);
+    }
+
+    private sealed record MembershipActor(int UserId) : ERP.Application.Interfaces.ICurrentUser
+    {
+        public bool IsAuthenticated => true;
+        public bool IsGlobalAdmin => true;
+    }
+
+    [SqlServerFact]
     public async Task AggregateVersionSerializesConcurrentGrantAndRevoke()
     {
         await using var setup = Context();

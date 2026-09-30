@@ -2,7 +2,44 @@
 
 Status: **PERMISSION CODE AUTHORIZATION TESTING INCOMPLETE**. This is an owner-review checkpoint, not release closure.
 
-## Browser/security successor — checkpoint a4f4556c, 2026-09-30
+## Membership concurrency successor — 2026-10-01
+
+Status remains **TESTING INCOMPLETE**. Runtime changes below supersede the earlier membership concurrency finding; full browser/security closure is still missing. Checkpoints `a4f4556c` and `9f0d8b7` are preserved.
+
+- Membership GET now returns `{ memberships, rowVersion }`. Its eight-byte Base64 token encodes a per-user `WarehouseAccessRevision`, including empty sets. EF marks this revision as a concurrency token, separate from authentication counters. Only mutation-capable non-Viewer callers receive the token; otherwise its JSON property is omitted.
+- Grant/revoke require the token. Missing/malformed/stale tokens return safe Vietnamese 409. Under the existing shared administration lock, the aggregate is reloaded; membership, revision and audit change atomically with the last-admin guard. Successful replay retains exactly-once behavior and still reauthorizes. Duplicate grant/absent revoke retain existing 400/404 failure semantics without a new audit/revision.
+- EF-generated additive migration `20260930150052_AddUserWarehouseAccessAggregateConcurrency` adds a non-null bigint default 0 to Users, with Designer/snapshot. Up/Down affect only this revision; production rollback after administration data still requires backup/data planning. No inventory/history changes.
+- Final Release build PASS, zero warnings/errors; EF pending-model PASS. Application SQL **347/347**, no failed/skipped, final owned Run ID `774d6e0e1aad44b89b65a56afb89cb61` (TRX run `16b75419-a853-48ce-a118-806ba4b868f6`). This supersedes the earlier successor run `92800a0c3b08475eac5b097a3d9e00bc` after membership reads were moved to a warehouse-filtered SQL projection. Official harness cleaned the exact marker-owned database. New service race covers an empty aggregate, malformed tokens and two overlapping same-token grants: one effect/audit, one stale loser. Fresh grant/revoke and stale revoke are also covered.
+- Expanded focused SQL-backed HTTP **1/1 PASS**, Run `e09589df-7e3c-4757-a713-55928c319532`, `TestResults/Permission/MembershipSuccessor/membership-http-expanded.trx`: two requests are held pending by the real shared SQL administration lock, then released, producing exactly one 204 and one 409. It verifies safe token validation, fresh grant/revoke, successful terminal-state replay, changed-payload 409, one audit/effect, permission-revoked replay 403, membership-revoked replay 404 despite a stale JWT Admin claim, inactive-user 401, and Viewer JSON token absence. Denials leave no new durable claims or success audits.
+- Final full API SQL/HTTP **181/181 PASS**, zero failed/skipped, TRX Run `27d6afb8-37be-4e40-a1c6-0c557fee7d7c`, `TestResults/Permission/MembershipSuccessor/api-membership-closure-checkpoint.trx`. Every test uses official exact-marker ownership and disposal. Application runtime was unchanged by the subsequent HTTP-test expansion, so its final 347/347 evidence remains associated with this source. Changed C# source/test/migration file-hash aggregate (sorted path plus SHA-256) is `CC871DA7FCDA40D132BDE9D7D136B1355895E1EB3348EE69C02B2558D6E2537C`.
+- Fresh frontend **65/65 PASS**, 16 files, lint and production build PASS. No frontend source change in this successor. These automated results do not close browser gates.
+- No frontend caller of the membership endpoint exists in the current source search. Membership token refresh/stale clearing UI and fresh browser membership behavior are **NOT VERIFIED**, not inferred from the permission-grant UI.
+
+### Browser capability precheck
+
+The exposed cua_repl documentation supports DOM/keyboard/screenshots and read-only evaluate; it exposes no raw HTTP reader, authenticated request replay, interception or controlled delayed responses. No new BrowserQA run was created to repeat partial UI evidence; no mutating evaluate/alternate driver was used.
+
+| Case | Required capability | Browser status |
+| --- | --- | --- |
+| Vietnamese UI, focus, menu/route | DOM/keyboard/screenshot | Supported; existing evidence partial |
+| Raw Viewer / safe HTTP errors | Raw response observation | BLOCKED: API not exposed |
+| Replay/fingerprint / double-submit counts | Request replay/network observation | BLOCKED; SQL/HTTP is separate evidence |
+| True concurrent administration/last-admin | Controlled overlap/timing | BLOCKED; SQL race is separate evidence |
+| Late auth/me/receipt response | Interception and controlled release | BLOCKED: API not exposed |
+
+Native Notion reads match baselines: 17 `2026-09-30T10:05:59.344Z`, 18 `2026-09-28T10:04:28.018Z`, 282 `2026-09-28T10:04:39.216Z`, 41 `2026-09-20T16:31:54.616Z`. No writes. Drive pagination complete: root 140 images + 5 folders; subfolders 16/24/56/10/176; no new nested folders. Metadata-only remains **NOT REVIEWED**.
+
+Main cache path `%SystemDrive%/ProgramData/Microsoft/Windows/Caches/`: three database cache files created around `2026-09-30T14:36:38Z`; creator/ownership **UNKNOWN**, preserved. Policy-blocked helper directory untouched. The earlier HTTPS failure after 21.1 seconds is historical: the 2026-10-01 read-only live check now succeeds, with origin EyeDemon/ERP_KHO and base `699f7a1e7eb338eabdf17666b187a43133ab8af0`. The authenticated GitHub account has push permission; no feature branch/open PR existed at that check. Owner-authorized feature checkpoint/Draft PR handoff may proceed after exact stage/history scans. This does not close browser/security gates; no network-setting workaround was used.
+
+### Review and cleanup status
+
+Targeted static correctness/security review confirms the new membership aggregate token, transaction lock, stale rejection, scoped SQL read and replay warehouse metadata; the full successor SQL/HTTP suites also preserve the existing canonical-Admin, locked-Admin, fully granted Manager and last-admin race regressions. Static review is not browser evidence or an independent review. Whole-feature security closure remains open: required browser cases above, membership UI token handling, and review of other existing administration surfaces (unlock/session-revocation have no explicit stale-token payload) have not been declared closed by this membership fix.
+
+Ponytail review of the successor: no new dependency, permission engine, lock infrastructure or abstraction; uses the existing shared lock and EF concurrency support. No security control was removed. Whole-feature release approval is not implied.
+
+Cleanup metadata after suites: QA-named integration/browser databases **0**, listeners on owned QA ports 4175/5265 **0**, BrowserQA credential artifacts **0**, `ERP_KHO` **ONLINE**. No fresh API/frontend/browser process or credential was created; ERP_KHO business tables were never read. Generated SQL/TRX/dist and existing ignored artifacts remain unstaged; the policy-blocked helper and unknown main cache are preserved. Pre-stage history scan examined **386 blobs**, with zero invalid UTF-8, private-key/strong-secret signatures or forbidden runtime/artifact paths; successor source scans are separate from the missing live remote verification.
+
+## Historical browser/security successor — checkpoint a4f4556c, 2026-09-30
 
 Status remains **TESTING INCOMPLETE**. No runtime/schema changes were made in this successor; automated evidence is associated with a4f4556c (API 180/180, Application 346/346 as previously qualified, frontend 65/65, build/EF/lint/build PASS), not a new test execution.
 

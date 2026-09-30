@@ -52,6 +52,10 @@ Fresh Application owned-SQL passes 338/338, API SQL/HTTP passes 156/156, and fro
 
 Closure Runs `0f5ec2aae31c4e6ab370ca60f33397bc`, `14eb93c5ea2f46b6b0681618010b08fa` and `9dfb6177fbeb4da1a415f385bd15b080` add true concurrency, replay/fingerprint, post-fix raw Viewer filtering, destination validation, pickable availability, alternate-UOM snapshot and complete warehouse isolation evidence. The implemented UI remains Vietnamese; the Drive image itself was not rendered and remains `NOT REVIEWED`.
 
-## Permission browser successor — 2026-09-30
+## Historical permission browser successor — 2026-09-30
 
 Checkpoint a4f4556c remains TESTING INCOMPLETE. Browser Run 39d474c6d89a4e4faf6bd34e0e58e730 verified Vietnamese title/catalog labels and same-session receipt.read revoke/regrant menu and route behavior. It did not close raw Viewer/network, controlled concurrency, late-response or full action-isolation coverage. Membership administration still lacks an aggregate stale token; serialization alone is not optimistic concurrency. See PERMISSION_CODE_AUTHORIZATION.md for the A–G matrix, retained automated evidence and exact cleanup. Drive remains metadata-only NOT REVIEWED.
+
+## Membership concurrency successor — 2026-10-01
+
+The preceding membership-token finding is superseded by the additive per-user revision fix. GET membership returns a scoped set and a mutation-only aggregate token even for an empty set; grant/revoke validate it within the shared lock and transaction. Fresh Application SQL 347/347, API SQL/HTTP 181/181 and frontend 65/65 pass. SQL-backed HTTP verifies concurrent 204/409, stale/retry/fingerprint, permission-revoked replay 403, membership-revoked replay 404 and Viewer token-property absence. This is automated evidence, not fresh browser closure. No frontend membership caller exists; token reload/stale-clearing UI is NOT VERIFIED. Browser raw-response/replay/interception capability gaps keep the feature TESTING INCOMPLETE. Drive pagination remains metadata-only NOT REVIEWED. Exact run IDs, migration, source association and cleanup are in PERMISSION_CODE_AUTHORIZATION.md.

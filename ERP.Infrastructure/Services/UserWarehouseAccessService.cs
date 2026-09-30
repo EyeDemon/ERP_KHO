@@ -4,6 +4,8 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Buffers.Binary;
+using ERP.Domain.Exceptions;
 
 namespace ERP.Infrastructure.Services;
 
@@ -11,26 +13,31 @@ public sealed class UserWarehouseAccessService(
     ErpKhoDbContext context,
     ICurrentUser currentUser) : IUserWarehouseAccessService
 {
-    public async Task<IReadOnlyList<UserWarehouseAccessDto>> GetForUserAsync(int userId, CancellationToken cancellationToken = default)
+    public async Task<UserWarehouseAccessSetDto> GetForUserAsync(int userId, CancellationToken cancellationToken = default)
     {
         await EnsurePermissionAsync("user_warehouse.read", cancellationToken);
-        await EnsureUserExistsAsync(userId, cancellationToken);
         var scope = await AccessibleWarehousesAsync(cancellationToken);
-        return await context.UserWarehouses.AsNoTracking()
-            .Where(x => x.UserId == userId && scope.Contains(x.WarehouseId))
-            .OrderBy(x => x.Warehouse.Code)
-            .Select(x => new UserWarehouseAccessDto(x.WarehouseId, x.Warehouse.Code, x.Warehouse.Name, x.CreatedAt))
-            .ToListAsync(cancellationToken);
+        var target = await context.Users.AsNoTracking().Where(u => u.Id == userId)
+            .Select(u => new { u.WarehouseAccessRevision, Memberships = u.WarehouseAccesses
+                .Where(w => scope.Contains(w.WarehouseId)).OrderBy(w => w.Warehouse.Code)
+                .Select(w => new UserWarehouseAccessDto(w.WarehouseId, w.Warehouse.Code, w.Warehouse.Name, w.CreatedAt)).ToList() })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Không tìm thấy người dùng.");
+        var canMutate = await context.Users.AnyAsync(u => u.Id == currentUser.UserId &&
+            u.Role.RoleName.Trim().ToLower() != "viewer" &&
+            u.Role.Permissions.Any(p => p.Permission.Code == "user_warehouse.manage"), cancellationToken);
+        return new(target.Memberships,
+            canMutate ? Token(target.WarehouseAccessRevision) : null);
     }
 
-    public async Task GrantAsync(int userId, int warehouseId, CancellationToken cancellationToken = default)
+    public async Task GrantAsync(int userId, int warehouseId, string? rowVersion, CancellationToken cancellationToken = default)
     {
         await EnsurePermissionAsync("user_warehouse.manage", cancellationToken);
         await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
         if (!(await AccessibleWarehousesAsync(cancellationToken)).Contains(warehouseId))
             throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
-        await EnsureUserExistsAsync(userId, cancellationToken);
+        var target = await ValidateVersionAsync(userId, rowVersion, cancellationToken);
         if (!await context.Warehouses.AnyAsync(x => x.Id == warehouseId, cancellationToken))
             throw new NotFoundException("Không tìm thấy kho.");
 
@@ -45,18 +52,20 @@ public sealed class UserWarehouseAccessService(
             CreatedAt = DateTime.UtcNow
         });
         context.AuditLogs.Add(CreateAudit("UserWarehouse.Granted", userId, warehouseId));
+        target.WarehouseAccessRevision = checked(target.WarehouseAccessRevision + 1);
         await context.SaveChangesAsync(cancellationToken);
         await PermissionAdministrationGuard.EnsureAdministratorAsync(context, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task RevokeAsync(int userId, int warehouseId, CancellationToken cancellationToken = default)
+    public async Task RevokeAsync(int userId, int warehouseId, string? rowVersion, CancellationToken cancellationToken = default)
     {
         await EnsurePermissionAsync("user_warehouse.manage", cancellationToken);
         await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
         if (!(await AccessibleWarehousesAsync(cancellationToken)).Contains(warehouseId))
             throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
+        var target = await ValidateVersionAsync(userId, rowVersion, cancellationToken);
         var access = await context.UserWarehouses
             .FirstOrDefaultAsync(x => x.UserId == userId && x.WarehouseId == warehouseId, cancellationToken);
         if (access is null)
@@ -64,15 +73,30 @@ public sealed class UserWarehouseAccessService(
 
         context.UserWarehouses.Remove(access);
         context.AuditLogs.Add(CreateAudit("UserWarehouse.Revoked", userId, warehouseId));
+        target.WarehouseAccessRevision = checked(target.WarehouseAccessRevision + 1);
         await context.SaveChangesAsync(cancellationToken);
         await PermissionAdministrationGuard.EnsureAdministratorAsync(context, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
     }
 
-    private async Task EnsureUserExistsAsync(int userId, CancellationToken cancellationToken)
+    private static string Token(long revision)
     {
-        if (!await context.Users.AnyAsync(x => x.Id == userId, cancellationToken))
-            throw new NotFoundException("Không tìm thấy người dùng.");
+        var bytes = new byte[8];
+        BinaryPrimitives.WriteInt64BigEndian(bytes, revision);
+        return Convert.ToBase64String(bytes);
+    }
+
+    private async Task<User> ValidateVersionAsync(int userId, string? version, CancellationToken cancellationToken)
+    {
+        var target = await context.Users.SingleOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new NotFoundException("Không tìm thấy người dùng.");
+        await context.Entry(target).ReloadAsync(cancellationToken);
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(version ?? ""); }
+        catch (FormatException) { throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại."); }
+        if (bytes.Length != 8 || BinaryPrimitives.ReadInt64BigEndian(bytes) != target.WarehouseAccessRevision)
+            throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+        return target;
     }
 
     private async Task EnsurePermissionAsync(string permission, CancellationToken token)

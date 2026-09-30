@@ -18,6 +18,99 @@ namespace ERP.Api.Tests;
 public sealed class InboundHttpIntegrationTests
 {
     [ApprovalSqlServerFact]
+    public async Task MembershipTokensProtectEmptySetsStaleRequestsAndReauthorizedReplay()
+    {
+        await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(
+            Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
+        await database.MigrateAndSeedAsync();
+        await using var db = Context(database.ConnectionString);
+        var actor = await db.Users.SingleAsync(u => u.Role.RoleName == "Admin");
+        var target = new User { Username = "QA_MEMBERSHIP_HTTP", PasswordHash = "QA_FIXTURE_NOT_A_LOGIN", RoleId = actor.RoleId };
+        db.Users.Add(target); await db.SaveChangesAsync();
+        var warehouse = await db.Warehouses.SingleAsync();
+        await using var factory = Factory(database.ConnectionString);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        var path = $"/api/users/{target.Id}/warehouse-access";
+        async Task<string> ReadToken()
+        {
+            using var response = await Send(client, HttpMethod.Get, path, actor.Id, "Admin");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return json.RootElement.GetProperty("rowVersion").GetString()!;
+        }
+        var baseline = await ReadToken();
+        Assert.Equal(8, Convert.FromBase64String(baseline).Length);
+        foreach (var invalid in new string?[] { null, "invalid", Convert.ToBase64String(new byte[7]) })
+        {
+            using var denied = await Send(client, HttpMethod.Post, path, actor.Id, "Admin", Guid.NewGuid().ToString(),
+                JsonSerializer.Serialize(new { warehouseId = warehouse.Id, rowVersion = invalid }));
+            Assert.Equal(HttpStatusCode.Conflict, denied.StatusCode);
+        }
+        Assert.Equal(0, await db.IdempotencyRecords.CountAsync(r => r.UserId == actor.Id));
+        var body = JsonSerializer.Serialize(new { warehouseId = warehouse.Id, rowVersion = baseline });
+        var keys = new[] { "qa-membership-race-a", "qa-membership-race-b" };
+        await using var blocker = Context(database.ConnectionString);
+        await using var blockingTransaction = await blocker.Database.BeginTransactionAsync();
+        await ERP.Infrastructure.Services.PermissionAdministrationGuard.LockAsync(blocker, default);
+        var first = Send(client, HttpMethod.Post, path, actor.Id, "Admin", keys[0], body);
+        var second = Send(client, HttpMethod.Post, path, actor.Id, "Admin", keys[1], body);
+        await Task.Delay(100);
+        Assert.False(first.IsCompleted);
+        Assert.False(second.IsCompleted);
+        await blockingTransaction.CommitAsync();
+        var responses = await Task.WhenAll(first, second);
+        var successKey = keys[Array.FindIndex(responses, r => r.StatusCode == HttpStatusCode.NoContent)];
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.NoContent);
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Conflict);
+        foreach (var response in responses) response.Dispose();
+        using (var replay = await Send(client, HttpMethod.Post, path, actor.Id, "Admin", successKey, body))
+            Assert.Equal(HttpStatusCode.NoContent, replay.StatusCode);
+        using (var mismatch = await Send(client, HttpMethod.Post, path, actor.Id, "Admin", successKey,
+            JsonSerializer.Serialize(new { warehouseId = warehouse.Id, rowVersion = await ReadToken() })))
+            Assert.Equal(HttpStatusCode.Conflict, mismatch.StatusCode);
+        using (var stale = await Send(client, HttpMethod.Delete, $"{path}/{warehouse.Id}", actor.Id, "Admin", "qa-membership-stale",
+            JsonSerializer.Serialize(new { rowVersion = baseline })))
+            Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal(1, await db.UserWarehouses.CountAsync(w => w.UserId == target.Id));
+        Assert.Equal(1, await db.AuditLogs.CountAsync(a => a.EntityName == "UserWarehouse" && a.EntityId == target.Id));
+        using (var success = await Send(client, HttpMethod.Delete, $"{path}/{warehouse.Id}", actor.Id, "Admin", "qa-membership-revoke",
+            JsonSerializer.Serialize(new { rowVersion = await ReadToken() })))
+            Assert.Equal(HttpStatusCode.NoContent, success.StatusCode);
+        await db.RolePermissions.Where(g => g.RoleId == actor.RoleId && g.Permission.Code == "user_warehouse.manage").ExecuteDeleteAsync();
+        using (var revoked = await Send(client, HttpMethod.Post, path, actor.Id, "Admin", successKey, body))
+            Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
+        Assert.Equal(2, await db.IdempotencyRecords.CountAsync(r => r.UserId == actor.Id));
+        Assert.Equal(2, await db.AuditLogs.CountAsync(a => a.EntityName == "UserWarehouse" && a.EntityId == target.Id));
+        Assert.False(await db.UserWarehouses.AnyAsync(w => w.UserId == target.Id));
+        var scopedRole = new Role { RoleName = "QA_MEMBERSHIP_SCOPED" };
+        foreach (var permission in await db.Permissions.Where(p => p.Code == "user_warehouse.read" || p.Code == "user_warehouse.manage").ToArrayAsync())
+            scopedRole.Permissions.Add(new RolePermission { PermissionId = permission.Id });
+        db.Roles.Add(scopedRole); await db.SaveChangesAsync();
+        actor.RoleId = scopedRole.Id;
+        db.UserWarehouses.Add(new UserWarehouse { UserId = actor.Id, WarehouseId = warehouse.Id, CreatedBy = actor.Id });
+        await db.SaveChangesAsync();
+        await db.UserWarehouses.Where(w => w.UserId == actor.Id).ExecuteDeleteAsync();
+        using (var revokedScopeReplay = await Send(client, HttpMethod.Post, path, actor.Id, "Admin", successKey, body))
+            Assert.Equal(HttpStatusCode.NotFound, revokedScopeReplay.StatusCode);
+        using (var deniedScope = await Send(client, HttpMethod.Post, path, actor.Id, "Admin", "qa-membership-outside", body))
+            Assert.Equal(HttpStatusCode.NotFound, deniedScope.StatusCode);
+        var viewerRole = await db.Roles.SingleAsync(r => r.RoleName == "Viewer");
+        viewerRole.Permissions.Add(new RolePermission { PermissionId = await db.Permissions.Where(p => p.Code == "user_warehouse.read").Select(p => p.Id).SingleAsync() });
+        actor.RoleId = viewerRole.Id; await db.SaveChangesAsync();
+        using (var readOnly = await Send(client, HttpMethod.Get, path, actor.Id, "Admin"))
+        {
+            Assert.Equal(HttpStatusCode.OK, readOnly.StatusCode);
+            using var json = JsonDocument.Parse(await readOnly.Content.ReadAsStringAsync());
+            Assert.False(json.RootElement.TryGetProperty("rowVersion", out _));
+        }
+        actor.IsActive = false; await db.SaveChangesAsync();
+        using (var inactive = await Send(client, HttpMethod.Post, path, actor.Id, "Admin", "qa-membership-inactive", body))
+            Assert.Equal(HttpStatusCode.Unauthorized, inactive.StatusCode);
+        Assert.Equal(2, await db.IdempotencyRecords.CountAsync(r => r.UserId == actor.Id));
+        Assert.Equal(2, await db.AuditLogs.CountAsync(a => a.EntityName == "UserWarehouse" && a.EntityId == target.Id));
+    }
+
+    [ApprovalSqlServerFact]
     public async Task MixedApprovalInboundRequiresIndependentReadAndRejectGrantsOnEveryRequest()
     {
         await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(
