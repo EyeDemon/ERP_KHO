@@ -15,6 +15,7 @@ public class User
     public DateTime? LockoutEnd { get; set; }
     public DateTime? LastFailedLoginAt { get; set; }
     public long WarehouseAccessRevision { get; set; }
+    public long SecurityRevision { get; set; }
 
     // Navigation
     public Role Role { get; set; } = null!;

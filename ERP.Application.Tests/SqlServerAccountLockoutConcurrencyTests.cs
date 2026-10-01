@@ -69,11 +69,11 @@ public sealed class SqlServerAccountLockoutConcurrencyTests
         try
         {
             var denied = new AccountAdminService(context, new TestCurrentUser(target.Id, false));
-            var deniedAction = () => denied.UnlockAsync(target.Id);
+            var deniedAction = () => denied.UnlockAsync(target.Id, null);
             await deniedAction.Should().ThrowAsync<ForbiddenException>();
 
             var allowed = new AccountAdminService(context, new TestCurrentUser(admin.Id, false));
-            await allowed.UnlockAsync(target.Id);
+            await allowed.UnlockAsync(target.Id, (await allowed.GetAsync(target.Id)).RowVersion);
             await context.Entry(target).ReloadAsync();
             target.FailedLoginCount.Should().Be(0);
             target.LockoutEnd.Should().BeNull();

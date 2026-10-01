@@ -103,8 +103,9 @@ public sealed class SqlServerRefreshTokenRotationTests
             await using (var db = CreateContext()) await db.Users.Where(x => x.Id == testUser.UserId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
             await AssertRefreshRejectedAsync(testUser.UserId, inactiveToken);
 
-            await using (var db = CreateContext()) await db.Users.Where(x => x.Id == testUser.UserId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, true).SetProperty(x => x.LockoutEnd, DateTime.UtcNow.AddMinutes(5)));
+            await using (var db = CreateContext()) await db.Users.Where(x => x.Id == testUser.UserId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, true));
             var lockedToken = await CreateRefreshAsync();
+            await using (var db = CreateContext()) await db.Users.Where(x => x.Id == testUser.UserId).ExecuteUpdateAsync(s => s.SetProperty(x => x.LockoutEnd, DateTime.UtcNow.AddMinutes(5)));
             await AssertRefreshRejectedAsync(testUser.UserId, lockedToken);
 
             await using (var db = CreateContext()) await db.Users.Where(x => x.Id == testUser.UserId).ExecuteUpdateAsync(s => s.SetProperty(x => x.LockoutEnd, (DateTime?)null));
@@ -155,7 +156,7 @@ public sealed class SqlServerRefreshTokenRotationTests
                 db.RolePermissions.Add(new RolePermission { RoleId = owner.RoleId, PermissionId = permissionId });
                 await db.SaveChangesAsync();
                 var admin = new UserSessionService(db, CreateTokenService(), new TestCurrentUser(owner.UserId, true), new SessionSecurityOptions());
-                await admin.RevokeUserSessionsAsAdminAsync(other.UserId);
+                await admin.RevokeUserSessionsAsAdminAsync(other.UserId, (await new AccountAdminService(db, new TestCurrentUser(owner.UserId, true)).GetAsync(other.UserId)).RowVersion);
                 (await db.UserSessions.CountAsync(x => x.UserId == other.UserId && x.RevokedAt == null)).Should().Be(0);
                 (await db.AuditLogs.CountAsync(x => x.UserId == owner.UserId
                     && x.Action == "Authentication.AdminRevokedUserSessions"

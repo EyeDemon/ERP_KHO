@@ -200,7 +200,8 @@ static async Task RevokeQaSessionsAsync(ErpKhoDbContext context)
     var service = new UserSessionService(context, tokenService, currentUser, new SessionSecurityOptions());
     await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
     foreach (var username in usernames)
-        await service.RevokeUserSessionsAsAdminAsync(users[username].Id);
+        await service.RevokeUserSessionsAsAdminAsync(users[username].Id,
+            (await new AccountAdminService(context, currentUser).GetAsync(users[username].Id)).RowVersion);
     await transaction.CommitAsync();
 
     var activeAfter = await context.UserSessions.AsNoTracking()

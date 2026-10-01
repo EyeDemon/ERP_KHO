@@ -30,6 +30,15 @@ public sealed class IdempotentCommandFilter(
             return;
         }
 
+        // Recheck target existence before both initial claims and successful terminal-state replay.
+        if (commandScope is "User.Unlock" or "User.RevokeSessions" &&
+            actionContext.ActionArguments.TryGetValue("userId", out var target) && target is int targetId &&
+            !await context.Users.AsNoTracking().AnyAsync(u => u.Id == targetId, actionContext.HttpContext.RequestAborted))
+        {
+            actionContext.Result = new NotFoundObjectResult(new { message = "Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập." });
+            return;
+        }
+
         var rawKey = actionContext.HttpContext.Request.Headers[HeaderName].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(rawKey) || rawKey.Length > 128)
         {

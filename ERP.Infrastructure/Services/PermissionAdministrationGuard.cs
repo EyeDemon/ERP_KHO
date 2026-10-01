@@ -14,7 +14,7 @@ public static class PermissionAdministrationGuard
     {
         if (db.Database.CurrentTransaction is null)
             throw new InvalidOperationException("Permission administration requires a transaction.");
-        // ponytail: serialize rare administration writes globally; shard only with a proven cross-role invariant strategy.
+        // ponytail: serialize security/session and administration writes globally; shard only with a proven boundary/last-admin strategy.
         try
         {
             await db.Database.ExecuteSqlRawAsync("""

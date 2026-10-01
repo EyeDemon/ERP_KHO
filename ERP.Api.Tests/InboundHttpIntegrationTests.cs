@@ -15,7 +15,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ERP.Api.Tests;
 
-public sealed class InboundHttpIntegrationTests
+public sealed partial class InboundHttpIntegrationTests
 {
     [ApprovalSqlServerFact]
     public async Task SessionOwnershipAndAdministrativeReplayUseDatabaseAuthority()
@@ -71,9 +71,11 @@ public sealed class InboundHttpIntegrationTests
         var permissionId = await db.Permissions.Where(p => p.Code == "user.manage").Select(p => p.Id).SingleAsync();
         db.RolePermissions.Add(new RolePermission { RoleId = manager.RoleId, PermissionId = permissionId });
         await db.SaveChangesAsync();
+        using var snapshotResponse = await Send(client, HttpMethod.Get, $"/api/users/{admin.Id}/security", manager.Id, "Manager");
+        var snapshot = JsonDocument.Parse(await snapshotResponse.Content.ReadAsStringAsync()).RootElement.GetProperty("rowVersion").GetString();
         foreach (var retry in Enumerable.Range(0, 2))
         {
-            using var success = await Send(client, HttpMethod.Post, path, manager.Id, "Manager", "qa-session-success");
+            using var success = await Send(client, HttpMethod.Post, path, manager.Id, "Manager", "qa-session-success", JsonSerializer.Serialize(new { rowVersion = snapshot }));
             Assert.Equal(HttpStatusCode.NoContent, success.StatusCode);
         }
         Assert.True(await db.UserSessions.AnyAsync(s => s.Id == foreign.Id && s.RevokedAt != null));
