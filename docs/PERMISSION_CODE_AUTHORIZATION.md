@@ -1,6 +1,6 @@
 # Permission Code Authorization — current checkpoint
 
-Status: **LOCAL VERIFICATION PASS — GitHub successor handoff pending**. PR #1 remains Draft and production NO-GO. The historical tool-capability blocker below is superseded by the owner-authorized test-only runner and the fresh full matrix.
+Status: **PERMISSION CODE AUTHORIZATION READY FOR OWNER REVIEW**. Local mandatory verification and published-source successor CI PASS; PR #1 remains Draft and production NO-GO. The historical tool-capability blocker below is superseded by the owner-authorized test-only runner and the fresh full matrix.
 
 ## Current browser closure successor — 2026-10-01
 
@@ -42,6 +42,8 @@ All runs created in this successor were cleaned using exact manifests/markers. F
 Main/test/worktree registrations, `.npm-cache/`, UNKNOWN main cache and policy-blocked audit helper are unchanged. Ignored reports/logs/build artifacts are retained unstaged; no recursive deletion workaround. Existing WIP/runtime checkpoints are preserved. Network read-only check now succeeds and live remote remains `285ad837` with base `699f7a1e`; new test/docs commits will be pushed only to the authorized feature branch after exact staged/history scans. PR #1 stays Draft. Successor publication/CI results are recorded separately from local verification.
 
 Pre-commit safety review: **571 source text files** validated UTF-8; current/staged secret/private-key and forbidden binary/runtime artifact scans PASS. The accumulated outgoing history through execution HEAD contains **436 distinct blobs / 36 commits**, with no strong secret/private-key or forbidden artifact hit. Literal credential candidates were reviewed as existing unit fixtures, placeholders and rejected connection examples, without recording values. The five runner files were explicitly staged and reviewed; reports, credentials, cache and build outputs are excluded. New commit blobs are rechecked before push.
+
+Published runner commit **bdd892336523317ea8cb1a58470818322de00607** and evidence commit **0700b7cc7149f427f96500ca1ee60cb31d29a039** are on the authorized feature branch, including the formerly local `e5f65a83` documentation checkpoint. [Successor CI **36892742086**](https://github.com/EyeDemon/ERP_KHO/actions/runs/36892742086) at `0700b7c` completed **SUCCESS**: build **0 warnings/errors**, Application **347/347**, API **184/184**, frontend **72/72 / 18 files**, no failed/skipped tests, audit **0 vulnerabilities**, lint/build PASS. Runner built-in/browser tests remain separately executed local evidence; CI does not claim to run the browser matrix. The published history scan covers **443 blobs / 38 commits** from base, with zero secret/private-key/artifact findings. This final closure status update is documentation-only; its live publication/CI state is maintained in Draft PR #1. No mandatory local browser/security gate remains open; membership UI is owner-deferred scope.
 
 REMOTE STAGING NOT AUTHORIZED · CAPACITY EXECUTION NOT AUTHORIZED · PRODUCTION NO-GO.
 
