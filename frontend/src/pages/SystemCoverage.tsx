@@ -11,7 +11,6 @@ import {
   type ReleaseWave,
 } from '../config/capabilityGovernance';
 import { getCanonicalDocumentationRegister } from '../config/documentationRegister';
-import { coreInteractiveDemoIds } from '../config/capabilityDemoScreens';
 import './SystemCoverage.css';
 
 const applicabilityLabels: Record<Applicability, string> = {

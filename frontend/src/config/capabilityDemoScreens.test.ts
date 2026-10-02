@@ -39,6 +39,28 @@ describe('interactive capability demo registry', () => {
     }
   });
 
+  it('gives every live/foundation capability a domain-specific implemented preview', () => {
+    const implemented = allCapabilities.filter(({ capability }) =>
+      capability.status === 'live' || capability.status === 'foundation'
+    );
+    expect(implemented).toHaveLength(33);
+
+    for (const { module, capability } of implemented) {
+      const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
+      expect(demo.commands).not.toContain('SIMULATE_ACTION');
+      expect(demo.exceptionTitle).not.toBe('MOCK_VALIDATION_EXCEPTION');
+      expect(demo.fields.some((field) => field.label === 'Production maturity')).toBe(true);
+    }
+  });
+
+  it('leaves no capability on the generic simulator fallback', () => {
+    for (const { module, capability } of allCapabilities) {
+      const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
+      expect(demo.exceptionTitle).not.toBe('MOCK_VALIDATION_EXCEPTION');
+      expect(demo.commands).not.toContain('SIMULATE_ACTION');
+    }
+  });
+
   it('keeps canonical inventory boundaries concrete in detailed core demos', () => {
     const dispatchEntry = allCapabilities.find(({ capability }) => capability.id === 'OUT-08');
     const moveEntry = allCapabilities.find(({ capability }) => capability.id === 'INV-08');
