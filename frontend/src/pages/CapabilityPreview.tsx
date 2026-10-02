@@ -9,6 +9,7 @@ import {
   type BlueprintStatus,
 } from '../config/erpWmsBlueprint';
 import { getMockCapabilityFixture, getMockWorkCenter } from '../mocks/erpWmsMockData';
+import { useMockDemo } from '../context/MockDemoContext';
 import './CapabilityPreview.css';
 
 const statusIcon = (status: BlueprintStatus) =>
@@ -16,11 +17,13 @@ const statusIcon = (status: BlueprintStatus) =>
 
 const CapabilityPreview = () => {
   const { moduleKey, capabilityId } = useParams();
+  const demo = useMockDemo();
   const module = findBlueprintModule(moduleKey);
   const capability = module?.capabilities.find((item) => item.id === capabilityId);
   const workCenter = getMockWorkCenter(moduleKey);
   const fixture = getMockCapabilityFixture(capabilityId);
-  const records = workCenter?.records ?? [];
+  const records = (workCenter?.records ?? []).filter((record) => demo.canSeeWarehouse(record.warehouse));
+  const fixtureVisible = fixture ? demo.canSeeWarehouse(fixture.sampleWarehouse) : false;
 
   if (!module || !capability) {
     return (
@@ -92,9 +95,15 @@ const CapabilityPreview = () => {
               <div className="capability-fixture-trace">
                 <strong>Capability fixture:</strong>
                 <span>{fixture.fixtureId}</span>
-                <span>{fixture.sampleReference}</span>
-                <span>{fixture.sampleWarehouse}</span>
-                <span>{fixture.sampleStatus}</span>
+                {fixtureVisible ? (
+                  <>
+                    <span>{fixture.sampleReference}</span>
+                    <span>{fixture.sampleWarehouse}</span>
+                    <span>{fixture.sampleStatus}</span>
+                  </>
+                ) : (
+                  <span>Sample record ẩn bởi simulated warehouse scope</span>
+                )}
               </div>
             )}
 
@@ -121,7 +130,7 @@ const CapabilityPreview = () => {
               <div className="mobile-preview-shell">
                 <div className="mobile-preview-top">
                   <strong>ERP WMS</strong>
-                  <span>{fixture?.sampleWarehouse ?? 'Warehouse'}</span>
+                  <span>{fixtureVisible ? fixture?.sampleWarehouse : (records[0]?.warehouse ?? 'No warehouse in scope')}</span>
                 </div>
                 <div className="mobile-preview-body">
                   <span className="mobile-task-label">TASK / {capability.id}</span>
@@ -129,7 +138,7 @@ const CapabilityPreview = () => {
                   <div className="mobile-scan-box">▣ Quét barcode / location / serial</div>
                   <div className="mobile-record-card">
                     <small>Reference</small>
-                    <strong>{fixture?.sampleReference ?? records[0]?.reference ?? '—'}</strong>
+                    <strong>{fixtureVisible ? fixture?.sampleReference : (records[0]?.reference ?? '—')}</strong>
                     <span>{records[0]?.subject ?? capability.goal}</span>
                   </div>
                   <div className="mobile-quantity-row">
