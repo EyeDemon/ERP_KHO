@@ -41,6 +41,7 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'OV-05', name: 'Distributed Warehouse Control Tower', goal: 'Theo dõi nhiều kho theo exception-driven operations.', surfaces: ['Web'], status: 'planned', spec: '183, 195' },
       { id: 'OV-06', name: 'Warehouse Task Engine & Work Queue', goal: 'Chuẩn hóa RECEIVE/PUTAWAY/PICK/PACK/MOVE/REPLENISH/COUNT/LOAD/QC/RETURN/EXCEPTION/VAS thành task dùng chung web/mobile.', surfaces: ['Web', 'Mobile', 'API', 'Worker'], status: 'planned', spec: '80' },
       { id: 'OV-07', name: 'Enterprise / Global Search', goal: 'Exact-first search xuyên Product, Barcode, Partner, Document, Lot/Serial, Location, Shipment và Task theo security scope.', surfaces: ['Web', 'Mobile', 'API', 'Worker'], status: 'planned', spec: '95, 216' },
+      { id: 'OV-08', name: 'Activity Feed', goal: 'Read model hợp nhất audit/business event/notification để người dùng xem hoạt động gần đây theo permission và warehouse scope.', surfaces: ['Web', 'API'], status: 'planned', spec: '61, 83, 216, 271' },
     ],
   },
   {
@@ -259,6 +260,8 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'MO-08', name: 'Replenishment', goal: 'Create/scan/confirm replenish task.', surfaces: ['Mobile', 'API'], status: 'planned', spec: '44, 65, 223, 229' },
       { id: 'MO-09', name: 'Returns', goal: 'Receive, inspect, disposition và post return.', surfaces: ['Mobile', 'API'], status: 'planned', spec: '43, 65, 223, 229' },
       { id: 'MO-10', name: 'Offline Queue & Sync', goal: 'Cho phép task low-risk offline, retry và giữ dữ liệu khi sync lỗi.', surfaces: ['Mobile', 'API'], status: 'planned', spec: '66, 146, 223, 229, 272' },
+      { id: 'MO-11', name: 'Product Lookup', goal: 'Tra cứu nhanh Product/SKU bằng exact barcode, code hoặc tên trong warehouse scope; không cần mở flow nghiệp vụ dài.', surfaces: ['Mobile', 'API'], status: 'planned', spec: '65, 95, 223' },
+      { id: 'MO-12', name: 'Exception Handling', goal: 'Xem/assign/resolve/escalate exception từ mobile mà giữ task context, reason, evidence và sync semantics.', surfaces: ['Mobile', 'API'], status: 'planned', spec: '71, 92, 223, 272' },
     ],
   },
   {

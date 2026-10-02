@@ -22,14 +22,15 @@ It is intentionally separated from production backend capability completion:
 Static coverage audit on the branch:
 
 - 17 module groups.
-- 176 unique capability IDs.
+- 179 unique capability IDs.
 - 17/17 module work centers have mock fixtures.
-- 131 unique operational mock records.
-- 176/176 dedicated capability fixtures.
+- 134 unique operational mock records.
+- 179/179 dedicated capability fixtures.
 - 10 golden end-to-end scenarios.
 - 282/282 canonical Notion specifications indexed in the runtime documentation register; capability-linked specs and platform/governance documents are distinguished explicitly.
 - Wave 6 planning/decision-support specs 89 and 179–203 decomposed into explicit optional capabilities; recommendations/simulations remain ledger-neutral until canonical execution commands.
 - Finance/costing boundary, integration reconciliation, partner SLA, calendar exceptions and controlled support/repair are explicit capabilities.
+- High-level UX scope now includes Activity Feed, Mobile Product Lookup and Mobile Exception Handling as read/shared-workflow capabilities.
 - Capability-level preview route for every capability, with real-route link where implementation exists.
 - Mobile capabilities include scan-first phone preview.
 - Blueprint mode has its own 17-module read-only navigation.
@@ -182,7 +183,7 @@ Mock/UAT semantics follow the newer canonical override in spec 41/228:
 
 ## Production boundary
 
-This blueprint does **not** mean all 176 capabilities have production backend implementations.
+This blueprint does **not** mean all 179 capabilities have production backend implementations.
 
 Statuses remain explicit:
 - Live — current real feature exists.

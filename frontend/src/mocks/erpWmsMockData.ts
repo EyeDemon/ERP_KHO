@@ -196,6 +196,7 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('OV-004', 'SLA-221', 'SLA', 'Bình thường', 'green', 'WH-HCM-01', 'Outbound backlog dưới ngưỡng', 'Nguyễn Minh Anh', 'Normal', '2026-10-02T08:40:00Z'),
       r('OV-005', 'QUEUE-HCM-OPS', 'Work Queue', 'READY', 'blue', 'WH-HCM-01', '12 task • 3 high priority • 1 blocked', 'Task Engine', 'High', '2026-10-02T09:27:00Z'),
       r('OV-006', 'SEARCH-SCOPE-ADMIN', 'Global Search', 'READY', 'green', 'WH-HCM-01', 'Exact-first index • Product / Barcode / Document / Lot / Serial / Partner', 'Search Projection', 'Normal', '2026-10-02T09:26:00Z'),
+      r('OV-007', 'FEED-HCM-0932', 'Activity Feed', 'READY', 'green', 'WH-HCM-01', 'GR-2026-1048 received • APR-1182 pending • PICK short exception opened', 'Activity Projection', 'Normal', '2026-10-02T09:32:00Z'),
     ],
   },
   'master-data': {
@@ -358,6 +359,8 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('MO-003', 'MOB-COUNT-0142', 'Count Task', 'RECOUNT', 'orange', 'WH-HCM-01', 'Blind recount SKU-1001', 'Trần Quốc Bảo', 'High', '2026-10-02T09:05:00Z', { productCode: 'SKU-1001' }),
       r('MO-004', 'OFF-QUEUE-021', 'Offline Queue', 'PENDING_SYNC', 'orange', 'WH-DN-01', '2 low-risk confirmations chờ mạng', 'Đỗ Minh Khang', 'Normal', '2026-10-02T09:14:00Z'),
       r('MO-005', 'SYNC-FAIL-008', 'Sync Error', 'RETRYABLE', 'red', 'WH-DN-01', 'PUT-2026-3308 • version conflict', 'Đỗ Minh Khang', 'High', '2026-10-02T09:15:00Z'),
+      r('MO-006', 'MOB-LOOKUP-SKU1001', 'Product Lookup', 'READY', 'green', 'WH-HCM-01', '8938501000011 → SKU-1001 • available 1.030 Gói', 'Lê Thu Hà', 'Normal', '2026-10-02T09:16:00Z', { productCode: 'SKU-1001' }),
+      r('MO-007', 'MOB-EXC-PICK6110', 'Exception Handling', 'OPEN', 'orange', 'WH-HCM-01', 'PICK-2026-6110 • LOCATION_SHORT • evidence/context preserved', 'Phạm Gia Huy', 'High', '2026-10-02T09:17:00Z', { productCode: 'SKU-1001' }),
     ],
   },
   'operations-resilience': {
@@ -500,6 +503,9 @@ export const mockCapabilitySampleRecordIds: Record<string, string> = {
   'IG-10': 'IG-007',
   'OP-10': 'OP-007',
   'OP-11': 'OP-008',
+  'OV-08': 'OV-007',
+  'MO-11': 'MO-006',
+  'MO-12': 'MO-007',
 };
 
 export const mockCapabilityFixtures: Record<string, MockCapabilityFixture> = Object.fromEntries(

@@ -229,6 +229,9 @@ const inventoryEffects: Record<string, string> = {
   'IG-10': 'Reconciliation dashboard is read/control plane; retries must remain idempotent and cannot invent business mutations.',
   'OP-10': 'Posted business errors require reversal + corrected transaction; controlled repair must never rewrite immutable ledger history.',
   'OP-11': 'Support tools call Application Layer contracts and preserve permission/audit/inventory safeguards; no routine direct DB mutation.',
+  'OV-08': 'Activity feed is a read model over governed events/audit/notifications and cannot become transactional truth.',
+  'MO-11': 'Product lookup is read-only exact search within security scope.',
+  'MO-12': 'Exception handling changes exception/task workflow only; any inventory effect must route through the owning canonical command.',
 };
 
 const parseSpecNumbers = (spec: string) =>

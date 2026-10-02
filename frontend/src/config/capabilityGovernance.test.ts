@@ -17,7 +17,7 @@ const findCapability = (id: string) => {
 describe('capability governance metadata', () => {
   it('produces governance metadata for every blueprint capability', () => {
     const rows = getBlueprintGovernanceRows(erpWmsBlueprint);
-    expect(rows).toHaveLength(176);
+    expect(rows).toHaveLength(179);
     for (const row of rows) {
       expect(row.profile.referencedSpecs.length).toBeGreaterThan(0);
       expect(row.profile.ownerModule.length).toBeGreaterThan(0);

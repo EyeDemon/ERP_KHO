@@ -17,8 +17,8 @@ A canonical spec existing does **not** mean the capability must be implemented n
 
 The blueprint registry has now been corrected in the same feature branch:
 
-- capability count increased from 119 to **176** without adding a new module;
-- 57 canonical capabilities were added explicitly across core gaps, advanced/conditional specs, Wave 6 planning and operational control-plane gaps;
+- capability count increased from 119 to **179** without adding a new module;
+- 60 canonical/high-level capabilities were added explicitly across core gaps, advanced/conditional specs, Wave 6 planning, operational control-plane and root UX scope;
 - high-confidence stale/wrong spec references were corrected;
 - broad numerical spec ranges were removed from every capability;
 - optional Wave 4/5 items remain `optional` and are not promoted into the current MVP implementation queue;
@@ -26,9 +26,10 @@ The blueprint registry has now been corrected in the same feature branch:
 - all 282 canonical Notion specs are indexed in Coverage & Readiness; specs not owned by a business capability remain visible as platform/governance documents rather than being turned into fake navigation;
 - Wave 6 specs 89 and 179–203 are decomposed into explicit optional planning/decision-support capabilities with recommendation/simulation-only inventory semantics;
 - specs 127/128/150/154/156/158/159/171/172/174/175/176 are represented through controlled repair/support, finance integration, reconciliation, SLA and calendar capabilities rather than being hidden in generic platform cards;
+- root-level UX entries Activity Feed, Mobile Product Lookup and Mobile Exception Handling are represented as read/shared-workflow capabilities using existing canonical audit/search/exception semantics;
 - registry tests now reject broad spec ranges and pin representative canonical mappings.
 - Inventory-owned reconciliation/projection rebuild is now explicit as `INV-11` instead of being hidden behind a reporting-only capability.
-- semantic mock coverage was strengthened for the newly added capabilities using targeted operational records instead of modulo-only sample assignment; the shared dataset now contains **131 unique operational mock records**.
+- semantic mock coverage was strengthened for the newly added capabilities using targeted operational records instead of modulo-only sample assignment; the shared dataset now contains **134 unique operational mock records**.
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
