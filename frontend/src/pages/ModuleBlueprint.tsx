@@ -266,9 +266,10 @@ const ModuleBlueprint = () => {
                   </td>
                   <td>{capability.spec}</td>
                   <td>
-                    {capability.route
-                      ? <Link className="table-open-link" to={capability.route}><ExternalLink size={14} /> Mở</Link>
-                      : <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + capability.id}>Xem preview</Link>}
+                    <div className="table-capability-links">
+                      <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + capability.id}>Preview</Link>
+                      {capability.route && <Link className="table-open-link" to={capability.route}><ExternalLink size={14} /> Mở thật</Link>}
+                    </div>
                   </td>
                 </tr>
               ))}
