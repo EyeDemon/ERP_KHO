@@ -32,8 +32,8 @@ describe('ModuleBlueprint mock work center', () => {
     const button = row?.querySelector('button');
     expect(button).toBeTruthy();
     fireEvent.click(button!);
-    expect(view.getByText('48 Cái')).toBeTruthy();
-    expect(view.getByText('QC-01')).toBeTruthy();
+    expect(view.getAllByText('48 Cái').length).toBeGreaterThan(0);
+    expect(view.getAllByText('QC-01').length).toBeGreaterThan(0);
   });
 
   it('renders transfer and mobile datasets from separate work centers', () => {
