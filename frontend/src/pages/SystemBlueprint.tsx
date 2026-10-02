@@ -119,7 +119,10 @@ const SystemBlueprint = () => {
                 <h2>{module.name}</h2>
                 <p>{module.description}</p>
               </div>
-              <span className="module-count">{module.capabilities.length} chức năng</span>
+              <div className="module-actions">
+                <span className="module-count">{module.capabilities.length} chức năng</span>
+                <Link className="module-preview-link" to={'/system-blueprint/' + module.key}>Xem work center →</Link>
+              </div>
             </header>
 
             {module.flow && (
@@ -153,7 +156,9 @@ const SystemBlueprint = () => {
                   </div>
                   <footer>
                     <span>Spec {capability.spec}</span>
-                    {capability.route ? <Link to={capability.route}>Mở chức năng →</Link> : <span className="muted-link">Chưa có route</span>}
+                    {capability.route
+                      ? <Link to={capability.route}>Mở chức năng →</Link>
+                      : <Link to={'/system-blueprint/' + module.key}>Xem minh họa →</Link>}
                   </footer>
                 </article>
               ))}
