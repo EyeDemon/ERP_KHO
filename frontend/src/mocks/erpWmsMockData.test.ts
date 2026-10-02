@@ -67,7 +67,9 @@ describe('ERP WMS complete mock dataset', () => {
       expect(balance.available).toBeGreaterThanOrEqual(0);
       expect(balance.allocated).toBeLessThanOrEqual(balance.reserved);
       expect(balance.reserved).toBeLessThanOrEqual(balance.onHand);
-      expect(balance.available).toBe(balance.onHand - balance.reserved);
+      const eligibleOnHand = balance.onHand - balance.qcHold - balance.quarantine;
+      expect(balance.reserved).toBeLessThanOrEqual(eligibleOnHand);
+      expect(balance.available).toBe(eligibleOnHand - balance.reserved);
     }
   });
 
