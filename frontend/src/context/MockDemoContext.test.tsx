@@ -26,7 +26,11 @@ const ScenarioProbe = () => {
       <span data-testid="scenario-step">{demo.activeScenarioStep}</span>
       <span data-testid="scenario-onhand">{firstBalance?.onHand ?? 'NA'}</span>
       <span data-testid="scenario-linked">{String(demo.isCapabilityInActiveScenario('IN-07'))}</span>
+      <span data-testid="scenario-visible">{demo.scenarioBalances.length}</span>
+      <span data-testid="scenario-hidden">{demo.scenarioHiddenBalanceCount}</span>
       <button type="button" onClick={() => demo.runScenarioStep('GS-01')}>Run GS01</button>
+      <button type="button" onClick={() => demo.runScenarioStep('GS-03')}>Run GS03</button>
+      <button type="button" onClick={() => demo.setSelectedUserCode('U-DN-MGR')}>DN scope</button>
       <button type="button" onClick={() => demo.resetScenario('GS-01')}>Reset GS01</button>
     </div>
   );
@@ -51,6 +55,18 @@ describe('MockDemoContext', () => {
     fireEvent.click(view.getByText('Reset GS01'));
     expect(view.getByTestId('scenario-step').textContent).toBe('0');
     expect(view.getByTestId('scenario-onhand').textContent).toBe('0');
+  });
+
+  it('filters shared runtime balances by the active persona warehouse scope', () => {
+    const view = render(<MockDemoProvider><ScenarioProbe /></MockDemoProvider>);
+    fireEvent.click(view.getByText('Run GS03'));
+    expect(view.getByTestId('scenario-id').textContent).toBe('GS-03');
+    expect(view.getByTestId('scenario-visible').textContent).toBe('2');
+    expect(view.getByTestId('scenario-hidden').textContent).toBe('0');
+
+    fireEvent.click(view.getByText('DN scope'));
+    expect(view.getByTestId('scenario-visible').textContent).toBe('1');
+    expect(view.getByTestId('scenario-hidden').textContent).toBe('1');
   });
 
   it('defaults to the admin persona and switches warehouse scope deterministically', () => {

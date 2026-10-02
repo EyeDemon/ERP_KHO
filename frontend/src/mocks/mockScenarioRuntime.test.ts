@@ -1,10 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { getMockScenarioRuntimeBalances, getMockScenarioRuntimeDefinition } from './mockScenarioRuntime';
+import { getMockScenarioRuntimeBalances, getMockScenarioRuntimeDefinition, mockScenarioRuntimeDefinitions } from './mockScenarioRuntime';
 
 const totalPhysical = (scenarioId: string, step: number) =>
   getMockScenarioRuntimeBalances(scenarioId, step).reduce((sum, item) => sum + item.onHand + item.inTransit, 0);
 
 describe('shared mock scenario runtime', () => {
+  it('maps all golden scenarios into the shared cross-screen runtime', () => {
+    expect(Object.keys(mockScenarioRuntimeDefinitions)).toHaveLength(22);
+    for (let index = 1; index <= 22; index += 1) {
+      const id = 'GS-' + String(index).padStart(2, '0');
+      expect(getMockScenarioRuntimeDefinition(id)?.affectedCapabilities.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('models concurrency and idempotent dispatch without duplicate inventory effects', () => {
+    expect(totalPhysical('GS-07', 0)).toBe(10);
+    expect(getMockScenarioRuntimeBalances('GS-07', 3)[0].reserved).toBe(8);
+    expect(getMockScenarioRuntimeBalances('GS-07', 3)[0].available).toBe(2);
+    expect(totalPhysical('GS-08', 0)).toBe(20);
+    expect(totalPhysical('GS-08', 1)).toBe(0);
+    expect(totalPhysical('GS-08', 3)).toBe(0);
+  });
+
+  it('keeps event-only policy and integration scenarios mapped without inventing balances', () => {
+    expect(getMockScenarioRuntimeBalances('GS-10', 2)).toEqual([]);
+    expect(getMockScenarioRuntimeDefinition('GS-10')?.affectedCapabilities).toContain('MO-10');
+    expect(getMockScenarioRuntimeBalances('GS-16', 4)).toEqual([]);
+    expect(getMockScenarioRuntimeDefinition('GS-21')?.affectedCapabilities).toContain('AX-15');
+  });
+
+  it('conserves network rebalance quantity and controlled repair outcome', () => {
+    expect(totalPhysical('GS-17', 1)).toBe(180);
+    expect(totalPhysical('GS-17', 3)).toBe(180);
+    expect(totalPhysical('GS-17', 4)).toBe(180);
+    expect(totalPhysical('GS-20', 1)).toBe(100);
+    expect(totalPhysical('GS-20', 2)).toBe(100);
+    expect(totalPhysical('GS-20', 3)).toBe(0);
+    expect(totalPhysical('GS-20', 4)).toBe(80);
+  });
+
   it('keeps inbound posting and putaway boundaries explicit', () => {
     expect(totalPhysical('GS-01', 1)).toBe(0);
     expect(totalPhysical('GS-01', 2)).toBe(100);
@@ -42,6 +76,8 @@ describe('shared mock scenario runtime', () => {
     expect(totalPhysical('GS-06', 3)).toBe(80);
     expect(totalPhysical('GS-11', 3)).toBe(0);
     expect(totalPhysical('GS-11', 4)).toBe(20);
+    expect(getMockScenarioRuntimeBalances('GS-11', 4)[0].available).toBeNull();
+    expect(getMockScenarioRuntimeBalances('GS-14', 3)[0].available).toBeNull();
   });
 
   it('keeps pack and load ledger-neutral until dispatch', () => {

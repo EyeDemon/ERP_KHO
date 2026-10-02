@@ -102,6 +102,12 @@ const MockScenarioLab = () => {
                   <span>SHARED RUNTIME</span>
                   <strong>{runtimeDefinition.affectedCapabilities.length} capability liên quan</strong>
                 </div>
+                {mockDemo.activeScenarioId === selected.id && mockDemo.scenarioTotalBalanceCount > 0 && (
+                  <div className="scenario-scope-note">
+                    Persona thấy {mockDemo.scenarioBalances.length}/{mockDemo.scenarioTotalBalanceCount} inventory bucket
+                    {mockDemo.scenarioHiddenBalanceCount > 0 ? ' • ' + mockDemo.scenarioHiddenBalanceCount + ' bucket bị ẩn bởi warehouse scope' : ' • toàn bộ bucket trong scope'}
+                  </div>
+                )}
                 <div className="scenario-capability-chips">
                   {runtimeDefinition.affectedCapabilities.map((capabilityId) => {
                     const route = capabilityRoutes.get(capabilityId);
@@ -116,7 +122,7 @@ const MockScenarioLab = () => {
                       <div key={item.warehouse + item.location + item.productCode}>
                         <small>{item.warehouse} • {item.location}</small>
                         <strong>{item.productCode}</strong>
-                        <span>OnHand {item.onHand} • Avail {item.available} • Transit {item.inTransit}</span>
+                        <span>OnHand {item.onHand} • Avail {item.available ?? '—'} • Transit {item.inTransit}</span>
                       </div>
                     ))}
                   </div>

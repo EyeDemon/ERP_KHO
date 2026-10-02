@@ -34,3 +34,5 @@
 .scenario-capability-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}.scenario-capability-chips span,.scenario-capability-chips a{font-size:9px;font-weight:850;color:#31577f;background:#edf5ff;border:1px solid #d3e4f8;border-radius:999px;padding:4px 7px;text-decoration:none}.scenario-capability-chips a:hover{background:#dfeeff;border-color:#b8d4f4}
 .scenario-balance-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px}.scenario-balance-strip>div{border:1px solid #e0e6ed;border-radius:7px;background:#fff;padding:8px}.scenario-balance-strip small,.scenario-balance-strip strong,.scenario-balance-strip span{display:block}.scenario-balance-strip small{font-size:8px;color:#7a8798}.scenario-balance-strip strong{font-size:11px;margin-top:3px}.scenario-balance-strip span{font-size:9px;color:#5f6e81;margin-top:3px}
 @media(max-width:700px){.scenario-runtime-link{margin-left:0}.scenario-balance-strip{grid-template-columns:1fr}}
+
+.scenario-scope-note{margin-top:8px;border:1px dashed #c6d5e6;background:#f7faff;border-radius:7px;padding:6px 8px;font-size:9px;color:#60728a}

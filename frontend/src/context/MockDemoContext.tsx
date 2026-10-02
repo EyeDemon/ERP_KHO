@@ -13,6 +13,8 @@ interface MockDemoContextValue {
   activeScenarioTitle: string | null;
   activeScenarioStep: number;
   scenarioBalances: MockScenarioRuntimeBalance[];
+  scenarioTotalBalanceCount: number;
+  scenarioHiddenBalanceCount: number;
   scenarioEventLog: Array<{ label: string; state: string; inventoryEffect: string }>;
   affectedScenarioCapabilities: string[];
   runScenarioStep: (scenarioId: string) => void;
@@ -33,6 +35,8 @@ const MockDemoContext = createContext<MockDemoContextValue>({
   activeScenarioTitle: null,
   activeScenarioStep: 0,
   scenarioBalances: [],
+  scenarioTotalBalanceCount: 0,
+  scenarioHiddenBalanceCount: 0,
   scenarioEventLog: [],
   affectedScenarioCapabilities: [],
   runScenarioStep: () => undefined,
@@ -48,9 +52,13 @@ export const MockDemoProvider = ({ children }: { children: ReactNode }) => {
   const selectedUser = mockUsers.find((user) => user.code === selectedUserCode) ?? defaultUser;
   const activeScenario = getGoldenScenario(activeScenarioId ?? '');
   const runtimeDefinition = getMockScenarioRuntimeDefinition(activeScenarioId);
-  const scenarioBalances = activeScenarioId
+  const canonicalScenarioBalances = activeScenarioId
     ? getMockScenarioRuntimeBalances(activeScenarioId, activeScenarioStep)
     : [];
+  const scenarioBalances = canonicalScenarioBalances
+    .filter((item) => selectedUser.warehouses.includes(item.warehouse));
+  const scenarioTotalBalanceCount = canonicalScenarioBalances.length;
+  const scenarioHiddenBalanceCount = scenarioTotalBalanceCount - scenarioBalances.length;
   const scenarioEventLog = activeScenario?.steps.slice(0, activeScenarioStep) ?? [];
   const affectedScenarioCapabilities = runtimeDefinition?.affectedCapabilities ?? [];
 
@@ -87,6 +95,8 @@ export const MockDemoProvider = ({ children }: { children: ReactNode }) => {
     activeScenarioTitle: activeScenario?.title ?? null,
     activeScenarioStep,
     scenarioBalances,
+    scenarioTotalBalanceCount,
+    scenarioHiddenBalanceCount,
     scenarioEventLog,
     affectedScenarioCapabilities,
     runScenarioStep,

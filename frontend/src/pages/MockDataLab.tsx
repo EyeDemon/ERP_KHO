@@ -148,14 +148,18 @@ const MockDataLab = () => {
                 <>
                   <div className="scenario-runtime-heading">
                     <div><span>ACTIVE SHARED SESSION</span><strong>{mockDemo.activeScenarioId} • {mockDemo.activeScenarioTitle}</strong></div>
-                    <div><strong>Step {mockDemo.activeScenarioStep}</strong><span>{mockDemo.affectedScenarioCapabilities.length} capability liên quan</span></div>
+                    <div>
+                      <strong>Step {mockDemo.activeScenarioStep}</strong>
+                      <span>{mockDemo.affectedScenarioCapabilities.length} capability liên quan • visible {mockDemo.scenarioBalances.length}/{mockDemo.scenarioTotalBalanceCount}</span>
+                      {mockDemo.scenarioHiddenBalanceCount > 0 ? <span>{mockDemo.scenarioHiddenBalanceCount} bucket bị ẩn bởi warehouse scope</span> : null}
+                    </div>
                   </div>
                   {mockDemo.scenarioBalances.length > 0 ? (
                     <table className="data-lab-table numeric-table">
                       <thead><tr><th>Warehouse</th><th>Location</th><th>SKU</th><th>OnHand</th><th>Reserved</th><th>Allocated</th><th>Picked</th><th>Available</th><th>QC Hold</th><th>Quarantine</th><th>Transit</th></tr></thead>
                       <tbody>{mockDemo.scenarioBalances.map((item) => (
                         <tr key={item.warehouse + item.location + item.productCode}>
-                          <td>{item.warehouse}</td><td>{item.location}</td><td>{item.productCode}</td><td>{item.onHand}</td><td>{item.reserved}</td><td>{item.allocated}</td><td>{item.picked}</td><td>{item.available}</td><td>{item.qcHold}</td><td>{item.quarantine}</td><td>{item.inTransit}</td>
+                          <td>{item.warehouse}</td><td>{item.location}</td><td>{item.productCode}</td><td>{item.onHand}</td><td>{item.reserved}</td><td>{item.allocated}</td><td>{item.picked}</td><td>{item.available ?? '—'}</td><td>{item.qcHold}</td><td>{item.quarantine}</td><td>{item.inTransit}</td>
                         </tr>
                       ))}</tbody>
                     </table>
