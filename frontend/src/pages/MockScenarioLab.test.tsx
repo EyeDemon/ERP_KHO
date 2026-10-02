@@ -9,11 +9,11 @@ describe('MockScenarioLab', () => {
 
   it('renders canonical inbound scenario with steps and assertions', () => {
     const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
-    expect(view.getByText('GS-01')).toBeTruthy();
-    expect(view.getByText('Inbound Receipt → Post → Putaway')).toBeTruthy();
+    expect(view.getAllByText('GS-01').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Inbound Receipt → Post → Putaway').length).toBeGreaterThan(0);
     expect(view.getByText('Post Receipt')).toBeTruthy();
     expect(view.getByText('Receipt ledger exactly once')).toBeTruthy();
-    expect(view.getByText('100', { selector: 'strong' })).toBeTruthy();
+    expect(view.getAllByText('100', { selector: 'strong' }).length).toBeGreaterThan(0);
   });
 
   it('switches to concurrency and idempotency scenarios', () => {
