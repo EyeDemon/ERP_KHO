@@ -25,8 +25,11 @@ Static coverage audit on the branch:
 - 119 unique capability IDs.
 - 17/17 module work centers have mock fixtures.
 - 72 unique operational mock records.
+- 119/119 dedicated capability fixtures.
 - 10 golden end-to-end scenarios.
-- Capability-level preview route for every planned/optional function.
+- Capability-level preview route for every capability, with real-route link where implementation exists.
+- Mobile capabilities include scan-first phone preview.
+- Blueprint mode has its own 17-module read-only navigation.
 
 ## Main routes
 
@@ -139,8 +142,10 @@ The scenario lab includes:
 
 ## Frontend tests added
 
+- `erpWmsBlueprint.test.ts`
 - `erpWmsMockData.test.ts`
 - `erpWmsMockScenarios.test.ts`
+- `MainLayout.test.tsx`
 - `SystemBlueprint.test.tsx`
 - `ModuleBlueprint.test.tsx`
 - `CapabilityPreview.test.tsx`
