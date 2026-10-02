@@ -194,7 +194,9 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('OV-002', 'APR-1182', 'Phê duyệt', 'Sắp đến hạn', 'orange', 'WH-HCM-01', 'Điều chỉnh tồn kho vượt ngưỡng', 'Trần Quốc Bảo', 'Critical', '2026-10-02T09:10:00Z', { productCode: 'SKU-2001', quantity: 3, uom: 'Cái' }),
       r('OV-003', 'EXC-904', 'Ngoại lệ', 'Mới', 'red', 'WH-DN-01', 'Putaway không có location phù hợp', 'Đỗ Minh Khang', 'High', '2026-10-02T08:58:00Z', { productCode: 'SKU-4001', quantity: 120, uom: 'Chai' }),
       r('OV-004', 'SLA-221', 'SLA', 'Bình thường', 'green', 'WH-HCM-01', 'Outbound backlog dưới ngưỡng', 'Nguyễn Minh Anh', 'Normal', '2026-10-02T08:40:00Z'),
-      r('OV-005', 'QUEUE-HCM-OPS', 'Work Queue', 'READY', 'blue', 'WH-HCM-01', '12 task • 3 high priority • 1 blocked', 'Task Engine', 'High', '2026-10-02T09:27:00Z'),\n      r('OV-006', 'SEARCH-SCOPE-ADMIN', 'Global Search', 'READY', 'green', 'WH-HCM-01', 'Exact-first index • Product / Barcode / Document / Lot / Serial / Partner', 'Search Projection', 'Normal', '2026-10-02T09:26:00Z'),\n    ],
+      r('OV-005', 'QUEUE-HCM-OPS', 'Work Queue', 'READY', 'blue', 'WH-HCM-01', '12 task • 3 high priority • 1 blocked', 'Task Engine', 'High', '2026-10-02T09:27:00Z'),
+      r('OV-006', 'SEARCH-SCOPE-ADMIN', 'Global Search', 'READY', 'green', 'WH-HCM-01', 'Exact-first index • Product / Barcode / Document / Lot / Serial / Partner', 'Search Projection', 'Normal', '2026-10-02T09:26:00Z'),
+    ],
   },
   'master-data': {
     moduleKey: 'master-data',
@@ -204,7 +206,8 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('MD-002', 'SKU-2001', 'Sản phẩm', 'Active', 'green', 'WH-HCM-01', 'Tai nghe Bluetooth TWS • Serial tracked', 'Nguyễn Minh Anh', 'Normal', '2026-10-01T14:06:00Z', { productCode: 'SKU-2001' }),
       r('MD-003', 'SUP-001', 'Đối tác', 'Active', 'green', 'WH-HCM-01', 'Công ty Nông Sản Cao Nguyên', 'Nguyễn Minh Anh', 'Normal', '2026-09-30T10:30:00Z', { partnerCode: 'SUP-001' }),
       r('MD-004', 'UOM-CASE24', 'UOM', 'Review', 'orange', 'WH-HCM-01', 'Thùng 24 chai → 24 Chai', 'Nguyễn Minh Anh', 'Normal', '2026-09-29T08:11:00Z', { productCode: 'SKU-4001' }),
-      r('MD-005', 'PKG-CARTON-M', 'Packaging Type', 'ACTIVE', 'green', 'WH-HCM-01', 'Carton M • 400×300×250 mm • max 15 kg', 'Nguyễn Minh Anh', 'Normal', '2026-10-01T11:40:00Z'),\n    ],
+      r('MD-005', 'PKG-CARTON-M', 'Packaging Type', 'ACTIVE', 'green', 'WH-HCM-01', 'Carton M • 400×300×250 mm • max 15 kg', 'Nguyễn Minh Anh', 'Normal', '2026-10-01T11:40:00Z'),
+    ],
   },
   'warehouse-structure': {
     moduleKey: 'warehouse-structure',
@@ -236,7 +239,9 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('OUT-003', 'ALLOC-2026-7711', 'Allocation', 'ALLOCATED', 'blue', 'WH-HCM-01', 'A01-R02-L03-B04 • lot LOT-1001-260930', 'Phạm Gia Huy', 'High', '2026-10-02T08:47:00Z', { productCode: 'SKU-1001', quantity: 120, uom: 'Gói', location: 'A01-R02-L03-B04' }),
       r('OUT-004', 'PICK-2026-6110', 'Picking', 'IN_PROGRESS', 'blue', 'WH-HCM-01', 'Wave WV-2026-301 • 8 lines', 'Phạm Gia Huy', 'High', '2026-10-02T09:20:00Z', { productCode: 'SKU-1001', quantity: 120, uom: 'Gói' }),
       r('OUT-005', 'SHP-2026-5108', 'Shipment', 'LOADED', 'orange', 'WH-HCM-01', 'CUS-002 • chờ dispatch', 'Trần Quốc Bảo', 'Critical', '2026-10-02T09:25:00Z', { partnerCode: 'CUS-002', productCode: 'SKU-2002', quantity: 22, uom: 'Cái' }),
-      r('OUT-006', 'TRK-SHP-5107', 'Shipment Tracking', 'IN_TRANSIT', 'blue', 'WH-HCM-01', 'SHP-2026-5107 • GHTK • ETA 14:30', 'Carrier Adapter', 'High', '2026-10-02T09:26:00Z', { partnerCode: 'CUS-001' }),\n      r('OUT-007', 'POD-SHP-5088', 'Proof of Delivery', 'DELIVERED', 'green', 'WH-HCM-01', 'SHP-2026-5088 • receiver evidence attached', 'Carrier Adapter', 'Normal', '2026-10-02T08:32:00Z', { partnerCode: 'CUS-001' }),\n    ],
+      r('OUT-006', 'TRK-SHP-5107', 'Shipment Tracking', 'IN_TRANSIT', 'blue', 'WH-HCM-01', 'SHP-2026-5107 • GHTK • ETA 14:30', 'Carrier Adapter', 'High', '2026-10-02T09:26:00Z', { partnerCode: 'CUS-001' }),
+      r('OUT-007', 'POD-SHP-5088', 'Proof of Delivery', 'DELIVERED', 'green', 'WH-HCM-01', 'SHP-2026-5088 • receiver evidence attached', 'Carrier Adapter', 'Normal', '2026-10-02T08:32:00Z', { partnerCode: 'CUS-001' }),
+    ],
   },
   'inventory-control': {
     moduleKey: 'inventory-control',
@@ -317,7 +322,11 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('AD-002', 'PERM-receipt.post', 'Permission', 'CRITICAL', 'red', 'WH-HCM-01', 'receipt.post • requires warehouse scope', 'Nguyễn Minh Anh', 'Critical', '2026-10-01T12:20:00Z'),
       r('AD-003', 'APR-1182', 'Approval', 'PENDING', 'orange', 'WH-HCM-01', 'ADJ-2026-0088 • SoD enforced', 'Trần Quốc Bảo', 'Critical', '2026-10-02T09:10:00Z'),
       r('AD-004', 'AUD-2026-99182', 'Audit', 'RECORDED', 'green', 'WH-HCM-01', 'InventoryAdjustment.Submitted', 'Audit Service', 'Normal', '2026-10-02T09:10:01Z'),
-      r('AD-005', 'SEQ-GR-HCM-2026', 'Number Sequence', 'ACTIVE', 'green', 'WH-HCM-01', 'GR-HCM-202610-000128 • next 000129', 'System Admin', 'Critical', '2026-10-02T08:00:00Z'),\n      r('AD-006', 'RULE-PUTAWAY-COLD', 'Business Rule', 'ACTIVE', 'blue', 'WH-HCM-01', 'Cold-chain SKU → COLD zone • version 4', 'System Admin', 'High', '2026-10-01T16:30:00Z'),\n      r('AD-007', 'ATT-QC-1048-01', 'Evidence', 'IMMUTABLE', 'green', 'WH-HCM-01', 'QC_PHOTO • GR-2026-1048 • checksum verified', 'Evidence Service', 'High', '2026-10-02T09:01:00Z'),\n      r('AD-008', 'NTF-APPROVAL-1182', 'Notification', 'SENT', 'green', 'WH-HCM-01', 'Approval APR-1182 sắp quá SLA • Level 1', 'Notification Worker', 'High', '2026-10-02T09:11:00Z'),\n    ],
+      r('AD-005', 'SEQ-GR-HCM-2026', 'Number Sequence', 'ACTIVE', 'green', 'WH-HCM-01', 'GR-HCM-202610-000128 • next 000129', 'System Admin', 'Critical', '2026-10-02T08:00:00Z'),
+      r('AD-006', 'RULE-PUTAWAY-COLD', 'Business Rule', 'ACTIVE', 'blue', 'WH-HCM-01', 'Cold-chain SKU → COLD zone • version 4', 'System Admin', 'High', '2026-10-01T16:30:00Z'),
+      r('AD-007', 'ATT-QC-1048-01', 'Evidence', 'IMMUTABLE', 'green', 'WH-HCM-01', 'QC_PHOTO • GR-2026-1048 • checksum verified', 'Evidence Service', 'High', '2026-10-02T09:01:00Z'),
+      r('AD-008', 'NTF-APPROVAL-1182', 'Notification', 'SENT', 'green', 'WH-HCM-01', 'Approval APR-1182 sắp quá SLA • Level 1', 'Notification Worker', 'High', '2026-10-02T09:11:00Z'),
+    ],
   },
   integration: {
     moduleKey: 'integration',
@@ -327,7 +336,8 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('IG-002', 'EVT-2026-77120', 'Outbox', 'PENDING', 'orange', 'WH-HCM-01', 'GoodsReceiptPosted v1', 'Outbox Worker', 'High', '2026-10-02T09:24:02Z'),
       r('IG-003', 'EVT-2026-77118', 'Outbox', 'SENT', 'green', 'WH-HCM-01', 'ShipmentDispatched v1', 'Outbox Worker', 'Normal', '2026-10-02T09:02:00Z'),
       r('IG-004', 'DLQ-2026-091', 'Dead Letter', 'FAILED', 'red', 'WH-DN-01', 'Carrier label callback • HTTP 503', 'Integration Worker', 'Critical', '2026-10-02T08:55:00Z'),
-      r('IG-005', 'IMP-PRODUCT-20261002', 'Import Batch', 'VALIDATED', 'green', 'WH-HCM-01', 'Product import • 48/50 valid • preview ready', 'Import Worker', 'Normal', '2026-10-02T08:35:00Z'),\n    ],
+      r('IG-005', 'IMP-PRODUCT-20261002', 'Import Batch', 'VALIDATED', 'green', 'WH-HCM-01', 'Product import • 48/50 valid • preview ready', 'Import Worker', 'Normal', '2026-10-02T08:35:00Z'),
+    ],
   },
   mobile: {
     moduleKey: 'mobile',
@@ -358,7 +368,10 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('AX-002', 'CAP-FCST-DN-W41', 'Capacity Forecast', 'WARNING', 'orange', 'WH-DN-01', 'Khu lạnh dự báo 96% sau 3 ngày', 'Planning Engine', 'High', '2026-10-02T07:30:00Z'),
       r('AX-003', 'NET-REBAL-020', 'Network Planning', 'PROPOSED', 'blue', 'WH-HCM-01', 'HCM → Đà Nẵng 200 SKU-1001', 'Planning Engine', 'Normal', '2026-10-02T07:20:00Z', { productCode: 'SKU-1001', quantity: 200, uom: 'Gói' }),
       r('AX-004', '3PL-BILL-SEP', '3PL Billing', 'DRAFT', 'gray', 'WH-HCM-01', 'Owner ACME • storage/handling draft', 'Billing Projection', 'Low', '2026-10-01T23:00:00Z'),
-      r('AX-005', 'MHE-FL-HCM-07', 'Equipment', 'AVAILABLE', 'green', 'WH-HCM-01', 'Forklift 07 • zone A/C • maintenance due 18/10', 'Asset Registry', 'Normal', '2026-10-02T07:10:00Z'),\n      r('AX-006', 'KIT-2026-0042', 'Kitting Order', 'RELEASED', 'blue', 'WH-HCM-01', 'Bundle PROMO-COFFEE-02 • components reserved', 'Kitting Engine', 'Normal', '2026-10-02T07:00:00Z', { productCode: 'SKU-1001', quantity: 20, uom: 'Bộ' }),\n      r('AX-007', 'VAS-2026-0018', 'VAS Order', 'IN_PROGRESS', 'blue', 'WH-HCM-01', 'Relabel 60 cartons • customer ACME', 'VAS Work Center', 'Normal', '2026-10-02T06:55:00Z'),\n    ],
+      r('AX-005', 'MHE-FL-HCM-07', 'Equipment', 'AVAILABLE', 'green', 'WH-HCM-01', 'Forklift 07 • zone A/C • maintenance due 18/10', 'Asset Registry', 'Normal', '2026-10-02T07:10:00Z'),
+      r('AX-006', 'KIT-2026-0042', 'Kitting Order', 'RELEASED', 'blue', 'WH-HCM-01', 'Bundle PROMO-COFFEE-02 • components reserved', 'Kitting Engine', 'Normal', '2026-10-02T07:00:00Z', { productCode: 'SKU-1001', quantity: 20, uom: 'Bộ' }),
+      r('AX-007', 'VAS-2026-0018', 'VAS Order', 'IN_PROGRESS', 'blue', 'WH-HCM-01', 'Relabel 60 cartons • customer ACME', 'VAS Work Center', 'Normal', '2026-10-02T06:55:00Z'),
+    ],
   },
 };
 

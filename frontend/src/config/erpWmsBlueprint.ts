@@ -39,7 +39,9 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'OV-03', name: 'Trung tâm phê duyệt', goal: 'Duyệt/từ chối nghiệp vụ có SoD, SLA và audit trail.', surfaces: ['Web', 'API'], status: 'live', spec: '17, 70, 221', route: '/approvals' },
       { id: 'OV-04', name: 'Trung tâm ngoại lệ', goal: 'Triage, assign, resolve và đóng exception theo workflow.', surfaces: ['Web', 'API'], status: 'planned', spec: '71, 92, 221' },
       { id: 'OV-05', name: 'Distributed Warehouse Control Tower', goal: 'Theo dõi nhiều kho theo exception-driven operations.', surfaces: ['Web'], status: 'planned', spec: '183, 195' },
-      { id: 'OV-06', name: 'Warehouse Task Engine & Work Queue', goal: 'Chuẩn hóa RECEIVE/PUTAWAY/PICK/PACK/MOVE/REPLENISH/COUNT/LOAD/QC/RETURN/EXCEPTION/VAS thành task dùng chung web/mobile.', surfaces: ['Web', 'Mobile', 'API', 'Worker'], status: 'planned', spec: '80' },\n      { id: 'OV-07', name: 'Enterprise / Global Search', goal: 'Exact-first search xuyên Product, Barcode, Partner, Document, Lot/Serial, Location, Shipment và Task theo security scope.', surfaces: ['Web', 'Mobile', 'API', 'Worker'], status: 'planned', spec: '95, 216' },\n    ],
+      { id: 'OV-06', name: 'Warehouse Task Engine & Work Queue', goal: 'Chuẩn hóa RECEIVE/PUTAWAY/PICK/PACK/MOVE/REPLENISH/COUNT/LOAD/QC/RETURN/EXCEPTION/VAS thành task dùng chung web/mobile.', surfaces: ['Web', 'Mobile', 'API', 'Worker'], status: 'planned', spec: '80' },
+      { id: 'OV-07', name: 'Enterprise / Global Search', goal: 'Exact-first search xuyên Product, Barcode, Partner, Document, Lot/Serial, Location, Shipment và Task theo security scope.', surfaces: ['Web', 'Mobile', 'API', 'Worker'], status: 'planned', spec: '95, 216' },
+    ],
   },
   {
     key: 'master-data',
@@ -53,7 +55,8 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'MD-05', name: 'Business Partner', goal: 'Supplier/Customer dùng chung, role, active state và snapshot trên chứng từ.', surfaces: ['Web', 'API'], status: 'foundation', spec: '84, 162', route: '/business-partners' },
       { id: 'MD-06', name: 'Carrier', goal: 'Danh mục đơn vị vận chuyển và điều kiện tích hợp.', surfaces: ['Web', 'API'], status: 'planned', spec: '58, 84, 164' },
       { id: 'MD-07', name: 'Reason Code Catalog', goal: 'Chuẩn hóa lý do điều chỉnh, hủy, exception, damage, scrap.', surfaces: ['Web', 'API'], status: 'planned', spec: '20, 276' },
-      { id: 'MD-08', name: 'Packaging Type', goal: 'Danh mục carton/tote/pallet/packaging profile dùng cho packing, HU và cartonization khi áp dụng.', surfaces: ['Web', 'API'], status: 'planned', spec: '37, 238' },\n    ],
+      { id: 'MD-08', name: 'Packaging Type', goal: 'Danh mục carton/tote/pallet/packaging profile dùng cho packing, HU và cartonization khi áp dụng.', surfaces: ['Web', 'API'], status: 'planned', spec: '37, 238' },
+    ],
   },
   {
     key: 'warehouse-structure',
@@ -100,7 +103,8 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'OUT-07', name: 'Staging & Loading', goal: 'Xếp hàng chờ, kiểm tra load và seal/vehicle context.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '38, 46, 239' },
       { id: 'OUT-08', name: 'Shipment Dispatch', goal: 'Boundary trừ OnHand vật lý đúng một lần và consume reservation/allocation.', surfaces: ['Web', 'API'], status: 'planned', spec: '29, 31, 38, 228' },
       { id: 'OUT-09', name: 'Backorder', goal: 'Theo dõi ordered/reserved/allocated/picked/shipped/backorder/cancelled.', surfaces: ['Web', 'API'], status: 'planned', spec: '72, 87' },
-      { id: 'OUT-10', name: 'Shipment Tracking / POD / Delivery Failure', goal: 'Theo dõi post-dispatch logistics state, POD, delivery failure/retry và return-to-warehouse mà không double inventory movement.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '58, 74, 164' },\n    ],
+      { id: 'OUT-10', name: 'Shipment Tracking / POD / Delivery Failure', goal: 'Theo dõi post-dispatch logistics state, POD, delivery failure/retry và return-to-warehouse mà không double inventory movement.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '58, 74, 164' },
+    ],
   },
   {
     key: 'inventory-control',
@@ -210,7 +214,10 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'AD-06', name: 'Audit Trail', goal: 'Audit hành động critical, trước/sau và actor/context.', surfaces: ['Web', 'API'], status: 'foundation', spec: '08, 17, 83, 280' },
       { id: 'AD-07', name: 'Notification Center & Alert Engine', goal: 'Thông báo task, approval, exception, SLA và integration failure.', surfaces: ['Web', 'API', 'Worker'], status: 'planned', spec: '61, 92, 271' },
       { id: 'AD-08', name: 'SSO / Identity Federation', goal: 'OIDC/SAML/enterprise identity và provisioning.', surfaces: ['Web', 'API'], status: 'planned', spec: '112, 279' },
-      { id: 'AD-09', name: 'Number Sequence & Document Numbering', goal: 'Sinh số chứng từ concurrency-safe theo company/warehouse/document type và policy immutability.', surfaces: ['Web', 'API'], status: 'planned', spec: '69, 276' },\n      { id: 'AD-10', name: 'Business Rules & Workflow Configuration', goal: 'Cấu hình policy/workflow có scope, version, validation và audit mà không phá domain invariant.', surfaces: ['Web', 'API'], status: 'planned', spec: '51, 276' },\n      { id: 'AD-11', name: 'Document / Attachment / Evidence', goal: 'Quản lý evidence an toàn cho receipt, QC, damage, POD, return, scrap, exception và audit.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '62, 83, 96' },\n    ],
+      { id: 'AD-09', name: 'Number Sequence & Document Numbering', goal: 'Sinh số chứng từ concurrency-safe theo company/warehouse/document type và policy immutability.', surfaces: ['Web', 'API'], status: 'planned', spec: '69, 276' },
+      { id: 'AD-10', name: 'Business Rules & Workflow Configuration', goal: 'Cấu hình policy/workflow có scope, version, validation và audit mà không phá domain invariant.', surfaces: ['Web', 'API'], status: 'planned', spec: '51, 276' },
+      { id: 'AD-11', name: 'Document / Attachment / Evidence', goal: 'Quản lý evidence an toàn cho receipt, QC, damage, POD, return, scrap, exception và audit.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '62, 83, 96' },
+    ],
   },
   {
     key: 'integration',
@@ -224,7 +231,8 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'IG-05', name: 'Integration Inbox', goal: 'Deduplicate inbound commands/events và retry an toàn.', surfaces: ['Worker', 'API'], status: 'planned', spec: '09, 75, 103, 107' },
       { id: 'IG-06', name: 'Carrier / E-commerce / TMS', goal: 'Shipping, tracking và fulfillment integration.', surfaces: ['API', 'Worker'], status: 'optional', spec: '163, 164, 165, 166, 169' },
       { id: 'IG-07', name: 'Dead-letter & Replay', goal: 'Quản lý integration failure, retry/replay có audit.', surfaces: ['Web', 'Worker'], status: 'planned', spec: '75, 103' },
-      { id: 'IG-08', name: 'Controlled Data Import & Bulk Operations', goal: 'Import/export/bulk operation có validation, preview, error report, authorization và audit.', surfaces: ['Web', 'API', 'Worker'], status: 'planned', spec: '63, 76' },\n    ],
+      { id: 'IG-08', name: 'Controlled Data Import & Bulk Operations', goal: 'Import/export/bulk operation có validation, preview, error report, authorization và audit.', surfaces: ['Web', 'API', 'Worker'], status: 'planned', spec: '63, 76' },
+    ],
   },
   {
     key: 'mobile',
@@ -269,7 +277,10 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'AX-05', name: '3PL / Multi-owner / Billing', goal: 'Owner-aware inventory và warehouse service billing reconciliation.', surfaces: ['Web', 'API'], status: 'optional', spec: '54, 55, 56, 173, 245, 246' },
       { id: 'AX-06', name: 'RFID / Voice / Pick-to-Light / Robotics', goal: 'Warehouse automation theo feature applicability.', surfaces: ['Mobile', 'API', 'Worker'], status: 'optional', spec: '235, 236, 237' },
       { id: 'AX-07', name: 'Cold-chain / Hazmat / Catch-weight', goal: 'Specialized inventory rules khi ngành yêu cầu.', surfaces: ['Web', 'Mobile', 'API'], status: 'optional', spec: '240, 241, 242' },
-      { id: 'AX-08', name: 'Equipment & Material Handling Assets', goal: 'Quản lý forklift, scanner, printer, cart/conveyor endpoint, assignment, eligibility và maintenance khi áp dụng.', surfaces: ['Web', 'Mobile', 'API'], status: 'optional', spec: '59' },\n      { id: 'AX-09', name: 'Kitting / Bundling / Assembly / De-kitting', goal: 'Light-manufacturing warehouse flow theo component allocation, pick, assembly, QC optional và transformation posting.', surfaces: ['Web', 'Mobile', 'API'], status: 'optional', spec: '52, 243' },\n      { id: 'AX-10', name: 'Value Added Services (VAS)', goal: 'Thực thi labeling/repack/custom service theo order/task có traceability và billing hooks khi khách hàng yêu cầu.', surfaces: ['Web', 'Mobile', 'API'], status: 'optional', spec: '53, 244' },\n    ],
+      { id: 'AX-08', name: 'Equipment & Material Handling Assets', goal: 'Quản lý forklift, scanner, printer, cart/conveyor endpoint, assignment, eligibility và maintenance khi áp dụng.', surfaces: ['Web', 'Mobile', 'API'], status: 'optional', spec: '59' },
+      { id: 'AX-09', name: 'Kitting / Bundling / Assembly / De-kitting', goal: 'Light-manufacturing warehouse flow theo component allocation, pick, assembly, QC optional và transformation posting.', surfaces: ['Web', 'Mobile', 'API'], status: 'optional', spec: '52, 243' },
+      { id: 'AX-10', name: 'Value Added Services (VAS)', goal: 'Thực thi labeling/repack/custom service theo order/task có traceability và billing hooks khi khách hàng yêu cầu.', surfaces: ['Web', 'Mobile', 'API'], status: 'optional', spec: '53, 244' },
+    ],
   },
 ];
 
