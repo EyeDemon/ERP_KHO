@@ -56,6 +56,7 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'MD-06', name: 'Carrier', goal: 'Danh mục đơn vị vận chuyển và điều kiện tích hợp.', surfaces: ['Web', 'API'], status: 'planned', spec: '58, 84, 164' },
       { id: 'MD-07', name: 'Reason Code Catalog', goal: 'Chuẩn hóa lý do điều chỉnh, hủy, exception, damage, scrap.', surfaces: ['Web', 'API'], status: 'planned', spec: '20, 276' },
       { id: 'MD-08', name: 'Packaging Type', goal: 'Danh mục carton/tote/pallet/packaging profile dùng cho packing, HU và cartonization khi áp dụng.', surfaces: ['Web', 'API'], status: 'planned', spec: '37, 238' },
+      { id: 'MD-09', name: 'Customer / Supplier / Carrier SLA Contracts', goal: 'Quản lý SLA contract dùng chung cho supplier, customer, carrier và 3PL client để KPI/event có cùng semantic.', surfaces: ['Web', 'API'], status: 'planned', spec: '174' },
     ],
   },
   {
@@ -69,6 +70,7 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'WH-04', name: 'Warehouse Map & Heatmap', goal: 'Hiển thị bản đồ kho, utilization, congestion và operational heatmap.', surfaces: ['Web'], status: 'planned', spec: '67' },
       { id: 'WH-05', name: 'Warehouse Calendar & Shift', goal: 'Lịch mở cửa, ca làm việc, cutoff và capacity vận hành.', surfaces: ['Web', 'API'], status: 'planned', spec: '60' },
       { id: 'WH-06', name: 'Dock & Yard', goal: 'Quản lý dock door, yard position, check-in và queue.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '46, 248' },
+      { id: 'WH-07', name: 'Operational Calendar Exceptions', goal: 'Quản lý company/warehouse/shift calendar exception và emergency override với precedence rõ ràng.', surfaces: ['Web', 'API'], status: 'planned', spec: '60, 175, 176' },
     ],
   },
   {
@@ -238,6 +240,8 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'IG-06', name: 'Carrier / E-commerce / TMS', goal: 'Shipping, tracking và fulfillment integration.', surfaces: ['API', 'Worker'], status: 'optional', spec: '163, 164, 165, 166, 169' },
       { id: 'IG-07', name: 'Dead-letter & Replay', goal: 'Quản lý integration failure, retry/replay có audit.', surfaces: ['Web', 'Worker'], status: 'planned', spec: '75, 103' },
       { id: 'IG-08', name: 'Controlled Data Import & Bulk Operations', goal: 'Import/export/bulk operation có validation, preview, error report, authorization và audit.', surfaces: ['Web', 'API', 'Worker'], status: 'planned', spec: '63, 76' },
+      { id: 'IG-09', name: 'Finance / Costing / Valuation Integration Boundary', goal: 'Xuất quantity/movement truth cho Finance/Costing, period cutoff và valuation events mà không biến WMS thành accounting engine.', surfaces: ['API', 'Worker'], status: 'planned', spec: '150, 154, 156, 158, 159, 172' },
+      { id: 'IG-10', name: 'Integration Reconciliation Dashboard & Control', goal: 'So sánh source control totals, WMS inbox/document/outbox và target acknowledgement; phát hiện mismatch và hỗ trợ safe retry.', surfaces: ['Web', 'API', 'Worker'], status: 'planned', spec: '75, 171' },
     ],
   },
   {
@@ -271,6 +275,8 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'OP-07', name: 'Manual Contingency & Post-Outage Reconciliation', goal: 'Biểu mẫu dự phòng và nhập/reconcile sau outage.', surfaces: ['Web'], status: 'planned', spec: '145, 147, 281' },
       { id: 'OP-08', name: 'Feature Telemetry & UX Measurement', goal: 'Đo adoption, friction, error/latency và scan workflow regression mà không dùng product analytics làm business KPI truth.', surfaces: ['Web', 'Mobile', 'Worker'], status: 'planned', spec: '254, 263' },
       { id: 'OP-09', name: 'Warehouse Decommissioning & Tenant Offboarding', goal: 'Đóng warehouse/company/tenant an toàn với inventory zero/reconcile, integration stop, evidence retention và data exit.', surfaces: ['Web', 'Worker'], status: 'planned', spec: '99, 265' },
+      { id: 'OP-10', name: 'Production Data Correction & Controlled Repair', goal: 'Sửa dữ liệu production bằng reversal/corrected transaction hoặc controlled correction; không sửa posted ledger trực tiếp.', surfaces: ['Web', 'API'], status: 'planned', spec: '127' },
+      { id: 'OP-11', name: 'Support & Administrative Tooling', goal: 'Cung cấp support tooling an toàn qua Application Layer, audit và permission thay vì truy cập DB trực tiếp thường xuyên.', surfaces: ['Web', 'API'], status: 'planned', spec: '128, 153' },
     ],
   },
   {

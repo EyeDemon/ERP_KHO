@@ -114,6 +114,8 @@ const featureEnabledIds = new Set([
   'AD-12',
   'AD-13',
   'AD-14',
+  'MD-09',
+  'IG-09',
 ]);
 
 const implementationSpecificModules = new Set(['operations-resilience']);
@@ -221,6 +223,12 @@ const inventoryEffects: Record<string, string> = {
   'AX-40': 'Service-level segmentation is governed policy metadata and does not directly mutate inventory.',
   'AX-41': 'What-if scenarios are isolated from production transaction/master/ledger data.',
   'AX-42': 'Decision policy registry governs/version-controls recommendations; execution remains human/contract gated where required.',
+  'MD-09': 'SLA contract is policy/semantic metadata; it does not mutate documents or inventory directly.',
+  'WH-07': 'Calendar exception controls execution eligibility/time semantics and has no direct inventory quantity effect.',
+  'IG-09': 'WMS exports quantity/movement/valuation events but does not calculate accounting cost/tax/multi-currency truth.',
+  'IG-10': 'Reconciliation dashboard is read/control plane; retries must remain idempotent and cannot invent business mutations.',
+  'OP-10': 'Posted business errors require reversal + corrected transaction; controlled repair must never rewrite immutable ledger history.',
+  'OP-11': 'Support tools call Application Layer contracts and preserve permission/audit/inventory safeguards; no routine direct DB mutation.',
 };
 
 const parseSpecNumbers = (spec: string) =>

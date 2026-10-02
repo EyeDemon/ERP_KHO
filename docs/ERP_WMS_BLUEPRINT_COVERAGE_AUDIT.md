@@ -17,17 +17,18 @@ A canonical spec existing does **not** mean the capability must be implemented n
 
 The blueprint registry has now been corrected in the same feature branch:
 
-- capability count increased from 119 to **170** without adding a new module;
-- 51 canonical capabilities were added explicitly across core gaps, advanced/conditional specs and Wave 6 planning;
+- capability count increased from 119 to **176** without adding a new module;
+- 57 canonical capabilities were added explicitly across core gaps, advanced/conditional specs, Wave 6 planning and operational control-plane gaps;
 - high-confidence stale/wrong spec references were corrected;
 - broad numerical spec ranges were removed from every capability;
 - optional Wave 4/5 items remain `optional` and are not promoted into the current MVP implementation queue;
 - advanced specs 235–249 are now decomposed into explicit optional capabilities instead of remaining hidden inside three umbrella cards;
 - platform/governance standards 251–282 are tracked separately in Coverage & Readiness so engineering standards are visible without being misrepresented as business navigation;
 - Wave 6 specs 89 and 179–203 are decomposed into explicit optional planning/decision-support capabilities with recommendation/simulation-only inventory semantics;
+- specs 127/128/150/154/156/158/159/171/172/174/175/176 are represented through controlled repair/support, finance integration, reconciliation, SLA and calendar capabilities rather than being hidden in generic platform cards;
 - registry tests now reject broad spec ranges and pin representative canonical mappings.
 - Inventory-owned reconciliation/projection rebuild is now explicit as `INV-11` instead of being hidden behind a reporting-only capability.
-- semantic mock coverage was strengthened for the newly added capabilities using targeted operational records instead of modulo-only sample assignment; the shared dataset now contains **125 unique operational mock records**.
+- semantic mock coverage was strengthened for the newly added capabilities using targeted operational records instead of modulo-only sample assignment; the shared dataset now contains **131 unique operational mock records**.
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 

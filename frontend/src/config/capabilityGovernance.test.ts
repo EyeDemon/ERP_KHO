@@ -17,7 +17,7 @@ const findCapability = (id: string) => {
 describe('capability governance metadata', () => {
   it('produces governance metadata for every blueprint capability', () => {
     const rows = getBlueprintGovernanceRows(erpWmsBlueprint);
-    expect(rows).toHaveLength(170);
+    expect(rows).toHaveLength(176);
     for (const row of rows) {
       expect(row.profile.referencedSpecs.length).toBeGreaterThan(0);
       expect(row.profile.ownerModule.length).toBeGreaterThan(0);
@@ -54,6 +54,9 @@ describe('capability governance metadata', () => {
 
     const scenario = findCapability('AX-41');
     expect(getCapabilityGovernanceProfile(scenario.module, scenario.capability).releaseWave).toBe(6);
+
+    const finance = findCapability('IG-09');
+    expect(getCapabilityGovernanceProfile(finance.module, finance.capability).applicability).toBe('REQUIRED_WHEN_FEATURE_ENABLED');
   });
 
   it('tracks platform standards separately from business navigation', () => {

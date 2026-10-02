@@ -8,7 +8,7 @@ describe('ERP WMS blueprint registry', () => {
     expect(new Set(moduleKeys).size).toBe(moduleKeys.length);
 
     const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
-    expect(capabilities).toHaveLength(170);
+    expect(capabilities).toHaveLength(176);
     const ids = capabilities.map((capability) => capability.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -33,7 +33,7 @@ describe('ERP WMS blueprint registry', () => {
   it('keeps canonical audit additions explicit and mapped to primary specs', () => {
     const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
     const byId = new Map(capabilities.map((capability) => [capability.id, capability]));
-    for (const id of ['OV-06', 'OV-07', 'MD-08', 'OUT-10', 'INV-11', 'RP-09', 'RP-10', 'AD-09', 'AD-10', 'AD-11', 'AD-12', 'AD-13', 'AD-14', 'IG-08', 'OP-08', 'OP-09', 'AX-08', 'AX-09', 'AX-10', 'AX-11', 'AX-12', 'AX-13', 'AX-14', 'AX-15', 'AX-16', 'AX-17', 'AX-18', 'AX-19', 'AX-20', 'AX-21', 'AX-22', 'AX-23', 'AX-24', 'AX-25', 'AX-26', 'AX-27', 'AX-28', 'AX-29', 'AX-30', 'AX-31', 'AX-32', 'AX-33', 'AX-34', 'AX-35', 'AX-36', 'AX-37', 'AX-38', 'AX-39', 'AX-40', 'AX-41', 'AX-42']) {
+    for (const id of ['OV-06', 'OV-07', 'MD-08', 'OUT-10', 'INV-11', 'RP-09', 'RP-10', 'AD-09', 'AD-10', 'AD-11', 'AD-12', 'AD-13', 'AD-14', 'IG-08', 'OP-08', 'OP-09', 'AX-08', 'AX-09', 'AX-10', 'AX-11', 'AX-12', 'AX-13', 'AX-14', 'AX-15', 'AX-16', 'AX-17', 'AX-18', 'AX-19', 'AX-20', 'AX-21', 'AX-22', 'AX-23', 'AX-24', 'AX-25', 'AX-26', 'AX-27', 'AX-28', 'AX-29', 'AX-30', 'AX-31', 'AX-32', 'AX-33', 'AX-34', 'AX-35', 'AX-36', 'AX-37', 'AX-38', 'AX-39', 'AX-40', 'AX-41', 'AX-42', 'MD-09', 'WH-07', 'IG-09', 'IG-10', 'OP-10', 'OP-11']) {
       expect(byId.has(id)).toBe(true);
     }
     expect(byId.get('OUT-05')?.spec.split(/,\s*/)).toContain('36');
@@ -49,6 +49,9 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('AX-23')?.spec).toBe('89');
     expect(byId.get('AX-31')?.spec).toBe('189');
     expect(byId.get('AX-42')?.spec.split(/,\s*/)).toContain('203');
+    expect(byId.get('IG-09')?.spec.split(/,\s*/)).toContain('154');
+    expect(byId.get('IG-10')?.spec.split(/,\s*/)).toContain('171');
+    expect(byId.get('OP-10')?.spec).toBe('127');
   });
 
   it('keeps critical core modules in the blueprint', () => {

@@ -207,6 +207,7 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('MD-003', 'SUP-001', 'Đối tác', 'Active', 'green', 'WH-HCM-01', 'Công ty Nông Sản Cao Nguyên', 'Nguyễn Minh Anh', 'Normal', '2026-09-30T10:30:00Z', { partnerCode: 'SUP-001' }),
       r('MD-004', 'UOM-CASE24', 'UOM', 'Review', 'orange', 'WH-HCM-01', 'Thùng 24 chai → 24 Chai', 'Nguyễn Minh Anh', 'Normal', '2026-09-29T08:11:00Z', { productCode: 'SKU-4001' }),
       r('MD-005', 'PKG-CARTON-M', 'Packaging Type', 'ACTIVE', 'green', 'WH-HCM-01', 'Carton M • 400×300×250 mm • max 15 kg', 'Nguyễn Minh Anh', 'Normal', '2026-10-01T11:40:00Z'),
+      r('MD-006', 'SLA-SUP001-2026', 'Partner SLA', 'ACTIVE', 'green', 'WH-HCM-01', 'SUP-001 • delivery accuracy 95% • dock-to-stock target 4h', 'Master Data Admin', 'High', '2026-10-02T08:05:00Z', { partnerCode: 'SUP-001' }),
     ],
   },
   'warehouse-structure': {
@@ -217,6 +218,7 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('WH-002', 'LOC-A01-R02-L03-B04', 'Bin', 'Available', 'green', 'WH-HCM-01', 'Zone A / Aisle 01 / Rack 02 / Level 03 / Bin 04', 'Trần Quốc Bảo', 'Normal', '2026-10-02T08:15:00Z', { location: 'A01-R02-L03-B04' }),
       r('WH-003', 'DOCK-HCM-03', 'Dock', 'Occupied', 'blue', 'WH-HCM-01', 'Dock 03 • xe 51C-882.41', 'Lê Thu Hà', 'High', '2026-10-02T09:12:00Z'),
       r('WH-004', 'CAP-DN-COLD', 'Capacity', 'Warning', 'orange', 'WH-DN-01', 'Khu lạnh đạt 92% usable capacity', 'Đỗ Minh Khang', 'High', '2026-10-02T09:05:00Z'),
+      r('WH-005', 'CAL-EXC-HCM-20261010', 'Calendar Exception', 'APPROVED', 'green', 'WH-HCM-01', '10/10 extended shift 18:00–22:00 • emergency override none', 'Warehouse Admin', 'High', '2026-10-02T08:02:00Z'),
     ],
   },
   inbound: {
@@ -343,6 +345,8 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('IG-003', 'EVT-2026-77118', 'Outbox', 'SENT', 'green', 'WH-HCM-01', 'ShipmentDispatched v1', 'Outbox Worker', 'Normal', '2026-10-02T09:02:00Z'),
       r('IG-004', 'DLQ-2026-091', 'Dead Letter', 'FAILED', 'red', 'WH-DN-01', 'Carrier label callback • HTTP 503', 'Integration Worker', 'Critical', '2026-10-02T08:55:00Z'),
       r('IG-005', 'IMP-PRODUCT-20261002', 'Import Batch', 'VALIDATED', 'green', 'WH-HCM-01', 'Product import • 48/50 valid • preview ready', 'Import Worker', 'Normal', '2026-10-02T08:35:00Z'),
+      r('IG-006', 'FIN-CUTOFF-202609', 'Finance / Costing Interface', 'RECONCILED', 'green', 'WH-HCM-01', 'Sep cutoff • movement totals exported • finance ack matched', 'Finance Adapter', 'Critical', '2026-10-02T08:30:00Z'),
+      r('IG-007', 'INT-RECON-20261002', 'Integration Reconciliation', 'MISMATCH', 'orange', 'WH-DN-01', 'Source 428 • WMS 428 • target ack 427 • 1 retry pending', 'Integration Control', 'Critical', '2026-10-02T08:25:00Z'),
     ],
   },
   mobile: {
@@ -366,6 +370,8 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('OP-004', 'ALERT-OUTBOX-002', 'Alert', 'WARNING', 'orange', 'WH-DN-01', 'Outbox backlog 18 messages', 'Operations', 'High', '2026-10-02T09:21:00Z'),
       r('OP-005', 'TEL-UX-PICK-W40', 'Feature Telemetry', 'HEALTHY', 'green', 'WH-HCM-01', 'Picking scan p95 420 ms • retry 1.3% • no business KPI use', 'Product Operations', 'Normal', '2026-10-02T09:18:00Z'),
       r('OP-006', 'OFFBOARD-WH-DL-01', 'Warehouse Offboarding', 'PLANNED', 'blue', 'WH-DL-01', 'Inventory zero/reconcile → integrations stop → evidence/data exit', 'Operations', 'Critical', '2026-10-02T07:40:00Z'),
+      r('OP-007', 'REPAIR-CASE-2026-018', 'Controlled Repair', 'PENDING_APPROVAL', 'orange', 'WH-HCM-01', 'Posted receipt error → reversal + corrected transaction plan', 'Production Support', 'Critical', '2026-10-02T07:35:00Z'),
+      r('OP-008', 'SUPPORT-CASE-2026-221', 'Support Tooling', 'INVESTIGATING', 'blue', 'WH-HCM-01', 'Trace document → ledger → outbox without direct DB write', 'Production Support', 'High', '2026-10-02T07:30:00Z'),
     ],
   },
   'advanced-planning': {
@@ -488,6 +494,12 @@ export const mockCapabilitySampleRecordIds: Record<string, string> = {
   'AX-40': 'AX-037',
   'AX-41': 'AX-038',
   'AX-42': 'AX-039',
+  'MD-09': 'MD-006',
+  'WH-07': 'WH-005',
+  'IG-09': 'IG-006',
+  'IG-10': 'IG-007',
+  'OP-10': 'OP-007',
+  'OP-11': 'OP-008',
 };
 
 export const mockCapabilityFixtures: Record<string, MockCapabilityFixture> = Object.fromEntries(
