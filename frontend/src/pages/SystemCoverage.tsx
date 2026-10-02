@@ -5,6 +5,7 @@ import { blueprintStatusLabels, erpWmsBlueprint, type BlueprintStatus } from '..
 import {
   evidenceStatusLabels,
   getBlueprintGovernanceRows,
+  platformStandards,
   type Applicability,
   type EvidenceStatus,
   type ReleaseWave,
@@ -74,6 +75,7 @@ const SystemCoverage = () => {
         <article><strong>{foundation}</strong><span>Foundation</span></article>
         <article><strong>{specOnly}</strong><span>Spec-only / optional</span></article>
         <article className="review-kpi"><strong>{reviewRequired.length}</strong><span>Screen review required</span></article>
+        <article><strong>{platformStandards.length}</strong><span>Platform standards 251–282</span></article>
       </section>
 
       <section className="completion-chain">
@@ -115,6 +117,23 @@ const SystemCoverage = () => {
           </div>
         </section>
       )}
+
+      <section className="platform-standards-panel">
+        <div className="platform-standards-title">
+          <div><strong>Platform Standards 251–282</strong><span>Guardrails kỹ thuật/governance được theo dõi riêng, không biến thành menu nghiệp vụ giả.</span></div>
+          <span>{platformStandards.length} standards</span>
+        </div>
+        <div className="platform-standards-grid">
+          {platformStandards.map((item) => (
+            <article key={item.spec}>
+              <span>Spec {item.spec} • {item.category}</span>
+              <strong>{item.title}</strong>
+              <small>{item.representation}</small>
+              {item.mappedCapabilityIds && <p>Mapped: {item.mappedCapabilityIds.join(', ')}</p>}
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="coverage-table-wrap">
         <table className="coverage-table">

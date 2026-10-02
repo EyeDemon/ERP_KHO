@@ -3,6 +3,7 @@ import { erpWmsBlueprint } from './erpWmsBlueprint';
 import {
   getBlueprintGovernanceRows,
   getCapabilityGovernanceProfile,
+  platformStandards,
 } from './capabilityGovernance';
 
 const findCapability = (id: string) => {
@@ -16,7 +17,7 @@ const findCapability = (id: string) => {
 describe('capability governance metadata', () => {
   it('produces governance metadata for every blueprint capability', () => {
     const rows = getBlueprintGovernanceRows(erpWmsBlueprint);
-    expect(rows).toHaveLength(131);
+    expect(rows).toHaveLength(150);
     for (const row of rows) {
       expect(row.profile.referencedSpecs.length).toBeGreaterThan(0);
       expect(row.profile.ownerModule.length).toBeGreaterThan(0);
@@ -50,6 +51,13 @@ describe('capability governance metadata', () => {
     const kittingProfile = getCapabilityGovernanceProfile(kitting.module, kitting.capability);
     expect(kittingProfile.releaseWave).toBe(5);
     expect(kittingProfile.applicability).toBe('INDUSTRY_OPTIONAL');
+  });
+
+  it('tracks platform standards separately from business navigation', () => {
+    expect(platformStandards).toHaveLength(32);
+    expect(platformStandards.find((item) => item.spec === 273)?.representation).toBe('Platform guardrail');
+    expect(platformStandards.find((item) => item.spec === 279)?.mappedCapabilityIds).toContain('AD-08');
+    expect(platformStandards.find((item) => item.spec === 265)?.mappedCapabilityIds).toContain('OP-09');
   });
 
   it('does not claim planned capabilities are production complete', () => {

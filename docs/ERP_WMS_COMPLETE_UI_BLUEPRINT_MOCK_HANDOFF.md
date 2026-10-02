@@ -22,11 +22,12 @@ It is intentionally separated from production backend capability completion:
 Static coverage audit on the branch:
 
 - 17 module groups.
-- 131 unique capability IDs.
+- 150 unique capability IDs.
 - 17/17 module work centers have mock fixtures.
-- 86 unique operational mock records.
-- 131/131 dedicated capability fixtures.
+- 105 unique operational mock records.
+- 150/150 dedicated capability fixtures.
 - 10 golden end-to-end scenarios.
+- 32 platform/governance standards (251–282) tracked separately from business navigation.
 - Capability-level preview route for every capability, with real-route link where implementation exists.
 - Mobile capabilities include scan-first phone preview.
 - Blueprint mode has its own 17-module read-only navigation.
@@ -179,7 +180,7 @@ Mock/UAT semantics follow the newer canonical override in spec 41/228:
 
 ## Production boundary
 
-This blueprint does **not** mean all 131 capabilities have production backend implementations.
+This blueprint does **not** mean all 150 capabilities have production backend implementations.
 
 Statuses remain explicit:
 - Live — current real feature exists.

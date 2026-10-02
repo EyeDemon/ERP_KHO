@@ -8,6 +8,15 @@ export type Applicability =
   | 'IMPLEMENTATION_SPECIFIC';
 export type CapabilityMaturity = 'M0' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5';
 export type EvidenceStatus = 'covered' | 'partial' | 'spec-only' | 'missing';
+export type PlatformStandardRepresentation = 'Capability-backed' | 'Platform guardrail' | 'Runbook-backed';
+
+export interface PlatformStandard {
+  spec: number;
+  title: string;
+  category: 'Data Platform' | 'Engineering' | 'Security / Compliance' | 'UX / Product' | 'Operations / Governance';
+  representation: PlatformStandardRepresentation;
+  mappedCapabilityIds?: string[];
+}
 
 export interface CapabilityEvidenceItem {
   key: string;
@@ -76,6 +85,18 @@ const waveOverrides: Record<string, ReleaseWave> = {
   'AX-05': 5,
   'AX-09': 5,
   'AX-10': 5,
+  'AX-11': 4,
+  'AX-12': 4,
+  'AX-13': 5,
+  'AX-14': 4,
+  'AX-15': 4,
+  'AX-16': 4,
+  'AX-17': 4,
+  'AX-18': 4,
+  'AX-19': 4,
+  'AX-20': 4,
+  'AX-21': 5,
+  'AX-22': 5,
 };
 
 const featureEnabledIds = new Set([
@@ -89,6 +110,10 @@ const featureEnabledIds = new Set([
   'IG-06',
   'AD-08',
   'AX-08',
+  'RP-10',
+  'AD-12',
+  'AD-13',
+  'AD-14',
 ]);
 
 const implementationSpecificModules = new Set(['operations-resilience']);
@@ -157,6 +182,25 @@ const inventoryEffects: Record<string, string> = {
   'DY-04': 'Cross-dock may bypass storage, but receipt/dispatch posting boundaries remain canonical.',
   'RP-06': 'Read-only reconciliation/reporting over ledger-derived vs operational balances.',
   'AX-09': 'Kitting/de-kitting uses explicit transformation posting; components/output remain traceable.',
+  'RP-09': 'Read-only analytical KPI derived from governed reporting semantics; no transactional inventory mutation.',
+  'RP-10': 'Analytical export is read-only and must preserve lineage back to OLTP/ledger truth.',
+  'AD-12': 'Presentation-only localization; canonical codes/quantities remain unchanged.',
+  'AD-13': 'Legal hold preserves evidence/retention and must not rewrite inventory or audit history.',
+  'AD-14': 'Privacy handling may redact/export allowed personal data but must not corrupt business/audit/legal truth.',
+  'OP-08': 'Telemetry observes workflow friction/latency only; it is never a business inventory KPI source of truth.',
+  'OP-09': 'Offboarding is ledger-neutral until canonical inventory/transfer workflows bring balances to zero before closure.',
+  'AX-11': 'Cartonization is a recommendation/packing optimization; it cannot post inventory or mark shipment dispatched.',
+  'AX-12': 'Load planning is operational optimization; loading/dispatch inventory boundaries remain canonical.',
+  'AX-13': 'Disposition execution uses explicit return/status/reclassification/scrap postings; no silent balance rewrite.',
+  'AX-14': 'Safety policy gates task eligibility/execution; it does not directly mutate inventory quantity.',
+  'AX-15': 'Automation/device jobs never own inventory truth; resulting WMS commands use canonical posting contracts.',
+  'AX-16': 'RFID/IoT capture is observational until validated WMS commands apply canonical state/inventory changes.',
+  'AX-17': 'Voice/light assistance guides task execution but does not bypass canonical command/idempotency rules.',
+  'AX-18': 'Hazmat policy constrains storage/eligibility; any movement/status change remains canonical and auditable.',
+  'AX-19': 'Temperature excursions create evidence/hold/disposition; quantity changes require explicit canonical posting.',
+  'AX-20': 'Dual-UOM quantities are persisted with canonical conversion/tolerance and immutable ledger traceability.',
+  'AX-21': 'Owner changes are explicit inventory reclassification transactions; physical quantity is conserved.',
+  'AX-22': 'Rating/billing consumes operational evidence as read models and does not own inventory truth.',
 };
 
 const parseSpecNumbers = (spec: string) =>
@@ -233,6 +277,41 @@ export const getBlueprintGovernanceRows = (modules: BlueprintModule[]) =>
       profile: getCapabilityGovernanceProfile(module, capability),
     })),
   );
+
+export const platformStandards: PlatformStandard[] = [
+  { spec: 251, title: 'CDC, Data Replication & Read Replica Specification', category: 'Data Platform', representation: 'Platform guardrail' },
+  { spec: 252, title: 'Schema Migration, Zero-Downtime Compatibility & Database Evolution Standard', category: 'Engineering', representation: 'Platform guardrail' },
+  { spec: 253, title: 'API SDK, Client Contract & Frontend Data Access Standard', category: 'Engineering', representation: 'Platform guardrail' },
+  { spec: 254, title: 'Feature Telemetry, Product Analytics & UX Measurement Specification', category: 'UX / Product', representation: 'Capability-backed', mappedCapabilityIds: ['OP-08'] },
+  { spec: 255, title: 'Browser, Device, Scanner & Peripheral Compatibility Matrix', category: 'Engineering', representation: 'Platform guardrail' },
+  { spec: 256, title: 'Localization Pack, Units, Locale & Regional Format Governance', category: 'UX / Product', representation: 'Capability-backed', mappedCapabilityIds: ['AD-12'] },
+  { spec: 257, title: 'Legal Hold, eDiscovery & Regulatory Evidence Handling Specification', category: 'Security / Compliance', representation: 'Capability-backed', mappedCapabilityIds: ['AD-13'] },
+  { spec: 258, title: 'Privacy Request & Data Subject Handling Boundary Specification', category: 'Security / Compliance', representation: 'Capability-backed', mappedCapabilityIds: ['AD-14'] },
+  { spec: 259, title: 'Vendor, Dependency & Open-Source Governance Specification', category: 'Engineering', representation: 'Platform guardrail' },
+  { spec: 260, title: 'SBOM, Software Supply Chain & Artifact Provenance Specification', category: 'Security / Compliance', representation: 'Platform guardrail' },
+  { spec: 261, title: 'Penetration Testing, Vulnerability Management & Security Verification Standard', category: 'Security / Compliance', representation: 'Platform guardrail' },
+  { spec: 262, title: 'Chaos Engineering, Resilience Verification & Failure Injection Standard', category: 'Engineering', representation: 'Platform guardrail' },
+  { spec: 263, title: 'Performance Budget by Screen, API & Mobile Workflow Specification', category: 'Engineering', representation: 'Platform guardrail' },
+  { spec: 264, title: 'Tenant Provisioning, Company Onboarding & Warehouse Setup Runbook', category: 'Operations / Governance', representation: 'Runbook-backed', mappedCapabilityIds: ['OP-06'] },
+  { spec: 265, title: 'Warehouse Decommissioning, Tenant Offboarding & Data Exit Runbook', category: 'Operations / Governance', representation: 'Runbook-backed', mappedCapabilityIds: ['OP-09'] },
+  { spec: 266, title: 'Product Requirements Document (PRD) Standard & Feature Discovery Template', category: 'UX / Product', representation: 'Platform guardrail' },
+  { spec: 267, title: 'Persona, Role, Job-to-be-Done & Operational Context Catalog', category: 'UX / Product', representation: 'Platform guardrail' },
+  { spec: 268, title: 'User Journey, Service Blueprint & Cross-Channel Experience Specification', category: 'UX / Product', representation: 'Platform guardrail' },
+  { spec: 269, title: 'UX Research, Usability Testing & Design Validation Standard', category: 'UX / Product', representation: 'Platform guardrail' },
+  { spec: 270, title: 'Design Token, Component API & Storybook Governance Specification', category: 'UX / Product', representation: 'Platform guardrail' },
+  { spec: 271, title: 'Notification Center, Inbox & Actionable Alert UX Specification', category: 'UX / Product', representation: 'Capability-backed', mappedCapabilityIds: ['AD-07'] },
+  { spec: 272, title: 'Offline UX Conflict Resolution & Deferred Command Experience Specification', category: 'UX / Product', representation: 'Capability-backed', mappedCapabilityIds: ['MO-10', 'OP-05'] },
+  { spec: 273, title: 'Accessibility Conformance & Assistive Technology Test Catalog', category: 'UX / Product', representation: 'Platform guardrail' },
+  { spec: 274, title: 'Enterprise Audit of Screen-to-API-to-Permission-to-State Coverage Matrix', category: 'Operations / Governance', representation: 'Platform guardrail' },
+  { spec: 275, title: 'Final Documentation Coverage Audit & Completeness Register', category: 'Operations / Governance', representation: 'Platform guardrail' },
+  { spec: 276, title: 'Administrative Console & Configuration UX Specification', category: 'UX / Product', representation: 'Capability-backed', mappedCapabilityIds: ['AD-05', 'AD-10'] },
+  { spec: 277, title: 'Warehouse Site Commissioning & Go-Live Readiness Specification', category: 'Operations / Governance', representation: 'Runbook-backed', mappedCapabilityIds: ['OP-06'] },
+  { spec: 278, title: 'Release Communication, Change Adoption & Operator Enablement Specification', category: 'Operations / Governance', representation: 'Platform guardrail' },
+  { spec: 279, title: 'Identity Federation, SSO & Enterprise Access Integration Specification', category: 'Security / Compliance', representation: 'Capability-backed', mappedCapabilityIds: ['AD-08'] },
+  { spec: 280, title: 'Evidence Export, Audit Package & Compliance Reporting Specification', category: 'Security / Compliance', representation: 'Capability-backed', mappedCapabilityIds: ['RP-08', 'AD-13'] },
+  { spec: 281, title: 'Manual Contingency Forms & Post-Outage Reconciliation Procedure', category: 'Operations / Governance', representation: 'Runbook-backed', mappedCapabilityIds: ['OP-07'] },
+  { spec: 282, title: 'UX Governance & Screen Matrix 229 Master Handoff Specification', category: 'UX / Product', representation: 'Platform guardrail', mappedCapabilityIds: ['INV-08', 'OUT-05', 'OUT-06', 'TR-01'] },
+];
 
 export const evidenceStatusLabels: Record<EvidenceStatus, string> = {
   covered: 'Covered',

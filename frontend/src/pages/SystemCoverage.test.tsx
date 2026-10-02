@@ -10,12 +10,14 @@ describe('SystemCoverage', () => {
   it('renders all traced capabilities and the four Screen Matrix review items', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     expect(view.getByText('Coverage & Readiness')).toBeTruthy();
-    expect(view.getByText('131')).toBeTruthy();
+    expect(view.getByText('150')).toBeTruthy();
     expect(view.getAllByText('Review Required').length).toBeGreaterThanOrEqual(4);
     expect(view.getByText(/Chuyển vị trí/)).toBeTruthy();
     expect(view.getByText(/Lấy hàng/)).toBeTruthy();
     expect(view.getByText(/Đóng gói/)).toBeTruthy();
     expect(view.getByText(/Tạo phiếu chuyển kho/)).toBeTruthy();
+    expect(view.getByText('32')).toBeTruthy();
+    expect(view.getByText('Platform Standards 251–282')).toBeTruthy();
   });
 
   it('filters by release wave and implementation status', () => {
@@ -28,6 +30,13 @@ describe('SystemCoverage', () => {
     fireEvent.change(view.getByLabelText('Lọc implementation status'), { target: { value: 'live' } });
     expect(view.getByText(/TR-01 • Warehouse Transfer/)).toBeTruthy();
     expect(view.queryByText(/OUT-05 • Picking/)).toBeNull();
+  });
+
+  it('shows advanced canonical capabilities without promoting them to core implementation', () => {
+    const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
+    fireEvent.change(view.getByLabelText('Tìm coverage'), { target: { value: 'Warehouse Safety' } });
+    expect(view.getByText(/AX-14 • Warehouse Safety/)).toBeTruthy();
+    expect(view.getByText(/Industry optional/)).toBeTruthy();
   });
 
   it('supports capability text search', () => {
