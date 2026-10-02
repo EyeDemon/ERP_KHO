@@ -11,6 +11,7 @@ import {
   type ReleaseWave,
 } from '../config/capabilityGovernance';
 import { getCanonicalDocumentationRegister } from '../config/documentationRegister';
+import { coreInteractiveDemoIds } from '../config/capabilityDemoScreens';
 import './SystemCoverage.css';
 
 const applicabilityLabels: Record<Applicability, string> = {
@@ -77,8 +78,9 @@ const SystemCoverage = () => {
       <section className="coverage-kpis">
         <article><strong>{implemented}</strong><span>Live / implemented</span></article>
         <article><strong>{foundation}</strong><span>Foundation</span></article>
-        <article><strong>{specOnly}</strong><span>Spec-only / optional</span></article>
-        <article className="review-kpi"><strong>{reviewRequired.length}</strong><span>Screen review required</span></article>
+        <article><strong>{specOnly}</strong><span>Production spec-only / optional</span></article>
+        <article><strong>{rows.length}</strong><span>Interactive Blueprint demos</span></article>
+        <article className="review-kpi" title={coreInteractiveDemoIds.length + ' core capability demos có workflow chuyên biệt'}><strong>{reviewRequired.length}</strong><span>Screen review required</span></article>
         <article><strong>{documentation.length}</strong><span>Canonical specs indexed</span></article>
         <article><strong>{platformDocs.length}</strong><span>Platform / governance docs</span></article>
       </section>

@@ -18,7 +18,7 @@ describe('CapabilityPreview', () => {
 
   it('renders a planned capability with spec, states and mock records', () => {
     const view = renderPreview('outbound', 'OUT-08');
-    expect(view.getByText('Shipment Dispatch')).toBeTruthy();
+    expect(view.getAllByText('Shipment Dispatch').length).toBeGreaterThan(0);
     expect(view.getByText('MOCK / SPEC PREVIEW')).toBeTruthy();
     expect(view.getByText(/Dispatch mới giảm OnHand|Boundary trừ OnHand/)).toBeTruthy();
     expect(view.getByText('SHP-2026-5108')).toBeTruthy();
@@ -69,6 +69,40 @@ describe('CapabilityPreview', () => {
     expect(picking.getByText('Capability governance & completeness')).toBeTruthy();
     expect(picking.getAllByText('Wave 2').length).toBeGreaterThan(0);
     expect(picking.getByText(/Picking không được giảm warehouse OnHand/)).toBeTruthy();
+  });
+
+  it('supports interactive core WMS state transitions and exception recovery', () => {
+    const view = renderPreview('outbound', 'OUT-08');
+    expect(view.getByTestId('interactive-capability-demo')).toBeTruthy();
+    fireEvent.click(view.getByText('Thực hiện bước tiếp theo'));
+    expect(view.getByText('State → LOAD_READY')).toBeTruthy();
+
+    fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
+    expect(view.getByText('DISPATCH_INVENTORY_CONFLICT')).toBeTruthy();
+    fireEvent.click(view.getByText('Giải quyết ngoại lệ'));
+    expect(view.getByText(/Exception resolved/)).toBeTruthy();
+  });
+
+  it('shows domain-specific warehouse lifecycle instead of a spec-only card', () => {
+    const view = renderPreview('warehouse-structure', 'WH-06');
+    expect(view.getByText(/Dock & Yard Control/)).toBeTruthy();
+    expect(view.getAllByText('CHECKED_IN').length).toBeGreaterThan(0);
+    expect(view.getByText('ASSIGN_DOCK')).toBeTruthy();
+    fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
+    expect(view.getByText('DOCK_DOUBLE_ASSIGNMENT')).toBeTruthy();
+  });
+
+  it('keeps quantity conversion interactive for core execution demos', () => {
+    const view = renderPreview('inventory-control', 'INV-08');
+    const quantity = view.getByLabelText('Move quantity') as HTMLInputElement;
+    fireEvent.change(quantity, { target: { value: '7' } });
+    expect(view.getByText('84 Cái')).toBeTruthy();
+  });
+
+  it('provides an interactive fallback for planned capabilities outside the detailed core catalog', () => {
+    const view = renderPreview('administration', 'AD-08');
+    expect(view.getByText(/SSO \/ Identity Federation • Interactive Blueprint/)).toBeTruthy();
+    expect(view.getByText('SIMULATE_ACTION')).toBeTruthy();
   });
 
   it('shows safe not-found UI for invalid capability', () => {

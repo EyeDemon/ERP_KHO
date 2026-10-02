@@ -154,7 +154,7 @@ const evidenceFor = (capability: BlueprintCapability, inventoryEffect: string): 
     { key: 'data', label: 'Data Model', status: capability.status === 'live' ? 'covered' : implementation, note: 'Production evidence follows implementation maturity; blueprint does not fabricate tables.' },
     { key: 'api', label: 'Command / API', status: implementation, note: commandApiModelFor(capability) },
     { key: 'permission', label: 'Permission', status: capability.status === 'live' ? 'partial' : 'spec-only', note: permissionModelFor(capability) },
-    { key: 'ux', label: 'UX / Screen', status: 'covered', note: 'Dedicated capability preview + module work center exists.' },
+    { key: 'ux', label: 'UX / Screen', status: 'covered', note: 'Interactive capability simulator + module work center exists; production implementation remains tracked separately.' },
     { key: 'inventory', label: 'Inventory Effect', status: 'covered', note: inventoryEffect },
     { key: 'event', label: 'Event / Error', status: capability.status === 'live' ? 'partial' : 'spec-only', note: 'Must remain aligned with canonical event/error contracts and idempotency policy.' },
     { key: 'test', label: 'Test Evidence', status: capability.status === 'live' ? 'partial' : 'spec-only', note: 'Blueprint/mock tests exist; production successor/integration evidence is separate.' },

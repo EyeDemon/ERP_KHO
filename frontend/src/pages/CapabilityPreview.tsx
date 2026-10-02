@@ -12,6 +12,7 @@ import { getMockCapabilityFixture, getMockWorkCenter } from '../mocks/erpWmsMock
 import { useMockDemo } from '../context/MockDemoContext';
 import { evidenceStatusLabels, getCapabilityGovernanceProfile } from '../config/capabilityGovernance';
 import { getSpecializedScreenPreview } from '../config/reviewRequiredScreens';
+import CapabilityInteractiveDemo from './CapabilityInteractiveDemo';
 import './CapabilityPreview.css';
 
 const statusIcon = (status: BlueprintStatus) =>
@@ -99,6 +100,15 @@ const CapabilityPreview = () => {
           <div className="specialized-screen-ref">{specializedPreview.screenReference}</div>
         </section>
       )}
+
+      <CapabilityInteractiveDemo
+        capability={capability}
+        moduleName={module.name}
+        moduleFlow={module.flow}
+        sampleReference={fixtureVisible ? fixture?.sampleReference : records[0]?.reference}
+        sampleWarehouse={fixtureVisible ? fixture?.sampleWarehouse : records[0]?.warehouse}
+        recordCount={records.length}
+      />
 
       <section className="capability-grid-layout">
         <div className="capability-main">
