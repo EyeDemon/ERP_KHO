@@ -51,6 +51,16 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.getByText('Mock Data Lab')).toBeTruthy();
   });
 
+  it('switches demo persona and reports the simulated warehouse scope', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
+    const view = renderAt('/system-blueprint/inbound');
+    await view.findByText('Blueprint content');
+    const selector = view.getByLabelText('Persona mô phỏng');
+    fireEvent.change(selector, { target: { value: 'U-DN-MGR' } });
+    expect((selector as HTMLSelectElement).value).toBe('U-DN-MGR');
+    expect(view.getByText('1 kho scope')).toBeTruthy();
+  });
+
   it('keeps production navigation separate from blueprint-only module menu', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/');
