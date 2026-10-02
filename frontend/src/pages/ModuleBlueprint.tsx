@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Boxes, CheckCircle2, CircleDashed, Database, ExternalLink,
@@ -8,6 +9,10 @@ import {
   findBlueprintModule,
   type BlueprintStatus,
 } from '../config/erpWmsBlueprint';
+import {
+  getMockWorkCenter,
+  type MockOperationalRecord,
+} from '../mocks/erpWmsMockData';
 import './SystemBlueprint.css';
 import './ModuleBlueprint.css';
 
@@ -16,9 +21,21 @@ const statusIcon = (status: BlueprintStatus) => {
   return <CircleDashed size={15} />;
 };
 
+const qtyText = (record: MockOperationalRecord) =>
+  record.quantity == null ? '—' : `${record.quantity.toLocaleString('vi-VN')} ${record.uom ?? ''}`.trim();
+
+const localTime = (iso: string) => new Date(iso).toLocaleString('vi-VN');
+
 const ModuleBlueprint = () => {
   const { moduleKey } = useParams();
   const module = findBlueprintModule(moduleKey);
+  const workCenter = getMockWorkCenter(moduleKey);
+  const [selectedId, setSelectedId] = useState<string | null>(workCenter?.records[0]?.id ?? null);
+
+  const selected = useMemo(
+    () => workCenter?.records.find((item) => item.id === selectedId) ?? workCenter?.records[0],
+    [selectedId, workCenter],
+  );
 
   if (!module) {
     return (
@@ -33,6 +50,10 @@ const ModuleBlueprint = () => {
   const foundationCount = module.capabilities.filter((item) => item.status === 'foundation').length;
   const plannedCount = module.capabilities.filter((item) => item.status === 'planned').length;
   const optionalCount = module.capabilities.filter((item) => item.status === 'optional').length;
+  const records = workCenter?.records ?? [];
+  const attentionCount = records.filter((item) => item.tone === 'orange' || item.tone === 'red').length;
+  const criticalCount = records.filter((item) => item.priority === 'Critical').length;
+  const activeCount = records.filter((item) => item.tone === 'blue').length;
 
   return (
     <div className="module-blueprint-page">
@@ -40,7 +61,7 @@ const ModuleBlueprint = () => {
 
       <section className="module-hero">
         <div>
-          <span className="eyebrow"><Workflow size={16} /> Module Blueprint</span>
+          <span className="eyebrow"><Workflow size={16} /> Module Blueprint • Mock Dataset</span>
           <h1>{module.name}</h1>
           <p>{module.description}</p>
         </div>
@@ -71,18 +92,21 @@ const ModuleBlueprint = () => {
         <div className="workbench-main">
           <div className="workbench-header">
             <div>
-              <span className="workbench-kicker">WORK CENTER PREVIEW</span>
+              <span className="workbench-kicker">WORK CENTER • MOCK DATA</span>
               <h2>{module.name}</h2>
-              <p>Minh họa bố cục vận hành theo Design System 217 và IA 216.</p>
+              <p>
+                Dataset mô phỏng tại {workCenter ? localTime(workCenter.snapshotAt) : '—'}.
+                Không gọi API thật và không thay đổi dữ liệu nghiệp vụ.
+              </p>
             </div>
-            <button type="button" className="demo-primary">+ Tạo tác vụ</button>
+            <button type="button" className="demo-primary">+ Tạo tác vụ mẫu</button>
           </div>
 
           <div className="demo-kpis">
-            <article><span>Đang xử lý</span><strong>{Math.max(4, module.capabilities.length * 3)}</strong><small>Trong warehouse scope</small></article>
-            <article><span>Chờ xử lý</span><strong>{Math.max(2, module.capabilities.length)}</strong><small>Ưu tiên theo SLA</small></article>
-            <article><span>Ngoại lệ</span><strong>{Math.max(1, Math.floor(module.capabilities.length / 3))}</strong><small>Cần triage</small></article>
-            <article><span>Hoàn tất hôm nay</span><strong>{module.capabilities.length * 7}</strong><small>Operational sample</small></article>
+            <article><span>Mock records</span><strong>{records.length}</strong><small>Dataset của module</small></article>
+            <article><span>Đang xử lý</span><strong>{activeCount}</strong><small>Active / in progress</small></article>
+            <article><span>Cần chú ý</span><strong>{attentionCount}</strong><small>Warning / exception</small></article>
+            <article><span>Critical</span><strong>{criticalCount}</strong><small>Ưu tiên cao nhất</small></article>
           </div>
 
           <div className="demo-filterbar">
@@ -93,51 +117,61 @@ const ModuleBlueprint = () => {
           </div>
 
           <div className="demo-table-wrap">
-            <table className="demo-table">
+            <table className="demo-table mock-data-table">
               <thead>
                 <tr>
-                  <th>Mã / Capability</th>
-                  <th>Mục tiêu vận hành</th>
-                  <th>Surface</th>
+                  <th>Tham chiếu</th>
+                  <th>Loại / Nội dung</th>
+                  <th>Kho / Vị trí</th>
+                  <th>Số lượng</th>
+                  <th>Người phụ trách</th>
+                  <th>Ưu tiên</th>
                   <th>Trạng thái</th>
-                  <th>Spec</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {module.capabilities.map((capability) => (
-                  <tr key={capability.id}>
-                    <td><strong>{capability.id}</strong><span>{capability.name}</span></td>
-                    <td>{capability.goal}</td>
-                    <td>
-                      <div className="surface-row compact-surfaces">
-                        {capability.surfaces.map((surface) => (
-                          <span key={surface}>
-                            {surface === 'Mobile' ? <Smartphone size={12} /> : <MonitorSmartphone size={12} />}
-                            {surface}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={'status-pill compact ' + capability.status}>
-                        {statusIcon(capability.status)} {blueprintStatusLabels[capability.status]}
-                      </span>
-                    </td>
-                    <td>{capability.spec}</td>
-                    <td>
-                      {capability.route
-                        ? <Link className="table-open-link" to={capability.route}><ExternalLink size={14} /> Mở</Link>
-                        : <span className="demo-only">Minh họa</span>}
-                    </td>
+                {records.map((record) => (
+                  <tr key={record.id} className={selected?.id === record.id ? 'selected-row' : undefined}>
+                    <td><strong>{record.reference}</strong><span>{record.id}</span></td>
+                    <td><strong>{record.type}</strong><span>{record.subject}</span></td>
+                    <td><strong>{record.warehouse}</strong><span>{record.location ?? '—'}</span></td>
+                    <td>{qtyText(record)}</td>
+                    <td><strong>{record.owner}</strong><span>{localTime(record.updatedAt)}</span></td>
+                    <td><span className={'priority-chip priority-' + record.priority.toLowerCase()}>{record.priority}</span></td>
+                    <td><span className={'mock-status tone-' + record.tone}>{record.status}</span></td>
+                    <td><button type="button" className="table-detail-button" onClick={() => setSelectedId(record.id)}>Chi tiết</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {records.length === 0 && <div className="mock-empty">Chưa có fixture cho module này.</div>}
           </div>
         </div>
 
         <aside className="trace-panel">
+          {selected && (
+            <div className="selected-record">
+              <span className="workbench-kicker">SELECTED MOCK RECORD</span>
+              <h3>{selected.reference}</h3>
+              <p>{selected.subject}</p>
+              <dl>
+                <div><dt>Loại</dt><dd>{selected.type}</dd></div>
+                <div><dt>Trạng thái</dt><dd><span className={'mock-status tone-' + selected.tone}>{selected.status}</span></dd></div>
+                <div><dt>Warehouse</dt><dd>{selected.warehouse}</dd></div>
+                <div><dt>Location</dt><dd>{selected.location ?? '—'}</dd></div>
+                <div><dt>Product</dt><dd>{selected.productCode ?? '—'}</dd></div>
+                <div><dt>Partner</dt><dd>{selected.partnerCode ?? '—'}</dd></div>
+                <div><dt>Quantity</dt><dd>{qtyText(selected)}</dd></div>
+                <div><dt>Owner</dt><dd>{selected.owner}</dd></div>
+                <div><dt>Priority</dt><dd>{selected.priority}</dd></div>
+                <div><dt>Updated</dt><dd>{localTime(selected.updatedAt)}</dd></div>
+              </dl>
+              {selected.note && <div className="selected-note">{selected.note}</div>}
+            </div>
+          )}
+
+          <div className="trace-divider" />
           <span className="workbench-kicker">TRACEABILITY</span>
           <h3>Đường kiểm soát bắt buộc</h3>
           <div className="trace-chain">
@@ -149,10 +183,57 @@ const ModuleBlueprint = () => {
             <div><FileCheck2 size={17} /><span><strong>Audit / Outbox</strong><small>Evidence và integration event</small></span></div>
           </div>
           <div className="trace-note">
-            Màn hình này là <strong>minh họa hệ thống</strong>. Capability chưa có backend được giữ ở trạng thái
-            “Theo đặc tả” hoặc “Nâng cao”, không giả lập là đã production-ready.
+            Mock records chỉ phục vụ demo/test. Capability chưa có backend vẫn giữ đúng nhãn “Theo đặc tả” hoặc
+            “Nâng cao”, không giả lập production readiness.
           </div>
         </aside>
+      </section>
+
+      <section className="module-panel">
+        <div className="module-panel-title"><ShieldCheck size={18} /><h2>Coverage capability</h2></div>
+        <div className="demo-table-wrap">
+          <table className="demo-table">
+            <thead>
+              <tr>
+                <th>Mã / Capability</th>
+                <th>Mục tiêu vận hành</th>
+                <th>Surface</th>
+                <th>Trạng thái</th>
+                <th>Spec</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {module.capabilities.map((capability) => (
+                <tr key={capability.id}>
+                  <td><strong>{capability.id}</strong><span>{capability.name}</span></td>
+                  <td>{capability.goal}</td>
+                  <td>
+                    <div className="surface-row compact-surfaces">
+                      {capability.surfaces.map((surface) => (
+                        <span key={surface}>
+                          {surface === 'Mobile' ? <Smartphone size={12} /> : <MonitorSmartphone size={12} />}
+                          {surface}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td>
+                    <span className={'status-pill compact ' + capability.status}>
+                      {statusIcon(capability.status)} {blueprintStatusLabels[capability.status]}
+                    </span>
+                  </td>
+                  <td>{capability.spec}</td>
+                  <td>
+                    {capability.route
+                      ? <Link className="table-open-link" to={capability.route}><ExternalLink size={14} /> Mở</Link>
+                      : <span className="demo-only">Minh họa</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="module-panel">
