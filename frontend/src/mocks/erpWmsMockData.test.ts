@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
 import {
+  mockCapabilityFixtures,
   mockInventoryBalances,
   mockPartners,
   mockProducts,
@@ -19,6 +20,21 @@ describe('ERP WMS complete mock dataset', () => {
     expect(mockRecordCount).toBeGreaterThanOrEqual(60);
     for (const module of erpWmsBlueprint) {
       expect(mockWorkCenters[module.key].records.length).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it('provides a dedicated fixture for every capability', () => {
+    const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
+    expect(Object.keys(mockCapabilityFixtures)).toHaveLength(capabilities.length);
+    for (const module of erpWmsBlueprint) {
+      for (const capability of module.capabilities) {
+        const fixture = mockCapabilityFixtures[capability.id];
+        expect(fixture).toBeTruthy();
+        expect(fixture.capabilityId).toBe(capability.id);
+        expect(fixture.moduleKey).toBe(module.key);
+        expect(fixture.sampleRecordId).not.toBe('NO-SAMPLE');
+        expect(fixture.sampleReference).not.toBe('NO-SAMPLE');
+      }
     }
   });
 
