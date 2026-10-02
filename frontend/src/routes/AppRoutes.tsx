@@ -19,6 +19,7 @@ import PutawayTasks from '../pages/PutawayTasks';
 import Permissions from '../pages/Permissions';
 import SystemBlueprint from '../pages/SystemBlueprint';
 import ModuleBlueprint from '../pages/ModuleBlueprint';
+import MockScenarioLab from '../pages/MockScenarioLab';
 import { canViewApprovals, canViewStocktakes, usePermission, usePermissionSet } from '../services/authorization';
 
 const PermissionRoute = ({ permission, children }: { permission: string; children: ReactNode }) =>
@@ -38,6 +39,7 @@ const AppRoutes = () => {
       <Route path="/" element={<MainLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="system-blueprint" element={<SystemBlueprint />} />
+        <Route path="system-blueprint/scenarios" element={<MockScenarioLab />} />
         <Route path="system-blueprint/:moduleKey" element={<ModuleBlueprint />} />
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
