@@ -16,6 +16,10 @@ describe('MockDataLab', () => {
     expect(view.getByText('SKU-1001')).toBeTruthy();
     expect(view.getByText('8938501000011, 8938501000012')).toBeTruthy();
 
+    fireEvent.click(view.getByRole('tab', { name: '119 Capability Fixtures' }));
+    expect(view.getByText('FX-OUT-08')).toBeTruthy();
+    expect(view.getByText(/OUT-08 — Shipment Dispatch/)).toBeTruthy();
+
     fireEvent.click(view.getByRole('tab', { name: 'Inventory Buckets' }));
     expect(view.getByText('1250')).toBeTruthy();
 
