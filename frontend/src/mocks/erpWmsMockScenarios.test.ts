@@ -42,10 +42,12 @@ describe('ERP WMS golden mock scenarios', () => {
     expect(Number(m.systemQty) + Number(m.adjustment)).toBe(m.finalOnHand);
   });
 
-  it('balances QC disposition back to the received physical quantity', () => {
+  it('keeps Receive/QC ledger-neutral and posts canonical disposition only at receipt POST', () => {
     const m = byId('GS-05').metrics;
-    expect(Number(m.qcPass) + Number(m.qcFail)).toBe(m.received);
-    expect(Number(m.available) + Number(m.quarantine)).toBe(m.physicalTotal);
+    expect(m.prePostOnHand).toBe(0);
+    expect(Number(m.accepted) + Number(m.damaged) + Number(m.rejectedAtDoor)).toBe(m.received);
+    expect(Number(m.available) + Number(m.damaged)).toBe(m.physicalOnHand);
+    expect(Number(m.physicalOnHand) + Number(m.rejectedAtDoor)).toBe(m.received);
   });
 
   it('keeps reversal ledger history and resolves to the corrected net', () => {
