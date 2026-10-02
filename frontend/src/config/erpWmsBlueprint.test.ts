@@ -8,7 +8,7 @@ describe('ERP WMS blueprint registry', () => {
     expect(new Set(moduleKeys).size).toBe(moduleKeys.length);
 
     const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
-    expect(capabilities).toHaveLength(119);
+    expect(capabilities).toHaveLength(130);
     const ids = capabilities.map((capability) => capability.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -22,11 +22,26 @@ describe('ERP WMS blueprint registry', () => {
         expect(capability.name.trim().length).toBeGreaterThan(0);
         expect(capability.goal.trim().length).toBeGreaterThan(0);
         expect(capability.spec.trim().length).toBeGreaterThan(0);
+        expect(capability.spec).not.toMatch(/\d+\s*-\s*\d+/);
         expect(capability.surfaces.length).toBeGreaterThan(0);
         expect(['live', 'foundation', 'planned', 'optional']).toContain(capability.status);
         if (capability.route) expect(capability.route.startsWith('/')).toBe(true);
       }
     }
+  });
+
+  it('keeps canonical audit additions explicit and mapped to primary specs', () => {
+    const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
+    const byId = new Map(capabilities.map((capability) => [capability.id, capability]));
+    for (const id of ['OV-06', 'OV-07', 'MD-08', 'OUT-10', 'AD-09', 'AD-10', 'AD-11', 'IG-08', 'AX-08', 'AX-09', 'AX-10']) {
+      expect(byId.has(id)).toBe(true);
+    }
+    expect(byId.get('OUT-05')?.spec.split(/,\s*/)).toContain('36');
+    expect(byId.get('INV-09')?.spec).toBe('32');
+    expect(byId.get('TR-05')?.spec.split(/,\s*/)).toContain('44');
+    expect(byId.get('HU-01')?.spec.split(/,\s*/)).toContain('37');
+    expect(byId.get('DY-04')?.spec.split(/,\s*/)).toContain('47');
+    expect(byId.get('AD-07')?.spec.split(/,\s*/)).toContain('61');
   });
 
   it('keeps critical core modules in the blueprint', () => {

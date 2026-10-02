@@ -13,11 +13,24 @@ This document distinguishes:
 
 A canonical spec existing does **not** mean the capability must be implemented now.
 
+## Remediation status — applied after audit
+
+The blueprint registry has now been corrected in the same feature branch:
+
+- capability count increased from 119 to **130** without adding a new module;
+- 11 canonical capabilities from the high-confidence gap list were added explicitly;
+- high-confidence stale/wrong spec references were corrected;
+- broad numerical spec ranges were removed from every capability;
+- optional Wave 4/5 items remain `optional` and are not promoted into the current MVP implementation queue;
+- registry tests now reject broad spec ranges and pin representative canonical mappings.
+
+The findings below remain the rationale/history for those corrections and for later structured metadata work.
+
 ## Executive finding
 
 The canonical documentation set is substantially complete. Spec 275 states that after pages 276–281 there are no obvious foundational solution-architecture/product/operations documentation gaps; conditional capabilities remain conditional.
 
-The current blueprint is useful but has two material issues:
+At audit start, the blueprint had two material issues:
 
 - several canonical capabilities are missing or under-modeled in the registry;
 - many capability-to-spec references are stale, overly broad, or point at the wrong numbered document.
