@@ -48,6 +48,26 @@ describe('ModuleBlueprint mock work center', () => {
     expect(mobile.getByText('SYNC-FAIL-008')).toBeTruthy();
   });
 
+  it('filters mock records by search, warehouse and status and can reset filters', () => {
+    const view = renderModule('inbound');
+    const search = view.getByLabelText('Tìm trong work center');
+    fireEvent.change(search, { target: { value: 'GR-2026-1045' } });
+    expect(view.getByText('GR-2026-1045')).toBeTruthy();
+    expect(view.queryByText('ASN-2026-0812')).toBeNull();
+
+    fireEvent.click(view.getByText('Xóa lọc'));
+    expect(view.getByText('ASN-2026-0812')).toBeTruthy();
+
+    fireEvent.change(view.getByLabelText('Kho'), { target: { value: 'WH-DN-01' } });
+    expect(view.getByText('GR-2026-1041')).toBeTruthy();
+    expect(view.queryByText('GR-2026-1048')).toBeNull();
+
+    fireEvent.click(view.getByText('Xóa lọc'));
+    fireEvent.change(view.getByLabelText('Trạng thái'), { target: { value: 'QC_PENDING' } });
+    expect(view.getByText('GR-2026-1045')).toBeTruthy();
+    expect(view.queryByText('GR-2026-1041')).toBeNull();
+  });
+
   it('shows a safe not-found state for an unknown module', () => {
     const view = renderModule('does-not-exist');
     expect(view.getByText('Không tìm thấy module')).toBeTruthy();
