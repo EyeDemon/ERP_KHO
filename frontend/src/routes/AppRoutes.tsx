@@ -17,6 +17,7 @@ import Approvals from '../pages/Approvals';
 import BusinessPartners from '../pages/BusinessPartners';
 import PutawayTasks from '../pages/PutawayTasks';
 import Permissions from '../pages/Permissions';
+import SystemBlueprint from '../pages/SystemBlueprint';
 import { canViewApprovals, canViewStocktakes, usePermission, usePermissionSet } from '../services/authorization';
 
 const PermissionRoute = ({ permission, children }: { permission: string; children: ReactNode }) =>
@@ -35,6 +36,7 @@ const AppRoutes = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<MainLayout />}>
         <Route index element={<Dashboard />} />
+        <Route path="system-blueprint" element={<SystemBlueprint />} />
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
         <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
