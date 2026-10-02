@@ -1,3 +1,5 @@
+import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
+
 export type MockTone = 'green' | 'blue' | 'orange' | 'red' | 'gray';
 
 export interface MockWarehouse {
@@ -365,3 +367,44 @@ export const getMockWorkCenter = (moduleKey?: string) =>
 
 export const mockRecordCount = Object.values(mockWorkCenters)
   .reduce((total, workCenter) => total + workCenter.records.length, 0);
+
+
+export interface MockCapabilityFixture {
+  fixtureId: string;
+  capabilityId: string;
+  moduleKey: string;
+  capabilityName: string;
+  implementationStatus: string;
+  spec: string;
+  sampleRecordId: string;
+  sampleReference: string;
+  sampleWarehouse: string;
+  sampleStatus: string;
+}
+
+export const mockCapabilityFixtures: Record<string, MockCapabilityFixture> = Object.fromEntries(
+  erpWmsBlueprint.flatMap((module) => {
+    const records = mockWorkCenters[module.key]?.records ?? [];
+    return module.capabilities.map((capability, index) => {
+      const sample = records[index % Math.max(records.length, 1)];
+      return [
+        capability.id,
+        {
+          fixtureId: `FX-${capability.id}`,
+          capabilityId: capability.id,
+          moduleKey: module.key,
+          capabilityName: capability.name,
+          implementationStatus: capability.status,
+          spec: capability.spec,
+          sampleRecordId: sample?.id ?? 'NO-SAMPLE',
+          sampleReference: sample?.reference ?? 'NO-SAMPLE',
+          sampleWarehouse: sample?.warehouse ?? 'NO-SAMPLE',
+          sampleStatus: sample?.status ?? 'NO-SAMPLE',
+        },
+      ];
+    });
+  }),
+);
+
+export const getMockCapabilityFixture = (capabilityId?: string) =>
+  capabilityId ? mockCapabilityFixtures[capabilityId] : undefined;
