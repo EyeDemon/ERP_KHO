@@ -111,7 +111,7 @@ The scenario lab includes:
 2. Outbound Reserve → Allocate → Pick → Dispatch.
 3. Warehouse Transfer Conservation.
 4. Cycle Count → Recount → Adjustment.
-5. QC Hold → Available / Quarantine.
+5. Inbound QC → Disposition → Receipt Post (canonical pre-post QC flow).
 6. Reversal & Corrective Receipt.
 7. Concurrent Reservation.
 8. Idempotent Shipment Dispatch.
@@ -127,11 +127,11 @@ The scenario lab includes:
 - Quantities are non-negative where expected.
 - Allocation <= Reservation.
 - Reserved <= OnHand.
-- Available = OnHand - Reserved in the simplified demo balance fixture.
+- Available = eligible OnHand - active Reserved; the current demo excludes QC_HOLD and QUARANTINE from eligible OnHand.
 - Transfer Source + Transit + Destination = requested quantity.
 - Recount attempts are immutable/sequential and only one final attempt is accepted.
 - Count is not shown as completed before adjustment approval/post.
-- Inbound POST is the inventory boundary.
+- Canonical Goods Receipt: Receive/QC/disposition are ledger-neutral; POST is the sole inventory boundary.
 - Picking does not deduct warehouse OnHand.
 - Dispatch does deduct warehouse OnHand.
 - QC disposition preserves physical quantity.
@@ -165,6 +165,17 @@ npm audit --audit-level=high
 ```
 
 Repository-level CI also verifies backend, SQL Server integration, encoding and frontend build/test.
+
+## Canonical Goods Receipt override
+
+Mock/UAT semantics follow the newer canonical override in spec 41/228:
+- Receive does not mutate inventory or ledger.
+- QC/disposition is resolved before READY_TO_POST.
+- POST is the sole inventory boundary.
+- Accepted quantity posts to AVAILABLE.
+- Damaged quantity posts to DAMAGED.
+- Rejected-at-door quantity does not enter Physical On Hand.
+- QC_HOLD/QUARANTINE remain non-eligible inventory statuses for other explicitly modeled status-change flows.
 
 ## Production boundary
 
