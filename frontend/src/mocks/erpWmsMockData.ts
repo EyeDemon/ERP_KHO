@@ -252,6 +252,7 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
       r('INV-003', 'SER-TWS-000128', 'Serial', 'QC_HOLD', 'orange', 'WH-HCM-01', 'SKU-2001 • chờ QC', 'Vũ Ngọc Lan', 'High', '2026-10-02T08:48:00Z', { productCode: 'SKU-2001', quantity: 1, uom: 'Cái', location: 'QC-01' }),
       r('INV-004', 'TXN-2026-98211', 'Ledger', 'POSTED', 'green', 'WH-HCM-01', 'RECEIPT +600 SKU-1002', 'Inventory Posting Engine', 'Normal', '2026-10-02T07:55:00Z', { productCode: 'SKU-1002', quantity: 600, uom: 'Hộp' }),
       r('INV-005', 'LOCK-2026-181', 'Inventory Lock', 'ACTIVE', 'red', 'WH-DN-01', 'SKU-4001 • freeze cycle count', 'Đỗ Minh Khang', 'High', '2026-10-02T09:00:00Z', { productCode: 'SKU-4001', quantity: 2400, uom: 'Chai' }),
+      r('INV-006', 'RECON-HCM-0930', 'Inventory Reconciliation', 'HEALTHY', 'green', 'WH-HCM-01', 'Ledger = Balance • unexplained difference 0 • projection current', 'Integrity Monitor', 'Critical', '2026-10-02T09:30:00Z'),
     ],
   },
   'transfer-replenishment': {
@@ -400,6 +401,7 @@ export const mockCapabilitySampleRecordIds: Record<string, string> = {
   'OV-07': 'OV-006',
   'MD-08': 'MD-005',
   'OUT-10': 'OUT-006',
+  'INV-11': 'INV-006',
   'AD-07': 'AD-008',
   'AD-09': 'AD-005',
   'AD-10': 'AD-006',

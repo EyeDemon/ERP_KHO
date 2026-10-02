@@ -17,13 +17,14 @@ A canonical spec existing does **not** mean the capability must be implemented n
 
 The blueprint registry has now been corrected in the same feature branch:
 
-- capability count increased from 119 to **130** without adding a new module;
-- 11 canonical capabilities from the high-confidence gap list were added explicitly;
+- capability count increased from 119 to **131** without adding a new module;
+- 12 canonical capabilities from the high-confidence gap list were added explicitly;
 - high-confidence stale/wrong spec references were corrected;
 - broad numerical spec ranges were removed from every capability;
 - optional Wave 4/5 items remain `optional` and are not promoted into the current MVP implementation queue;
 - registry tests now reject broad spec ranges and pin representative canonical mappings.
-- semantic mock coverage was strengthened for the newly added capabilities using targeted operational records instead of modulo-only sample assignment; the shared dataset now contains **85 unique operational mock records**.
+- Inventory-owned reconciliation/projection rebuild is now explicit as `INV-11` instead of being hidden behind a reporting-only capability.
+- semantic mock coverage was strengthened for the newly added capabilities using targeted operational records instead of modulo-only sample assignment; the shared dataset now contains **86 unique operational mock records**.
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
