@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import MainLayout from './MainLayout';
 import apiClient from '../services/apiClient';
+import { MockDemoProvider } from '../context/MockDemoContext';
 
 vi.mock('../services/apiClient', () => ({
   default: { get: vi.fn() },
@@ -21,12 +22,14 @@ vi.mock('../services/authorization', () => ({
 
 const renderAt = (path: string) => render(
   <MemoryRouter initialEntries={[path]}>
-    <Routes>
-      <Route path="/" element={<MainLayout />}>
-        <Route index element={<div>Production home</div>} />
-        <Route path="system-blueprint/*" element={<div>Blueprint content</div>} />
-      </Route>
-    </Routes>
+    <MockDemoProvider>
+      <Routes>
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<div>Production home</div>} />
+          <Route path="system-blueprint/*" element={<div>Blueprint content</div>} />
+        </Route>
+      </Routes>
+    </MockDemoProvider>
   </MemoryRouter>,
 );
 
