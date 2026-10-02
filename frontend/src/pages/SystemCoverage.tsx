@@ -136,7 +136,7 @@ const SystemCoverage = () => {
       </section>
 
       <section className="coverage-table-wrap">
-        <table className="coverage-table">
+        <table className="coverage-table" data-testid="coverage-table">
           <thead>
             <tr>
               <th>Capability</th>
