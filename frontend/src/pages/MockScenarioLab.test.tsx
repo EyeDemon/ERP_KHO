@@ -16,6 +16,17 @@ describe('MockScenarioLab', () => {
     expect(view.getAllByText('100', { selector: 'strong' }).length).toBeGreaterThan(0);
   });
 
+  it('simulates scenario steps locally and resets execution state', () => {
+    const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
+    const log = view.getByTestId('scenario-execution-log');
+    expect(log.textContent).toContain('Chưa chạy bước nào');
+    fireEvent.click(view.getByText('Chạy bước tiếp'));
+    expect(log.textContent).toContain('Receive 100');
+    expect(log.textContent).toContain('Không tăng warehouse OnHand');
+    fireEvent.click(view.getByText('Reset'));
+    expect(log.textContent).toContain('Chưa chạy bước nào');
+  });
+
   it('switches to concurrency and idempotency scenarios', () => {
     const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
     fireEvent.click(view.getByRole('button', { name: /Concurrent Reservation/ }));
