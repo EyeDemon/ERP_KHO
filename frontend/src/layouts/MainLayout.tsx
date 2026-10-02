@@ -17,6 +17,13 @@ const MainLayout = () => {
   useEffect(() => {
     let active = true;
     const revision = beginPermissionRefresh();
+
+    if (blueprintMode) {
+      setCurrentPermissions([], revision);
+      setIdentityState('ready');
+      return () => { active = false; };
+    }
+
     setIdentityState('loading');
     apiClient.get('/api/auth/me').then(response => {
       if (!active) return;
@@ -28,7 +35,7 @@ const MainLayout = () => {
       setIdentityState('error');
     });
     return () => { active = false; };
-  }, [pathname]);
+  }, [blueprintMode, pathname]);
 
   const showStocktakes = canViewStocktakes();
   const navLink = (to: string, label: string, accent = false) => (
@@ -118,10 +125,16 @@ const MainLayout = () => {
               </label>
             </>
           )}
-          <span style={{ marginRight: '12px' }}>{localStorage.getItem('username') || 'Người dùng'}</span>
-          <button type="button" onClick={() => void logout()} title="Đăng xuất" aria-label="Đăng xuất" style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: '8px' }}>
-            <LogOut size={20} />
-          </button>
+          {blueprintMode ? (
+            <span style={{ marginLeft: 12, fontSize: 11, color: '#718096' }}>Blueprint runtime</span>
+          ) : (
+            <>
+              <span style={{ marginRight: '12px' }}>{localStorage.getItem('username') || 'Người dùng'}</span>
+              <button type="button" onClick={() => void logout()} title="Đăng xuất" aria-label="Đăng xuất" style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: '8px' }}>
+                <LogOut size={20} />
+              </button>
+            </>
+          )}
         </header>
 
         <main style={{ padding: '20px', flex: 1, backgroundColor: '#f5f7fb', minWidth: 0 }}>
