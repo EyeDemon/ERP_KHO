@@ -40,7 +40,7 @@ const MockGlobalSearch = () => {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="SKU, barcode, chứng từ, lot, serial, partner..."
         />
-        {query && <button type="button" onClick={() => setQuery('')}>Xóa</button>}
+        {query.length > 0 ? <button type="button" onClick={() => setQuery('')}>Xóa</button> : null}
       </section>
 
       <div className="global-search-examples">
@@ -54,9 +54,9 @@ const MockGlobalSearch = () => {
           <span>{query ? results.length + ' kết quả' : 'Nhập từ khóa để tìm'}</span>
         </header>
 
-        {query && results.length === 0 && (
+        {query.length > 0 && results.length === 0 ? (
           <div className="global-search-empty">Không có dữ liệu phù hợp trong scope hiện tại.</div>
-        )}
+        ) : null}
 
         {results.map((result) => (
           <article key={result.id}>
@@ -68,8 +68,8 @@ const MockGlobalSearch = () => {
             </div>
             <div className="global-search-meta">
               {result.exact && <span className="exact-badge">EXACT</span>}
-              {result.warehouse && <span>{result.warehouse}</span>}
-              {result.status && <span>{result.status}</span>}
+              {result.warehouse ? <span>{result.warehouse}</span> : null}
+              {result.status ? <span>{result.status}</span> : null}
             </div>
           </article>
         ))}

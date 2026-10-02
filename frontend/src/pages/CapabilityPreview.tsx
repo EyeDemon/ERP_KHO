@@ -87,7 +87,7 @@ const CapabilityPreview = () => {
           <p className="specialized-subtitle">{specializedPreview.subtitle}</p>
           <div className="specialized-fields">
             {specializedPreview.fields.map((field) => (
-              <div key={field.label}><span>{field.label}</span><strong>{field.value}</strong>{field.helper && <small>{field.helper}</small>}</div>
+              <div key={field.label}><span>{field.label}</span><strong>{field.value}</strong>{field.helper ? <small>{field.helper}</small> : null}</div>
             ))}
           </div>
           <div className="specialized-columns">
@@ -195,7 +195,7 @@ const CapabilityPreview = () => {
                   </div>
                 ))}
               </div>
-              {governance.reviewFinding && <div className="governance-review-note"><CircleAlert size={14} /> {governance.reviewFinding}</div>}
+              {governance.reviewFinding ? <div className="governance-review-note"><CircleAlert size={14} /> {governance.reviewFinding}</div> : null}
             </section>
           )}
 

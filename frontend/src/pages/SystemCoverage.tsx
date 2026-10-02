@@ -153,7 +153,7 @@ const SystemCoverage = () => {
               <span>Spec {item.spec} • {item.category}</span>
               <strong>{item.title}</strong>
               <small>{item.representation}</small>
-              {item.mappedCapabilityIds && <p>Mapped: {item.mappedCapabilityIds.join(', ')}</p>}
+              {item.mappedCapabilityIds?.length ? <p>Mapped: {item.mappedCapabilityIds.join(', ')}</p> : null}
             </article>
           ))}
         </div>

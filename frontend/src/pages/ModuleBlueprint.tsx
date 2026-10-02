@@ -39,11 +39,11 @@ const ModuleBlueprint = () => {
 
   const records = (workCenter?.records ?? []).filter((record) => mockDemo.canSeeWarehouse(record.warehouse));
   const warehouses = useMemo(
-    () => Array.from(new Set(records.map((item) => item.warehouse))).sort(),
+    () => Array.from(new Set(records.map((item) => item.warehouse))).sort((a, b) => a.localeCompare(b)),
     [records],
   );
   const statuses = useMemo(
-    () => Array.from(new Set(records.map((item) => item.status))).sort(),
+    () => Array.from(new Set(records.map((item) => item.status))).sort((a, b) => a.localeCompare(b)),
     [records],
   );
   const filteredRecords = useMemo(() => {
@@ -210,7 +210,7 @@ const ModuleBlueprint = () => {
                 <div><dt>Priority</dt><dd>{selected.priority}</dd></div>
                 <div><dt>Updated</dt><dd>{localTime(selected.updatedAt)}</dd></div>
               </dl>
-              {selected.note && <div className="selected-note">{selected.note}</div>}
+              {selected.note ? <div className="selected-note">{selected.note}</div> : null}
             </div>
           )}
 
@@ -270,7 +270,7 @@ const ModuleBlueprint = () => {
                   <td>
                     <div className="table-capability-links">
                       <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + capability.id}>Preview</Link>
-                      {capability.route && <Link className="table-open-link" to={capability.route}><ExternalLink size={14} /> Mở thật</Link>}
+                      {capability.route ? <Link className="table-open-link" to={capability.route}><ExternalLink size={14} /> Mở thật</Link> : null}
                     </div>
                   </td>
                 </tr>

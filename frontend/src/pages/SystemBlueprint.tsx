@@ -179,7 +179,7 @@ const SystemBlueprint = () => {
                     <span>Spec {capability.spec}</span>
                     <div className="capability-links">
                       <Link to={'/system-blueprint/' + module.key + '/' + capability.id}>Preview</Link>
-                      {capability.route && <Link to={capability.route}>Mở thật →</Link>}
+                      {capability.route ? <Link to={capability.route}>Mở thật →</Link> : null}
                     </div>
                   </footer>
                 </article>
