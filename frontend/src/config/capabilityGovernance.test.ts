@@ -17,7 +17,7 @@ const findCapability = (id: string) => {
 describe('capability governance metadata', () => {
   it('produces governance metadata for every blueprint capability', () => {
     const rows = getBlueprintGovernanceRows(erpWmsBlueprint);
-    expect(rows).toHaveLength(150);
+    expect(rows).toHaveLength(170);
     for (const row of rows) {
       expect(row.profile.referencedSpecs.length).toBeGreaterThan(0);
       expect(row.profile.ownerModule.length).toBeGreaterThan(0);
@@ -51,6 +51,9 @@ describe('capability governance metadata', () => {
     const kittingProfile = getCapabilityGovernanceProfile(kitting.module, kitting.capability);
     expect(kittingProfile.releaseWave).toBe(5);
     expect(kittingProfile.applicability).toBe('INDUSTRY_OPTIONAL');
+
+    const scenario = findCapability('AX-41');
+    expect(getCapabilityGovernanceProfile(scenario.module, scenario.capability).releaseWave).toBe(6);
   });
 
   it('tracks platform standards separately from business navigation', () => {

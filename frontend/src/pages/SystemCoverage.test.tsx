@@ -10,7 +10,7 @@ describe('SystemCoverage', () => {
   it('renders all traced capabilities and the four Screen Matrix review items', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     expect(view.getByText('Coverage & Readiness')).toBeTruthy();
-    expect(view.getByText('150')).toBeTruthy();
+    expect(view.getByText('170')).toBeTruthy();
     expect(view.getAllByText('Review Required').length).toBeGreaterThanOrEqual(4);
     expect(view.getByText('UNMAPPED — Chuyển vị trí (Location Transfer)')).toBeTruthy();
     expect(view.getByText('UNMAPPED — Lấy hàng(Picking)')).toBeTruthy();
