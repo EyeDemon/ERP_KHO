@@ -3,12 +3,15 @@ import { useEffect, useState } from 'react';
 import { Layers3, LogOut } from 'lucide-react';
 import apiClient, { logout } from '../services/apiClient';
 import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
+import { mockUsers } from '../mocks/erpWmsMockData';
+import { useMockDemo } from '../context/MockDemoContext';
 import { canViewApprovals, canViewStocktakes, hasPermission, beginPermissionRefresh, setCurrentPermissions, usePermissionSet } from '../services/authorization';
 
 const MainLayout = () => {
   usePermissionSet();
   const { pathname } = useLocation();
   const blueprintMode = pathname.startsWith('/system-blueprint');
+  const mockDemo = useMockDemo();
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
@@ -97,7 +100,23 @@ const MainLayout = () => {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <header style={{ height: '60px', backgroundColor: '#ffffff', borderBottom: '1px solid #d9e1eb', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'flex-end' }}>
-          {blueprintMode && <span style={{ marginRight: 'auto', fontSize: 11, fontWeight: 800, color: '#6f4bc3', background: '#f4efff', border: '1px solid #dfd3f8', borderRadius: 999, padding: '5px 8px' }}>DEMO / MOCK • READ ONLY</span>}
+          {blueprintMode && (
+            <>
+              <span style={{ marginRight: 10, fontSize: 11, fontWeight: 800, color: '#6f4bc3', background: '#f4efff', border: '1px solid #dfd3f8', borderRadius: 999, padding: '5px 8px' }}>DEMO / MOCK • READ ONLY</span>
+              <label style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: '#607086' }}>
+                Persona mô phỏng
+                <select
+                  aria-label="Persona mô phỏng"
+                  value={mockDemo.selectedUserCode}
+                  onChange={(event) => mockDemo.setSelectedUserCode(event.target.value)}
+                  style={{ height: 30, border: '1px solid #d2dbe6', borderRadius: 6, background: '#fff', padding: '0 7px', fontSize: 10 }}
+                >
+                  {mockUsers.map((user) => <option key={user.code} value={user.code}>{user.name} • {user.role}</option>)}
+                </select>
+                <span>{mockDemo.allowedWarehouses.length} kho scope</span>
+              </label>
+            </>
+          )}
           <span style={{ marginRight: '12px' }}>{localStorage.getItem('username') || 'Người dùng'}</span>
           <button type="button" onClick={() => void logout()} title="Đăng xuất" aria-label="Đăng xuất" style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: '8px' }}>
             <LogOut size={20} />
