@@ -37,7 +37,7 @@ describe('CapabilityPreview', () => {
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
     expect(view.getByText('▣ Quét barcode / location / serial')).toBeTruthy();
     expect(view.getByText('Xác nhận • Mock read-only')).toBeTruthy();
-    expect(view.getByText('FX-MO-04')).toBeTruthy();
+    expect(view.getAllByText('FX-MO-04').length).toBeGreaterThan(0);
   });
 
   it('shows safe not-found UI for invalid capability', () => {
