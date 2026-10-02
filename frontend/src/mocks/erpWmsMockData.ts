@@ -119,11 +119,11 @@ export const mockUsers: MockUser[] = [
 ];
 
 export const mockInventoryBalances: MockInventoryBalance[] = [
-  { warehouse: 'WH-HCM-01', productCode: 'SKU-1001', onHand: 1250, reserved: 180, allocated: 120, available: 1070, qcHold: 40, quarantine: 0, inTransit: 200 },
-  { warehouse: 'WH-HCM-01', productCode: 'SKU-1002', onHand: 620, reserved: 90, allocated: 60, available: 530, qcHold: 0, quarantine: 20, inTransit: 0 },
-  { warehouse: 'WH-HCM-01', productCode: 'SKU-2001', onHand: 84, reserved: 18, allocated: 12, available: 66, qcHold: 2, quarantine: 0, inTransit: 10 },
+  { warehouse: 'WH-HCM-01', productCode: 'SKU-1001', onHand: 1250, reserved: 180, allocated: 120, available: 1030, qcHold: 40, quarantine: 0, inTransit: 200 },
+  { warehouse: 'WH-HCM-01', productCode: 'SKU-1002', onHand: 620, reserved: 90, allocated: 60, available: 510, qcHold: 0, quarantine: 20, inTransit: 0 },
+  { warehouse: 'WH-HCM-01', productCode: 'SKU-2001', onHand: 84, reserved: 18, allocated: 12, available: 64, qcHold: 2, quarantine: 0, inTransit: 10 },
   { warehouse: 'WH-DN-01', productCode: 'SKU-1001', onHand: 460, reserved: 70, allocated: 40, available: 390, qcHold: 0, quarantine: 0, inTransit: 0 },
-  { warehouse: 'WH-DN-01', productCode: 'SKU-4001', onHand: 2400, reserved: 360, allocated: 240, available: 2040, qcHold: 120, quarantine: 0, inTransit: 600 },
+  { warehouse: 'WH-DN-01', productCode: 'SKU-4001', onHand: 2400, reserved: 360, allocated: 240, available: 1920, qcHold: 120, quarantine: 0, inTransit: 600 },
   { warehouse: 'WH-DL-01', productCode: 'SKU-1002', onHand: 310, reserved: 30, allocated: 20, available: 280, qcHold: 0, quarantine: 0, inTransit: 0 },
 ];
 
