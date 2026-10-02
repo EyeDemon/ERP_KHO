@@ -32,6 +32,14 @@ describe('CapabilityPreview', () => {
     expect(link.getAttribute('href')).toBe('/products');
   });
 
+  it('renders scan-first phone preview for mobile capabilities', () => {
+    const view = renderPreview('mobile', 'MO-04');
+    expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
+    expect(view.getByText('▣ Quét barcode / location / serial')).toBeTruthy();
+    expect(view.getByText('Xác nhận • Mock read-only')).toBeTruthy();
+    expect(view.getByText('FX-MO-04')).toBeTruthy();
+  });
+
   it('shows safe not-found UI for invalid capability', () => {
     const view = renderPreview('outbound', 'OUT-DOES-NOT-EXIST');
     expect(view.getByText('Không tìm thấy capability')).toBeTruthy();
