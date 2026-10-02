@@ -17,7 +17,7 @@ describe('MockGlobalSearch', () => {
 
     fireEvent.change(input, { target: { value: 'GR-2026-1048' } });
     expect(view.getAllByText('GR-2026-1048').length).toBeGreaterThan(0);
-    expect(view.getByText('WH-HCM-01')).toBeTruthy();
+    expect(view.getAllByText('WH-HCM-01').length).toBeGreaterThan(0);
   });
 
   it('supports one-click example queries', () => {
