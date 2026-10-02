@@ -99,12 +99,17 @@ export const searchMockSystem = (query: string, allowedWarehouses?: string[]): M
   const kindOrder: Record<MockSearchKind, number> = {
     Barcode: 0,
     Product: 1,
-    'Lot/Serial': 2,
-    'Document/Task': 3,
-    Partner: 4,
+    Partner: 2,
+    'Lot/Serial': 3,
+    'Document/Task': 4,
   };
 
-  return results
+  const ordered = results
     .filter((result, index, all) => all.findIndex((item) => item.id === result.id) === index)
     .sort((a, b) => Number(b.exact) - Number(a.exact) || kindOrder[a.kind] - kindOrder[b.kind] || a.reference.localeCompare(b.reference));
+
+  return ordered.filter((result, index, all) => {
+    const semanticKey = normalize(result.reference) + '|' + normalize(result.title);
+    return all.findIndex((item) => normalize(item.reference) + '|' + normalize(item.title) === semanticKey) === index;
+  });
 };
