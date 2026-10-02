@@ -73,6 +73,7 @@ const MainLayout = () => {
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {navLink('/system-blueprint', 'Bản đồ tổng thể', true)}
               {navLink('/system-blueprint/search', 'Global Search')}
+              {navLink('/system-blueprint/coverage', 'Coverage & Readiness')}
               {navLink('/system-blueprint/mock-data', 'Mock Data Lab')}
               {navLink('/system-blueprint/scenarios', 'Golden Scenario Lab')}
             </ul>

@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Boxes, CheckCircle2, CircleDashed, Database, ExternalLink,
-  FileText, LockKeyhole, MonitorSmartphone, ShieldCheck, Smartphone, Workflow
+  FileText, LockKeyhole, MonitorSmartphone, ShieldCheck, Smartphone, Workflow, CircleAlert, Gauge
 } from 'lucide-react';
 import {
   blueprintStatusLabels,
@@ -10,6 +10,8 @@ import {
 } from '../config/erpWmsBlueprint';
 import { getMockCapabilityFixture, getMockWorkCenter } from '../mocks/erpWmsMockData';
 import { useMockDemo } from '../context/MockDemoContext';
+import { evidenceStatusLabels, getCapabilityGovernanceProfile } from '../config/capabilityGovernance';
+import { getSpecializedScreenPreview } from '../config/reviewRequiredScreens';
 import './CapabilityPreview.css';
 
 const statusIcon = (status: BlueprintStatus) =>
@@ -22,6 +24,8 @@ const CapabilityPreview = () => {
   const capability = module?.capabilities.find((item) => item.id === capabilityId);
   const workCenter = getMockWorkCenter(moduleKey);
   const fixture = getMockCapabilityFixture(capabilityId);
+  const governance = module && capability ? getCapabilityGovernanceProfile(module, capability) : undefined;
+  const specializedPreview = getSpecializedScreenPreview(capabilityId);
   const records = (workCenter?.records ?? []).filter((record) => demo.canSeeWarehouse(record.warehouse));
   const fixtureVisible = fixture ? demo.canSeeWarehouse(fixture.sampleWarehouse) : false;
 
@@ -48,6 +52,9 @@ const CapabilityPreview = () => {
           <div className="capability-meta">
             <span className={'status-pill ' + capability.status}>{statusIcon(capability.status)} {blueprintStatusLabels[capability.status]}</span>
             <span>Spec {capability.spec}</span>
+            {governance && <span>Wave {governance.releaseWave}</span>}
+            {governance && <span>{governance.applicability}</span>}
+            {governance && <span>{governance.maturity}</span>}
             {capability.surfaces.map((surface) => (
               <span key={surface}>
                 {surface === 'Mobile' ? <Smartphone size={13} /> : <MonitorSmartphone size={13} />}
@@ -71,6 +78,25 @@ const CapabilityPreview = () => {
               <div key={step}><span>{index + 1}</span><strong>{step}</strong></div>
             ))}
           </div>
+        </section>
+      )}
+
+      {specializedPreview && (
+        <section className="capability-panel specialized-preview">
+          <div className="capability-panel-title"><CircleAlert size={18} /><h2>{specializedPreview.title}</h2><span className="review-required-badge">Screen Matrix • Review Required</span></div>
+          <p className="specialized-subtitle">{specializedPreview.subtitle}</p>
+          <div className="specialized-fields">
+            {specializedPreview.fields.map((field) => (
+              <div key={field.label}><span>{field.label}</span><strong>{field.value}</strong>{field.helper && <small>{field.helper}</small>}</div>
+            ))}
+          </div>
+          <div className="specialized-columns">
+            <div><h3>Execution steps</h3><ol>{specializedPreview.steps.map((step) => <li key={step}>{step}</li>)}</ol></div>
+            <div><h3>Validation / policy</h3><ul>{specializedPreview.validations.map((rule) => <li key={rule}>{rule}</li>)}</ul></div>
+          </div>
+          <div className="specialized-boundary"><strong>Inventory boundary</strong><span>{specializedPreview.inventoryBoundary}</span></div>
+          <div className="specialized-boundary"><strong>Authorization</strong><span>{specializedPreview.permissionNote}</span></div>
+          <div className="specialized-screen-ref">{specializedPreview.screenReference}</div>
         </section>
       )}
 
@@ -151,6 +177,28 @@ const CapabilityPreview = () => {
             </section>
           )}
 
+          {governance && (
+            <section className="capability-panel">
+              <div className="capability-panel-title"><Gauge size={18} /><h2>Capability governance & completeness</h2></div>
+              <div className="governance-summary">
+                <div><span>Owner</span><strong>{governance.ownerModule}</strong></div>
+                <div><span>Release wave</span><strong>Wave {governance.releaseWave}</strong></div>
+                <div><span>Applicability</span><strong>{governance.applicability}</strong></div>
+                <div><span>Maturity</span><strong>{governance.maturity}</strong></div>
+                <div><span>Screen Matrix</span><strong>{governance.reviewStatus}</strong></div>
+                <div><span>Specs</span><strong>{governance.referencedSpecs.join(', ')}</strong></div>
+              </div>
+              <div className="governance-evidence">
+                {governance.evidence.map((item) => (
+                  <div key={item.key} className={'governance-evidence-item evidence-' + item.status.replace('spec-only', 'spec')}>
+                    <strong>{item.label}</strong><span>{evidenceStatusLabels[item.status]}</span><small>{item.note}</small>
+                  </div>
+                ))}
+              </div>
+              {governance.reviewFinding && <div className="governance-review-note"><CircleAlert size={14} /> {governance.reviewFinding}</div>}
+            </section>
+          )}
+
           <section className="capability-panel">
             <div className="capability-panel-title"><ShieldCheck size={18} /><h2>Expected UX states</h2></div>
             <div className="ux-state-grid">
@@ -177,6 +225,15 @@ const CapabilityPreview = () => {
             <div><Database size={17} /><span><strong>Ledger</strong><small>Immutable posting / reversal</small></span></div>
             <div><FileText size={17} /><span><strong>Audit & Outbox</strong><small>Atomic evidence khi mutation critical</small></span></div>
           </div>
+
+          {governance && (
+            <div className="technical-trace">
+              <div><strong>Permission</strong><span>{governance.permissionModel}</span></div>
+              <div><strong>Command / API</strong><span>{governance.commandApiModel}</span></div>
+              <div><strong>State model</strong><span>{governance.stateModel}</span></div>
+              <div><strong>Inventory effect</strong><span>{governance.inventoryEffect}</span></div>
+            </div>
+          )}
 
           <div className="capability-contract-note">
             <strong>Preview semantics:</strong> trang này minh họa UX/contract cho capability dựa trên spec.

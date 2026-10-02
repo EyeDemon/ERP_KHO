@@ -23,6 +23,7 @@ import MockScenarioLab from '../pages/MockScenarioLab';
 import MockDataLab from '../pages/MockDataLab';
 import MockGlobalSearch from '../pages/MockGlobalSearch';
 import CapabilityPreview from '../pages/CapabilityPreview';
+import SystemCoverage from '../pages/SystemCoverage';
 import { MockDemoProvider } from '../context/MockDemoContext';
 import { canViewApprovals, canViewStocktakes, usePermission, usePermissionSet } from '../services/authorization';
 
@@ -46,6 +47,7 @@ const AppRoutes = () => {
         <Route path="system-blueprint/scenarios" element={<MockScenarioLab />} />
         <Route path="system-blueprint/mock-data" element={<MockDataLab />} />
         <Route path="system-blueprint/search" element={<MockGlobalSearch />} />
+        <Route path="system-blueprint/coverage" element={<SystemCoverage />} />
         <Route path="system-blueprint/:moduleKey/:capabilityId" element={<CapabilityPreview />} />
         <Route path="system-blueprint/:moduleKey" element={<ModuleBlueprint />} />
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />

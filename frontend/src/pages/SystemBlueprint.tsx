@@ -86,6 +86,7 @@ const SystemBlueprint = () => {
         <span>Lot / Serial / Inventory / Transfer / Count / Approval / Integration / Mobile</span>
         <div className="blueprint-lab-links">
           <Link className="scenario-lab-link" to="/system-blueprint/search">Mở Global Search →</Link>
+          <Link className="scenario-lab-link" to="/system-blueprint/coverage">Mở Coverage & Readiness →</Link>
           <Link className="scenario-lab-link" to="/system-blueprint/mock-data">Mở Mock Data Lab →</Link>
           <Link className="scenario-lab-link" to="/system-blueprint/scenarios">Mở Golden Scenario Lab →</Link>
         </div>

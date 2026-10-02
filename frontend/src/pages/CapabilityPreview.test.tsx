@@ -62,6 +62,15 @@ describe('CapabilityPreview', () => {
     expect(view.queryByText('GR-2026-1045')).toBeNull();
   });
 
+  it('renders canonical governance metadata and specialized review-required screen content', () => {
+    const picking = renderPreview('outbound', 'OUT-05');
+    expect(picking.getByText('Picking Workbench / Scan Flow')).toBeTruthy();
+    expect(picking.getByText('Screen Matrix • Review Required')).toBeTruthy();
+    expect(picking.getByText('Capability governance & completeness')).toBeTruthy();
+    expect(picking.getAllByText('Wave 2').length).toBeGreaterThan(0);
+    expect(picking.getByText(/Picking không được giảm warehouse OnHand/)).toBeTruthy();
+  });
+
   it('shows safe not-found UI for invalid capability', () => {
     const view = renderPreview('outbound', 'OUT-DOES-NOT-EXIST');
     expect(view.getByText('Không tìm thấy capability')).toBeTruthy();
