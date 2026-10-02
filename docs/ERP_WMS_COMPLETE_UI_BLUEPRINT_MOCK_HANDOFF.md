@@ -24,7 +24,7 @@ Static coverage audit on the branch:
 - 17 module groups.
 - 130 unique capability IDs.
 - 17/17 module work centers have mock fixtures.
-- 72 unique operational mock records.
+- 85 unique operational mock records.
 - 130/130 dedicated capability fixtures.
 - 10 golden end-to-end scenarios.
 - Capability-level preview route for every capability, with real-route link where implementation exists.

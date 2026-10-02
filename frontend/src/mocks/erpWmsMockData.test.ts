@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
 import {
   mockCapabilityFixtures,
+  mockCapabilitySampleRecordIds,
   mockInventoryBalances,
   mockPartners,
   mockProducts,
@@ -35,6 +36,15 @@ describe('ERP WMS complete mock dataset', () => {
         expect(fixture.sampleRecordId).not.toBe('NO-SAMPLE');
         expect(fixture.sampleReference).not.toBe('NO-SAMPLE');
       }
+    }
+  });
+
+  it('maps newly audited capabilities to semantically relevant mock records', () => {
+    for (const [capabilityId, recordId] of Object.entries(mockCapabilitySampleRecordIds)) {
+      const fixture = mockCapabilityFixtures[capabilityId];
+      expect(fixture).toBeTruthy();
+      expect(fixture.sampleRecordId).toBe(recordId);
+      expect(fixture.sampleReference).not.toBe('NO-SAMPLE');
     }
   });
 
