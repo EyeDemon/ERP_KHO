@@ -31,10 +31,41 @@ const ModuleBlueprint = () => {
   const module = findBlueprintModule(moduleKey);
   const workCenter = getMockWorkCenter(moduleKey);
   const [selectedId, setSelectedId] = useState<string | null>(workCenter?.records[0]?.id ?? null);
+  const [search, setSearch] = useState('');
+  const [warehouseFilter, setWarehouseFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const records = workCenter?.records ?? [];
+  const warehouses = useMemo(
+    () => Array.from(new Set(records.map((item) => item.warehouse))).sort(),
+    [records],
+  );
+  const statuses = useMemo(
+    () => Array.from(new Set(records.map((item) => item.status))).sort(),
+    [records],
+  );
+  const filteredRecords = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase('vi');
+    return records.filter((record) => {
+      const searchMatch = !q || [
+        record.reference,
+        record.id,
+        record.type,
+        record.subject,
+        record.productCode,
+        record.partnerCode,
+        record.location,
+        record.owner,
+      ].filter(Boolean).join(' ').toLocaleLowerCase('vi').includes(q);
+      const warehouseMatch = !warehouseFilter || record.warehouse === warehouseFilter;
+      const statusMatch = !statusFilter || record.status === statusFilter;
+      return searchMatch && warehouseMatch && statusMatch;
+    });
+  }, [records, search, statusFilter, warehouseFilter]);
 
   const selected = useMemo(
-    () => workCenter?.records.find((item) => item.id === selectedId) ?? workCenter?.records[0],
-    [selectedId, workCenter],
+    () => filteredRecords.find((item) => item.id === selectedId) ?? filteredRecords[0] ?? records[0],
+    [filteredRecords, records, selectedId],
   );
 
   if (!module) {
@@ -50,10 +81,9 @@ const ModuleBlueprint = () => {
   const foundationCount = module.capabilities.filter((item) => item.status === 'foundation').length;
   const plannedCount = module.capabilities.filter((item) => item.status === 'planned').length;
   const optionalCount = module.capabilities.filter((item) => item.status === 'optional').length;
-  const records = workCenter?.records ?? [];
-  const attentionCount = records.filter((item) => item.tone === 'orange' || item.tone === 'red').length;
-  const criticalCount = records.filter((item) => item.priority === 'Critical').length;
-  const activeCount = records.filter((item) => item.tone === 'blue').length;
+  const attentionCount = filteredRecords.filter((item) => item.tone === 'orange' || item.tone === 'red').length;
+  const criticalCount = filteredRecords.filter((item) => item.priority === 'Critical').length;
+  const activeCount = filteredRecords.filter((item) => item.tone === 'blue').length;
 
   return (
     <div className="module-blueprint-page">
@@ -99,21 +129,32 @@ const ModuleBlueprint = () => {
                 Không gọi API thật và không thay đổi dữ liệu nghiệp vụ.
               </p>
             </div>
-            <button type="button" className="demo-primary">+ Tạo tác vụ mẫu</button>
+            <button type="button" className="demo-primary" disabled title="Mock dataset là read-only">Mock read-only</button>
           </div>
 
           <div className="demo-kpis">
-            <article><span>Mock records</span><strong>{records.length}</strong><small>Dataset của module</small></article>
+            <article><span>Mock records</span><strong>{filteredRecords.length}/{records.length}</strong><small>Sau bộ lọc / tổng</small></article>
             <article><span>Đang xử lý</span><strong>{activeCount}</strong><small>Active / in progress</small></article>
             <article><span>Cần chú ý</span><strong>{attentionCount}</strong><small>Warning / exception</small></article>
             <article><span>Critical</span><strong>{criticalCount}</strong><small>Ưu tiên cao nhất</small></article>
           </div>
 
           <div className="demo-filterbar">
-            <input aria-label="Tìm trong work center" placeholder="Tìm mã, sản phẩm, chứng từ, lot/serial..." />
-            <select aria-label="Kho"><option>Tất cả kho được phép</option></select>
-            <select aria-label="Trạng thái"><option>Tất cả trạng thái</option></select>
-            <button type="button">Lọc</button>
+            <input
+              aria-label="Tìm trong work center"
+              placeholder="Tìm mã, sản phẩm, chứng từ, lot/serial..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select aria-label="Kho" value={warehouseFilter} onChange={(event) => setWarehouseFilter(event.target.value)}>
+              <option value="">Tất cả kho được phép</option>
+              {warehouses.map((warehouse) => <option key={warehouse} value={warehouse}>{warehouse}</option>)}
+            </select>
+            <select aria-label="Trạng thái" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">Tất cả trạng thái</option>
+              {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+            <button type="button" onClick={() => { setSearch(''); setWarehouseFilter(''); setStatusFilter(''); }}>Xóa lọc</button>
           </div>
 
           <div className="demo-table-wrap">
@@ -131,7 +172,7 @@ const ModuleBlueprint = () => {
                 </tr>
               </thead>
               <tbody>
-                {records.map((record) => (
+                {filteredRecords.map((record) => (
                   <tr key={record.id} className={selected?.id === record.id ? 'selected-row' : undefined}>
                     <td><strong>{record.reference}</strong><span>{record.id}</span></td>
                     <td><strong>{record.type}</strong><span>{record.subject}</span></td>
@@ -145,7 +186,7 @@ const ModuleBlueprint = () => {
                 ))}
               </tbody>
             </table>
-            {records.length === 0 && <div className="mock-empty">Chưa có fixture cho module này.</div>}
+            {filteredRecords.length === 0 && <div className="mock-empty">Không có mock record phù hợp bộ lọc.</div>}
           </div>
         </div>
 
