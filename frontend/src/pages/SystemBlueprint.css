@@ -73,3 +73,5 @@
 
 .blueprint-lab-links{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
 .blueprint-lab-links .scenario-lab-link{margin-left:0}
+
+.capability-links{display:flex;align-items:center;gap:8px}.capability-links a{font-size:10px}
