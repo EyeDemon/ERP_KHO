@@ -157,19 +157,33 @@ export const mockRecountAttempts: MockRecountAttempt[] = [
   },
 ];
 
-const r = (
-  id: string,
-  reference: string,
-  type: string,
-  status: string,
-  tone: MockTone,
-  warehouse: string,
-  subject: string,
-  owner: string,
-  priority: MockOperationalRecord['priority'],
-  updatedAt: string,
-  extra: Partial<MockOperationalRecord> = {},
-): MockOperationalRecord => ({
+type MockOperationalRecordArgs = [
+  string,
+  string,
+  string,
+  string,
+  MockTone,
+  string,
+  string,
+  string,
+  MockOperationalRecord['priority'],
+  string,
+  Partial<MockOperationalRecord>?,
+];
+
+const r = (...[
+  id,
+  reference,
+  type,
+  status,
+  tone,
+  warehouse,
+  subject,
+  owner,
+  priority,
+  updatedAt,
+  extra = {},
+]: MockOperationalRecordArgs): MockOperationalRecord => ({
   id,
   reference,
   type,

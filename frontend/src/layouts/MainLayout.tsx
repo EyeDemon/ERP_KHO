@@ -38,13 +38,19 @@ const MainLayout = () => {
   }, [blueprintMode, pathname]);
 
   const showStocktakes = canViewStocktakes();
-  const navLink = (to: string, label: string, accent = false) => (
+  const navLink = (to: string, label: string, accent = false) => {
+    const active = pathname === to || (to !== '/system-blueprint' && pathname.startsWith(to + '/'));
+    let linkColor = '#dbe5f1';
+    if (accent) linkColor = '#8fc3ff';
+    if (active) linkColor = '#ffffff';
+
+    return (
     <li style={{ margin: '8px 0' }} key={to}>
       <Link
         to={to}
         style={{
-          color: pathname === to || (to !== '/system-blueprint' && pathname.startsWith(to + '/')) ? '#ffffff' : (accent ? '#8fc3ff' : '#dbe5f1'),
-          background: pathname === to || (to !== '/system-blueprint' && pathname.startsWith(to + '/')) ? '#1e3b60' : 'transparent',
+          color: linkColor,
+          background: active ? '#1e3b60' : 'transparent',
           textDecoration: 'none',
           display: 'block',
           borderRadius: 7,
@@ -56,7 +62,8 @@ const MainLayout = () => {
         {label}
       </Link>
     </li>
-  );
+    );
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Arial, sans-serif' }}>
@@ -113,7 +120,7 @@ const MainLayout = () => {
             <>
               <span style={{ marginRight: 10, fontSize: 11, fontWeight: 800, color: '#6f4bc3', background: '#f4efff', border: '1px solid #dfd3f8', borderRadius: 999, padding: '5px 8px' }}>DEMO / MOCK • READ ONLY</span>
               <label style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: '#607086' }}>
-                Persona mô phỏng
+                <span>Persona mô phỏng</span>
                 <select
                   aria-label="Persona mô phỏng"
                   value={mockDemo.selectedUserCode}

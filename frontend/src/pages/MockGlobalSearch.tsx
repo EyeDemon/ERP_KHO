@@ -34,7 +34,6 @@ const MockGlobalSearch = () => {
       <section className="global-search-box">
         <Search size={20} />
         <input
-          autoFocus
           aria-label="Global search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}

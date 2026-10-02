@@ -168,7 +168,7 @@ const CapabilityPreview = () => {
                     <span>{records[0]?.subject ?? capability.goal}</span>
                   </div>
                   <div className="mobile-quantity-row">
-                    <label>Số lượng</label>
+                    <span className="mobile-quantity-label">Số lượng</span>
                     <div><strong>{records[0]?.quantity ?? '—'}</strong><span>{records[0]?.uom ?? 'UOM'}</span></div>
                   </div>
                   <button type="button" disabled>Xác nhận • Mock read-only</button>
