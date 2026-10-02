@@ -139,11 +139,11 @@ export const mockGoldenScenarios: MockGoldenScenario[] = [
     precondition: 'RMA trả 6 SKU-2001 từ CUS-001.',
     steps: [
       { label: 'Receive physical return', state: 'RECEIVED', inventoryEffect: 'Chưa tăng available inventory.' },
-      { label: 'Inspect', state: 'INSPECTION', inventoryEffect: '4 sellable, 2 damaged; chưa post.' },
-      { label: 'Post disposition', state: 'POSTED', inventoryEffect: 'AVAILABLE +4; DAMAGED +2.' },
+      { label: 'Inspect', state: 'INSPECTION', inventoryEffect: '4 RESTOCK, 2 QUARANTINE; chưa post.' },
+      { label: 'Post disposition', state: 'POSTED', inventoryEffect: 'AVAILABLE +4; QUARANTINE +2.' },
     ],
-    assertions: ['Return posting là inventory boundary', 'Sellable + damaged = 6', 'Audit + event tồn tại'],
-    metrics: { returned: 6, sellable: 4, damaged: 2, posted: 6 },
+    assertions: ['Return posting là inventory boundary', 'RESTOCK + QUARANTINE = 6', 'Audit + event tồn tại'],
+    metrics: { returned: 6, restock: 4, quarantine: 2, posted: 6 },
   },
   {
     id: 'GS-10',
