@@ -52,6 +52,16 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.getByText('Mock Data Lab')).toBeTruthy();
   });
 
+
+  it('runs blueprint routes without calling the real auth API', async () => {
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('backend unavailable'));
+    const view = renderAt('/system-blueprint');
+    await view.findByText('Blueprint content');
+    expect(apiClient.get).not.toHaveBeenCalled();
+    expect(view.queryByRole('alert')).toBeNull();
+    expect(view.getByText('Blueprint runtime')).toBeTruthy();
+  });
+
   it('switches demo persona and reports the simulated warehouse scope', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/system-blueprint/inbound');
@@ -71,11 +81,11 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.queryByText('DEMO / MOCK • READ ONLY')).toBeNull();
   });
 
-  it('fails closed when identity verification fails', async () => {
+  it('fails closed on production routes when identity verification fails', async () => {
     vi.mocked(apiClient.get).mockRejectedValue(new Error('network'));
-    const view = renderAt('/system-blueprint');
+    const view = renderAt('/');
     await waitFor(() => expect(view.getByRole('alert')).toBeTruthy());
     expect(view.getByRole('alert').textContent).toContain('Không thể xác minh quyền truy cập');
-    expect(view.queryByText('Blueprint content')).toBeNull();
+    expect(view.queryByText('Production home')).toBeNull();
   });
 });
