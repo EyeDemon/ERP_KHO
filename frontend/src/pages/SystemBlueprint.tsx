@@ -80,7 +80,10 @@ const SystemBlueprint = () => {
         <span>{mockPartners.length} đối tác</span>
         <span>{mockRecordCount} operational records</span>
         <span>Lot / Serial / Inventory / Transfer / Count / Approval / Integration / Mobile</span>
-        <Link className="scenario-lab-link" to="/system-blueprint/scenarios">Mở Golden Scenario Lab →</Link>
+        <div className="blueprint-lab-links">
+          <Link className="scenario-lab-link" to="/system-blueprint/mock-data">Mở Mock Data Lab →</Link>
+          <Link className="scenario-lab-link" to="/system-blueprint/scenarios">Mở Golden Scenario Lab →</Link>
+        </div>
       </section>
 
       <section className="blueprint-principles">
