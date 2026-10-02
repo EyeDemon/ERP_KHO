@@ -23,6 +23,6 @@ describe('MockGlobalSearch', () => {
   it('supports one-click example queries', () => {
     const view = render(<MemoryRouter><MockDemoProvider><MockGlobalSearch /></MockDemoProvider></MemoryRouter>);
     fireEvent.click(view.getByText('SUP-001'));
-    expect(view.getByText('Công ty Nông Sản Cao Nguyên')).toBeTruthy();
+    expect(view.getAllByText('Công ty Nông Sản Cao Nguyên')).toHaveLength(1);
   });
 });
