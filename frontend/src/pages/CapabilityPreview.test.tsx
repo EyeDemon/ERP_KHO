@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import CapabilityPreview from './CapabilityPreview';
+import { MockDemoProvider, useMockDemo } from '../context/MockDemoContext';
 
 const renderPreview = (moduleKey: string, capabilityId: string) => render(
   <MemoryRouter initialEntries={[`/system-blueprint/${moduleKey}/${capabilityId}`]}>
@@ -38,6 +39,27 @@ describe('CapabilityPreview', () => {
     expect(view.getByText('▣ Quét barcode / location / serial')).toBeTruthy();
     expect(view.getByText('Xác nhận • Mock read-only')).toBeTruthy();
     expect(view.getAllByText('FX-MO-04').length).toBeGreaterThan(0);
+  });
+
+  it('hides out-of-scope fixture samples after persona warehouse scope changes', () => {
+    const PersonaSwitch = () => {
+      const demo = useMockDemo();
+      return <button type="button" onClick={() => demo.setSelectedUserCode('U-DN-MGR')}>Use DN persona</button>;
+    };
+    const view = render(
+      <MemoryRouter initialEntries={['/system-blueprint/inbound/IN-03']}>
+        <MockDemoProvider>
+          <PersonaSwitch />
+          <Routes>
+            <Route path="/system-blueprint/:moduleKey/:capabilityId" element={<CapabilityPreview />} />
+          </Routes>
+        </MockDemoProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(view.getByText('Use DN persona'));
+    expect(view.getByText('Sample record ẩn bởi simulated warehouse scope')).toBeTruthy();
+    expect(view.getByText('GR-2026-1041')).toBeTruthy();
+    expect(view.queryByText('GR-2026-1045')).toBeNull();
   });
 
   it('shows safe not-found UI for invalid capability', () => {
