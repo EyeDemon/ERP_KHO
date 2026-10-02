@@ -8,7 +8,7 @@ import {
   findBlueprintModule,
   type BlueprintStatus,
 } from '../config/erpWmsBlueprint';
-import { getMockWorkCenter } from '../mocks/erpWmsMockData';
+import { getMockCapabilityFixture, getMockWorkCenter } from '../mocks/erpWmsMockData';
 import './CapabilityPreview.css';
 
 const statusIcon = (status: BlueprintStatus) =>
@@ -19,6 +19,7 @@ const CapabilityPreview = () => {
   const module = findBlueprintModule(moduleKey);
   const capability = module?.capabilities.find((item) => item.id === capabilityId);
   const workCenter = getMockWorkCenter(moduleKey);
+  const fixture = getMockCapabilityFixture(capabilityId);
   const records = workCenter?.records ?? [];
 
   if (!module || !capability) {
@@ -84,8 +85,18 @@ const CapabilityPreview = () => {
               <div><span>Sample records</span><strong>{records.length}</strong></div>
               <div><span>Module</span><strong>{module.name}</strong></div>
               <div><span>Surface</span><strong>{capability.surfaces.join(' / ')}</strong></div>
-              <div><span>Revision source</span><strong>Notion canonical spec</strong></div>
+              <div><span>Fixture</span><strong>{fixture?.fixtureId ?? '—'}</strong></div>
             </div>
+
+            {fixture && (
+              <div className="capability-fixture-trace">
+                <strong>Capability fixture:</strong>
+                <span>{fixture.fixtureId}</span>
+                <span>{fixture.sampleReference}</span>
+                <span>{fixture.sampleWarehouse}</span>
+                <span>{fixture.sampleStatus}</span>
+              </div>
+            )}
 
             <div className="capability-records">
               {records.slice(0, 5).map((record) => (
