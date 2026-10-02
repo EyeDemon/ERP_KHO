@@ -18,7 +18,7 @@ describe('ModuleBlueprint mock work center', () => {
   it('renders realistic inbound mock records and module coverage', () => {
     const view = renderModule('inbound');
     expect(view.getByText('GR-2026-1048')).toBeTruthy();
-    expect(view.getByText('ASN-2026-0812')).toBeTruthy();
+    expect(view.getAllByText('ASN-2026-0812').length).toBeGreaterThan(0);
     expect(view.getByText('PUT-2026-3321')).toBeTruthy();
     expect(view.getByText('Goods Receipt Work Center')).toBeTruthy();
     expect(view.getByText('WORK CENTER • MOCK DATA')).toBeTruthy();
@@ -38,12 +38,12 @@ describe('ModuleBlueprint mock work center', () => {
 
   it('renders transfer and mobile datasets from separate work centers', () => {
     const transfer = renderModule('transfer-replenishment');
-    expect(transfer.getByText('TRF-2026-0018')).toBeTruthy();
+    expect(transfer.getAllByText('TRF-2026-0018').length).toBeGreaterThan(0);
     expect(transfer.getByText('REPL-2026-661')).toBeTruthy();
     transfer.unmount();
 
     const mobile = renderModule('mobile');
-    expect(mobile.getByText('MOB-RCV-1048')).toBeTruthy();
+    expect(mobile.getAllByText('MOB-RCV-1048').length).toBeGreaterThan(0);
     expect(mobile.getByText('OFF-QUEUE-021')).toBeTruthy();
     expect(mobile.getByText('SYNC-FAIL-008')).toBeTruthy();
   });
@@ -52,19 +52,19 @@ describe('ModuleBlueprint mock work center', () => {
     const view = renderModule('inbound');
     const search = view.getByLabelText('Tìm trong work center');
     fireEvent.change(search, { target: { value: 'GR-2026-1045' } });
-    expect(view.getByText('GR-2026-1045')).toBeTruthy();
+    expect(view.getAllByText('GR-2026-1045').length).toBeGreaterThan(0);
     expect(view.queryByText('ASN-2026-0812')).toBeNull();
 
     fireEvent.click(view.getByText('Xóa lọc'));
-    expect(view.getByText('ASN-2026-0812')).toBeTruthy();
+    expect(view.getAllByText('ASN-2026-0812').length).toBeGreaterThan(0);
 
     fireEvent.change(view.getByLabelText('Kho'), { target: { value: 'WH-DN-01' } });
-    expect(view.getByText('GR-2026-1041')).toBeTruthy();
+    expect(view.getAllByText('GR-2026-1041').length).toBeGreaterThan(0);
     expect(view.queryByText('GR-2026-1048')).toBeNull();
 
     fireEvent.click(view.getByText('Xóa lọc'));
     fireEvent.change(view.getByLabelText('Trạng thái'), { target: { value: 'QC_PENDING' } });
-    expect(view.getByText('GR-2026-1045')).toBeTruthy();
+    expect(view.getAllByText('GR-2026-1045').length).toBeGreaterThan(0);
     expect(view.queryByText('GR-2026-1041')).toBeNull();
   });
 
