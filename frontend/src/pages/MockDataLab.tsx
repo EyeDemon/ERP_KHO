@@ -18,7 +18,7 @@ type Tab = 'warehouses' | 'products' | 'capabilities' | 'partners' | 'users' | '
 const tabs: Array<{ key: Tab; label: string }> = [
   { key: 'warehouses', label: 'Warehouses' },
   { key: 'products', label: 'Products & Barcode' },
-  { key: 'capabilities', label: '119 Capability Fixtures' },
+  { key: 'capabilities', label: `${Object.keys(mockCapabilityFixtures).length} Capability Fixtures` },
   { key: 'partners', label: 'Business Partners' },
   { key: 'users', label: 'Users & Scope' },
   { key: 'inventory', label: 'Inventory Buckets' },

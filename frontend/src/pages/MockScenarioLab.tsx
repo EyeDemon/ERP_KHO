@@ -19,7 +19,7 @@ const MockScenarioLab = () => {
         <div>
           <span className="scenario-eyebrow"><FlaskConical size={16} /> ERP WMS • Golden Scenario Lab</span>
           <h1>Mock test nghiệp vụ end-to-end</h1>
-          <p>10 scenario mô phỏng các boundary quan trọng nhất: inbound, outbound, transfer, count, QC, reversal, concurrency, idempotency, returns và offline sync.</p>
+          <p>{mockGoldenScenarios.length} scenario bao phủ core inventory, outbound/inbound, returns, offline, advanced WMS, planning, finance, automation và safety.</p>
         </div>
         <div className="scenario-count"><strong>{mockGoldenScenarios.length}</strong><span>scenarios</span></div>
       </section>

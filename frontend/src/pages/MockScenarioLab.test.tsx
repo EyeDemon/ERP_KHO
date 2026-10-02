@@ -10,6 +10,7 @@ describe('MockScenarioLab', () => {
   it('renders canonical inbound scenario with steps and assertions', () => {
     const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
     expect(view.getAllByText('GS-01').length).toBeGreaterThan(0);
+    expect(view.getByText(/22 scenario bao phủ core inventory/)).toBeTruthy();
     expect(view.getAllByText('Inbound Receipt → Post → Putaway').length).toBeGreaterThan(0);
     expect(view.getByText('Post Receipt')).toBeTruthy();
     expect(view.getByText('Receipt ledger exactly once')).toBeTruthy();
