@@ -13,7 +13,7 @@ describe('MockGlobalSearch', () => {
     const input = view.getByLabelText('Global search');
     fireEvent.change(input, { target: { value: '8938501000011' } });
     expect(view.getByText('EXACT')).toBeTruthy();
-    expect(view.getByText(/SKU-1001/)).toBeTruthy();
+    expect(view.getByText('SKU-1001 • Cà phê Arabica 500g')).toBeTruthy();
 
     fireEvent.change(input, { target: { value: 'GR-2026-1048' } });
     expect(view.getAllByText('GR-2026-1048').length).toBeGreaterThan(0);
