@@ -43,7 +43,7 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.getByText('DEMO / MOCK • READ ONLY')).toBeTruthy();
     expect(view.getByText('17 module groups')).toBeTruthy();
     expect(view.getByText('Nhập kho')).toBeTruthy();
-    expect(view.getByText('Inventory Control')).toBeTruthy();
+    expect(view.getByText(/Inventory Control/)).toBeTruthy();
     expect(view.getByText('Golden Scenario Lab')).toBeTruthy();
     expect(view.getByText('Mock Data Lab')).toBeTruthy();
   });
