@@ -13,6 +13,7 @@ import {
   getMockWorkCenter,
   type MockOperationalRecord,
 } from '../mocks/erpWmsMockData';
+import { useMockDemo } from '../context/MockDemoContext';
 import './SystemBlueprint.css';
 import './ModuleBlueprint.css';
 
@@ -29,13 +30,14 @@ const localTime = (iso: string) => new Date(iso).toLocaleString('vi-VN');
 const ModuleBlueprint = () => {
   const { moduleKey } = useParams();
   const module = findBlueprintModule(moduleKey);
+  const mockDemo = useMockDemo();
   const workCenter = getMockWorkCenter(moduleKey);
   const [selectedId, setSelectedId] = useState<string | null>(workCenter?.records[0]?.id ?? null);
   const [search, setSearch] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  const records = workCenter?.records ?? [];
+  const records = (workCenter?.records ?? []).filter((record) => mockDemo.canSeeWarehouse(record.warehouse));
   const warehouses = useMemo(
     () => Array.from(new Set(records.map((item) => item.warehouse))).sort(),
     [records],
@@ -125,7 +127,7 @@ const ModuleBlueprint = () => {
               <span className="workbench-kicker">WORK CENTER • MOCK DATA</span>
               <h2>{module.name}</h2>
               <p>
-                Dataset mô phỏng tại {workCenter ? localTime(workCenter.snapshotAt) : '—'}.
+                Dataset mô phỏng tại {workCenter ? localTime(workCenter.snapshotAt) : '—'} • Persona {mockDemo.selectedUser.name} • {mockDemo.allowedWarehouses.length} kho scope.
                 Không gọi API thật và không thay đổi dữ liệu nghiệp vụ.
               </p>
             </div>
