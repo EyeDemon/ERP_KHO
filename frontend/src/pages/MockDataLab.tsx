@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Boxes, Database, Users, Warehouse } from 'lucide-react';
 import {
+  mockCapabilityFixtures,
   mockInventoryBalances,
   mockPartners,
   mockProducts,
@@ -12,11 +13,12 @@ import {
 } from '../mocks/erpWmsMockData';
 import './MockDataLab.css';
 
-type Tab = 'warehouses' | 'products' | 'partners' | 'users' | 'inventory' | 'transfers' | 'recounts';
+type Tab = 'warehouses' | 'products' | 'capabilities' | 'partners' | 'users' | 'inventory' | 'transfers' | 'recounts';
 
 const tabs: Array<{ key: Tab; label: string }> = [
   { key: 'warehouses', label: 'Warehouses' },
   { key: 'products', label: 'Products & Barcode' },
+  { key: 'capabilities', label: '119 Capability Fixtures' },
   { key: 'partners', label: 'Business Partners' },
   { key: 'users', label: 'Users & Scope' },
   { key: 'inventory', label: 'Inventory Buckets' },
@@ -30,6 +32,7 @@ const MockDataLab = () => {
   const rows = useMemo(() => {
     if (tab === 'warehouses') return mockWarehouses;
     if (tab === 'products') return mockProducts;
+    if (tab === 'capabilities') return Object.values(mockCapabilityFixtures);
     if (tab === 'partners') return mockPartners;
     if (tab === 'users') return mockUsers;
     if (tab === 'inventory') return mockInventoryBalances;
@@ -54,6 +57,7 @@ const MockDataLab = () => {
           <div><Warehouse size={17} /><strong>{mockWarehouses.length}</strong><span>Kho</span></div>
           <div><Boxes size={17} /><strong>{mockProducts.length}</strong><span>SKU</span></div>
           <div><Users size={17} /><strong>{mockUsers.length}</strong><span>User</span></div>
+          <div><Database size={17} /><strong>{Object.keys(mockCapabilityFixtures).length}</strong><span>Fixtures</span></div>
         </div>
       </section>
 
@@ -85,6 +89,13 @@ const MockDataLab = () => {
             <table className="data-lab-table">
               <thead><tr><th>SKU</th><th>Tên</th><th>Category</th><th>Base UOM</th><th>Tracking</th><th>Barcodes</th></tr></thead>
               <tbody>{mockProducts.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.category}</td><td>{item.baseUom}</td><td>{item.tracking}</td><td>{item.barcodes.join(', ')}</td></tr>)}</tbody>
+            </table>
+          )}
+
+          {tab === 'capabilities' && (
+            <table className="data-lab-table">
+              <thead><tr><th>Fixture</th><th>Capability</th><th>Module</th><th>Implementation</th><th>Spec</th><th>Sample Reference</th><th>Warehouse</th><th>Sample Status</th></tr></thead>
+              <tbody>{Object.values(mockCapabilityFixtures).map((item) => <tr key={item.fixtureId}><td>{item.fixtureId}</td><td>{item.capabilityId} — {item.capabilityName}</td><td>{item.moduleKey}</td><td>{item.implementationStatus}</td><td>{item.spec}</td><td>{item.sampleReference}</td><td>{item.sampleWarehouse}</td><td>{item.sampleStatus}</td></tr>)}</tbody>
             </table>
           )}
 
