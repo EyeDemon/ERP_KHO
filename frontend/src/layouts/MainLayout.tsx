@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { LogOut } from 'lucide-react';
+import { Layers3, LogOut } from 'lucide-react';
 import apiClient, { logout } from '../services/apiClient';
 import { canViewApprovals, canViewStocktakes, hasPermission, beginPermissionRefresh, setCurrentPermissions, usePermissionSet } from '../services/authorization';
 
@@ -26,11 +26,16 @@ const MainLayout = () => {
   const showStocktakes = canViewStocktakes();
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Arial, sans-serif' }}>
-      {/* Sidebar */}
-      <aside style={{ width: '250px', backgroundColor: '#2c3e50', color: 'white', padding: '20px' }}>
-        <h2>ERP KHO</h2>
+      <aside style={{ width: '250px', backgroundColor: '#0f1f35', color: 'white', padding: '20px' }}>
+        <h2 style={{ marginBottom: 6 }}>ERP WMS</h2>
+        <div style={{ color: '#91a4bc', fontSize: 12, marginBottom: 18 }}>Warehouse Management System</div>
         <ul style={{ listStyle: 'none', padding: 0 }}>
           <li style={{ margin: '10px 0' }}><Link to="/" style={{ color: 'white', textDecoration: 'none' }}>Tổng quan</Link></li>
+          <li style={{ margin: '10px 0' }}>
+            <Link to="/system-blueprint" style={{ color: '#8fc3ff', textDecoration: 'none', display: 'flex', gap: 7, alignItems: 'center', fontWeight: 700 }}>
+              <Layers3 size={16} /> Bản đồ hệ thống
+            </Link>
+          </li>
           {hasPermission('product.read') && <li style={{ margin: '10px 0' }}><Link to="/products" style={{ color: 'white', textDecoration: 'none' }}>Sản phẩm</Link></li>}
           {hasPermission('warehouse.read') && <li style={{ margin: '10px 0' }}><Link to="/warehouses" style={{ color: 'white', textDecoration: 'none' }}>Kho hàng</Link></li>}
           {hasPermission('uom.read') && <li style={{ margin: '10px 0' }}><Link to="/units" style={{ color: 'white', textDecoration: 'none' }}>Đơn vị tính</Link></li>}
@@ -47,16 +52,15 @@ const MainLayout = () => {
         </ul>
       </aside>
 
-      {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <header style={{ height: '60px', backgroundColor: '#ecf0f1', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'flex-end' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <header style={{ height: '60px', backgroundColor: '#ffffff', borderBottom: '1px solid #d9e1eb', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'flex-end' }}>
           <span style={{ marginRight: '12px' }}>{localStorage.getItem('username') || 'Người dùng'}</span>
           <button type="button" onClick={() => void logout()} title="Đăng xuất" aria-label="Đăng xuất" style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: '8px' }}>
             <LogOut size={20} />
           </button>
         </header>
         
-        <main style={{ padding: '20px', flex: 1, backgroundColor: '#f4f6f8' }}>
+        <main style={{ padding: '20px', flex: 1, backgroundColor: '#f5f7fb', minWidth: 0 }}>
           {identityState === 'loading' ? <p role="status">Đang xác minh quyền truy cập...</p>
             : identityState === 'error' ? <p role="alert">Không thể xác minh quyền truy cập. Vui lòng tải lại.</p>
               : <Outlet />}
