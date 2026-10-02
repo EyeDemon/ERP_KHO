@@ -115,6 +115,33 @@ const CapabilityPreview = () => {
             </div>
           </section>
 
+          {capability.surfaces.includes('Mobile') && (
+            <section className="capability-panel">
+              <div className="capability-panel-title"><Smartphone size={18} /><h2>Mobile scan-first preview</h2></div>
+              <div className="mobile-preview-shell">
+                <div className="mobile-preview-top">
+                  <strong>ERP WMS</strong>
+                  <span>{fixture?.sampleWarehouse ?? 'Warehouse'}</span>
+                </div>
+                <div className="mobile-preview-body">
+                  <span className="mobile-task-label">TASK / {capability.id}</span>
+                  <h3>{capability.name}</h3>
+                  <div className="mobile-scan-box">▣ Quét barcode / location / serial</div>
+                  <div className="mobile-record-card">
+                    <small>Reference</small>
+                    <strong>{fixture?.sampleReference ?? records[0]?.reference ?? '—'}</strong>
+                    <span>{records[0]?.subject ?? capability.goal}</span>
+                  </div>
+                  <div className="mobile-quantity-row">
+                    <label>Số lượng</label>
+                    <div><strong>{records[0]?.quantity ?? '—'}</strong><span>{records[0]?.uom ?? 'UOM'}</span></div>
+                  </div>
+                  <button type="button" disabled>Xác nhận • Mock read-only</button>
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className="capability-panel">
             <div className="capability-panel-title"><ShieldCheck size={18} /><h2>Expected UX states</h2></div>
             <div className="ux-state-grid">
