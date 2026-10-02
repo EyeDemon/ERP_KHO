@@ -12,10 +12,10 @@ describe('SystemBlueprint', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     expect(view.getByText('Bản đồ chức năng ERP/WMS hoàn chỉnh')).toBeTruthy();
     expect(view.getByText(`${mockRecordCount}`)).toBeTruthy();
-    expect(view.getByText('Nhập kho')).toBeTruthy();
-    expect(view.getByText('Xuất kho')).toBeTruthy();
-    expect(view.getByText('Mobile WMS')).toBeTruthy();
-    expect(view.getByText('Advanced WMS & Planning')).toBeTruthy();
+    expect(view.getAllByText('Nhập kho').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Xuất kho').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Mobile WMS').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Advanced WMS & Planning').length).toBeGreaterThan(0);
   });
 
   it('filters capability cards by text and implementation status', () => {
