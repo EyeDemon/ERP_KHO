@@ -3,12 +3,15 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import MockScenarioLab from './MockScenarioLab';
+import { MockDemoProvider } from '../context/MockDemoContext';
+
+const renderLab = () => render(<MockDemoProvider><MemoryRouter><MockScenarioLab /></MemoryRouter></MockDemoProvider>);
 
 describe('MockScenarioLab', () => {
   afterEach(cleanup);
 
   it('renders canonical inbound scenario with steps and assertions', () => {
-    const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
+    const view = renderLab();
     expect(view.getAllByText('GS-01').length).toBeGreaterThan(0);
     expect(view.getByText(/22 scenario bao phủ core inventory/)).toBeTruthy();
     expect(view.getAllByText('Inbound Receipt → Post → Putaway').length).toBeGreaterThan(0);
@@ -18,7 +21,7 @@ describe('MockScenarioLab', () => {
   });
 
   it('simulates scenario steps locally and resets execution state', () => {
-    const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
+    const view = renderLab();
     const log = view.getByTestId('scenario-execution-log');
     expect(log.textContent).toContain('Chưa chạy bước nào');
     fireEvent.click(view.getByText('Chạy bước tiếp'));
@@ -28,8 +31,19 @@ describe('MockScenarioLab', () => {
     expect(log.textContent).toContain('Chưa chạy bước nào');
   });
 
+  it('publishes core inventory state into the shared scenario session', () => {
+    const view = renderLab();
+    fireEvent.click(view.getByText('Chạy bước tiếp'));
+    expect(view.getByText(/SHARED SCENARIO SESSION/)).toBeTruthy();
+    expect(view.getByText(/5 capability liên quan/)).toBeTruthy();
+    expect(view.getAllByText(/OnHand 0 • Avail 0 • Transit 0/).length).toBeGreaterThan(0);
+
+    fireEvent.click(view.getByText('Chạy bước tiếp'));
+    expect(view.getAllByText(/OnHand 100 • Avail 100 • Transit 0/).length).toBeGreaterThan(0);
+  });
+
   it('switches to concurrency and idempotency scenarios', () => {
-    const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
+    const view = renderLab();
     fireEvent.click(view.getByRole('button', { name: /Concurrent Reservation/ }));
     expect(view.getByText('Exactly one success')).toBeTruthy();
     expect(view.getByText('409 INV_INSUFFICIENT_AVAILABLE')).toBeTruthy();
@@ -40,7 +54,7 @@ describe('MockScenarioLab', () => {
   });
 
   it('opens advanced automation and finance scenarios', () => {
-    const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
+    const view = renderLab();
     fireEvent.click(view.getByRole('button', { name: /Period Close/ }));
     expect(view.getByText('WMS quantity truth preserved')).toBeTruthy();
 
@@ -49,7 +63,7 @@ describe('MockScenarioLab', () => {
   });
 
   it('covers returns and offline deferred synchronization', () => {
-    const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
+    const view = renderLab();
     fireEvent.click(view.getByRole('button', { name: /Customer Return Inspection/ }));
     expect(view.getByText('RESTOCK + QUARANTINE = 6')).toBeTruthy();
 

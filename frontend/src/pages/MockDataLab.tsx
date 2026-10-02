@@ -11,9 +11,10 @@ import {
   mockUsers,
   mockWarehouses,
 } from '../mocks/erpWmsMockData';
+import { useMockDemo } from '../context/MockDemoContext';
 import './MockDataLab.css';
 
-type Tab = 'warehouses' | 'products' | 'capabilities' | 'partners' | 'users' | 'inventory' | 'transfers' | 'recounts';
+type Tab = 'warehouses' | 'products' | 'capabilities' | 'partners' | 'users' | 'inventory' | 'transfers' | 'recounts' | 'scenario';
 
 const tabs: Array<{ key: Tab; label: string }> = [
   { key: 'warehouses', label: 'Warehouses' },
@@ -24,10 +25,12 @@ const tabs: Array<{ key: Tab; label: string }> = [
   { key: 'inventory', label: 'Inventory Buckets' },
   { key: 'transfers', label: 'Transfer Conservation' },
   { key: 'recounts', label: 'Recount Attempts' },
+  { key: 'scenario', label: 'Shared Scenario Runtime' },
 ];
 
 const MockDataLab = () => {
   const [tab, setTab] = useState<Tab>('warehouses');
+  const mockDemo = useMockDemo();
 
   const rows = useMemo(() => {
     if (tab === 'warehouses') return mockWarehouses;
@@ -37,8 +40,9 @@ const MockDataLab = () => {
     if (tab === 'users') return mockUsers;
     if (tab === 'inventory') return mockInventoryBalances;
     if (tab === 'transfers') return mockTransferConservation;
-    return mockRecountAttempts;
-  }, [tab]);
+    if (tab === 'recounts') return mockRecountAttempts;
+    return mockDemo.scenarioBalances;
+  }, [mockDemo.scenarioBalances, tab]);
 
   return (
     <div className="data-lab-page">
@@ -58,6 +62,7 @@ const MockDataLab = () => {
           <div><Boxes size={17} /><strong>{mockProducts.length}</strong><span>SKU</span></div>
           <div><Users size={17} /><strong>{mockUsers.length}</strong><span>User</span></div>
           <div><Database size={17} /><strong>{Object.keys(mockCapabilityFixtures).length}</strong><span>Fixtures</span></div>
+          <div><Database size={17} /><strong>{mockDemo.activeScenarioId ?? '—'}</strong><span>Scenario</span></div>
         </div>
       </section>
 
@@ -135,6 +140,39 @@ const MockDataLab = () => {
               <thead><tr><th>Count</th><th>SKU</th><th>System Qty</th><th>Attempts</th><th>Final Accepted</th></tr></thead>
               <tbody>{mockRecountAttempts.map((item) => <tr key={item.countRef}><td>{item.countRef}</td><td>{item.productCode}</td><td>{item.systemQty}</td><td>{item.attempts.map((attempt) => `#${attempt.attempt}: ${attempt.countedQty}${attempt.accepted ? ' ✓' : ''}`).join(' → ')}</td><td>{item.finalAccepted}</td></tr>)}</tbody>
             </table>
+          )}
+
+          {tab === 'scenario' && (
+            <section className="scenario-runtime-panel">
+              {mockDemo.activeScenarioId ? (
+                <>
+                  <div className="scenario-runtime-heading">
+                    <div><span>ACTIVE SHARED SESSION</span><strong>{mockDemo.activeScenarioId} • {mockDemo.activeScenarioTitle}</strong></div>
+                    <div><strong>Step {mockDemo.activeScenarioStep}</strong><span>{mockDemo.affectedScenarioCapabilities.length} capability liên quan</span></div>
+                  </div>
+                  {mockDemo.scenarioBalances.length > 0 ? (
+                    <table className="data-lab-table numeric-table">
+                      <thead><tr><th>Warehouse</th><th>Location</th><th>SKU</th><th>OnHand</th><th>Reserved</th><th>Allocated</th><th>Picked</th><th>Available</th><th>QC Hold</th><th>Quarantine</th><th>Transit</th></tr></thead>
+                      <tbody>{mockDemo.scenarioBalances.map((item) => (
+                        <tr key={item.warehouse + item.location + item.productCode}>
+                          <td>{item.warehouse}</td><td>{item.location}</td><td>{item.productCode}</td><td>{item.onHand}</td><td>{item.reserved}</td><td>{item.allocated}</td><td>{item.picked}</td><td>{item.available}</td><td>{item.qcHold}</td><td>{item.quarantine}</td><td>{item.inTransit}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  ) : (
+                    <div className="scenario-runtime-empty">Scenario này có shared event session nhưng chưa có inventory snapshot chuyên biệt.</div>
+                  )}
+                  <div className="scenario-runtime-events">
+                    <strong>Shared event log</strong>
+                    {mockDemo.scenarioEventLog.length ? mockDemo.scenarioEventLog.map((event, index) => (
+                      <div key={event.label + index}><span>{index + 1}</span><p><strong>{event.label}</strong><small>{event.state} • {event.inventoryEffect}</small></p></div>
+                    )) : <p>Scenario đã được chọn nhưng chưa chạy bước nào.</p>}
+                  </div>
+                </>
+              ) : (
+                <div className="scenario-runtime-empty">Chưa có shared scenario session. Mở Golden Scenario Lab và chạy một bước để tạo session.</div>
+              )}
+            </section>
           )}
 
           <div className="data-lab-row-count">{rows.length} records trong dataset hiện tại</div>

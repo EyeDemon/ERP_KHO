@@ -2,15 +2,19 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, FlaskConical, Play, RotateCcw, ShieldCheck } from 'lucide-react';
 import { mockGoldenScenarios } from '../mocks/erpWmsMockScenarios';
+import { getMockScenarioRuntimeDefinition } from '../mocks/mockScenarioRuntime';
+import { useMockDemo } from '../context/MockDemoContext';
 import './MockScenarioLab.css';
 
 const MockScenarioLab = () => {
   const [selectedId, setSelectedId] = useState(mockGoldenScenarios[0]?.id ?? '');
-  const [executedSteps, setExecutedSteps] = useState(0);
+  const mockDemo = useMockDemo();
   const selected = useMemo(
     () => mockGoldenScenarios.find((scenario) => scenario.id === selectedId) ?? mockGoldenScenarios[0],
     [selectedId],
   );
+  const executedSteps = mockDemo.activeScenarioId === selected?.id ? mockDemo.activeScenarioStep : 0;
+  const runtimeDefinition = getMockScenarioRuntimeDefinition(selected?.id);
 
   return (
     <div className="scenario-page">
@@ -31,7 +35,7 @@ const MockScenarioLab = () => {
               type="button"
               key={scenario.id}
               className={scenario.id === selected?.id ? 'active' : undefined}
-              onClick={() => { setSelectedId(scenario.id); setExecutedSteps(0); }}
+              onClick={() => setSelectedId(scenario.id)}
             >
               <span>{scenario.id}</span>
               <strong>{scenario.title}</strong>
@@ -58,23 +62,24 @@ const MockScenarioLab = () => {
 
             <section className="scenario-runner">
               <div>
-                <span>SIMULATOR • READ ONLY</span>
+                <span>SHARED SCENARIO SESSION • CROSS-SCREEN</span>
                 <strong>Step {executedSteps} / {selected.steps.length}</strong>
               </div>
               <div className="scenario-runner-actions">
                 <button
                   type="button"
-                  onClick={() => setExecutedSteps((value) => Math.min(value + 1, selected.steps.length))}
+                  onClick={() => mockDemo.runScenarioStep(selected.id)}
                   disabled={executedSteps >= selected.steps.length}
                 >
                   <Play size={14} /> Chạy bước tiếp
                 </button>
-                <button type="button" onClick={() => setExecutedSteps(0)} disabled={executedSteps === 0}>
+                <button type="button" onClick={() => mockDemo.resetScenario(selected.id)} disabled={executedSteps === 0}>
                   <RotateCcw size={14} /> Reset
                 </button>
+                <Link className="scenario-runtime-link" to="/system-blueprint/mock-data">Xem trạng thái dùng chung →</Link>
               </div>
               <div className="scenario-execution-log" data-testid="scenario-execution-log">
-                {executedSteps === 0 && <p>Chưa chạy bước nào. Simulator chỉ thay đổi UI local.</p>}
+                {executedSteps === 0 && <p>Chưa chạy bước nào. Khi chạy, trạng thái session sẽ dùng chung với Mock Data Lab và capability liên quan.</p>}
                 {selected.steps.slice(0, executedSteps).map((step, index) => (
                   <div key={'run-' + step.label}>
                     <CheckCircle2 size={14} />
@@ -83,6 +88,29 @@ const MockScenarioLab = () => {
                 ))}
               </div>
             </section>
+
+            {runtimeDefinition && (
+              <section className="scenario-shared-state">
+                <div>
+                  <span>SHARED RUNTIME</span>
+                  <strong>{runtimeDefinition.affectedCapabilities.length} capability liên quan</strong>
+                </div>
+                <div className="scenario-capability-chips">
+                  {runtimeDefinition.affectedCapabilities.map((capabilityId) => <span key={capabilityId}>{capabilityId}</span>)}
+                </div>
+                {mockDemo.activeScenarioId === selected.id && mockDemo.scenarioBalances.length > 0 && (
+                  <div className="scenario-balance-strip">
+                    {mockDemo.scenarioBalances.map((item) => (
+                      <div key={item.warehouse + item.location + item.productCode}>
+                        <small>{item.warehouse} • {item.location}</small>
+                        <strong>{item.productCode}</strong>
+                        <span>OnHand {item.onHand} • Avail {item.available} • Transit {item.inTransit}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
             <div className="scenario-steps">
               {selected.steps.map((step, index) => (

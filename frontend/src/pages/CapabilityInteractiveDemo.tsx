@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BlueprintCapability } from '../config/erpWmsBlueprint';
 import { getCapabilityDemoDefinition } from '../config/capabilityDemoScreens';
+import { useMockDemo } from '../context/MockDemoContext';
 import './CapabilityInteractiveDemo.css';
 
 interface CapabilityInteractiveDemoProps {
@@ -20,6 +21,7 @@ const CapabilityInteractiveDemo = ({
   sampleWarehouse,
   recordCount,
 }: CapabilityInteractiveDemoProps) => {
+  const mockDemo = useMockDemo();
   const definition = useMemo(
     () => getCapabilityDemoDefinition(capability, moduleName, moduleFlow),
     [capability, moduleFlow, moduleName],
@@ -28,6 +30,7 @@ const CapabilityInteractiveDemo = ({
   const [exceptionOpen, setExceptionOpen] = useState(false);
   const [quantity, setQuantity] = useState(definition.quantity?.initial ?? 0);
   const [activity, setActivity] = useState<string[]>([]);
+  const linkedToSharedScenario = mockDemo.isCapabilityInActiveScenario(capability.id);
 
   useEffect(() => {
     setStageIndex(0);
@@ -80,6 +83,14 @@ const CapabilityInteractiveDemo = ({
           <strong>{stage}</strong>
         </div>
       </div>
+
+      {linkedToSharedScenario && (
+        <div className="interactive-shared-scenario" data-testid="shared-scenario-banner">
+          <span>ACTIVE SHARED SCENARIO</span>
+          <strong>{mockDemo.activeScenarioId} • {mockDemo.activeScenarioTitle}</strong>
+          <small>Step {mockDemo.activeScenarioStep} • trạng thái này dùng chung với Golden Scenario Lab và Mock Data Lab.</small>
+        </div>
+      )}
 
       <div className="interactive-demo-progress" aria-label="Luồng trạng thái mô phỏng">
         {definition.stages.map((item, index) => (

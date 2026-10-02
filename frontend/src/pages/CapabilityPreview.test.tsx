@@ -62,6 +62,28 @@ describe('CapabilityPreview', () => {
     expect(view.queryByText('GR-2026-1045')).toBeNull();
   });
 
+  it('shows the active shared scenario on linked capability previews', () => {
+    const ScenarioStarter = () => {
+      const demo = useMockDemo();
+      return <button type="button" onClick={() => demo.runScenarioStep('GS-01')}>Run GS01 shared</button>;
+    };
+    const view = render(
+      <MemoryRouter initialEntries={['/system-blueprint/inbound/IN-07']}>
+        <MockDemoProvider>
+          <ScenarioStarter />
+          <Routes>
+            <Route path="/system-blueprint/:moduleKey/:capabilityId" element={<CapabilityPreview />} />
+          </Routes>
+        </MockDemoProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(view.getByText('Run GS01 shared'));
+    expect(view.getByTestId('shared-scenario-banner')).toBeTruthy();
+    expect(view.getByText(/GS-01 • Inbound Receipt → Post → Putaway/)).toBeTruthy();
+    expect(view.getByText(/Step 1 • trạng thái này dùng chung/)).toBeTruthy();
+  });
+
   it('renders canonical governance metadata and specialized review-required screen content', () => {
     const picking = renderPreview('outbound', 'OUT-05');
     expect(picking.getByText('Picking Workbench / Scan Flow')).toBeTruthy();

@@ -52,3 +52,6 @@
 .interactive-demo-note{margin-top:14px;font-size:10px;line-height:1.45;color:#68778a;background:#eef3f8;border-radius:9px;padding:9px}
 @media(max-width:1000px){.interactive-demo-grid{grid-template-columns:1fr}.interactive-command-panel{border-left:0;border-top:1px solid #dbe3ed}.interactive-demo-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.interactive-demo-context{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.interactive-demo-header{flex-direction:column}.interactive-demo-meta{align-items:flex-start}.interactive-demo-fields,.interactive-demo-context{grid-template-columns:1fr}.interactive-demo-progress{padding-bottom:8px}}
+
+.interactive-shared-scenario{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;border:1px solid #b9d8c4;background:#f2fbf5;border-radius:10px;padding:9px 10px;margin-bottom:10px}.interactive-shared-scenario span{font-size:9px;font-weight:900;color:#25804b;letter-spacing:.06em}.interactive-shared-scenario strong{font-size:11px;color:#315943}.interactive-shared-scenario small{font-size:9px;color:#5f7969;text-align:right}
+@media(max-width:700px){.interactive-shared-scenario{grid-template-columns:1fr}.interactive-shared-scenario small{text-align:left}}

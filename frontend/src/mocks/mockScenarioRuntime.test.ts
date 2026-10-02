@@ -1,0 +1,38 @@
+import { describe, expect, it } from 'vitest';
+import { getMockScenarioRuntimeBalances, getMockScenarioRuntimeDefinition } from './mockScenarioRuntime';
+
+const totalPhysical = (scenarioId: string, step: number) =>
+  getMockScenarioRuntimeBalances(scenarioId, step).reduce((sum, item) => sum + item.onHand + item.inTransit, 0);
+
+describe('shared mock scenario runtime', () => {
+  it('keeps inbound posting and putaway boundaries explicit', () => {
+    expect(totalPhysical('GS-01', 1)).toBe(0);
+    expect(totalPhysical('GS-01', 2)).toBe(100);
+    expect(totalPhysical('GS-01', 4)).toBe(100);
+    const final = getMockScenarioRuntimeBalances('GS-01', 4);
+    expect(final.find((item) => item.location === 'RECV-01')?.onHand).toBe(0);
+    expect(final.find((item) => item.location === 'A01-R02-L03-B04')?.onHand).toBe(100);
+  });
+
+  it('keeps reserve/allocate/pick ledger-neutral until dispatch', () => {
+    expect(totalPhysical('GS-02', 1)).toBe(100);
+    expect(totalPhysical('GS-02', 3)).toBe(100);
+    expect(totalPhysical('GS-02', 4)).toBe(80);
+    const final = getMockScenarioRuntimeBalances('GS-02', 4)[0];
+    expect(final.reserved).toBe(10);
+    expect(final.available).toBe(70);
+  });
+
+  it('conserves source + transit + destination for transfer', () => {
+    expect(totalPhysical('GS-03', 0)).toBe(100);
+    expect(totalPhysical('GS-03', 2)).toBe(100);
+    expect(totalPhysical('GS-03', 3)).toBe(100);
+  });
+
+  it('does not mutate inventory during counts before adjustment post', () => {
+    expect(totalPhysical('GS-04', 1)).toBe(84);
+    expect(totalPhysical('GS-04', 3)).toBe(84);
+    expect(totalPhysical('GS-04', 4)).toBe(82);
+    expect(getMockScenarioRuntimeDefinition('GS-04')?.affectedCapabilities).toContain('CT-07');
+  });
+});

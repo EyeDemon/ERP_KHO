@@ -3,6 +3,12 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import MockDataLab from './MockDataLab';
+import { MockDemoProvider, useMockDemo } from '../context/MockDemoContext';
+
+const ScenarioStarter = () => {
+  const demo = useMockDemo();
+  return <button type="button" onClick={() => demo.runScenarioStep('GS-01')}>Run shared GS01</button>;
+};
 
 describe('MockDataLab', () => {
   afterEach(cleanup);
@@ -29,5 +35,25 @@ describe('MockDataLab', () => {
     fireEvent.click(view.getByRole('tab', { name: 'Recount Attempts' }));
     expect(view.getByText(/#1: 1242/)).toBeTruthy();
     expect(view.getByText(/#3: 1248 ✓/)).toBeTruthy();
+  });
+
+  it('shows the same shared scenario balances produced outside the data lab', () => {
+    const view = render(
+      <MockDemoProvider>
+        <MemoryRouter>
+          <ScenarioStarter />
+          <MockDataLab />
+        </MemoryRouter>
+      </MockDemoProvider>,
+    );
+
+    fireEvent.click(view.getByText('Run shared GS01'));
+    fireEvent.click(view.getByText('Run shared GS01'));
+    fireEvent.click(view.getByRole('tab', { name: 'Shared Scenario Runtime' }));
+
+    expect(view.getByText(/GS-01 • Inbound Receipt → Post → Putaway/)).toBeTruthy();
+    expect(view.getByText('RECV-01')).toBeTruthy();
+    expect(view.getAllByText('100').length).toBeGreaterThan(0);
+    expect(view.getByText('Post Receipt')).toBeTruthy();
   });
 });
