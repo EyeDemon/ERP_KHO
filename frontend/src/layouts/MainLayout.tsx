@@ -65,6 +65,7 @@ const MainLayout = () => {
             <div style={{ margin: '14px 0 7px', color: '#7188a4', fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>Blueprint tools</div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {navLink('/system-blueprint', 'Bản đồ tổng thể', true)}
+              {navLink('/system-blueprint/search', 'Global Search')}
               {navLink('/system-blueprint/mock-data', 'Mock Data Lab')}
               {navLink('/system-blueprint/scenarios', 'Golden Scenario Lab')}
             </ul>
