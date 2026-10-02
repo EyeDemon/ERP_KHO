@@ -74,7 +74,7 @@ describe('ERP WMS golden mock scenarios', () => {
 
   it('balances return disposition and blocks high-risk offline commands', () => {
     const returned = byId('GS-09').metrics;
-    expect(Number(returned.sellable) + Number(returned.damaged)).toBe(returned.returned);
+    expect(Number(returned.restock) + Number(returned.quarantine)).toBe(returned.returned);
     expect(returned.posted).toBe(returned.returned);
 
     const offline = byId('GS-10').metrics;
