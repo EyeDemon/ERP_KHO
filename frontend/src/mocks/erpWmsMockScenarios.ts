@@ -158,7 +158,7 @@ export const mockGoldenScenarios: MockGoldenScenario[] = [
     ],
     assertions: ['High-risk command bị chặn offline', 'Pending data không mất', 'Sync conflict không silently overwrite', 'Retry có clientCommandId'],
     metrics: { lowRiskQueued: 2, highRiskBlocked: 1, dataLoss: false, serverRevalidation: true },
-
+  },
   {
     id: 'GS-11',
     title: 'Shipment Tracking → POD / Delivery Failure',
@@ -336,7 +336,6 @@ export const mockGoldenScenarios: MockGoldenScenario[] = [
     ],
     assertions: ['Unsafe task blocked before execution', 'Safety rule does not directly mutate inventory', 'Qualification/equipment evidence retained'],
     metrics: { blockedAttempts: 1, unsafeInventoryMutations: 0, qualifiedExecution: true },
-  },
   },
 ];
 
