@@ -57,3 +57,6 @@
 .blueprint-empty{padding:50px;text-align:center;background:white;border:1px dashed #cfd8e5;border-radius:12px;color:var(--wms-muted)}
 @media(max-width:1200px){.blueprint-kpis{grid-template-columns:repeat(3,1fr)}.capability-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:800px){.blueprint-hero{flex-direction:column}.blueprint-principles{grid-template-columns:1fr}.blueprint-toolbar{grid-template-columns:1fr}.capability-grid{grid-template-columns:1fr}.blueprint-kpis{grid-template-columns:repeat(2,1fr)}}
+
+.module-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.module-preview-link{font-size:11px;font-weight:750;text-decoration:none;color:#1769e0;background:#eef5ff;border:1px solid #d0e3fb;border-radius:7px;padding:6px 9px}
