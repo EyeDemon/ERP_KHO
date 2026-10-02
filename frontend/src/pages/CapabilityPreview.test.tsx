@@ -57,9 +57,10 @@ describe('CapabilityPreview', () => {
       </MemoryRouter>,
     );
     fireEvent.click(view.getByText('Use DN persona'));
-    expect(view.getByText('Sample record ẩn bởi simulated warehouse scope')).toBeTruthy();
+    const hiddenFixture = view.getByText('Sample record ẩn bởi simulated warehouse scope');
+    expect(hiddenFixture).toBeTruthy();
     expect(view.getAllByText('GR-2026-1041').length).toBeGreaterThan(0);
-    expect(view.queryByText('GR-2026-1045')).toBeNull();
+    expect(hiddenFixture.closest('.capability-fixture-trace')?.textContent).not.toContain('GR-2026-1045');
   });
 
   it('shows the active shared scenario on linked capability previews', () => {

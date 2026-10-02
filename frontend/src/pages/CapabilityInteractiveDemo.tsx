@@ -93,21 +93,27 @@ const CapabilityInteractiveDemo = ({
       )}
 
       <div className="interactive-demo-progress" aria-label="Luồng trạng thái mô phỏng">
-        {definition.stages.map((item, index) => (
-          <button
-            type="button"
-            key={item + index}
-            className={index === stageIndex ? 'active' : index < stageIndex ? 'complete' : ''}
-            onClick={() => {
-              setStageIndex(index);
-              setExceptionOpen(false);
-              pushActivity('Jump state → ' + item);
-            }}
-          >
-            <span>{index + 1}</span>
-            <strong>{item}</strong>
-          </button>
-        ))}
+        {definition.stages.map((item, index) => {
+          let stageClassName = '';
+          if (index === stageIndex) stageClassName = 'active';
+          else if (index < stageIndex) stageClassName = 'complete';
+
+          return (
+            <button
+              type="button"
+              key={item + index}
+              className={stageClassName}
+              onClick={() => {
+                setStageIndex(index);
+                setExceptionOpen(false);
+                pushActivity('Jump state → ' + item);
+              }}
+            >
+              <span>{index + 1}</span>
+              <strong>{item}</strong>
+            </button>
+          );
+        })}
       </div>
 
       <div className="interactive-demo-grid">

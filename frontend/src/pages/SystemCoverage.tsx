@@ -80,7 +80,7 @@ const SystemCoverage = () => {
         <article><strong>{foundation}</strong><span>Foundation</span></article>
         <article><strong>{specOnly}</strong><span>Production spec-only / optional</span></article>
         <article><strong>{rows.length}</strong><span>Interactive Blueprint demos</span></article>
-        <article className="traceability-kpi" title={coreInteractiveDemoIds.length + ' planned capability demos có workflow chuyên biệt'}><strong>{traceabilityClosed.length}</strong><span>Screen traceability closed</span></article>
+        <article className="traceability-kpi" title={rows.length + ' capability có contextual interactive preview'}><strong>{traceabilityClosed.length}</strong><span>Screen traceability closed</span></article>
         <article><strong>{documentation.length}</strong><span>Canonical specs indexed</span></article>
         <article><strong>{platformDocs.length}</strong><span>Platform / governance docs</span></article>
       </section>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { mockUsers, type MockUser } from '../mocks/erpWmsMockData';
 import { getGoldenScenario } from '../mocks/erpWmsMockScenarios';
 import { getMockScenarioRuntimeBalances, getMockScenarioRuntimeDefinition, type MockScenarioRuntimeBalance } from '../mocks/mockScenarioRuntime';
@@ -62,7 +62,7 @@ export const MockDemoProvider = ({ children }: { children: ReactNode }) => {
   const scenarioEventLog = activeScenario?.steps.slice(0, activeScenarioStep) ?? [];
   const affectedScenarioCapabilities = runtimeDefinition?.affectedCapabilities ?? [];
 
-  const runScenarioStep = (scenarioId: string) => {
+  const runScenarioStep = useCallback((scenarioId: string) => {
     const scenario = getGoldenScenario(scenarioId);
     if (!scenario) return;
     if (activeScenarioId !== scenarioId) {
@@ -71,26 +71,35 @@ export const MockDemoProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     setActiveScenarioStep((current) => Math.min(current + 1, scenario.steps.length));
-  };
+  }, [activeScenarioId]);
 
-  const resetScenario = (scenarioId?: string) => {
+  const resetScenario = useCallback((scenarioId?: string) => {
     if (scenarioId && scenarioId !== activeScenarioId) {
       setActiveScenarioId(scenarioId);
     }
     setActiveScenarioStep(0);
-  };
+  }, [activeScenarioId]);
 
-  const clearScenario = () => {
+  const clearScenario = useCallback(() => {
     setActiveScenarioId(null);
     setActiveScenarioStep(0);
-  };
+  }, []);
 
-  const value: MockDemoContextValue = {
+  const canSeeWarehouse = useCallback(
+    (warehouseCode: string) => selectedUser.warehouses.includes(warehouseCode),
+    [selectedUser.warehouses],
+  );
+  const isCapabilityInActiveScenario = useCallback(
+    (capabilityId: string) => affectedScenarioCapabilities.includes(capabilityId),
+    [affectedScenarioCapabilities],
+  );
+
+  const value = useMemo<MockDemoContextValue>(() => ({
     selectedUserCode: selectedUser.code,
     selectedUser,
     allowedWarehouses: selectedUser.warehouses,
     setSelectedUserCode,
-    canSeeWarehouse: (warehouseCode: string) => selectedUser.warehouses.includes(warehouseCode),
+    canSeeWarehouse,
     activeScenarioId,
     activeScenarioTitle: activeScenario?.title ?? null,
     activeScenarioStep,
@@ -102,8 +111,23 @@ export const MockDemoProvider = ({ children }: { children: ReactNode }) => {
     runScenarioStep,
     resetScenario,
     clearScenario,
-    isCapabilityInActiveScenario: (capabilityId: string) => affectedScenarioCapabilities.includes(capabilityId),
-  };
+    isCapabilityInActiveScenario,
+  }), [
+    activeScenario?.title,
+    activeScenarioId,
+    activeScenarioStep,
+    affectedScenarioCapabilities,
+    canSeeWarehouse,
+    clearScenario,
+    isCapabilityInActiveScenario,
+    resetScenario,
+    runScenarioStep,
+    scenarioBalances,
+    scenarioEventLog,
+    scenarioHiddenBalanceCount,
+    scenarioTotalBalanceCount,
+    selectedUser,
+  ]);
 
   return <MockDemoContext.Provider value={value}>{children}</MockDemoContext.Provider>;
 };
