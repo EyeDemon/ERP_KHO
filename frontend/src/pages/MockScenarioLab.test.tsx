@@ -38,6 +38,15 @@ describe('MockScenarioLab', () => {
     expect(view.getByText('Retry x4')).toBeTruthy();
   });
 
+  it('opens advanced automation and finance scenarios', () => {
+    const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
+    fireEvent.click(view.getByRole('button', { name: /Period Close/ }));
+    expect(view.getByText('WMS quantity truth preserved')).toBeTruthy();
+
+    fireEvent.click(view.getByRole('button', { name: /WCS \/ Robotics/ }));
+    expect(view.getByText('Device callback not inventory truth')).toBeTruthy();
+  });
+
   it('covers returns and offline deferred synchronization', () => {
     const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
     fireEvent.click(view.getByRole('button', { name: /Customer Return Inspection/ }));

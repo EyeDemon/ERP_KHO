@@ -30,6 +30,7 @@ The blueprint registry has now been corrected in the same feature branch:
 - registry tests now reject broad spec ranges and pin representative canonical mappings.
 - Inventory-owned reconciliation/projection rebuild is now explicit as `INV-11` instead of being hidden behind a reporting-only capability.
 - semantic mock coverage was strengthened for the newly added capabilities using targeted operational records instead of modulo-only sample assignment; the shared dataset now contains **134 unique operational mock records**.
+- Golden Scenario Lab now contains **22 end-to-end scenarios** spanning core inventory, advanced WMS, planning, finance reconciliation, controlled repair, automation and safety.
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 

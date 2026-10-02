@@ -26,7 +26,7 @@ Static coverage audit on the branch:
 - 17/17 module work centers have mock fixtures.
 - 134 unique operational mock records.
 - 179/179 dedicated capability fixtures.
-- 10 golden end-to-end scenarios.
+- 22 golden end-to-end scenarios.
 - 282/282 canonical Notion specifications indexed in the runtime documentation register; capability-linked specs and platform/governance documents are distinguished explicitly.
 - Wave 6 planning/decision-support specs 89 and 179–203 decomposed into explicit optional capabilities; recommendations/simulations remain ledger-neutral until canonical execution commands.
 - Finance/costing boundary, integration reconciliation, partner SLA, calendar exceptions and controlled support/repair are explicit capabilities.
@@ -121,6 +121,18 @@ The scenario lab includes:
 8. Idempotent Shipment Dispatch.
 9. Customer Return Inspection & Posting.
 10. Mobile Offline Deferred Sync.
+11. Shipment Tracking / POD / Delivery Failure.
+12. Cartonization → Packing → Load Plan → Dispatch.
+13. Advanced Reverse Logistics / Refurbishment / RTV.
+14. Cold Chain Excursion → Quarantine → Disposition.
+15. Catch Weight / Dual-UOM Receipt.
+16. 3PL Billable Activity → Rating → Reconciliation.
+17. Network Rebalancing Proposal → Canonical Transfer.
+18. Procurement Suggestion → Approval → ERP PO.
+19. Period Close → Finance Export → Reconciliation.
+20. Controlled Production Repair → Reversal → Corrected Transaction.
+21. WCS / Robotics Device Job → WMS Command.
+22. Safety / Hazmat Task Eligibility Gate.
 
 ## Canonical invariants represented by tests
 

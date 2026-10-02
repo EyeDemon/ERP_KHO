@@ -8,8 +8,8 @@ const byId = (id: string) => {
 };
 
 describe('ERP WMS golden mock scenarios', () => {
-  it('covers eight canonical golden scenarios plus returns and offline sync', () => {
-    expect(mockGoldenScenarios).toHaveLength(10);
+  it('covers core, advanced, finance and resilience golden scenarios', () => {
+    expect(mockGoldenScenarios).toHaveLength(22);
     expect(mockGoldenScenarios.slice(0, 8).map((item) => item.id)).toEqual(
       ['GS-01', 'GS-02', 'GS-03', 'GS-04', 'GS-05', 'GS-06', 'GS-07', 'GS-08'],
     );
@@ -70,6 +70,20 @@ describe('ERP WMS golden mock scenarios', () => {
     expect(m.ledgerRows).toBe(1);
     expect(m.balanceMutations).toBe(1);
     expect(m.outboxRows).toBe(1);
+  });
+
+  it('keeps planning, optimization and finance control planes ledger-neutral until canonical execution', () => {
+    expect(byId('GS-12').metrics.preDispatchOnHandDeduction).toBe(0);
+    expect(byId('GS-17').metrics.preExecutionMutation).toBe(0);
+    expect(byId('GS-18').metrics.preReceiptOnHandChange).toBe(0);
+    expect(byId('GS-19').metrics.ledgerRewrite).toBe(false);
+  });
+
+  it('keeps specialized and automation flows inside canonical inventory boundaries', () => {
+    expect(byId('GS-14').metrics.sensorLedgerRows).toBe(0);
+    expect(byId('GS-15').metrics.ledgerTransactions).toBe(1);
+    expect(byId('GS-21').metrics.directDeviceLedgerRows).toBe(0);
+    expect(byId('GS-22').metrics.unsafeInventoryMutations).toBe(0);
   });
 
   it('balances return disposition and blocks high-risk offline commands', () => {
