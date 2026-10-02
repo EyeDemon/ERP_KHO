@@ -17,3 +17,4 @@
 .capability-not-found{background:#fff;border:1px solid #d9e1eb;border-radius:12px;padding:50px}
 @media(max-width:1050px){.capability-grid-layout{grid-template-columns:1fr}.capability-contract{margin-top:0}.capability-kpis{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.capability-hero{flex-direction:column}.preview-toolbar{grid-template-columns:1fr}.ux-state-grid{grid-template-columns:1fr}}
+.capability-fixture-trace{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;padding:8px;background:#f7f2ff;border:1px solid #e1d6fa;border-radius:8px;font-size:9px;color:#64527e}.capability-fixture-trace strong{color:#533a78}.capability-fixture-trace span{background:#fff;border:1px solid #e4dcf5;border-radius:999px;padding:3px 6px}
