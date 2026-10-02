@@ -37,7 +37,7 @@ export interface CapabilityGovernanceProfile {
   stateModel: string;
   inventoryEffect: string;
   operationalOwner: string;
-  reviewStatus: 'Designed' | 'Review Required';
+  reviewStatus: 'Designed' | 'Review Required' | 'Traceability Closed';
   screenReference?: string;
   reviewFinding?: string;
   evidence: CapabilityEvidenceItem[];
@@ -80,22 +80,22 @@ const featureEnabledIds = new Set(`MD-06 OUT-10 HU-04 DY-01 DY-02 DY-03 DY-04 IG
 
 const implementationSpecificModules = new Set(['operations-resilience']);
 
-const reviewRequired: Record<string, { screenReference: string; finding: string }> = {
+const screenTraceability: Record<string, { screenReference: string; finding: string }> = {
   'INV-08': {
-    screenReference: 'UNMAPPED — Chuyển vị trí (Location Transfer)',
-    finding: 'PASS content / Review Required traceability — Screen Matrix 229, 2026-09-20',
+    screenReference: 'BLUEPRINT • /system-blueprint/inventory-control/INV-08 • Internal Location Transfer Workbench',
+    finding: 'PASS content / Traceability Closed — Screen Matrix 229 + Spec 282 mapped to concrete Blueprint route • 2026-10-03',
   },
   'OUT-05': {
-    screenReference: 'UNMAPPED — Lấy hàng(Picking)',
-    finding: 'PASS content / Review Required traceability — Screen Matrix 229, 2026-09-20',
+    screenReference: 'BLUEPRINT • /system-blueprint/outbound/OUT-05 • Picking Workbench / Scan Flow',
+    finding: 'PASS content / Traceability Closed — Screen Matrix 229 + Spec 282 mapped to concrete Blueprint route • 2026-10-03',
   },
   'OUT-06': {
-    screenReference: 'UNMAPPED — Đóng gói (Packing)',
-    finding: 'PASS content / Review Required traceability — Screen Matrix 229, 2026-09-20',
+    screenReference: 'BLUEPRINT • /system-blueprint/outbound/OUT-06 • Packing Station',
+    finding: 'PASS content / Traceability Closed — Screen Matrix 229 + Spec 282 mapped to concrete Blueprint route • 2026-10-03',
   },
   'TR-01': {
-    screenReference: 'UNMAPPED — Tạo phiếu chuyển kho',
-    finding: 'PASS content / Review Required traceability — Screen Matrix 229, 2026-09-20',
+    screenReference: 'BLUEPRINT • /system-blueprint/transfer-replenishment/TR-01 • Create Warehouse Transfer',
+    finding: 'PASS content / Traceability Closed — Screen Matrix 229 + Spec 282 mapped to concrete Blueprint route • 2026-10-03',
   },
 };
 
@@ -168,7 +168,7 @@ export const getCapabilityGovernanceProfile = (
 ): CapabilityGovernanceProfile => {
   const inventoryEffect = inventoryEffects[capability.id]
     ?? 'No ad-hoc balance mutation. Follow the referenced canonical spec; reporting/read-model capabilities remain ledger-neutral.';
-  const review = reviewRequired[capability.id];
+  const traceability = screenTraceability[capability.id];
 
   return {
     releaseWave: releaseWaveFor(module.key, capability.id),
@@ -181,9 +181,9 @@ export const getCapabilityGovernanceProfile = (
     stateModel: module.flow?.join(' → ') ?? 'State transition contract is defined by the capability specification.',
     inventoryEffect,
     operationalOwner: module.name,
-    reviewStatus: review ? 'Review Required' : 'Designed',
-    screenReference: review?.screenReference,
-    reviewFinding: review?.finding,
+    reviewStatus: traceability ? 'Traceability Closed' : 'Designed',
+    screenReference: traceability?.screenReference,
+    reviewFinding: traceability?.finding,
     evidence: evidenceFor(capability, inventoryEffect),
   };
 };

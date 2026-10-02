@@ -25,12 +25,17 @@ describe('capability governance metadata', () => {
     }
   });
 
-  it('tracks the four Screen Matrix review-required screens explicitly', () => {
+  it('closes the four legacy Screen Matrix mappings without promoting production maturity', () => {
     for (const id of ['INV-08', 'OUT-05', 'OUT-06', 'TR-01']) {
       const { module, capability } = findCapability(id);
       const profile = getCapabilityGovernanceProfile(module, capability);
-      expect(profile.reviewStatus).toBe('Review Required');
-      expect(profile.screenReference).toContain('UNMAPPED');
+      expect(profile.reviewStatus).toBe('Traceability Closed');
+      expect(profile.screenReference).toContain('/system-blueprint/');
+      expect(profile.screenReference).not.toContain('UNMAPPED');
+      expect(profile.reviewFinding).toContain('Traceability Closed');
+      if (capability.status === 'planned') {
+        expect(profile.evidence.find((item) => item.key === 'api')?.status).toBe('spec-only');
+      }
     }
   });
 

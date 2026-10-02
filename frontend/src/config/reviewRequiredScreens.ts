@@ -19,7 +19,7 @@ export interface SpecializedScreenPreview {
 export const specializedScreenPreviews: SpecializedScreenPreview[] = [
   {
     capabilityIds: ['INV-08'],
-    screenReference: 'UNMAPPED — Chuyển vị trí (Location Transfer)',
+    screenReference: 'BLUEPRINT • /system-blueprint/inventory-control/INV-08 • Internal Location Transfer Workbench',
     title: 'Internal Location Transfer Workbench',
     subtitle: 'Same-warehouse move với scan source → product/lot/serial → quantity/UOM → destination.',
     fields: [
@@ -45,7 +45,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
   },
   {
     capabilityIds: ['OUT-05', 'MO-04'],
-    screenReference: 'UNMAPPED — Lấy hàng(Picking)',
+    screenReference: 'BLUEPRINT • OUT-05 /system-blueprint/outbound/OUT-05 • MO-04 /system-blueprint/mobile/MO-04',
     title: 'Picking Workbench / Scan Flow',
     subtitle: 'Scan-first task execution với allocated stock, lot/serial validation và short-pick exception.',
     fields: [
@@ -71,7 +71,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
   },
   {
     capabilityIds: ['OUT-06', 'MO-05'],
-    screenReference: 'UNMAPPED — Đóng gói (Packing)',
+    screenReference: 'BLUEPRINT • OUT-06 /system-blueprint/outbound/OUT-06 • MO-05 /system-blueprint/mobile/MO-05',
     title: 'Packing Station',
     subtitle: 'Pack vào carton/tote/HU, xác nhận quantity, weight/dimension và tạo label có audit.',
     fields: [
@@ -97,7 +97,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
   },
   {
     capabilityIds: ['TR-01', 'MO-07'],
-    screenReference: 'UNMAPPED — Tạo phiếu chuyển kho',
+    screenReference: 'BLUEPRINT • TR-01 /system-blueprint/transfer-replenishment/TR-01 • MO-07 /system-blueprint/mobile/MO-07',
     title: 'Create Warehouse Transfer',
     subtitle: 'Tạo yêu cầu source → destination, lines/UOM và policy trước khi dispatch sang In Transit.',
     fields: [

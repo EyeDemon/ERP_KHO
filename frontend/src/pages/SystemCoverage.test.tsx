@@ -7,15 +7,17 @@ import SystemCoverage from './SystemCoverage';
 describe('SystemCoverage', () => {
   afterEach(cleanup);
 
-  it('renders all traced capabilities and the four Screen Matrix review items', () => {
+  it('renders all traced capabilities and the four closed Screen Matrix mappings', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     expect(view.getByText('Coverage & Readiness')).toBeTruthy();
     expect(view.getByText('capabilities traced').parentElement?.textContent).toContain('179');
-    expect(view.getAllByText('Review Required').length).toBeGreaterThanOrEqual(4);
-    expect(view.getByText('UNMAPPED — Chuyển vị trí (Location Transfer)')).toBeTruthy();
-    expect(view.getByText('UNMAPPED — Lấy hàng(Picking)')).toBeTruthy();
-    expect(view.getByText('UNMAPPED — Đóng gói (Packing)')).toBeTruthy();
-    expect(view.getByText('UNMAPPED — Tạo phiếu chuyển kho')).toBeTruthy();
+    expect(view.getByText('Screen Matrix 229 • Traceability Closed')).toBeTruthy();
+    expect(view.getAllByText('Traceability Closed').length).toBeGreaterThanOrEqual(4);
+    expect(view.getByText(/inventory-control.*INV-08/)).toBeTruthy();
+    expect(view.getByText(/outbound.*OUT-05/)).toBeTruthy();
+    expect(view.getByText(/outbound.*OUT-06/)).toBeTruthy();
+    expect(view.getByText(/transfer-replenishment.*TR-01/)).toBeTruthy();
+    expect(view.queryByText(/UNMAPPED/)).toBeNull();
     expect(view.getAllByText('282').length).toBeGreaterThan(0);
     expect(view.getByText('Canonical Documentation Register • Specs 1–282')).toBeTruthy();
   });

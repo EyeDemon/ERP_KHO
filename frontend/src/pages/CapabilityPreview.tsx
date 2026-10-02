@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Boxes, CheckCircle2, CircleDashed, Database, ExternalLink,
-  FileText, LockKeyhole, MonitorSmartphone, ShieldCheck, Smartphone, Workflow, CircleAlert, Gauge
+  FileText, LockKeyhole, MonitorSmartphone, ShieldCheck, Smartphone, Workflow, Gauge
 } from 'lucide-react';
 import {
   blueprintStatusLabels,
@@ -84,7 +84,7 @@ const CapabilityPreview = () => {
 
       {specializedPreview && (
         <section className="capability-panel specialized-preview">
-          <div className="capability-panel-title"><CircleAlert size={18} /><h2>{specializedPreview.title}</h2><span className="review-required-badge">Screen Matrix • Review Required</span></div>
+          <div className="capability-panel-title"><CheckCircle2 size={18} /><h2>{specializedPreview.title}</h2><span className="traceability-closed-badge">Screen Matrix • Traceability Closed</span></div>
           <p className="specialized-subtitle">{specializedPreview.subtitle}</p>
           <div className="specialized-fields">
             {specializedPreview.fields.map((field) => (
@@ -205,7 +205,7 @@ const CapabilityPreview = () => {
                   </div>
                 ))}
               </div>
-              {governance.reviewFinding ? <div className="governance-review-note"><CircleAlert size={14} /> {governance.reviewFinding}</div> : null}
+              {governance.reviewFinding ? <div className={'governance-review-note ' + (governance.reviewStatus === 'Traceability Closed' ? 'traceability-closed-note' : '')}><CheckCircle2 size={14} /> {governance.reviewFinding}</div> : null}
             </section>
           )}
 

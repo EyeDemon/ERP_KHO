@@ -52,6 +52,7 @@ const SystemCoverage = () => {
   }, [applicability, query, rows, status, wave]);
 
   const reviewRequired = rows.filter((row) => row.profile.reviewStatus === 'Review Required');
+  const traceabilityClosed = rows.filter((row) => row.profile.reviewStatus === 'Traceability Closed');
   const implemented = rows.filter((row) => row.capability.status === 'live').length;
   const foundation = rows.filter((row) => row.capability.status === 'foundation').length;
   const specOnly = rows.length - implemented - foundation;
@@ -80,7 +81,7 @@ const SystemCoverage = () => {
         <article><strong>{foundation}</strong><span>Foundation</span></article>
         <article><strong>{specOnly}</strong><span>Production spec-only / optional</span></article>
         <article><strong>{rows.length}</strong><span>Interactive Blueprint demos</span></article>
-        <article className="review-kpi" title={coreInteractiveDemoIds.length + ' core capability demos có workflow chuyên biệt'}><strong>{reviewRequired.length}</strong><span>Screen review required</span></article>
+        <article className="traceability-kpi" title={coreInteractiveDemoIds.length + ' planned capability demos có workflow chuyên biệt'}><strong>{traceabilityClosed.length}</strong><span>Screen traceability closed</span></article>
         <article><strong>{documentation.length}</strong><span>Canonical specs indexed</span></article>
         <article><strong>{platformDocs.length}</strong><span>Platform / governance docs</span></article>
       </section>
@@ -110,9 +111,24 @@ const SystemCoverage = () => {
         </select></label>
       </section>
 
+      {traceabilityClosed.length > 0 && (
+        <section className="traceability-closed-panel">
+          <div className="traceability-title"><CheckCircle2 size={17} /><div><strong>Screen Matrix 229 • Traceability Closed</strong><span>4 legacy UNMAPPED screens đã map tới Blueprint route cụ thể. Trạng thái production/backend vẫn được theo dõi riêng.</span></div></div>
+          <div className="traceability-grid">
+            {traceabilityClosed.map(({ module, capability, profile }) => (
+              <Link key={capability.id} to={'/system-blueprint/' + module.key + '/' + capability.id}>
+                <strong>{capability.id} • {capability.name}</strong>
+                <span>{profile.screenReference}</span>
+                <small>{profile.reviewFinding}</small>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {reviewRequired.length > 0 && (
         <section className="review-required-panel">
-          <div className="review-title"><CircleAlert size={17} /><div><strong>Screen Matrix 229 • Review Required</strong><span>Content đã PASS; còn cần khóa traceability chính thức.</span></div></div>
+          <div className="review-title"><CircleAlert size={17} /><div><strong>Screen review còn mở</strong><span>Các mục này vẫn cần mapping/evidence trước khi đóng traceability.</span></div></div>
           <div className="review-grid">
             {reviewRequired.map(({ module, capability, profile }) => (
               <Link key={capability.id} to={'/system-blueprint/' + module.key + '/' + capability.id}>
@@ -181,6 +197,7 @@ const SystemCoverage = () => {
                 <td>
                   <Link to={'/system-blueprint/' + module.key + '/' + capability.id}>{capability.id} • {capability.name}</Link>
                   {profile.reviewStatus === 'Review Required' && <span className="review-chip">Review Required</span>}
+                  {profile.reviewStatus === 'Traceability Closed' && <span className="traceability-chip">Traceability Closed</span>}
                 </td>
                 <td>{profile.ownerModule}</td>
                 <td>Wave {profile.releaseWave}</td>

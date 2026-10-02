@@ -87,10 +87,11 @@ describe('CapabilityPreview', () => {
   it('renders canonical governance metadata and specialized review-required screen content', () => {
     const picking = renderPreview('outbound', 'OUT-05');
     expect(picking.getByText('Picking Workbench / Scan Flow')).toBeTruthy();
-    expect(picking.getByText('Screen Matrix • Review Required')).toBeTruthy();
+    expect(picking.getByText('Screen Matrix • Traceability Closed')).toBeTruthy();
     expect(picking.getByText('Capability governance & completeness')).toBeTruthy();
     expect(picking.getAllByText('Wave 2').length).toBeGreaterThan(0);
     expect(picking.getByText(/Picking không được giảm warehouse OnHand/)).toBeTruthy();
+    expect(picking.getByText(/Traceability Closed — Screen Matrix 229/)).toBeTruthy();
   });
 
   it('supports interactive core WMS state transitions and exception recovery', () => {
