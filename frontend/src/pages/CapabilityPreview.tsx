@@ -1,0 +1,144 @@
+import { Link, useParams } from 'react-router-dom';
+import {
+  ArrowLeft, Boxes, CheckCircle2, CircleDashed, Database, ExternalLink,
+  FileText, LockKeyhole, MonitorSmartphone, ShieldCheck, Smartphone, Workflow
+} from 'lucide-react';
+import {
+  blueprintStatusLabels,
+  findBlueprintModule,
+  type BlueprintStatus,
+} from '../config/erpWmsBlueprint';
+import { getMockWorkCenter } from '../mocks/erpWmsMockData';
+import './CapabilityPreview.css';
+
+const statusIcon = (status: BlueprintStatus) =>
+  status === 'live' ? <CheckCircle2 size={15} /> : <CircleDashed size={15} />;
+
+const CapabilityPreview = () => {
+  const { moduleKey, capabilityId } = useParams();
+  const module = findBlueprintModule(moduleKey);
+  const capability = module?.capabilities.find((item) => item.id === capabilityId);
+  const workCenter = getMockWorkCenter(moduleKey);
+  const records = workCenter?.records ?? [];
+
+  if (!module || !capability) {
+    return (
+      <div className="capability-not-found">
+        <h1>Không tìm thấy capability</h1>
+        <Link to="/system-blueprint">Quay lại bản đồ hệ thống</Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="capability-page">
+      <Link to={'/system-blueprint/' + module.key} className="capability-back">
+        <ArrowLeft size={16} /> {module.name}
+      </Link>
+
+      <section className="capability-hero">
+        <div>
+          <span className="capability-eyebrow">{capability.id} • Capability Preview</span>
+          <h1>{capability.name}</h1>
+          <p>{capability.goal}</p>
+          <div className="capability-meta">
+            <span className={'status-pill ' + capability.status}>{statusIcon(capability.status)} {blueprintStatusLabels[capability.status]}</span>
+            <span>Spec {capability.spec}</span>
+            {capability.surfaces.map((surface) => (
+              <span key={surface}>
+                {surface === 'Mobile' ? <Smartphone size={13} /> : <MonitorSmartphone size={13} />}
+                {surface}
+              </span>
+            ))}
+          </div>
+        </div>
+        {capability.route ? (
+          <Link to={capability.route} className="capability-real-link"><ExternalLink size={16} /> Mở chức năng hiện có</Link>
+        ) : (
+          <span className="capability-preview-badge">MOCK / SPEC PREVIEW</span>
+        )}
+      </section>
+
+      {module.flow && (
+        <section className="capability-panel">
+          <div className="capability-panel-title"><Workflow size={18} /><h2>Business flow liên quan</h2></div>
+          <div className="capability-flow">
+            {module.flow.map((step, index) => (
+              <div key={step}><span>{index + 1}</span><strong>{step}</strong></div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="capability-grid-layout">
+        <div className="capability-main">
+          <section className="capability-panel">
+            <div className="capability-panel-title"><FileText size={18} /><h2>Screen preview</h2></div>
+            <div className="preview-toolbar">
+              <input aria-label="Tìm dữ liệu mock capability" placeholder="Tìm mã / SKU / chứng từ..." readOnly value="" />
+              <select aria-label="Mock warehouse"><option>Tất cả kho được phép</option></select>
+              <button type="button" disabled>Mock read-only</button>
+            </div>
+
+            <div className="capability-kpis">
+              <div><span>Sample records</span><strong>{records.length}</strong></div>
+              <div><span>Module</span><strong>{module.name}</strong></div>
+              <div><span>Surface</span><strong>{capability.surfaces.join(' / ')}</strong></div>
+              <div><span>Revision source</span><strong>Notion canonical spec</strong></div>
+            </div>
+
+            <div className="capability-records">
+              {records.slice(0, 5).map((record) => (
+                <article key={record.id}>
+                  <div>
+                    <span>{record.type}</span>
+                    <strong>{record.reference}</strong>
+                    <p>{record.subject}</p>
+                  </div>
+                  <div>
+                    <small>{record.warehouse}</small>
+                    <span className={'cap-record-status tone-' + record.tone}>{record.status}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="capability-panel">
+            <div className="capability-panel-title"><ShieldCheck size={18} /><h2>Expected UX states</h2></div>
+            <div className="ux-state-grid">
+              <div><strong>Default</strong><span>Danh sách/detail theo permission và warehouse scope.</span></div>
+              <div><strong>Loading</strong><span>Giữ layout ổn định, không cho duplicate critical action.</span></div>
+              <div><strong>Empty</strong><span>Giải thích vì sao không có dữ liệu và action hợp lệ tiếp theo.</span></div>
+              <div><strong>Validation</strong><span>Field-level validation; quantity luôn rõ UOM/base UOM.</span></div>
+              <div><strong>Conflict</strong><span>409/412 hiển thị recovery path, reload state mới.</span></div>
+              <div><strong>Forbidden</strong><span>Server authorization là nguồn quyết định cuối.</span></div>
+              <div><strong>Exception</strong><span>Giữ context/evidence/reason và route sang resolution workflow.</span></div>
+              <div><strong>Success</strong><span>Reload canonical detail, hiển thị audit/event reference khi cần.</span></div>
+            </div>
+          </section>
+        </div>
+
+        <aside className="capability-contract">
+          <span className="capability-eyebrow">Technical contract</span>
+          <h3>Guardrails bắt buộc</h3>
+          <div className="contract-chain">
+            <div><ShieldCheck size={17} /><span><strong>Authorization</strong><small>Permission + warehouse scope</small></span></div>
+            <div><Workflow size={17} /><span><strong>State machine</strong><small>Explicit command; không set status tùy ý</small></span></div>
+            <div><LockKeyhole size={17} /><span><strong>Concurrency</strong><small>Version + inventory protection</small></span></div>
+            <div><Boxes size={17} /><span><strong>Inventory integrity</strong><small>Không ad-hoc mutate balance</small></span></div>
+            <div><Database size={17} /><span><strong>Ledger</strong><small>Immutable posting / reversal</small></span></div>
+            <div><FileText size={17} /><span><strong>Audit & Outbox</strong><small>Atomic evidence khi mutation critical</small></span></div>
+          </div>
+
+          <div className="capability-contract-note">
+            <strong>Preview semantics:</strong> trang này minh họa UX/contract cho capability dựa trên spec.
+            Nếu trạng thái là “Theo đặc tả” hoặc “Nâng cao”, nó chưa được coi là backend production-ready.
+          </div>
+        </aside>
+      </section>
+    </div>
+  );
+};
+
+export default CapabilityPreview;
