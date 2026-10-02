@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, FlaskConical, Play, RotateCcw, ShieldCheck } from 'lucide-react';
 import { mockGoldenScenarios } from '../mocks/erpWmsMockScenarios';
 import { getMockScenarioRuntimeDefinition } from '../mocks/mockScenarioRuntime';
+import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
 import { useMockDemo } from '../context/MockDemoContext';
 import './MockScenarioLab.css';
 
@@ -15,6 +16,12 @@ const MockScenarioLab = () => {
   );
   const executedSteps = mockDemo.activeScenarioId === selected?.id ? mockDemo.activeScenarioStep : 0;
   const runtimeDefinition = getMockScenarioRuntimeDefinition(selected?.id);
+  const capabilityRoutes = useMemo(
+    () => new Map(erpWmsBlueprint.flatMap((module) =>
+      module.capabilities.map((capability) => [capability.id, '/system-blueprint/' + module.key + '/' + capability.id] as const),
+    )),
+    [],
+  );
 
   return (
     <div className="scenario-page">
@@ -96,7 +103,12 @@ const MockScenarioLab = () => {
                   <strong>{runtimeDefinition.affectedCapabilities.length} capability liên quan</strong>
                 </div>
                 <div className="scenario-capability-chips">
-                  {runtimeDefinition.affectedCapabilities.map((capabilityId) => <span key={capabilityId}>{capabilityId}</span>)}
+                  {runtimeDefinition.affectedCapabilities.map((capabilityId) => {
+                    const route = capabilityRoutes.get(capabilityId);
+                    return route
+                      ? <Link key={capabilityId} to={route}>{capabilityId}</Link>
+                      : <span key={capabilityId}>{capabilityId}</span>;
+                  })}
                 </div>
                 {mockDemo.activeScenarioId === selected.id && mockDemo.scenarioBalances.length > 0 && (
                   <div className="scenario-balance-strip">

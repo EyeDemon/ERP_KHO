@@ -29,6 +29,28 @@ describe('shared mock scenario runtime', () => {
     expect(totalPhysical('GS-03', 3)).toBe(100);
   });
 
+  it('keeps QC and return inspection ledger-neutral until explicit posting', () => {
+    expect(totalPhysical('GS-05', 2)).toBe(0);
+    expect(totalPhysical('GS-05', 3)).toBe(95);
+    expect(totalPhysical('GS-09', 2)).toBe(0);
+    expect(totalPhysical('GS-09', 3)).toBe(6);
+  });
+
+  it('keeps reversal and delivery-return corrections explicit', () => {
+    expect(totalPhysical('GS-06', 1)).toBe(100);
+    expect(totalPhysical('GS-06', 2)).toBe(0);
+    expect(totalPhysical('GS-06', 3)).toBe(80);
+    expect(totalPhysical('GS-11', 3)).toBe(0);
+    expect(totalPhysical('GS-11', 4)).toBe(20);
+  });
+
+  it('keeps pack and load ledger-neutral until dispatch', () => {
+    expect(totalPhysical('GS-12', 1)).toBe(20);
+    expect(totalPhysical('GS-12', 3)).toBe(20);
+    expect(totalPhysical('GS-12', 4)).toBe(0);
+    expect(getMockScenarioRuntimeDefinition('GS-12')?.affectedCapabilities).toContain('OUT-08');
+  });
+
   it('does not mutate inventory during counts before adjustment post', () => {
     expect(totalPhysical('GS-04', 1)).toBe(84);
     expect(totalPhysical('GS-04', 3)).toBe(84);

@@ -36,6 +36,7 @@ describe('MockScenarioLab', () => {
     fireEvent.click(view.getByText('Chạy bước tiếp'));
     expect(view.getByText(/SHARED SCENARIO SESSION/)).toBeTruthy();
     expect(view.getByText(/5 capability liên quan/)).toBeTruthy();
+    expect(view.getByRole('link', { name: 'IN-07' }).getAttribute('href')).toBe('/system-blueprint/inbound/IN-07');
     expect(view.getAllByText(/OnHand 0 • Avail 0 • Transit 0/).length).toBeGreaterThan(0);
 
     fireEvent.click(view.getByText('Chạy bước tiếp'));

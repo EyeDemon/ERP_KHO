@@ -131,6 +131,104 @@ export const mockScenarioRuntimeDefinitions: Record<string, MockScenarioRuntimeD
       ],
     ],
   },
+  'GS-05': {
+    scenarioId: 'GS-05',
+    affectedCapabilities: ['IN-04', 'IN-06', 'IN-07', 'QR-01', 'QR-02', 'QR-03', 'INV-01', 'INV-05'],
+    initialBalances: [
+      balance('WH-HCM-01', 'QC-01', 'SKU-1002', 0, 0),
+    ],
+    stepBalances: [
+      [
+        balance('WH-HCM-01', 'QC-01', 'SKU-1002', 0, 0),
+      ],
+      [
+        balance('WH-HCM-01', 'QC-01', 'SKU-1002', 0, 0),
+      ],
+      [
+        balance('WH-HCM-01', 'AVAILABLE-STORAGE', 'SKU-1002', 80, 80),
+        balance('WH-HCM-01', 'DAMAGED-HOLD', 'SKU-1002', 15, 0),
+      ],
+    ],
+  },
+  'GS-06': {
+    scenarioId: 'GS-06',
+    affectedCapabilities: ['IN-07', 'INV-02', 'INV-09', 'OP-10'],
+    initialBalances: [
+      balance('WH-HCM-01', 'RECV-01', 'SKU-1001', 0, 0),
+    ],
+    stepBalances: [
+      [
+        balance('WH-HCM-01', 'RECV-01', 'SKU-1001', 100, 100),
+      ],
+      [
+        balance('WH-HCM-01', 'RECV-01', 'SKU-1001', 0, 0),
+      ],
+      [
+        balance('WH-HCM-01', 'RECV-01', 'SKU-1001', 80, 80),
+      ],
+    ],
+  },
+  'GS-09': {
+    scenarioId: 'GS-09',
+    affectedCapabilities: ['QR-04', 'INV-01', 'INV-05', 'MO-09'],
+    initialBalances: [
+      balance('WH-HCM-01', 'RETURN-RECV', 'SKU-2001', 0, 0),
+    ],
+    stepBalances: [
+      [
+        balance('WH-HCM-01', 'RETURN-RECV', 'SKU-2001', 0, 0),
+      ],
+      [
+        balance('WH-HCM-01', 'RETURN-RECV', 'SKU-2001', 0, 0),
+      ],
+      [
+        balance('WH-HCM-01', 'RESTOCK', 'SKU-2001', 4, 4),
+        balance('WH-HCM-01', 'QUARANTINE', 'SKU-2001', 2, 0, { quarantine: 2 }),
+      ],
+    ],
+  },
+  'GS-11': {
+    scenarioId: 'GS-11',
+    affectedCapabilities: ['OUT-10', 'QR-04', 'INV-01', 'INV-10'],
+    initialBalances: [
+      balance('WH-HCM-01', 'RETURN-RECV', 'SKU-1001', 0, 0),
+    ],
+    stepBalances: [
+      [
+        balance('WH-HCM-01', 'RETURN-RECV', 'SKU-1001', 0, 0),
+      ],
+      [
+        balance('WH-HCM-01', 'RETURN-RECV', 'SKU-1001', 0, 0),
+      ],
+      [
+        balance('WH-HCM-01', 'RETURN-RECV', 'SKU-1001', 0, 0),
+      ],
+      [
+        balance('WH-HCM-01', 'RETURN-RECV', 'SKU-1001', 20, 20),
+      ],
+    ],
+  },
+  'GS-12': {
+    scenarioId: 'GS-12',
+    affectedCapabilities: ['OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'HU-01', 'HU-02', 'INV-01'],
+    initialBalances: [
+      balance('WH-HCM-01', 'PICKED-STAGE', 'SKU-1001', 20, 0, { picked: 20 }),
+    ],
+    stepBalances: [
+      [
+        balance('WH-HCM-01', 'PICKED-STAGE', 'SKU-1001', 20, 0, { picked: 20 }),
+      ],
+      [
+        balance('WH-HCM-01', 'PACK-02', 'SKU-1001', 20, 0, { picked: 20 }),
+      ],
+      [
+        balance('WH-HCM-01', 'STAGE-OUT-03', 'SKU-1001', 20, 0, { picked: 20 }),
+      ],
+      [
+        balance('WH-HCM-01', 'DISPATCHED', 'SKU-1001', 0, 0),
+      ],
+    ],
+  },
 };
 
 export const getMockScenarioRuntimeDefinition = (scenarioId?: string | null) =>
