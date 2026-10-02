@@ -68,3 +68,5 @@
 .mock-dataset-summary span{background:#f4f6f9;border:1px solid #e0e5eb;border-radius:999px;padding:4px 7px}
 @media(max-width:1200px){.blueprint-kpis{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:800px){.blueprint-kpis{grid-template-columns:repeat(2,1fr)}}
+
+.scenario-lab-link{margin-left:auto;text-decoration:none;color:#1769e0;font-size:11px;font-weight:800;background:#eef5ff;border:1px solid #cfe1fa;border-radius:7px;padding:5px 8px}
