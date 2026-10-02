@@ -16,8 +16,8 @@ describe('SystemCoverage', () => {
     expect(view.getByText('UNMAPPED — Lấy hàng(Picking)')).toBeTruthy();
     expect(view.getByText('UNMAPPED — Đóng gói (Packing)')).toBeTruthy();
     expect(view.getByText('UNMAPPED — Tạo phiếu chuyển kho')).toBeTruthy();
-    expect(view.getByText('32')).toBeTruthy();
-    expect(view.getByText('Platform Standards 251–282')).toBeTruthy();
+    expect(view.getAllByText('282').length).toBeGreaterThan(0);
+    expect(view.getByText('Canonical Documentation Register • Specs 1–282')).toBeTruthy();
   });
 
   it('filters by release wave and implementation status', () => {
@@ -39,6 +39,11 @@ describe('SystemCoverage', () => {
     fireEvent.change(view.getByLabelText('Tìm coverage'), { target: { value: 'Warehouse Safety' } });
     expect(table.getByText(/AX-14 • Warehouse Safety/)).toBeTruthy();
     expect(table.getByText(/Industry optional/)).toBeTruthy();
+  });
+
+  it('indexes the complete canonical documentation set separately from capability readiness', () => {
+    const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
+    expect(view.getByText(/Xem toàn bộ 282 tài liệu canonical/)).toBeTruthy();
   });
 
   it('supports capability text search', () => {

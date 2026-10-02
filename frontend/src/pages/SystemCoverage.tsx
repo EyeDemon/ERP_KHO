@@ -10,6 +10,7 @@ import {
   type EvidenceStatus,
   type ReleaseWave,
 } from '../config/capabilityGovernance';
+import { getCanonicalDocumentationRegister } from '../config/documentationRegister';
 import './SystemCoverage.css';
 
 const applicabilityLabels: Record<Applicability, string> = {
@@ -23,6 +24,9 @@ const evidenceClass = (status: EvidenceStatus) => 'evidence-badge evidence-' + s
 
 const SystemCoverage = () => {
   const rows = useMemo(() => getBlueprintGovernanceRows(erpWmsBlueprint), []);
+  const documentation = useMemo(() => getCanonicalDocumentationRegister(erpWmsBlueprint), []);
+  const capabilityLinkedDocs = documentation.filter((item) => item.representation === 'Capability-linked');
+  const platformDocs = documentation.filter((item) => item.representation === 'Platform / Governance');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<BlueprintStatus | 'all'>('all');
   const [wave, setWave] = useState<ReleaseWave | 'all'>('all');
@@ -75,7 +79,8 @@ const SystemCoverage = () => {
         <article><strong>{foundation}</strong><span>Foundation</span></article>
         <article><strong>{specOnly}</strong><span>Spec-only / optional</span></article>
         <article className="review-kpi"><strong>{reviewRequired.length}</strong><span>Screen review required</span></article>
-        <article><strong>{platformStandards.length}</strong><span>Platform standards 251–282</span></article>
+        <article><strong>{documentation.length}</strong><span>Canonical specs indexed</span></article>
+        <article><strong>{platformDocs.length}</strong><span>Platform / governance docs</span></article>
       </section>
 
       <section className="completion-chain">
@@ -120,9 +125,28 @@ const SystemCoverage = () => {
 
       <section className="platform-standards-panel">
         <div className="platform-standards-title">
-          <div><strong>Platform Standards 251–282</strong><span>Guardrails kỹ thuật/governance được theo dõi riêng, không biến thành menu nghiệp vụ giả.</span></div>
-          <span>{platformStandards.length} standards</span>
+          <div><strong>Canonical Documentation Register • Specs 1–282</strong><span>Toàn bộ tài liệu Notion được index; tài liệu không phải business capability vẫn hiện như platform/governance guardrail.</span></div>
+          <span>{capabilityLinkedDocs.length} capability-linked • {platformDocs.length} platform/governance</span>
         </div>
+        <details className="documentation-details">
+          <summary>Xem toàn bộ {documentation.length} tài liệu canonical</summary>
+          <div className="documentation-table-wrap">
+            <table className="documentation-table">
+              <thead><tr><th>Spec</th><th>Title</th><th>Category</th><th>Representation</th><th>Capability IDs</th></tr></thead>
+              <tbody>
+                {documentation.map((item) => (
+                  <tr key={item.spec}>
+                    <td>{item.spec}</td>
+                    <td>{item.title}</td>
+                    <td>{item.category}</td>
+                    <td><span className={'doc-representation ' + (item.representation === 'Capability-linked' ? 'doc-linked' : 'doc-standard')}>{item.representation}</span></td>
+                    <td>{item.capabilityIds.length ? item.capabilityIds.join(', ') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
         <div className="platform-standards-grid">
           {platformStandards.map((item) => (
             <article key={item.spec}>
