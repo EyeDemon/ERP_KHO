@@ -7,10 +7,13 @@ const allCapabilities = erpWmsBlueprint.flatMap((module) =>
 );
 
 describe('interactive capability demo registry', () => {
-  it('keeps core WMS, count, quality and mobile tranches explicitly modeled', () => {
-    expect(coreInteractiveDemoIds).toHaveLength(55);
-    const knownIds = new Set(allCapabilities.map(({ capability }) => capability.id));
-    for (const id of coreInteractiveDemoIds) expect(knownIds.has(id)).toBe(true);
+  it('models every planned capability explicitly', () => {
+    const plannedIds = allCapabilities
+      .filter(({ capability }) => capability.status === 'planned')
+      .map(({ capability }) => capability.id)
+      .sort();
+    expect(coreInteractiveDemoIds.slice().sort()).toEqual(plannedIds);
+    expect(coreInteractiveDemoIds).toHaveLength(99);
   });
 
   it('provides state, commands and exception behavior for every capability', () => {

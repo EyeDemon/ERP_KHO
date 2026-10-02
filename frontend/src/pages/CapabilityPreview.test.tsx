@@ -99,10 +99,12 @@ describe('CapabilityPreview', () => {
     expect(view.getByText('84 Cái')).toBeTruthy();
   });
 
-  it('provides an interactive fallback for planned capabilities outside the detailed core catalog', () => {
+  it('renders a dedicated enterprise SSO simulator for the remaining planned capability tranche', () => {
     const view = renderPreview('administration', 'AD-08');
-    expect(view.getByText(/SSO \/ Identity Federation • Interactive Blueprint/)).toBeTruthy();
-    expect(view.getByText('SIMULATE_ACTION')).toBeTruthy();
+    expect(view.getAllByText('SSO / Identity Federation').length).toBeGreaterThan(0);
+    expect(view.getByText('TEST_SSO')).toBeTruthy();
+    fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
+    expect(view.getByText('SSO_MAPPING_AMBIGUOUS')).toBeTruthy();
   });
 
   it('shows safe not-found UI for invalid capability', () => {
