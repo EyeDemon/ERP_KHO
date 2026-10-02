@@ -14,7 +14,9 @@ describe('ERP WMS mock global search', () => {
 
   it('finds product, partner, document, lot and serial references', () => {
     expect(searchMockSystem('SKU-2001').some((item) => item.kind === 'Product')).toBe(true);
-    expect(searchMockSystem('SUP-001').some((item) => item.kind === 'Partner')).toBe(true);
+    const partnerResults = searchMockSystem('SUP-001');
+    expect(partnerResults.filter((item) => item.reference === 'SUP-001' && item.title === 'Công ty Nông Sản Cao Nguyên')).toHaveLength(1);
+    expect(partnerResults.find((item) => item.reference === 'SUP-001')?.kind).toBe('Partner');
     expect(searchMockSystem('GR-2026-1048').some((item) => item.kind === 'Document/Task')).toBe(true);
     expect(searchMockSystem('LOT-1001-260930').some((item) => item.kind === 'Lot/Serial')).toBe(true);
     expect(searchMockSystem('SER-TWS-000128').some((item) => item.kind === 'Lot/Serial')).toBe(true);
