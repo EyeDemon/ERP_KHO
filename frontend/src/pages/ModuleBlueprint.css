@@ -66,3 +66,5 @@
 .mock-empty{text-align:center;padding:30px;color:#758398;font-size:12px}
 
 .demo-primary:disabled{cursor:not-allowed;background:#7c8da5;opacity:.85}
+
+.table-capability-links{display:flex;align-items:center;gap:7px;white-space:nowrap}
