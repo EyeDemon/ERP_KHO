@@ -242,7 +242,7 @@ export const mockWorkCenters: Record<string, MockWorkCenterData> = {
     moduleKey: 'inventory-control',
     snapshotAt,
     records: [
-      r('INV-001', 'BAL-HCM-1001', 'Inventory Balance', 'AVAILABLE', 'green', 'WH-HCM-01', 'SKU-1001 • OnHand 1.250 / Available 1.070', 'System Projection', 'Normal', '2026-10-02T09:29:00Z', { productCode: 'SKU-1001', quantity: 1070, uom: 'Gói', location: 'MULTI' }),
+      r('INV-001', 'BAL-HCM-1001', 'Inventory Balance', 'AVAILABLE', 'green', 'WH-HCM-01', 'SKU-1001 • OnHand 1.250 / Available 1.030', 'System Projection', 'Normal', '2026-10-02T09:29:00Z', { productCode: 'SKU-1001', quantity: 1030, uom: 'Gói', location: 'MULTI' }),
       r('INV-002', 'LOT-1001-260930', 'Lot', 'AVAILABLE', 'green', 'WH-HCM-01', 'SKU-1001 • HSD 30/09/2027', 'System Projection', 'Normal', '2026-10-02T09:28:00Z', { productCode: 'SKU-1001', quantity: 720, uom: 'Gói', location: 'A01-R02-L03-B04' }),
       r('INV-003', 'SER-TWS-000128', 'Serial', 'QC_HOLD', 'orange', 'WH-HCM-01', 'SKU-2001 • chờ QC', 'Vũ Ngọc Lan', 'High', '2026-10-02T08:48:00Z', { productCode: 'SKU-2001', quantity: 1, uom: 'Cái', location: 'QC-01' }),
       r('INV-004', 'TXN-2026-98211', 'Ledger', 'POSTED', 'green', 'WH-HCM-01', 'RECEIPT +600 SKU-1002', 'Inventory Posting Engine', 'Normal', '2026-10-02T07:55:00Z', { productCode: 'SKU-1002', quantity: 600, uom: 'Hộp' }),
