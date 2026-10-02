@@ -30,7 +30,7 @@ describe('MockScenarioLab', () => {
   it('covers returns and offline deferred synchronization', () => {
     const view = render(<MemoryRouter><MockScenarioLab /></MemoryRouter>);
     fireEvent.click(view.getByRole('button', { name: /Customer Return Inspection/ }));
-    expect(view.getByText('Sellable + damaged = 6')).toBeTruthy();
+    expect(view.getByText('RESTOCK + QUARANTINE = 6')).toBeTruthy();
 
     fireEvent.click(view.getByRole('button', { name: /Mobile Offline Deferred Sync/ }));
     expect(view.getByText('High-risk command bị chặn offline')).toBeTruthy();
