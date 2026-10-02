@@ -10,6 +10,7 @@ import {
   erpWmsBlueprint,
   type BlueprintStatus,
 } from '../config/erpWmsBlueprint';
+import { mockRecordCount, mockWarehouses, mockProducts, mockPartners } from '../mocks/erpWmsMockData';
 import './SystemBlueprint.css';
 
 const statusIcon = (status: BlueprintStatus) => {
@@ -69,6 +70,16 @@ const SystemBlueprint = () => {
         <article className="kpi-foundation"><strong>{blueprintTotals.foundation}</strong><span>Đã có nền</span></article>
         <article><strong>{blueprintTotals.planned}</strong><span>Cần triển khai</span></article>
         <article><strong>{blueprintTotals.optional}</strong><span>Nâng cao</span></article>
+        <article className="kpi-mock"><strong>{mockRecordCount}</strong><span>Mock records</span></article>
+      </section>
+
+      <section className="mock-dataset-summary">
+        <strong>Demo dataset:</strong>
+        <span>{mockWarehouses.length} kho</span>
+        <span>{mockProducts.length} SKU</span>
+        <span>{mockPartners.length} đối tác</span>
+        <span>{mockRecordCount} operational records</span>
+        <span>Lot / Serial / Inventory / Transfer / Count / Approval / Integration / Mobile</span>
       </section>
 
       <section className="blueprint-principles">
