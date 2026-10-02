@@ -5,7 +5,7 @@ import {
   FileCheck2, LockKeyhole, MonitorSmartphone, Route, ShieldCheck, Smartphone, Workflow
 } from 'lucide-react';
 import {
-  blueprintStatusLabels,
+  blueprintDemoStatusLabels,
   findBlueprintModule,
   type BlueprintStatus,
 } from '../config/erpWmsBlueprint';
@@ -98,10 +98,10 @@ const ModuleBlueprint = () => {
           <p>{module.description}</p>
         </div>
         <div className="module-stat-grid">
-          <div><strong>{module.capabilities.length}</strong><span>Capability</span></div>
-          <div><strong>{liveCount}</strong><span>Đã có</span></div>
-          <div><strong>{foundationCount}</strong><span>Đã có nền</span></div>
-          <div><strong>{plannedCount + optionalCount}</strong><span>Còn lại</span></div>
+          <div><strong>{module.capabilities.length}</strong><span>Mock preview</span></div>
+          <div><strong>{liveCount}</strong><span>Production live</span></div>
+          <div><strong>{foundationCount}</strong><span>Prod. foundation</span></div>
+          <div><strong>{plannedCount + optionalCount}</strong><span>Prod. pending/optional</span></div>
         </div>
       </section>
 
@@ -263,7 +263,7 @@ const ModuleBlueprint = () => {
                   </td>
                   <td>
                     <span className={'status-pill compact ' + capability.status}>
-                      {statusIcon(capability.status)} {blueprintStatusLabels[capability.status]}
+                      {statusIcon(capability.status)} {blueprintDemoStatusLabels[capability.status]}
                     </span>
                   </td>
                   <td>{capability.spec}</td>

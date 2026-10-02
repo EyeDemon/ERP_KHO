@@ -27,6 +27,18 @@ describe('interactive capability demo registry', () => {
     }
   });
 
+  it('gives every optional capability an advanced feature simulator instead of the generic fallback', () => {
+    const optionalEntries = allCapabilities.filter(({ capability }) => capability.status === 'optional');
+    expect(optionalEntries).toHaveLength(47);
+
+    for (const { module, capability } of optionalEntries) {
+      const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
+      expect(demo.commands).not.toContain('SIMULATE_ACTION');
+      expect(demo.fields.some((field) => field.label === 'Applicability')).toBe(true);
+      expect(demo.exceptionTitle).not.toBe('MOCK_VALIDATION_EXCEPTION');
+    }
+  });
+
   it('keeps canonical inventory boundaries concrete in detailed core demos', () => {
     const dispatchEntry = allCapabilities.find(({ capability }) => capability.id === 'OUT-08');
     const moveEntry = allCapabilities.find(({ capability }) => capability.id === 'INV-08');

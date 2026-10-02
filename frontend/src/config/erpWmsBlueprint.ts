@@ -27,6 +27,13 @@ export const blueprintStatusLabels: Record<BlueprintStatus, string> = {
   optional: 'Nâng cao / bật theo nhu cầu',
 };
 
+export const blueprintDemoStatusLabels: Record<BlueprintStatus, string> = {
+  live: 'Có mock + chức năng thật',
+  foundation: 'Có mock + nền thật',
+  planned: 'Có mock tương tác • production chưa có',
+  optional: 'Có mock nâng cao • bật khi cần',
+};
+
 export const erpWmsBlueprint: BlueprintModule[] = [
   {
     key: 'overview',

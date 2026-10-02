@@ -5,7 +5,7 @@ import {
   Network, Search, ShieldCheck, Smartphone, Sparkles, Workflow
 } from 'lucide-react';
 import {
-  blueprintStatusLabels,
+  blueprintDemoStatusLabels,
   blueprintTotals,
   erpWmsBlueprint,
   type BlueprintStatus,
@@ -55,8 +55,8 @@ const SystemBlueprint = () => {
           <div className="eyebrow"><Layers3 size={16} /> ERP WMS • Complete System Blueprint</div>
           <h1>Bản đồ chức năng ERP/WMS hoàn chỉnh</h1>
           <p>
-            Màn hình minh họa tổng thể được dựng từ bộ đặc tả Notion. Mỗi capability được phân loại rõ:
-            phần đã có thật, phần đã có nền, phần còn phải triển khai và phần nâng cao chỉ bật khi có nhu cầu.
+            Blueprint này là môi trường minh họa tương tác từ bộ đặc tả Notion. Mọi capability đều có preview mock;
+            badge bên dưới chỉ mô tả mức độ production/backend thực tế, không phải mức độ hoàn thiện của mock.
           </p>
         </div>
         <div className="hero-badge">
@@ -67,11 +67,11 @@ const SystemBlueprint = () => {
 
       <section className="blueprint-kpis">
         <article><strong>{blueprintTotals.modules}</strong><span>Nhóm hệ thống</span></article>
-        <article><strong>{blueprintTotals.capabilities}</strong><span>Capability</span></article>
+        <article><strong>{blueprintTotals.capabilities}</strong><span>Capability có mock preview</span></article>
         <article className="kpi-live"><strong>{blueprintTotals.live}</strong><span>Đã có chức năng</span></article>
         <article className="kpi-foundation"><strong>{blueprintTotals.foundation}</strong><span>Đã có nền</span></article>
-        <article><strong>{blueprintTotals.planned}</strong><span>Cần triển khai</span></article>
-        <article><strong>{blueprintTotals.optional}</strong><span>Nâng cao</span></article>
+        <article><strong>{blueprintTotals.planned}</strong><span>Production chưa có</span></article>
+        <article><strong>{blueprintTotals.optional}</strong><span>Optional / advanced</span></article>
         <article className="kpi-mock"><strong>{mockRecordCount}</strong><span>Mock records</span></article>
       </section>
 
@@ -113,8 +113,8 @@ const SystemBlueprint = () => {
             <option value="all">Tất cả trạng thái</option>
             <option value="live">Đã có chức năng</option>
             <option value="foundation">Đã có nền / đang hoàn thiện</option>
-            <option value="planned">Theo đặc tả — chưa triển khai</option>
-            <option value="optional">Nâng cao / bật theo nhu cầu</option>
+            <option value="planned">Có mock • production chưa triển khai</option>
+            <option value="optional">Có mock nâng cao • bật khi cần</option>
           </select>
         </label>
         <label className="blueprint-select">
@@ -127,8 +127,8 @@ const SystemBlueprint = () => {
       </section>
 
       <section className="status-legend">
-        {(Object.keys(blueprintStatusLabels) as BlueprintStatus[]).map((item) => (
-          <span className={'status-pill ' + item} key={item}>{statusIcon(item)} {blueprintStatusLabels[item]}</span>
+        {(Object.keys(blueprintDemoStatusLabels) as BlueprintStatus[]).map((item) => (
+          <span className={'status-pill ' + item} key={item}>{statusIcon(item)} {blueprintDemoStatusLabels[item]}</span>
         ))}
       </section>
 
@@ -162,7 +162,7 @@ const SystemBlueprint = () => {
                   <div className="capability-top">
                     <span className="cap-id">{capability.id}</span>
                     <span className={'status-pill compact ' + capability.status}>
-                      {statusIcon(capability.status)} {blueprintStatusLabels[capability.status]}
+                      {statusIcon(capability.status)} {blueprintDemoStatusLabels[capability.status]}
                     </span>
                   </div>
                   <h3>{capability.name}</h3>
@@ -178,7 +178,7 @@ const SystemBlueprint = () => {
                   <footer>
                     <span>Spec {capability.spec}</span>
                     <div className="capability-links">
-                      <Link to={'/system-blueprint/' + module.key + '/' + capability.id}>Preview</Link>
+                      <Link to={'/system-blueprint/' + module.key + '/' + capability.id}>Mở mock →</Link>
                       {capability.route ? <Link to={capability.route}>Mở thật →</Link> : null}
                     </div>
                   </footer>

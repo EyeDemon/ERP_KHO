@@ -21,7 +21,7 @@ describe('CapabilityPreview', () => {
     expect(view.getAllByText('Shipment Dispatch').length).toBeGreaterThan(0);
     expect(view.getByText('MOCK / SPEC PREVIEW')).toBeTruthy();
     expect(view.getByText(/Dispatch mới giảm OnHand|Boundary trừ OnHand/)).toBeTruthy();
-    expect(view.getByText('SHP-2026-5108')).toBeTruthy();
+    expect(view.getAllByText('SHP-2026-5108').length).toBeGreaterThan(0);
     expect(view.getByText('Expected UX states')).toBeTruthy();
     expect(view.getByText('Technical contract')).toBeTruthy();
   });
@@ -58,7 +58,7 @@ describe('CapabilityPreview', () => {
     );
     fireEvent.click(view.getByText('Use DN persona'));
     expect(view.getByText('Sample record ẩn bởi simulated warehouse scope')).toBeTruthy();
-    expect(view.getByText('GR-2026-1041')).toBeTruthy();
+    expect(view.getAllByText('GR-2026-1041').length).toBeGreaterThan(0);
     expect(view.queryByText('GR-2026-1045')).toBeNull();
   });
 

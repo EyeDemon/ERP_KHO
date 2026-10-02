@@ -18,6 +18,13 @@ describe('SystemBlueprint', () => {
     expect(view.getAllByText('Advanced WMS & Planning').length).toBeGreaterThan(0);
   });
 
+  it('separates mock coverage from production maturity in the visible labels', () => {
+    const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
+    expect(view.getByText('Capability có mock preview')).toBeTruthy();
+    expect(view.getAllByText('Có mock tương tác • production chưa có').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Có mock nâng cao • bật khi cần').length).toBeGreaterThan(0);
+  });
+
   it('filters capability cards by text and implementation status', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     const search = view.getByPlaceholderText('Tìm chức năng, mã capability, spec...');
