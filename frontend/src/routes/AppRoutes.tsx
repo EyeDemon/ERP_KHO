@@ -22,6 +22,7 @@ import ModuleBlueprint from '../pages/ModuleBlueprint';
 import MockScenarioLab from '../pages/MockScenarioLab';
 import MockDataLab from '../pages/MockDataLab';
 import CapabilityPreview from '../pages/CapabilityPreview';
+import { MockDemoProvider } from '../context/MockDemoContext';
 import { canViewApprovals, canViewStocktakes, usePermission, usePermissionSet } from '../services/authorization';
 
 const PermissionRoute = ({ permission, children }: { permission: string; children: ReactNode }) =>
@@ -38,7 +39,7 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<MainLayout />}>
+      <Route path="/" element={<MockDemoProvider><MainLayout /></MockDemoProvider>}>
         <Route index element={<Dashboard />} />
         <Route path="system-blueprint" element={<SystemBlueprint />} />
         <Route path="system-blueprint/scenarios" element={<MockScenarioLab />} />
