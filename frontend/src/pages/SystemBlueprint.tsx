@@ -11,6 +11,7 @@ import {
   type BlueprintStatus,
 } from '../config/erpWmsBlueprint';
 import { mockRecordCount, mockWarehouses, mockProducts, mockPartners } from '../mocks/erpWmsMockData';
+import { useMockDemo } from '../context/MockDemoContext';
 import './SystemBlueprint.css';
 
 const statusIcon = (status: BlueprintStatus) => {
@@ -21,6 +22,7 @@ const statusIcon = (status: BlueprintStatus) => {
 };
 
 const SystemBlueprint = () => {
+  const mockDemo = useMockDemo();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<BlueprintStatus | 'all'>('all');
   const [activeModule, setActiveModule] = useState<string>('all');
@@ -75,6 +77,8 @@ const SystemBlueprint = () => {
 
       <section className="mock-dataset-summary">
         <strong>Demo dataset:</strong>
+        <span>Persona: {mockDemo.selectedUser.name}</span>
+        <span>Scope: {mockDemo.allowedWarehouses.join(', ')}</span>
         <span>{mockWarehouses.length} kho</span>
         <span>{mockProducts.length} SKU</span>
         <span>{mockPartners.length} đối tác</span>
