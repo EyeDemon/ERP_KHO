@@ -101,7 +101,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         ...zone.locations,
         ...zone.aisles.flatMap(aisle => aisle.racks.flatMap(rack => rack.levels.flatMap(level => level.locations))),
       ]);
-      return ok(config, [...item.systemLocations, ...nested]);
+      return ok(config, [...item.systemLocations, ...item.unmappedLocations, ...nested]);
     }
     if (path === '/api/locations') {
       const warehouseId = Number(params.get('warehouseId') ?? 0);
