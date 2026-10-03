@@ -107,6 +107,30 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         if (entity.IsSystemManaged && (!dto.IsActive || dto.IsBlocked || dto.IsPickable != entity.IsPickable || dto.IsReceivable != entity.IsReceivable))
             throw new BusinessRuleException("Không thể thay đổi thuộc tính vận hành của vị trí hệ thống.");
         ValidateFlags(entity.LocationType, dto.IsPickable, dto.IsReceivable);
+
+        if (!entity.IsSystemManaged)
+        {
+            if (!dto.ZoneId.HasValue) throw new BusinessRuleException("Khu vực là bắt buộc cho vị trí do người dùng quản lý.");
+            if (entity.ZoneId.HasValue && entity.ZoneId != dto.ZoneId)
+                throw new BusinessRuleException("Không thể đổi khu vực của vị trí đã được gắn cấu trúc. Hãy tạo vị trí mới.");
+            if (entity.RackLevelId.HasValue && entity.RackLevelId != dto.RackLevelId)
+                throw new BusinessRuleException("Không thể đổi tầng kệ của vị trí đã được gắn cấu trúc. Hãy tạo vị trí mới.");
+
+            var zone = await context.WarehouseZones.AsNoTracking().SingleOrDefaultAsync(x => x.Id == dto.ZoneId && x.WarehouseId == entity.WarehouseId, token)
+                ?? throw new NotFoundException("Không tìm thấy khu vực hoặc bạn không có quyền truy cập.");
+            if (!zone.IsActive) throw new BusinessRuleException("Không thể gắn vị trí vào khu vực ngừng hoạt động.");
+            if (dto.RackLevelId.HasValue)
+            {
+                var rackLevelZoneId = await context.WarehouseRackLevels.AsNoTracking()
+                    .Where(x => x.Id == dto.RackLevelId)
+                    .Select(x => (int?)x.Rack.Aisle.ZoneId)
+                    .SingleOrDefaultAsync(token);
+                if (!rackLevelZoneId.HasValue || rackLevelZoneId.Value != zone.Id)
+                    throw new BusinessRuleException("Tầng kệ không thuộc khu vực đã chọn.");
+            }
+            entity.ZoneId ??= zone.Id;
+            entity.RackLevelId ??= dto.RackLevelId;
+        }
         if (!dto.IsActive && (await context.InventoryStocks.AnyAsync(x => x.LocationId == id && x.Quantity != 0, token) ||
             await context.PutawayTaskItems.AnyAsync(x => x.SourceLocationId == id && x.PutawayTask.Status != PutawayTaskStatus.Completed && x.PutawayTask.Status != PutawayTaskStatus.Cancelled, token)))
             throw Conflict("Không thể ngừng hoạt động vị trí đang có tồn kho hoặc nhiệm vụ chưa hoàn tất.");
