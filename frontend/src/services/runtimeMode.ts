@@ -5,9 +5,14 @@ export const isBlueprintDemoRuntime = (hostname?: string): boolean => {
 
 export const blueprintDemoReadPermissions = [
   'product.read',
+  'product_category.read',
   'warehouse.read',
   'uom.read',
   'partner.read',
   'receipt.read',
+  'receiving_discrepancy.read',
+  'reason_code.read',
   'putaway.read',
+  'permission.read',
+  'role.read',
 ] as const;
