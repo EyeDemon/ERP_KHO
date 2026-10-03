@@ -94,6 +94,7 @@ public sealed class WarehouseStructureService(
     public async Task<WarehouseZoneDto> UpdateZoneAsync(int warehouseId, int zoneId, UpdateWarehouseZoneDto dto, CancellationToken token = default)
     {
         await warehouses.EnsureWarehouseAccessAsync(warehouseId, token);
+        await using var tx = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
         var entity = await context.WarehouseZones.SingleOrDefaultAsync(x => x.Id == zoneId && x.WarehouseId == warehouseId, token)
             ?? throw new NotFoundException("Không tìm thấy khu vực hoặc bạn không có quyền truy cập.");
         ApplyVersion(entity.RowVersion, dto.RowVersion, context.Entry(entity).Property(x => x.RowVersion));
@@ -125,7 +126,8 @@ public sealed class WarehouseStructureService(
         }
         context.AuditLogs.Add(Audit("WarehouseZone.Updated", "WarehouseZone", entity.Id, warehouseId, $"Active: {entity.IsActive}; Type: {entity.ZoneType}"));
         await context.SaveChangesAsync(token);
-        return Zone(entity, new Dictionary<int, List<WarehouseLocation>>(), new Dictionary<int, List<WarehouseLocation>>());
+        if (tx is not null) await tx.CommitAsync(token);
+        return Zone(entity, new Dictionary<int, List<WarehouseLocation>>(), new Dictionary<int, List<WarehouseLocation>>(), true, true);
     }
 
     public async Task<WarehouseAisleDto> CreateAisleAsync(int warehouseId, int zoneId, CreateWarehouseAisleDto dto, CancellationToken token = default)
@@ -138,17 +140,20 @@ public sealed class WarehouseStructureService(
         if (await context.WarehouseAisles.AnyAsync(x => x.ZoneId == zoneId && x.Code == code, token))
             throw Conflict("Mã dãy kệ đã tồn tại trong khu vực.");
 
+        await using var tx = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
         var entity = new WarehouseAisle { ZoneId = zoneId, Code = code, Name = Optional(dto.Name), CreatedBy = currentUser.UserId };
         context.WarehouseAisles.Add(entity);
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseAisle.Created", "WarehouseAisle", entity.Id, warehouseId, $"ZoneId: {zoneId}; Code: {code}"));
         await context.SaveChangesAsync(token);
+        if (tx is not null) await tx.CommitAsync(token);
         return Aisle(entity, new List<WarehouseRackDto>(), true);
     }
 
     public async Task<WarehouseAisleDto> UpdateAisleAsync(int warehouseId, int zoneId, int aisleId, UpdateWarehouseAisleDto dto, CancellationToken token = default)
     {
         await warehouses.EnsureWarehouseAccessAsync(warehouseId, token);
+        await using var tx = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
         var entity = await context.WarehouseAisles.Include(x => x.Zone)
             .SingleOrDefaultAsync(x => x.Id == aisleId && x.ZoneId == zoneId && x.Zone.WarehouseId == warehouseId, token)
             ?? throw new NotFoundException("Không tìm thấy dãy kệ hoặc bạn không có quyền truy cập.");
@@ -173,17 +178,20 @@ public sealed class WarehouseStructureService(
         if (await context.WarehouseRacks.AnyAsync(x => x.AisleId == aisleId && x.Code == code, token))
             throw Conflict("Mã kệ đã tồn tại trong dãy.");
 
+        await using var tx = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
         var entity = new WarehouseRack { AisleId = aisleId, Code = code, Name = Optional(dto.Name), CreatedBy = currentUser.UserId };
         context.WarehouseRacks.Add(entity);
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseRack.Created", "WarehouseRack", entity.Id, warehouseId, $"AisleId: {aisleId}; Code: {code}"));
         await context.SaveChangesAsync(token);
+        if (tx is not null) await tx.CommitAsync(token);
         return Rack(entity, new List<WarehouseRackLevelDto>(), true);
     }
 
     public async Task<WarehouseRackDto> UpdateRackAsync(int warehouseId, int aisleId, int rackId, UpdateWarehouseRackDto dto, CancellationToken token = default)
     {
         await warehouses.EnsureWarehouseAccessAsync(warehouseId, token);
+        await using var tx = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
         var entity = await context.WarehouseRacks.Include(x => x.Aisle).ThenInclude(x => x.Zone)
             .SingleOrDefaultAsync(x => x.Id == rackId && x.AisleId == aisleId && x.Aisle.Zone.WarehouseId == warehouseId, token)
             ?? throw new NotFoundException("Không tìm thấy kệ hoặc bạn không có quyền truy cập.");
@@ -208,11 +216,13 @@ public sealed class WarehouseStructureService(
         if (await context.WarehouseRackLevels.AnyAsync(x => x.RackId == rackId && x.LevelNo == dto.LevelNo, token))
             throw Conflict("Tầng đã tồn tại trên kệ.");
 
+        await using var tx = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
         var entity = new WarehouseRackLevel { RackId = rackId, LevelNo = dto.LevelNo, CreatedBy = currentUser.UserId };
         context.WarehouseRackLevels.Add(entity);
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseRackLevel.Created", "WarehouseRackLevel", entity.Id, warehouseId, $"RackId: {rackId}; LevelNo: {dto.LevelNo}"));
         await context.SaveChangesAsync(token);
+        if (tx is not null) await tx.CommitAsync(token);
         return Level(entity, new List<WarehouseLocation>(), true, true);
     }
 
