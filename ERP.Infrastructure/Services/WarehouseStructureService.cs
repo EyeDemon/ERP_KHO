@@ -13,6 +13,9 @@ public sealed class WarehouseStructureService(
     IWarehouseAuthorizationService warehouses,
     ICurrentUser currentUser) : IWarehouseStructureService
 {
+    private const string StructureManagePermission = "warehouse_zone.manage";
+    private const string LocationManagePermission = "location.manage";
+
     private static readonly HashSet<string> ZoneTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "RECEIVING", "STORAGE", "PICKING", "QC", "QUARANTINE", "STAGING", "SHIPPING"
@@ -26,6 +29,9 @@ public sealed class WarehouseStructureService(
             .Select(x => new { x.Id, x.Code, x.Name })
             .SingleOrDefaultAsync(token)
             ?? throw new NotFoundException("Không tìm thấy kho hoặc bạn không có quyền truy cập.");
+
+        var canManageStructure = await HasPermissionAsync(StructureManagePermission, token);
+        var canManageLocations = await HasPermissionAsync(LocationManagePermission, token);
 
         var zones = await context.WarehouseZones.AsNoTracking()
             .Where(x => x.WarehouseId == warehouseId)
@@ -50,8 +56,9 @@ public sealed class WarehouseStructureService(
             WarehouseId = warehouse.Id,
             WarehouseCode = warehouse.Code,
             WarehouseName = warehouse.Name,
-            Zones = zones.Select(zone => Zone(zone, byZone, byLevel)).ToList(),
-            SystemLocations = locations.Where(x => !x.ZoneId.HasValue).Select(Location).ToList()
+            Zones = zones.Select(zone => Zone(zone, byZone, byLevel, canManageStructure, canManageLocations)).ToList(),
+            SystemLocations = locations.Where(x => x.IsSystemManaged).Select(x => Location(x, false)).ToList(),
+            UnmappedLocations = locations.Where(x => !x.IsSystemManaged && !x.ZoneId.HasValue).Select(x => Location(x, canManageLocations)).ToList()
         };
     }
 
@@ -81,7 +88,7 @@ public sealed class WarehouseStructureService(
         context.AuditLogs.Add(Audit("WarehouseZone.Created", "WarehouseZone", entity.Id, warehouseId, $"Code: {code}; Type: {type}"));
         await context.SaveChangesAsync(token);
         if (tx is not null) await tx.CommitAsync(token);
-        return Zone(entity, new Dictionary<int, List<WarehouseLocation>>(), new Dictionary<int, List<WarehouseLocation>>());
+        return Zone(entity, new Dictionary<int, List<WarehouseLocation>>(), new Dictionary<int, List<WarehouseLocation>>(), true, true);
     }
 
     public async Task<WarehouseZoneDto> UpdateZoneAsync(int warehouseId, int zoneId, UpdateWarehouseZoneDto dto, CancellationToken token = default)
@@ -95,8 +102,13 @@ public sealed class WarehouseStructureService(
             await context.WarehouseLocations.AnyAsync(x => x.ZoneId == entity.Id && x.IsActive, token))
             throw Conflict("Không thể ngừng hoạt động khu vực còn vị trí đang hoạt động.");
 
+        var nextZoneType = ZoneType(dto.ZoneType);
+        if (!string.Equals(entity.ZoneType, nextZoneType, StringComparison.Ordinal) &&
+            await context.WarehouseLocations.AnyAsync(x => x.ZoneId == entity.Id, token))
+            throw Conflict("Không thể đổi loại khu vực đã có vị trí. Hãy tạo khu vực mới để giữ lịch sử.");
+
         entity.Name = Required(dto.Name, "Tên khu vực");
-        entity.ZoneType = ZoneType(dto.ZoneType);
+        entity.ZoneType = nextZoneType;
         entity.PickPriority = dto.PickPriority;
         entity.PutawayPriority = dto.PutawayPriority;
         entity.IsActive = dto.IsActive;
@@ -131,7 +143,7 @@ public sealed class WarehouseStructureService(
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseAisle.Created", "WarehouseAisle", entity.Id, warehouseId, $"ZoneId: {zoneId}; Code: {code}"));
         await context.SaveChangesAsync(token);
-        return Aisle(entity, new List<WarehouseRackDto>());
+        return Aisle(entity, new List<WarehouseRackDto>(), true);
     }
 
     public async Task<WarehouseAisleDto> UpdateAisleAsync(int warehouseId, int zoneId, int aisleId, UpdateWarehouseAisleDto dto, CancellationToken token = default)
@@ -166,7 +178,7 @@ public sealed class WarehouseStructureService(
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseRack.Created", "WarehouseRack", entity.Id, warehouseId, $"AisleId: {aisleId}; Code: {code}"));
         await context.SaveChangesAsync(token);
-        return Rack(entity, new List<WarehouseRackLevelDto>());
+        return Rack(entity, new List<WarehouseRackLevelDto>(), true);
     }
 
     public async Task<WarehouseRackDto> UpdateRackAsync(int warehouseId, int aisleId, int rackId, UpdateWarehouseRackDto dto, CancellationToken token = default)
@@ -201,7 +213,7 @@ public sealed class WarehouseStructureService(
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseRackLevel.Created", "WarehouseRackLevel", entity.Id, warehouseId, $"RackId: {rackId}; LevelNo: {dto.LevelNo}"));
         await context.SaveChangesAsync(token);
-        return Level(entity, new List<WarehouseLocation>());
+        return Level(entity, new List<WarehouseLocation>(), true, true);
     }
 
     private IQueryable<WarehouseLocation> LocationQuery() => context.WarehouseLocations.AsNoTracking()
@@ -211,7 +223,9 @@ public sealed class WarehouseStructureService(
     private WarehouseZoneDto Zone(
         WarehouseZone x,
         IReadOnlyDictionary<int, List<WarehouseLocation>> byZone,
-        IReadOnlyDictionary<int, List<WarehouseLocation>> byLevel) => new()
+        IReadOnlyDictionary<int, List<WarehouseLocation>> byLevel,
+        bool includeStructureVersion,
+        bool includeLocationVersion) => new()
     {
         Id = x.Id,
         WarehouseId = x.WarehouseId,
@@ -221,30 +235,30 @@ public sealed class WarehouseStructureService(
         PickPriority = x.PickPriority,
         PutawayPriority = x.PutawayPriority,
         IsActive = x.IsActive,
-        RowVersion = Version(x.RowVersion),
+        RowVersion = Version(x.RowVersion, includeStructureVersion),
         Aisles = x.Aisles.OrderBy(a => a.Code).Select(a =>
             Aisle(a, a.Racks.OrderBy(r => r.Code).Select(r =>
                 Rack(r, r.Levels.OrderBy(l => l.LevelNo).Select(l =>
-                    Level(l, byLevel.TryGetValue(l.Id, out var locations) ? locations : new List<WarehouseLocation>())).ToList())).ToList())).ToList(),
-        Locations = byZone.TryGetValue(x.Id, out var zoneLocations) ? zoneLocations.Select(Location).ToList() : []
+                    Level(l, byLevel.TryGetValue(l.Id, out var locations) ? locations : new List<WarehouseLocation>(), includeStructureVersion, includeLocationVersion)).ToList(), includeStructureVersion)).ToList(), includeStructureVersion)).ToList(),
+        Locations = byZone.TryGetValue(x.Id, out var zoneLocations) ? zoneLocations.Select(location => Location(location, includeLocationVersion)).ToList() : []
     };
 
-    private WarehouseAisleDto Aisle(WarehouseAisle x, IReadOnlyList<WarehouseRackDto> racks) => new()
+    private WarehouseAisleDto Aisle(WarehouseAisle x, IReadOnlyList<WarehouseRackDto> racks, bool includeVersion) => new()
     {
-        Id = x.Id, ZoneId = x.ZoneId, Code = x.Code, Name = x.Name, RowVersion = Version(x.RowVersion), Racks = racks
+        Id = x.Id, ZoneId = x.ZoneId, Code = x.Code, Name = x.Name, RowVersion = Version(x.RowVersion, includeVersion), Racks = racks
     };
 
-    private WarehouseRackDto Rack(WarehouseRack x, IReadOnlyList<WarehouseRackLevelDto> levels) => new()
+    private WarehouseRackDto Rack(WarehouseRack x, IReadOnlyList<WarehouseRackLevelDto> levels, bool includeVersion) => new()
     {
-        Id = x.Id, AisleId = x.AisleId, Code = x.Code, Name = x.Name, RowVersion = Version(x.RowVersion), Levels = levels
+        Id = x.Id, AisleId = x.AisleId, Code = x.Code, Name = x.Name, RowVersion = Version(x.RowVersion, includeVersion), Levels = levels
     };
 
-    private WarehouseRackLevelDto Level(WarehouseRackLevel x, IReadOnlyList<WarehouseLocation> locations) => new()
+    private WarehouseRackLevelDto Level(WarehouseRackLevel x, IReadOnlyList<WarehouseLocation> locations, bool includeStructureVersion, bool includeLocationVersion) => new()
     {
-        Id = x.Id, RackId = x.RackId, LevelNo = x.LevelNo, RowVersion = Version(x.RowVersion), Locations = locations.Select(Location).ToList()
+        Id = x.Id, RackId = x.RackId, LevelNo = x.LevelNo, RowVersion = Version(x.RowVersion, includeStructureVersion), Locations = locations.Select(location => Location(location, includeLocationVersion)).ToList()
     };
 
-    private WarehouseLocationDto Location(WarehouseLocation x) => new()
+    private WarehouseLocationDto Location(WarehouseLocation x, bool includeVersion) => new()
     {
         Id = x.Id,
         WarehouseId = x.WarehouseId,
@@ -265,11 +279,16 @@ public sealed class WarehouseStructureService(
         IsPickable = x.IsPickable,
         IsReceivable = x.IsReceivable,
         IsSystemManaged = x.IsSystemManaged,
-        RowVersion = Version(x.RowVersion)
+        RowVersion = Version(x.RowVersion, includeVersion)
     };
 
-    private string? Version(byte[] value) =>
-        currentUser.Role is "Admin" or "Manager" ? Convert.ToBase64String(value) : null;
+    private static string? Version(byte[] value, bool includeVersion) =>
+        includeVersion ? Convert.ToBase64String(value) : null;
+
+    private Task<bool> HasPermissionAsync(string code, CancellationToken token) => context.Users.AsNoTracking()
+        .Where(user => user.Id == currentUser.UserId && user.IsActive)
+        .Select(user => user.Role.Permissions.Any(grant => grant.Permission.Code == code))
+        .SingleOrDefaultAsync(token);
 
     private async Task SaveConcurrencyAsync(CancellationToken token)
     {
