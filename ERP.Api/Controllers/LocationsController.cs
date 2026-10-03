@@ -25,7 +25,7 @@ public sealed class LocationsController(IPutawayService service) : ControllerBas
     public async Task<IActionResult> Create(CreateWarehouseLocationDto dto, CancellationToken ct) =>
         Ok(await service.CreateLocationAsync(dto, ct));
 
-    [HttpPut("{id:int}"), PermissionAuthorize(AppPermissions.LocationManage)]
+    [HttpPatch("{id:int}"), PermissionAuthorize(AppPermissions.LocationManage)]
     public async Task<IActionResult> Update(int id, UpdateWarehouseLocationDto dto, CancellationToken ct) =>
         Ok(await service.UpdateLocationAsync(id, dto, ct));
 }
