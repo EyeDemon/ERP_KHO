@@ -11,6 +11,7 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/', label: 'Tổng quan', section: 'Vận hành', description: 'Điểm vào nhanh tới các work center và trạng thái demo/runtime.', access: 'always' },
   { path: '/products', label: 'Sản phẩm', section: 'Dữ liệu nền', description: 'SKU, danh mục, đơn vị tính và barcode của sản phẩm.', permission: 'product.read' },
   { path: '/warehouses', label: 'Kho hàng', section: 'Dữ liệu nền', description: 'Danh mục kho và trạng thái hoạt động.', permission: 'warehouse.read' },
+  { path: '/warehouse-structure', label: 'Cấu trúc vị trí', section: 'Dữ liệu nền', description: 'Zone, dãy kệ, kệ, tầng và ô/vị trí theo warehouse scope.', permission: 'location.read' },
   { path: '/units', label: 'Đơn vị tính', section: 'Dữ liệu nền', description: 'Danh mục đơn vị tính dùng trong chứng từ và tồn kho.', permission: 'uom.read' },
   { path: '/business-partners', label: 'Đối tác', section: 'Dữ liệu nền', description: 'Nhà cung cấp, khách hàng và thông tin liên hệ.', permission: 'partner.read' },
   { path: '/import-receipts', label: 'Phiếu nhập kho', section: 'Inbound', description: 'Nhận hàng, QC, discrepancy và posting nhập kho.', permission: 'receipt.read' },
