@@ -2,6 +2,19 @@
 
 Status: mandatory for production UI routes. Blueprint-only simulator screens may use their dedicated visual language, but production work centers must use this standard.
 
+## Mandatory design skill
+
+All frontend, UI and UX work in this repository MUST use **UI UX Pro Max** before implementation or visual refactoring:
+
+- Skill source: `nextlevelbuilder/ui-ux-pro-max-skill`
+- Repository: https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
+- Use it for design-system decisions, layout patterns, visual hierarchy, accessibility, responsive behavior, interaction states and anti-pattern checks.
+- Treat its output as design guidance, then reconcile it with this repository's domain constraints, existing production tokens, permissions, concurrency/idempotency rules and read-only Vercel demo behavior.
+- Do not introduce a new visual style, component pattern, color system, typography pattern or interaction convention without first checking the skill guidance and the shared production UI standard.
+- Before delivery, apply the skill's pre-delivery checks, especially visible focus states, contrast, responsive behavior, reduced-motion considerations, non-clipping labels/badges and consistent icon usage.
+
+For this ERP/WMS project, the skill is a **required input to every frontend/UI/UX task**, not an optional reference.
+
 ## Goals
 
 - One visual language across master data, inbound, outbound, inventory control and administration.
