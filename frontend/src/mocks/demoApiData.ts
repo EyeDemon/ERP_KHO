@@ -193,6 +193,9 @@ export const demoStocktakes = [
 export const demoPermissionCatalog = [
   { code: 'product.read', description: 'Xem sản phẩm' },
   { code: 'warehouse.read', description: 'Xem kho' },
+  { code: 'warehouse_zone.manage', description: 'Quản lý cấu trúc khu vực kho' },
+  { code: 'location.read', description: 'Xem vị trí kho' },
+  { code: 'location.manage', description: 'Quản lý vị trí kho' },
   { code: 'receipt.read', description: 'Xem phiếu nhập' },
   { code: 'putaway.read', description: 'Xem nhiệm vụ cất hàng' },
 ];
