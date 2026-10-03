@@ -1054,48 +1054,6 @@
     "exceptionTitle": "TRACE_CHAIN_INCOMPLETE",
     "exceptionDetail": "Một node thiếu source/correlation linkage; hệ thống không được giả định genealogy hoàn chỉnh."
   },
-  "INV-11": {
-    "title": "Inventory Integrity & Reconciliation",
-    "subtitle": "So sánh immutable ledger với balance projection và rebuild có kiểm soát.",
-    "mode": "control",
-    "stages": [
-      "Snapshot",
-      "Compare",
-      "Investigate mismatch",
-      "Rebuild projection",
-      "Verify green"
-    ],
-    "fields": [
-      {
-        "label": "Warehouse",
-        "value": "WH-HCM-01"
-      },
-      {
-        "label": "Ledger total",
-        "value": "128,442 Cái"
-      },
-      {
-        "label": "Balance total",
-        "value": "128,430 Cái"
-      },
-      {
-        "label": "Mismatch",
-        "value": "12 Cái"
-      },
-      {
-        "label": "Affected keys",
-        "value": "2 SKU/location buckets"
-      }
-    ],
-    "commands": [
-      "RUN_RECONCILIATION",
-      "OPEN_MISMATCH",
-      "REBUILD_PROJECTION",
-      "VERIFY"
-    ],
-    "exceptionTitle": "RECONCILIATION_NOT_GREEN",
-    "exceptionDetail": "Projection rebuild vẫn không khớp ledger; warehouse/release gate phải giữ blocked."
-  },
   "TR-02": {
     "title": "In-Transit Inventory Explorer",
     "subtitle": "Theo dõi quantity đang transit theo source/destination/reference/owner.",
