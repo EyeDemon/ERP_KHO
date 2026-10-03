@@ -12,6 +12,8 @@ public interface IReceiptPutawayIntegration
 public interface IPutawayService
 {
     Task<IReadOnlyList<WarehouseLocationDto>> ListLocationsAsync(int warehouseId, CancellationToken token = default);
+    Task<WarehouseLocationDto> GetLocationAsync(int id, CancellationToken token = default);
+    Task<WarehouseLocationDto> ResolveLocationBarcodeAsync(string barcode, int? warehouseId = null, CancellationToken token = default);
     Task<WarehouseLocationDto> CreateLocationAsync(CreateWarehouseLocationDto dto, CancellationToken token = default);
     Task<WarehouseLocationDto> UpdateLocationAsync(int id, UpdateWarehouseLocationDto dto, CancellationToken token = default);
     Task<IReadOnlyList<PutawayTaskListDto>> ListAsync(CancellationToken token = default);

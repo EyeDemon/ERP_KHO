@@ -27,7 +27,7 @@ describe('Approvals page',()=>{
   it('renders loading, queue data, capabilities, filters, and pagination',async()=>{
     let resolve!: (value:unknown)=>void;vi.mocked(apiClient.get).mockReturnValueOnce(new Promise(r=>{resolve=r}) as never);
     const view=render(<Approvals/>);expect(view.getByText('Đang tải...')).toBeTruthy();resolve({data:page()});
-    await view.findByText('TRF-7');expect(view.queryByTitle('Duyệt')).toBeNull();expect(view.getByTitle('Từ chối')).toBeTruthy();
+    await view.findByText('TRF-7');expect(view.getByRole('table',{name:'Hàng đợi phê duyệt'})).toBeTruthy();expect(view.queryByTitle('Duyệt')).toBeNull();expect(view.getByTitle('Từ chối')).toBeTruthy();
     fireEvent.change(view.getByLabelText('Tìm mã chứng từ'),{target:{value:'TRF'}});
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalled());fireEvent.click(view.getByText('Sau'));
   });

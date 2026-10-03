@@ -3,6 +3,8 @@ import apiClient from '../services/apiClient';
 import { currentRole, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import './ExportReceipts.css';
 
 interface ExportReceiptDetail {
   id: number;
@@ -306,183 +308,269 @@ const ExportReceipts = () => {
     return stock;
   };
 
+  const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
+    if (status === 'Cancelled') return 'danger';
+    if (status === 'Dispatched' || status === 'Completed') return 'success';
+    if (status === 'Draft' || status === 'Approved') return 'warning';
+    return 'neutral';
+  };
+
+  const statusLabel = (status: string) => ({ Draft: 'Nháp', Approved: 'Đã duyệt', Dispatched: 'Đã xuất kho', Cancelled: 'Đã hủy', Completed: 'Hoàn tất' }[status] || status);
+
   return (
-    <div>
-      <h2>Quản Lý Phiếu Xuất Kho</h2>
-      {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-      {successMsg && <div style={{ color: 'green', marginBottom: '10px' }}>{successMsg}</div>}
-      {receipts.some(receipt => !receipt.writeEnabled) && <div role="status" style={{ color: '#92400e', marginBottom: '10px' }}>Workflow xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.</div>}
-      
-      {canOperate && <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
-        <h3>Tạo Phiếu Xuất Kho</h3>
-        <form onSubmit={handleCreate}>
-          <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
-            <div>
-              <label style={{ display: 'block' }}>Mã phiếu</label>
-              <input value={code} onChange={e => setCode(e.target.value)} required />
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>Kho</label>
-              <select value={warehouseId} onChange={e => setWarehouseId(e.target.value ? Number(e.target.value) : '')} required>
-                <option value="">-- Chọn kho --</option>
-                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>Ghi chú phiếu</label>
-              <input value={note} onChange={e => setNote(e.target.value)} />
-            </div>
-            <div><label style={{display:'block'}}>Khách hàng</label><select aria-label="Khách hàng" value={customerId} onChange={e=>setCustomerId(e.target.value?Number(e.target.value):'')}><option value="">-- Không chọn --</option>{customers.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}</select></div>
+    <UiPage>
+      <div className="export-receipts">
+        <UiPageHeader
+          eyebrow="Outbound"
+          title="Quản Lý Phiếu Xuất Kho"
+          description="Tạo và theo dõi phiếu xuất từ kiểm tra tồn khả dụng, duyệt và giữ hàng đến xác nhận hàng rời kho."
+        />
+
+        {error && <p role="alert">{error}</p>}
+        {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
+        {receipts.some(receipt => !receipt.writeEnabled) && (
+          <div role="status" className="export-maintenance">
+            Workflow xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.
           </div>
+        )}
 
-          <h4>Chi tiết phiếu</h4>
-          {details.map((d, i) => {
-            const stockDisplay = getStockDisplay(warehouseId, d.productId);
-            const isExceed = typeof stockDisplay === 'number' && Number(d.quantity) > stockDisplay;
-            return (
-              <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-                <select 
-                  value={d.productId} 
-                  onChange={e => handleDetailChange(i, 'productId', e.target.value ? Number(e.target.value) : '')}
-                  required
-                >
-                  <option value="">-- Chọn sản phẩm --</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
-                </select>
-                
-                <input 
-                  type="number" 
-                  placeholder="Số lượng" 
-                  value={d.quantity} 
-                  onChange={e => handleDetailChange(i, 'quantity', e.target.value ? Number(e.target.value) : '')}
-                  required
-                  min="0.01"
-                  step="0.01"
-                  style={{ borderColor: isExceed ? 'red' : undefined }}
-                />
-                
-                <span style={{ fontSize: '14px', minWidth: '100px', color: isExceed ? 'red' : 'inherit' }}>
-                  (Tồn: {stockDisplay})
-                </span>
-                
-                <input 
-                  type="number" 
-                  placeholder="Đơn giá" 
-                  value={d.unitPrice} 
-                  onChange={e => handleDetailChange(i, 'unitPrice', e.target.value ? Number(e.target.value) : '')}
-                  required
-                  min="0"
-                  step="0.01"
-                />
-
-                <input 
-                  placeholder="Ghi chú" 
-                  value={d.note} 
-                  onChange={e => handleDetailChange(i, 'note', e.target.value)}
-                />
-
-                <button type="button" onClick={() => handleRemoveDetail(i)}>Xóa</button>
+        {canOperate && (
+          <UiCard title="Tạo Phiếu Xuất Kho">
+            <form onSubmit={handleCreate} className="export-form">
+              <div className="export-form-grid">
+                <label className="ui-stack">
+                  <span>Mã phiếu</span>
+                  <input aria-label="Mã phiếu" value={code} onChange={e => setCode(e.target.value)} required />
+                </label>
+                <label className="ui-stack">
+                  <span>Kho</span>
+                  <select aria-label="Kho" value={warehouseId} onChange={e => setWarehouseId(e.target.value ? Number(e.target.value) : '')} required>
+                    <option value="">-- Chọn kho --</option>
+                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </label>
+                <label className="ui-stack">
+                  <span>Ghi chú phiếu</span>
+                  <input aria-label="Ghi chú phiếu" value={note} onChange={e => setNote(e.target.value)} />
+                </label>
+                <label className="ui-stack">
+                  <span>Khách hàng</span>
+                  <select aria-label="Khách hàng" value={customerId} onChange={e => setCustomerId(e.target.value ? Number(e.target.value) : '')}>
+                    <option value="">-- Không chọn --</option>
+                    {customers.filter(x => x.isActive).map(x => <option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}
+                  </select>
+                </label>
               </div>
-            );
-          })}
-          
-          <button type="button" onClick={handleAddDetail} style={{ marginBottom: '15px' }}>+ Thêm dòng</button>
-          
-          <div style={{ marginTop: '15px' }}>
-            <button 
-              type="submit" 
-              disabled={creating || isFormInvalid()}
-              style={{ 
-                backgroundColor: creating || isFormInvalid() ? '#95a5a6' : '#2ecc71',
-                color: '#fff', 
-                padding: '10px 20px', 
-                border: 'none', 
-                cursor: creating || isFormInvalid() ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {creating ? 'Đang lưu...' : 'Tạo Phiếu Xuất'}
-            </button>
-          </div>
-        </form>
-      </div>}
 
-      <hr style={{ margin: '30px 0' }} />
+              <h3>Chi tiết phiếu</h3>
+              <div className="ui-stack">
+                {details.map((d, i) => {
+                  const stockDisplay = getStockDisplay(warehouseId, d.productId);
+                  const isExceed = typeof stockDisplay === 'number' && Number(d.quantity) > stockDisplay;
+                  return (
+                    <div key={i} className="export-line">
+                      <label className="ui-stack">
+                        <span>Sản phẩm</span>
+                        <select
+                          aria-label={'Sản phẩm dòng ' + (i + 1)}
+                          value={d.productId}
+                          onChange={e => handleDetailChange(i, 'productId', e.target.value ? Number(e.target.value) : '')}
+                          required
+                        >
+                          <option value="">-- Chọn sản phẩm --</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
+                        </select>
+                      </label>
 
-      <h3>Danh Sách Phiếu Xuất</h3>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã phiếu</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Kho</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Khách hàng</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Người tạo</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>
-          </tr>
-        </thead>
-        <tbody>
-          {receipts.map(r => (
-            <tr key={r.id}>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.code}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.warehouseName}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.customerCode ? `${r.customerCode} - ${r.customerName}` : '—'}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.status}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.createdByName}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
-                <button onClick={() => handleViewDetails(r.id)} style={{ cursor: 'pointer', marginRight: '5px' }}>Chi tiết</button>
-                <button disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)} style={{ cursor: 'pointer', marginRight: '5px' }}>{printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}</button>
-                {canOperate && r.status === 'Draft' && (
-                  <>
-                    {canApproveAndReserve && r.createdBy !== userId && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')} style={{ cursor: 'pointer', marginRight: '5px' }}>Duyệt và giữ hàng</button>}
-                    {(role === 'Admin' || role === 'Manager') && r.createdBy !== userId && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Duyệt và xuất ngay</button>}
-                    <button disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy</button>
-                  </>
-                )}
-                {canOperate && r.status === 'Approved' && <><button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Xác nhận xuất kho</button><button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy và giải phóng hàng</button></>}
-              </td>
-            </tr>
-          ))}
-          {receipts.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '10px' }}>Chưa có phiếu xuất nào</td></tr>}
-        </tbody>
-      </table>
+                      <label className="ui-stack">
+                        <span>Số lượng</span>
+                        <input
+                          className={isExceed ? 'export-stock-input danger' : 'export-stock-input'}
+                          aria-label={'Số lượng dòng ' + (i + 1)}
+                          type="number"
+                          placeholder="Số lượng"
+                          value={d.quantity}
+                          onChange={e => handleDetailChange(i, 'quantity', e.target.value ? Number(e.target.value) : '')}
+                          required
+                          min="0.01"
+                          step="0.01"
+                        />
+                      </label>
 
-      {selectedReceipt && (
-        <div style={{ padding: '15px', border: '1px solid #34495e', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>
-          <h3>Chi Tiết Phiếu Xuất: {selectedReceipt.code}</h3>
-          <p><strong>Kho:</strong> {selectedReceipt.warehouseName}</p>
-          <p><strong>Khách hàng:</strong> {selectedReceipt.customerCode ? `${selectedReceipt.customerCode} - ${selectedReceipt.customerName}` : '—'}</p>
-          {selectedReceipt.status === 'Draft' && canOperate && <p><label>Đổi khách hàng <select aria-label="Đổi khách hàng" disabled={partnerUpdating} value={selectedReceipt.customerId||''} onChange={e=>void changeCustomer(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{customers.filter(x=>x.isActive||x.id===selectedReceipt.customerId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</p>}
-          <p><strong>Trạng thái:</strong> {selectedReceipt.status}</p>
-          <p><strong>Ghi chú:</strong> {selectedReceipt.note || '-'}</p>
-          <p><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</p>
-          {selectedReceipt.status === 'Approved' && <><p><strong>Đang giữ hàng:</strong> {selectedReceipt.reservationStatus}</p><p><strong>Người duyệt:</strong> {selectedReceipt.approvedByName || '-'}</p><p><strong>Thời gian duyệt:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString() : '-'}</p></>}
-          {selectedReceipt.status === 'Dispatched' && <><p><strong>Đã xuất kho:</strong> {selectedReceipt.dispatchMode}</p><p><strong>Người duyệt/xuất:</strong> {selectedReceipt.approvedByName || '-'} / {selectedReceipt.dispatchedByName || '-'}</p><p><strong>Thời gian duyệt/xuất:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString() : '-'} / {selectedReceipt.dispatchedAt ? new Date(selectedReceipt.dispatchedAt).toLocaleString() : '-'}</p></>}
-          
-          <h4>Sản phẩm</h4>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-                <th style={{ padding: '5px', border: '1px solid #bdc3c7' }}>Sản phẩm</th>
-                <th style={{ padding: '5px', border: '1px solid #bdc3c7' }}>Số lượng</th>
-                <th style={{ padding: '5px', border: '1px solid #bdc3c7' }}>Đơn giá</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedReceipt.details.map(d => (
-                <tr key={d.id}>
-                  <td style={{ padding: '5px', border: '1px solid #bdc3c7' }}>{d.productCode} - {d.productName}</td>
-                  <td style={{ padding: '5px', border: '1px solid #bdc3c7' }}>{d.quantity}</td>
-                  <td style={{ padding: '5px', border: '1px solid #bdc3c7' }}>{d.unitPrice}</td>
+                      <div className={isExceed ? 'export-stock danger' : 'export-stock'} aria-live="polite">
+                        Tồn: {stockDisplay}
+                      </div>
+
+                      <label className="ui-stack">
+                        <span>Đơn giá</span>
+                        <input
+                          aria-label={'Đơn giá dòng ' + (i + 1)}
+                          type="number"
+                          placeholder="Đơn giá"
+                          value={d.unitPrice}
+                          onChange={e => handleDetailChange(i, 'unitPrice', e.target.value ? Number(e.target.value) : '')}
+                          required
+                          min="0"
+                          step="0.01"
+                        />
+                      </label>
+
+                      <label className="ui-stack">
+                        <span>Ghi chú</span>
+                        <input
+                          aria-label={'Ghi chú dòng ' + (i + 1)}
+                          placeholder="Ghi chú"
+                          value={d.note}
+                          onChange={e => handleDetailChange(i, 'note', e.target.value)}
+                        />
+                      </label>
+
+                      <div className="export-actions">
+                        <button type="button" aria-label={'Xóa dòng ' + (i + 1)} onClick={() => handleRemoveDetail(i)}>Xóa</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="export-section-actions">
+                <button type="button" onClick={handleAddDetail}>+ Thêm dòng</button>
+                <button type="submit" disabled={creating || isFormInvalid()}>
+                  {creating ? 'Đang lưu...' : 'Tạo Phiếu Xuất'}
+                </button>
+              </div>
+            </form>
+          </UiCard>
+        )}
+
+        <UiCard title="Danh Sách Phiếu Xuất">
+          <UiTableScroll>
+            <table aria-label="Danh sách phiếu xuất">
+              <thead>
+                <tr>
+                  <th>Mã phiếu</th>
+                  <th>Kho</th>
+                  <th>Khách hàng</th>
+                  <th>Trạng thái</th>
+                  <th>Người tạo</th>
+                  <th>Hành động</th>
                 </tr>
-              ))}
-              {selectedReceipt.details.length === 0 && <tr><td colSpan={3} style={{ textAlign: 'center', padding: '5px' }}>Không có chi tiết</td></tr>}
-            </tbody>
-          </table>
-          <button onClick={() => setSelectedReceipt(null)} style={{ marginTop: '15px', cursor: 'pointer', padding: '8px 15px' }}>Đóng chi tiết</button>
-        </div>
-      )}
-      {printReceipt && printFetchedAt && <ReceiptPrintPreview kind="export" receipt={printReceipt} fetchedAt={printFetchedAt} onClose={closePrintPreview} />}
-    </div>
+              </thead>
+              <tbody>
+                {receipts.map(r => (
+                  <tr key={r.id}>
+                    <td><strong>{r.code}</strong></td>
+                    <td>{r.warehouseName}</td>
+                    <td>{r.customerCode ? r.customerCode + ' - ' + r.customerName : '—'}</td>
+                    <td><UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge></td>
+                    <td>{r.createdByName}</td>
+                    <td>
+                      <div className="export-row-actions">
+                        <button type="button" onClick={() => handleViewDetails(r.id)}>Chi tiết</button>
+                        <button type="button" disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)}>
+                          {printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}
+                        </button>
+                        {canOperate && r.status === 'Draft' && (
+                          <>
+                            {canApproveAndReserve && r.createdBy !== userId && (
+                              <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')}>
+                                Duyệt và giữ hàng
+                              </button>
+                            )}
+                            {(role === 'Admin' || role === 'Manager') && r.createdBy !== userId && (
+                              <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')}>
+                                Duyệt và xuất ngay
+                              </button>
+                            )}
+                            <button type="button" disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)}>Hủy</button>
+                          </>
+                        )}
+                        {canOperate && r.status === 'Approved' && (
+                          <>
+                            <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')}>Xác nhận xuất kho</button>
+                            <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)}>Hủy và giải phóng hàng</button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {receipts.length === 0 && <tr><td colSpan={6} className="ui-empty-cell">Chưa có phiếu xuất nào</td></tr>}
+              </tbody>
+            </table>
+          </UiTableScroll>
+        </UiCard>
+
+        {selectedReceipt && (
+          <UiCard title={'Chi Tiết Phiếu Xuất: ' + selectedReceipt.code}>
+            <div className="export-detail-meta">
+              <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
+              <div><strong>Khách hàng:</strong> {selectedReceipt.customerCode ? selectedReceipt.customerCode + ' - ' + selectedReceipt.customerName : '—'}</div>
+              {selectedReceipt.status === 'Draft' && canOperate && (
+                <div>
+                  <label className="ui-stack">
+                    <span>Đổi khách hàng</span>
+                    <select aria-label="Đổi khách hàng" disabled={partnerUpdating} value={selectedReceipt.customerId || ''} onChange={e => void changeCustomer(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">-- Gỡ liên kết --</option>
+                      {customers.filter(x => x.isActive || x.id === selectedReceipt.customerId).map(x => <option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive ? '' : ' (ngừng hoạt động)'}</option>)}
+                    </select>
+                  </label>
+                  {partnerUpdating && <span role="status">Đang cập nhật...</span>}
+                </div>
+              )}
+              <div><strong>Trạng thái:</strong> <UiBadge tone={statusTone(selectedReceipt.status)}>{statusLabel(selectedReceipt.status)}</UiBadge></div>
+              <div><strong>Ghi chú:</strong> {selectedReceipt.note || '—'}</div>
+              <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString('vi-VN')}</div>
+              {selectedReceipt.status === 'Approved' && (
+                <>
+                  <div><strong>Đang giữ hàng:</strong> {selectedReceipt.reservationStatus || '—'}</div>
+                  <div><strong>Người duyệt:</strong> {selectedReceipt.approvedByName || '—'}</div>
+                  <div><strong>Thời gian duyệt:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString('vi-VN') : '—'}</div>
+                </>
+              )}
+              {selectedReceipt.status === 'Dispatched' && (
+                <>
+                  <div><strong>Đã xuất kho:</strong> {selectedReceipt.dispatchMode || '—'}</div>
+                  <div><strong>Người duyệt/xuất:</strong> {selectedReceipt.approvedByName || '—'} / {selectedReceipt.dispatchedByName || '—'}</div>
+                  <div><strong>Thời gian duyệt/xuất:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString('vi-VN') : '—'} / {selectedReceipt.dispatchedAt ? new Date(selectedReceipt.dispatchedAt).toLocaleString('vi-VN') : '—'}</div>
+                </>
+              )}
+            </div>
+
+            <h3>Sản phẩm</h3>
+            <UiTableScroll>
+              <table aria-label={'Chi tiết phiếu xuất ' + selectedReceipt.code}>
+                <thead>
+                  <tr>
+                    <th>Sản phẩm</th>
+                    <th className="export-numeric">Số lượng</th>
+                    <th className="export-numeric">Đơn giá</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedReceipt.details.map(d => (
+                    <tr key={d.id}>
+                      <td>{d.productCode} - {d.productName}</td>
+                      <td className="export-numeric">{d.quantity}</td>
+                      <td className="export-numeric">{d.unitPrice}</td>
+                    </tr>
+                  ))}
+                  {selectedReceipt.details.length === 0 && <tr><td colSpan={3} className="ui-empty-cell">Không có chi tiết</td></tr>}
+                </tbody>
+              </table>
+            </UiTableScroll>
+
+            <div className="export-section-actions">
+              <button type="button" onClick={() => setSelectedReceipt(null)}>Đóng chi tiết</button>
+            </div>
+          </UiCard>
+        )}
+
+        {printReceipt && printFetchedAt && (
+          <ReceiptPrintPreview kind="export" receipt={printReceipt} fetchedAt={printFetchedAt} onClose={closePrintPreview} />
+        )}
+      </div>
+    </UiPage>
   );
 };
 

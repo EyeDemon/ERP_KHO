@@ -27,43 +27,45 @@ const Login = () => {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f4f6f8' }}>
-      <form onSubmit={handleLogin} style={{ padding: '30px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', width: '350px' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Đăng nhập ERP KHO</h2>
-
-        {error && <div role="alert" style={{ color: 'red', marginBottom: '15px', textAlign: 'center' }}>{error}</div>}
-
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="login-username" style={{ display: 'block', marginBottom: '5px' }}>Tên đăng nhập</label>
-          <input
-            id="login-username"
-            autoComplete="username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-            required
-          />
+    <main className="login-page production-ui">
+      <section className="login-card" aria-labelledby="login-title">
+        <div className="login-heading">
+          <div className="ui-eyebrow">ERP WMS</div>
+          <h1 id="login-title">Đăng nhập hệ thống</h1>
+          <p>Truy cập các work center theo vai trò và quyền đã được cấp.</p>
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <label htmlFor="login-password" style={{ display: 'block', marginBottom: '5px' }}>Mật khẩu</label>
-          <input
-            id="login-password"
-            autoComplete="current-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-            required
-          />
-        </div>
+        <form onSubmit={handleLogin} className="login-form">
+          {error && <div role="alert">{error}</div>}
 
-        <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '16px' }}>
-          Đăng nhập
-        </button>
-      </form>
-    </div>
+          <label className="ui-stack" htmlFor="login-username">
+            <span>Tên đăng nhập</span>
+            <input
+              id="login-username"
+              autoComplete="username"
+              type="text"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              required
+            />
+          </label>
+
+          <label className="ui-stack" htmlFor="login-password">
+            <span>Mật khẩu</span>
+            <input
+              id="login-password"
+              autoComplete="current-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+
+          <button type="submit" className="ui-primary-button">Đăng nhập</button>
+        </form>
+      </section>
+    </main>
   );
 };
 

@@ -24,6 +24,10 @@ public class ErpKhoDbContext : DbContext
     public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
     public DbSet<BusinessPartner> BusinessPartners => Set<BusinessPartner>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<WarehouseZone> WarehouseZones => Set<WarehouseZone>();
+    public DbSet<WarehouseAisle> WarehouseAisles => Set<WarehouseAisle>();
+    public DbSet<WarehouseRack> WarehouseRacks => Set<WarehouseRack>();
+    public DbSet<WarehouseRackLevel> WarehouseRackLevels => Set<WarehouseRackLevel>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<ImportReceipt> ImportReceipts => Set<ImportReceipt>();
@@ -89,9 +93,25 @@ public class ErpKhoDbContext : DbContext
             modelBuilder.Entity<ProductCategory>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
             modelBuilder.Entity<ProductBarcode>().Property(x => x.Value).UseCollation("Latin1_General_100_BIN2");
             modelBuilder.Entity<WarehouseLocation>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
-            modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t => t.HasCheckConstraint(
-                "CK_WarehouseLocations_Code",
-                "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0"));
+            modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t =>
+            {
+                t.HasCheckConstraint("CK_WarehouseLocations_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
+                t.HasCheckConstraint("CK_WarehouseLocations_RackLevelRequiresZone", "[RackLevelId] IS NULL OR [ZoneId] IS NOT NULL");
+            });
+            modelBuilder.Entity<WarehouseZone>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
+            modelBuilder.Entity<WarehouseZone>().ToTable("WarehouseZones", t =>
+            {
+                t.HasCheckConstraint("CK_WarehouseZones_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
+                t.HasCheckConstraint("CK_WarehouseZones_Type", "[ZoneType] = UPPER(LTRIM(RTRIM([ZoneType]))) AND LEN([ZoneType]) > 0");
+            });
+            modelBuilder.Entity<WarehouseAisle>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
+            modelBuilder.Entity<WarehouseAisle>().ToTable("WarehouseAisles", t =>
+                t.HasCheckConstraint("CK_WarehouseAisles_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0"));
+            modelBuilder.Entity<WarehouseRack>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
+            modelBuilder.Entity<WarehouseRack>().ToTable("WarehouseRacks", t =>
+                t.HasCheckConstraint("CK_WarehouseRacks_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0"));
+            modelBuilder.Entity<WarehouseRackLevel>().ToTable("WarehouseRackLevels", t =>
+                t.HasCheckConstraint("CK_WarehouseRackLevels_LevelNo", "[LevelNo] > 0"));
             modelBuilder.Entity<PutawayTaskItem>().ToTable("PutawayTaskItems", t =>
             {
                 t.HasCheckConstraint("CK_PutawayTaskItems_Required", "[RequiredBaseQuantity] > 0");

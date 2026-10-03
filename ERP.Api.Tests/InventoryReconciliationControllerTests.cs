@@ -1,11 +1,14 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ERP.Api.Controllers;
+using ERP.Api.Authorization;
 using ERP.Application.Common;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Reflection;
 using Moq;
 using Xunit;
 
@@ -13,6 +16,14 @@ namespace ERP.Api.Tests
 {
     public class InventoryReconciliationControllerTests
     {
+        [Fact]
+        public void Controller_AllowsAllAuthenticatedOperationalRoles()
+        {
+            var attribute = typeof(InventoryReconciliationController).GetCustomAttribute<AuthorizeAttribute>();
+            attribute.Should().NotBeNull();
+            attribute!.Roles.Should().Be(AppRoles.AllRoles);
+        }
+
         [Fact]
         public async Task GetReconciliations_ReturnsOkResult_WithPagedResult()
         {

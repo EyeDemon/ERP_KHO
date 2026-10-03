@@ -1,0 +1,3810 @@
+{
+  "WH-03": {
+    "title": "Capacity & Storage Constraint Workbench",
+    "subtitle": "Mô phỏng kiểm tra sức chứa, storage class và compatibility trước putaway/move.",
+    "mode": "workbench",
+    "stages": [
+      "Chọn vị trí",
+      "Đọc capacity",
+      "Kiểm tra compatibility",
+      "Kiểm tra incoming load",
+      "Đủ điều kiện"
+    ],
+    "fields": [
+      {
+        "label": "Location",
+        "value": "A01-R02-L03-B04"
+      },
+      {
+        "label": "Storage class",
+        "value": "DRY-A"
+      },
+      {
+        "label": "Capacity",
+        "value": "1,200 kg / 8 pallet"
+      },
+      {
+        "label": "Đang sử dụng",
+        "value": "890 kg / 6 pallet"
+      },
+      {
+        "label": "Incoming",
+        "value": "120 kg / 1 pallet"
+      }
+    ],
+    "commands": [
+      "CHECK_CAPACITY",
+      "CHECK_COMPATIBILITY",
+      "RESERVE_CAPACITY"
+    ],
+    "exceptionTitle": "LOCATION_CAPACITY_EXCEEDED",
+    "exceptionDetail": "Incoming load làm vượt weight/volume/pallet capacity hoặc vi phạm storage compatibility."
+  },
+  "WH-04": {
+    "title": "Warehouse Map & Heatmap",
+    "subtitle": "Bản đồ vận hành theo zone/bin với utilization, congestion và exception layer.",
+    "mode": "control",
+    "stages": [
+      "Overview",
+      "Utilization layer",
+      "Congestion layer",
+      "Exception layer",
+      "Drill-down bin"
+    ],
+    "fields": [
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Zone nóng nhất",
+        "value": "PICK-A • 91% utilization"
+      },
+      {
+        "label": "Congestion",
+        "value": "AISLE A03 • High"
+      },
+      {
+        "label": "Blocked bins",
+        "value": "3"
+      },
+      {
+        "label": "Open tasks",
+        "value": "27"
+      }
+    ],
+    "commands": [
+      "CHANGE_LAYER",
+      "FOCUS_ZONE",
+      "OPEN_LOCATION_DETAIL"
+    ],
+    "exceptionTitle": "MAP_STALE_SNAPSHOT",
+    "exceptionDetail": "Heatmap snapshot cũ hơn operational read model; cần refresh trước khi điều phối."
+  },
+  "WH-05": {
+    "title": "Warehouse Calendar & Shift",
+    "subtitle": "Mô phỏng timezone, ca làm việc, cutoff và capacity theo ngày vận hành.",
+    "mode": "configuration",
+    "stages": [
+      "Chọn ngày",
+      "Kiểm tra lịch kho",
+      "Kiểm tra ca",
+      "Áp cutoff",
+      "Xác nhận capacity"
+    ],
+    "fields": [
+      {
+        "label": "Warehouse timezone",
+        "value": "Asia/Ho_Chi_Minh"
+      },
+      {
+        "label": "Ngày",
+        "value": "02/10/2026"
+      },
+      {
+        "label": "Shift",
+        "value": "Ca 1 • 06:00–14:00"
+      },
+      {
+        "label": "Inbound cutoff",
+        "value": "12:30"
+      },
+      {
+        "label": "Capacity",
+        "value": "18 / 24 dock-hours còn lại"
+      }
+    ],
+    "commands": [
+      "ADD_SHIFT",
+      "SET_CUTOFF",
+      "CLOSE_DAY"
+    ],
+    "exceptionTitle": "WAREHOUSE_CALENDAR_CLOSED",
+    "exceptionDetail": "Action được yêu cầu ngoài giờ mở cửa/cutoff hoặc capacity ca đã hết."
+  },
+  "WH-06": {
+    "title": "Dock & Yard Control",
+    "subtitle": "Theo dõi xe từ gate arrival đến check-in, dock assignment, in-service và completion.",
+    "mode": "control",
+    "stages": [
+      "DRAFT",
+      "CONFIRMED",
+      "ARRIVED",
+      "CHECKED_IN",
+      "DOCK_ASSIGNED",
+      "IN_SERVICE",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "Appointment",
+        "value": "APT-2026-1042"
+      },
+      {
+        "label": "Vehicle",
+        "value": "51C-882.14"
+      },
+      {
+        "label": "Carrier",
+        "value": "CAR-FAST-01"
+      },
+      {
+        "label": "Dock",
+        "value": "D-04"
+      },
+      {
+        "label": "Queue position",
+        "value": "#2"
+      }
+    ],
+    "commands": [
+      "CHECK_IN",
+      "ASSIGN_DOCK",
+      "START_SERVICE",
+      "COMPLETE_SERVICE"
+    ],
+    "exceptionTitle": "DOCK_DOUBLE_ASSIGNMENT",
+    "exceptionDetail": "Dock đã được giữ bởi appointment khác hoặc vehicle chưa CHECKED_IN."
+  },
+  "WH-07": {
+    "title": "Operational Calendar Exceptions",
+    "subtitle": "Quản lý holiday, maintenance và emergency override với precedence rõ ràng.",
+    "mode": "configuration",
+    "stages": [
+      "Chọn scope",
+      "Tạo exception",
+      "Đặt priority",
+      "Review conflict",
+      "Publish"
+    ],
+    "fields": [
+      {
+        "label": "Scope",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Exception type",
+        "value": "MAINTENANCE_WINDOW"
+      },
+      {
+        "label": "Window",
+        "value": "04/10/2026 22:00–23:30"
+      },
+      {
+        "label": "Priority",
+        "value": "Warehouse override"
+      },
+      {
+        "label": "Affects",
+        "value": "Receiving + Loading"
+      }
+    ],
+    "commands": [
+      "CREATE_EXCEPTION",
+      "RESCHEDULE",
+      "EMERGENCY_OVERRIDE"
+    ],
+    "exceptionTitle": "CALENDAR_PRECEDENCE_CONFLICT",
+    "exceptionDetail": "Hai exception cùng scope/window có precedence không xác định."
+  },
+  "IN-01": {
+    "title": "Purchase Order / ASN Workbench",
+    "subtitle": "Expected inbound từ ERP/Procurement, không làm tăng On Hand cho tới Receipt POST.",
+    "mode": "workbench",
+    "stages": [
+      "DRAFT",
+      "CONFIRMED",
+      "ARRIVED",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "PO",
+        "value": "PO-2026-8831"
+      },
+      {
+        "label": "ASN",
+        "value": "ASN-2026-4172"
+      },
+      {
+        "label": "Supplier",
+        "value": "SUP-0008 • Minh Phát"
+      },
+      {
+        "label": "Expected",
+        "value": "120 Thùng"
+      },
+      {
+        "label": "ETA",
+        "value": "02/10/2026 16:30"
+      }
+    ],
+    "commands": [
+      "IMPORT_PO",
+      "CONFIRM_ASN",
+      "MARK_ARRIVED"
+    ],
+    "exceptionTitle": "ASN_REFERENCE_MISMATCH",
+    "exceptionDetail": "ASN không khớp PO/supplier/product hoặc expected quantity vượt contract policy.",
+    "quantity": {
+      "label": "Expected quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 10
+    }
+  },
+  "IN-02": {
+    "title": "Receiving Appointment",
+    "subtitle": "Đặt lịch và điều phối vehicle tới dock mà không trộn ARRIVED, CHECKED_IN và DOCK_ASSIGNED.",
+    "mode": "wizard",
+    "stages": [
+      "DRAFT",
+      "CONFIRMED",
+      "ARRIVED",
+      "CHECKED_IN",
+      "DOCK_ASSIGNED",
+      "IN_SERVICE",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "Appointment",
+        "value": "APT-2026-1042"
+      },
+      {
+        "label": "ASN",
+        "value": "ASN-2026-4172"
+      },
+      {
+        "label": "Vehicle",
+        "value": "51C-882.14"
+      },
+      {
+        "label": "Window",
+        "value": "16:00–16:30"
+      },
+      {
+        "label": "Preferred dock",
+        "value": "D-04"
+      }
+    ],
+    "commands": [
+      "CONFIRM",
+      "CHECK_IN",
+      "ASSIGN_DOCK",
+      "START_SERVICE"
+    ],
+    "exceptionTitle": "APPOINTMENT_NO_SHOW",
+    "exceptionDetail": "Vehicle không đến đúng window hoặc gate check-in không khớp appointment."
+  },
+  "IN-05": {
+    "title": "Receiving Discrepancy Resolution",
+    "subtitle": "Tách under/over receipt khỏi QC disposition và giữ approval khi vượt tolerance.",
+    "mode": "wizard",
+    "stages": [
+      "DETECTED",
+      "PENDING",
+      "SUBMITTED",
+      "PENDING_APPROVAL",
+      "RESOLVED"
+    ],
+    "fields": [
+      {
+        "label": "Receipt",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Expected",
+        "value": "100 Thùng"
+      },
+      {
+        "label": "Received",
+        "value": "108 Thùng"
+      },
+      {
+        "label": "Variance",
+        "value": "+8 Thùng"
+      },
+      {
+        "label": "Tolerance",
+        "value": "±2%"
+      }
+    ],
+    "commands": [
+      "CREATE_DISCREPANCY",
+      "SUBMIT",
+      "APPROVE_OVERRIDE",
+      "RESOLVE"
+    ],
+    "exceptionTitle": "RECEIPT_OVER_TOLERANCE",
+    "exceptionDetail": "Received quantity vượt tolerance; POST/QC completion bị chặn cho tới khi resolution hợp lệ.",
+    "quantity": {
+      "label": "Observed quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 108
+    }
+  },
+  "IN-06": {
+    "title": "Inbound QC Work Center",
+    "subtitle": "Inspection + evidence + disposition trước READY_TO_POST cho receipt yêu cầu QC.",
+    "mode": "workbench",
+    "stages": [
+      "QC_PENDING",
+      "INSPECTING",
+      "QC_COMPLETED",
+      "READY_TO_POST"
+    ],
+    "fields": [
+      {
+        "label": "Receipt",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Received",
+        "value": "96 Cái"
+      },
+      {
+        "label": "Accepted",
+        "value": "90 Cái"
+      },
+      {
+        "label": "Damaged / Rejected",
+        "value": "4 / 2 Cái"
+      }
+    ],
+    "commands": [
+      "START_INSPECTION",
+      "CAPTURE_EVIDENCE",
+      "COMPLETE_INSPECTION",
+      "APPROVE_DISPOSITION"
+    ],
+    "exceptionTitle": "QC_DISPOSITION_UNBALANCED",
+    "exceptionDetail": "Accepted + Damaged + Rejected phải bằng Received trước khi receipt có thể READY_TO_POST.",
+    "quantity": {
+      "label": "Accepted quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 90
+    }
+  },
+  "IN-09": {
+    "title": "Putaway Rule Engine",
+    "subtitle": "Mô phỏng candidate eligibility, capacity và ranking; P1 hiển thị lý do đề xuất.",
+    "mode": "workbench",
+    "stages": [
+      "Load candidates",
+      "Compatibility",
+      "Capacity",
+      "Ranking",
+      "Recommendation"
+    ],
+    "fields": [
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Source",
+        "value": "RECEIVING-01"
+      },
+      {
+        "label": "Candidate #1",
+        "value": "A01-R02-L03-B04 • 92 điểm"
+      },
+      {
+        "label": "Candidate #2",
+        "value": "A02-R01-L01-B02 • 78 điểm"
+      },
+      {
+        "label": "Reason",
+        "value": "Same SKU + capacity + Zone A"
+      }
+    ],
+    "commands": [
+      "EVALUATE_CANDIDATES",
+      "EXPLAIN_RECOMMENDATION",
+      "ACCEPT_LOCATION"
+    ],
+    "exceptionTitle": "NO_ELIGIBLE_PUTAWAY_LOCATION",
+    "exceptionDetail": "Không còn candidate thỏa compatibility/status/capacity; cần exception workflow."
+  },
+  "OUT-03": {
+    "title": "Allocation Workbench",
+    "subtitle": "Gắn reserved demand vào location/lot/serial mà không trừ On Hand lần hai.",
+    "mode": "workbench",
+    "stages": [
+      "Demand loaded",
+      "Eligibility check",
+      "Candidate scoring",
+      "Allocated",
+      "Released to pick"
+    ],
+    "fields": [
+      {
+        "label": "Sales order",
+        "value": "SO-2026-5108"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Reserved",
+        "value": "120 Gói"
+      },
+      {
+        "label": "Candidate",
+        "value": "A01-R02-L03-B04 • LOT-1001-260930"
+      },
+      {
+        "label": "Allocated",
+        "value": "120 Gói"
+      }
+    ],
+    "commands": [
+      "AUTO_ALLOCATE",
+      "REALLOCATE",
+      "RELEASE_ALLOCATION"
+    ],
+    "exceptionTitle": "ALLOCATION_INSUFFICIENT_ELIGIBLE_STOCK",
+    "exceptionDetail": "Reserved demand có nhưng không đủ stock eligible theo status/lot/lock/FEFO.",
+    "quantity": {
+      "label": "Allocate quantity",
+      "operationUom": "Gói",
+      "baseUom": "Gói",
+      "factor": 1,
+      "initial": 120
+    }
+  },
+  "OUT-05": {
+    "title": "Picking Execution",
+    "subtitle": "Scan allocated location/product/lot/serial, xử lý short pick nhưng chưa trừ warehouse On Hand.",
+    "mode": "scan",
+    "stages": [
+      "ASSIGNED",
+      "IN_PROGRESS",
+      "SHORT_PICK_REVIEW",
+      "PICKED",
+      "TO_PACK"
+    ],
+    "fields": [
+      {
+        "label": "Task",
+        "value": "PICK-2026-6110"
+      },
+      {
+        "label": "Source",
+        "value": "A01-R02-L03-B04"
+      },
+      {
+        "label": "SKU / Lot",
+        "value": "SKU-1001 / LOT-1001-260930"
+      },
+      {
+        "label": "Allocated",
+        "value": "120 Gói"
+      },
+      {
+        "label": "Destination",
+        "value": "PACK-02"
+      }
+    ],
+    "commands": [
+      "CLAIM_TASK",
+      "SCAN_LOCATION",
+      "CONFIRM_PICK",
+      "SHORT_PICK"
+    ],
+    "exceptionTitle": "PICK_SHORT",
+    "exceptionDetail": "Thực tế tại location thiếu so với allocated; cần reason + exception/reallocation.",
+    "quantity": {
+      "label": "Picked quantity",
+      "operationUom": "Gói",
+      "baseUom": "Gói",
+      "factor": 1,
+      "initial": 118
+    }
+  },
+  "OUT-06": {
+    "title": "Packing Station",
+    "subtitle": "Đóng gói picked inventory vào carton/tote/HU và tạo label; không dispatch inventory.",
+    "mode": "scan",
+    "stages": [
+      "OPEN",
+      "SCANNING",
+      "VALIDATING",
+      "SEALED",
+      "LABELLED"
+    ],
+    "fields": [
+      {
+        "label": "Shipment",
+        "value": "SHP-2026-5108"
+      },
+      {
+        "label": "Station",
+        "value": "PACK-02"
+      },
+      {
+        "label": "HU",
+        "value": "CTN-SHP-5108-01"
+      },
+      {
+        "label": "Packaging",
+        "value": "PKG-CARTON-M"
+      },
+      {
+        "label": "Weight",
+        "value": "8.4 kg"
+      }
+    ],
+    "commands": [
+      "OPEN_HU",
+      "SCAN_ITEM",
+      "CLOSE_HU",
+      "PRINT_LABEL"
+    ],
+    "exceptionTitle": "PACK_QUANTITY_MISMATCH",
+    "exceptionDetail": "Packed quantity/serial không khớp picked quantity hoặc serial bị scan trùng.",
+    "quantity": {
+      "label": "Packed quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 22
+    }
+  },
+  "OUT-07": {
+    "title": "Staging & Loading",
+    "subtitle": "Đưa HU/shipment vào staging lane, kiểm vehicle/seal và load sequence.",
+    "mode": "workbench",
+    "stages": [
+      "PACKED",
+      "STAGED",
+      "LOAD_READY",
+      "LOADING",
+      "LOADED"
+    ],
+    "fields": [
+      {
+        "label": "Shipment",
+        "value": "SHP-2026-5108"
+      },
+      {
+        "label": "Staging lane",
+        "value": "STAGE-OUT-03"
+      },
+      {
+        "label": "Vehicle",
+        "value": "51C-882.14"
+      },
+      {
+        "label": "Seal",
+        "value": "SEAL-028817"
+      },
+      {
+        "label": "HU count",
+        "value": "8 / 8"
+      }
+    ],
+    "commands": [
+      "STAGE_SHIPMENT",
+      "ASSIGN_VEHICLE",
+      "START_LOADING",
+      "COMPLETE_LOADING"
+    ],
+    "exceptionTitle": "LOAD_HU_MISSING",
+    "exceptionDetail": "HU bắt buộc chưa có tại staging lane hoặc vehicle/seal không khớp load plan."
+  },
+  "OUT-08": {
+    "title": "Shipment Dispatch",
+    "subtitle": "Boundary outbound duy nhất làm giảm warehouse On Hand đúng một lần.",
+    "mode": "wizard",
+    "stages": [
+      "PACKED",
+      "LOAD_READY",
+      "VALIDATING",
+      "DISPATCHED",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "Shipment",
+        "value": "SHP-2026-5108"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Loaded HU",
+        "value": "8 / 8"
+      },
+      {
+        "label": "Reservation",
+        "value": "Consumed on dispatch"
+      },
+      {
+        "label": "Idempotency key",
+        "value": "dispatch-SHP-5108-v3"
+      }
+    ],
+    "commands": [
+      "VALIDATE_DISPATCH",
+      "DISPATCH_SHIPMENT",
+      "PRINT_DOCUMENTS"
+    ],
+    "exceptionTitle": "DISPATCH_INVENTORY_CONFLICT",
+    "exceptionDetail": "Stock/version thay đổi sau pick/load; dispatch phải fail closed và không double-deduct.",
+    "quantity": {
+      "label": "Dispatch quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 22
+    }
+  },
+  "OUT-09": {
+    "title": "Backorder Workbench",
+    "subtitle": "Theo dõi ordered/reserved/allocated/picked/shipped/backorder/cancelled cùng một semantic.",
+    "mode": "workbench",
+    "stages": [
+      "OPEN",
+      "PARTIALLY_RESERVED",
+      "BACKORDERED",
+      "REPLANNED",
+      "RELEASED"
+    ],
+    "fields": [
+      {
+        "label": "Sales order",
+        "value": "SO-2026-5112"
+      },
+      {
+        "label": "Ordered",
+        "value": "300 Cái"
+      },
+      {
+        "label": "Reserved",
+        "value": "220 Cái"
+      },
+      {
+        "label": "Backorder",
+        "value": "80 Cái"
+      },
+      {
+        "label": "Next supply ETA",
+        "value": "05/10/2026"
+      }
+    ],
+    "commands": [
+      "SPLIT_BACKORDER",
+      "REPLAN",
+      "CANCEL_REMAINDER",
+      "RELEASE_AVAILABLE"
+    ],
+    "exceptionTitle": "BACKORDER_PROMISE_CONFLICT",
+    "exceptionDetail": "Ngày promise mới xung đột allocation/supply hoặc customer policy."
+  },
+  "OUT-10": {
+    "title": "Shipment Tracking / POD",
+    "subtitle": "Theo dõi post-dispatch logistics, POD và delivery failure mà không double inventory movement.",
+    "mode": "trace",
+    "stages": [
+      "DISPATCHED",
+      "IN_TRANSIT",
+      "OUT_FOR_DELIVERY",
+      "DELIVERED",
+      "POD_CAPTURED"
+    ],
+    "fields": [
+      {
+        "label": "Shipment",
+        "value": "SHP-2026-5108"
+      },
+      {
+        "label": "Carrier",
+        "value": "CAR-FAST-01"
+      },
+      {
+        "label": "Tracking",
+        "value": "TRK-88941002"
+      },
+      {
+        "label": "Current node",
+        "value": "HCM Hub"
+      },
+      {
+        "label": "POD",
+        "value": "Pending signature/photo"
+      }
+    ],
+    "commands": [
+      "INGEST_TRACKING",
+      "CAPTURE_POD",
+      "MARK_DELIVERY_FAILURE",
+      "START_RETURN"
+    ],
+    "exceptionTitle": "DELIVERY_FAILED",
+    "exceptionDetail": "Delivery failure chỉ mở retry/return workflow; không tự cộng stock về warehouse."
+  },
+  "INV-05": {
+    "title": "Inventory Status Control",
+    "subtitle": "Drill-down trạng thái AVAILABLE/QC_HOLD/QUARANTINE/BLOCKED/DAMAGED/EXPIRED/RECALL_BLOCKED.",
+    "mode": "workbench",
+    "stages": [
+      "Overview",
+      "Granular status",
+      "Eligibility check",
+      "Reason/evidence",
+      "Status action"
+    ],
+    "fields": [
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "AVAILABLE",
+        "value": "1,240 Cái"
+      },
+      {
+        "label": "QC_HOLD",
+        "value": "96 Cái"
+      },
+      {
+        "label": "DAMAGED",
+        "value": "14 Cái"
+      },
+      {
+        "label": "RECALL_BLOCKED",
+        "value": "0 Cái"
+      }
+    ],
+    "commands": [
+      "VIEW_STATUS_DETAIL",
+      "HOLD",
+      "RELEASE_HOLD",
+      "BLOCK"
+    ],
+    "exceptionTitle": "STATUS_TRANSITION_NOT_ALLOWED",
+    "exceptionDetail": "Status transition không có permission/reason/evidence hoặc stock đang bị lock."
+  },
+  "INV-06": {
+    "title": "Lot / Serial / Expiry Explorer",
+    "subtitle": "Tra cứu genealogy và eligibility theo lot/serial/expiry với duplicate protection.",
+    "mode": "trace",
+    "stages": [
+      "Search",
+      "Identity match",
+      "Eligibility",
+      "Genealogy",
+      "Action"
+    ],
+    "fields": [
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Lot",
+        "value": "LOT-1001-260930"
+      },
+      {
+        "label": "Expiry",
+        "value": "30/09/2027"
+      },
+      {
+        "label": "Status",
+        "value": "AVAILABLE"
+      },
+      {
+        "label": "Locations",
+        "value": "3 bins"
+      }
+    ],
+    "commands": [
+      "SEARCH_LOT_SERIAL",
+      "TRACE_FORWARD",
+      "TRACE_BACKWARD",
+      "BLOCK_IDENTITY"
+    ],
+    "exceptionTitle": "SERIAL_DUPLICATE",
+    "exceptionDetail": "Serial đã tồn tại hoặc lot/expiry không thỏa tracking policy."
+  },
+  "INV-07": {
+    "title": "Inventory Lock / Freeze",
+    "subtitle": "Khóa stock theo scope/policy; count hỗ trợ hard, soft và snapshot-only.",
+    "mode": "configuration",
+    "stages": [
+      "Select scope",
+      "Choose strategy",
+      "Validate open work",
+      "Apply lock",
+      "Audit"
+    ],
+    "fields": [
+      {
+        "label": "Scope",
+        "value": "WH-HCM-01 / Zone PICK-A"
+      },
+      {
+        "label": "Strategy",
+        "value": "SOFT_FREEZE"
+      },
+      {
+        "label": "Reason",
+        "value": "CYCLE_COUNT"
+      },
+      {
+        "label": "Open tasks affected",
+        "value": "4"
+      },
+      {
+        "label": "Expiry",
+        "value": "03/10/2026 06:00"
+      }
+    ],
+    "commands": [
+      "CREATE_LOCK",
+      "RELEASE_LOCK",
+      "CHANGE_STRATEGY"
+    ],
+    "exceptionTitle": "INVENTORY_LOCK_CONFLICT",
+    "exceptionDetail": "Lock mới chồng lấn lock khác hoặc đang có critical mutation không thể freeze an toàn."
+  },
+  "INV-08": {
+    "title": "Internal Location Move",
+    "subtitle": "Same-warehouse move source → destination, bảo toàn tổng On Hand.",
+    "mode": "scan",
+    "stages": [
+      "Scan source",
+      "Scan product/lot",
+      "Enter quantity",
+      "Scan destination",
+      "POSTED"
+    ],
+    "fields": [
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Source",
+        "value": "A01-R02-L03-B04"
+      },
+      {
+        "label": "Destination",
+        "value": "B02-R01-L02-B03"
+      },
+      {
+        "label": "SKU / Lot",
+        "value": "SKU-1001 / LOT-1001-260930"
+      },
+      {
+        "label": "Reason",
+        "value": "REBALANCE_PICK_FACE"
+      }
+    ],
+    "commands": [
+      "VALIDATE_SOURCE",
+      "VALIDATE_DESTINATION",
+      "POST_MOVE"
+    ],
+    "exceptionTitle": "MOVE_DESTINATION_INELIGIBLE",
+    "exceptionDetail": "Destination vi phạm capacity/storage/status hoặc source quantity không còn đủ.",
+    "quantity": {
+      "label": "Move quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 5
+    }
+  },
+  "INV-09": {
+    "title": "Inventory Reversal",
+    "subtitle": "Sửa sai bằng corrective transaction; ledger gốc không bao giờ bị sửa/xóa.",
+    "mode": "wizard",
+    "stages": [
+      "Select transaction",
+      "Validate reversible",
+      "Reason/evidence",
+      "Create reversal",
+      "POSTED"
+    ],
+    "fields": [
+      {
+        "label": "Original txn",
+        "value": "LED-2026-882177"
+      },
+      {
+        "label": "Type",
+        "value": "MOVE"
+      },
+      {
+        "label": "Signed delta",
+        "value": "-40 / +40 Cái"
+      },
+      {
+        "label": "Reason",
+        "value": "WRONG_DESTINATION"
+      },
+      {
+        "label": "Correlation",
+        "value": "CORR-9A10F"
+      }
+    ],
+    "commands": [
+      "VALIDATE_REVERSAL",
+      "CREATE_REVERSAL",
+      "POST_CORRECTION"
+    ],
+    "exceptionTitle": "TRANSACTION_NOT_REVERSIBLE",
+    "exceptionDetail": "Transaction đã có downstream dependency hoặc đã được reversal trước đó."
+  },
+  "INV-10": {
+    "title": "Traceability & Genealogy",
+    "subtitle": "Truy ngược/xuôi xuyên receipt, QC, move, pick, shipment, return và recall.",
+    "mode": "trace",
+    "stages": [
+      "Identity",
+      "Backward trace",
+      "Forward trace",
+      "Exposure",
+      "Recall/Return branch"
+    ],
+    "fields": [
+      {
+        "label": "Lot",
+        "value": "LOT-1001-260930"
+      },
+      {
+        "label": "Receipt",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Current stock",
+        "value": "420 Cái"
+      },
+      {
+        "label": "Shipped exposure",
+        "value": "180 Cái / 12 customers"
+      },
+      {
+        "label": "Returns",
+        "value": "2 open RMA"
+      }
+    ],
+    "commands": [
+      "TRACE_BACKWARD",
+      "TRACE_FORWARD",
+      "SHOW_EXPOSURE",
+      "START_RECALL"
+    ],
+    "exceptionTitle": "TRACE_CHAIN_INCOMPLETE",
+    "exceptionDetail": "Một node thiếu source/correlation linkage; hệ thống không được giả định genealogy hoàn chỉnh."
+  },
+  "TR-02": {
+    "title": "In-Transit Inventory Explorer",
+    "subtitle": "Theo dõi quantity đang transit theo source/destination/reference/owner.",
+    "mode": "trace",
+    "stages": [
+      "Source dispatched",
+      "IN_TRANSIT",
+      "Arrival pending",
+      "Destination received"
+    ],
+    "fields": [
+      {
+        "label": "Transfer",
+        "value": "TRF-2026-0024"
+      },
+      {
+        "label": "Source → Destination",
+        "value": "WH-HCM-01 → WH-DN-01"
+      },
+      {
+        "label": "In transit",
+        "value": "200 Gói"
+      },
+      {
+        "label": "Owner",
+        "value": "OWN-COMPANY-01"
+      }
+    ],
+    "commands": [
+      "TRACE_TRANSIT",
+      "OPEN_TRANSFER",
+      "RECONCILE_TRANSIT"
+    ],
+    "exceptionTitle": "TRANSIT_BALANCE_MISMATCH",
+    "exceptionDetail": "Source + Transit + Destination không bảo toàn transfer quantity."
+  },
+  "TR-05": {
+    "title": "Replenishment Workbench",
+    "subtitle": "Bổ sung pick face từ reserve storage theo min/max và demand.",
+    "mode": "workbench",
+    "stages": [
+      "Demand detected",
+      "Source selected",
+      "Task created",
+      "Moving",
+      "Completed"
+    ],
+    "fields": [
+      {
+        "label": "Pick face",
+        "value": "PICK-A-01"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Min / Max",
+        "value": "60 / 240 Cái"
+      },
+      {
+        "label": "Suggested",
+        "value": "180 Cái"
+      }
+    ],
+    "commands": [
+      "CREATE_REPLENISH_TASK",
+      "START_MOVE",
+      "COMPLETE_MOVE"
+    ],
+    "exceptionTitle": "REPLENISH_SOURCE_SHORT",
+    "exceptionDetail": "Reserve location không còn đủ eligible stock cho replenishment.",
+    "quantity": {
+      "label": "Replenish quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 15
+    }
+  },
+  "CT-03": {
+    "title": "Blind Count Execution",
+    "subtitle": "Counter không nhìn thấy system quantity; chỉ nhập observed quantity theo UOM thao tác.",
+    "mode": "scan",
+    "stages": [
+      "RELEASED",
+      "COUNTING",
+      "SUBMITTED",
+      "REVIEW"
+    ],
+    "fields": [
+      {
+        "label": "Count",
+        "value": "CNT-2026-0098"
+      },
+      {
+        "label": "Location",
+        "value": "A01-R02-L03-B04"
+      },
+      {
+        "label": "System qty",
+        "value": "Ẩn với counter"
+      },
+      {
+        "label": "Attempt",
+        "value": "#1"
+      }
+    ],
+    "commands": [
+      "START_COUNT",
+      "SUBMIT_COUNT",
+      "REQUEST_RECOUNT"
+    ],
+    "exceptionTitle": "COUNT_SCOPE_CHANGED",
+    "exceptionDetail": "Location/stock identity thay đổi ngoài freeze policy trong lúc đếm.",
+    "quantity": {
+      "label": "Observed quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 3
+    }
+  },
+  "CT-04": {
+    "title": "Count Freeze Strategy",
+    "subtitle": "Chọn Hard Freeze / Soft Freeze / Snapshot-only theo count policy.",
+    "mode": "configuration",
+    "stages": [
+      "Select scope",
+      "Choose policy",
+      "Review open work",
+      "Apply",
+      "Release"
+    ],
+    "fields": [
+      {
+        "label": "Count",
+        "value": "CNT-2026-0098"
+      },
+      {
+        "label": "Scope",
+        "value": "Zone PICK-A"
+      },
+      {
+        "label": "Strategy",
+        "value": "SOFT_FREEZE"
+      },
+      {
+        "label": "Snapshot at",
+        "value": "02/10/2026 16:10"
+      }
+    ],
+    "commands": [
+      "APPLY_FREEZE",
+      "CHANGE_POLICY",
+      "RELEASE_FREEZE"
+    ],
+    "exceptionTitle": "COUNT_FREEZE_CONFLICT",
+    "exceptionDetail": "Open task hoặc lock hiện hữu làm strategy không thể áp dụng an toàn."
+  },
+  "CT-05": {
+    "title": "Recount & Attempt History",
+    "subtitle": "Mỗi attempt bất biến; final accepted count không overwrite lần trước.",
+    "mode": "trace",
+    "stages": [
+      "Attempt 1",
+      "Review",
+      "Attempt 2",
+      "Final accepted"
+    ],
+    "fields": [
+      {
+        "label": "Count",
+        "value": "CNT-2026-0098"
+      },
+      {
+        "label": "Attempt 1",
+        "value": "41 Cái"
+      },
+      {
+        "label": "Attempt 2",
+        "value": "43 Cái"
+      },
+      {
+        "label": "Final",
+        "value": "43 Cái"
+      }
+    ],
+    "commands": [
+      "REQUEST_RECOUNT",
+      "SUBMIT_ATTEMPT",
+      "ACCEPT_FINAL_COUNT"
+    ],
+    "exceptionTitle": "RECOUNT_LIMIT_REACHED",
+    "exceptionDetail": "Số lần recount vượt policy hoặc cùng counter vi phạm segregation rule."
+  },
+  "CT-06": {
+    "title": "Variance Resolution",
+    "subtitle": "Review variance, evidence, reason và route sang recount/approval/adjustment.",
+    "mode": "wizard",
+    "stages": [
+      "REVIEW",
+      "RECOUNT_OPTION",
+      "PENDING_APPROVAL",
+      "RESOLVED"
+    ],
+    "fields": [
+      {
+        "label": "Count",
+        "value": "CNT-2026-0098"
+      },
+      {
+        "label": "System snapshot",
+        "value": "48 Cái"
+      },
+      {
+        "label": "Final count",
+        "value": "43 Cái"
+      },
+      {
+        "label": "Variance",
+        "value": "-5 Cái"
+      }
+    ],
+    "commands": [
+      "REQUEST_RECOUNT",
+      "SUBMIT_VARIANCE",
+      "CREATE_ADJUSTMENT"
+    ],
+    "exceptionTitle": "VARIANCE_THRESHOLD_EXCEEDED",
+    "exceptionDetail": "Variance vượt threshold và phải đi approval trước adjustment POST."
+  },
+  "CT-07": {
+    "title": "Inventory Adjustment",
+    "subtitle": "Tạo/approve/post adjustment với reason, threshold và SoD.",
+    "mode": "wizard",
+    "stages": [
+      "DRAFT",
+      "SUBMITTED",
+      "PENDING_APPROVAL",
+      "APPROVED",
+      "POSTED"
+    ],
+    "fields": [
+      {
+        "label": "Adjustment",
+        "value": "ADJ-2026-0077"
+      },
+      {
+        "label": "SKU / Location",
+        "value": "SKU-1001 / A01-R02-L03-B04"
+      },
+      {
+        "label": "Reason",
+        "value": "COUNT_VARIANCE"
+      },
+      {
+        "label": "Creator / Approver",
+        "value": "U-COUNTER / U-SUPERVISOR"
+      }
+    ],
+    "commands": [
+      "SUBMIT_ADJUSTMENT",
+      "APPROVE_ADJUSTMENT",
+      "POST_ADJUSTMENT"
+    ],
+    "exceptionTitle": "SOD_CONFLICT",
+    "exceptionDetail": "Creator/counter không được tự approve khi SoD policy bật.",
+    "quantity": {
+      "label": "Signed adjustment",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 5
+    }
+  },
+  "QR-01": {
+    "title": "QC Work Center",
+    "subtitle": "Queue inspection theo priority, criteria, evidence và disposition.",
+    "mode": "workbench",
+    "stages": [
+      "QUEUED",
+      "ASSIGNED",
+      "INSPECTING",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "Inspection",
+        "value": "QC-2026-3011"
+      },
+      {
+        "label": "Source",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Priority",
+        "value": "High"
+      },
+      {
+        "label": "Evidence",
+        "value": "2 photos • 1 note"
+      }
+    ],
+    "commands": [
+      "ASSIGN_QC",
+      "START_QC",
+      "COMPLETE_QC"
+    ],
+    "exceptionTitle": "QC_CRITERIA_FAILED",
+    "exceptionDetail": "Một hoặc nhiều criteria không đạt; cần disposition thay vì tự release."
+  },
+  "QR-02": {
+    "title": "QC Hold / Quarantine",
+    "subtitle": "Giữ stock khỏi reserve/allocate/pick theo status policy.",
+    "mode": "workbench",
+    "stages": [
+      "AVAILABLE",
+      "QC_HOLD",
+      "QUARANTINE",
+      "RELEASED"
+    ],
+    "fields": [
+      {
+        "label": "SKU / Lot",
+        "value": "SKU-1001 / LOT-1001-260930"
+      },
+      {
+        "label": "Quantity",
+        "value": "96 Cái"
+      },
+      {
+        "label": "Current status",
+        "value": "QC_HOLD"
+      },
+      {
+        "label": "Reason",
+        "value": "QUALITY_REVIEW"
+      }
+    ],
+    "commands": [
+      "PLACE_HOLD",
+      "MOVE_TO_QUARANTINE",
+      "RELEASE_HOLD"
+    ],
+    "exceptionTitle": "STATUS_STILL_BLOCKED",
+    "exceptionDetail": "Disposition/evidence chưa đủ để release stock về AVAILABLE."
+  },
+  "QR-03": {
+    "title": "Damaged Inventory",
+    "subtitle": "DAMAGE_FOUND dùng chung từ receiving/putaway/picking/transfer/count/returns.",
+    "mode": "wizard",
+    "stages": [
+      "FOUND",
+      "ISOLATED",
+      "QC_REVIEW",
+      "DISPOSITIONED"
+    ],
+    "fields": [
+      {
+        "label": "Source task",
+        "value": "PUTAWAY-2026-4110"
+      },
+      {
+        "label": "SKU / Lot",
+        "value": "SKU-1001 / LOT-1001-260930"
+      },
+      {
+        "label": "Location",
+        "value": "RECEIVING-01"
+      },
+      {
+        "label": "Reason",
+        "value": "PACKAGE_TORN"
+      }
+    ],
+    "commands": [
+      "REPORT_DAMAGE",
+      "ISOLATE",
+      "ROUTE_TO_QC",
+      "DISPOSITION"
+    ],
+    "exceptionTitle": "DAMAGED_QTY_INVALID",
+    "exceptionDetail": "Damaged quantity không thể vượt observed/eligible quantity.",
+    "quantity": {
+      "label": "Damaged quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 4
+    }
+  },
+  "QR-04": {
+    "title": "Customer Returns / RMA",
+    "subtitle": "Receive return → inspect → disposition → explicit Return Receipt POST.",
+    "mode": "wizard",
+    "stages": [
+      "AUTHORIZED",
+      "RECEIVED",
+      "INSPECTING",
+      "DISPOSITIONED",
+      "POSTED"
+    ],
+    "fields": [
+      {
+        "label": "RMA",
+        "value": "RMA-2026-1882"
+      },
+      {
+        "label": "Original shipment",
+        "value": "SHP-2026-5108"
+      },
+      {
+        "label": "Customer",
+        "value": "CUS-0042"
+      },
+      {
+        "label": "Disposition",
+        "value": "RESTOCK / REPAIR / SCRAP"
+      }
+    ],
+    "commands": [
+      "RECEIVE_RETURN",
+      "INSPECT_RETURN",
+      "POST_RETURN"
+    ],
+    "exceptionTitle": "RETURN_NOT_AUTHORIZED",
+    "exceptionDetail": "Return không khớp RMA/original shipment hoặc product/serial.",
+    "quantity": {
+      "label": "Return quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 2
+    }
+  },
+  "QR-05": {
+    "title": "Recall Control",
+    "subtitle": "Xác định exposure, block stock và liên kết shipped/in-stock/return scope.",
+    "mode": "trace",
+    "stages": [
+      "OPEN",
+      "TRACE_SCOPE",
+      "BLOCKED",
+      "NOTIFIED",
+      "CLOSED"
+    ],
+    "fields": [
+      {
+        "label": "Recall",
+        "value": "RCL-2026-004"
+      },
+      {
+        "label": "Lot",
+        "value": "LOT-1001-260930"
+      },
+      {
+        "label": "In stock",
+        "value": "420 Cái"
+      },
+      {
+        "label": "Shipped exposure",
+        "value": "180 Cái / 12 customers"
+      }
+    ],
+    "commands": [
+      "TRACE_EXPOSURE",
+      "BLOCK_STOCK",
+      "EXPORT_RECALL_LIST"
+    ],
+    "exceptionTitle": "RECALL_SCOPE_INCOMPLETE",
+    "exceptionDetail": "Genealogy thiếu linkage Return/Shipment hoặc customer exposure chưa xác định đủ."
+  },
+  "QR-06": {
+    "title": "Scrap Workbench",
+    "subtitle": "Approval + evidence + explicit scrap posting làm giảm tồn kho.",
+    "mode": "wizard",
+    "stages": [
+      "DRAFT",
+      "SUBMITTED",
+      "APPROVED",
+      "POSTED"
+    ],
+    "fields": [
+      {
+        "label": "Scrap",
+        "value": "SCR-2026-0081"
+      },
+      {
+        "label": "SKU / Lot",
+        "value": "SKU-1001 / LOT-1001-260930"
+      },
+      {
+        "label": "Reason",
+        "value": "IRREPAIRABLE_DAMAGE"
+      },
+      {
+        "label": "Evidence",
+        "value": "Photo + supervisor note"
+      }
+    ],
+    "commands": [
+      "SUBMIT_SCRAP",
+      "APPROVE_SCRAP",
+      "POST_SCRAP"
+    ],
+    "exceptionTitle": "SCRAP_APPROVAL_REQUIRED",
+    "exceptionDetail": "Scrap chưa đủ approval/evidence nên không được post inventory.",
+    "quantity": {
+      "label": "Scrap quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 4
+    }
+  },
+  "HU-01": {
+    "title": "Handling Unit Explorer",
+    "subtitle": "Theo dõi pallet/carton/tote hierarchy, contents, location và state.",
+    "mode": "trace",
+    "stages": [
+      "OPEN",
+      "IN_USE",
+      "SEALED",
+      "MOVED",
+      "CLOSED"
+    ],
+    "fields": [
+      {
+        "label": "HU",
+        "value": "PLT-2026-00418"
+      },
+      {
+        "label": "Type",
+        "value": "Pallet"
+      },
+      {
+        "label": "Location",
+        "value": "STAGE-OUT-03"
+      },
+      {
+        "label": "Children",
+        "value": "8 cartons"
+      }
+    ],
+    "commands": [
+      "OPEN_HU",
+      "ADD_CONTENT",
+      "MOVE_HU",
+      "CLOSE_HU"
+    ],
+    "exceptionTitle": "HU_CONTENT_MISMATCH",
+    "exceptionDetail": "HU content/hierarchy không khớp underlying inventory identity."
+  },
+  "HU-02": {
+    "title": "Pallet / Carton / Tote Operations",
+    "subtitle": "Merge/split/repack HU nhưng vẫn bảo toàn underlying inventory truth.",
+    "mode": "wizard",
+    "stages": [
+      "Select HU",
+      "Scan contents",
+      "Merge/Split",
+      "Validate",
+      "Commit"
+    ],
+    "fields": [
+      {
+        "label": "Source HU",
+        "value": "CTN-001 + CTN-002"
+      },
+      {
+        "label": "Target HU",
+        "value": "PLT-2026-00418"
+      },
+      {
+        "label": "Items",
+        "value": "48 Cái"
+      },
+      {
+        "label": "Operation",
+        "value": "MERGE"
+      }
+    ],
+    "commands": [
+      "MERGE_HU",
+      "SPLIT_HU",
+      "REPACK_HU"
+    ],
+    "exceptionTitle": "HU_MIXING_NOT_ALLOWED",
+    "exceptionDetail": "Owner/status/lot compatibility không cho phép merge vào cùng HU."
+  },
+  "HU-03": {
+    "title": "Label Center",
+    "subtitle": "Preview/print/reprint barcode, lot, HU và shipping label với audit.",
+    "mode": "workbench",
+    "stages": [
+      "Select template",
+      "Preview",
+      "Print",
+      "Verify",
+      "Reprint audit"
+    ],
+    "fields": [
+      {
+        "label": "Template",
+        "value": "SSCC-LOGISTICS-v3"
+      },
+      {
+        "label": "Reference",
+        "value": "PLT-2026-00418"
+      },
+      {
+        "label": "Printer",
+        "value": "ZEBRA-PACK-02"
+      },
+      {
+        "label": "Copies",
+        "value": "1"
+      }
+    ],
+    "commands": [
+      "PREVIEW_LABEL",
+      "PRINT_LABEL",
+      "REPRINT_LABEL"
+    ],
+    "exceptionTitle": "LABEL_REPRINT_REASON_REQUIRED",
+    "exceptionDetail": "Reprint phải có reason/audit để tránh duplicate label không kiểm soát."
+  },
+  "DY-01": {
+    "title": "Gate Check-in",
+    "subtitle": "Xác minh vehicle/driver/appointment trước khi vào yard.",
+    "mode": "scan",
+    "stages": [
+      "ARRIVED",
+      "IDENTITY_CHECK",
+      "CHECKED_IN",
+      "QUEUED"
+    ],
+    "fields": [
+      {
+        "label": "Appointment",
+        "value": "APT-2026-1042"
+      },
+      {
+        "label": "Vehicle",
+        "value": "51C-882.14"
+      },
+      {
+        "label": "Driver",
+        "value": "DRV-8891"
+      },
+      {
+        "label": "Gate",
+        "value": "GATE-01"
+      }
+    ],
+    "commands": [
+      "SCAN_APPOINTMENT",
+      "CHECK_IN",
+      "DENY_ENTRY"
+    ],
+    "exceptionTitle": "GATE_IDENTITY_MISMATCH",
+    "exceptionDetail": "Vehicle/driver không khớp appointment hoặc thiếu điều kiện an toàn."
+  },
+  "DY-02": {
+    "title": "Dock Scheduling",
+    "subtitle": "Phân dock theo appointment, capacity, priority và thời gian phục vụ.",
+    "mode": "control",
+    "stages": [
+      "Schedule",
+      "Conflict check",
+      "Assign dock",
+      "In service",
+      "Release dock"
+    ],
+    "fields": [
+      {
+        "label": "Appointment",
+        "value": "APT-2026-1042"
+      },
+      {
+        "label": "Dock",
+        "value": "D-04"
+      },
+      {
+        "label": "Window",
+        "value": "16:00–16:30"
+      },
+      {
+        "label": "Priority",
+        "value": "Inbound High"
+      }
+    ],
+    "commands": [
+      "ASSIGN_DOCK",
+      "RESCHEDULE_DOCK",
+      "RELEASE_DOCK"
+    ],
+    "exceptionTitle": "DOCK_SLOT_CONFLICT",
+    "exceptionDetail": "Dock/time window đã bị appointment khác giữ hoặc capacity không đủ."
+  },
+  "MO-01": {
+    "title": "Mobile Home & My Tasks",
+    "subtitle": "Danh sách task được giao theo warehouse, priority và offline readiness.",
+    "mode": "scan",
+    "stages": [
+      "Home",
+      "Task queue",
+      "Task detail",
+      "Claimed"
+    ],
+    "fields": [
+      {
+        "label": "User",
+        "value": "U-HCM-OP-01"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Open tasks",
+        "value": "14"
+      },
+      {
+        "label": "Critical",
+        "value": "2"
+      }
+    ],
+    "commands": [
+      "REFRESH_TASKS",
+      "CLAIM_TASK",
+      "OPEN_TASK"
+    ],
+    "exceptionTitle": "TASK_ALREADY_CLAIMED",
+    "exceptionDetail": "Task vừa được operator khác claim; mobile phải refresh canonical assignment."
+  },
+  "MO-02": {
+    "title": "Mobile Receiving Scan",
+    "subtitle": "Scan receipt/product/lot/serial và quantity/UOM trước complete receiving.",
+    "mode": "scan",
+    "stages": [
+      "Select receipt",
+      "Scan product",
+      "Enter quantity",
+      "Confirm receive"
+    ],
+    "fields": [
+      {
+        "label": "Receipt",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "QC required",
+        "value": "Yes"
+      },
+      {
+        "label": "Location",
+        "value": "RECEIVING-01"
+      }
+    ],
+    "commands": [
+      "SCAN_RECEIPT",
+      "SCAN_PRODUCT",
+      "CONFIRM_RECEIVE"
+    ],
+    "exceptionTitle": "RECEIVING_SCAN_MISMATCH",
+    "exceptionDetail": "Barcode/lot/serial không thuộc receipt line hoặc vượt tolerance.",
+    "quantity": {
+      "label": "Receive quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 8
+    }
+  },
+  "MO-03": {
+    "title": "Mobile Putaway Scan",
+    "subtitle": "Scan source/product/destination và xác nhận move sau Receipt POST.",
+    "mode": "scan",
+    "stages": [
+      "Task",
+      "Scan source",
+      "Scan product",
+      "Scan destination",
+      "Complete"
+    ],
+    "fields": [
+      {
+        "label": "Task",
+        "value": "PUT-2026-4410"
+      },
+      {
+        "label": "Source",
+        "value": "RECEIVING-01"
+      },
+      {
+        "label": "Destination",
+        "value": "A01-R02-L03-B04"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      }
+    ],
+    "commands": [
+      "START_PUTAWAY",
+      "SCAN_LOCATION",
+      "CONFIRM_MOVE"
+    ],
+    "exceptionTitle": "PUTAWAY_DESTINATION_INVALID",
+    "exceptionDetail": "Destination không eligible theo capacity/status/storage rule.",
+    "quantity": {
+      "label": "Putaway quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 5
+    }
+  },
+  "MO-04": {
+    "title": "Mobile Picking Scan",
+    "subtitle": "Scan-first picking theo allocated stock, serial/status validation và short pick.",
+    "mode": "scan",
+    "stages": [
+      "Task",
+      "Scan location",
+      "Scan item",
+      "Confirm qty",
+      "Complete"
+    ],
+    "fields": [
+      {
+        "label": "Task",
+        "value": "PICK-2026-6110"
+      },
+      {
+        "label": "Source",
+        "value": "A01-R02-L03-B04"
+      },
+      {
+        "label": "SKU / Lot",
+        "value": "SKU-1001 / LOT-1001-260930"
+      },
+      {
+        "label": "Allocated",
+        "value": "120 Gói"
+      }
+    ],
+    "commands": [
+      "CLAIM_TASK",
+      "SCAN_ITEM",
+      "CONFIRM_PICK",
+      "SHORT_PICK"
+    ],
+    "exceptionTitle": "PICK_SHORT",
+    "exceptionDetail": "Picked quantity thấp hơn allocated; cần reason + reallocation path.",
+    "quantity": {
+      "label": "Picked quantity",
+      "operationUom": "Gói",
+      "baseUom": "Gói",
+      "factor": 1,
+      "initial": 118
+    }
+  },
+  "MO-05": {
+    "title": "Mobile Packing",
+    "subtitle": "Scan shipment/HU/items và xác nhận quantity trước seal/label.",
+    "mode": "scan",
+    "stages": [
+      "Shipment",
+      "Open HU",
+      "Scan items",
+      "Seal HU",
+      "Label"
+    ],
+    "fields": [
+      {
+        "label": "Shipment",
+        "value": "SHP-2026-5108"
+      },
+      {
+        "label": "HU",
+        "value": "CTN-SHP-5108-01"
+      },
+      {
+        "label": "Station",
+        "value": "PACK-02"
+      },
+      {
+        "label": "Packaging",
+        "value": "PKG-CARTON-M"
+      }
+    ],
+    "commands": [
+      "OPEN_HU",
+      "SCAN_ITEM",
+      "CLOSE_HU",
+      "PRINT_LABEL"
+    ],
+    "exceptionTitle": "PACK_SERIAL_DUPLICATE",
+    "exceptionDetail": "Serial đã được đóng gói hoặc packed quantity vượt picked quantity.",
+    "quantity": {
+      "label": "Packed quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 22
+    }
+  },
+  "MO-06": {
+    "title": "Mobile Count",
+    "subtitle": "Blind count scan location/item và nhập operation UOM → Base UOM.",
+    "mode": "scan",
+    "stages": [
+      "Task",
+      "Scan location",
+      "Scan item",
+      "Enter count",
+      "Submit"
+    ],
+    "fields": [
+      {
+        "label": "Count",
+        "value": "CNT-2026-0098"
+      },
+      {
+        "label": "Location",
+        "value": "A01-R02-L03-B04"
+      },
+      {
+        "label": "Attempt",
+        "value": "#1"
+      },
+      {
+        "label": "System qty",
+        "value": "Hidden"
+      }
+    ],
+    "commands": [
+      "START_COUNT",
+      "SCAN_ITEM",
+      "SUBMIT_COUNT"
+    ],
+    "exceptionTitle": "COUNT_ITEM_NOT_IN_SCOPE",
+    "exceptionDetail": "Scanned item/location nằm ngoài released count scope.",
+    "quantity": {
+      "label": "Count quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 3
+    }
+  },
+  "MO-07": {
+    "title": "Mobile Transfer",
+    "subtitle": "Tạo/scan/confirm transfer line; inventory chỉ thay đổi tại Dispatch/Receive.",
+    "mode": "scan",
+    "stages": [
+      "Transfer",
+      "Scan item",
+      "Confirm line",
+      "Dispatch/Receive"
+    ],
+    "fields": [
+      {
+        "label": "Transfer",
+        "value": "TRF-2026-0024"
+      },
+      {
+        "label": "Source",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Destination",
+        "value": "WH-DN-01"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      }
+    ],
+    "commands": [
+      "SCAN_ITEM",
+      "CONFIRM_LINE",
+      "DISPATCH_TRANSFER"
+    ],
+    "exceptionTitle": "TRANSFER_QTY_INVALID",
+    "exceptionDetail": "Quantity vượt eligible source stock hoặc không convert được UOM.",
+    "quantity": {
+      "label": "Transfer quantity",
+      "operationUom": "Pallet",
+      "baseUom": "Thùng",
+      "factor": 48,
+      "initial": 4
+    }
+  },
+  "MO-08": {
+    "title": "Mobile Replenishment",
+    "subtitle": "Nhận task replenish, scan source/destination và hoàn thành move.",
+    "mode": "scan",
+    "stages": [
+      "Home",
+      "Task",
+      "Scan source",
+      "Scan destination",
+      "Complete"
+    ],
+    "fields": [
+      {
+        "label": "Task",
+        "value": "REP-2026-7102"
+      },
+      {
+        "label": "SKU",
+        "value": "SP008"
+      },
+      {
+        "label": "Source",
+        "value": "RESERVE-B-02"
+      },
+      {
+        "label": "Destination",
+        "value": "PICK-A-01"
+      }
+    ],
+    "commands": [
+      "CLAIM_TASK",
+      "SCAN_SOURCE",
+      "CONFIRM_REPLENISH"
+    ],
+    "exceptionTitle": "REPLENISH_DESTINATION_FULL",
+    "exceptionDetail": "Pick face capacity không đủ cho suggested quantity.",
+    "quantity": {
+      "label": "Replenish quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 20
+    }
+  },
+  "MO-09": {
+    "title": "Mobile Returns",
+    "subtitle": "Receive RMA, inspect line và confirm disposition/Base UOM trước post.",
+    "mode": "scan",
+    "stages": [
+      "RMA",
+      "Scan item",
+      "Inspect",
+      "Disposition",
+      "Post"
+    ],
+    "fields": [
+      {
+        "label": "RMA",
+        "value": "RMA-2026-1882"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Original shipment",
+        "value": "SHP-2026-5108"
+      },
+      {
+        "label": "Disposition",
+        "value": "RESTOCK"
+      }
+    ],
+    "commands": [
+      "SCAN_RETURN",
+      "INSPECT_RETURN",
+      "CONFIRM_DISPOSITION"
+    ],
+    "exceptionTitle": "RETURN_SERIAL_MISMATCH",
+    "exceptionDetail": "Serial/lot không thuộc original shipment hoặc RMA scope.",
+    "quantity": {
+      "label": "Return quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 2
+    }
+  },
+  "MO-10": {
+    "title": "Offline Queue & Sync",
+    "subtitle": "Queue command offline, giữ idempotency key và reconcile khi online lại.",
+    "mode": "control",
+    "stages": [
+      "ONLINE",
+      "OFFLINE_QUEUE",
+      "SYNCING",
+      "CONFLICT_REVIEW",
+      "SYNCED"
+    ],
+    "fields": [
+      {
+        "label": "Queued commands",
+        "value": "5"
+      },
+      {
+        "label": "Oldest",
+        "value": "12 phút"
+      },
+      {
+        "label": "Device",
+        "value": "HH-HCM-014"
+      },
+      {
+        "label": "Last sync",
+        "value": "15:58"
+      }
+    ],
+    "commands": [
+      "QUEUE_COMMAND",
+      "SYNC_NOW",
+      "RETRY_FAILED",
+      "DISCARD_INVALID"
+    ],
+    "exceptionTitle": "OFFLINE_SYNC_CONFLICT",
+    "exceptionDetail": "Server state/version đổi trong lúc offline; không được auto-overwrite canonical state."
+  },
+  "MO-11": {
+    "title": "Mobile Product Lookup",
+    "subtitle": "Exact-first lookup barcode/SKU trong warehouse/security scope.",
+    "mode": "scan",
+    "stages": [
+      "Scan",
+      "Exact match",
+      "Stock summary",
+      "Open detail"
+    ],
+    "fields": [
+      {
+        "label": "Barcode",
+        "value": "8938500123456"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Base UOM",
+        "value": "Cái"
+      },
+      {
+        "label": "Tracking",
+        "value": "Lot"
+      }
+    ],
+    "commands": [
+      "SCAN_BARCODE",
+      "SEARCH_PRODUCT",
+      "OPEN_STOCK"
+    ],
+    "exceptionTitle": "PRODUCT_NOT_FOUND",
+    "exceptionDetail": "Barcode/SKU không có exact match trong security scope."
+  },
+  "MO-12": {
+    "title": "Mobile Exception Handling",
+    "subtitle": "Tạo/assign/resolve exception từ task và giữ context/evidence.",
+    "mode": "wizard",
+    "stages": [
+      "Detected",
+      "Created",
+      "Assigned",
+      "Resolving",
+      "Closed"
+    ],
+    "fields": [
+      {
+        "label": "Exception",
+        "value": "EXC-2026-0441"
+      },
+      {
+        "label": "Source task",
+        "value": "PICK-2026-6110"
+      },
+      {
+        "label": "Type",
+        "value": "DAMAGE_FOUND"
+      },
+      {
+        "label": "Priority",
+        "value": "High"
+      }
+    ],
+    "commands": [
+      "CREATE_EXCEPTION",
+      "ASSIGN_EXCEPTION",
+      "RESOLVE_EXCEPTION"
+    ],
+    "exceptionTitle": "EXCEPTION_RESOLUTION_BLOCKED",
+    "exceptionDetail": "Resolution cần approval/evidence hoặc canonical inventory command khác."
+  },
+  "OV-02": {
+    "title": "My Tasks Workbench",
+    "subtitle": "Task được giao theo warehouse, priority, SLA và trạng thái thực thi.",
+    "mode": "workbench",
+    "stages": [
+      "ASSIGNED",
+      "CLAIMED",
+      "IN_PROGRESS",
+      "DONE"
+    ],
+    "fields": [
+      {
+        "label": "User",
+        "value": "U-HCM-OP-01"
+      },
+      {
+        "label": "Open tasks",
+        "value": "14"
+      },
+      {
+        "label": "Critical",
+        "value": "2"
+      },
+      {
+        "label": "Due soon",
+        "value": "5"
+      }
+    ],
+    "commands": [
+      "CLAIM_TASK",
+      "START_TASK",
+      "COMPLETE_TASK"
+    ],
+    "exceptionTitle": "TASK_ALREADY_CLAIMED",
+    "exceptionDetail": "Task vừa được user khác claim; cần refresh assignment/version."
+  },
+  "OV-04": {
+    "title": "Exception Center",
+    "subtitle": "Triage, assign, escalate, resolve và đóng ngoại lệ vận hành.",
+    "mode": "control",
+    "stages": [
+      "OPEN",
+      "TRIAGED",
+      "ASSIGNED",
+      "RESOLVING",
+      "CLOSED"
+    ],
+    "fields": [
+      {
+        "label": "Exception",
+        "value": "EXC-2026-0441"
+      },
+      {
+        "label": "Type",
+        "value": "DAMAGE_FOUND"
+      },
+      {
+        "label": "Priority",
+        "value": "High"
+      },
+      {
+        "label": "Owner",
+        "value": "Warehouse Supervisor"
+      }
+    ],
+    "commands": [
+      "TRIAGE_EXCEPTION",
+      "ASSIGN_EXCEPTION",
+      "ESCALATE",
+      "RESOLVE"
+    ],
+    "exceptionTitle": "EXCEPTION_RESOLUTION_BLOCKED",
+    "exceptionDetail": "Resolution thiếu evidence/approval hoặc cần command inventory của module sở hữu."
+  },
+  "OV-05": {
+    "title": "Distributed Warehouse Control Tower",
+    "subtitle": "Theo dõi nhiều kho theo SLA, backlog, exception và capacity.",
+    "mode": "control",
+    "stages": [
+      "Network overview",
+      "Warning drill-down",
+      "Critical incident",
+      "Action plan"
+    ],
+    "fields": [
+      {
+        "label": "Warehouses",
+        "value": "4"
+      },
+      {
+        "label": "Critical alerts",
+        "value": "3"
+      },
+      {
+        "label": "Late inbound",
+        "value": "7"
+      },
+      {
+        "label": "Dispatch SLA",
+        "value": "94.2%"
+      }
+    ],
+    "commands": [
+      "OPEN_WAREHOUSE",
+      "OPEN_EXCEPTION",
+      "CREATE_ACTION_PLAN"
+    ],
+    "exceptionTitle": "CONTROL_TOWER_DATA_STALE",
+    "exceptionDetail": "Một warehouse feed stale; không được coi KPI tổng hợp là realtime."
+  },
+  "OV-06": {
+    "title": "Warehouse Task Engine",
+    "subtitle": "Queue thống nhất RECEIVE/PUTAWAY/PICK/PACK/MOVE/REPLENISH/COUNT/LOAD/QC/RETURN.",
+    "mode": "workbench",
+    "stages": [
+      "CREATED",
+      "ASSIGNED",
+      "IN_PROGRESS",
+      "BLOCKED",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "Task",
+        "value": "TSK-2026-9008"
+      },
+      {
+        "label": "Type",
+        "value": "PICK"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Priority",
+        "value": "High"
+      }
+    ],
+    "commands": [
+      "ASSIGN_TASK",
+      "START_TASK",
+      "BLOCK_TASK",
+      "COMPLETE_TASK"
+    ],
+    "exceptionTitle": "TASK_VERSION_CONFLICT",
+    "exceptionDetail": "Task đã đổi assignee/state ở thiết bị khác; cần reload canonical state."
+  },
+  "OV-07": {
+    "title": "Enterprise / Global Search",
+    "subtitle": "Exact-first search Product, Barcode, Partner, Document, Lot/Serial, Location, Shipment và Task.",
+    "mode": "workbench",
+    "stages": [
+      "Query",
+      "Exact match",
+      "Scoped results",
+      "Open entity"
+    ],
+    "fields": [
+      {
+        "label": "Query",
+        "value": "8938500123456"
+      },
+      {
+        "label": "Exact match",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Warehouse scope",
+        "value": "WH-HCM-01, WH-DN-01"
+      },
+      {
+        "label": "Result type",
+        "value": "Barcode → Product"
+      }
+    ],
+    "commands": [
+      "SEARCH",
+      "FILTER_RESULTS",
+      "OPEN_RESULT"
+    ],
+    "exceptionTitle": "SEARCH_SCOPE_FORBIDDEN",
+    "exceptionDetail": "Kết quả ngoài permission/warehouse scope phải bị omit khỏi index response."
+  },
+  "OV-08": {
+    "title": "Activity Feed",
+    "subtitle": "Read model hợp nhất audit, business event và notification theo security scope.",
+    "mode": "trace",
+    "stages": [
+      "Recent",
+      "Filtered",
+      "Entity timeline",
+      "Audit drill-down"
+    ],
+    "fields": [
+      {
+        "label": "Events",
+        "value": "128 today"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Entity",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Latest",
+        "value": "Receipt ready to post"
+      }
+    ],
+    "commands": [
+      "FILTER_ACTIVITY",
+      "OPEN_ENTITY",
+      "OPEN_AUDIT_EVENT"
+    ],
+    "exceptionTitle": "ACTIVITY_EVENT_REDACTED",
+    "exceptionDetail": "Event chứa field nhạy cảm ngoài permission và phải được redact/omit."
+  },
+  "MD-06": {
+    "title": "Carrier Master",
+    "subtitle": "Quản lý carrier, service, active state và integration mapping.",
+    "mode": "configuration",
+    "stages": [
+      "List",
+      "Detail",
+      "Validate",
+      "Active"
+    ],
+    "fields": [
+      {
+        "label": "Carrier",
+        "value": "CAR-FAST-01"
+      },
+      {
+        "label": "Name",
+        "value": "Fast Logistics"
+      },
+      {
+        "label": "Service",
+        "value": "Same-day"
+      },
+      {
+        "label": "Integration",
+        "value": "TRACKING_API_V2"
+      }
+    ],
+    "commands": [
+      "CREATE_CARRIER",
+      "UPDATE_CARRIER",
+      "DEACTIVATE_CARRIER"
+    ],
+    "exceptionTitle": "CARRIER_CODE_DUPLICATE",
+    "exceptionDetail": "Carrier code phải ổn định và unique theo master-data governance."
+  },
+  "MD-07": {
+    "title": "Reason Code Catalog",
+    "subtitle": "Reason code dùng chung cho cancel, adjustment, damage, scrap và exception.",
+    "mode": "configuration",
+    "stages": [
+      "Catalog",
+      "Edit",
+      "Policy mapping",
+      "Publish"
+    ],
+    "fields": [
+      {
+        "label": "Code",
+        "value": "PACKAGE_TORN"
+      },
+      {
+        "label": "Category",
+        "value": "DAMAGE"
+      },
+      {
+        "label": "Evidence required",
+        "value": "Photo"
+      },
+      {
+        "label": "Active",
+        "value": "Yes"
+      }
+    ],
+    "commands": [
+      "CREATE_REASON",
+      "MAP_POLICY",
+      "DEACTIVATE_REASON"
+    ],
+    "exceptionTitle": "REASON_CODE_IN_USE",
+    "exceptionDetail": "Reason đã được dùng trong posted/audit history nên không được delete vật lý."
+  },
+  "MD-08": {
+    "title": "Packaging Type Master",
+    "subtitle": "Carton/tote/pallet profile cho packing, HU và cartonization.",
+    "mode": "configuration",
+    "stages": [
+      "List",
+      "Dimensions",
+      "Capacity",
+      "Publish"
+    ],
+    "fields": [
+      {
+        "label": "Code",
+        "value": "PKG-CARTON-M"
+      },
+      {
+        "label": "Dimensions",
+        "value": "400 × 300 × 250 mm"
+      },
+      {
+        "label": "Max weight",
+        "value": "15 kg"
+      },
+      {
+        "label": "Type",
+        "value": "Carton"
+      }
+    ],
+    "commands": [
+      "CREATE_PACKAGING",
+      "UPDATE_CAPACITY",
+      "DEACTIVATE_PACKAGING"
+    ],
+    "exceptionTitle": "PACKAGING_PROFILE_INVALID",
+    "exceptionDetail": "Dimension/weight/capacity không hợp lệ hoặc profile đang dùng bởi open HU."
+  },
+  "MD-09": {
+    "title": "SLA Contract Registry",
+    "subtitle": "SLA supplier/customer/carrier/3PL để KPI và escalation dùng cùng semantic.",
+    "mode": "configuration",
+    "stages": [
+      "Contract",
+      "Metric rules",
+      "Thresholds",
+      "Effective"
+    ],
+    "fields": [
+      {
+        "label": "Contract",
+        "value": "SLA-CAR-FAST-2026"
+      },
+      {
+        "label": "Party",
+        "value": "CAR-FAST-01"
+      },
+      {
+        "label": "Metric",
+        "value": "On-time delivery"
+      },
+      {
+        "label": "Target",
+        "value": "≥ 97%"
+      }
+    ],
+    "commands": [
+      "CREATE_SLA",
+      "UPDATE_THRESHOLD",
+      "ACTIVATE_SLA"
+    ],
+    "exceptionTitle": "SLA_EFFECTIVE_DATE_OVERLAP",
+    "exceptionDetail": "Hai SLA cùng party/metric có effective window chồng lấn."
+  },
+  "RP-03": {
+    "title": "Inbound / Outbound Performance",
+    "subtitle": "KPI throughput, dwell time, SLA và bottleneck theo warehouse/shift.",
+    "mode": "control",
+    "stages": [
+      "Overview",
+      "Inbound",
+      "Outbound",
+      "Bottleneck"
+    ],
+    "fields": [
+      {
+        "label": "Inbound today",
+        "value": "18,420 Cái"
+      },
+      {
+        "label": "Outbound today",
+        "value": "16,980 Cái"
+      },
+      {
+        "label": "Dock dwell",
+        "value": "42 phút"
+      },
+      {
+        "label": "SLA",
+        "value": "95.8%"
+      }
+    ],
+    "commands": [
+      "CHANGE_PERIOD",
+      "DRILL_DOWN_FLOW",
+      "EXPORT_VIEW"
+    ],
+    "exceptionTitle": "KPI_SOURCE_DELAYED",
+    "exceptionDetail": "Read model chưa cập nhật đủ event window; KPI phải hiển thị freshness."
+  },
+  "RP-04": {
+    "title": "Inventory Aging / Expiry",
+    "subtitle": "Theo dõi aging bucket, expiry risk và FEFO exposure.",
+    "mode": "control",
+    "stages": [
+      "Aging overview",
+      "Expiry risk",
+      "Lot drill-down",
+      "Action list"
+    ],
+    "fields": [
+      {
+        "label": ">90 days",
+        "value": "12,440 Cái"
+      },
+      {
+        "label": "<30 days expiry",
+        "value": "820 Cái"
+      },
+      {
+        "label": "Blocked",
+        "value": "140 Cái"
+      },
+      {
+        "label": "Top SKU",
+        "value": "SKU-1001"
+      }
+    ],
+    "commands": [
+      "FILTER_AGING",
+      "OPEN_LOT",
+      "CREATE_ACTION_LIST"
+    ],
+    "exceptionTitle": "EXPIRY_DATA_INCOMPLETE",
+    "exceptionDetail": "Tracking/expiry metadata thiếu nên không thể tính risk chính xác."
+  },
+  "RP-05": {
+    "title": "Accuracy & Count Variance",
+    "subtitle": "Inventory accuracy, variance rate, recount rate và root cause.",
+    "mode": "control",
+    "stages": [
+      "Accuracy",
+      "Variance",
+      "Recount",
+      "Root cause"
+    ],
+    "fields": [
+      {
+        "label": "Accuracy",
+        "value": "99.42%"
+      },
+      {
+        "label": "Variance docs",
+        "value": "7"
+      },
+      {
+        "label": "Recount rate",
+        "value": "3.1%"
+      },
+      {
+        "label": "Top reason",
+        "value": "MISPLACED_STOCK"
+      }
+    ],
+    "commands": [
+      "FILTER_COUNT",
+      "OPEN_VARIANCE",
+      "EXPORT_REPORT"
+    ],
+    "exceptionTitle": "COUNT_DATA_NOT_POSTED",
+    "exceptionDetail": "Count chưa POST/COMPLETE không được tính như final inventory accuracy."
+  },
+  "RP-06": {
+    "title": "Ledger Reconciliation Report",
+    "subtitle": "So sánh ledger, balance projection và finance/export reconciliation.",
+    "mode": "trace",
+    "stages": [
+      "Ledger",
+      "Projection",
+      "Mismatch",
+      "Reconciled"
+    ],
+    "fields": [
+      {
+        "label": "Ledger total",
+        "value": "128,442 Cái"
+      },
+      {
+        "label": "Balance",
+        "value": "128,442 Cái"
+      },
+      {
+        "label": "Mismatch buckets",
+        "value": "0"
+      },
+      {
+        "label": "Status",
+        "value": "GREEN"
+      }
+    ],
+    "commands": [
+      "RUN_RECONCILIATION",
+      "OPEN_MISMATCH",
+      "EXPORT_EVIDENCE"
+    ],
+    "exceptionTitle": "RECONCILIATION_FAILED",
+    "exceptionDetail": "Mismatch chưa giải quyết thì release/warehouse reopening gate phải giữ blocked."
+  },
+  "RP-07": {
+    "title": "Productivity / Heatmap",
+    "subtitle": "Task throughput, travel, congestion và productivity theo zone/shift.",
+    "mode": "control",
+    "stages": [
+      "Warehouse",
+      "Zone",
+      "Operator",
+      "Task detail"
+    ],
+    "fields": [
+      {
+        "label": "Tasks/hour",
+        "value": "18.6"
+      },
+      {
+        "label": "Travel index",
+        "value": "0.74"
+      },
+      {
+        "label": "Hot zone",
+        "value": "PICK-A"
+      },
+      {
+        "label": "Shift",
+        "value": "Ca 1"
+      }
+    ],
+    "commands": [
+      "CHANGE_LAYER",
+      "OPEN_ZONE",
+      "OPEN_TASK_SAMPLE"
+    ],
+    "exceptionTitle": "PRODUCTIVITY_CONTEXT_MISSING",
+    "exceptionDetail": "Thiếu shift/task mix context nên không được so sánh operator một cách trực tiếp."
+  },
+  "RP-08": {
+    "title": "Audit & Evidence Export",
+    "subtitle": "Xuất audit package có manifest, checksum, permission và data classification.",
+    "mode": "wizard",
+    "stages": [
+      "Select scope",
+      "Classify data",
+      "Generate package",
+      "Verify checksum"
+    ],
+    "fields": [
+      {
+        "label": "Scope",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Period",
+        "value": "02/10/2026"
+      },
+      {
+        "label": "Format",
+        "value": "ZIP + manifest.json"
+      },
+      {
+        "label": "Classification",
+        "value": "INTERNAL"
+      }
+    ],
+    "commands": [
+      "GENERATE_PACKAGE",
+      "VERIFY_PACKAGE",
+      "DOWNLOAD_MANIFEST"
+    ],
+    "exceptionTitle": "EVIDENCE_EXPORT_FORBIDDEN",
+    "exceptionDetail": "Package chứa field classified ngoài permission của requester."
+  },
+  "RP-09": {
+    "title": "Inventory Turnover & Days on Hand",
+    "subtitle": "Read-only analytical KPI theo governed quantity/value semantics.",
+    "mode": "control",
+    "stages": [
+      "Overview",
+      "Category",
+      "SKU",
+      "Trend"
+    ],
+    "fields": [
+      {
+        "label": "Turnover",
+        "value": "7.8x"
+      },
+      {
+        "label": "Days on hand",
+        "value": "46 ngày"
+      },
+      {
+        "label": "Slow movers",
+        "value": "34 SKU"
+      },
+      {
+        "label": "Period",
+        "value": "90 days"
+      }
+    ],
+    "commands": [
+      "CHANGE_PERIOD",
+      "DRILL_DOWN_SKU",
+      "EXPORT_KPI"
+    ],
+    "exceptionTitle": "VALUATION_PERMISSION_REQUIRED",
+    "exceptionDetail": "Nếu KPI dùng value/cost thì phải enforce FINANCIAL_CONFIDENTIAL permission."
+  },
+  "RP-10": {
+    "title": "BI Export & Analytical Platform",
+    "subtitle": "Export governed read models sang analytical platform với lineage.",
+    "mode": "trace",
+    "stages": [
+      "Select dataset",
+      "Validate lineage",
+      "Export",
+      "Reconcile"
+    ],
+    "fields": [
+      {
+        "label": "Dataset",
+        "value": "inventory_daily_snapshot"
+      },
+      {
+        "label": "Rows",
+        "value": "182,440"
+      },
+      {
+        "label": "Destination",
+        "value": "Analytics Lakehouse"
+      },
+      {
+        "label": "Lineage",
+        "value": "OLTP → Read Model → Export"
+      }
+    ],
+    "commands": [
+      "EXPORT_DATASET",
+      "VERIFY_LINEAGE",
+      "RECONCILE_EXPORT"
+    ],
+    "exceptionTitle": "ANALYTICS_LINEAGE_BROKEN",
+    "exceptionDetail": "Dataset thiếu source lineage hoặc classification metadata."
+  },
+  "AD-05": {
+    "title": "Configuration & Feature Flags",
+    "subtitle": "Quản lý configuration có version, scope, approval và effective time.",
+    "mode": "configuration",
+    "stages": [
+      "Draft",
+      "Review",
+      "Approved",
+      "Effective"
+    ],
+    "fields": [
+      {
+        "label": "Flag",
+        "value": "enable_advanced_allocation"
+      },
+      {
+        "label": "Scope",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Value",
+        "value": "false"
+      },
+      {
+        "label": "Version",
+        "value": "v12"
+      }
+    ],
+    "commands": [
+      "CREATE_CONFIG",
+      "APPROVE_CONFIG",
+      "ACTIVATE_CONFIG"
+    ],
+    "exceptionTitle": "CONFIG_VERSION_CONFLICT",
+    "exceptionDetail": "Config đã đổi version sau khi user mở form."
+  },
+  "AD-07": {
+    "title": "Notification Center & Alert Engine",
+    "subtitle": "Alert/notification theo event, severity, recipient rule và acknowledgment.",
+    "mode": "control",
+    "stages": [
+      "Triggered",
+      "Delivered",
+      "Acknowledged",
+      "Closed"
+    ],
+    "fields": [
+      {
+        "label": "Alert",
+        "value": "ALT-2026-2201"
+      },
+      {
+        "label": "Severity",
+        "value": "High"
+      },
+      {
+        "label": "Rule",
+        "value": "Dock dwell > 60m"
+      },
+      {
+        "label": "Recipients",
+        "value": "3 supervisors"
+      }
+    ],
+    "commands": [
+      "ACKNOWLEDGE",
+      "SNOOZE",
+      "ESCALATE"
+    ],
+    "exceptionTitle": "NOTIFICATION_DELIVERY_FAILED",
+    "exceptionDetail": "Delivery failure phải retry/idempotent và không duplicate alert state."
+  },
+  "AD-08": {
+    "title": "SSO / Identity Federation",
+    "subtitle": "Enterprise SSO mapping identity, group, role và warehouse scope.",
+    "mode": "configuration",
+    "stages": [
+      "Metadata",
+      "Mapping",
+      "Test login",
+      "Enabled"
+    ],
+    "fields": [
+      {
+        "label": "Provider",
+        "value": "SAML 2.0"
+      },
+      {
+        "label": "Entity ID",
+        "value": "erp-wms-prod"
+      },
+      {
+        "label": "Group mapping",
+        "value": "WMS_SUPERVISOR → role"
+      },
+      {
+        "label": "Status",
+        "value": "Test mode"
+      }
+    ],
+    "commands": [
+      "SAVE_METADATA",
+      "TEST_SSO",
+      "ENABLE_SSO"
+    ],
+    "exceptionTitle": "SSO_MAPPING_AMBIGUOUS",
+    "exceptionDetail": "Một external group map tới nhiều role/scope xung đột."
+  },
+  "AD-09": {
+    "title": "Number Sequence & Document Numbering",
+    "subtitle": "Sequence theo document type/company/warehouse với uniqueness và reset policy.",
+    "mode": "configuration",
+    "stages": [
+      "Sequence",
+      "Pattern",
+      "Preview",
+      "Activate"
+    ],
+    "fields": [
+      {
+        "label": "Document type",
+        "value": "GOODS_RECEIPT"
+      },
+      {
+        "label": "Pattern",
+        "value": "GR-{YYYY}-{SEQ:6}"
+      },
+      {
+        "label": "Next",
+        "value": "GR-2026-001046"
+      },
+      {
+        "label": "Scope",
+        "value": "Company"
+      }
+    ],
+    "commands": [
+      "CREATE_SEQUENCE",
+      "PREVIEW_NUMBER",
+      "ACTIVATE_SEQUENCE"
+    ],
+    "exceptionTitle": "NUMBER_SEQUENCE_CONFLICT",
+    "exceptionDetail": "Pattern/scope tạo nguy cơ duplicate document number."
+  },
+  "AD-10": {
+    "title": "Business Rules & Workflow Configuration",
+    "subtitle": "Versioned policy cho tolerance, approval, routing và workflow.",
+    "mode": "configuration",
+    "stages": [
+      "Draft rule",
+      "Simulate",
+      "Approve",
+      "Publish"
+    ],
+    "fields": [
+      {
+        "label": "Rule",
+        "value": "Receipt over tolerance"
+      },
+      {
+        "label": "Threshold",
+        "value": "2%"
+      },
+      {
+        "label": "Action",
+        "value": "Require approval"
+      },
+      {
+        "label": "Version",
+        "value": "v8"
+      }
+    ],
+    "commands": [
+      "SIMULATE_RULE",
+      "APPROVE_RULE",
+      "PUBLISH_RULE"
+    ],
+    "exceptionTitle": "RULE_CONFLICT",
+    "exceptionDetail": "Hai rule cùng priority/scope match cùng condition nhưng action khác nhau."
+  },
+  "AD-11": {
+    "title": "Document / Attachment / Evidence",
+    "subtitle": "Quản lý file/evidence với classification, retention và entity linkage.",
+    "mode": "workbench",
+    "stages": [
+      "Upload",
+      "Scan/validate",
+      "Classify",
+      "Linked"
+    ],
+    "fields": [
+      {
+        "label": "Entity",
+        "value": "QC-2026-3011"
+      },
+      {
+        "label": "File",
+        "value": "damage-photo-01.jpg"
+      },
+      {
+        "label": "Classification",
+        "value": "INTERNAL"
+      },
+      {
+        "label": "Retention",
+        "value": "3 years"
+      }
+    ],
+    "commands": [
+      "UPLOAD_EVIDENCE",
+      "CLASSIFY",
+      "LINK_ENTITY"
+    ],
+    "exceptionTitle": "ATTACHMENT_POLICY_REJECTED",
+    "exceptionDetail": "File type/size/classification/retention không thỏa policy."
+  },
+  "AD-12": {
+    "title": "Localization & Regional Format",
+    "subtitle": "Locale, timezone, date/number/unit formatting mà không đổi canonical values.",
+    "mode": "configuration",
+    "stages": [
+      "Locale",
+      "Preview",
+      "Validate",
+      "Apply"
+    ],
+    "fields": [
+      {
+        "label": "Locale",
+        "value": "vi-VN"
+      },
+      {
+        "label": "Timezone",
+        "value": "Asia/Ho_Chi_Minh"
+      },
+      {
+        "label": "Date",
+        "value": "02/10/2026"
+      },
+      {
+        "label": "Decimal",
+        "value": "1.234,56"
+      }
+    ],
+    "commands": [
+      "PREVIEW_FORMAT",
+      "VALIDATE_LOCALE",
+      "APPLY_LOCALE"
+    ],
+    "exceptionTitle": "LOCALE_FORMAT_INVALID",
+    "exceptionDetail": "Format presentation không được làm thay đổi canonical quantity/code."
+  },
+  "AD-13": {
+    "title": "Legal Hold & eDiscovery",
+    "subtitle": "Đặt legal hold cho evidence/audit mà không xóa hoặc rewrite lịch sử.",
+    "mode": "wizard",
+    "stages": [
+      "Scope",
+      "Review",
+      "Hold active",
+      "Export"
+    ],
+    "fields": [
+      {
+        "label": "Hold",
+        "value": "LH-2026-004"
+      },
+      {
+        "label": "Scope",
+        "value": "Shipment + POD evidence"
+      },
+      {
+        "label": "Owner",
+        "value": "Compliance"
+      },
+      {
+        "label": "Status",
+        "value": "ACTIVE"
+      }
+    ],
+    "commands": [
+      "CREATE_HOLD",
+      "EXPORT_HOLD_DATA",
+      "RELEASE_HOLD"
+    ],
+    "exceptionTitle": "LEGAL_HOLD_DELETE_BLOCKED",
+    "exceptionDetail": "Evidence thuộc legal hold không được purge theo retention job."
+  },
+  "AD-14": {
+    "title": "Privacy Request Handling",
+    "subtitle": "Export/redact/delete allowed personal data mà không phá business/audit/legal truth.",
+    "mode": "wizard",
+    "stages": [
+      "Request",
+      "Identity verify",
+      "Impact review",
+      "Execute",
+      "Closed"
+    ],
+    "fields": [
+      {
+        "label": "Request",
+        "value": "DSR-2026-0102"
+      },
+      {
+        "label": "Type",
+        "value": "ACCESS"
+      },
+      {
+        "label": "Subject",
+        "value": "Customer contact"
+      },
+      {
+        "label": "Legal hold",
+        "value": "No"
+      }
+    ],
+    "commands": [
+      "VERIFY_SUBJECT",
+      "GENERATE_EXPORT",
+      "APPLY_REDACTION"
+    ],
+    "exceptionTitle": "PRIVACY_LEGAL_CONFLICT",
+    "exceptionDetail": "Requested deletion xung đột legal/audit retention; cần lawful restriction path."
+  },
+  "IG-01": {
+    "title": "Master Data Sync",
+    "subtitle": "Source event/API → Inbox dedupe → validate → canonical mapping → upsert → audit.",
+    "mode": "trace",
+    "stages": [
+      "Received",
+      "Deduped",
+      "Validated",
+      "Mapped",
+      "Applied"
+    ],
+    "fields": [
+      {
+        "label": "Entity",
+        "value": "Product SKU-1001"
+      },
+      {
+        "label": "Source",
+        "value": "ERP-MDM"
+      },
+      {
+        "label": "Version",
+        "value": "v1028"
+      },
+      {
+        "label": "Status",
+        "value": "VALIDATED"
+      }
+    ],
+    "commands": [
+      "PROCESS_MESSAGE",
+      "RETRY_SYNC",
+      "OPEN_AUDIT"
+    ],
+    "exceptionTitle": "MASTER_DATA_MAPPING_FAILED",
+    "exceptionDetail": "External value không map được canonical enum/UOM/location identity."
+  },
+  "IG-02": {
+    "title": "Purchase Order Integration",
+    "subtitle": "ERP PO truth vào WMS expected inbound với idempotent update/cancel semantics.",
+    "mode": "trace",
+    "stages": [
+      "Received",
+      "Validated",
+      "Upserted",
+      "Acknowledged"
+    ],
+    "fields": [
+      {
+        "label": "PO",
+        "value": "PO-2026-8831"
+      },
+      {
+        "label": "Source",
+        "value": "ERP Procurement"
+      },
+      {
+        "label": "Lines",
+        "value": "12"
+      },
+      {
+        "label": "State",
+        "value": "OPEN"
+      }
+    ],
+    "commands": [
+      "INGEST_PO",
+      "APPLY_PO_UPDATE",
+      "ACK_PO"
+    ],
+    "exceptionTitle": "PO_CANCEL_CONFLICT",
+    "exceptionDetail": "ERP cancel đến sau khi WMS đã có receiving/posting activity."
+  },
+  "IG-03": {
+    "title": "Sales Order Integration",
+    "subtitle": "OMS/ERP order truth vào WMS fulfillment mà không trộn commercial và execution state.",
+    "mode": "trace",
+    "stages": [
+      "Received",
+      "Validated",
+      "Released",
+      "Fulfillment linked"
+    ],
+    "fields": [
+      {
+        "label": "SO",
+        "value": "SO-2026-5108"
+      },
+      {
+        "label": "Source",
+        "value": "OMS"
+      },
+      {
+        "label": "Lines",
+        "value": "8"
+      },
+      {
+        "label": "Priority",
+        "value": "Express"
+      }
+    ],
+    "commands": [
+      "INGEST_SO",
+      "APPLY_ORDER_UPDATE",
+      "ACK_ORDER"
+    ],
+    "exceptionTitle": "ORDER_UPDATE_AFTER_DISPATCH",
+    "exceptionDetail": "Commercial change đến sau physical dispatch; phải xử lý bằng downstream correction."
+  },
+  "IG-05": {
+    "title": "Integration Inbox",
+    "subtitle": "Dedupe, validation, processing status và retry cho inbound integration messages.",
+    "mode": "workbench",
+    "stages": [
+      "RECEIVED",
+      "VALIDATING",
+      "PROCESSED",
+      "FAILED"
+    ],
+    "fields": [
+      {
+        "label": "Message",
+        "value": "MSG-2026-88318"
+      },
+      {
+        "label": "Source",
+        "value": "ERP"
+      },
+      {
+        "label": "Type",
+        "value": "PurchaseOrderUpdated"
+      },
+      {
+        "label": "Attempts",
+        "value": "1"
+      }
+    ],
+    "commands": [
+      "PROCESS_MESSAGE",
+      "RETRY_MESSAGE",
+      "MOVE_TO_DLQ"
+    ],
+    "exceptionTitle": "INBOX_DUPLICATE_EVENT",
+    "exceptionDetail": "Duplicate source/event_id phải dedupe trước business processing."
+  },
+  "IG-07": {
+    "title": "Dead-letter & Replay",
+    "subtitle": "Inspect failed message, sửa dependency/config và replay idempotently.",
+    "mode": "workbench",
+    "stages": [
+      "DLQ",
+      "Investigate",
+      "Ready to replay",
+      "Replayed"
+    ],
+    "fields": [
+      {
+        "label": "Message",
+        "value": "MSG-2026-88104"
+      },
+      {
+        "label": "Error",
+        "value": "UNKNOWN_UOM"
+      },
+      {
+        "label": "Attempts",
+        "value": "5"
+      },
+      {
+        "label": "Last error",
+        "value": "15:42"
+      }
+    ],
+    "commands": [
+      "OPEN_PAYLOAD",
+      "REPLAY_MESSAGE",
+      "DISCARD_WITH_REASON"
+    ],
+    "exceptionTitle": "REPLAY_STILL_FAILING",
+    "exceptionDetail": "Replay không được bypass validation/idempotency chỉ để ép message thành công."
+  },
+  "IG-08": {
+    "title": "Controlled Data Import & Bulk Operations",
+    "subtitle": "Preview/validate/import bulk data theo permission, dry-run và audit.",
+    "mode": "wizard",
+    "stages": [
+      "Upload",
+      "Dry run",
+      "Validation",
+      "Apply",
+      "Report"
+    ],
+    "fields": [
+      {
+        "label": "File",
+        "value": "products-20261002.csv"
+      },
+      {
+        "label": "Rows",
+        "value": "2,480"
+      },
+      {
+        "label": "Valid",
+        "value": "2,461"
+      },
+      {
+        "label": "Errors",
+        "value": "19"
+      }
+    ],
+    "commands": [
+      "DRY_RUN_IMPORT",
+      "APPLY_VALID_ROWS",
+      "DOWNLOAD_ERRORS"
+    ],
+    "exceptionTitle": "BULK_IMPORT_VALIDATION_FAILED",
+    "exceptionDetail": "Invalid rows phải được reject/report, không silent-coerce dữ liệu."
+  },
+  "IG-09": {
+    "title": "Finance / Costing Integration Boundary",
+    "subtitle": "WMS phát factual quantity/movement; ERP/Finance sở hữu cost, tax và valuation truth.",
+    "mode": "trace",
+    "stages": [
+      "Operational event",
+      "Outbox",
+      "Finance received",
+      "Reconciled"
+    ],
+    "fields": [
+      {
+        "label": "Event",
+        "value": "GoodsReceiptPosted"
+      },
+      {
+        "label": "Reference",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Quantity",
+        "value": "1,080 Cái"
+      },
+      {
+        "label": "Cost",
+        "value": "Owned by ERP"
+      }
+    ],
+    "commands": [
+      "PUBLISH_EVENT",
+      "RETRY_DELIVERY",
+      "RECONCILE_FINANCE"
+    ],
+    "exceptionTitle": "FINANCE_DELIVERY_PENDING",
+    "exceptionDetail": "Operational posting đã hoàn tất nhưng finance event chưa delivered; không rollback inventory tự động."
+  },
+  "IG-10": {
+    "title": "Integration Reconciliation Dashboard",
+    "subtitle": "Đối chiếu sent/received/processed/failed giữa WMS và external systems.",
+    "mode": "control",
+    "stages": [
+      "Overview",
+      "Mismatch",
+      "Retry",
+      "Reconciled"
+    ],
+    "fields": [
+      {
+        "label": "Outbox pending",
+        "value": "7"
+      },
+      {
+        "label": "Inbox failed",
+        "value": "3"
+      },
+      {
+        "label": "DLQ",
+        "value": "2"
+      },
+      {
+        "label": "Oldest pending",
+        "value": "18 phút"
+      }
+    ],
+    "commands": [
+      "RUN_RECONCILIATION",
+      "RETRY_DELIVERY",
+      "OPEN_DLQ"
+    ],
+    "exceptionTitle": "INTEGRATION_RECONCILIATION_RED",
+    "exceptionDetail": "Business event counts/correlation không khớp external acknowledgment."
+  },
+  "OP-02": {
+    "title": "Warehouse Opening / Closing",
+    "subtitle": "Operational gate trước khi mở/đóng warehouse theo task, inventory và incident state.",
+    "mode": "wizard",
+    "stages": [
+      "Pre-check",
+      "Inventory check",
+      "Open work check",
+      "OPEN/CLOSED"
+    ],
+    "fields": [
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Open tasks",
+        "value": "0 critical"
+      },
+      {
+        "label": "Reconciliation",
+        "value": "GREEN"
+      },
+      {
+        "label": "Incidents",
+        "value": "0 blocking"
+      }
+    ],
+    "commands": [
+      "RUN_PRECHECK",
+      "OPEN_WAREHOUSE",
+      "CLOSE_WAREHOUSE"
+    ],
+    "exceptionTitle": "WAREHOUSE_GATE_BLOCKED",
+    "exceptionDetail": "Critical task/reconciliation/incident chưa green nên không được đổi operational state."
+  },
+  "OP-04": {
+    "title": "Incident & Recovery Reconciliation",
+    "subtitle": "Sau incident/DR phải reconcile inventory và open work trước full production.",
+    "mode": "control",
+    "stages": [
+      "Incident",
+      "Service restored",
+      "Reconcile",
+      "Reopen approved"
+    ],
+    "fields": [
+      {
+        "label": "Incident",
+        "value": "INC-2026-014"
+      },
+      {
+        "label": "Duration",
+        "value": "26 phút"
+      },
+      {
+        "label": "Deferred ops",
+        "value": "18"
+      },
+      {
+        "label": "Reconciliation",
+        "value": "PENDING"
+      }
+    ],
+    "commands": [
+      "RUN_RECOVERY_CHECK",
+      "RECONCILE_DEFERRED",
+      "APPROVE_REOPEN"
+    ],
+    "exceptionTitle": "RECOVERY_RECONCILIATION_FAILED",
+    "exceptionDetail": "Service up nhưng inventory/open-work chưa reconcile nên warehouse vẫn blocked."
+  },
+  "OP-05": {
+    "title": "Offline Warehouse Operations",
+    "subtitle": "Giới hạn action offline, queue idempotent command và sync/reconcile khi online.",
+    "mode": "control",
+    "stages": [
+      "ONLINE",
+      "CONTINUITY_MODE",
+      "OFFLINE_QUEUE",
+      "SYNCING",
+      "RECONCILED"
+    ],
+    "fields": [
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Devices offline",
+        "value": "6"
+      },
+      {
+        "label": "Queued commands",
+        "value": "23"
+      },
+      {
+        "label": "Policy",
+        "value": "Restricted offline"
+      }
+    ],
+    "commands": [
+      "ENTER_CONTINUITY_MODE",
+      "SYNC_DEFERRED",
+      "EXIT_CONTINUITY_MODE"
+    ],
+    "exceptionTitle": "OFFLINE_OPERATION_NOT_ALLOWED",
+    "exceptionDetail": "Critical action không được phép offline theo continuity policy."
+  },
+  "OP-06": {
+    "title": "Warehouse Commissioning",
+    "subtitle": "Checklist master data, locations, devices, users, integrations, inventory baseline và readiness.",
+    "mode": "wizard",
+    "stages": [
+      "Setup",
+      "Validation",
+      "Dry run",
+      "Go-live approval"
+    ],
+    "fields": [
+      {
+        "label": "Warehouse",
+        "value": "WH-DN-02"
+      },
+      {
+        "label": "Checklist",
+        "value": "47 / 52"
+      },
+      {
+        "label": "Blocking",
+        "value": "3"
+      },
+      {
+        "label": "Target go-live",
+        "value": "12/10/2026"
+      }
+    ],
+    "commands": [
+      "RUN_READINESS",
+      "OPEN_BLOCKER",
+      "APPROVE_GO_LIVE"
+    ],
+    "exceptionTitle": "COMMISSIONING_BLOCKERS_OPEN",
+    "exceptionDetail": "Blocking readiness item còn mở nên không được go-live."
+  },
+  "OP-07": {
+    "title": "Manual Contingency & Post-Outage Reconciliation",
+    "subtitle": "Manual forms trong outage phải map lại canonical WMS operations sau recovery.",
+    "mode": "wizard",
+    "stages": [
+      "Contingency active",
+      "Manual capture",
+      "Digitize",
+      "Reconcile",
+      "Closed"
+    ],
+    "fields": [
+      {
+        "label": "Form batch",
+        "value": "MCF-2026-0102-A"
+      },
+      {
+        "label": "Forms",
+        "value": "18"
+      },
+      {
+        "label": "Digitized",
+        "value": "15"
+      },
+      {
+        "label": "Unmatched",
+        "value": "3"
+      }
+    ],
+    "commands": [
+      "CAPTURE_FORM",
+      "IMPORT_FORM",
+      "RECONCILE_FORM"
+    ],
+    "exceptionTitle": "CONTINGENCY_FORM_UNMATCHED",
+    "exceptionDetail": "Manual operation không map được document/task/identity canonical."
+  },
+  "OP-08": {
+    "title": "Feature Telemetry & UX Measurement",
+    "subtitle": "Đo latency, error, friction và adoption mà không biến telemetry thành business truth.",
+    "mode": "control",
+    "stages": [
+      "Collect",
+      "Aggregate",
+      "Analyze",
+      "Action"
+    ],
+    "fields": [
+      {
+        "label": "Feature",
+        "value": "Mobile Picking"
+      },
+      {
+        "label": "P95 action latency",
+        "value": "840 ms"
+      },
+      {
+        "label": "Error rate",
+        "value": "0.7%"
+      },
+      {
+        "label": "Abandon rate",
+        "value": "1.8%"
+      }
+    ],
+    "commands": [
+      "CHANGE_FEATURE",
+      "OPEN_TRACE",
+      "CREATE_IMPROVEMENT"
+    ],
+    "exceptionTitle": "TELEMETRY_SAMPLE_INCOMPLETE",
+    "exceptionDetail": "Sample/consent/context không đủ để kết luận UX issue."
+  },
+  "OP-09": {
+    "title": "Warehouse Decommissioning & Tenant Offboarding",
+    "subtitle": "Đóng warehouse/tenant chỉ sau inventory zero, open work closed và evidence retained.",
+    "mode": "wizard",
+    "stages": [
+      "Plan",
+      "Drain inventory",
+      "Close work",
+      "Archive/export",
+      "Decommissioned"
+    ],
+    "fields": [
+      {
+        "label": "Warehouse",
+        "value": "WH-LEGACY-01"
+      },
+      {
+        "label": "On Hand",
+        "value": "0"
+      },
+      {
+        "label": "Open docs",
+        "value": "2"
+      },
+      {
+        "label": "Evidence export",
+        "value": "Ready"
+      }
+    ],
+    "commands": [
+      "RUN_OFFBOARDING_CHECK",
+      "EXPORT_EVIDENCE",
+      "DECOMMISSION"
+    ],
+    "exceptionTitle": "OFFBOARDING_NOT_SAFE",
+    "exceptionDetail": "Còn inventory/open work/integration dependency nên không được decommission."
+  },
+  "OP-10": {
+    "title": "Production Data Correction & Controlled Repair",
+    "subtitle": "Correction production phải qua reversal/corrected transaction và audit; không sửa ledger trực tiếp.",
+    "mode": "wizard",
+    "stages": [
+      "Issue identified",
+      "Repair plan",
+      "Approval",
+      "Corrective command",
+      "Verified"
+    ],
+    "fields": [
+      {
+        "label": "Case",
+        "value": "FIX-2026-0038"
+      },
+      {
+        "label": "Entity",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Risk",
+        "value": "Inventory-affecting"
+      },
+      {
+        "label": "Plan",
+        "value": "Reversal + repost"
+      }
+    ],
+    "commands": [
+      "CREATE_REPAIR_PLAN",
+      "APPROVE_REPAIR",
+      "EXECUTE_CORRECTION"
+    ],
+    "exceptionTitle": "DIRECT_LEDGER_EDIT_FORBIDDEN",
+    "exceptionDetail": "Posted ledger/history không được sửa trực tiếp dưới danh nghĩa support."
+  },
+  "OP-11": {
+    "title": "Support & Administrative Tooling",
+    "subtitle": "Support tools gọi Application Layer contract, giữ permission/audit và không routine direct DB.",
+    "mode": "workbench",
+    "stages": [
+      "Lookup",
+      "Diagnose",
+      "Safe action",
+      "Audit"
+    ],
+    "fields": [
+      {
+        "label": "Case",
+        "value": "SUP-2026-1881"
+      },
+      {
+        "label": "User",
+        "value": "U-HCM-OP-01"
+      },
+      {
+        "label": "Entity",
+        "value": "PICK-2026-6110"
+      },
+      {
+        "label": "Access",
+        "value": "Support scoped"
+      }
+    ],
+    "commands": [
+      "LOOKUP_ENTITY",
+      "RETRY_SAFE_ACTION",
+      "OPEN_AUDIT"
+    ],
+    "exceptionTitle": "SUPPORT_ACTION_FORBIDDEN",
+    "exceptionDetail": "Requested action vượt support permission hoặc bypass business command contract."
+  }
+}

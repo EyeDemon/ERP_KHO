@@ -1,0 +1,89 @@
+.stocktakes-page .stocktake-form {
+  display: grid;
+  gap: var(--ui-space-3);
+  max-width: 680px;
+}
+
+.stocktakes-page .stocktake-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ui-space-2) var(--ui-space-5);
+}
+
+.stocktakes-page .stocktake-detail-meta .wide {
+  grid-column: 1 / -1;
+}
+
+.stocktakes-page .stocktake-row-actions,
+.stocktakes-page .stocktake-page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  flex-wrap: wrap;
+}
+
+.stocktakes-page .stocktake-note {
+  max-width: 240px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stocktakes-page .stocktake-variance {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stocktakes-page .stocktake-variance.neutral {
+  color: var(--ui-muted);
+  font-weight: 600;
+}
+
+.stocktakes-page .stocktake-variance.success {
+  color: var(--ui-success);
+}
+
+.stocktakes-page .stocktake-variance.danger {
+  color: var(--ui-danger);
+}
+
+.stocktakes-page .stocktake-editor {
+  min-width: 120px;
+}
+
+.stocktakes-page .stocktake-editor-note {
+  min-width: 220px;
+}
+
+.stocktakes-page .stocktake-row-error {
+  color: var(--ui-danger);
+  font-size: 12px;
+  margin-top: var(--ui-space-1);
+}
+
+.stocktakes-page .stocktake-row-success {
+  color: var(--ui-success);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stocktakes-page .stocktake-empty-warning {
+  color: var(--ui-warning);
+  padding: var(--ui-space-2) 0;
+}
+
+@media (max-width: 900px) {
+  .stocktakes-page .stocktake-detail-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .stocktakes-page .stocktake-detail-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .stocktakes-page .stocktake-detail-meta .wide {
+    grid-column: auto;
+  }
+}

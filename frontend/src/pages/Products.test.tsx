@@ -52,9 +52,9 @@ describe('Products category and barcode UI (mocked API)', () => {
   it('searches and edits a category without allowing its code to change', async () => {
     const category = { id: 3, code: 'CAT', name: 'Danh mục cũ', isActive: true };
     vi.mocked(apiClient.get).mockImplementation(async (url) => ({ data: url === '/api/products' ? [product] : url === '/api/units' ? [{ id: 1, code: 'EA', name: 'Cái', isActive: true }] : url === '/api/product-categories' ? [category] : [] }));
-    const view = render(<Products />); await view.findByRole('button', { name: 'Sửa danh mục' });
+    const view = render(<Products />); await view.findByRole('button', { name: /Sửa danh mục/ });
     fireEvent.change(view.getByLabelText('Tìm danh mục'), { target: { value: 'cat' } });
-    fireEvent.click(view.getByText('Sửa danh mục'));
+    fireEvent.click(view.getByRole('button', { name: /Sửa danh mục/ }));
     expect((view.getByPlaceholderText('Mã danh mục') as HTMLInputElement).disabled).toBe(true);
     fireEvent.change(view.getByPlaceholderText('Tên danh mục'), { target: { value: 'Danh mục mới' } });
     fireEvent.submit(view.getByText('Lưu danh mục').closest('form')!);
