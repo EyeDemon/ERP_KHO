@@ -1,6 +1,6 @@
 # WH-02 — Warehouse Structure Hierarchy
 
-Status: **FOUNDATION — QA pending** until the final SQL/API/frontend CI batch and Vercel runtime verification pass.
+Status: **FOUNDATION**. Promotion evidence is the final PR CI batch plus Vercel runtime verification described in the Definition of Done below.
 
 ## Canonical Notion references reviewed
 
