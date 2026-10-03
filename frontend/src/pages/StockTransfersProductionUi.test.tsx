@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../services/apiClient';
 import StockTransfers from './StockTransfers';
@@ -87,11 +87,12 @@ describe('StockTransfers shared production UI', () => {
     await view.findByText('TRF-2026-0007');
     fireEvent.click(view.getByRole('button', { name: /Tạo phiếu/ }));
 
-    expect(view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' })).toBeTruthy();
-    expect(view.getByLabelText('Kho nguồn')).toBeTruthy();
-    expect(view.getByLabelText('Kho đích')).toBeTruthy();
-    expect(view.getByLabelText('Sản phẩm dòng 1')).toBeTruthy();
-    expect(view.getByLabelText('Số lượng dòng 1')).toBeTruthy();
+    const dialog = view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' });
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).getByLabelText('Kho nguồn')).toBeTruthy();
+    expect(within(dialog).getByLabelText('Kho đích')).toBeTruthy();
+    expect(within(dialog).getByLabelText('Sản phẩm dòng 1')).toBeTruthy();
+    expect(within(dialog).getByLabelText('Số lượng dòng 1')).toBeTruthy();
   });
 
   it('preserves manager approval and idempotency from the detail dialog', async () => {
