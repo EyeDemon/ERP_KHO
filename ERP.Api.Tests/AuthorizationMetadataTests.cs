@@ -17,7 +17,7 @@ namespace ERP.Api.Tests
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
                 typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
-                typeof(PermissionsController) };
+                typeof(PermissionsController), typeof(WarehouseStructureController), typeof(LocationsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
             foreach (var controller in controllers)
@@ -194,6 +194,30 @@ namespace ERP.Api.Tests
             // Verify Viewer is NOT in AdminOrManager or AdminManagerOrStaff
             AppRoles.AdminOrManager.Should().NotContain(AppRoles.Viewer);
             AppRoles.AdminManagerOrStaff.Should().NotContain(AppRoles.Viewer);
+        }
+
+
+        [Fact]
+        public void WarehouseStructureEndpoints_UseCanonicalLocationAndZonePermissions()
+        {
+            typeof(WarehouseStructureController).GetMethod("Structure")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.LocationRead);
+            typeof(WarehouseStructureController).GetMethod("Zones")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.LocationRead);
+            typeof(WarehouseStructureController).GetMethod("CreateZone")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.WarehouseZoneManage);
+            typeof(WarehouseStructureController).GetMethod("CreateAisle")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.WarehouseZoneManage);
+            typeof(WarehouseStructureController).GetMethod("CreateRack")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.WarehouseZoneManage);
+            typeof(WarehouseStructureController).GetMethod("CreateLevel")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.WarehouseZoneManage);
+            typeof(LocationsController).GetMethod("List")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.LocationRead);
+            typeof(LocationsController).GetMethod("Create")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.LocationManage);
+            typeof(LocationsController).GetMethod("Update")!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.LocationManage);
         }
 
         [Fact]
