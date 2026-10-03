@@ -45,7 +45,6 @@ import {
   resolveProductionPage,
   type ProductionNavItem,
 } from '../config/productionNavigation';
-import '../ui/production-ui.css';
 import './MainLayout.css';
 
 const productionIcons: Record<string, LucideIcon> = {
