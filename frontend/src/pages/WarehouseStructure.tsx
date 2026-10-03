@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { permissionError } from '../services/permissionPresentation';
@@ -209,7 +210,7 @@ const WarehouseStructure = () => {
     else setStructure(null);
   };
 
-  const submitStructure = async (event: React.FormEvent) => {
+  const submitStructure = async (event: FormEvent) => {
     event.preventDefault();
     if (!warehouseId || nodeSaving) return;
     setNodeSaving(true);
@@ -241,7 +242,7 @@ const WarehouseStructure = () => {
     }
   };
 
-  const submitNodeEdit = async (event: React.FormEvent) => {
+  const submitNodeEdit = async (event: FormEvent) => {
     event.preventDefault();
     if (!warehouseId || !editNode || nodeSaving) return;
     setNodeSaving(true);
@@ -309,7 +310,7 @@ const WarehouseStructure = () => {
     setLocationPickable(location.isPickable);
   };
 
-  const submitLocation = async (event: React.FormEvent) => {
+  const submitLocation = async (event: FormEvent) => {
     event.preventDefault();
     if (!warehouseId || locationSaving) return;
     setLocationSaving(true);
@@ -605,7 +606,7 @@ const WarehouseStructure = () => {
                 </thead>
                 <tbody>
                   {structure.zones.flatMap(zone => {
-                    const rows: React.ReactNode[] = [
+                    const rows: ReactNode[] = [
                       <tr key={'zone-' + zone.id}>
                         <td><UiBadge>Khu vực</UiBadge></td>
                         <td><strong>{zone.code}</strong><br /><small>{zone.name}</small></td>
