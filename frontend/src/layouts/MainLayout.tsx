@@ -8,6 +8,7 @@ import { useMockDemo } from '../context/MockDemoContext';
 import { canViewApprovals, canViewStocktakes, hasPermission, beginPermissionRefresh, setCurrentPermissions, usePermissionSet } from '../services/authorization';
 import { blueprintDemoReadPermissions, isBlueprintDemoRuntime } from '../services/runtimeMode';
 import { productionNavigation, productionSections, resolveProductionPage, type ProductionNavItem } from '../config/productionNavigation';
+import '../ui/production-ui.css';
 
 const MainLayout = () => {
   usePermissionSet();
@@ -170,7 +171,7 @@ const MainLayout = () => {
           )}
         </header>
 
-        <main style={{ padding: '20px', flex: 1, backgroundColor: '#f5f7fb', minWidth: 0 }}>
+        <main className={blueprintMode ? undefined : 'production-ui'} style={{ padding: '20px', flex: 1, backgroundColor: '#f5f7fb', minWidth: 0 }}>
           {demoRuntime && !blueprintMode && (
             <section role="note" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16, padding: '12px 14px', background: '#fff9e8', border: '1px solid #ead58a', borderRadius: 10, color: '#5f4a18' }}>
               <div style={{ minWidth: 260, flex: 1 }}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 export interface BusinessPartner {
   id: number; code: string; name: string; isSupplier: boolean; isCustomer: boolean;
@@ -24,10 +25,87 @@ const BusinessPartners = () => {
   const submit = async (e: React.FormEvent) => { e.preventDefault(); if (submitting.current) return; submitting.current = true; setLoading(true); setError(''); try { if (editing) await apiClient.put(`/api/business-partners/${editing}`, form); else await apiClient.post('/api/business-partners', form); setMessage(editing ? 'Đã cập nhật đối tác.' : 'Đã tạo đối tác.'); setShowForm(false); await load(); } catch (x: any) { const message=x.response?.data?.message || 'Không lưu được đối tác.'; setError(x.response?.status===409 ? `${message} Vui lòng tải lại danh sách rồi thử lại.` : message); } finally { submitting.current = false; setLoading(false); } };
   const remove = async (x: BusinessPartner) => { if (!confirm(`Xóa đối tác ${x.code}?`)) return; try { await apiClient.delete(`/api/business-partners/${x.id}`); setMessage('Đã xóa đối tác.'); await load(); } catch (e: any) { setError(e.response?.data?.message || 'Không xóa được đối tác.'); } };
   const field = (name: keyof BusinessPartner, value: unknown) => setForm(v => ({ ...v, [name]: value }));
-  return <div><h2>Quản lý đối tác</h2>{error && <p role="alert" style={{color:'red'}}>{error}</p>}{message && <p role="status" style={{color:'green'}}>{message}</p>}
-    {!showForm && <><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><input aria-label="Tìm đối tác" placeholder="Tìm mã hoặc tên" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}}/><select aria-label="Lọc vai trò" value={role} onChange={e=>{setRole(e.target.value);setPage(1)}}><option value="">Mọi vai trò</option><option value="supplier">Nhà cung cấp</option><option value="customer">Khách hàng</option></select><select aria-label="Lọc trạng thái" value={active} onChange={e=>{setActive(e.target.value);setPage(1)}}><option value="">Mọi trạng thái</option><option value="true">Hoạt động</option><option value="false">Ngừng hoạt động</option></select>{canManage&&<button onClick={openCreate}>Thêm đối tác</button>}</div>
-    {loading?<p>Đang tải...</p>:<table style={{width:'100%',marginTop:12}}><thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Liên hệ</th><th>Trạng thái</th>{canManage&&<th>Thao tác</th>}</tr></thead><tbody>{items.length===0?<tr><td colSpan={canManage?6:5} style={{textAlign:'center',padding:18,color:'#6b7b90'}}>Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>:items.map(x=><tr key={x.id}><td>{x.code}</td><td><div>{x.name}</div>{x.address&&<small style={{color:'#7a899b'}}>{x.address}</small>}</td><td>{[x.isSupplier?'Nhà cung cấp':'',x.isCustomer?'Khách hàng':''].filter(Boolean).join(', ')||'—'}</td><td><div>{x.phone||'—'}</div>{x.email&&<small style={{color:'#607086'}}>{x.email}</small>}</td><td>{x.isActive?'Hoạt động':'Ngừng hoạt động'}</td>{canManage&&<td><button onClick={()=>openEdit(x)}>Sửa</button> <button onClick={()=>void remove(x)}>Xóa</button></td>}</tr>)}</tbody></table>}<div><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Trước</button> <span>Trang {page}/{pages}</span> <button disabled={page>=pages} onClick={()=>setPage(p=>p+1)}>Sau</button></div></>}
-    {showForm&&<form onSubmit={submit} style={{maxWidth:600}}><h3>{editing?'Sửa đối tác':'Thêm đối tác'}</h3><label>Mã *<input aria-label="Mã đối tác" value={form.code||''} disabled={!!editing||loading} maxLength={50} onChange={e=>field('code',e.target.value)}/></label><br/><label>Tên *<input aria-label="Tên đối tác" value={form.name||''} disabled={loading} maxLength={200} onChange={e=>field('name',e.target.value)}/></label><br/><label><input type="checkbox" checked={!!form.isSupplier} disabled={loading} onChange={e=>field('isSupplier',e.target.checked)}/> Nhà cung cấp</label> <label><input type="checkbox" checked={!!form.isCustomer} disabled={loading} onChange={e=>field('isCustomer',e.target.checked)}/> Khách hàng</label> <label><input type="checkbox" checked={!!form.isActive} disabled={loading} onChange={e=>field('isActive',e.target.checked)}/> Hoạt động</label><br/><label>Điện thoại<input value={form.phone||''} maxLength={50} onChange={e=>field('phone',e.target.value)}/></label><br/><label>Email<input value={form.email||''} maxLength={254} onChange={e=>field('email',e.target.value)}/></label><br/><label>Địa chỉ<textarea value={form.address||''} maxLength={500} onChange={e=>field('address',e.target.value)}/></label><br/><button type="submit" disabled={loading}>{loading?'Đang lưu...':'Lưu'}</button> <button type="button" disabled={loading} onClick={()=>setShowForm(false)}>Hủy</button></form>}
-  </div>;
+  return <UiPage>
+    <UiPageHeader
+      eyebrow="Dữ liệu nền"
+      title="Đối tác"
+      description="Quản lý nhà cung cấp, khách hàng, vai trò nghiệp vụ và thông tin liên hệ dùng trên các chứng từ kho."
+      actions={canManage && !showForm ? <button type="button" className="ui-primary-button" onClick={openCreate}>Thêm đối tác</button> : undefined}
+    />
+
+    {error && <p role="alert">{error}</p>}
+    {message && <p role="status" style={{ color: '#256b45', margin: 0 }}>{message}</p>}
+
+    {!showForm && <>
+      <UiToolbar>
+        <UiToolbarField label="Tìm đối tác">
+          <input aria-label="Tìm đối tác" placeholder="Mã hoặc tên" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} />
+        </UiToolbarField>
+        <UiToolbarField label="Vai trò">
+          <select aria-label="Lọc vai trò" value={role} onChange={event => { setRole(event.target.value); setPage(1); }}>
+            <option value="">Mọi vai trò</option>
+            <option value="supplier">Nhà cung cấp</option>
+            <option value="customer">Khách hàng</option>
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Trạng thái">
+          <select aria-label="Lọc trạng thái" value={active} onChange={event => { setActive(event.target.value); setPage(1); }}>
+            <option value="">Mọi trạng thái</option>
+            <option value="true">Hoạt động</option>
+            <option value="false">Ngừng hoạt động</option>
+          </select>
+        </UiToolbarField>
+        <div style={{ marginLeft: 'auto', alignSelf: 'center', color: '#66788d', fontSize: 10 }}>Trang {page}/{pages}</div>
+      </UiToolbar>
+
+      <UiCard title="Danh sách đối tác">
+        {loading ? <p role="status">Đang tải đối tác...</p> : <table>
+          <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
+          <tbody>
+            {items.length === 0
+              ? <tr><td colSpan={canManage ? 6 : 5} style={{ textAlign: 'center', padding: 22, color: '#6b7b90' }}>Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
+              : items.map(item => <tr key={item.id}>
+                  <td><strong>{item.code}</strong></td>
+                  <td><div>{item.name}</div>{item.address && <small>{item.address}</small>}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      {item.isSupplier && <UiBadge>Nhà cung cấp</UiBadge>}
+                      {item.isCustomer && <UiBadge>Khách hàng</UiBadge>}
+                      {!item.isSupplier && !item.isCustomer && <span>—</span>}
+                    </div>
+                  </td>
+                  <td><div>{item.phone || '—'}</div>{item.email && <small>{item.email}</small>}</td>
+                  <td><UiBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
+                  {canManage && <td><div style={{ display: 'flex', gap: 6 }}><button onClick={() => openEdit(item)}>Sửa</button><button onClick={() => void remove(item)}>Xóa</button></div></td>}
+                </tr>)}
+          </tbody>
+        </table>}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10 }}>
+          <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Trước</button>
+          <span style={{ color: '#66788d', fontSize: 11 }}>Trang {page}/{pages}</span>
+          <button disabled={page >= pages} onClick={() => setPage(value => value + 1)}>Sau</button>
+        </div>
+      </UiCard>
+    </>}
+
+    {showForm && <UiCard title={editing ? 'Sửa đối tác' : 'Thêm đối tác'}>
+      <form onSubmit={submit} style={{ display: 'grid', gap: 10, maxWidth: 720 }}>
+        <label>Mã đối tác *<input aria-label="Mã đối tác" value={form.code || ''} disabled={!!editing || loading} maxLength={50} onChange={event => field('code', event.target.value)} /></label>
+        <label>Tên đối tác *<input aria-label="Tên đối tác" value={form.name || ''} disabled={loading} maxLength={200} onChange={event => field('name', event.target.value)} /></label>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={!!form.isSupplier} disabled={loading} onChange={event => field('isSupplier', event.target.checked)} /> Nhà cung cấp</label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={!!form.isCustomer} disabled={loading} onChange={event => field('isCustomer', event.target.checked)} /> Khách hàng</label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={!!form.isActive} disabled={loading} onChange={event => field('isActive', event.target.checked)} /> Hoạt động</label>
+        </div>
+        <label>Điện thoại<input value={form.phone || ''} maxLength={50} onChange={event => field('phone', event.target.value)} /></label>
+        <label>Email<input value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
+        <label>Địa chỉ<textarea value={form.address || ''} maxLength={500} rows={3} onChange={event => field('address', event.target.value)} /></label>
+        <div style={{ display: 'flex', gap: 7 }}>
+          <button type="submit" disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu'}</button>
+          <button type="button" disabled={loading} onClick={() => setShowForm(false)}>Hủy</button>
+        </div>
+      </form>
+    </UiCard>}
+  </UiPage>;
 };
 export default BusinessPartners;

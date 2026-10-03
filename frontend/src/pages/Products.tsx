@@ -3,6 +3,7 @@ import apiClient from '../services/apiClient';
 import { hasPermission, usePermission } from '../services/authorization';
 import { categoryChanged, categoryRequest, normalizeBarcodeInput } from './productCatalog';
 import { permissionError } from '../services/permissionPresentation';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 interface Barcode { id: number; productId: number; value: string }
 interface Category { id: number; code: string; name: string; isActive: boolean }
@@ -94,22 +95,120 @@ const Products = () => {
   const deleteProduct = async (id: number) => { if (!canDeactivate || !window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return; await mutate(async () => { try { await apiClient.delete(`/api/products/${id}`); setNotice('Đã xóa sản phẩm.'); await load(); } catch (e) { setError(messageOf(e, 'Không thể xóa sản phẩm.')); } }); };
   const lookup = async (e: React.FormEvent) => { e.preventDefault(); setError(''); setNotice(''); try { const p = (await apiClient.get('/api/product-barcodes/lookup', { params: { value: scan } })).data as Product; setSearch(p.code); setNotice(`Mã vạch thuộc sản phẩm ${p.code} – ${p.name}.`); } catch (e) { setSearch(''); setError(messageOf(e, 'Không tìm thấy mã vạch.')); } };
 
-  return <div><h2>Quản lý sản phẩm</h2>
-    {notice && <p style={{ color: 'green' }}>{notice}</p>}{error && <p role="alert" style={{ color: 'red' }}>{error}</p>}{mutating && <p role="status">Đang xử lý...</p>}
-    <form onSubmit={lookup}><input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" /><button>Tra mã vạch</button></form>
-    <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Tìm mã, tên hoặc mã vạch" />
-    {canManageCategories && <section><h3>Danh mục sản phẩm</h3><input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" /><form onSubmit={addCategory}><input value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required /><input value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required /><button disabled={mutating}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>{editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }}>Hủy sửa danh mục</button>}</form><ul>{categories.filter(c => { const q=categorySearch.trim().toLowerCase(); return !q || c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q); }).map(c => <li key={c.id}>{c.code} – {c.name} ({c.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}) <button disabled={mutating} onClick={() => editCategory(c)}>Sửa danh mục</button> <button disabled={mutating} onClick={() => toggleCategory(c)}>{c.isActive ? 'Ngừng' : 'Kích hoạt'}</button> <button disabled={mutating} onClick={() => deleteCategory(c.id)}>Xóa</button></li>)}</ul></section>}
-    {(editing ? canManage : canCreate) && <form onSubmit={saveProduct} style={{ display: 'grid', gap: 8, maxWidth: 620 }}><h3>{editing ? `Sửa ${editing.code}` : 'Thêm sản phẩm'}</h3>
-      <input value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã sản phẩm" disabled={!!editing} required /><input value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên sản phẩm" required /><textarea value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="Mô tả" />
-      <select value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required><option value={0}>Chọn đơn vị</option>{units.filter(x => x.isActive).map(x => <option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}</select>
-      <select disabled={!canReadCategories} aria-label="Danh mục" value={form.categoryId} onChange={e => setForm(x => ({ ...x, categoryId: e.target.value ? Number(e.target.value) : '' }))}><option value="">Không có danh mục</option>{categories.filter(c => c.isActive || c.id === editing?.categoryId).map(c => <option key={c.id} value={c.id}>{c.code} – {c.name}{c.isActive ? '' : ' (ngừng hoạt động)'}</option>)}</select>
-      {editing && <label><input type="checkbox" checked={form.isActive} onChange={e => setForm(x => ({ ...x, isActive: e.target.checked }))} /> Hoạt động</label>}<div><button>Lưu</button> {editing && <button type="button" onClick={createMode}>Hủy sửa</button>}</div>
+  return <UiPage>
+    <UiPageHeader
+      eyebrow="Dữ liệu nền"
+      title="Sản phẩm"
+      description="Quản lý SKU, danh mục, đơn vị tính và barcode. Tìm kiếm và tra mã vạch dùng cùng dữ liệu sản phẩm."
+    />
 
-    </form>}
-      {editing && canManageBarcodes && <fieldset><legend>Mã vạch</legend>{editing.barcodes?.map(b => <span key={b.id}>{b.value} <button type="button" onClick={() => deleteBarcode(b.id)}>×</button> </span>)}<div><input aria-label="Mã vạch mới" value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={64} placeholder="Mã vạch mới" /><button type="button" onClick={addBarcode}>Thêm mã vạch</button></div></fieldset>}
+    {notice && <p role="status" style={{ color: '#256b45', margin: 0 }}>{notice}</p>}
+    {error && <p role="alert">{error}</p>}
+    {mutating && <p role="status">Đang xử lý...</p>}
 
-    {loading ? <p>Đang tải...</p> : <table><thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th />}</tr></thead><tbody>{visibleProducts.length === 0 ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 7 : 6} style={{ textAlign: 'center', padding: 18, color: '#6b7b90' }}>Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr> : visibleProducts.map(p => <tr key={p.id}><td>{p.code}</td><td>{p.name}</td><td>{p.categoryName || '—'}</td><td>{p.unitName || p.unitId}</td><td>{p.barcodes?.map(b => b.value).join(', ') || '—'}</td><td>{p.isActive ? 'Hoạt động' : 'Khóa'}</td>{(canManage || canManageBarcodes || canDeactivate) && <td>{(canManage || canManageBarcodes) && <button onClick={() => editMode(p)}>Sửa</button>} {canDeactivate && <button onClick={() => deleteProduct(p.id)}>Xóa</button>}</td>}</tr>)}</tbody></table>}
-    <div><button disabled={currentPage === 1} onClick={() => setCurrentPage(x => x - 1)}>Trước</button> Trang {currentPage}/{totalPages} <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(x => x + 1)}>Sau</button></div>
-  </div>;
+    <UiToolbar>
+      <UiToolbarField label="Tra mã vạch">
+        <form onSubmit={lookup} style={{ display: 'flex', gap: 7 }}>
+          <input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" />
+          <button type="submit">Tra mã vạch</button>
+        </form>
+      </UiToolbarField>
+      <UiToolbarField label="Tìm sản phẩm">
+        <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Mã, tên hoặc mã vạch" />
+      </UiToolbarField>
+      <div style={{ marginLeft: 'auto', alignSelf: 'center', color: '#66788d', fontSize: 10 }}>
+        {filtered.length} sản phẩm • Trang {currentPage}/{totalPages}
+      </div>
+    </UiToolbar>
+
+    {canManageCategories && <UiCard title="Danh mục sản phẩm">
+      <div style={{ display: 'grid', gap: 10 }}>
+        <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" />
+        <form onSubmit={addCategory} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
+          <input value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required />
+          <button type="submit" disabled={mutating}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>
+          {editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }}>Hủy sửa</button>}
+        </form>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {categories.filter(category => {
+            const q = categorySearch.trim().toLowerCase();
+            return !q || category.code.toLowerCase().includes(q) || category.name.toLowerCase().includes(q);
+          }).map(category => (
+            <div key={category.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid #e7edf3', paddingTop: 7 }}>
+              <strong>{category.code}</strong>
+              <span>{category.name}</span>
+              <UiBadge tone={category.isActive ? 'success' : 'neutral'}>{category.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                <button disabled={mutating} onClick={() => editCategory(category)}>Sửa</button>
+                <button disabled={mutating} onClick={() => toggleCategory(category)}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
+                <button disabled={mutating} onClick={() => deleteCategory(category.id)}>Xóa</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </UiCard>}
+
+    {(editing ? canManage : canCreate) && <UiCard title={editing ? `Sửa ${editing.code}` : 'Thêm sản phẩm'}>
+      <form onSubmit={saveProduct} style={{ display: 'grid', gap: 9, maxWidth: 760 }}>
+        <input aria-label="Mã sản phẩm" value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã sản phẩm" disabled={!!editing} required />
+        <input aria-label="Tên sản phẩm" value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên sản phẩm" required />
+        <textarea aria-label="Mô tả sản phẩm" value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="Mô tả" rows={3} />
+        <select aria-label="Đơn vị tính" value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required>
+          <option value={0}>Chọn đơn vị</option>
+          {units.filter(item => item.isActive).map(item => <option key={item.id} value={item.id}>{item.code} – {item.name}</option>)}
+        </select>
+        <select disabled={!canReadCategories} aria-label="Danh mục" value={form.categoryId} onChange={e => setForm(x => ({ ...x, categoryId: e.target.value ? Number(e.target.value) : '' }))}>
+          <option value="">Không có danh mục</option>
+          {categories.filter(category => category.isActive || category.id === editing?.categoryId).map(category => <option key={category.id} value={category.id}>{category.code} – {category.name}{category.isActive ? '' : ' (ngừng hoạt động)'}</option>)}
+        </select>
+        {editing && <label style={{ display: 'flex', gap: 7, alignItems: 'center' }}><input type="checkbox" checked={form.isActive} onChange={e => setForm(x => ({ ...x, isActive: e.target.checked }))} /> Hoạt động</label>}
+        <div style={{ display: 'flex', gap: 7 }}>
+          <button type="submit">Lưu</button>
+          {editing && <button type="button" onClick={createMode}>Hủy sửa</button>}
+        </div>
+      </form>
+    </UiCard>}
+
+    {editing && canManageBarcodes && <UiCard title="Mã vạch">
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 9 }}>
+        {editing.barcodes?.map(item => <UiBadge key={item.id}>{item.value} <button type="button" aria-label={'Xóa mã vạch ' + item.value} onClick={() => deleteBarcode(item.id)} style={{ minHeight: 18, padding: '0 4px', marginLeft: 4 }}>×</button></UiBadge>)}
+      </div>
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+        <input aria-label="Mã vạch mới" value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={64} placeholder="Mã vạch mới" />
+        <button type="button" onClick={addBarcode}>Thêm mã vạch</button>
+      </div>
+    </UiCard>}
+
+    <UiCard title="Danh sách sản phẩm">
+      {loading ? <p role="status">Đang tải sản phẩm...</p> : <table>
+        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th>Thao tác</th>}</tr></thead>
+        <tbody>
+          {visibleProducts.length === 0
+            ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 7 : 6} style={{ textAlign: 'center', padding: 22, color: '#6b7b90' }}>Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
+            : visibleProducts.map(product => <tr key={product.id}>
+                <td><strong>{product.code}</strong></td>
+                <td>{product.name}</td>
+                <td>{product.categoryName || '—'}</td>
+                <td>{product.unitName || product.unitId}</td>
+                <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>
+                <td><UiBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Hoạt động' : 'Khóa'}</UiBadge></td>
+                {(canManage || canManageBarcodes || canDeactivate) && <td>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(canManage || canManageBarcodes) && <button onClick={() => editMode(product)}>Sửa</button>}
+                    {canDeactivate && <button onClick={() => deleteProduct(product.id)}>Xóa</button>}
+                  </div>
+                </td>}
+              </tr>)}
+        </tbody>
+      </table>}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10 }}>
+        <button disabled={currentPage === 1} onClick={() => setCurrentPage(value => value - 1)}>Trước</button>
+        <span style={{ color: '#66788d', fontSize: 11 }}>Trang {currentPage}/{totalPages}</span>
+        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(value => value + 1)}>Sau</button>
+      </div>
+    </UiCard>
+  </UiPage>;
 };
 export default Products;

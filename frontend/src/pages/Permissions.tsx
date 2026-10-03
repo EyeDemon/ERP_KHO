@@ -3,6 +3,7 @@ import apiClient from '../services/apiClient';
 import { beginPermissionRefresh, setCurrentPermissions, usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { permissionError, permissionLabel, roleLabel } from '../services/permissionPresentation';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader } from '../ui/ProductionUi';
 
 type Permission = { code: string; description: string };
 type Role = { id: number; roleName: string; rowVersion: string; permissions: string[] };
@@ -54,27 +55,52 @@ export default function Permissions() {
     } catch (failure) { setRoles([]); setCatalog([]); setError(permissionError(failure)); }
     finally { inFlight.current = false; setPending(false); }
   };
-  return <section aria-label="Quản trị quyền truy cập">
-    <h2>Quản trị quyền truy cập</h2>
+  return <UiPage>
+    <UiPageHeader
+      eyebrow="Kiểm soát"
+      title="Quản trị quyền truy cập"
+      description="Theo dõi permission catalog và grant theo role. Mọi thay đổi quyền cần tuân thủ concurrency và idempotency."
+      actions={<button type="button" disabled={pending || loading} onClick={() => void load()}>Tải lại</button>}
+    />
+
     {error && <p role="alert">{error}</p>}
-    {success && <p role="status">{success}</p>}
+    {success && <p role="status" style={{ color: '#256b45', margin: 0 }}>{success}</p>}
+
+    <UiMetricGrid>
+      <UiMetric value={catalog.length} label="Permission trong catalog" />
+      <UiMetric value={roles.length} label="Role đang hiển thị" />
+      <UiMetric value={roles.reduce((sum, role) => sum + role.permissions.length, 0)} label="Grant hiện tại" />
+    </UiMetricGrid>
+
     {loading ? <p role="status">Đang tải quyền truy cập...</p> : <>
-      {catalog.length === 0 && <p>Chưa có quyền truy cập để hiển thị.</p>}
-      {!canReadRoles && catalog.length > 0 && <ul aria-label="Danh mục quyền truy cập">
-        {catalog.map(permission => <li key={permission.code}>{permissionLabel(permission.code)}</li>)}
-      </ul>}
-      {roles.map(role => <section key={role.id} aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
-        <h3>{roleLabel(role.roleName)}</h3>
-        <ul>{catalog.map(permission => {
-          const granted = role.permissions.includes(permission.code);
-          return <li key={permission.code}>{permissionLabel(permission.code)} — {granted ? 'Đã cấp' : 'Chưa cấp'}
-            {canAssign && <button type="button" disabled={pending} onClick={() => void change(role, permission.code, granted)}
-              aria-label={`${granted ? 'Thu hồi' : 'Cấp'} ${permissionLabel(permission.code)} cho ${roleLabel(role.roleName)}`}>
-              {pending ? 'Đang lưu...' : granted ? 'Thu hồi quyền' : 'Cấp quyền'}</button>}
-          </li>;
-        })}</ul>
-      </section>)}
-      <button type="button" disabled={pending || loading} onClick={() => void load()}>Tải lại</button>
+      {catalog.length === 0 && <UiCard><p style={{ margin: 0 }}>Chưa có quyền truy cập để hiển thị.</p></UiCard>}
+
+      {!canReadRoles && catalog.length > 0 && <UiCard title="Danh mục quyền truy cập">
+        <table aria-label="Danh mục quyền truy cập">
+          <thead><tr><th>Quyền</th><th>Mã permission</th></tr></thead>
+          <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td><code>{permission.code}</code></td></tr>)}</tbody>
+        </table>
+      </UiCard>}
+
+      {roles.map(role => <UiCard key={role.id} title={roleLabel(role.roleName)}>
+        <table aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
+          <thead><tr><th>Quyền</th><th>Mã permission</th><th>Trạng thái</th>{canAssign && <th>Thao tác</th>}</tr></thead>
+          <tbody>{catalog.map(permission => {
+            const granted = role.permissions.includes(permission.code);
+            return <tr key={permission.code}>
+              <td>{permissionLabel(permission.code)}</td>
+              <td><code>{permission.code}</code></td>
+              <td><UiBadge tone={granted ? 'success' : 'neutral'}>{granted ? 'Đã cấp' : 'Chưa cấp'}</UiBadge></td>
+              {canAssign && <td>
+                <button type="button" disabled={pending} onClick={() => void change(role, permission.code, granted)}
+                  aria-label={`${granted ? 'Thu hồi' : 'Cấp'} ${permissionLabel(permission.code)} cho ${roleLabel(role.roleName)}`}>
+                  {pending ? 'Đang lưu...' : granted ? 'Thu hồi quyền' : 'Cấp quyền'}
+                </button>
+              </td>}
+            </tr>;
+          })}</tbody>
+        </table>
+      </UiCard>)}
     </>}
-  </section>;
+  </UiPage>;
 }
