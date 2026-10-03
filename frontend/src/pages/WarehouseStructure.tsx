@@ -62,6 +62,7 @@ type Structure = {
   warehouseName: string;
   zones: Zone[];
   systemLocations: Location[];
+  unmappedLocations: Location[];
 };
 
 type StructureKind = 'zone' | 'aisle' | 'rack' | 'level';
@@ -366,7 +367,7 @@ const WarehouseStructure = () => {
   const aisleCount = aisles.length;
   const rackCount = racks.length;
   const levelCount = levels.length;
-  const locationCount = userLocations.length + (structure?.systemLocations.length ?? 0);
+  const locationCount = userLocations.length + (structure?.systemLocations.length ?? 0) + (structure?.unmappedLocations.length ?? 0);
 
   return (
     <UiPage>
@@ -679,6 +680,30 @@ const WarehouseStructure = () => {
             </UiTableScroll>
           )}
         </UiCard>
+
+        {structure && structure.unmappedLocations.length > 0 && (
+          <UiCard title="Vị trí chưa gắn cấu trúc">
+            <p className="ui-muted-text">
+              Đây là dữ liệu vị trí có từ trước WH-02. Hãy gắn vào một khu vực/tầng kệ phù hợp; hệ thống không tự tạo cấu trúc giả cho lịch sử cũ.
+            </p>
+            <UiTableScroll>
+              <table aria-label="Vị trí chưa gắn cấu trúc">
+                <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th>{canManageLocations && <th>Hành động</th>}</tr></thead>
+                <tbody>
+                  {structure.unmappedLocations.map(location => (
+                    <tr key={location.id}>
+                      <td><strong>{location.code}</strong></td>
+                      <td>{location.name}</td>
+                      <td>{locationLabels[location.locationType] || location.locationType}</td>
+                      <td><UiBadge tone={!location.isActive || location.isBlocked ? 'danger' : 'warning'}>{!location.isActive ? 'Ngừng hoạt động' : location.isBlocked ? 'Đang khóa' : 'Chưa gắn cấu trúc'}</UiBadge></td>
+                      {canManageLocations && <td><button type="button" onClick={() => beginLocationEdit(location)}>Gắn cấu trúc</button></td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </UiTableScroll>
+          </UiCard>
+        )}
 
         {structure && structure.systemLocations.length > 0 && (
           <UiCard title="Vị trí hệ thống">
