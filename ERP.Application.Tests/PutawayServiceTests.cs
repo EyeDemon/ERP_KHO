@@ -56,6 +56,8 @@ public sealed class PutawayServiceTests : IDisposable
         var ids = await SeedAsync(); await using var db = Create(); var service = Service(db, ids.WarehouseId, ids.UserId);
         var created = await service.CreateLocationAsync(new CreateWarehouseLocationDto { WarehouseId=ids.WarehouseId, ZoneId=ids.ZoneId, Code="  shelf-c  ", Name="Kệ C", LocationType="Storage", IsPickable=true });
         created.Code.Should().Be("SHELF-C"); created.LocationType.Should().Be(nameof(WarehouseLocationType.Storage));
+        var reserve = await service.CreateLocationAsync(new CreateWarehouseLocationDto { WarehouseId=ids.WarehouseId, ZoneId=ids.ZoneId, Code="reserve-c", Name="Kệ dự trữ", LocationType="Storage", IsPickable=false });
+        reserve.Code.Should().Be("RESERVE-C"); reserve.IsPickable.Should().BeFalse();
         var receiving = (await service.ListLocationsAsync(ids.WarehouseId)).Single(x => x.Id == ids.Receiving);
         var action = () => service.UpdateLocationAsync(receiving.Id, new UpdateWarehouseLocationDto { Name=receiving.Name, IsActive=false, IsReceivable=true, RowVersion=receiving.RowVersion! });
         await action.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>();
