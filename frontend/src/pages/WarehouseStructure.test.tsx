@@ -70,6 +70,7 @@ const structure = {
     }],
     locations: [],
   }],
+  unmappedLocations: [],
   systemLocations: [{
     id: 1,
     warehouseId: 1,
