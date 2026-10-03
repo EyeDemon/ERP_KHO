@@ -72,6 +72,30 @@ public sealed class PutawayServiceTests : IDisposable
         await transaction.RollbackAsync();
     }
 
+    [Fact]
+    public async Task Location_deactivation_protects_stock_and_unfinished_tasks_but_allows_empty_location()
+    {
+        var ids = await SeedAsync(); await using var db = Create(); var service = Service(db, ids.WarehouseId, ids.UserId);
+        var task = await service.GetAsync(ids.TaskId);
+        await service.MoveAsync(task.Id, new MovePutawayItemDto { ItemId=ids.ItemId, DestinationLocationId=ids.Storage1, Quantity=2, UnitCode="EA", RowVersion=task.RowVersion! });
+        async Task Deactivate(int id)
+        {
+            var location = (await service.ListLocationsAsync(ids.WarehouseId)).Single(x => x.Id == id);
+            await service.UpdateLocationAsync(id, new UpdateWarehouseLocationDto { Name=location.Name, IsActive=false, IsPickable=true, RowVersion=location.RowVersion! });
+        }
+        await FluentActions.Awaiting(() => Deactivate(ids.Storage1)).Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
+            .Where(x => Equals(x.Data["HttpStatusCode"], 409));
+        var item = await db.PutawayTaskItems.SingleAsync(x => x.Id == ids.ItemId);
+        item.SourceLocationId=ids.Storage2; await db.SaveChangesAsync();
+        await FluentActions.Awaiting(() => Deactivate(ids.Storage2)).Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>();
+        item.SourceLocationId=ids.Receiving; await db.SaveChangesAsync();
+        await Deactivate(ids.Storage2);
+        (await db.WarehouseLocations.SingleAsync(x => x.Id == ids.Storage1)).IsActive.Should().BeTrue();
+        (await db.WarehouseLocations.SingleAsync(x => x.Id == ids.Storage2)).IsActive.Should().BeFalse();
+        (await db.InventoryStocks.SumAsync(x => x.Quantity)).Should().Be(10);
+        (await db.InventoryLocationMovements.CountAsync()).Should().Be(1);
+    }
+
     private async Task<(int WarehouseId,int UserId,int ProductId,int TaskId,int ItemId,int Receiving,int Storage1,int Storage2,int Damaged)> SeedAsync()
     {
         await using var db=Create(); var role=new Role{RoleName="Manager"}; var user=new User{Username=Guid.NewGuid().ToString("N"),PasswordHash="x",FullName="QA",Role=role};

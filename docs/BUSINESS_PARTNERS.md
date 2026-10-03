@@ -17,7 +17,7 @@ Inactive partners remain visible on existing receipts but cannot be newly assign
 
 ## API contract
 
-All authenticated roles may read partner master data. Admin and Manager may mutate it. Receipt endpoints retain their existing roles and warehouse scope.
+Partner master actions require database `partner.read/create/update/deactivate` grants. Import supplier assignment requires `receipt.update`; reading supplier choices separately requires `partner.read`. Export customer assignment retains outbound compatibility authorization. Both assignment paths enforce warehouse scope before checking receipt state or partner validity, so a foreign direct ID returns isolated 404 without a state/partner oracle. See `ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md` for the acceptance regression.
 
 `GET /api/business-partners?page=1&pageSize=20&search=ACME&role=supplier&active=true` returns the normal `PagedResult` shape. `role` accepts `supplier` or `customer`.
 

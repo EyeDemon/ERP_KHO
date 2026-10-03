@@ -1,6 +1,6 @@
 # Permission Code Authorization — current checkpoint
 
-Status: **OWNER BROWSERQA FINDINGS CLOSED**. Local evidence for both requested findings PASS; final published-HEAD CI is tracked separately in Draft PR #1. Historical full-matrix evidence remains scoped below. Production NO-GO; no deployment authorization.
+Status: **OWNER BROWSERQA FINDINGS CLOSED; ACCUMULATED OWNER REVIEW INCOMPLETE**. Both requested BrowserQA findings retain PASS evidence. The subsequent whole-PR review found an unresolved QC endpoint/permission mapping; see `ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md` for findings, successor verification and source association. Final published-HEAD CI is tracked separately in Draft PR #1. Production NO-GO; no deployment authorization.
 
 ## Owner BrowserQA findings successor — 2026-10-03
 

@@ -14,7 +14,7 @@ Commands:
 - `POST /api/importreceipts/{id}/approve`: Received/QcCompleted to ReadyToPost; no stock effect.
 - `POST /api/importreceipts/{id}/post`: writes status balances and ledger once, then Posted.
 
-Invalid/stale transitions return 409. All mutations retain warehouse scope, idempotency and optimistic concurrency. Current gates are role-backed; Notion permission codes are target governance and permission-code migration is deferred.
+Invalid/stale transitions return 409. All mutations retain warehouse scope, idempotency and optimistic concurrency. Endpoint gates now use database permission grants; warehouse scope and maker/checker remain independent. Acceptance review found an unresolved mapping between the combined QC disposition/readiness commands and the separately seeded complete/approve QC permissions; see `ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md`. Module workflow closure does not waive this whole-PR authorization gap.
 
 Migration `20260920163928_AddInboundQcDisposition` backfills legacy balances/ledger as AVAILABLE and does not infer historical QC policies or alter legacy receipt states.
 
@@ -52,7 +52,7 @@ No business data in database `ERP_KHO` was accessed. Historical runs remain supp
 
 Cất hàng compatibility was verified after this closure: Posted AVAILABLE/DAMAGED/REJECTED buckets keep their status while moving from RECEIVING to eligible locations. QC-before-Post and the single receipt inventory boundary remain unchanged.
 
-Next gaps after QC closure are receiving discrepancy/reason codes, Putaway/location movement, permission-code migration, rejected-at-door handling, and an optional laboratory/evidence engine. They do not expand this recovery slice.
+Historical next-gap list at QC closure (superseded by successor modules): receiving discrepancy/reason codes, Putaway/location movement, permission-code migration and rejected-at-door handling were subsequently implemented. An optional laboratory/evidence engine remains deferred. Current accumulated acceptance findings are recorded separately.
 
 ## Successor slice note — 2026-09-24
 

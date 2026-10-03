@@ -26,7 +26,16 @@ describe('ReceiptPrintPreview', () => {
   it('invokes browser print and supports keyboard close', () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => {}); const close = vi.fn();
     const view = render(<ReceiptPrintPreview kind="export" receipt={receipt('Dispatched')} fetchedAt={new Date()} onClose={close} />);
-    fireEvent.click(view.getByText('In / Save as PDF')); expect(print).toHaveBeenCalledTimes(1);
+    fireEvent.click(view.getByText('In / Lưu thành PDF')); expect(print).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(view.getByRole('dialog'), { key: 'Escape' }); expect(close).toHaveBeenCalledTimes(1);
   });
+  it.each(['Approved', 'Dispatched', 'Received', 'ReadyToPost', 'Posted', 'QcPending', 'QcCompleted',
+    'DiscrepancyPending', 'DiscrepancySubmitted', 'DiscrepancyPendingApproval', 'DiscrepancyResolved', 'DiscrepancyRejected', 'UnexpectedState'])(
+    'keeps print copy and %s status in Vietnamese', status => {
+      const view = render(<ReceiptPrintPreview kind="import" receipt={receipt(status)} fetchedAt={new Date()} onClose={() => {}} />);
+      expect(view.getByText('Bản in dùng dữ liệu đã lưu trên hệ thống.')).toBeTruthy();
+      expect(view.getByRole('button', { name: 'In / Lưu thành PDF' })).toBeTruthy();
+      expect(view.container.querySelector('.receipt-status')!.textContent).not.toBe(status);
+      expect(view.container.textContent).not.toMatch(/Preview|backend|Save as PDF/);
+    });
 });

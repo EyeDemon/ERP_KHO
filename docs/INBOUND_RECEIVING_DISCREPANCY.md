@@ -2,6 +2,10 @@
 
 ## Current verification state
 
+The discrepancy workflow has historical owned-SQL/browser closure below and now uses database permission grants. The accumulated PR acceptance report is `ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md`; READY for this module does not mean READY for all ERP modules.
+
+## Superseded implementation checkpoint — 2026-09-24
+
 **RECEIVING DISCREPANCY TESTING INCOMPLETE — OWNED SQL ADMIN CONNECTION REQUIRES USER CONFIGURATION**
 
 Canonical Notion sources were read back before implementation. Native timestamps remained unchanged from the accepted 2026-09-23 contract: 01 `15:38:52.544Z`, 17 `15:38:54.658Z`, 20 `15:38:55.860Z`, 34 `15:38:57.552Z`, 71 `15:38:59.281Z`, 84 `15:39:00.942Z`, 228 `15:39:01.746Z`, 282 `15:39:04.511Z`, and `INB-RECEIPT-DISCREPANCY` `15:39:06.751Z`. Page 41 remained `2026-09-20T16:31:54.616Z`; its post-then-QC text remains superseded for Goods Receipt.
@@ -45,7 +49,7 @@ Typed actions are `ACCEPT_OBSERVED`, `ACCEPT_EXPECTED_REJECT_EXCESS`, `REJECT_AT
 - `POST /api/importreceipts/{id}/discrepancies/{discrepancyId}/reject`
 - `POST /api/importreceipts/{id}/discrepancies/{discrepancyId}/recount`
 
-Every receipt command is warehouse-scoped. Mutations use the existing user/command/key/fingerprint idempotency filter. Discrepancy RowVersion protects submit/recount/approval, receipt Status protects the initial observe transition, and unique races map to HTTP 409. Authorization executes before action filters, so an unauthorized request cannot create an idempotency claim. Current gates remain role-backed Admin/Manager and checker policy; target permission-code migration is deferred.
+Every receipt command is warehouse-scoped. Mutations use the existing user/command/key/fingerprint idempotency filter. Discrepancy RowVersion protects submit/recount/approval, receipt Status protects the initial observe transition, and unique races map to HTTP 409. Capability authorization uses database `receiving_discrepancy.read/create/submit/approve/reject/resolve`; recount uses `resolve`. Maker/checker is independent. Permission authorization runs before the idempotency action filter; any claim created inside its transaction is rolled back on resource/state denial and completed replay reauthorizes warehouse scope. Denial leaves no durable claim, reusable fingerprint or cached success.
 
 ## Migration and compatibility
 

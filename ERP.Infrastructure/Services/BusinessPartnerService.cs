@@ -59,12 +59,17 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
     private async Task SetReceiptPartner(int receiptId,int? partnerId,bool supplier,CancellationToken ct)
     {
         await using var tx=await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,ct);
+        var import = supplier ? await context.ImportReceipts.SingleOrDefaultAsync(x=>x.Id==receiptId,ct) : null;
+        var export = supplier ? null : await context.ExportReceipts.SingleOrDefaultAsync(x=>x.Id==receiptId,ct);
+        var warehouseId = import?.WarehouseId ?? export?.WarehouseId
+            ?? throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
+        await warehouses.EnsureWarehouseAccessAsync(warehouseId,ct);
+        if ((import?.Status ?? export!.Status) != ReceiptStatus.Draft)
+            throw Conflict(supplier ? "Chỉ được đổi nhà cung cấp khi phiếu nhập ở trạng thái nháp." : "Chỉ được đổi khách hàng khi phiếu xuất ở trạng thái nháp.");
         BusinessPartner? partner=null;
         if(partnerId.HasValue){partner=await context.BusinessPartners.SingleOrDefaultAsync(x=>x.Id==partnerId,ct)??throw new BusinessRuleException("Đối tác không tồn tại.");if(!partner.IsActive||(supplier?!partner.IsSupplier:!partner.IsCustomer))throw new BusinessRuleException(supplier?"Đối tác không phải nhà cung cấp đang hoạt động.":"Đối tác không phải khách hàng đang hoạt động.");}
-        int warehouseId;
-        if(supplier){var receipt=await context.ImportReceipts.SingleOrDefaultAsync(x=>x.Id==receiptId,ct)??throw new NotFoundException("Không tìm thấy phiếu nhập.");if(receipt.Status!=ReceiptStatus.Draft)throw Conflict("Chỉ được đổi nhà cung cấp khi phiếu nhập ở trạng thái nháp.");receipt.SupplierId=partnerId;warehouseId=receipt.WarehouseId;}
-        else{var receipt=await context.ExportReceipts.SingleOrDefaultAsync(x=>x.Id==receiptId,ct)??throw new NotFoundException("Không tìm thấy phiếu xuất.");if(receipt.Status!=ReceiptStatus.Draft)throw Conflict("Chỉ được đổi khách hàng khi phiếu xuất ở trạng thái nháp.");receipt.CustomerId=partnerId;warehouseId=receipt.WarehouseId;}
-        await warehouses.EnsureWarehouseAccessAsync(warehouseId,ct);
+        if(supplier) import!.SupplierId=partnerId;
+        else export!.CustomerId=partnerId;
         context.AuditLogs.Add(new AuditLog{UserId=currentUser.UserId,Action=supplier?"ImportReceipt.SupplierChanged":"ExportReceipt.CustomerChanged",EntityName=supplier?"ImportReceipt":"ExportReceipt",EntityId=receiptId,WarehouseId=warehouseId,NewValues=partnerId.HasValue?$"PartnerId: {partnerId}":"PartnerId: null",Result="Success",Severity="Information",Timestamp=DateTime.UtcNow});
         await Save("Liên kết đối tác không còn khả dụng hoặc chứng từ đã thay đổi.",ct);await tx.CommitAsync(ct);
     }
