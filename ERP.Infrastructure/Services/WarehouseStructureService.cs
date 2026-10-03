@@ -2,6 +2,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
+using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -112,7 +113,7 @@ public sealed class WarehouseStructureService(
         }
         context.AuditLogs.Add(Audit("WarehouseZone.Updated", "WarehouseZone", entity.Id, warehouseId, $"Active: {entity.IsActive}; Type: {entity.ZoneType}"));
         await context.SaveChangesAsync(token);
-        return Zone(entity, [], []);
+        return Zone(entity, new Dictionary<int, List<WarehouseLocation>>(), new Dictionary<int, List<WarehouseLocation>>());
     }
 
     public async Task<WarehouseAisleDto> CreateAisleAsync(int warehouseId, int zoneId, CreateWarehouseAisleDto dto, CancellationToken token = default)
@@ -130,7 +131,7 @@ public sealed class WarehouseStructureService(
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseAisle.Created", "WarehouseAisle", entity.Id, warehouseId, $"ZoneId: {zoneId}; Code: {code}"));
         await context.SaveChangesAsync(token);
-        return Aisle(entity, []);
+        return Aisle(entity, new List<WarehouseRackDto>());
     }
 
     public async Task<WarehouseAisleDto> UpdateAisleAsync(int warehouseId, int zoneId, int aisleId, UpdateWarehouseAisleDto dto, CancellationToken token = default)
@@ -165,7 +166,7 @@ public sealed class WarehouseStructureService(
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseRack.Created", "WarehouseRack", entity.Id, warehouseId, $"AisleId: {aisleId}; Code: {code}"));
         await context.SaveChangesAsync(token);
-        return Rack(entity, []);
+        return Rack(entity, new List<WarehouseRackLevelDto>());
     }
 
     public async Task<WarehouseRackDto> UpdateRackAsync(int warehouseId, int aisleId, int rackId, UpdateWarehouseRackDto dto, CancellationToken token = default)
@@ -200,7 +201,7 @@ public sealed class WarehouseStructureService(
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit("WarehouseRackLevel.Created", "WarehouseRackLevel", entity.Id, warehouseId, $"RackId: {rackId}; LevelNo: {dto.LevelNo}"));
         await context.SaveChangesAsync(token);
-        return Level(entity, []);
+        return Level(entity, new List<WarehouseLocation>());
     }
 
     private IQueryable<WarehouseLocation> LocationQuery() => context.WarehouseLocations.AsNoTracking()
@@ -224,7 +225,7 @@ public sealed class WarehouseStructureService(
         Aisles = x.Aisles.OrderBy(a => a.Code).Select(a =>
             Aisle(a, a.Racks.OrderBy(r => r.Code).Select(r =>
                 Rack(r, r.Levels.OrderBy(l => l.LevelNo).Select(l =>
-                    Level(l, byLevel.TryGetValue(l.Id, out var locations) ? locations : [])).ToList())).ToList())).ToList(),
+                    Level(l, byLevel.TryGetValue(l.Id, out var locations) ? locations : new List<WarehouseLocation>())).ToList())).ToList())).ToList(),
         Locations = byZone.TryGetValue(x.Id, out var zoneLocations) ? zoneLocations.Select(Location).ToList() : []
     };
 
