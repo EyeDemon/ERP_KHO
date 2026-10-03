@@ -6,6 +6,7 @@ import NotFound from '../pages/NotFound';
 import Login from '../pages/Login';
 import Products from '../pages/Products';
 import Warehouses from '../pages/Warehouses';
+import WarehouseStructure from '../pages/WarehouseStructure';
 import Units from '../pages/Units';
 import ExportReceipts from '../pages/ExportReceipts';
 import ImportReceipts from '../pages/ImportReceipts';
@@ -67,6 +68,7 @@ const AppRoutes = () => {
         <Route path="system-blueprint/:moduleKey" element={<ModuleBlueprint />} />
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
+        <Route path="warehouse-structure" element={<PermissionRoute permission="location.read"><WarehouseStructure /></PermissionRoute>} />
         <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
         <Route path="business-partners" element={<PermissionRoute permission="partner.read"><BusinessPartners /></PermissionRoute>} />
         <Route path="export-receipts" element={<ExportReceipts />} />
