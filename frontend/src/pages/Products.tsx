@@ -141,9 +141,9 @@ const Products = () => {
               <span>{category.name}</span>
               <UiBadge tone={category.isActive ? 'success' : 'neutral'}>{category.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge>
               <div className="ui-inline-actions ui-auto-actions">
-                <button disabled={mutating} onClick={() => editCategory(category)}>Sửa</button>
-                <button disabled={mutating} onClick={() => toggleCategory(category)}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
-                <button disabled={mutating} onClick={() => deleteCategory(category.id)}>Xóa</button>
+                <button type="button" aria-label={`Sửa danh mục ${category.code}`} disabled={mutating} onClick={() => editCategory(category)}>Sửa</button>
+                <button type="button" aria-label={`${category.isActive ? 'Ngừng' : 'Kích hoạt'} danh mục ${category.code}`} disabled={mutating} onClick={() => toggleCategory(category)}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
+                <button type="button" aria-label={`Xóa danh mục ${category.code}`} disabled={mutating} onClick={() => deleteCategory(category.id)}>Xóa</button>
               </div>
             </div>
           ))}
