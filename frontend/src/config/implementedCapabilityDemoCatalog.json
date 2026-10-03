@@ -362,6 +362,52 @@
     "exceptionTitle": "WAREHOUSE_SCOPE_CONFLICT",
     "exceptionDetail": "Warehouse identity/scope không được thay đổi làm phá membership hoặc document history."
   },
+  "WH-02": {
+    "title": "Warehouse Location Hierarchy",
+    "subtitle": "Cấu trúc vị trí lưu trữ nhiều cấp.",
+    "mode": "configuration",
+    "stages": [
+      "Warehouse",
+      "Zone",
+      "Aisle",
+      "Rack",
+      "Level",
+      "Bin / Location"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "WH-02"
+      },
+      {
+        "label": "Module",
+        "value": "Kho & Vị trí"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "02, 16, 17, 67, 84, 216, 282"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Physical path",
+        "value": "ZONE-A / A01 / R02 / L03 / B04"
+      }
+    ],
+    "commands": [
+      "OPEN_HIERARCHY",
+      "MAP_UNMAPPED_LOCATION",
+      "MANAGE_STRUCTURE"
+    ],
+    "exceptionTitle": "WAREHOUSE_HIERARCHY_CONFLICT",
+    "exceptionDetail": "Parent scope, immutable code, RowVersion hoặc warehouse permission thay đổi phải fail closed và yêu cầu tải lại dữ liệu."
+  },
   "IN-03": {
     "title": "Goods Receipt Work Center",
     "subtitle": "Tìm/lọc/tạo/mở receipt theo state và warehouse scope.",

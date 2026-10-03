@@ -102,7 +102,7 @@ describe('Cấu trúc vị trí kho', () => {
     const view = render(<WarehouseStructure />);
 
     await view.findByText('A01-R02-L03-B04');
-    expect(view.getByText('ZONE-A')).toBeTruthy();
+    expect(view.getAllByText('ZONE-A').length).toBeGreaterThan(0);
     expect(view.getByText('Dãy 01')).toBeTruthy();
     expect(view.getByText('Kệ 02')).toBeTruthy();
     expect(view.getByText('Tầng 3')).toBeTruthy();
