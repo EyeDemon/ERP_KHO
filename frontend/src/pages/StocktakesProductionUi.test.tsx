@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../services/apiClient';
 import Stocktakes from './Stocktakes';
@@ -59,8 +59,9 @@ describe('Stocktakes shared production UI', () => {
     const view = render(<Stocktakes />);
 
     expect(await view.findByText('ST-2026-0001')).toBeTruthy();
-    expect(view.getByRole('table', { name: 'Danh sách phiếu kiểm kê' })).toBeTruthy();
-    expect(view.getByText('Bản nháp')).toBeTruthy();
+    const table = view.getByRole('table', { name: 'Danh sách phiếu kiểm kê' });
+    expect(table).toBeTruthy();
+    expect(within(table).getByText('Bản nháp')).toBeTruthy();
 
     fireEvent.click(view.getByRole('button', { name: 'Tạo phiếu kiểm kê' }));
 
