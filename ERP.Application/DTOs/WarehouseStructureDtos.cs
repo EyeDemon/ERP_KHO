@@ -7,6 +7,7 @@ public sealed class WarehouseStructureDto
     public string WarehouseName { get; set; } = "";
     public IReadOnlyList<WarehouseZoneDto> Zones { get; set; } = [];
     public IReadOnlyList<WarehouseLocationDto> SystemLocations { get; set; } = [];
+    public IReadOnlyList<WarehouseLocationDto> UnmappedLocations { get; set; } = [];
 }
 
 public sealed class WarehouseZoneDto
