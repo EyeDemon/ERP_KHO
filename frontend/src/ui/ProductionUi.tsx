@@ -69,7 +69,7 @@ export const UiEmptyState = ({
   <div className="ui-empty">
     <div>
       <strong>{title}</strong>
-      {detail && <div style={{ marginTop: 5 }}>{detail}</div>}
+      {detail && <div className="ui-empty-detail">{detail}</div>}
     </div>
   </div>
 );
