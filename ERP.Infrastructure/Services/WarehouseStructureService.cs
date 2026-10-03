@@ -80,7 +80,7 @@ public sealed class WarehouseStructureService(
         context.AuditLogs.Add(Audit("WarehouseZone.Created", "WarehouseZone", entity.Id, warehouseId, $"Code: {code}; Type: {type}"));
         await context.SaveChangesAsync(token);
         if (tx is not null) await tx.CommitAsync(token);
-        return Zone(entity, [], []);
+        return Zone(entity, new Dictionary<int, List<WarehouseLocation>>(), new Dictionary<int, List<WarehouseLocation>>());
     }
 
     public async Task<WarehouseZoneDto> UpdateZoneAsync(int warehouseId, int zoneId, UpdateWarehouseZoneDto dto, CancellationToken token = default)
