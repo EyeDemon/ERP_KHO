@@ -93,9 +93,11 @@ public class ErpKhoDbContext : DbContext
             modelBuilder.Entity<ProductCategory>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
             modelBuilder.Entity<ProductBarcode>().Property(x => x.Value).UseCollation("Latin1_General_100_BIN2");
             modelBuilder.Entity<WarehouseLocation>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
-            modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t => t.HasCheckConstraint(
-                "CK_WarehouseLocations_Code",
-                "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0"));
+            modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t =>
+            {
+                t.HasCheckConstraint("CK_WarehouseLocations_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
+                t.HasCheckConstraint("CK_WarehouseLocations_RackLevelRequiresZone", "[RackLevelId] IS NULL OR [ZoneId] IS NOT NULL");
+            });
             modelBuilder.Entity<WarehouseZone>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
             modelBuilder.Entity<WarehouseZone>().ToTable("WarehouseZones", t =>
             {
