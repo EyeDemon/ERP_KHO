@@ -13,7 +13,7 @@ describe('interactive capability demo registry', () => {
       .map(({ capability }) => capability.id)
       .sort();
     expect(coreInteractiveDemoIds.slice().sort()).toEqual(plannedIds);
-    expect(coreInteractiveDemoIds).toHaveLength(99);
+    expect(coreInteractiveDemoIds).toHaveLength(98);
   });
 
   it('provides state, commands and exception behavior for every capability', () => {
