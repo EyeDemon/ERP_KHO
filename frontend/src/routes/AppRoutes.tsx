@@ -28,12 +28,18 @@ import SystemCoverage from '../pages/SystemCoverage';
 import { MockDemoProvider } from '../context/MockDemoContext';
 import { canViewApprovals, canViewStocktakes, usePermission, usePermissionSet } from '../services/authorization';
 import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { UiCard, UiPage } from '../ui/ProductionUi';
 
 const AccessDenied = () => (
-  <section role="alert" style={{ maxWidth: 720, background: '#fff', border: '1px solid #dde5ef', borderRadius: 12, padding: 20 }}>
-    <h2 style={{ marginTop: 0 }}>Không có quyền truy cập</h2>
-    <p style={{ color: '#607086', lineHeight: 1.6 }}>Tài khoản hiện tại chưa có quyền đọc màn hình này. Hãy kiểm tra vai trò, warehouse scope hoặc permission grant.</p>
-  </section>
+  <UiPage>
+    <div role="alert">
+      <UiCard title="Không có quyền truy cập">
+        <p className="ui-muted-text">
+          Tài khoản hiện tại chưa có quyền đọc màn hình này. Hãy kiểm tra vai trò, warehouse scope hoặc permission grant.
+        </p>
+      </UiCard>
+    </div>
+  </UiPage>
 );
 
 const PermissionRoute = ({ permission, children }: { permission: string; children: ReactNode }) =>
