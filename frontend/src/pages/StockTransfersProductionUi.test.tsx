@@ -78,6 +78,22 @@ describe('StockTransfers shared production UI', () => {
     expect(view.queryByRole('button', { name: 'Hủy phiếu' })).toBeNull();
   });
 
+
+  it('opens an accessible create dialog for warehouse staff', async () => {
+    localStorage.setItem('role', 'WarehouseStaff');
+
+    const view = render(<StockTransfers />);
+
+    await view.findByText('TRF-2026-0007');
+    fireEvent.click(view.getByRole('button', { name: /Tạo phiếu/ }));
+
+    expect(view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' })).toBeTruthy();
+    expect(view.getByLabelText('Kho nguồn')).toBeTruthy();
+    expect(view.getByLabelText('Kho đích')).toBeTruthy();
+    expect(view.getByLabelText('Sản phẩm dòng 1')).toBeTruthy();
+    expect(view.getByLabelText('Số lượng dòng 1')).toBeTruthy();
+  });
+
   it('preserves manager approval and idempotency from the detail dialog', async () => {
     localStorage.setItem('role', 'Manager');
     localStorage.setItem('userId', '99');
