@@ -60,7 +60,7 @@ export const demoPartners = mockPartners.map((partner, index) => ({
   rowVersion: 'AAAAAAAAAA' + (index + 1),
 }));
 
-export const demoInventoryStocks = mockInventoryBalances.map((balance, index) => {
+export const demoInventoryStocks = mockInventoryBalances.map((balance) => {
   const warehouse = demoWarehouses.find(item => item.code === balance.warehouse)!;
   const product = demoProducts.find(item => item.code === balance.productCode)!;
   return {
