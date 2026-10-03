@@ -47,7 +47,7 @@ The latter is the larger traceability risk because broad ranges such as `47-56, 
 
 ## Screen Matrix 229 status
 
-Current Screen Matrix query:
+The canonical Screen Matrix snapshot used at audit time contained:
 
 | Coverage Status | Count |
 | --- | ---: |
@@ -56,16 +56,23 @@ Current Screen Matrix query:
 | Review Required | 4 |
 | Deprecated | 3 |
 
-No row is currently marked `Missing`.
+No row was marked `Missing`.
 
-The four `Review Required` screens are:
+The four rows that were `Review Required` in that source snapshot were:
 
 - Internal Location Transfer.
 - Picking.
 - Packing.
 - Create Warehouse Transfer.
 
-This means visual/screen inventory is broadly covered, but traceability from capability → authoritative spec/API/permission/state/test still needs correction.
+**Blueprint remediation is now closed for all four mappings.** The current branch marks the corresponding capabilities as `Traceability Closed` and routes each to a concrete Blueprint preview:
+
+- INV-08 Internal Location Transfer.
+- OUT-05 Picking.
+- OUT-06 Packing.
+- TR-01 Warehouse Transfer.
+
+This closes Blueprint screen traceability only. Production/backend maturity and release evidence remain tracked separately and must not be inferred from the closed UI mapping.
 
 ## High-confidence capability gaps
 

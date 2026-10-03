@@ -193,6 +193,19 @@ Mock/UAT semantics follow the newer canonical override in spec 41/228:
 - Rejected-at-door quantity does not enter Physical On Hand.
 - QC_HOLD/QUARANTINE remain non-eligible inventory statuses for other explicitly modeled status-change flows.
 
+## Latest QA checkpoint — 2026-10-03
+
+- HEAD: `af1814300ba3c15dd9319f145117a84bebe2f2ff`.
+- GitHub Actions CI #233: PASS.
+- Application / SQL integration: 347/347 PASS.
+- API: 184/184 PASS.
+- Frontend: 35 test files / 168 tests PASS.
+- Frontend production build: PASS.
+- npm audit: 0 vulnerabilities.
+- SonarCloud Quality Gate: PASS; 0 new issues, 0 security hotspots, 1.1% duplication on new code.
+- Vercel Blueprint deployment: READY.
+- Runtime smoke-check returned HTTP 200 for System Blueprint, Coverage, Mock Data Lab, Golden Scenario Lab and Global Search routes.
+- No Vercel runtime errors were observed in the checked one-hour window.
 ## Production boundary
 
 This blueprint does **not** mean all 179 capabilities have production backend implementations.
