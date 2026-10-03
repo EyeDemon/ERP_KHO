@@ -131,7 +131,7 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'INV-08', name: 'Internal Location Move', goal: 'Di chuyển cùng kho qua posting boundary và giữ tổng quantity.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '29, 222, 282' },
       { id: 'INV-09', name: 'Reversal', goal: 'Sửa sai bằng transaction đảo/corrective thay vì sửa lịch sử đã post.', surfaces: ['Web', 'API'], status: 'planned', spec: '32' },
       { id: 'INV-10', name: 'Traceability & Genealogy', goal: 'Truy ngược/xuôi theo lot/serial/document/return/recall.', surfaces: ['Web', 'API'], status: 'planned', spec: '48, 79, 222' },
-      { id: 'INV-11', name: 'Inventory Integrity & Reconciliation Engine', goal: 'Phát hiện ledger/balance mismatch, chạy reconciliation và rebuild projection có kiểm soát, audit và operational evidence.', surfaces: ['Web', 'API', 'Worker'], status: 'planned', spec: '82, 152' },
+      { id: 'INV-11', name: 'Inventory Integrity & Reconciliation Engine', goal: 'Phát hiện ledger/balance mismatch, chạy reconciliation và rebuild projection có kiểm soát, audit và operational evidence.', surfaces: ['Web', 'API', 'Worker'], status: 'foundation', spec: '82, 152', route: '/inventory-reconciliation' },
     ],
   },
   {

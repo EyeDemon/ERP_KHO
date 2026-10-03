@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using ERP.Api.Authorization;
 using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +8,7 @@ namespace ERP.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin,Manager,Viewer")]
+    [Authorize(Roles = AppRoles.AllRoles)]
     public class InventoryReconciliationController : ControllerBase
     {
         private readonly IInventoryReconciliationQueryService _queryService;

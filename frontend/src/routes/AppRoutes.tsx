@@ -10,6 +10,7 @@ import Units from '../pages/Units';
 import ExportReceipts from '../pages/ExportReceipts';
 import ImportReceipts from '../pages/ImportReceipts';
 import Inventory from '../pages/Inventory';
+import InventoryReconciliation from '../pages/InventoryReconciliation';
 import Stocktakes from '../pages/Stocktakes';
 import StockTransfers from '../pages/StockTransfers';
 import StockReservations from '../pages/StockReservations';
@@ -57,6 +58,7 @@ const AppRoutes = () => {
         <Route path="export-receipts" element={<ExportReceipts />} />
         <Route path="import-receipts" element={<PermissionRoute permission="receipt.read"><ImportReceipts /></PermissionRoute>} />
         <Route path="inventory" element={<Inventory />} />
+        <Route path="inventory-reconciliation" element={<InventoryReconciliation />} />
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
         <Route path="stock-reservations" element={<StockReservations />} />
