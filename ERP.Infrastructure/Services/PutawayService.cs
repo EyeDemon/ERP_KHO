@@ -12,11 +12,13 @@ namespace ERP.Infrastructure.Services;
 public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizationService warehouses, ICurrentUser currentUser)
     : IPutawayService, IReceiptPutawayIntegration
 {
+    private const string LocationManagePermission = "location.manage";
     public async Task<IReadOnlyList<WarehouseLocationDto>> ListLocationsAsync(int warehouseId, CancellationToken token = default)
     {
         await warehouses.EnsureWarehouseAccessAsync(warehouseId, token);
+        var canManage = await HasPermissionAsync(LocationManagePermission, token);
         return (await LocationQuery().Where(x => x.WarehouseId == warehouseId).OrderBy(x => x.Code).ToListAsync(token))
-            .Select(Location).ToList();
+            .Select(location => Location(location, canManage)).ToList();
     }
 
     public async Task<WarehouseLocationDto> GetLocationAsync(int id, CancellationToken token = default)
@@ -24,7 +26,7 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         var entity = await LocationQuery().SingleOrDefaultAsync(x => x.Id == id, token)
             ?? throw new NotFoundException("Không tìm thấy vị trí hoặc bạn không có quyền truy cập.");
         await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId, token);
-        return Location(entity);
+        return Location(entity, await HasPermissionAsync(LocationManagePermission, token));
     }
 
     public async Task<WarehouseLocationDto> ResolveLocationBarcodeAsync(string barcode, int? warehouseId = null, CancellationToken token = default)
@@ -47,7 +49,7 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
             .ToListAsync(token);
         if (matches.Count == 0) throw new NotFoundException("Không tìm thấy vị trí hoặc bạn không có quyền truy cập.");
         if (matches.Count > 1) throw Conflict("Mã vạch vị trí không duy nhất trong phạm vi truy cập. Hãy chọn kho trước khi quét.");
-        return Location(matches[0]);
+        return Location(matches[0], await HasPermissionAsync(LocationManagePermission, token));
     }
 
     public async Task<WarehouseLocationDto> CreateLocationAsync(CreateWarehouseLocationDto dto, CancellationToken token = default)
@@ -76,6 +78,7 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         if (await context.WarehouseLocations.AnyAsync(x => x.WarehouseId == dto.WarehouseId && x.Code == code, token))
             throw Conflict("Mã vị trí đã tồn tại trong kho.");
         ValidateFlags(type, dto.IsPickable, dto.IsReceivable);
+        await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
         var entity = new WarehouseLocation
         {
             WarehouseId = dto.WarehouseId,
@@ -95,7 +98,9 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit(currentUser.UserId, "WarehouseLocation.Created", entity.Id, dto.WarehouseId, $"Code: {code}; ZoneId: {zone.Id}; RackLevelId: {dto.RackLevelId}"));
         await context.SaveChangesAsync(token);
-        return await GetLocationAsync(entity.Id, token);
+        if (transaction is not null) await transaction.CommitAsync(token);
+        var created = await LocationQuery().SingleAsync(x => x.Id == entity.Id, token);
+        return Location(created, true);
     }
 
     public async Task<WarehouseLocationDto> UpdateLocationAsync(int id, UpdateWarehouseLocationDto dto, CancellationToken token = default)
@@ -149,7 +154,8 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         context.AuditLogs.Add(Audit(currentUser.UserId, "WarehouseLocation.Updated", entity.Id, entity.WarehouseId, $"Active: {entity.IsActive}; Blocked: {entity.IsBlocked}"));
         await context.SaveChangesAsync(token);
         if (transaction is not null) await transaction.CommitAsync(token);
-        return await GetLocationAsync(entity.Id, token);
+        var updated = await LocationQuery().SingleAsync(x => x.Id == entity.Id, token);
+        return Location(updated, true);
     }
 
     public async Task<int> GetReceivingLocationIdAsync(int warehouseId, CancellationToken token = default) =>
@@ -199,7 +205,7 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         var task = await Load(taskId, token); var item = task.Items.SingleOrDefault(x=>x.Id==itemId) ?? throw new NotFoundException("Không tìm thấy dòng hàng.");
         var type = RequiredType(item.InventoryStatus);
         return (await context.WarehouseLocations.AsNoTracking().Where(x=>x.WarehouseId==task.WarehouseId && x.IsActive && !x.IsBlocked && x.LocationType==type && (item.InventoryStatus!=InventoryStatus.Available || x.IsPickable))
-            .OrderBy(x=>x.Code).ToListAsync(token)).Select(Location).ToList();
+            .OrderBy(x=>x.Code).ToListAsync(token)).Select(location=>Location(location,false)).ToList();
     }
 
     public Task<PutawayTaskDto> AssignAsync(int id, PutawayStateCommandDto dto, CancellationToken token = default) => Mutate(id,dto, [PutawayTaskStatus.Open,PutawayTaskStatus.Assigned], task=>{ task.AssignedUserId=dto.AssignedUserId ?? throw new BusinessRuleException("Người thực hiện là bắt buộc."); task.Status=PutawayTaskStatus.Assigned; },"Assigned",token);
@@ -256,7 +262,8 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
     private async Task<PutawayTaskDto> MapAsync(PutawayTask t,CancellationToken token){var moves=await context.InventoryLocationMovements.AsNoTracking().Where(x=>x.PutawayTaskId==t.Id).Join(context.WarehouseLocations,x=>x.FromLocationId,x=>x.Id,(m,f)=>new{m,f}).Join(context.WarehouseLocations,x=>x.m.ToLocationId,x=>x.Id,(x,d)=>new PutawayMovementDto{Id=x.m.Id,ItemId=x.m.PutawayTaskItemId,FromLocationCode=x.f.Code,ToLocationCode=d.Code,BaseQuantity=x.m.BaseQuantity,CreatedAt=x.m.CreatedAt}).ToListAsync(token);var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";return new PutawayTaskDto{Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=t.Receipt.Code,WarehouseId=t.WarehouseId,WarehouseName=t.Warehouse.Name,Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,Items=t.Items.Select(x=>new PutawayTaskItemDto{Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=x.ReceiptLine.Product.Code,ProductName=x.ReceiptLine.Product.Name,InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=x.SourceLocation.Code,OperationUnitCode=x.OperationUnitCodeSnapshot,BaseUnitCode=x.BaseUnitCodeSnapshot,RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate?Convert.ToBase64String(x.RowVersion):null}).ToList(),Movements=moves};}
     private static AuditLog Audit(int user,string action,int entity,int warehouse,string values)=>new(){UserId=user,Action=action,EntityName="PutawayTask",EntityId=entity,WarehouseId=warehouse,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
     private static BusinessRuleException Conflict(string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;return e;}
-    private WarehouseLocationDto Location(WarehouseLocation x)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,ZoneId=x.ZoneId,ZoneCode=x.Zone?.Code,RackLevelId=x.RackLevelId,AisleCode=x.RackLevel?.Rack?.Aisle?.Code,RackCode=x.RackLevel?.Rack?.Code,LevelNo=x.RackLevel?.LevelNo,Code=x.Code,Name=x.Name,Barcode=x.Barcode,PickPriority=x.PickPriority,PutawayPriority=x.PutawayPriority,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff"?Convert.ToBase64String(x.RowVersion):null};
+    private WarehouseLocationDto Location(WarehouseLocation x,bool includeVersion)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,ZoneId=x.ZoneId,ZoneCode=x.Zone?.Code,RackLevelId=x.RackLevelId,AisleCode=x.RackLevel?.Rack?.Aisle?.Code,RackCode=x.RackLevel?.Rack?.Code,LevelNo=x.RackLevel?.LevelNo,Code=x.Code,Name=x.Name,Barcode=x.Barcode,PickPriority=x.PickPriority,PutawayPriority=x.PutawayPriority,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=includeVersion?Convert.ToBase64String(x.RowVersion):null};
+    private Task<bool> HasPermissionAsync(string code,CancellationToken token)=>context.Users.AsNoTracking().Where(user=>user.Id==currentUser.UserId&&user.IsActive).Select(user=>user.Role.Permissions.Any(grant=>grant.Permission.Code==code)).SingleOrDefaultAsync(token);
     private static string Required(string value,string label)=>string.IsNullOrWhiteSpace(value)?throw new BusinessRuleException($"{label} là bắt buộc."):value.Trim();
     private static string? Optional(string? value)=>string.IsNullOrWhiteSpace(value)?null:value.Trim();
     private static void ValidateFlags(WarehouseLocationType type,bool pickable,bool receivable){if(type==WarehouseLocationType.Storage&&!pickable)throw new BusinessRuleException("Vị trí lưu trữ phải cho phép lấy hàng.");if((type is WarehouseLocationType.Damaged or WarehouseLocationType.Rejected)&&pickable)throw new BusinessRuleException("Vị trí hư hỏng hoặc từ chối không được cho phép lấy hàng.");if(receivable)throw new BusinessRuleException("Chỉ vị trí nhận hàng do hệ thống quản lý được phép nhận hàng.");}
