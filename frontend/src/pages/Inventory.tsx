@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../services/apiClient';
+import { UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import './Inventory.css';
 
 interface InventoryStockDto {
   productId: number;
@@ -263,302 +265,322 @@ const Inventory = () => {
   };
 
   const renderStockTab = () => (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <form onSubmit={handleStockFilterSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div>
-            <label style={{ display: 'block' }}>ID Kho</label>
-            <select value={stockFilter.warehouseId} onChange={e => setStockFilter({...stockFilter, warehouseId: e.target.value})}>
+    <UiCard title="Tồn kho hiện tại">
+      <form onSubmit={handleStockFilterSubmit}>
+        <UiToolbar>
+          <UiToolbarField label="Kho">
+            <select aria-label="Kho tồn hiện tại" value={stockFilter.warehouseId} onChange={e => setStockFilter({ ...stockFilter, warehouseId: e.target.value })}>
               <option value="">Tất cả kho được phép</option>
               {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
             </select>
-          </div>
-          <div>
-            <label style={{ display: 'block' }}>ID Sản phẩm</label>
-            <input type="number" value={stockFilter.productId} onChange={e => setStockFilter({...stockFilter, productId: e.target.value})} placeholder="Nhập ID sản phẩm..." />
-          </div>
-          <div>
-            <label style={{ display: 'block' }}>Từ khóa SP</label>
-            <input type="text" value={stockFilter.keyword} onChange={e => setStockFilter({...stockFilter, keyword: e.target.value})} placeholder="Mã hoặc tên SP..." />
-          </div>
-          <button type="submit" style={{ padding: '5px 10px', cursor: 'pointer' }}>Lọc Tồn Kho</button>
-        </form>
-        <button onClick={handleExportStock} style={{ padding: '5px 15px', backgroundColor: '#27ae60', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '4px' }}>
-          Xuất Excel Tồn Kho
-        </button>
-      </div>
+          </UiToolbarField>
 
-      {stockError && <div style={{ color: 'red', marginBottom: '10px' }}>{stockError}</div>}
-      {stockLoading ? <div>Đang tải...</div> : (
-        <div style={{ overflowX: 'auto', maxWidth: '100%' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-              <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã SP</th>
-              <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Tên SP</th>
-              <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>ĐVT</th>
-              <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Kho</th>
-              <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Tồn thực tế</th>
-              <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Đã giữ</th>
-              <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Khả dụng</th>
-              <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Cập nhật lần cuối</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedStocks.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '10px' }}>Không có dữ liệu tồn kho</td></tr>
-            ) : (
-              paginatedStocks.map((item, index) => (
-                <tr key={`${item.productId}-${item.warehouseId}-${index}`}>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{item.productCode}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{item.productName}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{item.unitName}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{item.warehouseName}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{item.onHandQuantity}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{item.reservedQuantity}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7', fontWeight: 700 }}>{item.availableQuantity}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{new Date(item.lastUpdated).toLocaleString()}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table></div>
-      )}
-      {stocks.length > 0 && stockTotalPages > 1 && (
-        <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button 
-            disabled={currentStockPage <= 1} 
-            onClick={() => setStockPage(prev => Math.max(prev - 1, 1))}
-            style={{ cursor: currentStockPage <= 1 ? 'not-allowed' : 'pointer' }}>
-            Trang trước
-          </button>
-          <span>Trang {currentStockPage} / {stockTotalPages} (Tổng: {stocks.length})</span>
-          <button 
-            disabled={currentStockPage >= stockTotalPages} 
-            onClick={() => setStockPage(prev => Math.min(prev + 1, stockTotalPages))}
-            style={{ cursor: currentStockPage >= stockTotalPages ? 'not-allowed' : 'pointer' }}>
-            Trang sau
-          </button>
-        </div>
-      )}
-    </div>
-  );
+          <UiToolbarField label="ID Sản phẩm">
+            <input
+              aria-label="ID sản phẩm tồn hiện tại"
+              type="number"
+              value={stockFilter.productId}
+              onChange={e => setStockFilter({ ...stockFilter, productId: e.target.value })}
+              placeholder="Nhập ID sản phẩm..."
+            />
+          </UiToolbarField>
 
-  const renderHistoryTab = () => (
-    <div>
-      <form onSubmit={handleHistoryFilterSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div>
-          <label style={{ display: 'block' }}>Từ ngày</label>
-          <input type="date" value={historyFilter.fromDate} onChange={e => setHistoryFilter({...historyFilter, fromDate: e.target.value})} />
-        </div>
-        <div>
-          <label style={{ display: 'block' }}>Đến ngày</label>
-          <input type="date" value={historyFilter.toDate} onChange={e => setHistoryFilter({...historyFilter, toDate: e.target.value})} />
-        </div>
-        <div>
-          <label style={{ display: 'block' }}>Loại GD</label>
-          <select value={historyFilter.transactionType} onChange={e => setHistoryFilter({...historyFilter, transactionType: e.target.value})}>
-            <option value="">-- Tất cả --</option>
-            <option value="Import">Nhập kho (Import)</option>
-            <option value="Export">Xuất kho (Export)</option>
-            <option value="AdjustmentIncrease">Điều chỉnh Tăng</option>
-            <option value="AdjustmentDecrease">Điều chỉnh Giảm</option>
-          </select>
-        </div>
-        <div>
-          <label style={{ display: 'block' }}>Kho (ID)</label>
-          <select value={historyFilter.warehouseId} onChange={e => setHistoryFilter({...historyFilter, warehouseId: e.target.value})}>
-            <option value="">Tất cả kho được phép</option>
-            {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{ display: 'block' }}>Từ khóa SP</label>
-          <input style={{ width: '120px' }} type="text" value={historyFilter.keyword} onChange={e => setHistoryFilter({...historyFilter, keyword: e.target.value})} />
-        </div>
-        <button type="submit" style={{ padding: '5px 10px', cursor: 'pointer' }}>Lọc Lịch Sử</button>
+          <UiToolbarField label="Từ khóa SP">
+            <input
+              aria-label="Từ khóa sản phẩm tồn hiện tại"
+              type="text"
+              value={stockFilter.keyword}
+              onChange={e => setStockFilter({ ...stockFilter, keyword: e.target.value })}
+              placeholder="Mã hoặc tên SP..."
+            />
+          </UiToolbarField>
+
+          <div className="inventory-toolbar-actions">
+            <button type="submit">Lọc Tồn Kho</button>
+            <button type="button" onClick={handleExportStock}>Xuất Excel Tồn Kho</button>
+          </div>
+        </UiToolbar>
       </form>
 
-      {historyError && <div style={{ color: 'red', marginBottom: '10px' }}>{historyError}</div>}
-      {historyLoading && !history ? <div>Đang tải...</div> : (
-        <>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+      {stockError && <p role="alert">{stockError}</p>}
+      {stockLoading ? (
+        <p role="status">Đang tải...</p>
+      ) : (
+        <UiTableScroll>
+          <table aria-label="Tồn kho hiện tại" className="inventory-table-wide">
             <thead>
-              <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-                <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Ngày GD</th>
-                <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Loại GD</th>
-                <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Kho</th>
-                <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Sản phẩm</th>
-                <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>SL</th>
-                <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Tham chiếu</th>
-                <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Ghi chú</th>
+              <tr>
+                <th>Mã SP</th>
+                <th>Tên SP</th>
+                <th>ĐVT</th>
+                <th>Kho</th>
+                <th className="inventory-numeric">Tồn thực tế</th>
+                <th className="inventory-numeric">Đã giữ</th>
+                <th className="inventory-numeric">Khả dụng</th>
+                <th>Cập nhật lần cuối</th>
               </tr>
             </thead>
             <tbody>
-              {(!history || history.items.length === 0) ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '10px' }}>Không có lịch sử giao dịch</td></tr>
+              {paginatedStocks.length === 0 ? (
+                <tr><td colSpan={8} className="ui-empty-cell">Không có dữ liệu tồn kho</td></tr>
               ) : (
-                history.items.map(item => (
-                  <tr key={item.id}>
-                    <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{new Date(item.transactionDate).toLocaleString()}</td>
-                    <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.transactionType}</td>
-                    <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.warehouseName}</td>
-                    <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.productCode} - {item.productName}</td>
-                    <td style={{ padding: '8px', border: '1px solid #bdc3c7', fontWeight: 'bold', color: (item.transactionType === 'Import' || item.transactionType === 'AdjustmentIncrease') ? 'green' : 'red' }}>
-                      {item.quantity} {item.unitName}
-                    </td>
-                    <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.referenceType ? `[${item.referenceType}] #${item.referenceId}` : ''}</td>
-                    <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.note}</td>
+                paginatedStocks.map((item, index) => (
+                  <tr key={item.productId + '-' + item.warehouseId + '-' + index}>
+                    <td><strong>{item.productCode}</strong></td>
+                    <td>{item.productName}</td>
+                    <td>{item.unitName}</td>
+                    <td>{item.warehouseName}</td>
+                    <td className="inventory-numeric">{item.onHandQuantity}</td>
+                    <td className="inventory-numeric">{item.reservedQuantity}</td>
+                    <td className="inventory-numeric inventory-available">{item.availableQuantity}</td>
+                    <td>{new Date(item.lastUpdated).toLocaleString('vi-VN')}</td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </UiTableScroll>
+      )}
+
+      {stocks.length > 0 && stockTotalPages > 1 && (
+        <div className="ui-pagination" aria-label="Phân trang tồn kho">
+          <button type="button" disabled={currentStockPage <= 1} onClick={() => setStockPage(prev => Math.max(prev - 1, 1))}>Trang trước</button>
+          <span>Trang {currentStockPage} / {stockTotalPages} (Tổng: {stocks.length})</span>
+          <button type="button" disabled={currentStockPage >= stockTotalPages} onClick={() => setStockPage(prev => Math.min(prev + 1, stockTotalPages))}>Trang sau</button>
+        </div>
+      )}
+    </UiCard>
+  );
+
+  const renderHistoryTab = () => (
+    <UiCard title="Lịch sử giao dịch">
+      <form onSubmit={handleHistoryFilterSubmit}>
+        <UiToolbar>
+          <UiToolbarField label="Từ ngày">
+            <input aria-label="Lịch sử từ ngày" type="date" value={historyFilter.fromDate} onChange={e => setHistoryFilter({ ...historyFilter, fromDate: e.target.value })} />
+          </UiToolbarField>
+
+          <UiToolbarField label="Đến ngày">
+            <input aria-label="Lịch sử đến ngày" type="date" value={historyFilter.toDate} onChange={e => setHistoryFilter({ ...historyFilter, toDate: e.target.value })} />
+          </UiToolbarField>
+
+          <UiToolbarField label="Loại GD">
+            <select aria-label="Loại giao dịch" value={historyFilter.transactionType} onChange={e => setHistoryFilter({ ...historyFilter, transactionType: e.target.value })}>
+              <option value="">-- Tất cả --</option>
+              <option value="Import">Nhập kho (Import)</option>
+              <option value="Export">Xuất kho (Export)</option>
+              <option value="AdjustmentIncrease">Điều chỉnh Tăng</option>
+              <option value="AdjustmentDecrease">Điều chỉnh Giảm</option>
+            </select>
+          </UiToolbarField>
+
+          <UiToolbarField label="Kho">
+            <select aria-label="Kho lịch sử giao dịch" value={historyFilter.warehouseId} onChange={e => setHistoryFilter({ ...historyFilter, warehouseId: e.target.value })}>
+              <option value="">Tất cả kho được phép</option>
+              {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+            </select>
+          </UiToolbarField>
+
+          <UiToolbarField label="Từ khóa SP">
+            <input aria-label="Từ khóa sản phẩm lịch sử" type="text" value={historyFilter.keyword} onChange={e => setHistoryFilter({ ...historyFilter, keyword: e.target.value })} />
+          </UiToolbarField>
+
+          <div className="inventory-toolbar-actions">
+            <button type="submit">Lọc Lịch Sử</button>
+          </div>
+        </UiToolbar>
+      </form>
+
+      {historyError && <p role="alert">{historyError}</p>}
+      {historyLoading && !history ? (
+        <p role="status">Đang tải...</p>
+      ) : (
+        <>
+          <UiTableScroll>
+            <table aria-label="Lịch sử giao dịch tồn kho">
+              <thead>
+                <tr>
+                  <th>Ngày GD</th>
+                  <th>Loại GD</th>
+                  <th>Kho</th>
+                  <th>Sản phẩm</th>
+                  <th className="inventory-numeric">SL</th>
+                  <th>Tham chiếu</th>
+                  <th>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(!history || history.items.length === 0) ? (
+                  <tr><td colSpan={7} className="ui-empty-cell">Không có lịch sử giao dịch</td></tr>
+                ) : (
+                  history.items.map(item => {
+                    const increase = item.transactionType === 'Import' || item.transactionType === 'AdjustmentIncrease';
+                    return (
+                      <tr key={item.id}>
+                        <td>{new Date(item.transactionDate).toLocaleString('vi-VN')}</td>
+                        <td>{item.transactionType}</td>
+                        <td>{item.warehouseName}</td>
+                        <td>{item.productCode} - {item.productName}</td>
+                        <td className={'inventory-numeric ' + (increase ? 'inventory-qty-increase' : 'inventory-qty-decrease')}>
+                          {item.quantity} {item.unitName}
+                        </td>
+                        <td>{item.referenceType ? '[' + item.referenceType + '] #' + item.referenceId : ''}</td>
+                        <td>{item.note}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </UiTableScroll>
+
           {history && history.totalPages > 1 && (
-            <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button 
-                disabled={history.pageIndex <= 1} 
-                onClick={() => setHistoryFilter(prev => ({ ...prev, page: prev.page - 1 }))}
-                style={{ cursor: 'pointer' }}>
-                Trang trước
-              </button>
+            <div className="ui-pagination" aria-label="Phân trang lịch sử tồn kho">
+              <button type="button" disabled={history.pageIndex <= 1} onClick={() => setHistoryFilter(prev => ({ ...prev, page: prev.page - 1 }))}>Trang trước</button>
               <span>Trang {history.pageIndex} / {history.totalPages} (Tổng: {history.totalRecords})</span>
-              <button 
-                disabled={history.pageIndex >= history.totalPages} 
-                onClick={() => setHistoryFilter(prev => ({ ...prev, page: prev.page + 1 }))}
-                style={{ cursor: 'pointer' }}>
-                Trang sau
-              </button>
+              <button type="button" disabled={history.pageIndex >= history.totalPages} onClick={() => setHistoryFilter(prev => ({ ...prev, page: prev.page + 1 }))}>Trang sau</button>
             </div>
           )}
         </>
       )}
-    </div>
+    </UiCard>
   );
 
   const renderInOutTab = () => {
     const inoutTotalPages = inoutReport ? Math.ceil(inoutReport.length / inoutPageSize) : 0;
     const safeInoutPage = inoutTotalPages > 0 ? Math.min(inoutPage, inoutTotalPages) : 1;
     const inoutCurrentPageData = inoutReport ? inoutReport.slice((safeInoutPage - 1) * inoutPageSize, safeInoutPage * inoutPageSize) : [];
-    
-    return (
-      <div>
-        <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
-          <h3>Báo cáo Xuất Nhập Tồn</h3>
-          <form onSubmit={handleInOutFilterSubmit} style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div>
-              <label style={{ display: 'block' }}>Từ ngày</label>
-              <input type="date" value={inoutFilter.fromDate} onChange={e => setInoutFilter({...inoutFilter, fromDate: e.target.value})} />
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>Đến ngày</label>
-              <input type="date" value={inoutFilter.toDate} onChange={e => setInoutFilter({...inoutFilter, toDate: e.target.value})} />
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>ID Kho</label>
-              <select value={inoutFilter.warehouseId} onChange={e => setInoutFilter({...inoutFilter, warehouseId: e.target.value})}>
-                <option value="">Tất cả kho được phép</option>
-                {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>ID Sản phẩm</label>
-              <input type="number" value={inoutFilter.productId} onChange={e => setInoutFilter({...inoutFilter, productId: e.target.value})} placeholder="Nhập ID sản phẩm..." />
-            </div>
-            <button type="submit" style={{ padding: '5px 15px', backgroundColor: '#3498db', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '4px' }}>
-              Lọc Báo Cáo
-            </button>
-            <button type="button" onClick={handleExportInOut} style={{ padding: '5px 15px', backgroundColor: '#27ae60', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '4px' }}>
-              Xuất Excel
-            </button>
-          </form>
-        </div>
 
-        {inoutError && <div style={{ color: 'red', marginBottom: '10px' }}>{inoutError}</div>}
-        {inoutLoading ? <div>Đang tải...</div> : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-                  <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Mã SP</th>
-                  <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Tên SP</th>
-                  <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>ĐVT</th>
-                  <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Kho</th>
-                  <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Tồn đầu kỳ</th>
-                  <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Nhập trong kỳ</th>
-                  <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Xuất trong kỳ</th>
-                  <th style={{ padding: '8px', border: '1px solid #bdc3c7' }}>Tồn cuối kỳ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(!inoutReport || inoutReport.length === 0) ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '10px' }}>Không có dữ liệu báo cáo</td></tr>
-                ) : (
-                  inoutCurrentPageData.map((item, index) => (
-                    <tr key={`${item.productId}-${item.warehouseId}-${index}`}>
-                      <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.productCode}</td>
-                      <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.productName}</td>
-                      <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.unitName}</td>
-                      <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.warehouseName}</td>
-                      <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.openingQuantity}</td>
-                      <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.inQuantity}</td>
-                      <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.outQuantity}</td>
-                      <td style={{ padding: '8px', border: '1px solid #bdc3c7' }}>{item.closingQuantity}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-            {inoutReport && inoutTotalPages > 1 && (
-              <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <button 
-                  disabled={safeInoutPage <= 1} 
-                  onClick={() => setInoutPage(prev => Math.max(prev - 1, 1))}
-                  style={{ cursor: safeInoutPage <= 1 ? 'not-allowed' : 'pointer' }}>
-                  Trang trước
-                </button>
-                <span>Trang {safeInoutPage} / {inoutTotalPages} (Tổng: {inoutReport.length})</span>
-                <button 
-                  disabled={safeInoutPage >= inoutTotalPages} 
-                  onClick={() => setInoutPage(prev => Math.min(prev + 1, inoutTotalPages))}
-                  style={{ cursor: safeInoutPage >= inoutTotalPages ? 'not-allowed' : 'pointer' }}>
-                  Trang sau
-                </button>
+    return (
+      <UiCard title="Báo cáo Xuất Nhập Tồn">
+        <div className="inventory-report-card">
+          <form onSubmit={handleInOutFilterSubmit}>
+            <UiToolbar>
+              <UiToolbarField label="Từ ngày">
+                <input aria-label="Báo cáo từ ngày" type="date" value={inoutFilter.fromDate} onChange={e => setInoutFilter({ ...inoutFilter, fromDate: e.target.value })} />
+              </UiToolbarField>
+
+              <UiToolbarField label="Đến ngày">
+                <input aria-label="Báo cáo đến ngày" type="date" value={inoutFilter.toDate} onChange={e => setInoutFilter({ ...inoutFilter, toDate: e.target.value })} />
+              </UiToolbarField>
+
+              <UiToolbarField label="Kho">
+                <select aria-label="Kho báo cáo xuất nhập tồn" value={inoutFilter.warehouseId} onChange={e => setInoutFilter({ ...inoutFilter, warehouseId: e.target.value })}>
+                  <option value="">Tất cả kho được phép</option>
+                  {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+                </select>
+              </UiToolbarField>
+
+              <UiToolbarField label="ID Sản phẩm">
+                <input aria-label="ID sản phẩm báo cáo xuất nhập tồn" type="number" value={inoutFilter.productId} onChange={e => setInoutFilter({ ...inoutFilter, productId: e.target.value })} placeholder="Nhập ID sản phẩm..." />
+              </UiToolbarField>
+
+              <div className="inventory-toolbar-actions">
+                <button type="submit">Lọc Báo Cáo</button>
+                <button type="button" onClick={handleExportInOut}>Xuất Excel</button>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+            </UiToolbar>
+          </form>
+
+          {inoutError && <p role="alert">{inoutError}</p>}
+          {inoutLoading ? (
+            <p role="status">Đang tải...</p>
+          ) : (
+            <UiTableScroll>
+              <table aria-label="Báo cáo xuất nhập tồn">
+                <thead>
+                  <tr>
+                    <th>Mã SP</th>
+                    <th>Tên SP</th>
+                    <th>ĐVT</th>
+                    <th>Kho</th>
+                    <th className="inventory-numeric">Tồn đầu kỳ</th>
+                    <th className="inventory-numeric">Nhập trong kỳ</th>
+                    <th className="inventory-numeric">Xuất trong kỳ</th>
+                    <th className="inventory-numeric">Tồn cuối kỳ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(!inoutReport || inoutReport.length === 0) ? (
+                    <tr><td colSpan={8} className="ui-empty-cell">Không có dữ liệu báo cáo</td></tr>
+                  ) : (
+                    inoutCurrentPageData.map((item, index) => (
+                      <tr key={item.productId + '-' + item.warehouseId + '-' + index}>
+                        <td><strong>{item.productCode}</strong></td>
+                        <td>{item.productName}</td>
+                        <td>{item.unitName}</td>
+                        <td>{item.warehouseName}</td>
+                        <td className="inventory-numeric">{item.openingQuantity}</td>
+                        <td className="inventory-numeric">{item.inQuantity}</td>
+                        <td className="inventory-numeric">{item.outQuantity}</td>
+                        <td className="inventory-numeric inventory-available">{item.closingQuantity}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </UiTableScroll>
+          )}
+
+          {inoutReport && inoutTotalPages > 1 && (
+            <div className="ui-pagination" aria-label="Phân trang báo cáo xuất nhập tồn">
+              <button type="button" disabled={safeInoutPage <= 1} onClick={() => setInoutPage(prev => Math.max(prev - 1, 1))}>Trang trước</button>
+              <span>Trang {safeInoutPage} / {inoutTotalPages} (Tổng: {inoutReport.length})</span>
+              <button type="button" disabled={safeInoutPage >= inoutTotalPages} onClick={() => setInoutPage(prev => Math.min(prev + 1, inoutTotalPages))}>Trang sau</button>
+            </div>
+          )}
+        </div>
+      </UiCard>
     );
   };
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>Báo Cáo Tồn Kho</h2>
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #ccc', paddingBottom: '10px' }}>
-        <button 
-          style={{ padding: '10px 20px', cursor: 'pointer', fontWeight: activeTab === 'stock' ? 'bold' : 'normal', backgroundColor: activeTab === 'stock' ? '#3498db' : '#ecf0f1', color: activeTab === 'stock' ? 'white' : 'black', border: 'none', borderRadius: '4px' }}
-          onClick={() => setActiveTab('stock')}
-        >
-          Tồn kho hiện tại
-        </button>
-        <button 
-          style={{ padding: '10px 20px', cursor: 'pointer', fontWeight: activeTab === 'history' ? 'bold' : 'normal', backgroundColor: activeTab === 'history' ? '#3498db' : '#ecf0f1', color: activeTab === 'history' ? 'white' : 'black', border: 'none', borderRadius: '4px' }}
-          onClick={() => setActiveTab('history')}
-        >
-          Lịch sử giao dịch
-        </button>
-        <button 
-          style={{ padding: '10px 20px', cursor: 'pointer', fontWeight: activeTab === 'inout' ? 'bold' : 'normal', backgroundColor: activeTab === 'inout' ? '#3498db' : '#ecf0f1', color: activeTab === 'inout' ? 'white' : 'black', border: 'none', borderRadius: '4px' }}
-          onClick={() => setActiveTab('inout')}
-        >
-          Xuất nhập tồn
-        </button>
-      </div>
+    <UiPage>
+      <div className="inventory-page">
+        <UiPageHeader
+          eyebrow="Inventory"
+          title="Báo Cáo Tồn Kho"
+          description="Theo dõi tồn thực tế, lượng đã giữ, lịch sử biến động và báo cáo xuất nhập tồn theo phạm vi kho được phép."
+        />
 
-      {activeTab === 'stock' && renderStockTab()}
-      {activeTab === 'history' && renderHistoryTab()}
-      {activeTab === 'inout' && renderInOutTab()}
-    </div>
+        <div className="inventory-tabs" role="tablist" aria-label="Chế độ báo cáo tồn kho">
+          <button
+            type="button"
+            role="tab"
+            className="inventory-tab"
+            aria-selected={activeTab === 'stock'}
+            aria-controls="inventory-stock-panel"
+            onClick={() => setActiveTab('stock')}
+          >
+            Tồn kho hiện tại
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className="inventory-tab"
+            aria-selected={activeTab === 'history'}
+            aria-controls="inventory-history-panel"
+            onClick={() => setActiveTab('history')}
+          >
+            Lịch sử giao dịch
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className="inventory-tab"
+            aria-selected={activeTab === 'inout'}
+            aria-controls="inventory-inout-panel"
+            onClick={() => setActiveTab('inout')}
+          >
+            Xuất nhập tồn
+          </button>
+        </div>
+
+        {activeTab === 'stock' && <section id="inventory-stock-panel" role="tabpanel">{renderStockTab()}</section>}
+        {activeTab === 'history' && <section id="inventory-history-panel" role="tabpanel">{renderHistoryTab()}</section>}
+        {activeTab === 'inout' && <section id="inventory-inout-panel" role="tabpanel">{renderInOutTab()}</section>}
+      </div>
+    </UiPage>
   );
 };
 
