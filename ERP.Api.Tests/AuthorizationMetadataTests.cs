@@ -221,6 +221,13 @@ namespace ERP.Api.Tests
         }
 
         [Fact]
+        public void LocationsController_Update_UsesCanonicalPatch()
+        {
+            typeof(LocationsController).GetMethod("Update")!
+                .GetCustomAttribute<HttpPatchAttribute>().Should().NotBeNull();
+        }
+
+        [Fact]
         public void ProductBarcodeEndpoints_ReadForAllRoles_MutateForAdminOrManager()
         {
             typeof(ProductBarcodeLookupController).GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.ProductRead);
