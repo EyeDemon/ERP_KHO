@@ -306,7 +306,8 @@ public sealed class WarehouseStructureService(
         catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.", ex); }
     }
 
-    private static void ApplyVersion(byte[] actual, string encoded, Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry<byte[]> property)
+    private static void ApplyVersion<TEntity>(byte[] actual, string encoded, Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry<TEntity, byte[]> property)
+        where TEntity : class
     {
         byte[] expected;
         try { expected = Convert.FromBase64String(encoded); }
