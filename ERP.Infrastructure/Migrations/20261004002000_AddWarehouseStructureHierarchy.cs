@@ -153,6 +153,11 @@ public partial class AddWarehouseStructureHierarchy : Migration
             type: "int",
             nullable: true);
 
+        migrationBuilder.AddCheckConstraint(
+            name: "CK_WarehouseLocations_RackLevelRequiresZone",
+            table: "WarehouseLocations",
+            sql: "[RackLevelId] IS NULL OR [ZoneId] IS NOT NULL");
+
         migrationBuilder.CreateIndex(
             name: "IX_WarehouseZones_WarehouseId_Code",
             table: "WarehouseZones",
@@ -234,6 +239,10 @@ JOIN Permissions p ON p.Id=rp.PermissionId
 WHERE p.Code='warehouse_zone.manage';
 DELETE FROM Permissions WHERE Code='warehouse_zone.manage';
 """);
+
+        migrationBuilder.DropCheckConstraint(
+            name: "CK_WarehouseLocations_RackLevelRequiresZone",
+            table: "WarehouseLocations");
 
         migrationBuilder.DropForeignKey(
             name: "FK_WarehouseLocations_WarehouseRackLevels_RackLevelId",
