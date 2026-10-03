@@ -2628,6 +2628,8 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("WarehouseLocations", null, t =>
                         {
                             t.HasCheckConstraint("CK_WarehouseLocations_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
+
+                            t.HasCheckConstraint("CK_WarehouseLocations_RackLevelRequiresZone", "[RackLevelId] IS NULL OR [ZoneId] IS NOT NULL");
                         });
                 });
 
