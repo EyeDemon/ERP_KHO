@@ -155,6 +155,7 @@ namespace ERP.Application.Tests
                 => throw new ERP.Domain.Exceptions.ConcurrencyException("Mock DB conflict during save", new DbUpdateConcurrencyException("Mock"));
 
             public Task<ImportReceipt?> GetByIdWithDetailsAsync(int id) => _inner.GetByIdWithDetailsAsync(id);
+            public Task<ImportReceipt?> GetByIdWithDetailsForUpdateAsync(int id) => _inner.GetByIdWithDetailsForUpdateAsync(id);
             public Task<ImportReceipt?> GetByIdAsync(int id, CancellationToken cancellationToken = default) => _inner.GetByIdAsync(id, cancellationToken);
             public Task<System.Collections.Generic.IEnumerable<ImportReceipt>> GetAllAsync(CancellationToken cancellationToken = default) => _inner.GetAllAsync(cancellationToken);
             public Task<System.Collections.Generic.IEnumerable<ImportReceipt>> FindAsync(System.Linq.Expressions.Expression<Func<ImportReceipt, bool>> predicate, CancellationToken cancellationToken = default) => _inner.FindAsync(predicate, cancellationToken);
@@ -327,6 +328,7 @@ namespace ERP.Application.Tests
                 return receipt;
             }
 
+            public Task<ImportReceipt?> GetByIdWithDetailsForUpdateAsync(int id) => _inner.GetByIdWithDetailsForUpdateAsync(id);
             public Task<ImportReceipt?> GetByIdAsync(int id, CancellationToken cancellationToken = default) => _inner.GetByIdAsync(id, cancellationToken);
             public Task<System.Collections.Generic.IEnumerable<ImportReceipt>> GetAllAsync(CancellationToken cancellationToken = default) => _inner.GetAllAsync(cancellationToken);
             public Task<System.Collections.Generic.IEnumerable<ImportReceipt>> FindAsync(System.Linq.Expressions.Expression<Func<ImportReceipt, bool>> predicate, CancellationToken cancellationToken = default) => _inner.FindAsync(predicate, cancellationToken);

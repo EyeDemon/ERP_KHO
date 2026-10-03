@@ -328,3 +328,7 @@ Notion timestamps and Drive metadata remained unchanged; the discrepancy artifac
 ## Cất hàng successor slice — 2026-09-27
 
 Post now creates location-aware balances at system RECEIVING and exactly one Cất hàng task/items in the same transaction. Cất hàng changes only location; receipt/QC/discrepancy quantities and status buckets remain unchanged. Fresh evidence and deferred scope are recorded in `INBOUND_PUTAWAY_LOCATION_MOVEMENT.md`.
+
+## Conditional QC authorization successor — 2026-10-03
+
+Page 17 §33.4.4 requires execute for every disposition and complete for a command finishing QC; selected partial batches remain allowed. Received/no-QC readiness approval uses receipt.complete; QcCompleted approval additionally uses quality_disposition.approve and does not require execute. Shared-service enforcement and original-transition replay preserve warehouse, maker/checker, quantities/UOM and Post-only inventory boundary. Fresh evidence and exact cleanup are linked in [accumulated acceptance review](ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md): Application 352/352, API 189/189, frontend 89/89, focused browser 7e83a8d3c6d347de9b80688ec98da134 PASS. No schema, migration, bundle or dependency change. Historical receiving checkpoints above remain historical; they do not describe current permission authority.

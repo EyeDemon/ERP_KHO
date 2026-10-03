@@ -14,7 +14,7 @@ Commands:
 - `POST /api/importreceipts/{id}/approve`: Received/QcCompleted to ReadyToPost; no stock effect.
 - `POST /api/importreceipts/{id}/post`: writes status balances and ledger once, then Posted.
 
-Invalid/stale transitions return 409. All mutations retain warehouse scope, idempotency and optimistic concurrency. Current gates are role-backed; Notion permission codes are target governance and permission-code migration is deferred.
+Invalid/stale transitions return 409. All mutations retain warehouse scope, idempotency and optimistic concurrency. Endpoint gates now use database permission grants; warehouse scope and maker/checker remain independent. Page 17 §33.4.4 now locks the conditional mapping: qc-disposition always requires quality_inspection.execute; a validated command finishing all persisted QC lines additionally requires quality_inspection.complete. Execute-only partial batches remain allowed. Approval from Received requires receipt.complete; approval from QcCompleted additionally requires quality_disposition.approve, without execute. Missing capability returns safe 403 with the entire command rolled back. QC reads are serialized under the receipt row lock inside the existing transaction; replay checks the original audited transition, not today's state. The successor acceptance report records Application 352/352, API 189/189, frontend 89/89 and focused Browser Run 7e83a8d3c6d347de9b80688ec98da134 PASS, including revoke/replay and unchanged stock/ledger. See [accumulated review](ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md) for source association, precursor failures, cleanup and precise evidence classes.
 
 Migration `20260920163928_AddInboundQcDisposition` backfills legacy balances/ledger as AVAILABLE and does not infer historical QC policies or alter legacy receipt states.
 
@@ -52,7 +52,7 @@ No business data in database `ERP_KHO` was accessed. Historical runs remain supp
 
 Cất hàng compatibility was verified after this closure: Posted AVAILABLE/DAMAGED/REJECTED buckets keep their status while moving from RECEIVING to eligible locations. QC-before-Post and the single receipt inventory boundary remain unchanged.
 
-Next gaps after QC closure are receiving discrepancy/reason codes, Putaway/location movement, permission-code migration, rejected-at-door handling, and an optional laboratory/evidence engine. They do not expand this recovery slice.
+Historical next-gap list at QC closure (superseded by successor modules): receiving discrepancy/reason codes, Putaway/location movement, permission-code migration and rejected-at-door handling were subsequently implemented. An optional laboratory/evidence engine remains deferred. Current accumulated acceptance findings are recorded separately.
 
 ## Successor slice note — 2026-09-24
 

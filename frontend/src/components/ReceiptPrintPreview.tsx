@@ -20,11 +20,15 @@ export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose 
   const partner = kind === 'import'
     ? receipt.supplierCode && receipt.supplierName ? `${receipt.supplierCode} - ${receipt.supplierName}` : 'Chưa ghi nhận'
     : receipt.customerCode && receipt.customerName ? `${receipt.customerCode} - ${receipt.customerName}` : 'Chưa ghi nhận';
-  const statusBanner = receipt.status === 'Draft' ? 'BẢN NHÁP — CHƯA DUYỆT' : receipt.status === 'Cancelled' ? 'ĐÃ HỦY' : receipt.status;
+  const statusBanner = ({ Draft: 'BẢN NHÁP — CHƯA DUYỆT', Cancelled: 'ĐÃ HỦY', Approved: 'Đã duyệt',
+    Dispatched: 'Đã xuất kho', Received: 'Đã nhận — chưa ghi tồn', ReadyToPost: 'Sẵn sàng ghi nhận tồn kho',
+    Posted: 'Đã ghi nhận tồn kho', QcPending: 'Chờ kết quả kiểm tra chất lượng', QcCompleted: 'Kiểm tra chất lượng đã hoàn tất — chờ duyệt',
+    DiscrepancyPending: 'Chờ xử lý sai lệch', DiscrepancySubmitted: 'Đã gửi xử lý sai lệch', DiscrepancyPendingApproval: 'Chờ duyệt sai lệch',
+    DiscrepancyResolved: 'Sai lệch đã xử lý', DiscrepancyRejected: 'Sai lệch bị trả lại' } as Record<string, string>)[receipt.status] || 'Trạng thái chưa xác định';
   return <div className="receipt-print-overlay" role="dialog" aria-modal="true" aria-label={`Bản in ${receipt.code}`} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
     <div className="receipt-print-actions">
-      <span>Preview dùng dữ liệu đã lưu từ backend.</span>
-      <button onClick={() => window.print()}>In / Save as PDF</button>
+      <span>Bản in dùng dữ liệu đã lưu trên hệ thống.</span>
+      <button onClick={() => window.print()}>In / Lưu thành PDF</button>
       <button ref={closeRef} onClick={onClose}>Đóng</button>
     </div>
     <article className="receipt-print-sheet">

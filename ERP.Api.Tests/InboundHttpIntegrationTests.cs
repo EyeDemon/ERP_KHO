@@ -18,6 +18,85 @@ namespace ERP.Api.Tests;
 public sealed partial class InboundHttpIntegrationTests
 {
     [ApprovalSqlServerFact]
+    public async Task Location_deactivation_and_move_overlap_without_stock_entering_an_inactive_destination()
+    {
+        await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(
+            Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
+        await database.MigrateAndSeedAsync();
+        await using var db = Context(database.ConnectionString);
+        var admin = await db.Users.SingleAsync(u => u.Role.RoleName == "Admin");
+        var warehouse = await db.Warehouses.SingleAsync();
+        var product = await db.Products.Include(x => x.Unit).SingleAsync();
+        var source = new WarehouseLocation { WarehouseId=warehouse.Id, Code="QA-RECEIVING", Name="Vị trí nhận", LocationType=WarehouseLocationType.Receiving, IsReceivable=true };
+        var destination = new WarehouseLocation { WarehouseId=warehouse.Id, Code="QA-STORAGE", Name="Vị trí lưu", LocationType=WarehouseLocationType.Storage, IsPickable=true };
+        var receipt = Receipt("QA-LOCATION-RACE", warehouse.Id, admin.Id, product, ReceiptStatus.Posted, 0);
+        db.AddRange(source, destination, receipt); await db.SaveChangesAsync();
+        var task = new PutawayTask { ReceiptId=receipt.Id, WarehouseId=warehouse.Id, CreatedBy=admin.Id, AssignedUserId=admin.Id, Status=PutawayTaskStatus.Assigned };
+        var item = new PutawayTaskItem { PutawayTask=task, ReceiptLineId=receipt.Details.Single().Id, ProductId=product.Id,
+            InventoryStatus=InventoryStatus.Available, SourceLocationId=source.Id, OperationUnitId=product.UnitId, BaseUnitId=product.UnitId,
+            OperationUnitCodeSnapshot=product.Unit.Code, BaseUnitCodeSnapshot=product.Unit.Code, ConversionFactorSnapshot=1, ConversionVersionSnapshot=1,
+            RequiredOperationQuantity=5, RequiredBaseQuantity=5 };
+        db.AddRange(item, new InventoryStock { ProductId=product.Id, WarehouseId=warehouse.Id, LocationId=source.Id, Quantity=5 });
+        await db.SaveChangesAsync();
+        var total = await db.InventoryStocks.SumAsync(x => x.Quantity);
+        await using var factory = Factory(database.ConnectionString);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress=new Uri("https://localhost") });
+        await using var blocker = Context(database.ConnectionString);
+        await using var transaction = await blocker.Database.BeginTransactionAsync();
+        await blocker.Database.ExecuteSqlInterpolatedAsync($"SELECT Id FROM dbo.WarehouseLocations WITH (UPDLOCK,HOLDLOCK) WHERE Id={destination.Id}");
+        var move = Send(client, HttpMethod.Post, $"/api/putaway-tasks/{task.Id}/move", admin.Id, "Admin", "qa-location-move",
+            JsonSerializer.Serialize(new { itemId=item.Id, destinationLocationId=destination.Id, quantity=5, unitCode=product.Unit.Code, rowVersion=Convert.ToBase64String(task.RowVersion) }));
+        var deactivate = Send(client, HttpMethod.Put, $"/api/putaway-tasks/locations/{destination.Id}", admin.Id, "Admin", body:
+            JsonSerializer.Serialize(new { name=destination.Name, isActive=false, isPickable=true, rowVersion=Convert.ToBase64String(destination.RowVersion) }));
+        await Task.Delay(150);
+        Assert.False(move.IsCompleted); Assert.False(deactivate.IsCompleted);
+        await transaction.CommitAsync();
+        using var moved = await move.WaitAsync(TimeSpan.FromSeconds(20));
+        using var deactivated = await deactivate.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True((moved.StatusCode == HttpStatusCode.OK && deactivated.StatusCode == HttpStatusCode.Conflict) ||
+            (deactivated.StatusCode == HttpStatusCode.OK && moved.StatusCode == HttpStatusCode.BadRequest),
+            $"Move={moved.StatusCode}; deactivate={deactivated.StatusCode}");
+        db.ChangeTracker.Clear();
+        var active = await db.WarehouseLocations.Where(x => x.Id == destination.Id).Select(x => x.IsActive).SingleAsync();
+        var quantity = await db.InventoryStocks.Where(x => x.LocationId == destination.Id).SumAsync(x => x.Quantity);
+        Assert.True(active || quantity == 0);
+        Assert.Equal(total, await db.InventoryStocks.SumAsync(x => x.Quantity));
+        var effects = moved.IsSuccessStatusCode ? 1 : 0;
+        Assert.Equal(effects, await db.InventoryLocationMovements.CountAsync());
+        Assert.Equal(effects, await db.AuditLogs.CountAsync(x => x.Action == "PutawayTask.Moved"));
+        Assert.Equal(effects, await db.IdempotencyRecords.CountAsync());
+    }
+
+    [ApprovalSqlServerFact]
+    public async Task Partner_assignment_isolates_foreign_receipt_before_state_or_partner_validation()
+    {
+        await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(
+            Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
+        await database.MigrateAndSeedAsync();
+        await using var db = Context(database.ConnectionString);
+        var manager = await db.Users.SingleAsync(u => u.Role.RoleName == "Manager");
+        var warehouse = await db.Warehouses.SingleAsync();
+        var import = new ImportReceipt { Code="QA-PARTNER-PRIVATE-IMPORT", WarehouseId=warehouse.Id, CreatedBy=manager.Id, Status=ReceiptStatus.Approved };
+        var export = new ExportReceipt { Code="QA-PARTNER-PRIVATE-EXPORT", WarehouseId=warehouse.Id, CreatedBy=manager.Id, Status=ReceiptStatus.Approved };
+        db.AddRange(import, export); await db.SaveChangesAsync();
+        await using var factory = Factory(database.ConnectionString);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress=new Uri("https://localhost") });
+        var auditCount = await db.AuditLogs.CountAsync();
+        foreach (var path in new[] { $"/api/importreceipts/{import.Id}/supplier", $"/api/exportreceipts/{export.Id}/customer" })
+            foreach (var partnerId in new int?[] { null, int.MaxValue })
+            {
+                using var denied = await Send(client, HttpMethod.Put, path, manager.Id, "Manager", body:JsonSerializer.Serialize(new { partnerId }));
+                Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+                var raw = await denied.Content.ReadAsStringAsync();
+                Assert.DoesNotContain("QA-PARTNER-PRIVATE", raw);
+                Assert.DoesNotContain("nháp", raw);
+            }
+        Assert.Equal(auditCount, await db.AuditLogs.CountAsync());
+        Assert.Null((await db.ImportReceipts.AsNoTracking().SingleAsync(x => x.Id == import.Id)).SupplierId);
+        Assert.Null((await db.ExportReceipts.AsNoTracking().SingleAsync(x => x.Id == export.Id)).CustomerId);
+    }
+
+    [ApprovalSqlServerFact]
     public async Task SessionOwnershipAndAdministrativeReplayUseDatabaseAuthority()
     {
         await using var database = await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(

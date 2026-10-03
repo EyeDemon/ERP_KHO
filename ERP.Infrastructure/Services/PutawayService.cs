@@ -33,13 +33,18 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
 
     public async Task<WarehouseLocationDto> UpdateLocationAsync(int id, UpdateWarehouseLocationDto dto, CancellationToken token = default)
     {
-        var entity = await context.WarehouseLocations.SingleOrDefaultAsync(x => x.Id == id, token) ?? throw new NotFoundException("Không tìm thấy vị trí hoặc bạn không có quyền truy cập.");
+        await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
+        var entity = await LocationForMutation(id, token) ?? throw new NotFoundException("Không tìm thấy vị trí hoặc bạn không có quyền truy cập.");
         await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId, token);
         ApplyLocationVersion(entity, dto.RowVersion);
         if (entity.IsSystemManaged && (!dto.IsActive || dto.IsBlocked || dto.IsPickable != entity.IsPickable || dto.IsReceivable != entity.IsReceivable)) throw new BusinessRuleException("Không thể thay đổi thuộc tính vận hành của vị trí hệ thống.");
         ValidateFlags(entity.LocationType, dto.IsPickable, dto.IsReceivable);
+        if (!dto.IsActive && (await context.InventoryStocks.AnyAsync(x => x.LocationId == id && x.Quantity != 0, token) ||
+            await context.PutawayTaskItems.AnyAsync(x => x.SourceLocationId == id && x.PutawayTask.Status != PutawayTaskStatus.Completed && x.PutawayTask.Status != PutawayTaskStatus.Cancelled, token)))
+            throw Conflict("Không thể ngừng hoạt động vị trí đang có tồn kho hoặc nhiệm vụ chưa hoàn tất.");
         entity.Name=Required(dto.Name,"Tên vị trí"); entity.IsActive=dto.IsActive; entity.IsBlocked=dto.IsBlocked; entity.IsPickable=dto.IsPickable; entity.IsReceivable=dto.IsReceivable; entity.UpdatedAt=DateTime.UtcNow; entity.UpdatedBy=currentUser.UserId;
         try { await context.SaveChangesAsync(token); } catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.", ex); }
+        if (transaction is not null) await transaction.CommitAsync(token);
         return Location(entity);
     }
     public async Task<int> GetReceivingLocationIdAsync(int warehouseId, CancellationToken token = default) =>
@@ -107,7 +112,7 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
             var task=await Load(id,token); if(task.Status is not PutawayTaskStatus.Assigned and not PutawayTaskStatus.InProgress) throw Conflict("Nhiệm vụ không ở trạng thái có thể cất hàng."); EnsureActor(task);
             ApplyVersion(task.RowVersion,dto.RowVersion,context.Entry(task).Property(x=>x.RowVersion));
             var item=task.Items.SingleOrDefault(x=>x.Id==dto.ItemId)??throw new NotFoundException("Không tìm thấy dòng hàng.");
-            var destination=await context.WarehouseLocations.SingleOrDefaultAsync(x=>x.Id==dto.DestinationLocationId,token)??throw new NotFoundException("Không tìm thấy vị trí đích.");
+            var destination=await LocationForMutation(dto.DestinationLocationId,token)??throw new NotFoundException("Không tìm thấy vị trí đích.");
             if(destination.WarehouseId!=task.WarehouseId) throw new NotFoundException("Không tìm thấy vị trí đích.");
             if(!destination.IsActive||destination.IsBlocked||destination.LocationType!=RequiredType(item.InventoryStatus)||(item.InventoryStatus==InventoryStatus.Available&&!destination.IsPickable)) throw new BusinessRuleException("Vị trí đích không phù hợp với hàng hóa này.");
             var baseQty=ToBase(dto.Quantity,dto.UnitCode,item); if(baseQty>item.RemainingBaseQuantity) throw new BusinessRuleException("Số lượng cất vượt quá số lượng còn lại.");
@@ -129,6 +134,11 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         await using var tx=context.Database.CurrentTransaction is null?await context.Database.BeginTransactionAsync(token):null; try{var task=await Load(id,token);if(!allowed.Contains(task.Status))throw Conflict("Trạng thái nhiệm vụ không còn phù hợp.");ApplyVersion(task.RowVersion,dto.RowVersion,context.Entry(task).Property(x=>x.RowVersion));change(task);context.AuditLogs.Add(Audit(currentUser.UserId,$"PutawayTask.{action}",task.Id,task.WarehouseId,$"Status: {task.Status}"));await context.SaveChangesAsync(token);if(tx is not null)await tx.CommitAsync(token);return await GetAsync(id,token);}catch(DbUpdateConcurrencyException ex){if(tx is not null)await tx.RollbackAsync(token);throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.",ex);}catch{if(tx is not null)await tx.RollbackAsync(token);throw;}
     }
     private async Task<PutawayTask> Load(int id,CancellationToken token){var task=await Query().SingleOrDefaultAsync(x=>x.Id==id,token)??throw new NotFoundException("Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.");await warehouses.EnsureWarehouseAccessAsync(task.WarehouseId,token);return task;}
+    // Hold destination eligibility through commit, including a concurrent master deactivation.
+    private Task<WarehouseLocation?> LocationForMutation(int id, CancellationToken token) =>
+        (context.Database.IsSqlServer()
+            ? context.WarehouseLocations.FromSqlInterpolated($"SELECT * FROM dbo.WarehouseLocations WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}")
+            : context.WarehouseLocations.Where(x => x.Id == id)).SingleOrDefaultAsync(token);
     private IQueryable<PutawayTask> Query()=>context.PutawayTasks.Include(x=>x.Receipt).Include(x=>x.Warehouse).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).Include(x=>x.Items).ThenInclude(x=>x.SourceLocation);
     private void EnsureActor(PutawayTask task){if(task.AssignedUserId!=currentUser.UserId&&!currentUser.IsGlobalAdmin&&currentUser.Role is not "Admin" and not "Manager")throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");}
     private static decimal ToBase(decimal qty,string unit,PutawayTaskItem item){var code=unit.Trim().ToUpperInvariant();var result=code==item.BaseUnitCodeSnapshot.ToUpperInvariant()?qty:code==item.OperationUnitCodeSnapshot.ToUpperInvariant()?qty*item.ConversionFactorSnapshot:throw new BusinessRuleException("Đơn vị tính không được hỗ trợ.");if(decimal.Round(result,item.BaseUnitDecimalPlaces)!=result)throw new BusinessRuleException("Số lượng vượt quá độ chính xác cho phép; hệ thống không tự làm tròn.");return result;}

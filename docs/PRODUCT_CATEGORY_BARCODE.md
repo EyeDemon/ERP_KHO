@@ -1,6 +1,6 @@
 # Product Category and Barcode
 
-Categories are flat master data managed by the existing Admin/Manager catalog permission. Codes are trimmed, converted to uppercase, limited to 50 characters, and unique using SQL Server case-insensitive comparison. Inactive categories cannot be assigned to a product; existing products keep and display an inactive category. A category referenced by any product cannot be deleted.
+Categories are flat master data protected by database `product_category.read/manage` permissions. Category assignment/removal on a Product requires `product.update`; barcode mutations require the independent `product_barcode.manage`; exact barcode lookup requires `product.read`. There are no Product/Category/Barcode permission aliases. Codes are trimmed, converted to uppercase, limited to 50 characters, and unique using SQL Server case-insensitive comparison. Inactive categories cannot be assigned to a product; existing products keep and display an inactive category. A category referenced by any product cannot be deleted.
 
 Creating a product with a category and explicitly assigning a category both validate the active category inside a serializable database transaction. The foreign key uses restrictive delete behavior, so concurrent deletion cannot leave an invalid reference. Database uniqueness and foreign-key errors are returned as business conflicts.
 

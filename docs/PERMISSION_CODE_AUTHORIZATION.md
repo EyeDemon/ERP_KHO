@@ -1,8 +1,51 @@
 # Permission Code Authorization — current checkpoint
 
-Status: **PERMISSION CODE AUTHORIZATION READY FOR OWNER REVIEW**. Local mandatory verification and published-source successor CI PASS; PR #1 remains Draft and production NO-GO. The historical tool-capability blocker below is superseded by the owner-authorized test-only runner and the fresh full matrix.
+Status: **ACCUMULATED PR READY FOR OWNER ACCEPTANCE**. Owner-approved conditional QC authorization and original-transition replay are now verified; both prior BrowserQA findings retain their precise PASS evidence. See [accumulated acceptance review](ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md) for source association, findings, fresh gates and cleanup. Final published-HEAD CI is tracked separately in Draft PR #1. Production NO-GO; no deployment authorization.
 
-## Current browser closure successor — 2026-10-01
+## Current QC authorization successor — 2026-10-03
+
+Page 17 §33.4.4 write/read-back timestamp is **2026-10-03T15:19:58.948Z**, superseding **2026-09-30T19:50:06.373Z** for this conditional mapping. Execute always protects disposition; complete additionally protects the command that finishes QC. Receipt.complete protects readiness approval; disposition.approve additionally protects approval from QcCompleted. Shared services and original-transition replay enforce these requirements; Approval Center and Vietnamese partial-line UI reflect them. Catalog, bundles, model and migrations are unchanged. Fresh Application **352/352**, API **189/189**, frontend **89/89**, build/EF/lint/build/audit PASS; focused browser **7e83a8d3c6d347de9b80688ec98da134 PASS**, including cleanup. Full details and failed precursor scope are in the accumulated report. Membership UI remains **DEFERRED_BY_OWNER**.
+
+## Historical owner BrowserQA findings successor — 2026-10-03
+
+Both owner findings are **CLOSED by fresh evidence**. This successor changes only BrowserQA/test-host code and documentation. Production runtime/model remains `285ad837`; no SQL suite is rerun locally for test-only changes. Final published HEAD CI is tracked separately in Draft PR #1; this local evidence does not claim an unobserved CI result.
+
+### Failure propagation
+
+`captureOriginal()` now rejects caller-visible arrival/completion on fetch failure, non-200 status, fulfill failure and deadline. It never turns a failed handler into successful completion or silently releases a timeout. Setup registration failure/hang and case cancellation also settle. Route abort/unroute cleanup is bounded at 1 second; each owned browser resource close is bounded at 5 seconds and cleanup failure marks the report/exit failed.
+
+Node regressions **18/18 PASS**, zero failed/skipped, include all requested paths, missing arrival, held/fulfill timeout, hanging cleanup, registration failure/hang and cancellation. Four child-process regressions end **exit 1 / FAIL**, then **CLEANED** in finally, without waiting indefinitely. These are automated runner tests, not UI workflows.
+
+Fresh negative Browser Run **f72d11d9b6344f10aaa05f7d7e7f9773** deliberately captures the reader's actual denied catalog response (HTTP **403**). Caller fails, report is **FAILED**, runner exits **1**, and browser `Closed=true`, profiles **0**; official guarded cleanup removes its exact database, processes and DPAPI credential. This is expected negative evidence, never called a passing closure run. Later registration/close deadline hardening is additionally covered by final regressions and the successful run's bounded close path.
+
+### Mounted list/detail/print (distinct from prior unmount evidence)
+
+Production PermissionRoute and MainLayout intentionally unmount on revoked access/identity loading. `frontend/e2e/mounted-receipts.html/.tsx` is a **test-only component-in-browser host**, outside the production entry/bundle. It renders unchanged production Login and ImportReceipts with real apiClient. A test-host button invokes a denied catalog read; the existing application **403 interceptor** reloads `/api/auth/me`. It does not inject permission events, fake identity, change security configuration or add a production hook. Browser-origin administration HTTP performs revoke/regrant; SQL only changes owned QA display identifiers and checks postconditions. This is not represented as the normal production route staying mounted.
+
+Fresh Browser Run **42464f71903e4898ad347ae047ab1d43**: selected group **PASS**, all three subcases **list/detail/print PASS**. Four personas log in once (200 each). In each subcase the held original authorized response is HTTP **200** and contains a verified previous identifier. Revocation refresh clears existing data/dialog; regrant loads a different fresh identifier. The exact original heading node remains connected after revoke, regrant and release (three checks per case), proving no component unmount/remount. Releasing the old response cannot overwrite the current list or reopen detail/print dialogs.
+
+| Held response | Original received (UTC) | Released (UTC) | Refresh / grants | Database delta |
+| --- | --- | --- | --- | --- |
+| List | 10:29:19.483 | 10:29:22.506 | Catalog 403, identity 200; revoke/regrant 200/200 | 2 audits / 2 claims |
+| Detail | 10:29:23.928 | 10:29:27.133 | Same | 2 audits / 2 claims |
+| Print | 10:29:28.154 | 10:29:32.371 | Same | 2 audits / 2 claims |
+
+Final scalar counts **42 audits / 19 claims / 0 movements / 1 receipt ledger / 100 stock**. Stock/ledger/movements remain unchanged throughout; only the six explicit administration mutations add six audits/claims. Neither a stale response nor a read/denial creates an inventory effect.
+
+Execution HEAD **966e8b98076ed0b3bf3aa5e67bc41b8745c48d61** with the reviewed uncommitted BrowserQA successor. Executed runner SHA-256 **941ECE1887884AF56C7666CFFB7ABEF193571DD6A265BE86E687F5DF2EFE6CF6**; final runner **396DCC5F26CEF96B815412B15DADF80D31B269DCC9B4687E8A637474DE004A31** differs solely by removing one trailing space flagged by diff-check after the browser run. Host EOF whitespace was also normalized by staged diff-check (final TSX SHA-256 **061D05A79B8343134D87D8C6019802A33C3A09981D154176C49309C142129658**). No executable statement changed. Executed host HTML **9AE80788794C678AFEFA2A2731FB97A546731423D93242B03479B17D2770DBCF**, host TSX **D37D4DA072546153C83575B233FA0FF73FD7FFE8A3B7554DA940823263679898**. SQL fixture hash is unchanged (**85825DF9…F9285C5**). Final runnable regressions use the final file; committed test source **c95404782b67316ae8722135f3106fbdd38170b6**.
+
+Earlier full Run **3017ec885d284fa4968128222c66e7ef** remains supporting evidence for its actual ten groups. Its delayed receipt case navigated to Tổng quan and unmounted; it did **not** close this mounted finding. Prior three guard tests did not cover capture error propagation. The corrected historical scope below must be read with this successor.
+
+### Verification, freshness, review and cleanup
+
+- Fresh frontend **72/72 / 18 files**, zero failed/skipped; lint **zero warnings**, production build and audit **0 vulnerabilities** PASS. Test-host TSX explicitly type-checked separately because production tsconfig includes `src`, not `e2e`. Initial type-check used a command rejected by TS6 until `--ignoreConfig` was supplied; the corrected command PASS. A lint invocation from repository root was rejected for missing package.json; the correct frontend invocation PASS. No assertion failure is hidden.
+- Backend runtime/model unchanged; retained CI **36893840574** at `966e8b9` has Application **347**, API **184**, frontend **72**, Release/audit/lint/build PASS. A successor pushed-head CI result is required separately; no claim that CI executes the local browser cases.
+- Current source UTF-8 validation **573 text files**, secret/private-key/artifact scan and exact five-file test staging review PASS; existing hero.png is a source asset, not a generated QA binary. Evidence/logs/profiles/credentials/cache were excluded.
+- Internal correctness review covers failure propagation, timer settlement, one-shot routing, bounded cleanup and true mounted generation checks. No remaining finding in the two requested BrowserQA issues. Ponytail/Ponytail Review reuse native promises, Node tests, installed Playwright and the official ownership harness; minimal test-only host rather than a production hook. No dependency, policy engine or new business behavior. QA distinguishes unit/process failures, actual browser HTTP and component-in-browser evidence.
+- Final native Notion 17/18/282/41 unchanged (**2026-09-30T19:50:06.373Z / 2026-09-28T10:04:28.018Z / 2026-09-28T10:04:39.216Z / 2026-09-20T16:31:54.616Z**). No Notion write. Drive fully paginated: **140 images + 5 root folders**, children **16/24/56/10/176**, no nested-folder/count delta; metadata-only **NOT REVIEWED**.
+- Both runs cleaned by exact manifest/name/marker and recorded process identity. Browser contexts/profiles, owned QA databases/listeners and synthetic credentials **0**. `ERP_KHO` **ONLINE** via metadata only; no business-table access. Main/test/worktrees, `.npm-cache/`, UNKNOWN cache and policy-blocked helper preserved; ignored evidence/artifacts remain unstaged. Membership UI remains **DEFERRED_BY_OWNER**.
+
+## Historical full browser run — 2026-10-01 (scope corrected by the successor above)
 
 ### Source, tooling and evidence boundary
 
@@ -21,7 +64,7 @@ Status: **PERMISSION CODE AUTHORIZATION READY FOR OWNER REVIEW**. Local mandator
 | Independent master capabilities | Product update cannot manage Category/Barcode; Barcode manage cannot update Product; product.read permits exact lookup. Location/Warehouse management remain independent; scoped warehouse list and foreign 404. UI controls reflect independent grants. | PASS |
 | Vietnamese history/accessibility | Nonempty inbound history uses translated actions/states, including Nháp → Đã nhận hàng; Vietnamese title/login labels/route denial, dialog close focus and return focus verified. Manager has no administration menu. | PASS |
 | Operational rules | Explicit grants do not bypass maker/checker/poster, warehouse membership or Putaway assignment. Unassigned operator 403, assigned start 200; membership-revoked replay 404; restored legitimate terminal replay 200 with no duplicate effect. | PASS |
-| Late responses and optional dependencies | Original authorized auth/me, receipt list/detail/print responses held across revoke → regrant; older release cannot restore menu/data/dialog. UTC arrival/release timings recorded per case. Receipt-only detail sends zero optional discrepancy/reason/master requests and remains usable. | PASS |
+| Late responses and optional dependencies | Original authorized auth/me and receipt responses held across revoke → regrant with navigation to Tổng quan/unmount. This proves cleanup after unmount, not a mounted receipt screen. Receipt-only detail sends zero optional requests. | PASS for unmount scope only; mounted coverage is the 2026-10-03 successor |
 
 Final scalar QA totals: **116 audit rows, 72 idempotency records, one immutable location movement, two receipt inventory ledger rows, 111 stock units**. Totals include deliberate setup and successful operations across cases; each denial/replay assertion compares the relevant pre/post delta rather than claiming zero global rows. Initial stock/ledger 100/1 become 111/2 only after the independent legitimate receipt Post; permission administration and replay never create stock/ledger effects.
 
@@ -272,9 +315,9 @@ Origin remains https://github.com/EyeDemon/ERP_KHO.git. Read-only DNS succeeded;
 | Controller action | Permission code |
 | --- | --- |
 | ImportReceiptsController.Create | `receipt.create` |
-| ImportReceiptsController.Approve | `receipt.complete` |
+| ImportReceiptsController.Approve | `receipt.complete`; shared service additionally `quality_disposition.approve` from QcCompleted; original-transition replay |
 | ImportReceiptsController.Receive | `receipt.receive` |
-| ImportReceiptsController.RecordQcDisposition | `quality_inspection.execute` |
+| ImportReceiptsController.RecordQcDisposition | `quality_inspection.execute`; shared service additionally `quality_inspection.complete` when the validated batch finishes QC; original-transition replay |
 | ImportReceiptsController.Post | `receipt.post` |
 | ImportReceiptsController.GetAll | `receipt.read` |
 | ImportReceiptsController.GetById | `receipt.read` |

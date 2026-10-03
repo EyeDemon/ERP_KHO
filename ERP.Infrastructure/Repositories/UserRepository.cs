@@ -19,6 +19,11 @@ namespace ERP.Infrastructure.Repositories
                 .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
         }
 
+        public Task<bool> HasPermissionAsync(int userId, string permission, CancellationToken cancellationToken = default)
+            => _dbSet.AsNoTracking().AnyAsync(u => u.Id == userId && u.IsActive &&
+                (u.LockoutEnd == null || u.LockoutEnd <= DateTime.UtcNow) &&
+                u.Role.Permissions.Any(p => p.Permission.Code == permission), cancellationToken);
+
         public async Task<(int FailedCount, DateTime? LockoutEnd)> RecordFailedLoginAsync(int userId, int threshold, DateTime nowUtc, TimeSpan lockoutDuration, CancellationToken cancellationToken = default)
         {
             await using var transaction = _context.Database.CurrentTransaction is null
