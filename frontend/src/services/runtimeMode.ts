@@ -7,6 +7,7 @@ export const blueprintDemoReadPermissions = [
   'product.read',
   'product_category.read',
   'warehouse.read',
+  'location.read',
   'uom.read',
   'partner.read',
   'receipt.read',
