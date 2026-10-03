@@ -25,6 +25,69 @@ export const demoWarehouses = mockWarehouses.map((warehouse, index) => ({
   isActive: true,
 }));
 
+export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => {
+  const base = (index + 1) * 1000;
+  const storageLocation = {
+    id: base + 101,
+    warehouseId: warehouse.id,
+    zoneId: base + 10,
+    zoneCode: 'ZONE-A',
+    rackLevelId: base + 40,
+    aisleCode: 'A01',
+    rackCode: 'R02',
+    levelNo: 3,
+    code: index === 0 ? 'A01-R02-L03-B04' : 'A01-R01-L01-B01',
+    name: index === 0 ? 'Ô A01-R02-L03-B04' : 'Ô lưu trữ 01',
+    barcode: index === 0 ? 'LOC-HCM-A01-R02-L03-B04' : 'LOC-' + warehouse.code + '-01',
+    pickPriority: 10,
+    putawayPriority: 10,
+    locationType: 'Storage',
+    isActive: true,
+    isBlocked: false,
+    isPickable: true,
+    isReceivable: false,
+    isSystemManaged: false,
+  };
+  return {
+    warehouseId: warehouse.id,
+    warehouseCode: warehouse.code,
+    warehouseName: warehouse.name,
+    zones: [{
+      id: base + 10,
+      warehouseId: warehouse.id,
+      code: 'ZONE-A',
+      name: index === 0 ? 'Khu lưu trữ A' : 'Khu lưu trữ chính',
+      zoneType: 'STORAGE',
+      pickPriority: 10,
+      putawayPriority: 10,
+      isActive: true,
+      aisles: [{
+        id: base + 20,
+        zoneId: base + 10,
+        code: 'A01',
+        name: 'Dãy 01',
+        racks: [{
+          id: base + 30,
+          aisleId: base + 20,
+          code: index === 0 ? 'R02' : 'R01',
+          name: index === 0 ? 'Kệ 02' : 'Kệ 01',
+          levels: [{
+            id: base + 40,
+            rackId: base + 30,
+            levelNo: index === 0 ? 3 : 1,
+            locations: [storageLocation],
+          }],
+        }],
+      }],
+      locations: [],
+    }],
+    systemLocations: [
+      { id: base + 1, warehouseId: warehouse.id, code: 'RECEIVING', name: 'Vị trí nhận hàng', locationType: 'Receiving', isActive: true, isBlocked: false, isPickable: false, isReceivable: true, isSystemManaged: true },
+      { id: base + 2, warehouseId: warehouse.id, code: 'LEGACY', name: 'Tồn kho kế thừa', locationType: 'Legacy', isActive: true, isBlocked: false, isPickable: true, isReceivable: false, isSystemManaged: true },
+    ],
+  };
+});
+
 export const demoProducts = mockProducts.map((product, index) => {
   const unitId = unitByName[product.baseUom] ?? 3;
   const categoryId = categoryByName[product.category] ?? null;
