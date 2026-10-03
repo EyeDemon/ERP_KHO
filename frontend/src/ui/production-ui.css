@@ -374,6 +374,10 @@
   text-align: center;
 }
 
+.production-ui .ui-empty-detail {
+  margin-top: 5px;
+}
+
 .production-ui .ui-metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
