@@ -1480,5 +1480,51 @@
     ],
     "exceptionTitle": "RESTORE_DRILL_FAILED",
     "exceptionDetail": "Backup không được coi là usable cho tới khi restore và integrity verification PASS."
+  },
+  "INV-11": {
+    "title": "Inventory Integrity & Reconciliation",
+    "subtitle": "So sánh immutable ledger với balance projection và rebuild có kiểm soát.",
+    "mode": "control",
+    "stages": [
+      "Snapshot",
+      "Compare",
+      "Investigate mismatch",
+      "Rebuild projection",
+      "Verify green"
+    ],
+    "fields": [
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Ledger total",
+        "value": "128,442 Cái"
+      },
+      {
+        "label": "Balance total",
+        "value": "128,430 Cái"
+      },
+      {
+        "label": "Mismatch",
+        "value": "12 Cái"
+      },
+      {
+        "label": "Affected keys",
+        "value": "2 SKU/location buckets"
+      }
+    ],
+    "commands": [
+      "RUN_RECONCILIATION",
+      "OPEN_MISMATCH",
+      "REBUILD_PROJECTION",
+      "VERIFY"
+    ],
+    "exceptionTitle": "RECONCILIATION_NOT_GREEN",
+    "exceptionDetail": "Projection rebuild vẫn không khớp ledger; warehouse/release gate phải giữ blocked."
   }
 }
