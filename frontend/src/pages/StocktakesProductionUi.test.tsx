@@ -60,6 +60,7 @@ describe('Stocktakes shared production UI', () => {
 
     expect(await view.findByText('ST-2026-0001')).toBeTruthy();
     expect(view.getByRole('table', { name: 'Danh sách phiếu kiểm kê' })).toBeTruthy();
+    expect(view.getByText('Bản nháp')).toBeTruthy();
 
     fireEvent.click(view.getByRole('button', { name: 'Tạo phiếu kiểm kê' }));
 
