@@ -52,6 +52,19 @@ describe('Blueprint demo API adapter', () => {
     }
   });
 
+  it('serves the WH-02 warehouse hierarchy and canonical location reads', async () => {
+    const structureConfig = request('/api/warehouses/1/structure');
+    const structure = await createBlueprintDemoApiAdapter(structureConfig)(structureConfig);
+    const payload = structure.data as { zones: Array<{ code: string; aisles: unknown[] }>; systemLocations: Array<{ code: string }> };
+    expect(payload.zones[0].code).toBe('ZONE-A');
+    expect(payload.zones[0].aisles.length).toBeGreaterThan(0);
+    expect(payload.systemLocations.some(item => item.code === 'RECEIVING')).toBe(true);
+
+    const locationsConfig = request('/api/locations', 'get', { warehouseId: 1 });
+    const locations = await createBlueprintDemoApiAdapter(locationsConfig)(locationsConfig);
+    expect((locations.data as Array<{ code: string }>).some(item => item.code === 'A01-R02-L03-B04')).toBe(true);
+  });
+
   it('fails closed for mutations instead of pretending a write succeeded', async () => {
     const config = request('/api/products', 'post');
     await expect(createBlueprintDemoApiAdapter(config)(config)).rejects.toMatchObject({
