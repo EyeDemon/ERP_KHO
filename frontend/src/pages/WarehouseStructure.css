@@ -1,0 +1,75 @@
+.warehouse-structure-page {
+  display: grid;
+  gap: var(--ui-space-4);
+}
+
+.warehouse-structure-form {
+  display: grid;
+  gap: var(--ui-space-3);
+}
+
+.warehouse-structure-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ui-space-3);
+  align-items: end;
+}
+
+.warehouse-structure-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  flex-wrap: wrap;
+}
+
+.warehouse-structure-depth {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.warehouse-structure-depth::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 1px;
+  margin-right: var(--ui-space-2);
+  background: var(--ui-border-strong);
+}
+
+.warehouse-structure-depth.depth-2 {
+  padding-left: 18px;
+}
+
+.warehouse-structure-depth.depth-3 {
+  padding-left: 36px;
+}
+
+.warehouse-structure-depth.depth-4 {
+  padding-left: 54px;
+}
+
+.warehouse-structure-page td small {
+  display: inline-block;
+  margin-top: 2px;
+}
+
+@media (max-width: 1100px) {
+  .warehouse-structure-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .warehouse-structure-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .warehouse-structure-depth.depth-2,
+  .warehouse-structure-depth.depth-3,
+  .warehouse-structure-depth.depth-4 {
+    padding-left: 0;
+  }
+}
