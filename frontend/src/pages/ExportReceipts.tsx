@@ -317,41 +317,7 @@ const ExportReceipts = () => {
 
   const statusLabel = (status: string) => ({ Draft: 'Nháp', Approved: 'Đã duyệt', Dispatched: 'Đã xuất kho', Cancelled: 'Đã hủy', Completed: 'Hoàn tất' }[status] || status);
 
-
   return (
-    <div>
-      <h2>Quản Lý Phiếu Xuất Kho</h2>
-      {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-      {successMsg && <div style={{ color: 'green', marginBottom: '10px' }}>{successMsg}</div>}
-      {receipts.some(receipt => !receipt.writeEnabled) && <div role="status" style={{ color: '#92400e', marginBottom: '10px' }}>Workflow xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.</div>}
-      
-      {canOperate && <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
-        <h3>Tạo Phiếu Xuất Kho</h3>
-        <form onSubmit={handleCreate}>
-          <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
-            <div>
-              <label style={{ display: 'block' }}>Mã phiếu</label>
-              <input value={code} onChange={e => setCode(e.target.value)} required />
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>Kho</label>
-              <select value={warehouseId} onChange={e => setWarehouseId(e.target.value ? Number(e.target.value) : '')} required>
-                <option value="">-- Chọn kho --</option>
-                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>Ghi chú phiếu</label>
-              <input value={note} onChange={e => setNote(e.target.value)} />
-            </div>
-            <div><label style={{display:'block'}}>Khách hàng</label><select aria-label="Khách hàng" value={customerId} onChange={e=>setCustomerId(e.target.value?Number(e.target.value):'')}><option value="">-- Không chọn --</option>{customers.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}</select></div>
-          </div>
-
-          <h4>Chi tiết phiếu</h4>
-          {details.map((d, i) => {
-            const stockDisplay = getStockDisplay(warehouseId, d.productId);
-            const isExceed = typeof stockDisplay === 'number' && Number(d.quantity) > stockDisplay;
-            return (
     <UiPage>
       <div className="export-receipts">
         <UiPageHeader
