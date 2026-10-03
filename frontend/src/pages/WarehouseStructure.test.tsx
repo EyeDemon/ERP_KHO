@@ -6,7 +6,7 @@ import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 
 vi.mock('../services/apiClient', () => ({
-  default: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn() },
 }));
 
 vi.mock('../services/authorization', () => ({
@@ -111,6 +111,7 @@ describe('Cấu trúc vị trí kho', () => {
     expect(view.queryByText('Thêm ô / vị trí')).toBeNull();
     expect(apiClient.post).not.toHaveBeenCalled();
     expect(apiClient.put).not.toHaveBeenCalled();
+    expect(apiClient.patch).not.toHaveBeenCalled();
   });
 
   it('shows separate structure and location management forms only with matching permissions', async () => {
