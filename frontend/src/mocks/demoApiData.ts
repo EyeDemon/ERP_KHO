@@ -81,6 +81,7 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
       }],
       locations: [],
     }],
+    unmappedLocations: [],
     systemLocations: [
       { id: base + 1, warehouseId: warehouse.id, code: 'RECEIVING', name: 'Vị trí nhận hàng', locationType: 'Receiving', isActive: true, isBlocked: false, isPickable: false, isReceivable: true, isSystemManaged: true },
       { id: base + 2, warehouseId: warehouse.id, code: 'LEGACY', name: 'Tồn kho kế thừa', locationType: 'Legacy', isActive: true, isBlocked: false, isPickable: true, isReceivable: false, isSystemManaged: true },
