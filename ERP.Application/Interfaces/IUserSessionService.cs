@@ -11,6 +11,6 @@ public interface IUserSessionService
     Task LogoutAllAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<UserSessionDto>> GetCurrentUserSessionsAsync(string? currentRefreshToken, CancellationToken cancellationToken = default);
     Task RevokeSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
-    Task RevokeUserSessionsAsAdminAsync(int userId, CancellationToken cancellationToken = default);
+    Task RevokeUserSessionsAsAdminAsync(int userId, string? rowVersion, CancellationToken cancellationToken = default);
     Task<int> CleanupAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default);
 }

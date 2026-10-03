@@ -15,5 +15,7 @@ namespace ERP.Application.DTOs
         public string? Description { get; set; }
 
         public int UnitId { get; set; }
+
+        public int? CategoryId { get; set; }
     }
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { RefreshCw, Unlock } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import './StockReservations.css';
-import { canOperateWarehouse, currentRole } from '../services/authorization';
+import { currentRole } from '../services/authorization';
 
 type Reservation = {
   id: number; reservationCode: string; productCode: string; productName: string;
@@ -13,7 +13,7 @@ type Reservation = {
 type Page = { items: Reservation[]; totalRecords: number; pageIndex: number; pageSize: number };
 
 export default function StockReservations() {
-  const canOperate = canOperateWarehouse(currentRole());
+  const canOperate = currentRole() !== 'Viewer';
   const [data, setData] = useState<Page>({ items: [], totalRecords: 0, pageIndex: 1, pageSize: 20 });
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);

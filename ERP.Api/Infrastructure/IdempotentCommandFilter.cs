@@ -30,6 +30,15 @@ public sealed class IdempotentCommandFilter(
             return;
         }
 
+        // Recheck target existence before both initial claims and successful terminal-state replay.
+        if (commandScope is "User.Unlock" or "User.RevokeSessions" &&
+            actionContext.ActionArguments.TryGetValue("userId", out var target) && target is int targetId &&
+            !await context.Users.AsNoTracking().AnyAsync(u => u.Id == targetId, actionContext.HttpContext.RequestAborted))
+        {
+            actionContext.Result = new NotFoundObjectResult(new { message = "Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập." });
+            return;
+        }
+
         var rawKey = actionContext.HttpContext.Request.Headers[HeaderName].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(rawKey) || rawKey.Length > 128)
         {
@@ -67,6 +76,24 @@ public sealed class IdempotentCommandFilter(
                 return;
             }
             await ReauthorizeWarehouses(existing, actionContext.HttpContext.RequestAborted);
+            // Original audited transition, not today's receipt state, determines conditional QC replay rights.
+            if (commandScope is "ImportReceipt.QcDisposition" or "ImportReceipt.Approve")
+            {
+                var auditAction = commandScope == "ImportReceipt.QcDisposition" ? "ImportReceipt.QcDispositionRecorded" : "ImportReceipt.Approved";
+                var audit = await context.AuditLogs.AsNoTracking().SingleOrDefaultAsync(x =>
+                    x.CorrelationId == existing.CorrelationId && x.Action == auditAction && x.Result == "Success",
+                    actionContext.HttpContext.RequestAborted);
+                if (audit is null) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+                var qcTransition = commandScope == "ImportReceipt.QcDisposition" ? audit.NewValues : audit.OldValues;
+                if (qcTransition == "Status: QcCompleted")
+                {
+                    var permission = commandScope == "ImportReceipt.QcDisposition" ? "quality_inspection.complete" : "quality_disposition.approve";
+                    if (!await context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && u.IsActive &&
+                        (u.LockoutEnd == null || u.LockoutEnd <= DateTime.UtcNow) && u.Role.Permissions.Any(p => p.Permission.Code == permission),
+                        actionContext.HttpContext.RequestAborted))
+                        throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+                }
+            }
             actionContext.Result = new ContentResult { StatusCode = existing.ResponseStatusCode, ContentType = "application/json", Content = existing.ResponseBody };
             return;
         }
@@ -88,9 +115,10 @@ public sealed class IdempotentCommandFilter(
         }
 
         var statusCode = ResultStatus(executed.Result);
-        if (statusCode >= 500)
+        if (statusCode >= 500 || statusCode is 401 or 403 or 404)
         {
             await transaction.RollbackAsync(CancellationToken.None);
+            context.ChangeTracker.Clear();
             return;
         }
 

@@ -18,6 +18,10 @@ namespace ERP.Application.Validators
             RuleFor(x => x.UnitId)
                 .GreaterThan(0).WithMessage("Đơn vị tính không hợp lệ");
 
+            RuleFor(x => x.CategoryId)
+                .GreaterThan(0).When(x => x.CategoryId.HasValue)
+                .WithMessage("Danh mục sản phẩm không hợp lệ");
+
             RuleFor(x => x.Description)
                 .MaximumLength(500).WithMessage("Mô tả không được vượt quá 500 ký tự")
                 .When(x => !string.IsNullOrEmpty(x.Description));

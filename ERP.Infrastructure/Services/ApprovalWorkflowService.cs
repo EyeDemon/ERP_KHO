@@ -20,6 +20,7 @@ public sealed class ApprovalWorkflowService(
     TimeProvider? timeProvider = null,
     ApprovalAgingOptions? agingOptions = null) : IApprovalWorkflowService
 {
+    private string? databaseRole;
     private sealed class QueueRow
     {
         public string Type { get; set; } = string.Empty;
@@ -33,25 +34,29 @@ public sealed class ApprovalWorkflowService(
         public int? DestinationWarehouseId { get; set; }
         public string? DestinationWarehouseName { get; set; }
         public decimal TotalQuantity { get; set; }
+        public bool QcCompleted { get; set; }
     }
 
     public async Task<PagedResult<ApprovalQueueItem>> GetQueueAsync(ApprovalQueueQuery request, CancellationToken cancellationToken = default)
     {
-        EnsureChecker();
+        var permissions = await PermissionsAsync(cancellationToken);
+        var inboundRead = permissions.Contains("receipt.read");
+        var legacy = currentUser.Role is "Admin" or "Manager";
+        if (!inboundRead && !legacy) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
         ValidatePage(request.PageIndex, request.PageSize);
         var nowUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         var options = agingOptions ?? new ApprovalAgingOptions();
         options.Validate();
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        var imports = context.ImportReceipts.AsNoTracking().Where(x => x.Status == ReceiptStatus.Draft && allowed.Contains(x.WarehouseId))
-            .Select(x => new QueueRow { Type = "ImportReceipt", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.Quantity) });
+        var imports = context.ImportReceipts.AsNoTracking().Where(x => (x.Status == ReceiptStatus.Received || x.Status == ReceiptStatus.QcCompleted) && allowed.Contains(x.WarehouseId))
+            .Select(x => new QueueRow { Type = "ImportReceipt", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.ReceivedQuantity), QcCompleted = x.Status == ReceiptStatus.QcCompleted });
         var exports = context.ExportReceipts.AsNoTracking().Where(x => x.Status == ReceiptStatus.Draft && allowed.Contains(x.WarehouseId))
-            .Select(x => new QueueRow { Type = "ExportReceipt", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.Quantity) });
+            .Select(x => new QueueRow { Type = "ExportReceipt", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.Quantity), QcCompleted = false });
         var transfers = context.StockTransfers.AsNoTracking().Where(x => x.Status == StockTransferStatus.Draft && allowed.Contains(x.SourceWarehouseId) && allowed.Contains(x.DestinationWarehouseId))
-            .Select(x => new QueueRow { Type = "StockTransfer", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.SourceWarehouseId, WarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, TotalQuantity = x.Details.Sum(d => d.RequestedQuantity) });
+            .Select(x => new QueueRow { Type = "StockTransfer", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.SourceWarehouseId, WarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, TotalQuantity = x.Details.Sum(d => d.RequestedQuantity), QcCompleted = false });
         var stocktakes = context.Stocktakes.AsNoTracking().Where(x => x.Status == ReceiptStatus.Draft && allowed.Contains(x.WarehouseId))
-            .Select(x => new QueueRow { Type = "Stocktake", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.ActualQuantity ?? d.SystemQuantity) });
-        var query = imports.Concat(exports).Concat(transfers).Concat(stocktakes);
+            .Select(x => new QueueRow { Type = "Stocktake", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.ActualQuantity ?? d.SystemQuantity), QcCompleted = false });
+        var query = imports.Where(_ => inboundRead).Concat(exports.Where(_ => legacy)).Concat(transfers.Where(_ => legacy)).Concat(stocktakes.Where(_ => legacy));
         if (!string.IsNullOrWhiteSpace(request.DocumentType)) query = query.Where(x => x.Type == request.DocumentType.Trim());
         if (request.WarehouseId.HasValue) query = query.Where(x => x.WarehouseId == request.WarehouseId || x.DestinationWarehouseId == request.WarehouseId);
         if (request.CreatorId.HasValue) query = query.Where(x => x.CreatorId == request.CreatorId);
@@ -93,7 +98,9 @@ public sealed class ApprovalWorkflowService(
                 WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus,
                 WarehouseName = x.WarehouseName, DestinationWarehouseId = x.DestinationWarehouseId,
                 DestinationWarehouseName = x.DestinationWarehouseName, TotalQuantity = x.TotalQuantity,
-                CanApprove = x.CreatorId != currentUser.UserId, CanReject = x.CreatorId != currentUser.UserId,
+                PendingState = x.Type == "ImportReceipt" ? (x.QcCompleted ? "QcCompleted" : "Received") : "Draft",
+                CanApprove = x.CreatorId != currentUser.UserId && (x.Type != "ImportReceipt" || (permissions.Contains("receipt.complete") && (!x.QcCompleted || permissions.Contains("quality_disposition.approve")))),
+                CanReject = x.CreatorId != currentUser.UserId && (x.Type != "ImportReceipt" || (!x.QcCompleted && permissions.Contains("approval.reject"))),
                 DeniedReasonCode = x.CreatorId == currentUser.UserId ? "CREATOR_CANNOT_CHECK" : null
                 };
             }).ToList()
@@ -102,9 +109,20 @@ public sealed class ApprovalWorkflowService(
 
     public async Task<PagedResult<ApprovalHistoryItem>> GetHistoryAsync(ApprovalHistoryQuery request, CancellationToken cancellationToken = default)
     {
-        EnsureChecker(); ValidatePage(request.PageIndex, request.PageSize);
+        var permissions = await PermissionsAsync(cancellationToken);
+        var inboundRead = permissions.Contains("receipt.read");
+        var legacy = currentUser.Role is "Admin" or "Manager";
+        if (!inboundRead && !legacy) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+        ValidatePage(request.PageIndex, request.PageSize);
+        if (request.DocumentId.HasValue && request.DocumentType == "ImportReceipt")
+        {
+            if (!inboundRead) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+            var receipt = await context.ImportReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.Id == request.DocumentId.Value, cancellationToken)
+                ?? throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId, cancellationToken);
+        }
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        var names = new[] { "ImportReceipt", "ExportReceipt", "StockTransfer", "Stocktake" };
+        var names = new[] { inboundRead ? "ImportReceipt" : "", legacy ? "ExportReceipt" : "", legacy ? "StockTransfer" : "", legacy ? "Stocktake" : "" };
         var query = context.AuditLogs.AsNoTracking().Where(x => names.Contains(x.EntityName) &&
             ((x.WarehouseId.HasValue && allowed.Contains(x.WarehouseId.Value)) ||
              (x.SourceWarehouseId.HasValue && x.DestinationWarehouseId.HasValue && allowed.Contains(x.SourceWarehouseId.Value) && allowed.Contains(x.DestinationWarehouseId.Value))));
@@ -120,12 +138,16 @@ public sealed class ApprovalWorkflowService(
         var rows = await query.Include(x => x.User).OrderByDescending(x => x.Timestamp).ThenByDescending(x => x.Id)
             .Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize).ToListAsync(cancellationToken);
         var codes = await ResolveDocumentCodesAsync(rows, cancellationToken);
-        return new PagedResult<ApprovalHistoryItem> { TotalRecords = total, PageIndex = request.PageIndex, PageSize = request.PageSize, Items = rows.Select(x => MapHistory(x, codes.GetValueOrDefault((x.EntityName, x.EntityId ?? 0), string.Empty))).ToList() };
+        var items = rows.Select(x => MapHistory(x, codes.GetValueOrDefault((x.EntityName, x.EntityId ?? 0), string.Empty))).ToList();
+        if (databaseRole == "Viewer")
+            foreach (var item in items.Where(i => i.DocumentType == "ImportReceipt")) { item.Reason = null; item.CorrelationId = null; }
+        return new PagedResult<ApprovalHistoryItem> { TotalRecords = total, PageIndex = request.PageIndex, PageSize = request.PageSize, Items = items };
     }
 
     public async Task<ApprovalDetail> GetDetailAsync(string documentType, int id, CancellationToken cancellationToken = default)
     {
-        EnsureChecker();
+        var permissions = await PermissionsAsync(cancellationToken);
+        EnsureCapability(documentType, permissions, "receipt.read");
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
         ApprovalQueueItem summary;
         string? note;
@@ -135,7 +157,7 @@ public sealed class ApprovalWorkflowService(
             var x = await context.ImportReceipts.AsNoTracking().Include(x => x.Warehouse).Include(x => x.CreatedByUser).Include(x => x.Details).ThenInclude(x => x.Product).ThenInclude(x => x.Unit)
                 .SingleOrDefaultAsync(x => x.Id == id && allowed.Contains(x.WarehouseId), cancellationToken) ?? throw new NotFoundException("Không tìm thấy chứng từ.");
             summary = DetailSummary(documentType, x.Id, x.Code, x.Status.ToString(), x.CreatedBy, x.CreatedByUser.FullName ?? x.CreatedByUser.Username, x.CreatedAt, x.WarehouseId, x.Warehouse.Name, null, null);
-            note = x.Note; lines = x.Details.Select(d => DetailLine(d.Product, d.Quantity)).ToList();
+            note = x.Note; lines = x.Details.Select(d => DetailLine(d.Product, d.ReceivedQuantity)).ToList();
         }
         else if (documentType == "ExportReceipt")
         {
@@ -159,13 +181,21 @@ public sealed class ApprovalWorkflowService(
             note = x.Note; lines = x.Details.Select(d => DetailLine(d.Product, d.RequestedQuantity)).ToList();
         }
         else throw new BusinessRuleException("Loại chứng từ không hợp lệ.");
+        if (documentType == "ImportReceipt")
+        {
+            summary.CanApprove &= permissions.Contains("receipt.complete") && (summary.PendingState != "QcCompleted" || permissions.Contains("quality_disposition.approve"));
+            summary.CanReject &= permissions.Contains("approval.reject");
+            if (databaseRole == "Viewer") note = null;
+        }
         var history = await GetHistoryAsync(new ApprovalHistoryQuery { DocumentType = documentType, DocumentId = id, PageSize = 20 }, cancellationToken);
         return new ApprovalDetail { Summary = summary, Note = note, Lines = lines, History = history.Items };
     }
 
     public async Task<ApprovalActionResult> RejectAsync(string documentType, int id, string reason, CancellationToken cancellationToken = default)
     {
-        EnsureChecker(); reason = ApprovalRejectReasonPolicy.Normalize(reason);
+        var permissions = await PermissionsAsync(cancellationToken);
+        EnsureCapability(documentType, permissions, "approval.reject");
+        reason = ApprovalRejectReasonPolicy.Normalize(reason);
         var ownsTransaction = context.Database.CurrentTransaction is null;
         await using var transaction = ownsTransaction
             ? await context.Database.BeginTransactionAsync(cancellationToken)
@@ -174,9 +204,9 @@ public sealed class ApprovalWorkflowService(
         {
             var result = documentType switch
             {
-                "ImportReceipt" => await RejectReceiptAsync(documentType, id, reason, context.ImportReceipts, cancellationToken),
-                "ExportReceipt" => await RejectReceiptAsync(documentType, id, reason, context.ExportReceipts, cancellationToken),
-                "Stocktake" => await RejectReceiptAsync(documentType, id, reason, context.Stocktakes, cancellationToken),
+                "ImportReceipt" => await RejectReceiptAsync(documentType, id, reason, context.ImportReceipts, ReceiptStatus.Received, cancellationToken),
+                "ExportReceipt" => await RejectReceiptAsync(documentType, id, reason, context.ExportReceipts, ReceiptStatus.Draft, cancellationToken),
+                "Stocktake" => await RejectReceiptAsync(documentType, id, reason, context.Stocktakes, ReceiptStatus.Draft, cancellationToken),
                 "StockTransfer" => await RejectTransferAsync(id, reason, cancellationToken),
                 _ => throw new BusinessRuleException("Loại chứng từ không hợp lệ.")
             };
@@ -190,7 +220,7 @@ public sealed class ApprovalWorkflowService(
         }
     }
 
-    private async Task<ApprovalActionResult> RejectReceiptAsync<TEntity>(string type, int id, string reason, DbSet<TEntity> set, CancellationToken token) where TEntity : class
+    private async Task<ApprovalActionResult> RejectReceiptAsync<TEntity>(string type, int id, string reason, DbSet<TEntity> set, ReceiptStatus pendingStatus, CancellationToken token) where TEntity : class
     {
         var entity = await set.SingleOrDefaultAsync(x => EF.Property<int>(x, "Id") == id, token) ?? throw new NotFoundException("Không tìm thấy chứng từ.");
         var warehouseId = (int)entity.GetType().GetProperty("WarehouseId")!.GetValue(entity)!;
@@ -198,10 +228,10 @@ public sealed class ApprovalWorkflowService(
         var code = (string)entity.GetType().GetProperty("Code")!.GetValue(entity)!;
         await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, token);
         ApprovalSafetyGuard.EnsureDifferentChecker(creatorId, currentUser.UserId);
-        var affected = await set.Where(x => EF.Property<int>(x, "Id") == id && EF.Property<ReceiptStatus>(x, "Status") == ReceiptStatus.Draft)
+        var affected = await set.Where(x => EF.Property<int>(x, "Id") == id && EF.Property<ReceiptStatus>(x, "Status") == pendingStatus)
             .ExecuteUpdateAsync(s => s.SetProperty(x => EF.Property<ReceiptStatus>(x, "Status"), ReceiptStatus.Cancelled), token);
-        if (affected != 1) throw new ConcurrencyException("Chứng từ không còn ở trạng thái nháp.");
-        context.AuditLogs.Add(CreateAudit(type, id, code, creatorId, warehouseId, null, reason));
+        if (affected != 1) throw new ConcurrencyException("Chứng từ không còn ở trạng thái chờ duyệt.");
+        context.AuditLogs.Add(CreateAudit(type, id, code, creatorId, warehouseId, null, reason, pendingStatus));
         await context.SaveChangesAsync(token);
         return Result(type, id, code);
     }
@@ -215,16 +245,16 @@ public sealed class ApprovalWorkflowService(
         var affected = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.Draft)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StockTransferStatus.Cancelled).SetProperty(x => x.CancelledBy, currentUser.UserId).SetProperty(x => x.CancelledAt, DateTime.UtcNow), token);
         if (affected != 1) throw new ConcurrencyException("Chứng từ không còn ở trạng thái nháp.");
-        context.AuditLogs.Add(CreateAudit("StockTransfer", id, entity.Code, entity.CreatedBy, entity.SourceWarehouseId, entity.DestinationWarehouseId, reason));
+        context.AuditLogs.Add(CreateAudit("StockTransfer", id, entity.Code, entity.CreatedBy, entity.SourceWarehouseId, entity.DestinationWarehouseId, reason, ReceiptStatus.Draft));
         await context.SaveChangesAsync(token);
         return Result("StockTransfer", id, entity.Code);
     }
 
-    private AuditLog CreateAudit(string type, int id, string code, int creatorId, int warehouseId, int? destinationId, string reason) => new()
+    private AuditLog CreateAudit(string type, int id, string code, int creatorId, int warehouseId, int? destinationId, string reason, ReceiptStatus oldStatus) => new()
     {
         UserId = currentUser.UserId, Action = "ApprovalRejected", EntityName = type, EntityId = id,
         WarehouseId = destinationId is null ? warehouseId : null, SourceWarehouseId = destinationId is null ? null : warehouseId,
-        DestinationWarehouseId = destinationId, OldValues = "Status: Draft", NewValues = "Status: Cancelled",
+        DestinationWarehouseId = destinationId, OldValues = $"Status: {oldStatus}", NewValues = "Status: Cancelled",
         Result = "Success", Reason = reason, CorrelationId = requestMetadata.CorrelationId,
         IdempotencyKeyHash = requestMetadata.IdempotencyKeyHash, RequestFingerprint = requestMetadata.RequestFingerprint,
         Severity = "Information", Timestamp = DateTime.UtcNow
@@ -232,12 +262,25 @@ public sealed class ApprovalWorkflowService(
     private ApprovalActionResult Result(string type, int id, string code) => new() { DocumentType = type, DocumentId = id, DocumentCode = code, CorrelationId = requestMetadata.CorrelationId };
     private ApprovalQueueItem DetailSummary(string type, int id, string code, string state, int creatorId, string creatorName, DateTime createdAt, int warehouseId, string warehouseName, int? destinationId, string? destinationName)
     {
-        var pending = state == "Draft"; var checker = creatorId != currentUser.UserId;
+        var pending = type == "ImportReceipt" ? state is "Received" or "QcCompleted" : state == "Draft"; var checker = creatorId != currentUser.UserId;
         var aging = ApprovalAgingCalculator.Calculate(createdAt, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime, pending, agingOptions ?? new ApprovalAgingOptions());
-        return new ApprovalQueueItem { DocumentType = type, DocumentId = id, DocumentCode = code, PendingState = state, CreatorId = creatorId, CreatorName = creatorName, RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName, DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName, CanApprove = pending && checker, CanReject = pending && checker, DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
+        return new ApprovalQueueItem { DocumentType = type, DocumentId = id, DocumentCode = code, PendingState = state, CreatorId = creatorId, CreatorName = creatorName, RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName, DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName, CanApprove = pending && checker, CanReject = pending && checker && !(type == "ImportReceipt" && state == "QcCompleted"), DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
     }
     private static ApprovalDetailLine DetailLine(Product product, decimal quantity) => new() { ProductCode = product.Code, ProductName = product.Name, UnitName = product.Unit.Name, Quantity = quantity };
-    private void EnsureChecker() { if (!currentUser.IsAuthenticated || (!currentUser.IsGlobalAdmin && currentUser.Role != "Manager")) throw new ForbiddenException("Bạn không có quyền phê duyệt chứng từ."); }
+    private async Task<HashSet<string>> PermissionsAsync(CancellationToken token)
+    {
+        if (!currentUser.IsAuthenticated) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+        databaseRole = await context.Users.AsNoTracking().Where(u => u.Id == currentUser.UserId && u.IsActive &&
+            (u.LockoutEnd == null || u.LockoutEnd <= DateTime.UtcNow)).Select(u => u.Role.RoleName).SingleOrDefaultAsync(token);
+        return (await context.RolePermissions.AsNoTracking().Where(g => context.Users.Any(u => u.Id == currentUser.UserId && u.IsActive &&
+            (u.LockoutEnd == null || u.LockoutEnd <= DateTime.UtcNow) && u.RoleId == g.RoleId))
+            .Select(g => g.Permission.Code).ToListAsync(token)).ToHashSet(StringComparer.Ordinal);
+    }
+    private void EnsureCapability(string type, HashSet<string> permissions, string required)
+    {
+        if (type == "ImportReceipt" ? !permissions.Contains(required) : currentUser.Role is not ("Admin" or "Manager"))
+            throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+    }
     private static void ValidatePage(int page, int size) { if (page < 1 || size is < 1 or > 100) throw new BusinessRuleException("Thông tin phân trang không hợp lệ."); }
     private async Task<Dictionary<(string Type, int Id), string>> ResolveDocumentCodesAsync(IReadOnlyCollection<AuditLog> rows, CancellationToken token)
     {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
-import { canManageWarehouses, currentRole } from '../services/authorization';
+import { usePermission } from '../services/authorization';
 
 interface Warehouse {
   id: number;
@@ -13,7 +13,7 @@ interface Warehouse {
 const PAGE_SIZE = 10;
 
 const Warehouses = () => {
-  const canManage = canManageWarehouses(currentRole());
+  const canManage = usePermission('warehouse.manage');
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

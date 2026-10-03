@@ -48,11 +48,14 @@ namespace ERP.Infrastructure.Repositories
         {
             var query = _dbSet
                 .Include(e => e.Warehouse)
+                .Include(e => e.Customer)
                 .Include(e => e.CreatedByUser)
                 .Include(e => e.ApprovedByUser)
                 .Include(e => e.DispatchedByUser)
                 .Include(e => e.Details)
-                    .ThenInclude(d => d.Product).AsQueryable();
+                    .ThenInclude(d => d.Product)
+                        .ThenInclude(p => p.Unit)
+                .AsQueryable();
             if (_warehouseAuthorization is not null)
             {
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
@@ -71,6 +74,7 @@ namespace ERP.Infrastructure.Repositories
             }
             return await query
                 .Include(e => e.Warehouse)
+                .Include(e => e.Customer)
                 .Include(e => e.CreatedByUser)
                 .Include(e => e.ApprovedByUser)
                 .Include(e => e.DispatchedByUser)
@@ -82,6 +86,8 @@ namespace ERP.Infrastructure.Repositories
         {
             try
             {
+                if (entity.CustomerId.HasValue && !await _context.BusinessPartners.AnyAsync(x => x.Id == entity.CustomerId && x.IsActive && x.IsCustomer, cancellationToken))
+                    throw new BusinessRuleException("Khách hàng không tồn tại, không hoạt động hoặc sai vai trò.");
                 return await base.AddAsync(entity, cancellationToken);
             }
             catch (DbUpdateException ex)

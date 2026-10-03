@@ -47,5 +47,10 @@ public class CatalogModelMetadataTests
         unitIndex.Should().NotBeNull();
         unitIndex!.IsUnique.Should().BeTrue();
         unitIndex.GetDatabaseName().Should().Be("IX_UnitCode");
+
+        var category = model.FindEntityType(typeof(ProductCategory))!;
+        category.FindIndex(category.FindProperty(nameof(ProductCategory.Code))!)!.IsUnique.Should().BeTrue();
+        var barcode = model.FindEntityType(typeof(ProductBarcode))!;
+        barcode.FindIndex(barcode.FindProperty(nameof(ProductBarcode.Value))!)!.IsUnique.Should().BeTrue();
     }
 }

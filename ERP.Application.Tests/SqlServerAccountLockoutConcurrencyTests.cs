@@ -55,10 +55,11 @@ public sealed class SqlServerAccountLockoutConcurrencyTests
     }
 
     [SqlServerFact]
-    public async Task OnlyGlobalAdmin_CanUnlockAndResetAccount()
+    public async Task ExplicitUserManageGrant_CanUnlockAndResetAccount()
     {
         await using var context = CreateContext();
         var adminRole = new Role { RoleName = $"AdminTest_{Guid.NewGuid():N}" };
+        adminRole.Permissions.Add(new RolePermission { Permission = await context.Permissions.SingleAsync(p => p.Code == "user.manage") });
         var targetRole = new Role { RoleName = $"TargetTest_{Guid.NewGuid():N}" };
         var admin = new User { Username = $"QAADMIN_{Guid.NewGuid():N}", PasswordHash = "test", FullName = "Test admin", Role = adminRole };
         var target = new User { Username = $"QAUNLOCK_{Guid.NewGuid():N}", PasswordHash = "test", FullName = "Unlock target", Role = targetRole, FailedLoginCount = 5, LockoutEnd = DateTime.UtcNow.AddMinutes(15) };
@@ -68,17 +69,18 @@ public sealed class SqlServerAccountLockoutConcurrencyTests
         try
         {
             var denied = new AccountAdminService(context, new TestCurrentUser(target.Id, false));
-            var deniedAction = () => denied.UnlockAsync(target.Id);
+            var deniedAction = () => denied.UnlockAsync(target.Id, null);
             await deniedAction.Should().ThrowAsync<ForbiddenException>();
 
-            var allowed = new AccountAdminService(context, new TestCurrentUser(admin.Id, true));
-            await allowed.UnlockAsync(target.Id);
+            var allowed = new AccountAdminService(context, new TestCurrentUser(admin.Id, false));
+            await allowed.UnlockAsync(target.Id, (await allowed.GetAsync(target.Id)).RowVersion);
             await context.Entry(target).ReloadAsync();
             target.FailedLoginCount.Should().Be(0);
             target.LockoutEnd.Should().BeNull();
         }
         finally
         {
+            await context.AuditLogs.Where(a => a.UserId == admin.Id).ExecuteDeleteAsync();
             await context.Users.Where(u => u.Id == target.Id).ExecuteDeleteAsync();
             await context.Users.Where(u => u.Id == admin.Id).ExecuteDeleteAsync();
             await context.Roles.Where(r => r.Id == adminRole.Id || r.Id == targetRole.Id).ExecuteDeleteAsync();

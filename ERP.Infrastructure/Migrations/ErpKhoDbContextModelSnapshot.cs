@@ -106,6 +106,69 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("AuditLogs", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.BusinessPartner", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsCustomer")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSupplier")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_BusinessPartners_Code");
+
+                    b.ToTable("BusinessPartners", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BusinessPartners_Role", "[IsSupplier] = 1 OR [IsCustomer] = 1");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ExportReceipt", b =>
                 {
                     b.Property<int>("Id")
@@ -130,6 +193,17 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Property<int>("CreatedBy")
                         .HasColumnType("int");
+
+                    b.Property<string>("CustomerCodeSnapshot")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CustomerNameSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<int?>("DispatchMode")
                         .HasColumnType("int");
@@ -159,6 +233,8 @@ namespace ERP.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("CreatedBy");
+
+                    b.HasIndex("CustomerId");
 
                     b.HasIndex("DispatchedBy");
 
@@ -305,6 +381,17 @@ namespace ERP.Infrastructure.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("int");
 
+                    b.Property<string>("SupplierCodeSnapshot")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SupplierNameSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<int>("WarehouseId")
                         .HasColumnType("int");
 
@@ -316,6 +403,8 @@ namespace ERP.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("CreatedBy");
+
+                    b.HasIndex("SupplierId");
 
                     b.HasIndex("WarehouseId");
 
@@ -330,6 +419,83 @@ namespace ERP.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal>("AcceptedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseAcceptedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseDamagedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseDoorRejectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseExpectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseFinalReceivedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseObservedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BasePostedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseReceivedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseRejectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("BaseUnitCodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("BaseUnitDecimalPlaces")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BaseUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ConversionFactor")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<int>("ConversionVersion")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("DamagedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("DoorRejectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("ExpectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("FinalReceivedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int?>("FinalResolutionVersionId")
+                        .HasColumnType("int");
+
                     b.Property<int>("ImportReceiptId")
                         .HasColumnType("int");
 
@@ -337,12 +503,76 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<decimal>("ObservedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("OperationUnitCodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("OperationUnitDecimalPlaces")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OperationUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("PostedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("QcCompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("QcCompletedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("QcDispositionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("QcDispositionReasonCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("QcPolicyEffectiveAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("QcPolicyId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("QcPolicySourceSnapshot")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("QcPolicyVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("QcRuleSnapshot")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("QcState")
                         .HasColumnType("int");
 
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("ReceivedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("RejectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<bool>("RequiresQc")
+                        .HasColumnType("bit");
 
                     b.Property<decimal>("UnitPrice")
                         .HasPrecision(18, 2)
@@ -350,11 +580,93 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FinalResolutionVersionId");
+
                     b.HasIndex("ImportReceiptId");
 
                     b.HasIndex("ProductId");
 
                     b.ToTable("ImportReceiptDetails", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.InventoryLocationMovement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BaseQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("EnteredQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("EnteredUnitCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("FromLocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("InventoryStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PutawayTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PutawayTaskItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ReceiptId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ReceiptLineId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ToLocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromLocationId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("PutawayTaskId");
+
+                    b.HasIndex("ReceiptId");
+
+                    b.HasIndex("ReceiptLineId");
+
+                    b.HasIndex("ToLocationId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("PutawayTaskItemId", "CreatedAt");
+
+                    b.ToTable("InventoryLocationMovements", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InventoryLocationMovements_Locations", "[FromLocationId] <> [ToLocationId]");
+
+                            t.HasCheckConstraint("CK_InventoryLocationMovements_Quantity", "[BaseQuantity] > 0");
+                        });
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.InventoryStock", b =>
@@ -368,6 +680,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("LocationId")
+                        .HasColumnType("int");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
@@ -380,14 +695,19 @@ namespace ERP.Infrastructure.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
                     b.Property<int>("WarehouseId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LocationId");
+
                     b.HasIndex("WarehouseId");
 
-                    b.HasIndex("ProductId", "WarehouseId")
+                    b.HasIndex("ProductId", "WarehouseId", "Status", "LocationId")
                         .IsUnique();
 
                     b.ToTable("InventoryStocks", null, t =>
@@ -405,6 +725,12 @@ namespace ERP.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("InventoryStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LocationId")
                         .HasColumnType("int");
 
                     b.Property<string>("Note")
@@ -438,6 +764,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("CreatedBy");
 
+                    b.HasIndex("LocationId");
+
                     b.HasIndex("ProductId");
 
                     b.HasIndex("TransactionDate");
@@ -453,6 +781,40 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("InventoryTransactions", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.Permission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Permissions_Code");
+
+                    b.ToTable("Permissions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Permissions_Code", "[Code] = LOWER(LTRIM(RTRIM([Code]))) AND [Code] LIKE '%.%'");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -460,6 +822,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CategoryId")
+                        .HasColumnType("int");
 
                     b.Property<string>("Code")
                         .IsRequired()
@@ -489,6 +854,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CategoryId");
+
                     b.HasIndex("Code")
                         .IsUnique()
                         .HasDatabaseName("IX_ProductCode");
@@ -496,6 +863,840 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("UnitId");
 
                     b.ToTable("Products", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ProductBarcode", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("Value")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProductBarcodes_Value");
+
+                    b.ToTable("ProductBarcodes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductBarcodes_Value", "[Value] = LTRIM(RTRIM([Value])) AND [Value] NOT LIKE '%[^-A-Za-z0-9._]%' COLLATE Latin1_General_100_BIN2 AND LEN([Value]) BETWEEN 1 AND 64");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ProductCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .UseCollation("Latin1_General_100_CI_AS");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProductCategories_Code");
+
+                    b.ToTable("ProductCategories", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ProductUom", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ConversionFactor")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<DateTime>("EffectiveFromUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UnitId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UnitId");
+
+                    b.HasIndex("ProductId", "UnitId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("ProductUoms", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductUoms_ConversionFactor", "[ConversionFactor] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AssignedUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ExceptionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("ReceiptId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiptId")
+                        .IsUnique();
+
+                    b.HasIndex("WarehouseId");
+
+                    b.ToTable("PutawayTasks", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PutawayTaskItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BaseUnitCodeSnapshot")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("BaseUnitDecimalPlaces")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BaseUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ConversionFactorSnapshot")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("ConversionVersionSnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<int>("InventoryStatus")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("MovedBaseQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("OperationUnitCodeSnapshot")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("OperationUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PutawayTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ReceiptLineId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("RequiredBaseQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("RequiredOperationQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("SourceLocationId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiptLineId");
+
+                    b.HasIndex("SourceLocationId");
+
+                    b.HasIndex("PutawayTaskId", "ReceiptLineId", "InventoryStatus")
+                        .IsUnique();
+
+                    b.ToTable("PutawayTaskItems", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PutawayTaskItems_Moved", "[MovedBaseQuantity] >= 0 AND [MovedBaseQuantity] <= [RequiredBaseQuantity]");
+
+                            t.HasCheckConstraint("CK_PutawayTaskItems_Required", "[RequiredBaseQuantity] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.QcPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("EffectiveFromUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresQc")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Rule")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupplierId");
+
+                    b.HasIndex("ProductId", "Version")
+                        .IsUnique()
+                        .HasFilter("[SupplierId] IS NULL");
+
+                    b.HasIndex("ProductId", "SupplierId", "Version")
+                        .IsUnique()
+                        .HasFilter("[SupplierId] IS NOT NULL");
+
+                    b.ToTable("QcPolicies", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingDiscrepancy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ImportReceiptDetailId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ImportReceiptId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImportReceiptDetailId");
+
+                    b.HasIndex("ImportReceiptId", "ImportReceiptDetailId")
+                        .IsUnique();
+
+                    b.ToTable("ReceivingDiscrepancies", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingObservationItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsVoided")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("ReceivingObservationVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ScanReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("SupersededByObservationVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("VoidedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("VoidedBy")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceivingObservationVersionId");
+
+                    b.HasIndex("SupersededByObservationVersionId");
+
+                    b.ToTable("ReceivingObservationItems", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReceivingObservationItems_Quantity", "[Quantity] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingObservationVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BaseObservedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("ConversionFactorSnapshot")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<int>("ConversionVersionSnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ObservedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("ObservedUnitCodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("ObservedUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PreviousObservationVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ReceivingDiscrepancyId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PreviousObservationVersionId");
+
+                    b.HasIndex("ReceivingDiscrepancyId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("ReceivingObservationVersions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReceivingObservationVersions_Quantity", "[ObservedQuantity] >= 0 AND [BaseObservedQuantity] >= 0 AND [ConversionFactorSnapshot] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingReasonCode", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("EffectiveFromUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EffectiveToUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("RequiresApproval")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("RequiresAttachment")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("RequiresNote")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code", "Version")
+                        .IsUnique();
+
+                    b.HasIndex("Code", "IsActive", "EffectiveFromUtc");
+
+                    b.ToTable("ReceivingReasonCodes", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Category = "Quantity",
+                            Code = "UNDER_RECEIPT",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Nhận thiếu",
+                            RequiresApproval = false,
+                            RequiresAttachment = false,
+                            RequiresNote = true,
+                            Version = 1
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Category = "Quantity",
+                            Code = "OVER_RECEIPT",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Nhận thừa",
+                            RequiresApproval = false,
+                            RequiresAttachment = false,
+                            RequiresNote = true,
+                            Version = 1
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Category = "Condition",
+                            Code = "DAMAGED_ON_RECEIPT",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Hư hỏng khi nhận",
+                            RequiresApproval = false,
+                            RequiresAttachment = false,
+                            RequiresNote = true,
+                            Version = 1
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Category = "Identity",
+                            Code = "WRONG_PRODUCT",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Sai sản phẩm",
+                            RequiresApproval = false,
+                            RequiresAttachment = false,
+                            RequiresNote = true,
+                            Version = 1
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Category = "Identity",
+                            Code = "WRONG_LOT",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Sai lô",
+                            RequiresApproval = false,
+                            RequiresAttachment = false,
+                            RequiresNote = true,
+                            Version = 1
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Category = "Custody",
+                            Code = "REJECTED_AT_DOOR",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Từ chối tại cửa",
+                            RequiresApproval = false,
+                            RequiresAttachment = false,
+                            RequiresNote = true,
+                            Version = 1
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Category = "Uom",
+                            Code = "UOM_MISMATCH",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Sai đơn vị tính",
+                            RequiresApproval = false,
+                            RequiresAttachment = false,
+                            RequiresNote = true,
+                            Version = 1
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Category = "Counting",
+                            Code = "DUPLICATE_COUNT",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Name = "Đếm trùng",
+                            RequiresApproval = false,
+                            RequiresAttachment = false,
+                            RequiresNote = true,
+                            Version = 1
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingResolutionVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AbsoluteToleranceSnapshot")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("AllowedBaseToleranceSnapshot")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime?>("ApprovedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ApprovedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("BaseDoorRejectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("BaseFinalReceivedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("DoorRejectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("EvidenceReference")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("FinalReceivedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("PercentageToleranceSnapshot")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<int?>("PreviousResolutionVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReasonCategorySnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("ReasonCodeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReasonCodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("ReasonEffectiveAtUtcSnapshot")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReasonNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("ReasonRequiresApprovalSnapshot")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ReasonRequiresAttachmentSnapshot")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ReasonRequiresNoteSnapshot")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ReasonVersionSnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ReceivingDiscrepancyId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("RejectedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RejectedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresApproval")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ResolvedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ResponsibleParty")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("SubmittedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("SupplierClaimRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("TolerancePolicyEffectiveAtUtcSnapshot")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("TolerancePolicyId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TolerancePolicySourceSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("TolerancePolicyVersionSnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("ValueToleranceSnapshot")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PreviousResolutionVersionId");
+
+                    b.HasIndex("ReceivingDiscrepancyId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("ReceivingResolutionVersions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReceivingResolutionVersions_Quantities", "[DoorRejectedQuantity] >= 0 AND [BaseDoorRejectedQuantity] >= 0 AND [FinalReceivedQuantity] >= 0 AND [BaseFinalReceivedQuantity] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingTolerancePolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AbsoluteQuantityTolerance")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("ApproverTarget")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("EffectiveFromUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EffectiveToUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("OverageAllowed")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("PercentageTolerance")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresApprovalOutsideTolerance")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ShortageAllowed")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("ValueTolerance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupplierId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("IsActive", "EffectiveFromUtc");
+
+                    b.HasIndex("ProductId", "SupplierId", "WarehouseId", "Version")
+                        .IsUnique()
+                        .HasFilter("[ProductId] IS NOT NULL AND [SupplierId] IS NOT NULL AND [WarehouseId] IS NOT NULL");
+
+                    b.ToTable("ReceivingTolerancePolicies", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReceivingTolerancePolicies_Scope", "([ProductId] IS NOT NULL AND [SupplierId] IS NOT NULL) OR ([ProductId] IS NOT NULL AND [SupplierId] IS NULL AND [WarehouseId] IS NULL) OR ([ProductId] IS NULL AND [SupplierId] IS NULL)");
+
+                            t.HasCheckConstraint("CK_ReceivingTolerancePolicies_Tolerance", "[AbsoluteQuantityTolerance] >= 0 AND [PercentageTolerance] >= 0 AND ([ValueTolerance] IS NULL OR [ValueTolerance] >= 0)");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            AbsoluteQuantityTolerance = 0m,
+                            ApproverTarget = "receiving_discrepancy.approve",
+                            EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            OverageAllowed = true,
+                            PercentageTolerance = 0m,
+                            RequiresApprovalOutsideTolerance = true,
+                            ShortageAllowed = true,
+                            Version = 1
+                        });
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Role", b =>
@@ -510,14 +1711,52 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<long>("GrantRevision")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("RoleName")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.HasKey("Id");
 
                     b.ToTable("Roles", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.RolePermission", b =>
+                {
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("GrantedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("RoleId", "PermissionId");
+
+                    b.HasIndex("GrantedByUserId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("RolePermissions", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockReservation", b =>
@@ -827,6 +2066,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -843,9 +2085,13 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LocationId");
+
                     b.HasIndex("ProductId");
 
-                    b.HasIndex("StocktakeId");
+                    b.HasIndex("StocktakeId", "ProductId", "LocationId")
+                        .IsUnique()
+                        .HasFilter("[LocationId] IS NOT NULL");
 
                     b.ToTable("StocktakeDetails", (string)null);
                 });
@@ -866,6 +2112,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("DecimalPlaces")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -883,7 +2132,10 @@ namespace ERP.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_UnitCode");
 
-                    b.ToTable("Units", (string)null);
+                    b.ToTable("Units", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Units_DecimalPlaces", "[DecimalPlaces] BETWEEN 0 AND 4");
+                        });
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.User", b =>
@@ -926,6 +2178,10 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
 
+                    b.Property<long>("SecurityRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -933,6 +2189,10 @@ namespace ERP.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<long>("WarehouseAccessRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
@@ -1076,6 +2336,75 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("Warehouses", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseLocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .UseCollation("Latin1_General_100_CI_AS");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsBlocked")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPickable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsReceivable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSystemManaged")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("LocationType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarehouseId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("WarehouseLocations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_WarehouseLocations_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.AuditLog", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.User", "User")
@@ -1099,6 +2428,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.BusinessPartner", "Customer")
+                        .WithMany("ExportReceipts")
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.User", "DispatchedByUser")
                         .WithMany()
                         .HasForeignKey("DispatchedBy")
@@ -1113,6 +2447,8 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("ApprovedByUser");
 
                     b.Navigation("CreatedByUser");
+
+                    b.Navigation("Customer");
 
                     b.Navigation("DispatchedByUser");
 
@@ -1162,6 +2498,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.BusinessPartner", "Supplier")
+                        .WithMany("ImportReceipts")
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
                         .WithMany("ImportReceipts")
                         .HasForeignKey("WarehouseId")
@@ -1172,11 +2513,18 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("CreatedByUser");
 
+                    b.Navigation("Supplier");
+
                     b.Navigation("Warehouse");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.ImportReceiptDetail", b =>
                 {
+                    b.HasOne("ERP.Domain.Entities.ReceivingResolutionVersion", "FinalResolutionVersion")
+                        .WithMany()
+                        .HasForeignKey("FinalResolutionVersionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("ERP.Domain.Entities.ImportReceipt", "ImportReceipt")
                         .WithMany("Details")
                         .HasForeignKey("ImportReceiptId")
@@ -1189,13 +2537,72 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("FinalResolutionVersion");
+
                     b.Navigation("ImportReceipt");
 
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.InventoryLocationMovement", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
+                        .WithMany()
+                        .HasForeignKey("FromLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PutawayTask", null)
+                        .WithMany()
+                        .HasForeignKey("PutawayTaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PutawayTaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("PutawayTaskItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.ImportReceipt", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.ImportReceiptDetail", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
+                        .WithMany()
+                        .HasForeignKey("ToLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.InventoryStock", b =>
                 {
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("ERP.Domain.Entities.Product", "Product")
                         .WithMany("InventoryStocks")
                         .HasForeignKey("ProductId")
@@ -1207,6 +2614,8 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("WarehouseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Location");
 
                     b.Navigation("Product");
 
@@ -1221,6 +2630,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
@@ -1235,6 +2649,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("CreatedByUser");
 
+                    b.Navigation("Location");
+
                     b.Navigation("Product");
 
                     b.Navigation("Warehouse");
@@ -1242,13 +2658,231 @@ namespace ERP.Infrastructure.Migrations
 
             modelBuilder.Entity("ERP.Domain.Entities.Product", b =>
                 {
+                    b.HasOne("ERP.Domain.Entities.ProductCategory", "Category")
+                        .WithMany("Products")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Unit", "Unit")
                         .WithMany("Products")
                         .HasForeignKey("UnitId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("Category");
+
                     b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ProductBarcode", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany("Barcodes")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ProductUom", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany("Uoms")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Unit", "Unit")
+                        .WithMany("ProductUoms")
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ImportReceipt", "Receipt")
+                        .WithMany()
+                        .HasForeignKey("ReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Receipt");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PutawayTaskItem", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.PutawayTask", "PutawayTask")
+                        .WithMany("Items")
+                        .HasForeignKey("PutawayTaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.ImportReceiptDetail", "ReceiptLine")
+                        .WithMany()
+                        .HasForeignKey("ReceiptLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "SourceLocation")
+                        .WithMany()
+                        .HasForeignKey("SourceLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PutawayTask");
+
+                    b.Navigation("ReceiptLine");
+
+                    b.Navigation("SourceLocation");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.QcPolicy", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany("QcPolicies")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.BusinessPartner", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingDiscrepancy", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ImportReceiptDetail", "ImportReceiptDetail")
+                        .WithMany("ReceivingDiscrepancies")
+                        .HasForeignKey("ImportReceiptDetailId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.ImportReceipt", "ImportReceipt")
+                        .WithMany("Discrepancies")
+                        .HasForeignKey("ImportReceiptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ImportReceipt");
+
+                    b.Navigation("ImportReceiptDetail");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingObservationItem", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ReceivingObservationVersion", "ReceivingObservationVersion")
+                        .WithMany("Items")
+                        .HasForeignKey("ReceivingObservationVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.ReceivingObservationVersion", "SupersededByObservationVersion")
+                        .WithMany()
+                        .HasForeignKey("SupersededByObservationVersionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("ReceivingObservationVersion");
+
+                    b.Navigation("SupersededByObservationVersion");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingObservationVersion", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ReceivingObservationVersion", "PreviousObservationVersion")
+                        .WithMany()
+                        .HasForeignKey("PreviousObservationVersionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.ReceivingDiscrepancy", "ReceivingDiscrepancy")
+                        .WithMany("Observations")
+                        .HasForeignKey("ReceivingDiscrepancyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PreviousObservationVersion");
+
+                    b.Navigation("ReceivingDiscrepancy");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingResolutionVersion", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ReceivingResolutionVersion", "PreviousResolutionVersion")
+                        .WithMany()
+                        .HasForeignKey("PreviousResolutionVersionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.ReceivingDiscrepancy", "ReceivingDiscrepancy")
+                        .WithMany("Resolutions")
+                        .HasForeignKey("ReceivingDiscrepancyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PreviousResolutionVersion");
+
+                    b.Navigation("ReceivingDiscrepancy");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingTolerancePolicy", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.BusinessPartner", null)
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.RolePermission", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "GrantedByUser")
+                        .WithMany()
+                        .HasForeignKey("GrantedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Role", "Role")
+                        .WithMany("Permissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GrantedByUser");
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockReservation", b =>
@@ -1384,6 +3018,11 @@ namespace ERP.Infrastructure.Migrations
 
             modelBuilder.Entity("ERP.Domain.Entities.StocktakeDetail", b =>
                 {
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
@@ -1395,6 +3034,8 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("StocktakeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Location");
 
                     b.Navigation("Product");
 
@@ -1457,6 +3098,24 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseLocation", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany("Locations")
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.BusinessPartner", b =>
+                {
+                    b.Navigation("ExportReceipts");
+
+                    b.Navigation("ImportReceipts");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ExportReceipt", b =>
                 {
                     b.Navigation("Details");
@@ -1465,15 +3124,57 @@ namespace ERP.Infrastructure.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.ImportReceipt", b =>
                 {
                     b.Navigation("Details");
+
+                    b.Navigation("Discrepancies");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ImportReceiptDetail", b =>
+                {
+                    b.Navigation("ReceivingDiscrepancies");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.Permission", b =>
+                {
+                    b.Navigation("RolePermissions");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Product", b =>
                 {
+                    b.Navigation("Barcodes");
+
                     b.Navigation("InventoryStocks");
+
+                    b.Navigation("QcPolicies");
+
+                    b.Navigation("Uoms");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ProductCategory", b =>
+                {
+                    b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingDiscrepancy", b =>
+                {
+                    b.Navigation("Observations");
+
+                    b.Navigation("Resolutions");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ReceivingObservationVersion", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Role", b =>
                 {
+                    b.Navigation("Permissions");
+
                     b.Navigation("Users");
                 });
 
@@ -1489,6 +3190,8 @@ namespace ERP.Infrastructure.Migrations
 
             modelBuilder.Entity("ERP.Domain.Entities.Unit", b =>
                 {
+                    b.Navigation("ProductUoms");
+
                     b.Navigation("Products");
                 });
 
@@ -1508,6 +3211,8 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("ImportReceipts");
 
                     b.Navigation("InventoryStocks");
+
+                    b.Navigation("Locations");
 
                     b.Navigation("Stocktakes");
 

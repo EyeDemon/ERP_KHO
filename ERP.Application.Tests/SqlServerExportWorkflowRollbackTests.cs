@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using ERP.TestSupport;
 
 namespace ERP.Application.Tests;
 
@@ -21,13 +22,13 @@ public sealed class SqlServerExportWorkflowRollbackTests
         await using var context = database.CreateContext();
         var migrator = context.GetService<IMigrator>();
 
-        await migrator.MigrateAsync();
+        await PermissionMigrationBootstrap.MigrateAsync(context, database.RunId, "qa_rollback_bootstrap");
         (await HasDispatchColumnsAsync(context)).Should().BeTrue();
 
         await migrator.MigrateAsync(PreviousMigration);
         (await HasDispatchColumnsAsync(context)).Should().BeFalse();
 
-        await migrator.MigrateAsync();
+        await PermissionMigrationBootstrap.MigrateAsync(context, database.RunId, "qa_rollback_bootstrap");
         (await HasDispatchColumnsAsync(context)).Should().BeTrue();
     }
 
@@ -36,7 +37,7 @@ public sealed class SqlServerExportWorkflowRollbackTests
     {
         await using var database = await OwnedTemporaryMigrationDatabase.CreateAsync(BaseConnectionString());
         await using var context = database.CreateContext();
-        await context.Database.MigrateAsync();
+        await PermissionMigrationBootstrap.MigrateAsync(context, database.RunId, "qa_rollback_bootstrap");
 
         var role = new Role { RoleName = "RollbackTestRole" };
         var warehouse = new Warehouse { Code = "RB_WH", Name = "Rollback test warehouse", IsActive = true };

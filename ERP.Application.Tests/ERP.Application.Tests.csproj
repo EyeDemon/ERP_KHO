@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <Compile Remove="Operational/**/*.cs" />
+    <Compile Include="..\ERP.Api.Tests\Helpers\PermissionMigrationBootstrap.cs" Link="Helpers\PermissionMigrationBootstrap.cs" />
   </ItemGroup>
 
   <PropertyGroup>

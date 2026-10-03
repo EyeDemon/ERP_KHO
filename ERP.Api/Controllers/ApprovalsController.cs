@@ -9,7 +9,8 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/approvals")]
-[Authorize(Policy = ApprovalPolicies.Checker)]
+[Authorize]
+[ApprovalAuthorize]
 public sealed class ApprovalsController(IApprovalWorkflowService service) : ControllerBase
 {
     [HttpGet("queue")]

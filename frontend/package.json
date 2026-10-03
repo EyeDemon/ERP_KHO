@@ -7,11 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "vitest run",
+    "test": "vitest run --no-file-parallelism",
     "preview": "vite preview"
   },
   "dependencies": {
-    "axios": "^1.18.1",
+    "axios": "^1.20.0",
     "lucide-react": "^0.468.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

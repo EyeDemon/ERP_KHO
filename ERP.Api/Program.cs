@@ -44,7 +44,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ConfiguredOrigins", policy =>
     {
         policy.WithOrigins(allowedOrigins)
-              .WithHeaders("Authorization", "Content-Type", "Accept")
+              .WithHeaders("Authorization", "Content-Type", "Accept", "Idempotency-Key")
               .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
               .AllowCredentials();
     });
@@ -118,6 +118,9 @@ builder.Services.AddHealthChecks()
 // DI Registrations
 builder.Services.AddScoped<ERP.Domain.Interfaces.IProductRepository, ERP.Infrastructure.Repositories.ProductRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IProductService, ERP.Application.Services.ProductService>();
+builder.Services.AddScoped<ERP.Domain.Interfaces.IProductCatalogRepository, ERP.Infrastructure.Repositories.ProductCatalogRepository>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IProductCatalogService, ERP.Application.Services.ProductCatalogService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IBusinessPartnerService, ERP.Infrastructure.Services.BusinessPartnerService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IWarehouseRepository, ERP.Infrastructure.Repositories.WarehouseRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseService, ERP.Application.Services.WarehouseService>();
@@ -165,6 +168,10 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IAccessTokenSessionValidat
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockTransferService, ERP.Infrastructure.Services.StockTransferService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockReservationService, ERP.Infrastructure.Services.StockReservationService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPutawayService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddSingleton(TimeProvider.System);
 var approvalAgingOptions = builder.Configuration.GetSection("ApprovalAging").Get<ERP.Application.Options.ApprovalAgingOptions>() ?? new ERP.Application.Options.ApprovalAgingOptions();
 approvalAgingOptions.Validate();

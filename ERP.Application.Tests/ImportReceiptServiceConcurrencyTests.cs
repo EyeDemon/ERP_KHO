@@ -155,6 +155,7 @@ namespace ERP.Application.Tests
                 => throw new ERP.Domain.Exceptions.ConcurrencyException("Mock DB conflict during save", new DbUpdateConcurrencyException("Mock"));
 
             public Task<ImportReceipt?> GetByIdWithDetailsAsync(int id) => _inner.GetByIdWithDetailsAsync(id);
+            public Task<ImportReceipt?> GetByIdWithDetailsForUpdateAsync(int id) => _inner.GetByIdWithDetailsForUpdateAsync(id);
             public Task<ImportReceipt?> GetByIdAsync(int id, CancellationToken cancellationToken = default) => _inner.GetByIdAsync(id, cancellationToken);
             public Task<System.Collections.Generic.IEnumerable<ImportReceipt>> GetAllAsync(CancellationToken cancellationToken = default) => _inner.GetAllAsync(cancellationToken);
             public Task<System.Collections.Generic.IEnumerable<ImportReceipt>> FindAsync(System.Linq.Expressions.Expression<Func<ImportReceipt, bool>> predicate, CancellationToken cancellationToken = default) => _inner.FindAsync(predicate, cancellationToken);
@@ -165,7 +166,7 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
-        public async Task Service_CatchesDomainConcurrencyException_ThrowsBusinessRuleException_AndRollsBack()
+        public async Task Service_PreservesDomainConcurrencyException_AndRollsBack()
         {
             var (receiptId, userId, productId, warehouseId) = await SeedTestDataAsync();
 
@@ -181,15 +182,17 @@ namespace ERP.Application.Tests
                 new WarehouseRepository(ctx), new ProductRepository(ctx), 
                 uow, new AuditLogRepository(ctx));
 
+            (await ctx.ImportReceipts.FindAsync(receiptId))!.Status = ReceiptStatus.Received;
+            await ctx.SaveChangesAsync();
             var act = () => service.ApproveImportReceiptAsync(receiptId, userId);
 
-            await act.Should().ThrowAsync<BusinessRuleException>("because the service maps ConcurrencyException to a business error");
+            await act.Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>("because stale writes are HTTP 409 conflicts");
 
             // Verify rollback using a fresh context
             using var verifyCtx = CreateContext();
             
             var receipt = await verifyCtx.ImportReceipts.FindAsync(receiptId);
-            receipt!.Status.Should().Be(ReceiptStatus.Draft, "rollback ensures receipt metadata is unchanged");
+            receipt!.Status.Should().Be(ReceiptStatus.Received, "rollback preserves the state that entered approval");
 
             var stock = await verifyCtx.InventoryStocks.FirstAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId);
             stock.Quantity.Should().Be(50, "rollback ensures inventory stock mutation is discarded");
@@ -206,32 +209,35 @@ namespace ERP.Application.Tests
         {
             var (receiptId, userId, productId, warehouseId) = await SeedTestDataAsync();
 
-            // First approval - should succeed
+            // Complete receiving and approval without inventory, then post once.
             {
                 using var ctx = CreateContext();
                 var service = new ImportReceiptService(
                     new ImportReceiptRepository(ctx), new InventoryStockRepository(ctx), new InventoryTransactionRepository(ctx),
                     new WarehouseRepository(ctx), new ProductRepository(ctx), new UnitOfWork(ctx), new AuditLogRepository(ctx));
                 
+                var lineId = await ctx.ImportReceiptDetails.Where(x => x.ImportReceiptId == receiptId).Select(x => x.Id).SingleAsync();
+                await service.ReceiveAsync(receiptId, new ReceiveImportReceiptDto { Lines = [new() { LineId = lineId, ReceivedQuantity = 10, AcceptedQuantity = 10 }] }, userId);
                 await service.ApproveImportReceiptAsync(receiptId, userId);
+                await service.PostAsync(receiptId, userId);
             }
 
-            // Second approval - should fail
+            // Second post - should fail
             {
                 using var ctx = CreateContext();
                 var service = new ImportReceiptService(
                     new ImportReceiptRepository(ctx), new InventoryStockRepository(ctx), new InventoryTransactionRepository(ctx),
                     new WarehouseRepository(ctx), new ProductRepository(ctx), new UnitOfWork(ctx), new AuditLogRepository(ctx));
                 
-                var act = () => service.ApproveImportReceiptAsync(receiptId, userId);
-                await act.Should().ThrowAsync<BusinessRuleException>("second approval attempt should be rejected");
+                var act = () => service.PostAsync(receiptId, userId);
+                await act.Should().ThrowAsync<BusinessRuleException>("second post attempt should be rejected");
             }
 
             // Verify exactly-once state
             using var verifyCtx = CreateContext();
             
             var receipt = await verifyCtx.ImportReceipts.FindAsync(receiptId);
-            receipt!.Status.Should().Be(ReceiptStatus.Approved);
+            receipt!.Status.Should().Be(ReceiptStatus.Posted);
             receipt.ApprovedBy.Should().Be(userId);
             receipt.ApprovedAt.Should().NotBeNull();
             receipt.ApprovedAt.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(10));
@@ -241,7 +247,7 @@ namespace ERP.Application.Tests
             stocks.First().Quantity.Should().Be(60, "stock should reflect initial 50 + exactly 1 receipt of 10");
 
             var transactions = await verifyCtx.InventoryTransactions.Where(t => t.ReferenceType == "ImportReceipt").ToListAsync();
-            transactions.Should().HaveCount(1, "exactly one transaction from the single successful approval");
+            transactions.Should().HaveCount(1, "exactly one transaction from the single successful post");
             var tx = transactions.First();
             tx.ReferenceId.Should().Be(receiptId);
             tx.TransactionType.Should().Be(TransactionType.Import);
@@ -322,6 +328,7 @@ namespace ERP.Application.Tests
                 return receipt;
             }
 
+            public Task<ImportReceipt?> GetByIdWithDetailsForUpdateAsync(int id) => _inner.GetByIdWithDetailsForUpdateAsync(id);
             public Task<ImportReceipt?> GetByIdAsync(int id, CancellationToken cancellationToken = default) => _inner.GetByIdAsync(id, cancellationToken);
             public Task<System.Collections.Generic.IEnumerable<ImportReceipt>> GetAllAsync(CancellationToken cancellationToken = default) => _inner.GetAllAsync(cancellationToken);
             public Task<System.Collections.Generic.IEnumerable<ImportReceipt>> FindAsync(System.Linq.Expressions.Expression<Func<ImportReceipt, bool>> predicate, CancellationToken cancellationToken = default) => _inner.FindAsync(predicate, cancellationToken);
@@ -333,9 +340,17 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
-        public async Task ApproveAsync_ParallelExecution_PreventsRaceCondition()
+        public async Task PostAsync_ParallelExecution_PreventsRaceCondition()
         {
             var (receiptId, userId, productId, warehouseId) = await SeedTestDataAsync();
+            using (var prepare = CreateContext())
+            {
+                (await prepare.ImportReceipts.FindAsync(receiptId))!.Status = ReceiptStatus.ReadyToPost;
+                var detail = await prepare.ImportReceiptDetails.SingleAsync(x => x.ImportReceiptId == receiptId);
+                detail.AcceptedQuantity = detail.Quantity;
+                detail.BaseAcceptedQuantity = detail.Quantity;
+                await prepare.SaveChangesAsync();
+            }
 
             using var ctx1 = CreateContext();
             using var ctx2 = CreateContext();
@@ -365,7 +380,7 @@ namespace ERP.Application.Tests
             {
                 try
                 {
-                    await service1.ApproveImportReceiptAsync(receiptId, userId);
+                    await service1.PostAsync(receiptId, userId);
                     System.Threading.Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
@@ -379,7 +394,7 @@ namespace ERP.Application.Tests
             {
                 try
                 {
-                    await service2.ApproveImportReceiptAsync(receiptId, userId);
+                    await service2.PostAsync(receiptId, userId);
                     System.Threading.Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
@@ -391,30 +406,32 @@ namespace ERP.Application.Tests
 
             await Task.WhenAll(task1, task2);
 
-            successCount.Should().Be(1, "exactly one concurrent approval must succeed");
-            errorCount.Should().Be(1, "losing concurrent approval must fail with BusinessRuleException");
-            errorException.Should().BeOfType<BusinessRuleException>("losing concurrent approval must fail with mapped BusinessRuleException");
+            successCount.Should().Be(1, "exactly one concurrent post must succeed");
+            errorCount.Should().Be(1, "losing concurrent post must fail");
+            var mapsToConflict = errorException is ERP.Domain.Exceptions.ConcurrencyException
+                || errorException is ERP.Application.Exceptions.BusinessRuleException business
+                    && Equals(business.Data["HttpStatusCode"], 409);
+            mapsToConflict.Should().BeTrue(
+                "the losing concurrent post may observe either a stale write or the already-posted state, and both map to HTTP 409");
 
             using var verifyCtx = CreateContext();
 
             var receipt = await verifyCtx.ImportReceipts.FindAsync(receiptId);
-            receipt!.Status.Should().Be(ReceiptStatus.Approved);
-            receipt.ApprovedBy.Should().Be(userId);
-            receipt.ApprovedAt.Should().NotBeNull();
+            receipt!.Status.Should().Be(ReceiptStatus.Posted);
 
             var stock = await verifyCtx.InventoryStocks.FirstAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId);
             stock.Quantity.Should().Be(60, "stock should reflect initial 50 + exactly 1 receipt of 10");
 
             var transactions = await verifyCtx.InventoryTransactions.Where(t => t.ReferenceType == "ImportReceipt" && t.ReferenceId == receiptId).ToListAsync();
-            transactions.Should().HaveCount(1, "exactly one Import transaction from the single successful approval");
+            transactions.Should().HaveCount(1, "exactly one Import transaction from the single successful post");
             var tx = transactions.First();
             tx.TransactionType.Should().Be(TransactionType.Import);
             tx.ProductId.Should().Be(productId);
             tx.WarehouseId.Should().Be(warehouseId);
             tx.Quantity.Should().Be(10);
 
-            var audits = await verifyCtx.AuditLogs.Where(a => a.Action == "ImportReceipt.Approved" && a.EntityId == receiptId).ToListAsync();
-            audits.Should().HaveCount(1, "exactly one approval audit log should exist");
+            var audits = await verifyCtx.AuditLogs.Where(a => a.Action == "ImportReceipt.Posted" && a.EntityId == receiptId).ToListAsync();
+            audits.Should().HaveCount(1, "exactly one post audit log should exist");
         }
 
         public void Dispose()

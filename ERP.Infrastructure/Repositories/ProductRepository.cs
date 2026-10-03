@@ -11,6 +11,12 @@ namespace ERP.Infrastructure.Repositories
         {
         }
 
+        public override Task<Product?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+        {
+            return _dbSet.Include(p => p.Unit).Include(p => p.Uoms).ThenInclude(x => x.Unit).Include(p => p.Category).Include(p => p.Barcodes).Include(p => p.QcPolicies)
+                .SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+        }
+
         public async Task<bool> ExistsByCodeAsync(string code, int? excludeId = null, CancellationToken cancellationToken = default)
         {
             var query = _dbSet.Where(p => p.Code == code);
@@ -25,13 +31,16 @@ namespace ERP.Infrastructure.Repositories
         {
             return await _dbSet
                 .Include(p => p.Unit)
+                .Include(p => p.Uoms).ThenInclude(x => x.Unit)
+                .Include(p => p.Category)
+                .Include(p => p.Barcodes)
                 .OrderByDescending(p => p.CreatedAt)
                 .ToListAsync(cancellationToken);
         }
 
         public async Task<(IReadOnlyList<Product> Items, int TotalRecords)> GetPagedAsync(int pageIndex, int pageSize, string? keyword, CancellationToken cancellationToken = default)
         {
-            var query = _dbSet.Include(p => p.Unit).AsNoTracking();
+            var query = _dbSet.Include(p => p.Unit).Include(p => p.Uoms).ThenInclude(x => x.Unit).Include(p => p.Category).Include(p => p.Barcodes).AsNoTracking();
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {

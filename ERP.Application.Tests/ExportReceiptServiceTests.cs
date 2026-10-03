@@ -548,12 +548,14 @@ namespace ERP.Application.Tests
         [Fact]
         public async Task CancelAsync_ValidReceipt_UpdatesStatusAndWritesAuditLog()
         {
-            var receipt = new ExportReceipt { Id = 1, Status = ReceiptStatus.Draft };
+            var receipt = new ExportReceipt { Id = 1, Status = ReceiptStatus.Draft, Customer = new BusinessPartner { Code = "CUS-1", Name = "Khách hàng" } };
             _mockExportRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(receipt);
 
             await _service.CancelAsync(1, 99);
 
             receipt.Status.Should().Be(ReceiptStatus.Cancelled);
+            receipt.CustomerCodeSnapshot.Should().Be("CUS-1");
+            receipt.CustomerNameSnapshot.Should().Be("Khách hàng");
             _mockExportRepo.Verify(x => x.UpdateAsync(receipt), Times.Once);
             var expectedTime = DateTime.UtcNow;
             _mockAuditRepo.Verify(x => x.AddAsync(It.Is<AuditLog>(a => 

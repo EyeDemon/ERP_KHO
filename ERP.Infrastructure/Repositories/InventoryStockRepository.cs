@@ -1,5 +1,6 @@
 using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
+using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -15,8 +16,19 @@ namespace ERP.Infrastructure.Repositories
         public async Task<InventoryStock?> GetByProductAndWarehouseAsync(int productId, int warehouseId)
         {
             return await _dbSet
-                .FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId);
+                .Include(s => s.Location)
+                .FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == InventoryStatus.Available && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
         }
+
+        public Task<InventoryStock?> GetByProductWarehouseAndStatusAsync(int productId, int warehouseId, InventoryStatus status) =>
+            _dbSet.Include(s=>s.Location).FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && (status != InventoryStatus.Available || s.Location.IsPickable))));
+
+        public Task<InventoryStock?> GetByProductWarehouseStatusAndLocationAsync(int productId, int warehouseId, InventoryStatus status, int locationId) =>
+            _dbSet.FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && s.LocationId == locationId);
+
+        public async Task<int?> GetLegacyAdjustmentLocationIdAsync(int warehouseId, CancellationToken cancellationToken = default) =>
+            await _context.WarehouseLocations.Where(x => x.WarehouseId == warehouseId && x.Code == "LEGACY" && x.IsSystemManaged)
+                .Select(x => (int?)x.Id).SingleOrDefaultAsync(cancellationToken);
 
         public async Task<bool> TryDecreaseStockAsync(
             int productId,
@@ -29,20 +41,9 @@ namespace ERP.Infrastructure.Repositories
                 throw new ArgumentOutOfRangeException(nameof(quantity), "Quantity must be greater than zero.");
             }
 
-            var updatedAt = DateTime.UtcNow;
-            int affectedRows;
             try
             {
-                affectedRows = await _dbSet
-                    .Where(stock =>
-                        stock.ProductId == productId &&
-                        stock.WarehouseId == warehouseId &&
-                        stock.Quantity - stock.ReservedQuantity >= quantity)
-                    .ExecuteUpdateAsync(
-                        setters => setters
-                            .SetProperty(stock => stock.Quantity, stock => stock.Quantity - quantity)
-                            .SetProperty(stock => stock.LastUpdated, updatedAt),
-                        cancellationToken);
+                return await AllocateAsync(productId, warehouseId, quantity, false, false, cancellationToken);
             }
             catch (SqlException exception) when (exception.Number == 1205)
             {
@@ -51,7 +52,6 @@ namespace ERP.Infrastructure.Repositories
                     exception);
             }
 
-            return affectedRows == 1;
         }
 
         public async Task<bool> TryReserveAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
@@ -59,8 +59,7 @@ namespace ERP.Infrastructure.Repositories
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             try
             {
-                return await _dbSet.Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.Quantity - x.ReservedQuantity >= quantity)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity + quantity).SetProperty(x => x.LastUpdated, DateTime.UtcNow), cancellationToken) == 1;
+                return await AllocateAsync(productId, warehouseId, quantity, true, false, cancellationToken);
             }
             catch (SqlException exception) when (exception.Number == 1205)
             {
@@ -73,8 +72,7 @@ namespace ERP.Infrastructure.Repositories
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             try
             {
-                return await _dbSet.Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.ReservedQuantity >= quantity && x.Quantity >= quantity)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.Quantity, x => x.Quantity - quantity).SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - quantity).SetProperty(x => x.LastUpdated, DateTime.UtcNow), cancellationToken) == 1;
+                return await AllocateAsync(productId, warehouseId, quantity, false, true, cancellationToken);
             }
             catch (SqlException exception) when (exception.Number == 1205) { throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch tiêu thụ giữ hàng bị deadlock.", exception); }
         }
@@ -84,10 +82,40 @@ namespace ERP.Infrastructure.Repositories
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             try
             {
-                return await _dbSet.Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.ReservedQuantity >= quantity)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - quantity).SetProperty(x => x.LastUpdated, DateTime.UtcNow), cancellationToken) == 1;
+                return await AllocateAsync(productId, warehouseId, quantity, false, true, cancellationToken, releaseOnly: true);
             }
             catch (SqlException exception) when (exception.Number == 1205) { throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch giải phóng giữ hàng bị deadlock.", exception); }
+        }
+
+        private async Task<bool> AllocateAsync(int productId, int warehouseId, decimal quantity, bool reserve, bool useReserved, CancellationToken token, bool releaseOnly = false)
+        {
+            var rows = await _dbSet.AsNoTracking()
+                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.Status == InventoryStatus.Available && x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
+                .OrderBy(x => x.LocationId).Select(x => new { x.Id, x.Quantity, x.ReservedQuantity }).ToListAsync(token);
+            var capacity = rows.Sum(x => useReserved ? x.ReservedQuantity : x.Quantity - x.ReservedQuantity);
+            if (capacity < quantity) return false;
+            var remaining = quantity;
+            foreach (var row in rows)
+            {
+                var available = useReserved ? row.ReservedQuantity : row.Quantity - row.ReservedQuantity;
+                var take = Math.Min(remaining, available);
+                if (take <= 0) continue;
+                var query = _dbSet.Where(x => x.Id == row.Id);
+                if (useReserved) query = query.Where(x => x.ReservedQuantity >= take && (releaseOnly || x.Quantity >= take));
+                else query = query.Where(x => x.Quantity - x.ReservedQuantity >= take);
+                var now = DateTime.UtcNow;
+                var affected = reserve
+                    ? await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity + take).SetProperty(x => x.LastUpdated, now), token)
+                    : useReserved
+                        ? releaseOnly
+                            ? await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take).SetProperty(x => x.LastUpdated, now), token)
+                            : await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.Quantity, x => x.Quantity - take).SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take).SetProperty(x => x.LastUpdated, now), token)
+                        : await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.Quantity, x => x.Quantity - take).SetProperty(x => x.LastUpdated, now), token);
+                if (affected != 1) return false;
+                remaining -= take;
+                if (remaining == 0) return true;
+            }
+            return false;
         }
     }
 }

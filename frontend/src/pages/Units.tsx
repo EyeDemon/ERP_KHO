@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
-import { canManageCatalogs, currentRole } from '../services/authorization';
+import { usePermission } from '../services/authorization';
 
 interface Unit {
   id: number;
@@ -12,7 +12,7 @@ interface Unit {
 const PAGE_SIZE = 10;
 
 const Units = () => {
-  const canManage = canManageCatalogs(currentRole());
+  const canManage = usePermission('uom.manage');
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

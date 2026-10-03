@@ -1,4 +1,5 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { beginPermissionRefresh, setCurrentPermissions } from './authorization';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://localhost:7198';
 let accessToken: string | null = null;
@@ -28,9 +29,12 @@ export const createSingleFlight = <T>(operation: () => Promise<T>): (() => Promi
 
 const refreshAccessToken = createSingleFlight<string>(() =>
   refreshClient.post('/api/Auth/refresh')
-      .then((response) => {
+      .then(async (response) => {
         const token = response.data.token as string;
         setAccessToken(token);
+        const revision = beginPermissionRefresh();
+        const identity = await refreshClient.get('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+        setCurrentPermissions(identity.data.permissions, revision);
         return token;
       })
 );
@@ -40,6 +44,7 @@ const clearAuthentication = (): void => {
   localStorage.removeItem('username');
   localStorage.removeItem('role');
   localStorage.removeItem('userId');
+  setCurrentPermissions([]);
 };
 
 apiClient.interceptors.request.use((config) => {
@@ -53,6 +58,15 @@ apiClient.interceptors.response.use(
     const config = error.config as RetryConfig | undefined;
     const requestUrl = config?.url;
     const isAuthEndpoint = requestUrl?.includes('/api/Auth/login') || requestUrl?.includes('/api/Auth/refresh');
+    if (error.response?.status === 403 && accessToken) {
+      const revision = beginPermissionRefresh();
+      try {
+        const identity = await refreshClient.get('/api/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
+        setCurrentPermissions(identity.data.permissions, revision);
+      } catch {
+        setCurrentPermissions([], revision);
+      }
+    }
     if (error.response?.status === 401 && config && !config._authRetry && !isAuthEndpoint) {
       config._authRetry = true;
       try {

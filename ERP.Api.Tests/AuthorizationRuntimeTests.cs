@@ -10,6 +10,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Configuration;
+using ERP.Api.Authorization;
+using ERP.Domain.Entities;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace ERP.Api.Tests
 {
@@ -36,6 +39,7 @@ namespace ERP.Api.Tests
                 {
                     // Remove real DbContext
                     services.RemoveAll(typeof(DbContextOptions<ErpKhoDbContext>));
+                    services.RemoveAll<IDbContextOptionsConfiguration<ErpKhoDbContext>>();
                     
                     // Add in-memory DbContext
                     services.AddDbContext<ErpKhoDbContext>(options => 
@@ -62,6 +66,22 @@ namespace ERP.Api.Tests
 
             if (role != null)
             {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ErpKhoDbContext>();
+                db.Database.EnsureDeleted();
+                db.Database.EnsureCreated();
+                var databaseRole = new Role { Id = 1, RoleName = role };
+                var user = new User { Id = 99, Username = "AuthorizationTest", RoleId = 1, Role = databaseRole };
+                if (role is AppRoles.Admin or AppRoles.Manager)
+                {
+                    foreach (var code in new[] { AppPermissions.ProductCreate, AppPermissions.ProductUpdate, AppPermissions.ProductDeactivate, AppPermissions.ReceiptCreate, AppPermissions.ReceiptComplete })
+                    {
+                        var permission = new Permission(code);
+                        databaseRole.Permissions.Add(new RolePermission { Role = databaseRole, Permission = permission });
+                    }
+                }
+                db.Users.Add(user);
+                db.SaveChanges();
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(MockAuthenticationHandler.DefaultScheme);
                 client.DefaultRequestHeaders.Add("X-Test-Role", role);
             }
@@ -154,6 +174,7 @@ namespace ERP.Api.Tests
             // or even 200/201, but as long as it's NOT 401 or 403, authorization passed!
             Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
             Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.NotEqual(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         }
     }
 }

@@ -361,10 +361,12 @@ public sealed class SqlServerStockReservationTests
         var product = new Product { Code = $"RP{suffix}", Name = "Reservation product", Unit = unit };
         var warehouse = new Warehouse { Code = $"RW{suffix}", Name = "Reservation warehouse" };
         db.AddRange(creator, approver, product, warehouse); await db.SaveChangesAsync();
+        var location = new WarehouseLocation { WarehouseId = warehouse.Id, Code = "LEGACY", Name = "Legacy stock", LocationType = WarehouseLocationType.Legacy, IsActive = true, IsPickable = true, IsSystemManaged = true, CreatedBy = creator.Id };
+        db.Add(location); await db.SaveChangesAsync();
         db.UserWarehouses.AddRange(
             new UserWarehouse { UserId = creator.Id, WarehouseId = warehouse.Id, CreatedBy = creator.Id },
             new UserWarehouse { UserId = approver.Id, WarehouseId = warehouse.Id, CreatedBy = creator.Id });
-        db.InventoryStocks.Add(new InventoryStock { ProductId = product.Id, WarehouseId = warehouse.Id, Quantity = quantity });
+        db.InventoryStocks.Add(new InventoryStock { ProductId = product.Id, WarehouseId = warehouse.Id, LocationId = location.Id, Quantity = quantity });
         await db.SaveChangesAsync();
         return new(creator.Id, approver.Id, role.Id, unit.Id, product.Id, warehouse.Id);
     }
@@ -398,6 +400,7 @@ public sealed class SqlServerStockReservationTests
         await db.UserWarehouses.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == f.ProductId).ExecuteDeleteAsync();
         await db.Units.Where(x => x.Id == f.UnitId).ExecuteDeleteAsync();
+        await db.WarehouseLocations.Where(x => x.WarehouseId == f.WarehouseId).ExecuteDeleteAsync();
         await db.Warehouses.Where(x => x.Id == f.WarehouseId).ExecuteDeleteAsync();
         await db.Users.Where(x => userIds.Contains(x.Id)).ExecuteDeleteAsync();
         await db.Roles.Where(x => x.Id == f.RoleId).ExecuteDeleteAsync();

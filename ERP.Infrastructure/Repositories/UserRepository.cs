@@ -2,6 +2,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using ERP.Infrastructure.Services;
 
 namespace ERP.Infrastructure.Repositories
 {
@@ -18,22 +19,42 @@ namespace ERP.Infrastructure.Repositories
                 .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
         }
 
+        public Task<bool> HasPermissionAsync(int userId, string permission, CancellationToken cancellationToken = default)
+            => _dbSet.AsNoTracking().AnyAsync(u => u.Id == userId && u.IsActive &&
+                (u.LockoutEnd == null || u.LockoutEnd <= DateTime.UtcNow) &&
+                u.Role.Permissions.Any(p => p.Permission.Code == permission), cancellationToken);
+
         public async Task<(int FailedCount, DateTime? LockoutEnd)> RecordFailedLoginAsync(int userId, int threshold, DateTime nowUtc, TimeSpan lockoutDuration, CancellationToken cancellationToken = default)
         {
+            await using var transaction = _context.Database.CurrentTransaction is null
+                ? await _context.Database.BeginTransactionAsync(cancellationToken) : null;
+            await PermissionAdministrationGuard.LockAsync(_context, cancellationToken);
             await _dbSet.Where(u => u.Id == userId).ExecuteUpdateAsync(setters => setters
                 .SetProperty(u => u.FailedLoginCount, u => u.FailedLoginCount + 1)
+                .SetProperty(u => u.SecurityRevision, u => u.SecurityRevision + 1)
                 .SetProperty(u => u.LastFailedLoginAt, nowUtc)
                 .SetProperty(u => u.LockoutEnd, u => u.FailedLoginCount + 1 >= threshold ? nowUtc.Add(lockoutDuration) : u.LockoutEnd), cancellationToken);
 
-            return await _dbSet.AsNoTracking().Where(u => u.Id == userId)
+            var result = await _dbSet.AsNoTracking().Where(u => u.Id == userId)
                 .Select(u => new ValueTuple<int, DateTime?>(u.FailedLoginCount, u.LockoutEnd))
                 .SingleAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            return result;
         }
 
-        public Task ResetLoginFailuresAsync(int userId, CancellationToken cancellationToken = default) =>
-            _dbSet.Where(u => u.Id == userId).ExecuteUpdateAsync(setters => setters
+        public async Task ResetLoginFailuresAsync(int userId, CancellationToken cancellationToken = default)
+        {
+            await using var transaction = _context.Database.CurrentTransaction is null
+                ? await _context.Database.BeginTransactionAsync(cancellationToken) : null;
+            await PermissionAdministrationGuard.LockAsync(_context, cancellationToken);
+            var now = DateTime.UtcNow;
+            await _dbSet.Where(u => u.Id == userId && (u.LockoutEnd == null || u.LockoutEnd <= now) &&
+                (u.FailedLoginCount != 0 || u.LockoutEnd != null)).ExecuteUpdateAsync(setters => setters
                 .SetProperty(u => u.FailedLoginCount, 0)
+                .SetProperty(u => u.SecurityRevision, u => u.SecurityRevision + 1)
                 .SetProperty(u => u.LastFailedLoginAt, (DateTime?)null)
                 .SetProperty(u => u.LockoutEnd, (DateTime?)null), cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        }
     }
 }

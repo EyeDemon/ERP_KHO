@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient, { setAccessToken } from '../services/apiClient';
+import { setCurrentPermissions } from '../services/authorization';
+import { permissionError } from '../services/permissionPresentation';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -16,9 +18,11 @@ const Login = () => {
       localStorage.setItem('username', response.data.username);
       localStorage.setItem('role', response.data.role);
       localStorage.setItem('userId', String(response.data.userId));
+      const identity = await apiClient.get('/api/auth/me');
+      setCurrentPermissions(identity.data.permissions || []);
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Đăng nhập thất bại');
+      setError(permissionError(err, 'Đăng nhập thất bại. Vui lòng kiểm tra thông tin và thử lại.'));
     }
   };
 
@@ -27,11 +31,13 @@ const Login = () => {
       <form onSubmit={handleLogin} style={{ padding: '30px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', width: '350px' }}>
         <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Đăng nhập ERP KHO</h2>
 
-        {error && <div style={{ color: 'red', marginBottom: '15px', textAlign: 'center' }}>{error}</div>}
+        {error && <div role="alert" style={{ color: 'red', marginBottom: '15px', textAlign: 'center' }}>{error}</div>}
 
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>Tên đăng nhập</label>
+          <label htmlFor="login-username" style={{ display: 'block', marginBottom: '5px' }}>Tên đăng nhập</label>
           <input
+            id="login-username"
+            autoComplete="username"
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -41,8 +47,10 @@ const Login = () => {
         </div>
 
         <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>Mật khẩu</label>
+          <label htmlFor="login-password" style={{ display: 'block', marginBottom: '5px' }}>Mật khẩu</label>
           <input
+            id="login-password"
+            autoComplete="current-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

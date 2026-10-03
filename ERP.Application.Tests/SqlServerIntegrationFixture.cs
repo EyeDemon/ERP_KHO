@@ -40,7 +40,7 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
             new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(builder.ConnectionString).Options);
         await context.Database.GetDbConnection().OpenAsync();
         context.Database.GetDbConnection().Database.Should().Be(builder.InitialCatalog);
-        await context.Database.MigrateAsync();
+        await ERP.TestSupport.PermissionMigrationBootstrap.MigrateAsync(context, runId, "qa_permission_bootstrap");
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

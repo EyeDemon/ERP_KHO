@@ -24,6 +24,7 @@ public sealed class SqlServerApprovalQueueRejectTests
         var now = new DateTimeOffset(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
         var role = new Role { RoleName = $"QA-AGING-{suffix}" };
         db.Roles.Add(role); await db.SaveChangesAsync();
+        await GrantInboundAsync(db, role.Id);
         var maker = new User { Username = $"qa-aging-maker-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
         var checker = new User { Username = $"qa-aging-checker-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
         db.Users.AddRange(maker, checker); await db.SaveChangesAsync();
@@ -31,9 +32,9 @@ public sealed class SqlServerApprovalQueueRejectTests
         var outside = new Warehouse { Code = $"QA-OUT-{suffix}", Name = "QA Outside" };
         db.Warehouses.AddRange(warehouse, outside); await db.SaveChangesAsync();
         db.UserWarehouses.Add(new UserWarehouse { UserId = checker.Id, WarehouseId = warehouse.Id, CreatedBy = maker.Id });
-        var normal = new ImportReceipt { Code = $"QA-NORMAL-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-23).AddMinutes(-59) };
-        var warning = new ImportReceipt { Code = $"QA-WARNING-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-24) };
-        var overdue = new ImportReceipt { Code = $"QA-OVERDUE-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-48) };
+        var normal = new ImportReceipt { Code = $"QA-NORMAL-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-23).AddMinutes(-59), Status = ReceiptStatus.Received };
+        var warning = new ImportReceipt { Code = $"QA-WARNING-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-24), Status = ReceiptStatus.Received };
+        var overdue = new ImportReceipt { Code = $"QA-OVERDUE-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddHours(-48), Status = ReceiptStatus.Received };
         var closed = new ImportReceipt { Code = $"QA-CLOSED-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddDays(-5), Status = ReceiptStatus.Cancelled };
         var hidden = new ImportReceipt { Code = $"QA-HIDDEN-AGING-{suffix}", WarehouseId = outside.Id, CreatedBy = maker.Id, CreatedAt = now.UtcDateTime.AddDays(-5) };
         db.AddRange(normal, warning, overdue, closed, hidden); await db.SaveChangesAsync();
@@ -62,6 +63,7 @@ public sealed class SqlServerApprovalQueueRejectTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var role = new Role { RoleName = $"QA-SCOPE-{suffix}" };
         db.Roles.Add(role); await db.SaveChangesAsync();
+        await GrantInboundAsync(db, role.Id);
         var maker = new User { Username = $"qa-scope-maker-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
         var sourceOnly = new User { Username = $"qa-scope-source-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
         var destinationOnly = new User { Username = $"qa-scope-destination-{suffix}", PasswordHash = "test-only", RoleId = role.Id };
@@ -186,6 +188,7 @@ public sealed class SqlServerApprovalQueueRejectTests
             await cleanup.UserWarehouses.Where(x => users.Contains(x.UserId)).ExecuteDeleteAsync();
             await cleanup.Warehouses.Where(x => x.Id == warehouseOneId || x.Id == warehouseTwoId).ExecuteDeleteAsync();
             await cleanup.Users.Where(x => users.Contains(x.Id)).ExecuteDeleteAsync();
+            await cleanup.RolePermissions.Where(x => x.RoleId == roleId).ExecuteDeleteAsync();
             await cleanup.Roles.Where(x => x.Id == roleId).ExecuteDeleteAsync();
         }
     }
@@ -198,13 +201,14 @@ public sealed class SqlServerApprovalQueueRejectTests
         await using (var seed = CreateContext())
         {
             var role = new Role { RoleName = $"QA-RACE-{suffix}" }; seed.Roles.Add(role); await seed.SaveChangesAsync(); roleId = role.Id;
+            await GrantInboundAsync(seed, role.Id);
             var maker = new User { Username = $"qa-race-maker-{suffix}", FullName = "Maker", PasswordHash = "test-only", RoleId = role.Id };
             var one = new User { Username = $"qa-race-one-{suffix}", FullName = "One", PasswordHash = "test-only", RoleId = role.Id };
             var two = new User { Username = $"qa-race-two-{suffix}", FullName = "Two", PasswordHash = "test-only", RoleId = role.Id };
             seed.Users.AddRange(maker, one, two); await seed.SaveChangesAsync(); makerId = maker.Id; checkerOneId = one.Id; checkerTwoId = two.Id;
             var warehouse = new Warehouse { Code = $"QA-RACE-{suffix}", Name = "Race Warehouse" }; seed.Warehouses.Add(warehouse); await seed.SaveChangesAsync(); warehouseId = warehouse.Id;
             seed.UserWarehouses.AddRange(new UserWarehouse { UserId = one.Id, WarehouseId = warehouse.Id, CreatedBy = maker.Id }, new UserWarehouse { UserId = two.Id, WarehouseId = warehouse.Id, CreatedBy = maker.Id });
-            var receipt = new ImportReceipt { Code = $"QA-RACE-IMP-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id }; seed.ImportReceipts.Add(receipt); await seed.SaveChangesAsync(); receiptId = receipt.Id;
+            var receipt = new ImportReceipt { Code = $"QA-RACE-IMP-{suffix}", WarehouseId = warehouse.Id, CreatedBy = maker.Id, Status = ReceiptStatus.Received }; seed.ImportReceipts.Add(receipt); await seed.SaveChangesAsync(); receiptId = receipt.Id;
         }
         try
         {
@@ -230,6 +234,7 @@ public sealed class SqlServerApprovalQueueRejectTests
             await cleanup.UserWarehouses.Where(x => users.Contains(x.UserId)).ExecuteDeleteAsync();
             await cleanup.Warehouses.Where(x => x.Id == warehouseId).ExecuteDeleteAsync();
             await cleanup.Users.Where(x => users.Contains(x.Id)).ExecuteDeleteAsync();
+            await cleanup.RolePermissions.Where(x => x.RoleId == roleId).ExecuteDeleteAsync();
             await cleanup.Roles.Where(x => x.Id == roleId).ExecuteDeleteAsync();
         }
     }
@@ -242,6 +247,7 @@ public sealed class SqlServerApprovalQueueRejectTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var role = new Role { RoleName = $"QA-MANAGER-{suffix}" };
         db.Roles.Add(role); await db.SaveChangesAsync();
+        await GrantInboundAsync(db, role.Id);
         var creator = new User { Username = $"qa-maker-{suffix}", FullName = "QA Maker", PasswordHash = "test-only", RoleId = role.Id };
         var checker = new User { Username = $"qa-checker-{suffix}", FullName = "QA Checker", PasswordHash = "test-only", RoleId = role.Id };
         db.Users.AddRange(creator, checker); await db.SaveChangesAsync();
@@ -252,19 +258,19 @@ public sealed class SqlServerApprovalQueueRejectTests
         db.UserWarehouses.AddRange(
             new UserWarehouse { UserId = checker.Id, WarehouseId = source.Id, CreatedBy = creator.Id },
             new UserWarehouse { UserId = checker.Id, WarehouseId = destination.Id, CreatedBy = creator.Id });
-        var import = new ImportReceipt { Code = $"QA-IMP-{suffix}", WarehouseId = source.Id, CreatedBy = creator.Id };
+        var import = new ImportReceipt { Code = $"QA-IMP-{suffix}", WarehouseId = source.Id, CreatedBy = creator.Id, Status = ReceiptStatus.Received };
         var export = new ExportReceipt { Code = $"QA-EXP-{suffix}", WarehouseId = source.Id, CreatedBy = creator.Id };
         var stocktake = new Stocktake { Code = $"QA-STK-{suffix}", WarehouseId = source.Id, CreatedBy = creator.Id };
         var transfer = new StockTransfer { Code = $"QA-TRF-{suffix}", SourceWarehouseId = source.Id, DestinationWarehouseId = destination.Id, CreatedBy = creator.Id };
-        var own = new ImportReceipt { Code = $"QA-SELF-{suffix}-X", WarehouseId = source.Id, CreatedBy = checker.Id };
-        var hidden = new ImportReceipt { Code = $"QA-HIDDEN-{suffix}-X", WarehouseId = outside.Id, CreatedBy = creator.Id };
+        var own = new ImportReceipt { Code = $"QA-SELF-{suffix}-X", WarehouseId = source.Id, CreatedBy = checker.Id, Status = ReceiptStatus.Received };
+        var hidden = new ImportReceipt { Code = $"QA-HIDDEN-{suffix}-X", WarehouseId = outside.Id, CreatedBy = creator.Id, Status = ReceiptStatus.Received };
         db.AddRange(import, export, stocktake, transfer, own, hidden); await db.SaveChangesAsync();
 
         var before = await InventorySnapshotAsync(db);
         var current = new Current(checker.Id);
         var metadata = new Metadata { CorrelationId = "qa-correlation", IdempotencyKeyHash = "hashed", RequestFingerprint = "fingerprint" };
         var service = new ApprovalWorkflowService(db, current, new WarehouseAuthorizationService(db, current), metadata);
-        var staff = new Current(checker.Id, "WarehouseStaff");
+        var staff = new Current(0, "WarehouseStaff");
         await FluentActions.Awaiting(() => new ApprovalWorkflowService(db, staff, new WarehouseAuthorizationService(db, staff), metadata).GetQueueAsync(new ApprovalQueueQuery()))
             .Should().ThrowAsync<ERP.Application.Exceptions.ForbiddenException>();
         var queue = await service.GetQueueAsync(new ApprovalQueueQuery { PageSize = 20 });
@@ -293,6 +299,12 @@ public sealed class SqlServerApprovalQueueRejectTests
         await transaction.RollbackAsync();
     }
 
+    private static async Task GrantInboundAsync(ErpKhoDbContext db, int roleId)
+    {
+        foreach (var permission in await db.Permissions.Where(p => p.Code == "receipt.read" || p.Code == "approval.reject" || p.Code == "receipt.complete").ToListAsync())
+            db.RolePermissions.Add(new RolePermission { RoleId = roleId, PermissionId = permission.Id });
+        await db.SaveChangesAsync();
+    }
     private static async Task<(decimal OnHand, decimal Reserved, int Transactions, int Reservations)> InventorySnapshotAsync(ErpKhoDbContext db) =>
         (await db.InventoryStocks.SumAsync(x => x.Quantity), await db.InventoryStocks.SumAsync(x => x.ReservedQuantity), await db.InventoryTransactions.CountAsync(), await db.StockReservations.CountAsync());
     private static ErpKhoDbContext CreateContext() => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!).Options);

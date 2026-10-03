@@ -6,7 +6,7 @@ using ERP.Api.Authorization;
 
 namespace ERP.Api.Controllers
 {
-    [Authorize(Roles = AppRoles.AllRoles)]
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class WarehousesController : ControllerBase
@@ -19,6 +19,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet]
+        [PermissionAuthorize(AppPermissions.WarehouseRead)]
         public async Task<IActionResult> GetAll()
         {
             var warehouses = await _warehouseService.GetAllWarehousesAsync();
@@ -26,6 +27,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("{id}")]
+        [PermissionAuthorize(AppPermissions.WarehouseRead)]
         public async Task<IActionResult> GetById(int id)
         {
             var warehouse = await _warehouseService.GetWarehouseByIdAsync(id);
@@ -33,7 +35,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = AppRoles.Admin)]
+        [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Create([FromBody] CreateWarehouseDto dto)
         {
             var username = User.Identity?.Name ?? "system";
@@ -42,7 +44,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateWarehouseDto dto)
         {
             var username = User.Identity?.Name ?? "system";
@@ -51,7 +53,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = AppRoles.Admin)]
+        [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Delete(int id)
         {
             await _warehouseService.DeleteWarehouseAsync(id);

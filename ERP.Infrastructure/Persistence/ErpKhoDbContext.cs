@@ -13,9 +13,16 @@ public class ErpKhoDbContext : DbContext
     }
 
     public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Unit> Units => Set<Unit>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductUom> ProductUoms => Set<ProductUom>();
+    public DbSet<QcPolicy> QcPolicies => Set<QcPolicy>();
+    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
+    public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
+    public DbSet<BusinessPartner> BusinessPartners => Set<BusinessPartner>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
@@ -32,6 +39,16 @@ public class ErpKhoDbContext : DbContext
     public DbSet<StockTransferDetail> StockTransferDetails => Set<StockTransferDetail>();
     public DbSet<StockReservation> StockReservations => Set<StockReservation>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+    public DbSet<ReceivingDiscrepancy> ReceivingDiscrepancies => Set<ReceivingDiscrepancy>();
+    public DbSet<ReceivingObservationVersion> ReceivingObservationVersions => Set<ReceivingObservationVersion>();
+    public DbSet<ReceivingObservationItem> ReceivingObservationItems => Set<ReceivingObservationItem>();
+    public DbSet<ReceivingResolutionVersion> ReceivingResolutionVersions => Set<ReceivingResolutionVersion>();
+    public DbSet<ReceivingReasonCode> ReceivingReasonCodes => Set<ReceivingReasonCode>();
+    public DbSet<ReceivingTolerancePolicy> ReceivingTolerancePolicies => Set<ReceivingTolerancePolicy>();
+    public DbSet<WarehouseLocation> WarehouseLocations => Set<WarehouseLocation>();
+    public DbSet<PutawayTask> PutawayTasks => Set<PutawayTask>();
+    public DbSet<PutawayTaskItem> PutawayTaskItems => Set<PutawayTaskItem>();
+    public DbSet<InventoryLocationMovement> InventoryLocationMovements => Set<InventoryLocationMovement>();
 
     public override int SaveChanges()
     {
@@ -61,5 +78,33 @@ public class ErpKhoDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ErpKhoDbContext).Assembly);
+        if (Database.IsSqlServer())
+        {
+            modelBuilder.Entity<Permission>().Property(x => x.Code).UseCollation("Latin1_General_100_BIN2");
+            modelBuilder.Entity<Role>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<RolePermission>().Property(x => x.RowVersion).IsRowVersion();
+            // SQL deployments backfill LocationId before enforcing the final required relationship.
+            // The nullable CLR shape also lets pre-migration compatibility tests represent legacy rows.
+            modelBuilder.Entity<InventoryStock>().Property(x => x.LocationId).IsRequired();
+            modelBuilder.Entity<ProductCategory>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
+            modelBuilder.Entity<ProductBarcode>().Property(x => x.Value).UseCollation("Latin1_General_100_BIN2");
+            modelBuilder.Entity<WarehouseLocation>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
+            modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t => t.HasCheckConstraint(
+                "CK_WarehouseLocations_Code",
+                "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0"));
+            modelBuilder.Entity<PutawayTaskItem>().ToTable("PutawayTaskItems", t =>
+            {
+                t.HasCheckConstraint("CK_PutawayTaskItems_Required", "[RequiredBaseQuantity] > 0");
+                t.HasCheckConstraint("CK_PutawayTaskItems_Moved", "[MovedBaseQuantity] >= 0 AND [MovedBaseQuantity] <= [RequiredBaseQuantity]");
+            });
+            modelBuilder.Entity<InventoryLocationMovement>().ToTable("InventoryLocationMovements", t =>
+            {
+                t.HasCheckConstraint("CK_InventoryLocationMovements_Quantity", "[BaseQuantity] > 0");
+                t.HasCheckConstraint("CK_InventoryLocationMovements_Locations", "[FromLocationId] <> [ToLocationId]");
+            });
+            modelBuilder.Entity<ProductBarcode>().ToTable("ProductBarcodes", t => t.HasCheckConstraint(
+                "CK_ProductBarcodes_Value",
+                "[Value] = LTRIM(RTRIM([Value])) AND [Value] NOT LIKE '%[^-A-Za-z0-9._]%' COLLATE Latin1_General_100_BIN2 AND LEN([Value]) BETWEEN 1 AND 64"));
+        }
     }
 }

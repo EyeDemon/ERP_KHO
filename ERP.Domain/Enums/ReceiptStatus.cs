@@ -5,5 +5,15 @@ public enum ReceiptStatus
     Draft = 0,
     Approved = 1,
     Cancelled = 2,
-    Dispatched = 3
+    Dispatched = 3,
+    Received = 4,
+    ReadyToPost = 5,
+    Posted = 6,
+    QcPending = 7,
+    QcCompleted = 8,
+    DiscrepancyPending = 9,
+    DiscrepancySubmitted = 10,
+    DiscrepancyPendingApproval = 11,
+    DiscrepancyResolved = 12,
+    DiscrepancyRejected = 13
 }

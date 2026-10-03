@@ -1,4 +1,29 @@
+import { useSyncExternalStore } from 'react';
+
 export type AppRole = 'Admin' | 'Manager' | 'WarehouseStaff' | 'Viewer';
+const storageKey = 'permissions';
+let revision = 0;
+export const beginPermissionRefresh = () => ++revision;
+export const setCurrentPermissions = (permissions: string[], expectedRevision?: number) => {
+  if (expectedRevision !== undefined && expectedRevision !== revision) return;
+  revision++;
+  localStorage.setItem(storageKey, JSON.stringify([...new Set(permissions)].sort()));
+  window.dispatchEvent(new Event('permissions-changed'));
+};
+const subscribe = (changed: () => void) => {
+  window.addEventListener('permissions-changed', changed);
+  return () => window.removeEventListener('permissions-changed', changed);
+};
+export const usePermissionSet = () => useSyncExternalStore(subscribe, () => localStorage.getItem(storageKey) || '[]');
+export const usePermission = (code: string) => {
+  usePermissionSet();
+  return hasPermission(code);
+};
+export const currentPermissions = (): string[] => {
+  try { const value=JSON.parse(localStorage.getItem(storageKey) || '[]'); return Array.isArray(value) ? value.filter(x=>typeof x==='string') : []; }
+  catch { return []; }
+};
+export const hasPermission = (code: string) => currentPermissions().includes(code);
 
 export const currentRole = (): AppRole => {
   const role = localStorage.getItem('role');
@@ -12,13 +37,7 @@ export const currentUserId = (): number | null => {
   return Number.isInteger(value) && value > 0 ? value : null;
 };
 
-export const canManageWarehouses = (role: AppRole) => role === 'Admin';
-export const canManageCatalogs = (role: AppRole) => role === 'Admin' || role === 'Manager';
-export const canOperateWarehouse = (role: AppRole) => role !== 'Viewer';
-export const canApproveExportImmediately = (
-  role: AppRole,
-  _allowWarehouseStaffDirectDispatch: boolean,
-) => role === 'Admin' || role === 'Manager';
-export const canViewStocktakes = (role: AppRole) => role !== 'Viewer';
-export const canRunExportMutation = (role: AppRole, writeEnabled: boolean) =>
-  writeEnabled && canOperateWarehouse(role);
+// Stocktake remains outside the inbound permission cutover.
+export const canViewStocktakes = (role: AppRole = currentRole()) => role !== 'Viewer';
+// Inbound reads use grants; other approval document types retain their compatibility role gate.
+export const canViewApprovals = () => hasPermission('receipt.read') || currentRole() === 'Admin' || currentRole() === 'Manager';

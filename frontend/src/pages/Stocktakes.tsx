@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
-import { canManageCatalogs, currentRole, currentUserId } from '../services/authorization';
+import { currentRole, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 
 interface StocktakeSummary {
@@ -45,7 +45,8 @@ interface Warehouse {
 const PAGE_SIZE = 10;
 
 const Stocktakes = () => {
-  const canApprove = canManageCatalogs(currentRole());
+  const role = currentRole();
+  const canApprove = role === 'Admin' || role === 'Manager';
   const userId = currentUserId();
   const [stocktakes, setStocktakes] = useState<StocktakeSummary[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);

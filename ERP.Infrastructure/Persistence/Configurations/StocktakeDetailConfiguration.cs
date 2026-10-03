@@ -24,5 +24,10 @@ public class StocktakeDetailConfiguration : IEntityTypeConfiguration<StocktakeDe
                .WithMany()
                .HasForeignKey(x => x.ProductId)
                .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Location)
+               .WithMany()
+               .HasForeignKey(x => x.LocationId)
+               .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.StocktakeId, x.ProductId, x.LocationId }).IsUnique();
     }
 }

@@ -70,6 +70,7 @@ namespace ERP.Application.Services
                 Details = stocks.Select(s => new StocktakeDetail
                 {
                     ProductId = s.ProductId,
+                    LocationId = s.LocationId,
                     SystemQuantity = s.Quantity,
                     DifferenceQuantity = 0
                 }).ToList()
@@ -129,7 +130,9 @@ namespace ERP.Application.Services
                     if (detail.ActualQuantity == null)
                         throw new BusinessRuleException($"Chưa nhập số lượng thực tế cho sản phẩm id {detail.ProductId}");
 
-                    var reservedStock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, stocktake.WarehouseId);
+                    var reservedStock = detail.LocationId.HasValue
+                        ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, stocktake.WarehouseId, InventoryStatus.Available, detail.LocationId.Value)
+                        : await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, stocktake.WarehouseId);
                     if (detail.ActualQuantity.Value < (reservedStock?.ReservedQuantity ?? 0))
                         throw new ERP.Domain.Exceptions.ConcurrencyException($"Không thể duyệt kiểm kê: sản phẩm ID {detail.ProductId} có tồn thực tế {detail.ActualQuantity.Value} thấp hơn số lượng đang giữ {reservedStock?.ReservedQuantity ?? 0}. Hãy xử lý reservation trước.");
 
@@ -137,13 +140,17 @@ namespace ERP.Application.Services
                     if (diff != 0)
                     {
                         // Update Stock
-                        var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, stocktake.WarehouseId);
+                        var stock = detail.LocationId.HasValue
+                            ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, stocktake.WarehouseId, InventoryStatus.Available, detail.LocationId.Value)
+                            : await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, stocktake.WarehouseId);
                         if (stock == null)
                         {
+                            var locationId = detail.LocationId ?? await _inventoryStockRepository.GetLegacyAdjustmentLocationIdAsync(stocktake.WarehouseId);
                             stock = new InventoryStock
                             {
                                 ProductId = detail.ProductId,
                                 WarehouseId = stocktake.WarehouseId,
+                                LocationId = locationId,
                                 Quantity = detail.ActualQuantity.Value,
                                 LastUpdated = DateTime.UtcNow
                             };
@@ -161,6 +168,7 @@ namespace ERP.Application.Services
                         {
                             ProductId = detail.ProductId,
                             WarehouseId = stocktake.WarehouseId,
+                            LocationId = detail.LocationId ?? stock.LocationId,
                             TransactionType = diff > 0 ? TransactionType.AdjustmentIncrease : TransactionType.AdjustmentDecrease,
                             Quantity = Math.Abs(diff),
                             ReferenceId = stocktake.Id,

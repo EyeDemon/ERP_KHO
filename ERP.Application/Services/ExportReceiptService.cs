@@ -78,6 +78,7 @@ namespace ERP.Application.Services
                 WarehouseId = dto.WarehouseId,
                 Status = ReceiptStatus.Draft,
                 Note = dto.Note,
+                CustomerId = dto.CustomerId,
                 CreatedBy = userId,
                 CreatedAt = DateTime.UtcNow,
                 Details = new List<ERP.Domain.Entities.ExportReceiptDetail>()
@@ -182,6 +183,9 @@ namespace ERP.Application.Services
 
                     if (receipt.Details == null || !receipt.Details.Any())
                         throw new BusinessRuleException("Phiếu xuất phải có ít nhất 1 sản phẩm để duyệt");
+
+                    receipt.CustomerCodeSnapshot = receipt.Customer?.Code;
+                    receipt.CustomerNameSnapshot = receipt.Customer?.Name;
 
                     receipt.DispatchMode = mode;
                     receipt.ApprovedBy = approvedByUserId;
@@ -347,6 +351,11 @@ namespace ERP.Application.Services
             try
             {
                 var wasApproved = receipt.Status == ReceiptStatus.Approved;
+                if (receipt.Status == ReceiptStatus.Draft)
+                {
+                    receipt.CustomerCodeSnapshot = receipt.Customer?.Code;
+                    receipt.CustomerNameSnapshot = receipt.Customer?.Name;
+                }
                 receipt.Status = ReceiptStatus.Cancelled;
                 if (_stockReservationService is not null) await _stockReservationService.ReleaseSourceAsync("ExportReceipt", receipt.Id, userId, "Export receipt cancelled");
                 await _exportReceiptRepository.UpdateAsync(receipt);
@@ -395,6 +404,9 @@ namespace ERP.Application.Services
                 DispatchedBy = receipt.DispatchedBy,
                 DispatchedByName = receipt.DispatchedByUser?.FullName ?? receipt.DispatchedByUser?.Username,
                 DispatchedAt = receipt.DispatchedAt,
+                CustomerId = receipt.CustomerId,
+                CustomerCode = receipt.Status == ReceiptStatus.Draft ? receipt.Customer?.Code : receipt.CustomerCodeSnapshot,
+                CustomerName = receipt.Status == ReceiptStatus.Draft ? receipt.Customer?.Name : receipt.CustomerNameSnapshot,
                 AllowPerReceiptDispatchMode = _options.AllowPerReceiptDispatchMode,
                 AllowWarehouseStaffDirectDispatch = _options.AllowWarehouseStaffDirectDispatch,
                 WriteEnabled = _options.WriteEnabled,
@@ -405,6 +417,7 @@ namespace ERP.Application.Services
                     ProductId = d.ProductId,
                     ProductCode = d.Product?.Code,
                     ProductName = d.Product?.Name,
+                    UnitName = d.Product?.Unit?.Name,
                     Quantity = d.Quantity,
                     UnitPrice = d.UnitPrice,
                     Note = d.Note

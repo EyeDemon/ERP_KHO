@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using ERP.Application.Common;
+using ERP.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace ERP.Api.Controllers
 {
@@ -69,6 +72,20 @@ namespace ERP.Api.Controllers
             await _sessionService.LogoutAsync(Request.Cookies[RefreshCookieName] ?? string.Empty, actor, cancellationToken);
             DeleteRefreshCookie();
             return NoContent();
+        }
+
+        [HttpGet("me")]
+        [Authorize]
+        public async Task<IActionResult> Me([FromServices] ErpKhoDbContext db, CancellationToken cancellationToken)
+        {
+            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+                return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." });
+            var user = await db.Users.AsNoTracking().Where(x => x.Id == userId && x.IsActive && (!x.LockoutEnd.HasValue || x.LockoutEnd <= DateTime.UtcNow))
+                .Select(x => new { x.Id, x.Username, x.FullName, Role = x.Role.RoleName,
+                    Permissions = x.Role.Permissions.Select(p => p.Permission.Code).OrderBy(c => c).ToArray(),
+                    WarehouseIds = x.WarehouseAccesses.Select(w => w.WarehouseId).OrderBy(id => id).ToArray() })
+                .SingleOrDefaultAsync(cancellationToken);
+            return user is null ? Unauthorized(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." }) : Ok(user);
         }
 
         [HttpPost("logout-all")]
