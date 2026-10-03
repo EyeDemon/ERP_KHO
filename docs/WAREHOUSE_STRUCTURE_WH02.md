@@ -1,6 +1,6 @@
 # WH-02 — Warehouse Structure Hierarchy
 
-Status: **FOUNDATION**. Promotion evidence is the final PR CI batch plus Vercel runtime verification described in the Definition of Done below.
+Status: **FOUNDATION**. CI #261 caught a compile-only generic `PropertyEntry` typing defect before SQL/API/frontend execution; the defect was corrected in `c574c61c`. Promotion still requires the verification retry plus final Vercel runtime evidence.
 
 ## Canonical Notion references reviewed
 
