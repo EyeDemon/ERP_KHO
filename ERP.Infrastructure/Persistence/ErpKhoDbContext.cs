@@ -24,6 +24,10 @@ public class ErpKhoDbContext : DbContext
     public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
     public DbSet<BusinessPartner> BusinessPartners => Set<BusinessPartner>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<WarehouseZone> WarehouseZones => Set<WarehouseZone>();
+    public DbSet<WarehouseAisle> WarehouseAisles => Set<WarehouseAisle>();
+    public DbSet<WarehouseRack> WarehouseRacks => Set<WarehouseRack>();
+    public DbSet<WarehouseRackLevel> WarehouseRackLevels => Set<WarehouseRackLevel>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<ImportReceipt> ImportReceipts => Set<ImportReceipt>();
