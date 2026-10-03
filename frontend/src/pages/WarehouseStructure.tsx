@@ -319,7 +319,7 @@ const WarehouseStructure = () => {
     setSuccess('');
     try {
       if (editingLocation) {
-        await apiClient.put(`/api/locations/${editingLocation.id}`, {
+        await apiClient.patch(`/api/locations/${editingLocation.id}`, {
           zoneId: locationZoneId || null,
           rackLevelId: locationLevelId || null,
           name: locationName,
