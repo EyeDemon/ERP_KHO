@@ -1,46 +1,4 @@
 {
-  "WH-02": {
-    "title": "Cấu trúc vị trí kho",
-    "subtitle": "Duyệt và cấu hình Warehouse → Zone → Aisle → Rack → Level → Bin với identity theo warehouse.",
-    "mode": "configuration",
-    "stages": [
-      "Chọn kho",
-      "Chọn Zone",
-      "Chọn Rack/Level",
-      "Kiểm tra Bin",
-      "Lưu cấu trúc"
-    ],
-    "fields": [
-      {
-        "label": "Warehouse",
-        "value": "WH-HCM-01"
-      },
-      {
-        "label": "Zone",
-        "value": "PICK-A • Picking Zone"
-      },
-      {
-        "label": "Aisle / Rack",
-        "value": "A01 / R02"
-      },
-      {
-        "label": "Level / Bin",
-        "value": "L03 / B04"
-      },
-      {
-        "label": "Location code",
-        "value": "A01-R02-L03-B04",
-        "helper": "Unique case-insensitively trong warehouse."
-      }
-    ],
-    "commands": [
-      "ADD_CHILD_LOCATION",
-      "UPDATE_LOCATION",
-      "DEACTIVATE_LOCATION"
-    ],
-    "exceptionTitle": "LOCATION_CODE_DUPLICATE",
-    "exceptionDetail": "Mã vị trí đã tồn tại trong cùng warehouse hoặc cố thay đổi identity sang warehouse khác."
-  },
   "WH-03": {
     "title": "Capacity & Storage Constraint Workbench",
     "subtitle": "Mô phỏng kiểm tra sức chứa, storage class và compatibility trước putaway/move.",
