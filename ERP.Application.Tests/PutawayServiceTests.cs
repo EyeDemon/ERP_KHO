@@ -54,7 +54,7 @@ public sealed class PutawayServiceTests : IDisposable
     public async Task Location_master_normalizes_code_and_protects_system_location()
     {
         var ids = await SeedAsync(); await using var db = Create(); var service = Service(db, ids.WarehouseId, ids.UserId);
-        var created = await service.CreateLocationAsync(new CreateWarehouseLocationDto { WarehouseId=ids.WarehouseId, Code="  shelf-c  ", Name="Kệ C", LocationType="Storage", IsPickable=true });
+        var created = await service.CreateLocationAsync(new CreateWarehouseLocationDto { WarehouseId=ids.WarehouseId, ZoneId=ids.ZoneId, Code="  shelf-c  ", Name="Kệ C", LocationType="Storage", IsPickable=true });
         created.Code.Should().Be("SHELF-C"); created.LocationType.Should().Be(nameof(WarehouseLocationType.Storage));
         var receiving = (await service.ListLocationsAsync(ids.WarehouseId)).Single(x => x.Id == ids.Receiving);
         var action = () => service.UpdateLocationAsync(receiving.Id, new UpdateWarehouseLocationDto { Name=receiving.Name, IsActive=false, IsReceivable=true, RowVersion=receiving.RowVersion! });
@@ -81,7 +81,7 @@ public sealed class PutawayServiceTests : IDisposable
         async Task Deactivate(int id)
         {
             var location = (await service.ListLocationsAsync(ids.WarehouseId)).Single(x => x.Id == id);
-            await service.UpdateLocationAsync(id, new UpdateWarehouseLocationDto { Name=location.Name, IsActive=false, IsPickable=true, RowVersion=location.RowVersion! });
+            await service.UpdateLocationAsync(id, new UpdateWarehouseLocationDto { ZoneId=location.ZoneId, RackLevelId=location.RackLevelId, Name=location.Name, IsActive=false, IsPickable=true, RowVersion=location.RowVersion! });
         }
         await FluentActions.Awaiting(() => Deactivate(ids.Storage1)).Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
             .Where(x => Equals(x.Data["HttpStatusCode"], 409));
@@ -96,20 +96,21 @@ public sealed class PutawayServiceTests : IDisposable
         (await db.InventoryLocationMovements.CountAsync()).Should().Be(1);
     }
 
-    private async Task<(int WarehouseId,int UserId,int ProductId,int TaskId,int ItemId,int Receiving,int Storage1,int Storage2,int Damaged)> SeedAsync()
+    private async Task<(int WarehouseId,int UserId,int ProductId,int TaskId,int ItemId,int Receiving,int Storage1,int Storage2,int Damaged,int ZoneId)> SeedAsync()
     {
         await using var db=Create(); var role=new Role{RoleName="Manager"}; var user=new User{Username=Guid.NewGuid().ToString("N"),PasswordHash="x",FullName="QA",Role=role};
         var unit=new Unit{Code="EA",Name="Cái",DecimalPlaces=0}; var warehouse=new Warehouse{Code="W1",Name="Kho"}; var product=new Product{Code="P1",Name="Sản phẩm",Unit=unit}; db.AddRange(role,user,warehouse,product); await db.SaveChangesAsync();
+        var zone=new WarehouseZone{WarehouseId=warehouse.Id,Code="ZONE-A",Name="Khu A",ZoneType="STORAGE",IsActive=true,CreatedBy=user.Id}; db.Add(zone); await db.SaveChangesAsync();
         var receiving=new WarehouseLocation{WarehouseId=warehouse.Id,Code="RECEIVING",Name="Nhận",LocationType=WarehouseLocationType.Receiving,IsActive=true,IsReceivable=true,IsSystemManaged=true};
-        var s1=new WarehouseLocation{WarehouseId=warehouse.Id,Code="S1",Name="Kệ 1",LocationType=WarehouseLocationType.Storage,IsActive=true,IsPickable=true}; var s2=new WarehouseLocation{WarehouseId=warehouse.Id,Code="S2",Name="Kệ 2",LocationType=WarehouseLocationType.Storage,IsActive=true,IsPickable=true}; var damaged=new WarehouseLocation{WarehouseId=warehouse.Id,Code="D1",Name="Hư",LocationType=WarehouseLocationType.Damaged,IsActive=true}; db.AddRange(receiving,s1,s2,damaged); await db.SaveChangesAsync();
+        var s1=new WarehouseLocation{WarehouseId=warehouse.Id,ZoneId=zone.Id,Code="S1",Name="Kệ 1",LocationType=WarehouseLocationType.Storage,IsActive=true,IsPickable=true}; var s2=new WarehouseLocation{WarehouseId=warehouse.Id,ZoneId=zone.Id,Code="S2",Name="Kệ 2",LocationType=WarehouseLocationType.Storage,IsActive=true,IsPickable=true}; var damaged=new WarehouseLocation{WarehouseId=warehouse.Id,ZoneId=zone.Id,Code="D1",Name="Hư",LocationType=WarehouseLocationType.Damaged,IsActive=true}; db.AddRange(receiving,s1,s2,damaged); await db.SaveChangesAsync();
         var receipt=new ImportReceipt{Code="PN1",WarehouseId=warehouse.Id,Status=ReceiptStatus.Posted,CreatedBy=user.Id}; var line=new ImportReceiptDetail{ImportReceipt=receipt,ProductId=product.Id,Quantity=5,ExpectedQuantity=5,ReceivedQuantity=5,AcceptedQuantity=5,PostedQuantity=5,OperationUnitId=unit.Id,OperationUnitCodeSnapshot="BOX",BaseUnitId=unit.Id,BaseUnitCodeSnapshot="EA",ConversionFactor=2,ConversionVersion=3,BaseExpectedQuantity=10,BaseReceivedQuantity=10,BaseAcceptedQuantity=10,BasePostedQuantity=10}; db.Add(line); await db.SaveChangesAsync();
         var task=new PutawayTask{ReceiptId=receipt.Id,WarehouseId=warehouse.Id,Status=PutawayTaskStatus.Assigned,AssignedUserId=user.Id,CreatedBy=user.Id,RowVersion=Guid.NewGuid().ToByteArray()}; var item=new PutawayTaskItem{PutawayTask=task,ReceiptLineId=line.Id,ProductId=product.Id,InventoryStatus=InventoryStatus.Available,SourceLocationId=receiving.Id,OperationUnitId=unit.Id,OperationUnitCodeSnapshot="BOX",BaseUnitId=unit.Id,BaseUnitCodeSnapshot="EA",ConversionFactorSnapshot=2,ConversionVersionSnapshot=3,BaseUnitDecimalPlaces=0,RequiredOperationQuantity=5,RequiredBaseQuantity=10,RowVersion=Guid.NewGuid().ToByteArray()}; db.AddRange(item,new InventoryStock{ProductId=product.Id,WarehouseId=warehouse.Id,LocationId=receiving.Id,Status=InventoryStatus.Available,Quantity=10}); await db.SaveChangesAsync();
-        return(warehouse.Id,user.Id,product.Id,task.Id,item.Id,receiving.Id,s1.Id,s2.Id,damaged.Id);
+        return(warehouse.Id,user.Id,product.Id,task.Id,item.Id,receiving.Id,s1.Id,s2.Id,damaged.Id,zone.Id);
     }
     private TestContext Create()=>new(options);
     private static PutawayService Service(ErpKhoDbContext db,int warehouse,int user)=>new(db,new Access(warehouse),new Current(user));
     public void Dispose()=>connection.Dispose();
     private sealed record Current(int UserId):ICurrentUser{public bool IsAuthenticated=>true;public bool IsGlobalAdmin=>false;public string Role=>"Manager";}
     private sealed class Access(int id):IWarehouseAuthorizationService{public Task<IReadOnlyList<int>> GetAccessibleWarehouseIdsAsync(CancellationToken c=default)=>Task.FromResult<IReadOnlyList<int>>([id]);public Task<bool> CanAccessWarehouseAsync(int w,CancellationToken c=default)=>Task.FromResult(w==id);public Task EnsureWarehouseAccessAsync(int w,CancellationToken c=default)=>w==id?Task.CompletedTask:throw new UnauthorizedAccessException();}
-    private sealed class TestContext(DbContextOptions<ErpKhoDbContext> o):ErpKhoDbContext(o){public override Task<int> SaveChangesAsync(CancellationToken c=default){foreach(var e in ChangeTracker.Entries().Where(x=>x.Entity is PutawayTask or PutawayTaskItem or WarehouseLocation&&x.State is EntityState.Added or EntityState.Modified))e.Property("RowVersion").CurrentValue=Guid.NewGuid().ToByteArray();return base.SaveChangesAsync(c);}protected override void OnModelCreating(ModelBuilder m){base.OnModelCreating(m);foreach(var p in m.Model.GetEntityTypes().SelectMany(x=>x.GetProperties()))if(p.GetColumnType()?.Contains("max",StringComparison.OrdinalIgnoreCase)==true)p.SetColumnType(null);foreach(var t in new[]{typeof(PutawayTask),typeof(PutawayTaskItem),typeof(WarehouseLocation)})m.Entity(t).Property("RowVersion").IsConcurrencyToken().ValueGeneratedNever();}}
+    private sealed class TestContext(DbContextOptions<ErpKhoDbContext> o):ErpKhoDbContext(o){public override Task<int> SaveChangesAsync(CancellationToken c=default){foreach(var e in ChangeTracker.Entries().Where(x=>x.Entity is PutawayTask or PutawayTaskItem or WarehouseLocation or WarehouseZone or WarehouseAisle or WarehouseRack or WarehouseRackLevel&&x.State is EntityState.Added or EntityState.Modified))e.Property("RowVersion").CurrentValue=Guid.NewGuid().ToByteArray();return base.SaveChangesAsync(c);}protected override void OnModelCreating(ModelBuilder m){base.OnModelCreating(m);foreach(var p in m.Model.GetEntityTypes().SelectMany(x=>x.GetProperties()))if(p.GetColumnType()?.Contains("max",StringComparison.OrdinalIgnoreCase)==true)p.SetColumnType(null);foreach(var t in new[]{typeof(PutawayTask),typeof(PutawayTaskItem),typeof(WarehouseLocation),typeof(WarehouseZone),typeof(WarehouseAisle),typeof(WarehouseRack),typeof(WarehouseRackLevel)})m.Entity(t).Property("RowVersion").IsConcurrencyToken().ValueGeneratedNever();}}
 }
