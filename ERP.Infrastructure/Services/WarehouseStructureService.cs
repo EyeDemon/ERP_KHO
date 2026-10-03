@@ -164,7 +164,7 @@ public sealed class WarehouseStructureService(
         await SaveConcurrencyAsync(token);
         context.AuditLogs.Add(Audit("WarehouseAisle.Updated", "WarehouseAisle", entity.Id, warehouseId, $"ZoneId: {zoneId}"));
         await context.SaveChangesAsync(token);
-        return Aisle(entity, []);
+        return Aisle(entity, new List<WarehouseRackDto>(), true);
     }
 
     public async Task<WarehouseRackDto> CreateRackAsync(int warehouseId, int aisleId, CreateWarehouseRackDto dto, CancellationToken token = default)
@@ -202,7 +202,7 @@ public sealed class WarehouseStructureService(
         await SaveConcurrencyAsync(token);
         context.AuditLogs.Add(Audit("WarehouseRack.Updated", "WarehouseRack", entity.Id, warehouseId, $"AisleId: {aisleId}"));
         await context.SaveChangesAsync(token);
-        return Rack(entity, []);
+        return Rack(entity, new List<WarehouseRackLevelDto>(), true);
     }
 
     public async Task<WarehouseRackLevelDto> CreateLevelAsync(int warehouseId, int rackId, CreateWarehouseRackLevelDto dto, CancellationToken token = default)
