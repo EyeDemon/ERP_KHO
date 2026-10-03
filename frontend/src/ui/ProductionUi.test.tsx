@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { UiBadge, UiCard, UiEmptyState, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from './ProductionUi';
+import { UiBadge, UiCard, UiEmptyState, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from './ProductionUi';
 
 describe('Production UI primitives', () => {
   afterEach(cleanup);
@@ -20,6 +20,11 @@ describe('Production UI primitives', () => {
     expect(view.getByText('Receiving')).toBeTruthy();
     expect(view.getByText('Open tasks')).toBeTruthy();
     expect(view.getByText('In progress').className).toContain('warning');
+  });
+
+  it('wraps wide operational tables in a dedicated scroll region', () => {
+    const view = render(<UiTableScroll><table><tbody><tr><td>SKU-1001</td></tr></tbody></table></UiTableScroll>);
+    expect(view.getByText('SKU-1001').closest('.ui-table-scroll')).toBeTruthy();
   });
 
   it('renders a reusable empty state', () => {

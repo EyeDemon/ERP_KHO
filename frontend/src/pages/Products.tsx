@@ -102,13 +102,13 @@ const Products = () => {
       description="Quản lý SKU, danh mục, đơn vị tính và barcode. Tìm kiếm và tra mã vạch dùng cùng dữ liệu sản phẩm."
     />
 
-    {notice && <p role="status" style={{ color: '#256b45', margin: 0 }}>{notice}</p>}
+    {notice && <p role="status" className="ui-success-text">{notice}</p>}
     {error && <p role="alert">{error}</p>}
     {mutating && <p role="status">Đang xử lý...</p>}
 
     <UiToolbar>
       <UiToolbarField label="Tra mã vạch">
-        <form onSubmit={lookup} style={{ display: 'flex', gap: 7 }}>
+        <form onSubmit={lookup} className="ui-inline">
           <input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" />
           <button type="submit">Tra mã vạch</button>
         </form>
@@ -116,30 +116,30 @@ const Products = () => {
       <UiToolbarField label="Tìm sản phẩm">
         <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Mã, tên hoặc mã vạch" />
       </UiToolbarField>
-      <div style={{ marginLeft: 'auto', alignSelf: 'center', color: '#66788d', fontSize: 10 }}>
+      <div className="ui-muted-text ui-auto-actions">
         {filtered.length} sản phẩm • Trang {currentPage}/{totalPages}
       </div>
     </UiToolbar>
 
     {canManageCategories && <UiCard title="Danh mục sản phẩm">
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="ui-stack">
         <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" />
-        <form onSubmit={addCategory} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <form onSubmit={addCategory} className="ui-inline-wrap">
           <input value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
           <input value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required />
           <button type="submit" disabled={mutating}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>
           {editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }}>Hủy sửa</button>}
         </form>
-        <div style={{ display: 'grid', gap: 6 }}>
+        <div className="ui-stack">
           {categories.filter(category => {
             const q = categorySearch.trim().toLowerCase();
             return !q || category.code.toLowerCase().includes(q) || category.name.toLowerCase().includes(q);
           }).map(category => (
-            <div key={category.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid #e7edf3', paddingTop: 7 }}>
+            <div key={category.id} className="ui-divider-row">
               <strong>{category.code}</strong>
               <span>{category.name}</span>
               <UiBadge tone={category.isActive ? 'success' : 'neutral'}>{category.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              <div className="ui-inline-actions ui-auto-actions">
                 <button disabled={mutating} onClick={() => editCategory(category)}>Sửa</button>
                 <button disabled={mutating} onClick={() => toggleCategory(category)}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
                 <button disabled={mutating} onClick={() => deleteCategory(category.id)}>Xóa</button>
@@ -151,7 +151,7 @@ const Products = () => {
     </UiCard>}
 
     {(editing ? canManage : canCreate) && <UiCard title={editing ? `Sửa ${editing.code}` : 'Thêm sản phẩm'}>
-      <form onSubmit={saveProduct} style={{ display: 'grid', gap: 9, maxWidth: 760 }}>
+      <form onSubmit={saveProduct} className="ui-form-grid">
         <input aria-label="Mã sản phẩm" value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã sản phẩm" disabled={!!editing} required />
         <input aria-label="Tên sản phẩm" value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên sản phẩm" required />
         <textarea aria-label="Mô tả sản phẩm" value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="Mô tả" rows={3} />
@@ -163,8 +163,8 @@ const Products = () => {
           <option value="">Không có danh mục</option>
           {categories.filter(category => category.isActive || category.id === editing?.categoryId).map(category => <option key={category.id} value={category.id}>{category.code} – {category.name}{category.isActive ? '' : ' (ngừng hoạt động)'}</option>)}
         </select>
-        {editing && <label style={{ display: 'flex', gap: 7, alignItems: 'center' }}><input type="checkbox" checked={form.isActive} onChange={e => setForm(x => ({ ...x, isActive: e.target.checked }))} /> Hoạt động</label>}
-        <div style={{ display: 'flex', gap: 7 }}>
+        {editing && <label className="ui-checkbox-label"><input type="checkbox" checked={form.isActive} onChange={e => setForm(x => ({ ...x, isActive: e.target.checked }))} /> Hoạt động</label>}
+        <div className="ui-inline-actions">
           <button type="submit">Lưu</button>
           {editing && <button type="button" onClick={createMode}>Hủy sửa</button>}
         </div>
@@ -172,10 +172,10 @@ const Products = () => {
     </UiCard>}
 
     {editing && canManageBarcodes && <UiCard title="Mã vạch">
-      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 9 }}>
-        {editing.barcodes?.map(item => <UiBadge key={item.id}>{item.value} <button type="button" aria-label={'Xóa mã vạch ' + item.value} onClick={() => deleteBarcode(item.id)} style={{ minHeight: 18, padding: '0 4px', marginLeft: 4 }}>×</button></UiBadge>)}
+      <div className="ui-inline-wrap">
+        {editing.barcodes?.map(item => <UiBadge key={item.id}>{item.value} <button type="button" aria-label={'Xóa mã vạch ' + item.value} onClick={() => deleteBarcode(item.id)} className="ui-badge-remove">×</button></UiBadge>)}
       </div>
-      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+      <div className="ui-inline-wrap">
         <input aria-label="Mã vạch mới" value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={64} placeholder="Mã vạch mới" />
         <button type="button" onClick={addBarcode}>Thêm mã vạch</button>
       </div>
@@ -186,7 +186,7 @@ const Products = () => {
         <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th>Thao tác</th>}</tr></thead>
         <tbody>
           {visibleProducts.length === 0
-            ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 7 : 6} style={{ textAlign: 'center', padding: 22, color: '#6b7b90' }}>Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
+            ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 7 : 6} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
             : visibleProducts.map(product => <tr key={product.id}>
                 <td><strong>{product.code}</strong></td>
                 <td>{product.name}</td>
@@ -195,7 +195,7 @@ const Products = () => {
                 <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>
                 <td><UiBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Hoạt động' : 'Khóa'}</UiBadge></td>
                 {(canManage || canManageBarcodes || canDeactivate) && <td>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div className="ui-inline-actions">
                     {(canManage || canManageBarcodes) && <button onClick={() => editMode(product)}>Sửa</button>}
                     {canDeactivate && <button onClick={() => deleteProduct(product.id)}>Xóa</button>}
                   </div>
@@ -203,9 +203,9 @@ const Products = () => {
               </tr>)}
         </tbody>
       </table>}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10 }}>
+      <div className="ui-pagination">
         <button disabled={currentPage === 1} onClick={() => setCurrentPage(value => value - 1)}>Trước</button>
-        <span style={{ color: '#66788d', fontSize: 11 }}>Trang {currentPage}/{totalPages}</span>
+        <span>Trang {currentPage}/{totalPages}</span>
         <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(value => value + 1)}>Sau</button>
       </div>
     </UiCard>

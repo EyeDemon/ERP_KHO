@@ -103,6 +103,20 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.getByText('Frontend production UI')).toBeTruthy();
   });
 
+  it('exposes accessible navigation, current location and skip-to-content behavior', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
+    const view = renderAt('/');
+    await view.findByText('Production home');
+
+    expect(view.getByText('Bỏ qua điều hướng').getAttribute('href')).toBe('#main-content');
+    expect(view.getByRole('navigation', { name: 'Điều hướng nghiệp vụ' })).toBeTruthy();
+    expect(view.getByRole('link', { name: 'Tổng quan' }).getAttribute('aria-current')).toBe('page');
+
+    const menuButton = view.getByRole('button', { name: 'Mở menu điều hướng' });
+    expect(menuButton.getAttribute('aria-controls')).toBe('system-sidebar');
+    expect(document.getElementById('system-sidebar')).toBeTruthy();
+  });
+
   it('fails closed on production routes when identity verification fails', async () => {
     vi.mocked(apiClient.get).mockRejectedValue(new Error('network'));
     const view = renderAt('/');

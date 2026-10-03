@@ -4,6 +4,7 @@ import { mockInventoryBalances, mockProducts, mockWarehouses, mockWorkCenters } 
 import { demoReconciliationRows } from '../mocks/inventoryReconciliationDemo';
 import { productionNavigation } from '../config/productionNavigation';
 import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader } from '../ui/ProductionUi';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -20,52 +21,40 @@ const Dashboard = () => {
   ];
 
   return (
-    <section className="dashboard-page">
-      <header className="dashboard-hero">
-        <div>
-          <span className="dashboard-kicker">ERP WMS Operations</span>
-          <h1>Tổng quan vận hành</h1>
-          <p>Điểm vào nhanh tới các work center đã có frontend, cùng trạng thái demo/runtime hiện tại.</p>
-        </div>
-        <Link className="dashboard-blueprint-link" to="/system-blueprint">Mở bản đồ hệ thống <ArrowRight size={15} /></Link>
-      </header>
+    <UiPage>
+      <UiPageHeader
+        eyebrow="Vận hành"
+        title="Tổng quan vận hành"
+        description="Điểm vào nhanh tới các work center đã có frontend và trạng thái môi trường đang kiểm thử."
+        actions={<Link className="dashboard-blueprint-link" to="/system-blueprint">Mở bản đồ hệ thống <ArrowRight size={16} aria-hidden="true" /></Link>}
+      />
 
-      {demoRuntime && (
-        <div className="dashboard-runtime-note">
-          <strong>Đang ở Vercel Blueprint Demo.</strong>
-          <span>Dữ liệu bên dưới là mock read-only để kiểm tra UI/UX; backend staging và persistence chưa được kết nối.</span>
-        </div>
-      )}
-
-      <div className="dashboard-metrics" aria-label="Tóm tắt dữ liệu">
-        <article><Warehouse size={18} /><div><strong>{demoRuntime ? mockWarehouses.length : '—'}</strong><span>Kho trong demo dataset</span></div></article>
-        <article><Boxes size={18} /><div><strong>{demoRuntime ? mockProducts.length : '—'}</strong><span>SKU trong demo dataset</span></div></article>
-        <article><PackageSearch size={18} /><div><strong>{demoRuntime ? mockInventoryBalances.length : '—'}</strong><span>Dòng tồn kho mẫu</span></div></article>
-        <article className={demoRuntime && mismatchCount > 0 ? 'warning' : ''}><AlertTriangle size={18} /><div><strong>{demoRuntime ? mismatchCount : '—'}</strong><span>Reconciliation mismatch mẫu</span></div></article>
-      </div>
+      <UiMetricGrid>
+        <UiMetric value={demoRuntime ? mockWarehouses.length : '—'} label="Kho trong demo dataset" />
+        <UiMetric value={demoRuntime ? mockProducts.length : '—'} label="SKU trong demo dataset" />
+        <UiMetric value={demoRuntime ? mockInventoryBalances.length : '—'} label="Dòng tồn kho mẫu" />
+        <article className={'ui-metric' + (demoRuntime && mismatchCount > 0 ? ' dashboard-metric-warning' : '')}>
+          <strong>{demoRuntime ? mismatchCount : '—'}</strong>
+          <span>Reconciliation mismatch mẫu</span>
+        </article>
+      </UiMetricGrid>
 
       <div className="dashboard-grid">
-        <section className="dashboard-panel">
-          <div className="dashboard-panel-heading">
-            <div><span>Work centers</span><h2>Tiếp tục công việc</h2></div>
-            <small>{demoRuntime ? operationalRecords.length + ' operational records mẫu' : 'Mở màn nghiệp vụ'}</small>
-          </div>
+        <UiCard title="Tiếp tục công việc">
+          <div className="dashboard-panel-meta">{demoRuntime ? operationalRecords.length + ' operational records mẫu' : 'Mở work center nghiệp vụ'}</div>
           <div className="dashboard-actions">
             {quickLinks.map(({ to, title, detail, icon: Icon }) => (
               <Link key={to} to={to}>
-                <Icon size={18} />
+                <Icon size={18} aria-hidden="true" />
                 <div><strong>{title}</strong><span>{detail}</span></div>
-                <ArrowRight size={15} />
+                <ArrowRight size={16} aria-hidden="true" />
               </Link>
             ))}
           </div>
-        </section>
+        </UiCard>
 
-        <section className="dashboard-panel">
-          <div className="dashboard-panel-heading">
-            <div><span>Frontend coverage</span><h2>Màn đã có route production UI</h2></div>
-            <strong>{productionNavigation.length}</strong>
-          </div>
+        <UiCard title="Màn production UI đã có route">
+          <div className="dashboard-screen-count">{productionNavigation.length}</div>
           <div className="dashboard-screen-list">
             {productionNavigation.filter((item) => item.path !== '/').map((item) => (
               <Link key={item.path} to={item.path}>
@@ -74,16 +63,25 @@ const Dashboard = () => {
               </Link>
             ))}
           </div>
-        </section>
+        </UiCard>
       </div>
 
-      <section className="dashboard-environment">
-        <div><span>Frontend</span><strong>{demoRuntime ? 'Vercel READY' : 'Runtime hiện tại'}</strong></div>
-        <div><span>Data source</span><strong>{demoRuntime ? 'Demo API adapter' : 'Backend API'}</strong></div>
-        <div><span>Write operations</span><strong>{demoRuntime ? 'Blocked (405)' : 'Theo quyền người dùng'}</strong></div>
-        <div><span>Backend staging</span><strong>{demoRuntime ? 'Chưa kết nối' : 'Theo environment'}</strong></div>
-      </section>
-    </section>
+      <UiCard title="Trạng thái môi trường">
+        <div className="dashboard-environment">
+          <div><span>Frontend</span><strong>{demoRuntime ? 'Vercel READY' : 'Runtime hiện tại'}</strong></div>
+          <div><span>Data source</span><strong>{demoRuntime ? 'Demo API adapter' : 'Backend API'}</strong></div>
+          <div><span>Write operations</span><strong>{demoRuntime ? 'Blocked (405)' : 'Theo quyền người dùng'}</strong></div>
+          <div><span>Backend staging</span><strong>{demoRuntime ? 'Chưa kết nối' : 'Theo environment'}</strong></div>
+        </div>
+      </UiCard>
+
+      {demoRuntime && mismatchCount > 0 && (
+        <div className="dashboard-attention" role="status">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span>Demo dataset hiện có {mismatchCount} dòng reconciliation cần chú ý. Mở work center Đối chiếu tồn kho để xem chi tiết.</span>
+        </div>
+      )}
+    </UiPage>
   );
 };
 

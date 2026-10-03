@@ -15,11 +15,24 @@ All frontend, UI and UX work in this repository MUST use **UI UX Pro Max** befor
 
 For this ERP/WMS project, the skill is a **required input to every frontend/UI/UX task**, not an optional reference.
 
+## Resolved design direction
+
+Read `design-system/erp-wms/MASTER.md` before changing production UI.
+
+The verified UI UX Pro Max profile for this project is:
+- Product: **Inventory & Stock Management**.
+- Style: **Flat Design + Minimalism & Swiss Style**.
+- Dashboard: **Real-Time Monitoring + Data-Dense**.
+- Palette: industrial slate + stock green + semantic traffic-light status colors.
+- Typography: professional, clean hierarchy; Inter primary.
+- Motion: subtle, ~150ms state feedback only.
+- Anti-patterns: excessive decoration, complex shadows, 3D effects, tiny body text.
+
 ## Goals
 
 - One visual language across master data, inbound, outbound, inventory control and administration.
 - Reusable patterns so new modules do not invent their own table/form/button styles.
-- Desktop-first warehouse operations with responsive fallbacks.
+- Dense desktop operations **without sacrificing responsive/mobile accessibility**.
 - Clear distinction between read-only demo runtime and real backend runtime.
 
 ## Foundation
@@ -141,20 +154,29 @@ New sections require explicit review instead of ad-hoc sidebar insertion.
 
 ## Visual rules
 
-- Use the shared spacing, radius, border and color tokens from `production-ui.css`.
+- Use the shared spacing, radius, border and semantic color tokens from `production-ui.css`.
+- Production surfaces follow **flat/minimal** styling: borders over decorative shadows.
 - Avoid raw browser-default tables/buttons/forms.
-- Avoid hard-coded one-off colors unless representing a domain status not covered by tokens.
-- Prefer 12–14px operational text; dense tables may use 10–12px metadata.
-- Keep major work areas inside cards.
-- Keep wide tables readable before adding decorative UI.
+- Avoid hard-coded one-off colors unless representing a reviewed domain status not covered by tokens.
+- Operational body text is 14px on desktop and scales to 16px on narrow/mobile layouts.
+- Labels/metadata should normally stay at 11–12px minimum; do not use 8–10px body copy.
+- Use tabular figures for inventory quantities, prices, durations and operational counters.
+- Keep major work areas inside flat cards/panels.
+- Wide tables scroll inside their own container on small screens; do not cause page-level horizontal overflow.
+- Use Lucide icons consistently; decorative icons beside visible text must be hidden from the accessibility tree.
 
 ## Accessibility
 
-- Inputs/selects need labels or aria-labels.
+- Inputs/selects need visible labels or an appropriate accessible name.
 - All interactive controls need visible focus states.
+- Include a skip-to-main-content link and preserve logical keyboard order.
+- Route changes should move focus to the main content region.
 - Alerts use `role="alert"`; loading/success states use `role="status"`.
 - Do not use color as the only indicator of state.
-- Buttons need descriptive accessible names.
+- Icon-only buttons need descriptive accessible names.
+- Respect `prefers-reduced-motion`.
+- Document language is Vietnamese (`lang="vi"`).
+- Mobile navigation must expose expanded state, a clear close action and Escape dismissal.
 
 ## Definition of done for a new frontend work center
 
@@ -170,3 +192,5 @@ A production UI capability is not complete until:
 8. Tests cover the primary render and at least one important interaction/error path.
 9. Vercel production build is READY.
 10. CI lint/test/build passes.
+11. Responsive behavior is checked against the 480 / 768 / 1024 / 1440 breakpoint system.
+12. Reduced-motion and keyboard/focus behavior remain correct.

@@ -44,9 +44,9 @@ export default function PutawayTasks(){
      </UiCard>
 
      {selected&&<UiCard title={'Chi tiết nhiệm vụ ' + selected.receiptCode}>
-       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
+       <div className="ui-inline-wrap">
          <UiBadge tone={selected.status==='Completed'?'success':selected.status==='Exception'?'danger':selected.status==='InProgress'?'warning':'neutral'}>{states[selected.status]??'Không xác định'}</UiBadge>
-         <span style={{color:'#66788d',fontSize:11}}>Tiến độ {selected.movedBaseQuantity}/{selected.requiredBaseQuantity}</span>
+         <span className="ui-muted-text">Tiến độ {selected.movedBaseQuantity}/{selected.requiredBaseQuantity}</span>
        </div>
        {selected.exceptionReason&&<p><strong>Lý do cần xử lý:</strong> {selected.exceptionReason}</p>}
 
@@ -61,15 +61,15 @@ export default function PutawayTasks(){
          {mutable&&['Open','Assigned'].includes(selected.status)&&<button disabled={!!busy} onClick={()=>void mutate(`cancel-${selected.id}`,`/api/putaway-tasks/${selected.id}/cancel`,{rowVersion:selected.rowVersion})}>Hủy nhiệm vụ</button>}
        </div>
 
-       <div style={{display:'grid',gap:10,marginTop:12}}>
+       <div className="ui-stack">
          {selected.items.map(item=><fieldset key={item.id}>
            <legend>{item.productCode} — {item.productName}</legend>
-           <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+           <div className="ui-inline-wrap">
              <UiBadge>{inventory[item.inventoryStatus]??'Không xác định'}</UiBadge>
              <UiBadge>Vị trí nguồn: {item.sourceLocationCode}</UiBadge>
            </div>
-           <p style={{margin:'4px 0'}}>Cần cất: <strong>{item.requiredOperationQuantity} {item.operationUnitCode}</strong> ({item.requiredBaseQuantity} {item.baseUnitCode})</p>
-           <p style={{margin:'4px 0'}}>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>
+           <p>Cần cất: <strong>{item.requiredOperationQuantity} {item.operationUnitCode}</strong> ({item.requiredBaseQuantity} {item.baseUnitCode})</p>
+           <p>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>
            {mutable&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
              <label>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
              <label>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0" step="any" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:Number(e.target.value)}))}/></label>

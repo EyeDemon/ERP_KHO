@@ -1,8 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { isBlueprintDemoRuntime } from '../services/runtimeMode';
 import { demoReconciliationRows, demoReconciliationWarehouses } from '../mocks/inventoryReconciliationDemo';
+import {
+  UiBadge,
+  UiCard,
+  UiMetric,
+  UiMetricGrid,
+  UiPage,
+  UiPageHeader,
+  UiTableScroll,
+  UiToolbar,
+  UiToolbarField,
+} from '../ui/ProductionUi';
 import './InventoryReconciliation.css';
 
 interface WarehouseOption {
@@ -38,6 +49,7 @@ interface PagedResult<T> {
 }
 
 const pageSize = 20;
+const numberFormat = new Intl.NumberFormat('vi-VN');
 
 export default function InventoryReconciliation() {
   const demoRuntime = isBlueprintDemoRuntime();
@@ -101,7 +113,7 @@ export default function InventoryReconciliation() {
       } catch {
         if (active) {
           setResult(null);
-          setError('Không thể tải dữ liệu đối chiếu tồn kho. Vui lòng thử lại.');
+          setError('Không thể tải dữ liệu đối chiếu tồn kho. Hãy kiểm tra kết nối và thử lại.');
         }
       } finally {
         if (active) setLoading(false);
@@ -112,8 +124,8 @@ export default function InventoryReconciliation() {
   }, [applied, demoRuntime, page]);
 
   const currentRows = result?.items ?? [];
-  const mismatchCount = useMemo(() => currentRows.filter(row => row.status !== 'Match').length, [currentRows]);
-  const absoluteDifference = useMemo(() => currentRows.reduce((sum, row) => sum + Math.abs(row.difference), 0), [currentRows]);
+  const mismatchCount = currentRows.filter(row => row.status !== 'Match').length;
+  const absoluteDifference = currentRows.reduce((sum, row) => sum + Math.abs(row.difference), 0);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -130,85 +142,101 @@ export default function InventoryReconciliation() {
   };
 
   return (
-    <section className="reconciliation-page">
-      {demoRuntime && (
-        <div className="reconciliation-demo-banner" role="note">
-          DEMO DATA • Màn production UI thật đang chạy bằng adapter đọc-only trên Vercel Blueprint. Backend staging chưa được kết nối.
-        </div>
-      )}
+    <UiPage>
+      <UiPageHeader
+        eyebrow="Inventory Control"
+        title="Đối chiếu tồn kho & ledger"
+        description="So sánh operational balance với immutable ledger để phát hiện chênh lệch. Work center này chỉ đọc; mọi sửa sai phải đi qua transaction có kiểm soát."
+      />
 
-      <header className="reconciliation-header">
-        <div>
-          <span className="reconciliation-kicker">Inventory Integrity</span>
-          <h1>Đối chiếu tồn kho & ledger</h1>
-          <p>So sánh số dư tồn hiện tại với tổng movement bất biến. Màn này chỉ đọc, không tự sửa số liệu.</p>
-        </div>
-        <div className="reconciliation-summary" aria-label="Tóm tắt đối chiếu">
-          <article><strong>{result?.totalRecords ?? 0}</strong><span>Cặp kho / sản phẩm</span></article>
-          <article><strong>{mismatchCount}</strong><span>Mismatch trang hiện tại</span></article>
-          <article><strong>{absoluteDifference}</strong><span>Độ lệch tuyệt đối</span></article>
-        </div>
-      </header>
+      <UiMetricGrid>
+        <UiMetric value={numberFormat.format(result?.totalRecords ?? 0)} label="Cặp kho / sản phẩm" />
+        <UiMetric value={numberFormat.format(mismatchCount)} label="Mismatch trang hiện tại" />
+        <UiMetric value={numberFormat.format(absoluteDifference)} label="Độ lệch tuyệt đối" />
+      </UiMetricGrid>
 
-      <form className="reconciliation-filter" onSubmit={submit}>
-        <label>Kho
-          <select value={warehouseId} onChange={event => setWarehouseId(event.target.value)}>
-            <option value="">Tất cả kho được phép</option>
-            {warehouses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        </label>
-        <label>ID sản phẩm
-          <input type="number" min="1" value={productId} onChange={event => setProductId(event.target.value)} placeholder="VD: 1001" />
-        </label>
-        <label>Mã / tên sản phẩm
-          <input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="Tìm theo mã hoặc tên" />
-        </label>
-        <div className="reconciliation-filter-actions">
-          <button type="submit">Đối chiếu</button>
-          <button type="button" className="secondary" onClick={reset}>Xóa lọc</button>
-        </div>
+      <form onSubmit={submit}>
+        <UiToolbar>
+          <UiToolbarField label="Kho">
+            <select value={warehouseId} onChange={event => setWarehouseId(event.target.value)}>
+              <option value="">Tất cả kho được phép</option>
+              {warehouses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="ID sản phẩm">
+            <input type="number" min="1" inputMode="numeric" value={productId} onChange={event => setProductId(event.target.value)} placeholder="VD: 1001" />
+          </UiToolbarField>
+          <UiToolbarField label="Mã / tên sản phẩm">
+            <input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="Tìm theo mã hoặc tên" />
+          </UiToolbarField>
+          <div className="reconciliation-filter-actions">
+            <button type="submit">Đối chiếu</button>
+            <button type="button" onClick={reset}>Xóa lọc</button>
+          </div>
+        </UiToolbar>
       </form>
 
-      {error && <div role="alert" className="reconciliation-error">{error}</div>}
-      {loading ? <p role="status">Đang đối chiếu tồn kho...</p> : (
-        <div className="reconciliation-table-wrap">
-          <table className="reconciliation-table">
-            <thead>
-              <tr>
-                <th>Kho</th><th>Sản phẩm</th><th>Current</th><th>Ledger expected</th><th>Difference</th><th>Trạng thái</th><th>Movement breakdown</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentRows.length === 0 ? (
-                <tr><td colSpan={7} className="empty">Không có dữ liệu phù hợp.</td></tr>
-              ) : currentRows.map(row => (
-                <tr key={row.warehouseId + '-' + row.productId} className={row.status === 'Match' ? '' : 'mismatch'}>
-                  <td>{row.warehouseName}</td>
-                  <td><strong>{row.productCode}</strong><span>{row.productName}</span></td>
-                  <td>{row.currentQuantity}</td>
-                  <td>{row.expectedQuantity}</td>
-                  <td className={row.difference === 0 ? 'difference-zero' : 'difference-alert'}>{row.difference}</td>
-                  <td><span className={row.status === 'Match' ? 'status-match' : 'status-mismatch'}>{row.status === 'Match' ? 'Khớp' : 'Lệch'}</span></td>
-                  <td className="movement">
-                    <span>Nhập +{row.importQuantity}</span>
-                    <span>Xuất -{row.exportQuantity}</span>
-                    <span>Chuyển +{row.transferInQuantity} / -{row.transferOutQuantity}</span>
-                    <span>Điều chỉnh +{row.adjustmentIncreaseQuantity} / -{row.adjustmentDecreaseQuantity}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {error && <div role="alert">{error}</div>}
 
-      {(result?.totalPages ?? 0) > 1 && (
-        <nav className="reconciliation-pagination" aria-label="Phân trang đối chiếu">
-          <button type="button" disabled={page <= 1 || loading} onClick={() => setPage(value => Math.max(1, value - 1))}>Trang trước</button>
-          <span>Trang {result?.pageIndex ?? page} / {result?.totalPages ?? 1}</span>
-          <button type="button" disabled={page >= (result?.totalPages ?? 1) || loading} onClick={() => setPage(value => value + 1)}>Trang sau</button>
-        </nav>
-      )}
-    </section>
+      <UiCard title="Kết quả đối chiếu">
+        {loading ? (
+          <p role="status">Đang đối chiếu tồn kho...</p>
+        ) : (
+          <UiTableScroll>
+            <table className="reconciliation-table">
+              <thead>
+                <tr>
+                  <th>Kho</th>
+                  <th>Sản phẩm</th>
+                  <th>Tồn hiện tại</th>
+                  <th>Ledger kỳ vọng</th>
+                  <th>Chênh lệch</th>
+                  <th>Trạng thái</th>
+                  <th>Movement breakdown</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentRows.length === 0 ? (
+                  <tr><td colSpan={7} className="reconciliation-empty">Không có dữ liệu phù hợp. Hãy thay đổi bộ lọc và thử lại.</td></tr>
+                ) : currentRows.map(row => {
+                  const matches = row.status === 'Match';
+                  return (
+                    <tr key={row.warehouseId + '-' + row.productId} className={matches ? undefined : 'reconciliation-mismatch'}>
+                      <td>{row.warehouseName}</td>
+                      <td>
+                        <strong>{row.productCode}</strong>
+                        <span className="reconciliation-product-name">{row.productName}</span>
+                      </td>
+                      <td>{numberFormat.format(row.currentQuantity)}</td>
+                      <td>{numberFormat.format(row.expectedQuantity)}</td>
+                      <td className={row.difference === 0 ? 'reconciliation-difference-zero' : 'reconciliation-difference-alert'}>
+                        {numberFormat.format(row.difference)}
+                      </td>
+                      <td><UiBadge tone={matches ? 'success' : 'danger'}>{matches ? 'Khớp' : 'Lệch'}</UiBadge></td>
+                      <td>
+                        <div className="reconciliation-movement">
+                          <span>Nhập +{numberFormat.format(row.importQuantity)}</span>
+                          <span>Xuất -{numberFormat.format(row.exportQuantity)}</span>
+                          <span>Chuyển +{numberFormat.format(row.transferInQuantity)} / -{numberFormat.format(row.transferOutQuantity)}</span>
+                          <span>Điều chỉnh +{numberFormat.format(row.adjustmentIncreaseQuantity)} / -{numberFormat.format(row.adjustmentDecreaseQuantity)}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </UiTableScroll>
+        )}
+
+        {(result?.totalPages ?? 0) > 1 && (
+          <nav className="reconciliation-pagination" aria-label="Phân trang đối chiếu">
+            <button type="button" disabled={page <= 1 || loading} onClick={() => setPage(value => Math.max(1, value - 1))}>Trang trước</button>
+            <span>Trang {result?.pageIndex ?? page} / {result?.totalPages ?? 1}</span>
+            <button type="button" disabled={page >= (result?.totalPages ?? 1) || loading} onClick={() => setPage(value => value + 1)}>Trang sau</button>
+          </nav>
+        )}
+      </UiCard>
+    </UiPage>
   );
 }

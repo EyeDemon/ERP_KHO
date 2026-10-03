@@ -19,7 +19,7 @@ export const UiPageHeader = ({
       <h1>{title}</h1>
       {description && <p className="ui-description">{description}</p>}
     </div>
-    {actions && <div>{actions}</div>}
+    {actions && <div className="ui-page-header-actions">{actions}</div>}
   </header>
 );
 
@@ -73,6 +73,8 @@ export const UiEmptyState = ({
     </div>
   </div>
 );
+
+export const UiTableScroll = ({ children }: { children: ReactNode }) => <div className="ui-table-scroll">{children}</div>;
 
 export const UiMetricGrid = ({ children }: { children: ReactNode }) => <div className="ui-metric-grid">{children}</div>;
 

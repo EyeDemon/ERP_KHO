@@ -64,7 +64,7 @@ export default function Permissions() {
     />
 
     {error && <p role="alert">{error}</p>}
-    {success && <p role="status" style={{ color: '#256b45', margin: 0 }}>{success}</p>}
+    {success && <p role="status" className="ui-success-text">{success}</p>}
 
     <UiMetricGrid>
       <UiMetric value={catalog.length} label="Permission trong catalog" />
@@ -73,7 +73,7 @@ export default function Permissions() {
     </UiMetricGrid>
 
     {loading ? <p role="status">Đang tải quyền truy cập...</p> : <>
-      {catalog.length === 0 && <UiCard><p style={{ margin: 0 }}>Chưa có quyền truy cập để hiển thị.</p></UiCard>}
+      {catalog.length === 0 && <UiCard><p className="ui-muted-text">Chưa có quyền truy cập để hiển thị.</p></UiCard>}
 
       {!canReadRoles && catalog.length > 0 && <UiCard title="Danh mục quyền truy cập">
         <table aria-label="Danh mục quyền truy cập">

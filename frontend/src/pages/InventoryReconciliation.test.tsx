@@ -28,7 +28,8 @@ describe('InventoryReconciliation', () => {
     const view = render(<InventoryReconciliation />);
 
     expect(await view.findByText('SKU-1001')).toBeTruthy();
-    expect(view.getByText(/DEMO DATA/)).toBeTruthy();
+    expect(view.getByText('Đối chiếu tồn kho & ledger')).toBeTruthy();
+    expect(view.getByText(/chỉ đọc/)).toBeTruthy();
     expect(view.getAllByText('Lệch').length).toBeGreaterThan(0);
     expect(apiClient.get).not.toHaveBeenCalled();
   });

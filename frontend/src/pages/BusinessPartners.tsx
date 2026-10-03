@@ -34,7 +34,7 @@ const BusinessPartners = () => {
     />
 
     {error && <p role="alert">{error}</p>}
-    {message && <p role="status" style={{ color: '#256b45', margin: 0 }}>{message}</p>}
+    {message && <p role="status" className="ui-success-text">{message}</p>}
 
     {!showForm && <>
       <UiToolbar>
@@ -55,7 +55,7 @@ const BusinessPartners = () => {
             <option value="false">Ngừng hoạt động</option>
           </select>
         </UiToolbarField>
-        <div style={{ marginLeft: 'auto', alignSelf: 'center', color: '#66788d', fontSize: 10 }}>Trang {page}/{pages}</div>
+        <div className="ui-muted-text ui-auto-actions">Trang {page}/{pages}</div>
       </UiToolbar>
 
       <UiCard title="Danh sách đối tác">
@@ -63,12 +63,12 @@ const BusinessPartners = () => {
           <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
           <tbody>
             {items.length === 0
-              ? <tr><td colSpan={canManage ? 6 : 5} style={{ textAlign: 'center', padding: 22, color: '#6b7b90' }}>Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
+              ? <tr><td colSpan={canManage ? 6 : 5} className="ui-empty-cell">Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
               : items.map(item => <tr key={item.id}>
                   <td><strong>{item.code}</strong></td>
                   <td><div>{item.name}</div>{item.address && <small>{item.address}</small>}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    <div className="ui-inline-wrap">
                       {item.isSupplier && <UiBadge>Nhà cung cấp</UiBadge>}
                       {item.isCustomer && <UiBadge>Khách hàng</UiBadge>}
                       {!item.isSupplier && !item.isCustomer && <span>—</span>}
@@ -76,31 +76,31 @@ const BusinessPartners = () => {
                   </td>
                   <td><div>{item.phone || '—'}</div>{item.email && <small>{item.email}</small>}</td>
                   <td><UiBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
-                  {canManage && <td><div style={{ display: 'flex', gap: 6 }}><button onClick={() => openEdit(item)}>Sửa</button><button onClick={() => void remove(item)}>Xóa</button></div></td>}
+                  {canManage && <td><div className="ui-inline-actions"><button onClick={() => openEdit(item)}>Sửa</button><button onClick={() => void remove(item)}>Xóa</button></div></td>}
                 </tr>)}
           </tbody>
         </table>}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10 }}>
+        <div className="ui-pagination">
           <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Trước</button>
-          <span style={{ color: '#66788d', fontSize: 11 }}>Trang {page}/{pages}</span>
+          <span>Trang {page}/{pages}</span>
           <button disabled={page >= pages} onClick={() => setPage(value => value + 1)}>Sau</button>
         </div>
       </UiCard>
     </>}
 
     {showForm && <UiCard title={editing ? 'Sửa đối tác' : 'Thêm đối tác'}>
-      <form onSubmit={submit} style={{ display: 'grid', gap: 10, maxWidth: 720 }}>
+      <form onSubmit={submit} className="ui-form-grid">
         <label>Mã đối tác *<input aria-label="Mã đối tác" value={form.code || ''} disabled={!!editing || loading} maxLength={50} onChange={event => field('code', event.target.value)} /></label>
         <label>Tên đối tác *<input aria-label="Tên đối tác" value={form.name || ''} disabled={loading} maxLength={200} onChange={event => field('name', event.target.value)} /></label>
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={!!form.isSupplier} disabled={loading} onChange={event => field('isSupplier', event.target.checked)} /> Nhà cung cấp</label>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={!!form.isCustomer} disabled={loading} onChange={event => field('isCustomer', event.target.checked)} /> Khách hàng</label>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={!!form.isActive} disabled={loading} onChange={event => field('isActive', event.target.checked)} /> Hoạt động</label>
+        <div className="ui-inline-wrap">
+          <label className="ui-checkbox-label"><input type="checkbox" checked={!!form.isSupplier} disabled={loading} onChange={event => field('isSupplier', event.target.checked)} /> Nhà cung cấp</label>
+          <label className="ui-checkbox-label"><input type="checkbox" checked={!!form.isCustomer} disabled={loading} onChange={event => field('isCustomer', event.target.checked)} /> Khách hàng</label>
+          <label className="ui-checkbox-label"><input type="checkbox" checked={!!form.isActive} disabled={loading} onChange={event => field('isActive', event.target.checked)} /> Hoạt động</label>
         </div>
         <label>Điện thoại<input value={form.phone || ''} maxLength={50} onChange={event => field('phone', event.target.value)} /></label>
         <label>Email<input value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
         <label>Địa chỉ<textarea value={form.address || ''} maxLength={500} rows={3} onChange={event => field('address', event.target.value)} /></label>
-        <div style={{ display: 'flex', gap: 7 }}>
+        <div className="ui-inline-actions">
           <button type="submit" disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu'}</button>
           <button type="button" disabled={loading} onClick={() => setShowForm(false)}>Hủy</button>
         </div>
