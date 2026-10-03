@@ -70,6 +70,7 @@ async function main(manifestPath) {
   assert.equal(version, '1.62.1', 'Review the runner before changing Playwright version');
   manifest.SourceHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
   const selected = process.argv.includes('--case') ? new RegExp(process.argv[process.argv.indexOf('--case') + 1], 'i') : null;
+  const mounted = selected?.test('Mounted receipt list/detail/print late responses');
   const evidence = { sourceHead: manifest.SourceHead, runnerSha256: createHash('sha256').update(await readFile(fileURLToPath(import.meta.url))).digest('hex'), fixtureSha256: createHash('sha256').update(await readFile(path.join(here, 'permission-fixtures.sql'))).digest('hex'), runId: manifest.RunId, runnerVersion: version, selection: selected?.source || 'all', logins: [], cases: [], requests: [] };
   const reportPath = path.join(manifest.ArtifactRoot, 'permission-browser-evidence.json');
   const save = () => writeFile(reportPath, JSON.stringify(safeEvidence(evidence), null, 2));
@@ -155,7 +156,8 @@ async function main(manifestPath) {
         }
       });
       page.setDefaultTimeout(10000);
-      await page.goto(manifest.FrontendUrl + '/login');
+      if (mounted && persona === 'reader') actor.initialList = await captureOriginal(page, '**/api/importreceipts');
+      await page.goto(manifest.FrontendUrl + (mounted && persona === 'reader' ? '/e2e/mounted-receipts.html#/login' : '/login'));
       assert.equal(await page.title(), 'Quản lý kho ERP');
       assert.equal(await page.getByLabel('Tên đăng nhập').getAttribute('autocomplete'), 'username');
       assert.equal(await page.getByLabel('Mật khẩu').getAttribute('autocomplete'), 'current-password');
@@ -167,7 +169,7 @@ async function main(manifestPath) {
       evidence.logins.push({ persona, status: response.status(), count: 1, assertions: ['Vietnamese labels/title', 'username/current-password autocomplete'] });
       console.log(`Normal UI login: ${persona}; HTTP ${response.status()}; one attempt.`);
       actor.bearer = (await response.json()).token;
-      await page.waitForURL(url => !url.pathname.endsWith('/login'));
+      await page.waitForURL(url => !url.pathname.endsWith('/login') && !url.hash.endsWith('/login'));
     }
     password = undefined;
     const admin = actors.admin, manager = actors.manager, viewer = actors.viewer, reader = actors.reader;
@@ -410,7 +412,7 @@ async function main(manifestPath) {
       } finally { await sql(`UPDATE Users SET RoleId=@role,SecurityRevision=SecurityRevision+1 WHERE Id=@user; SELECT 1 AS fixtureOnly FOR JSON PATH,WITHOUT_ARRAY_WRAPPER`, { role: fixture.readerRole, user: fixture.reader }); }
       return { actor: 'Maker Admin; Manager; same reader session with database WarehouseStaff fixture', statuses: [403, 200, 404, 204], postconditions: await counts(), assertions: ['explicit grants do not bypass maker/checker/poster', 'execute grant does not bypass assignment', 'missing assign grant denied', 'membership-revoked start replay 404', 'legitimate terminal replay 200 without new effect'], setup: 'role fixture is SQL setup; operations are browser HTTP' };
     });
-    await run('Receipt-only reader and controlled stale auth/list/detail/print responses', 'UI workflow; runner-only original response delay', async () => {
+    await run('Receipt-only reader and unmounted stale auth/list/detail/print responses', 'UI workflow; runner-only original response delay', async () => {
       const delays = [];
       await reader.page.goto(manifest.FrontendUrl + '/import-receipts');
       await reader.page.getByRole('button', { name: 'Chi tiết', exact: true }).first().waitFor();
@@ -446,7 +448,64 @@ async function main(manifestPath) {
         assert.equal(await reader.page.getByRole('dialog').count(), 0, 'Late detail/print cannot reopen dialog');
         await reader.page.reload(); await quiesce(reader);
       }
-      return { actor: 'Receipt-only reader / no optional dependency grants', delayedCases: ['auth/me', 'list', 'detail', 'print'], delays, optionalRequests: 0, postconditions: await counts(), assertions: ['original authorized response held in memory', 'revoke then regrant', 'no stale menu/data/dialog restoration'] };
+      return { actor: 'Receipt-only reader / no optional dependency grants', delayedCases: ['auth/me', 'list', 'detail', 'print'], delays, optionalRequests: 0, postconditions: await counts(), assertions: ['original authorized response held in memory', 'revoke then regrant', 'no stale menu/data/dialog restoration after navigation/unmount'] };
+    });
+    if (mounted) await run('Mounted receipt list/detail/print late responses', 'Component-in-browser; real application 403 refresh; SQL fixture/postconditions', async () => {
+      const delays = [];
+      const heading = await reader.page.getByRole('heading', { name: 'Quản Lý Nhập Kho', exact: true }).elementHandle();
+      assert(heading, 'Receipt component is mounted');
+      const refresh = async expected => {
+        const identity = reader.page.waitForResponse(r => /\/api\/auth\/me$/i.test(r.url()) && r.status() === 200);
+        await reader.page.getByRole('button', { name: 'Xác minh quyền truy cập', exact: true }).click();
+        await identity;
+        await reader.page.getByRole('status').filter({ hasText: expected }).waitFor();
+      };
+      const connected = () => heading.evaluate(node => node.isConnected);
+      for (const mode of ['list', 'detail', 'print']) {
+        let held = mode === 'list' ? reader.initialList : await captureOriginal(reader.page, /\/api\/importreceipts\/\d+$/);
+        try {
+          if (mode !== 'list') await reader.page.getByRole('button', { name: mode === 'detail' ? 'Chi tiết' : 'Xem bản in', exact: true }).first().click();
+          await held.arrived;
+          const originalJson = JSON.stringify(await held.original().json());
+          const previous = mode === 'list' ? /QA-(PENDING|SEED|RETRY|CONCURRENT|UI)-/ : new RegExp(`QA-FRESH-${mode === 'detail' ? 'list' : 'detail'}-`);
+          assert(previous.test(originalJson), 'Held authorized response actually contains old fixture identifiers');
+          const before = await counts();
+          // Change only QA display identifiers so a late old list cannot masquerade as the newer authorized list.
+          await sql(`UPDATE ImportReceipts SET Code=CONCAT('QA-FRESH-',@mode,'-',Id); SELECT 1 AS fixtureOnly FOR JSON PATH,WITHOUT_ARRAY_WRAPPER`, { mode });
+          expectStatus(await grant(fixture.readerRole, 'receipt.read', false), 200);
+          await refresh('Quyền đọc phiếu đã bị thu hồi');
+          await quiesce(reader, held.request());
+          assert(await connected(), 'Same original heading stays connected after revocation; no component unmount');
+          assert.equal(await reader.page.getByRole('dialog').count(), 0);
+          assert(!/QA-(PENDING|SEED|RETRY|CONCURRENT|UI|FRESH)-/.test(await reader.page.locator('body').innerText()), 'Revocation clears existing receipt data');
+          expectStatus(await grant(fixture.readerRole, 'receipt.read', true), 200);
+          await refresh('Có quyền đọc phiếu');
+          await quiesce(reader, held.request());
+          await reader.page.getByText(`QA-FRESH-${mode}-`, { exact: false }).first().waitFor();
+          assert(await connected(), 'Same component stays mounted through regrant');
+          held.release(); await held.done; await quiesce(reader);
+          assert(await connected(), 'Same component is mounted after original response release');
+          assert.equal(await reader.page.getByRole('dialog').count(), 0, 'Late detail/print cannot reopen either dialog');
+          const text = await reader.page.locator('body').innerText();
+          assert(text.includes(`QA-FRESH-${mode}-`), 'Current authorized list remains');
+          assert(!/QA-(PENDING|SEED|RETRY|CONCURRENT|UI)-/.test(text));
+          if (mode !== 'list') assert(!text.includes(`QA-FRESH-${mode === 'detail' ? 'list' : 'detail'}-`), 'Held older response cannot overwrite current display identifiers');
+          const after = await counts();
+          assert.equal(after.stock, before.stock); assert.equal(after.ledger, before.ledger); assert.equal(after.movements, before.movements);
+          assert.equal(after.audits - before.audits, 2); assert.equal(after.claims - before.claims, 2);
+          delays.push({ mode, ...held.observation, mountedChecks: 3, originalHeadingConnected: true, originalHadPreviousIdentifier: true, deniedCatalogStatus: 403, refreshedIdentityStatus: 200, grantStatuses: [200, 200], auditDelta: 2, claimDelta: 2 });
+        } finally { await held.cleanup(); }
+      }
+      await heading.dispose();
+      return { actor: 'Receipt-only reader, same UI login; Admin mutations from browser context', delayedCases: ['list', 'detail', 'print'], delays, assertions: ['unchanged production receipt component stays mounted', 'real 403 interceptor refreshes database permissions', 'revocation clears data/dialog', 'regrant fresh response wins; old release cannot restore data/dialog'], postconditions: await counts() };
+    });
+    if (selected?.test('Capture failure cleanup probe')) await run('Capture failure cleanup probe', 'Intentional negative browser case; caller must FAIL', async () => {
+      const held = await captureOriginal(reader.page, '**/api/permissions');
+      try {
+        const request = fetchFromBrowser(reader, '/api/permissions'); request.catch(() => {});
+        await held.arrived; await request; // Actual HTTP 403 must reject arrived, never report success.
+        held.release(); await held.done;
+      } finally { await held.cleanup(); }
     });
     evidence.status = evidence.cases.every(x => x.status === 'PASS') ? 'PASS_FOR_IMPLEMENTED_CASES' : 'FAILED'; await save();
   } catch (error) {
@@ -454,29 +513,65 @@ async function main(manifestPath) {
     await save(); console.error(`FAIL: ${currentCase}; ${String(error.message).match(/stage=[\w-]+; sqlNumber=\d+; kind=\w+; line=\d+/)?.[0] || 'inspect the runnable assertion locally'} (no sensitive response logged).`); process.exitCode = 1;
   } finally {
     password = undefined;
-    for (const actor of Object.values(actors)) { actor.bearer = undefined; await actor.context.close().catch(() => {}); }
-    await browser?.close().catch(() => {}); await server?.close().catch(() => {});
+    let closed = true;
+    for (const actor of Object.values(actors)) actor.bearer = undefined;
+    for (const resource of [...Object.values(actors).map(actor => actor.context), browser, server].filter(Boolean)) {
+      let timer;
+      try { await Promise.race([resource.close(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Browser cleanup deadline exceeded')), 5000); })]); }
+      catch { closed = false; process.exitCode = 1; }
+      finally { clearTimeout(timer); }
+    }
+    if (!closed) { evidence.status = 'FAILED'; evidence.cleanupFailed = true; await save(); }
     const remainingProfiles = [];
     for (const profile of manifest.BrowserProfiles) if (await access(profile).then(() => true, () => false)) remainingProfiles.push(profile);
-    manifest.BrowserRunner = { ...(manifest.BrowserRunner || {}), Closed: true, RemainingProfiles: remainingProfiles };
+    manifest.BrowserRunner = { ...(manifest.BrowserRunner || {}), Closed: closed, RemainingProfiles: remainingProfiles };
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
   }
 }
 
-async function captureOriginal(page, pattern) {
-  let arrive, release, finish, request;
+export async function captureOriginal(page, pattern, { arrivalMs = 10000, deadlineMs = 30000, cleanupMs = 1000 } = {}) {
+  const arrival = Promise.withResolvers(), completion = Promise.withResolvers(), gate = Promise.withResolvers();
+  // Preserve the rejected promises for callers, without an unhandled rejection if a UI action fails first.
+  arrival.promise.catch(() => {}); completion.promise.catch(() => {});
+  let route, request, original, failed = false, finished = false, cleaning;
   const observation = {};
-  let timer;
-  const arrived = new Promise((resolve, reject) => { arrive = () => { clearTimeout(timer); resolve(); }; timer = setTimeout(() => reject(new Error('Expected original response was not observed')), 10000); });
-  arrived.catch(() => {}); // Awaited by the case; avoid a second unhandled rejection if a UI action times out first.
-  const gate = new Promise(resolve => { release = () => { observation.releasedAt = new Date().toISOString(); resolve(); }; });
-  const safety = setTimeout(release, 30000);
-  const done = new Promise(resolve => { finish = resolve; });
-  await page.route(pattern, async route => {
-    try { request = route.request(); observation.path = new URL(request.url()).pathname; observation.startedAt = new Date().toISOString(); const response = await route.fetch({ timeout: 10000 }); observation.status = response.status(); observation.receivedAt = new Date().toISOString(); assert.equal(response.status(), 200, 'Only delay an original authorized success response'); arrive(); await gate; await route.fulfill({ response }); }
-    finally { clearTimeout(safety); clearTimeout(timer); finish(); }
-  }, { times: 1 });
-  return { arrived, release, done, request: () => request, observation };
+  const release = () => { observation.releasedAt ??= new Date().toISOString(); gate.resolve(); };
+  const fail = error => {
+    failed = true; clearTimeout(arrivalTimer); clearTimeout(deadline);
+    arrival.reject(error); completion.reject(error); gate.resolve();
+  };
+  const bounded = operation => {
+    let timer;
+    return Promise.race([Promise.resolve().then(operation), new Promise(resolve => { timer = setTimeout(() => resolve(false), cleanupMs); })])
+      .then(() => {}, () => {}).finally(() => clearTimeout(timer));
+  };
+  const cleanup = () => cleaning ??= Promise.all([
+    bounded(() => page.unroute(pattern, handler)),
+    ...(route && !finished ? [bounded(() => route.abort())] : []),
+  ]);
+  const arrivalTimer = setTimeout(() => { fail(new Error('Expected original response was not observed')); void cleanup(); }, arrivalMs);
+  const deadline = setTimeout(() => { fail(new Error('Original response capture deadline exceeded')); void cleanup(); }, deadlineMs);
+  const handler = async current => {
+    route = current;
+    try {
+      request = route.request(); observation.path = new URL(request.url()).pathname; observation.startedAt = new Date().toISOString();
+      const response = original = await route.fetch({ timeout: arrivalMs });
+      if (failed) return;
+      observation.status = response.status(); observation.receivedAt = new Date().toISOString();
+      assert.equal(response.status(), 200, 'Only delay an original authorized success response');
+      clearTimeout(arrivalTimer); arrival.resolve();
+      await gate.promise;
+      if (failed) return;
+      await route.fulfill({ response });
+      if (failed) return;
+      finished = true; clearTimeout(deadline); completion.resolve();
+    } catch (error) { fail(error); }
+    finally { await cleanup(); }
+  };
+  try { await Promise.race([page.route(pattern, handler, { times: 1 }), completion.promise]); }
+  catch (error) { fail(error); await cleanup(); throw error; }
+  return { arrived: arrival.promise, release, done: completion.promise, request: () => request, original: () => original, observation,
+    cleanup: () => { if (!finished && !failed) fail(new Error('Original response capture cancelled')); return cleanup(); } };
 }
 
 async function quiesce(actor, held) {

@@ -35,3 +35,18 @@ Wait until the startup helper exits successfully; the runner requires the comple
 SQL fixture grants/role changes are labelled setup, never called browser administration. A registry/component/API PASS does not replace an unrun browser case. The runner reports partial/failure and production NO-GO unless every mandatory matrix case actually passes.
 
 Controlled delay captures only an original HTTP 200 response. Before regrant, unrelated identity/refresh requests must settle; otherwise a legitimate newer request would invalidate the assertion about the held older response. Request paths/status/timestamps are recorded without bodies or credentials. The runner respects the existing login/API rate-limit windows and never retries blocked logins. Selected runs are not represented as full-matrix results.
+
+## Owner finding regressions and mounted successor
+
+`captureOriginal` rejects arrival/completion for fetch, non-200, fulfill and timeout failures. Cancellation and failed/hanging route registration also fail. Abort/unroute cleanup is bounded to 1 second; browser resource close to 5 seconds each. Node tests include child processes that must exit 1 and still print their finally cleanup marker.
+
+Use fresh separate owned runs for the following selections (the first is intentionally FAILED / exit 1; always invoke Stop-BrowserQa afterward):
+
+```powershell
+node tools/ERP.BrowserQa/permission-browser.mjs --manifest TestResults/BrowserQA/<NegativeRunId>/manifest.json --case '^Capture failure cleanup probe$'
+node tools/ERP.BrowserQa/permission-browser.mjs --manifest TestResults/BrowserQA/<MountedRunId>/manifest.json --case '^Mounted receipt list/detail/print late responses$'
+```
+
+The mounted selection uses a test-only Vite HTML entry under `frontend/e2e`, never the production entry/bundle. It mounts unchanged Login/ImportReceipts and uses the real apiClient 403 interceptor to refresh effective permissions. It deliberately omits the outer production route/loading gates, which normally unmount the component. Report this as component-in-browser coverage. Original authorized data is held only in memory; QA display identifiers are changed to distinguish old/new list data. The exact original heading node must remain connected through revoke, regrant and release. No mock identity, permission event injection, production hook or security override.
+
+The previous delayed-response case is renamed **unmounted**; navigation to Tổng quan is supporting cleanup-after-unmount evidence only. The mounted successor is an explicit separate selection, not silently included in the earlier full-matrix result. Deliberate negative selection is never passing closure evidence.
