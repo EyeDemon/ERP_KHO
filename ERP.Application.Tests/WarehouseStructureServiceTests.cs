@@ -167,8 +167,8 @@ public sealed class WarehouseStructureServiceTests : IDisposable
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             foreach (var entry in ChangeTracker.Entries().Where(x =>
-                         x.State is EntityState.Added or EntityState.Modified &&
-                         x.Entity is WarehouseZone or WarehouseAisle or WarehouseRack or WarehouseRackLevel or WarehouseLocation))
+                         x.State is (EntityState.Added or EntityState.Modified) &&
+                         x.Entity is (WarehouseZone or WarehouseAisle or WarehouseRack or WarehouseRackLevel or WarehouseLocation)))
                 entry.Property("RowVersion").CurrentValue = Guid.NewGuid().ToByteArray();
             return base.SaveChangesAsync(cancellationToken);
         }
