@@ -27,6 +27,29 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         return Location(entity);
     }
 
+    public async Task<WarehouseLocationDto> ResolveLocationBarcodeAsync(string barcode, int? warehouseId = null, CancellationToken token = default)
+    {
+        var normalized = Required(barcode, "Mã vạch vị trí");
+        IReadOnlyList<int> allowed;
+        if (warehouseId.HasValue)
+        {
+            await warehouses.EnsureWarehouseAccessAsync(warehouseId.Value, token);
+            allowed = [warehouseId.Value];
+        }
+        else
+        {
+            allowed = await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        }
+
+        var matches = await LocationQuery()
+            .Where(x => allowed.Contains(x.WarehouseId) && x.Barcode == normalized)
+            .Take(2)
+            .ToListAsync(token);
+        if (matches.Count == 0) throw new NotFoundException("Không tìm thấy vị trí hoặc bạn không có quyền truy cập.");
+        if (matches.Count > 1) throw Conflict("Mã vạch vị trí không duy nhất trong phạm vi truy cập. Hãy chọn kho trước khi quét.");
+        return Location(matches[0]);
+    }
+
     public async Task<WarehouseLocationDto> CreateLocationAsync(CreateWarehouseLocationDto dto, CancellationToken token = default)
     {
         await warehouses.EnsureWarehouseAccessAsync(dto.WarehouseId, token);
