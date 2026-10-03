@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import apiClient from '../services/apiClient';
+import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { demoReconciliationRows, demoReconciliationWarehouses } from '../mocks/inventoryReconciliationDemo';
 import './InventoryReconciliation.css';
 
 interface WarehouseOption {
@@ -38,6 +40,7 @@ interface PagedResult<T> {
 const pageSize = 20;
 
 export default function InventoryReconciliation() {
+  const demoRuntime = isBlueprintDemoRuntime();
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [warehouseId, setWarehouseId] = useState('');
   const [productId, setProductId] = useState('');
@@ -49,10 +52,14 @@ export default function InventoryReconciliation() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (demoRuntime) {
+      setWarehouses(demoReconciliationWarehouses);
+      return;
+    }
     apiClient.get('/api/warehouses')
       .then(response => setWarehouses((response.data as WarehouseOption[]).filter(item => item.isActive)))
       .catch(() => setWarehouses([]));
-  }, []);
+  }, [demoRuntime]);
 
   useEffect(() => {
     let active = true;
@@ -60,6 +67,29 @@ export default function InventoryReconciliation() {
       setLoading(true);
       setError('');
       try {
+        if (demoRuntime) {
+          const normalizedKeyword = applied.keyword.trim().toLocaleLowerCase('vi');
+          const filtered = demoReconciliationRows.filter(row => {
+            const warehouseMatches = !applied.warehouseId || row.warehouseId === Number(applied.warehouseId);
+            const productMatches = !applied.productId || row.productId === Number(applied.productId);
+            const keywordMatches = !normalizedKeyword
+              || row.productCode.toLocaleLowerCase('vi').includes(normalizedKeyword)
+              || row.productName.toLocaleLowerCase('vi').includes(normalizedKeyword);
+            return warehouseMatches && productMatches && keywordMatches;
+          });
+          const start = (page - 1) * pageSize;
+          if (active) {
+            setResult({
+              items: filtered.slice(start, start + pageSize),
+              totalRecords: filtered.length,
+              pageIndex: page,
+              pageSize,
+              totalPages: Math.ceil(filtered.length / pageSize),
+            });
+          }
+          return;
+        }
+
         const params = new URLSearchParams();
         if (applied.warehouseId) params.set('warehouseId', applied.warehouseId);
         if (applied.productId) params.set('productId', applied.productId);
@@ -79,7 +109,7 @@ export default function InventoryReconciliation() {
     };
     void load();
     return () => { active = false; };
-  }, [applied, page]);
+  }, [applied, demoRuntime, page]);
 
   const currentRows = result?.items ?? [];
   const mismatchCount = useMemo(() => currentRows.filter(row => row.status !== 'Match').length, [currentRows]);
@@ -101,6 +131,12 @@ export default function InventoryReconciliation() {
 
   return (
     <section className="reconciliation-page">
+      {demoRuntime && (
+        <div className="reconciliation-demo-banner" role="note">
+          DEMO DATA • Màn production UI thật đang chạy bằng adapter đọc-only trên Vercel Blueprint. Backend staging chưa được kết nối.
+        </div>
+      )}
+
       <header className="reconciliation-header">
         <div>
           <span className="reconciliation-kicker">Inventory Integrity</span>

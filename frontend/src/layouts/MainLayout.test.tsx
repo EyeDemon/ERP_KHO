@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import MainLayout from './MainLayout';
 import apiClient from '../services/apiClient';
 import { MockDemoProvider } from '../context/MockDemoContext';
+import { isBlueprintDemoRuntime } from '../services/runtimeMode';
 
 vi.mock('../services/apiClient', () => ({
   default: { get: vi.fn() },
@@ -18,6 +19,11 @@ vi.mock('../services/authorization', () => ({
   hasPermission: vi.fn(() => false),
   beginPermissionRefresh: vi.fn(() => 1),
   setCurrentPermissions: vi.fn(),
+}));
+
+vi.mock('../services/runtimeMode', () => ({
+  isBlueprintDemoRuntime: vi.fn(() => false),
+  blueprintDemoReadPermissions: ['warehouse.read'],
 }));
 
 const renderAt = (path: string) => render(
@@ -34,6 +40,10 @@ const renderAt = (path: string) => render(
 );
 
 describe('MainLayout blueprint navigation mode', () => {
+  beforeEach(() => {
+    vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
+  });
+
   afterEach(() => {
     cleanup();
     vi.resetAllMocks();
@@ -79,6 +89,18 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.getByText('Bản đồ hệ thống')).toBeTruthy();
     expect(view.queryByText('17 module groups')).toBeNull();
     expect(view.queryByText('DEMO / MOCK • READ ONLY')).toBeNull();
+  });
+
+  it('opens production UI routes on the Vercel blueprint demo without calling real auth', async () => {
+    vi.mocked(isBlueprintDemoRuntime).mockReturnValue(true);
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('backend unavailable'));
+    const view = renderAt('/');
+
+    await view.findByText('Production home');
+    expect(apiClient.get).not.toHaveBeenCalled();
+    expect(view.queryByRole('alert')).toBeNull();
+    expect(view.getByText('DEMO RUNTIME • MOCK BACKEND')).toBeTruthy();
+    expect(view.getByText('Frontend production UI')).toBeTruthy();
   });
 
   it('fails closed on production routes when identity verification fails', async () => {

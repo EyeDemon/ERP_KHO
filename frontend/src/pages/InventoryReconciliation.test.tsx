@@ -1,17 +1,36 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryReconciliation from './InventoryReconciliation';
 import apiClient from '../services/apiClient';
+import { isBlueprintDemoRuntime } from '../services/runtimeMode';
 
 vi.mock('../services/apiClient', () => ({
   default: { get: vi.fn() },
 }));
 
+vi.mock('../services/runtimeMode', () => ({
+  isBlueprintDemoRuntime: vi.fn(() => false),
+}));
+
 describe('InventoryReconciliation', () => {
+  beforeEach(() => {
+    vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it('uses read-only demo data on the Vercel blueprint runtime without calling APIs', async () => {
+    vi.mocked(isBlueprintDemoRuntime).mockReturnValue(true);
+    const view = render(<InventoryReconciliation />);
+
+    expect(await view.findByText('SKU-1001')).toBeTruthy();
+    expect(view.getByText(/DEMO DATA/)).toBeTruthy();
+    expect(view.getAllByText('Lệch').length).toBeGreaterThan(0);
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 
   it('renders reconciliation rows and highlights mismatches', async () => {

@@ -6,11 +6,13 @@ import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
 import { mockUsers } from '../mocks/erpWmsMockData';
 import { useMockDemo } from '../context/MockDemoContext';
 import { canViewApprovals, canViewStocktakes, hasPermission, beginPermissionRefresh, setCurrentPermissions, usePermissionSet } from '../services/authorization';
+import { blueprintDemoReadPermissions, isBlueprintDemoRuntime } from '../services/runtimeMode';
 
 const MainLayout = () => {
   usePermissionSet();
   const { pathname } = useLocation();
   const blueprintMode = pathname.startsWith('/system-blueprint');
+  const demoRuntime = isBlueprintDemoRuntime();
   const mockDemo = useMockDemo();
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -18,8 +20,8 @@ const MainLayout = () => {
     let active = true;
     const revision = beginPermissionRefresh();
 
-    if (blueprintMode) {
-      setCurrentPermissions([], revision);
+    if (blueprintMode || demoRuntime) {
+      setCurrentPermissions(demoRuntime ? [...blueprintDemoReadPermissions] : [], revision);
       setIdentityState('ready');
       return () => { active = false; };
     }
@@ -35,7 +37,7 @@ const MainLayout = () => {
       setIdentityState('error');
     });
     return () => { active = false; };
-  }, [blueprintMode, pathname]);
+  }, [blueprintMode, demoRuntime, pathname]);
 
   const showStocktakes = canViewStocktakes();
   const navLink = (to: string, label: string, accent = false) => {
@@ -136,6 +138,13 @@ const MainLayout = () => {
           )}
           {blueprintMode ? (
             <span style={{ marginLeft: 12, fontSize: 11, color: '#718096' }}>Blueprint runtime</span>
+          ) : demoRuntime ? (
+            <>
+              <span style={{ marginRight: 10, fontSize: 11, fontWeight: 800, color: '#75520b', background: '#fff7dc', border: '1px solid #ead58a', borderRadius: 999, padding: '5px 8px' }}>
+                DEMO RUNTIME • MOCK BACKEND
+              </span>
+              <span style={{ fontSize: 11, color: '#718096' }}>Frontend production UI</span>
+            </>
           ) : (
             <>
               <span style={{ marginRight: '12px' }}>{localStorage.getItem('username') || 'Người dùng'}</span>
