@@ -77,8 +77,8 @@ export default function Permissions() {
 
       {!canReadRoles && catalog.length > 0 && <UiCard title="Danh mục quyền truy cập">
         <table aria-label="Danh mục quyền truy cập">
-          <thead><tr><th>Quyền</th><th>Mã permission</th></tr></thead>
-          <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td><code>{permission.code}</code></td></tr>)}</tbody>
+          <thead><tr><th>Quyền</th><th>Mô tả</th></tr></thead>
+          <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td>{permission.description || 'Quyền truy cập hệ thống'}</td></tr>)}</tbody>
         </table>
       </UiCard>}
 
