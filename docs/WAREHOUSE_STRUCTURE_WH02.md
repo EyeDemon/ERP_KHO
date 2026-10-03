@@ -1,6 +1,6 @@
 # WH-02 — Warehouse Structure Hierarchy
 
-Status: **FOUNDATION**. CI #261 caught a compile-only generic `PropertyEntry` typing defect before SQL/API/frontend execution; the defect was corrected in `c574c61c`. Promotion still requires the verification retry plus final Vercel runtime evidence.
+Status: **FOUNDATION**. CI #261 caught and closed a compile-only generic `PropertyEntry` defect. CI #262 then passed build + SQL integration and exposed two API compatibility-test gaps (unmapped Location update compatibility and a hard-coded permission count); both are corrected. Promotion still requires the final verification retry plus Vercel runtime evidence.
 
 ## Canonical Notion references reviewed
 
