@@ -90,6 +90,7 @@ describe('Inventory shared production UI', () => {
     expect(await view.findByText('SKU-10')).toBeTruthy();
     expect(view.getByRole('table', { name: 'Tồn kho hiện tại' })).toBeTruthy();
     expect(view.getByRole('tab', { name: 'Tồn kho hiện tại' }).getAttribute('aria-selected')).toBe('true');
+    expect(view.getByRole('button', { name: 'Xuất Excel Tồn Kho' })).toBeTruthy();
 
     fireEvent.click(view.getByRole('tab', { name: 'Lịch sử giao dịch' }));
     expect(await view.findByRole('table', { name: 'Lịch sử giao dịch tồn kho' })).toBeTruthy();
