@@ -99,6 +99,7 @@ public sealed class PutawayServiceTests : IDisposable
     private async Task<(int WarehouseId,int UserId,int ProductId,int TaskId,int ItemId,int Receiving,int Storage1,int Storage2,int Damaged,int ZoneId)> SeedAsync()
     {
         await using var db=Create(); var role=new Role{RoleName="Manager"}; var user=new User{Username=Guid.NewGuid().ToString("N"),PasswordHash="x",FullName="QA",Role=role};
+        var locationManage=new Permission("location.manage","Quản lý vị trí kho"); role.Permissions.Add(new RolePermission{Role=role,Permission=locationManage});
         var unit=new Unit{Code="EA",Name="Cái",DecimalPlaces=0}; var warehouse=new Warehouse{Code="W1",Name="Kho"}; var product=new Product{Code="P1",Name="Sản phẩm",Unit=unit}; db.AddRange(role,user,warehouse,product); await db.SaveChangesAsync();
         var zone=new WarehouseZone{WarehouseId=warehouse.Id,Code="ZONE-A",Name="Khu A",ZoneType="STORAGE",IsActive=true,CreatedBy=user.Id}; db.Add(zone); await db.SaveChangesAsync();
         var receiving=new WarehouseLocation{WarehouseId=warehouse.Id,Code="RECEIVING",Name="Nhận",LocationType=WarehouseLocationType.Receiving,IsActive=true,IsReceivable=true,IsSystemManaged=true};
