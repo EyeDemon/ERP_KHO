@@ -175,7 +175,12 @@ const MainLayout = () => {
       )}
 
       <aside id="system-sidebar" className={'app-sidebar' + (mobileNavOpen ? ' open' : '')} aria-label="Điều hướng hệ thống">
-        <h2 className="app-brand">ERP WMS</h2>
+        <div className="app-sidebar-header">
+          <h2 className="app-brand">ERP WMS</h2>
+          <button type="button" className="sidebar-mobile-close" aria-label="Đóng menu điều hướng" onClick={() => setMobileNavOpen(false)}>
+            <X aria-hidden="true" />
+          </button>
+        </div>
         <div className="app-brand-context">
           {blueprintMode ? 'System Blueprint / Demo' : 'Warehouse Management System'}
         </div>

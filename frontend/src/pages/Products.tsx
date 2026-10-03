@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { hasPermission, usePermission } from '../services/authorization';
 import { categoryChanged, categoryRequest, normalizeBarcodeInput } from './productCatalog';
@@ -173,7 +174,7 @@ const Products = () => {
 
     {editing && canManageBarcodes && <UiCard title="Mã vạch">
       <div className="ui-inline-wrap">
-        {editing.barcodes?.map(item => <UiBadge key={item.id}>{item.value} <button type="button" aria-label={'Xóa mã vạch ' + item.value} onClick={() => deleteBarcode(item.id)} className="ui-badge-remove">×</button></UiBadge>)}
+        {editing.barcodes?.map(item => <UiBadge key={item.id}>{item.value} <button type="button" aria-label={'Xóa mã vạch ' + item.value} onClick={() => deleteBarcode(item.id)} className="ui-badge-remove"><X size={14} aria-hidden="true" /></button></UiBadge>)}
       </div>
       <div className="ui-inline-wrap">
         <input aria-label="Mã vạch mới" value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={64} placeholder="Mã vạch mới" />
