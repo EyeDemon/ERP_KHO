@@ -52,15 +52,24 @@ export const MockDemoProvider = ({ children }: { children: ReactNode }) => {
   const selectedUser = mockUsers.find((user) => user.code === selectedUserCode) ?? defaultUser;
   const activeScenario = getGoldenScenario(activeScenarioId ?? '');
   const runtimeDefinition = getMockScenarioRuntimeDefinition(activeScenarioId);
-  const canonicalScenarioBalances = activeScenarioId
-    ? getMockScenarioRuntimeBalances(activeScenarioId, activeScenarioStep)
-    : [];
-  const scenarioBalances = canonicalScenarioBalances
-    .filter((item) => selectedUser.warehouses.includes(item.warehouse));
+  const canonicalScenarioBalances = useMemo(
+    () => activeScenarioId ? getMockScenarioRuntimeBalances(activeScenarioId, activeScenarioStep) : [],
+    [activeScenarioId, activeScenarioStep],
+  );
+  const scenarioBalances = useMemo(
+    () => canonicalScenarioBalances.filter((item) => selectedUser.warehouses.includes(item.warehouse)),
+    [canonicalScenarioBalances, selectedUser.warehouses],
+  );
   const scenarioTotalBalanceCount = canonicalScenarioBalances.length;
   const scenarioHiddenBalanceCount = scenarioTotalBalanceCount - scenarioBalances.length;
-  const scenarioEventLog = activeScenario?.steps.slice(0, activeScenarioStep) ?? [];
-  const affectedScenarioCapabilities = runtimeDefinition?.affectedCapabilities ?? [];
+  const scenarioEventLog = useMemo(
+    () => activeScenario?.steps.slice(0, activeScenarioStep) ?? [],
+    [activeScenario?.steps, activeScenarioStep],
+  );
+  const affectedScenarioCapabilities = useMemo(
+    () => runtimeDefinition?.affectedCapabilities ?? [],
+    [runtimeDefinition?.affectedCapabilities],
+  );
 
   const runScenarioStep = useCallback((scenarioId: string) => {
     const scenario = getGoldenScenario(scenarioId);

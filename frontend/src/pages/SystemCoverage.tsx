@@ -112,7 +112,7 @@ const SystemCoverage = () => {
 
       {traceabilityClosed.length > 0 && (
         <section className="traceability-closed-panel">
-          <div className="traceability-title"><CheckCircle2 size={17} /><div><strong>Screen Matrix 229 • Traceability Closed</strong><span>4 legacy UNMAPPED screens đã map tới Blueprint route cụ thể. Trạng thái production/backend vẫn được theo dõi riêng.</span></div></div>
+          <div className="traceability-title"><CheckCircle2 size={17} /><div><strong>Screen Matrix 229 • Traceability Closed</strong><span>4 legacy screen gaps đã được map tới Blueprint route cụ thể. Trạng thái production/backend vẫn được theo dõi riêng.</span></div></div>
           <div className="traceability-grid">
             {traceabilityClosed.map(({ module, capability, profile }) => (
               <Link key={capability.id} to={'/system-blueprint/' + module.key + '/' + capability.id}>
