@@ -1,0 +1,10 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+
+[*.{cs,csproj,slnx,json,md,ts,tsx,js,jsx,css,html,yml,yaml,ps1}]
+charset = utf-8
+

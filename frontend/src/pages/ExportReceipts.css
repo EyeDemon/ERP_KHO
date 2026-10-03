@@ -1,0 +1,94 @@
+.export-receipts .export-form {
+  display: grid;
+  gap: var(--ui-space-3);
+}
+
+.export-receipts .export-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ui-space-3);
+}
+
+.export-receipts .export-line {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.5fr) minmax(130px, .8fr) minmax(120px, .7fr) minmax(140px, .8fr) minmax(160px, 1fr) auto;
+  gap: var(--ui-space-2);
+  align-items: end;
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-background);
+}
+
+.export-receipts .export-stock {
+  align-self: center;
+  min-width: 100px;
+  color: var(--ui-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-receipts .export-stock.danger {
+  color: var(--ui-danger);
+  font-weight: 700;
+}
+
+.export-receipts .export-stock-input.danger {
+  border-color: var(--ui-danger);
+}
+
+.export-receipts .export-actions,
+.export-receipts .export-row-actions,
+.export-receipts .export-section-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  flex-wrap: wrap;
+}
+
+.export-receipts .export-section-actions {
+  margin-top: var(--ui-space-3);
+}
+
+.export-receipts .export-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-2) var(--ui-space-5);
+  margin-bottom: var(--ui-space-4);
+}
+
+.export-receipts .export-maintenance {
+  padding: var(--ui-space-3);
+  border: 1px solid #D6A84B;
+  border-radius: var(--ui-radius);
+  background: var(--ui-warning-soft);
+  color: #92400E;
+}
+
+.export-receipts .export-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+  .export-receipts .export-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .export-receipts .export-line {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .export-receipts .export-form-grid,
+  .export-receipts .export-line,
+  .export-receipts .export-detail-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .export-receipts .export-line > *,
+  .export-receipts .export-form-grid > * {
+    width: 100%;
+  }
+}

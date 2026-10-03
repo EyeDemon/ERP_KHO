@@ -1,0 +1,6 @@
+.putaway-grid{display:grid;grid-template-columns:minmax(320px,.9fr) minmax(420px,1.1fr);gap:14px;align-items:start}
+.putaway table{width:100%}
+.putaway-actions,.move-form{display:flex;gap:9px;flex-wrap:wrap;align-items:end}
+.move-form label{display:grid;gap:5px}
+.putaway-error{margin-bottom:0}
+@media(max-width:900px){.putaway-grid{grid-template-columns:1fr}.move-form>*{width:100%}}

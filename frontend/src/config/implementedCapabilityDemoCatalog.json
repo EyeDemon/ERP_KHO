@@ -1,0 +1,1530 @@
+{
+  "OV-01": {
+    "title": "Operational Dashboard",
+    "subtitle": "KPI inbound, outbound, tồn kho, backlog, SLA và cảnh báo.",
+    "mode": "control",
+    "stages": [
+      "Overview",
+      "Drill-down",
+      "Exception focus",
+      "Open work center"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "OV-01"
+      },
+      {
+        "label": "Module",
+        "value": "Tổng quan & Work Center"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "68, 216, 227"
+      },
+      {
+        "label": "Open tasks",
+        "value": "47"
+      },
+      {
+        "label": "Critical exceptions",
+        "value": "3"
+      }
+    ],
+    "commands": [
+      "REFRESH_KPI",
+      "OPEN_EXCEPTION",
+      "OPEN_WORK_CENTER"
+    ],
+    "exceptionTitle": "DASHBOARD_DATA_STALE",
+    "exceptionDetail": "KPI snapshot cũ hơn operational read model; cần hiển thị freshness thay vì giả định realtime."
+  },
+  "OV-03": {
+    "title": "Approval Center",
+    "subtitle": "Duyệt/từ chối nghiệp vụ có SoD, SLA và audit trail.",
+    "mode": "workbench",
+    "stages": [
+      "PENDING",
+      "REVIEWING",
+      "APPROVED",
+      "EXECUTED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "OV-03"
+      },
+      {
+        "label": "Module",
+        "value": "Tổng quan & Work Center"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "17, 70, 221"
+      },
+      {
+        "label": "Request",
+        "value": "APR-2026-0442"
+      },
+      {
+        "label": "Type",
+        "value": "Inventory Adjustment"
+      }
+    ],
+    "commands": [
+      "OPEN_REQUEST",
+      "APPROVE",
+      "REJECT"
+    ],
+    "exceptionTitle": "SOD_APPROVER_CONFLICT",
+    "exceptionDetail": "Approver không được trùng creator/counter khi segregation-of-duties bật."
+  },
+  "MD-01": {
+    "title": "Product / SKU Master",
+    "subtitle": "CRUD sản phẩm, trạng thái, thuộc tính và tracking policy.",
+    "mode": "configuration",
+    "stages": [
+      "List",
+      "Detail",
+      "Validate",
+      "Active"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "MD-01"
+      },
+      {
+        "label": "Module",
+        "value": "Dữ liệu danh mục"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "16, 84, 162"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "Base UOM",
+        "value": "Cái"
+      }
+    ],
+    "commands": [
+      "CREATE_PRODUCT",
+      "UPDATE_PRODUCT",
+      "DEACTIVATE_PRODUCT"
+    ],
+    "exceptionTitle": "SKU_CODE_DUPLICATE",
+    "exceptionDetail": "SKU code phải unique case-insensitively và identity ổn định."
+  },
+  "MD-02": {
+    "title": "Product Category Manager",
+    "subtitle": "Phân loại sản phẩm theo category và cấu trúc tìm kiếm.",
+    "mode": "configuration",
+    "stages": [
+      "List",
+      "Create/Rename",
+      "Assign product",
+      "Active"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "MD-02"
+      },
+      {
+        "label": "Module",
+        "value": "Dữ liệu danh mục"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "84, 162"
+      },
+      {
+        "label": "Category",
+        "value": "CAT-FOOD"
+      },
+      {
+        "label": "Products",
+        "value": "128"
+      }
+    ],
+    "commands": [
+      "CREATE_CATEGORY",
+      "RENAME_CATEGORY",
+      "ASSIGN_PRODUCT"
+    ],
+    "exceptionTitle": "CATEGORY_CODE_IMMUTABLE",
+    "exceptionDetail": "Category code đã tạo không được đổi để giữ reference ổn định."
+  },
+  "MD-03": {
+    "title": "Barcode Registry",
+    "subtitle": "Quản lý nhiều barcode và exact lookup cho scan.",
+    "mode": "scan",
+    "stages": [
+      "Scan",
+      "Exact match",
+      "Assign",
+      "Verify"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "MD-03"
+      },
+      {
+        "label": "Module",
+        "value": "Dữ liệu danh mục"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "65, 84, 162"
+      },
+      {
+        "label": "Barcode",
+        "value": "8938500123456"
+      },
+      {
+        "label": "Product",
+        "value": "SKU-1001"
+      }
+    ],
+    "commands": [
+      "LOOKUP_BARCODE",
+      "ADD_BARCODE",
+      "REMOVE_BARCODE"
+    ],
+    "exceptionTitle": "BARCODE_DUPLICATE",
+    "exceptionDetail": "Một barcode không được map đồng thời tới nhiều SKU."
+  },
+  "MD-04": {
+    "title": "UOM & Conversion",
+    "subtitle": "Quản lý UOM và quy đổi về Base UOM cho mọi quantity entry.",
+    "mode": "configuration",
+    "stages": [
+      "UOM",
+      "Conversion",
+      "Preview",
+      "Active"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "MD-04"
+      },
+      {
+        "label": "Module",
+        "value": "Dữ liệu danh mục"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "16, 84, 220"
+      },
+      {
+        "label": "Operation UOM",
+        "value": "Thùng"
+      },
+      {
+        "label": "Base UOM",
+        "value": "Cái"
+      },
+      {
+        "label": "Factor",
+        "value": "12"
+      }
+    ],
+    "commands": [
+      "CREATE_UOM",
+      "SET_CONVERSION",
+      "PREVIEW_CONVERSION"
+    ],
+    "exceptionTitle": "UOM_CONVERSION_INVALID",
+    "exceptionDetail": "Conversion phải dương, nhất quán và không tạo cycle mơ hồ.",
+    "quantity": {
+      "label": "Operation quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 5
+    }
+  },
+  "MD-05": {
+    "title": "Business Partner Master",
+    "subtitle": "Supplier/Customer dùng chung, role, active state và snapshot trên chứng từ.",
+    "mode": "configuration",
+    "stages": [
+      "List",
+      "Detail",
+      "Roles",
+      "Active"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "MD-05"
+      },
+      {
+        "label": "Module",
+        "value": "Dữ liệu danh mục"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "84, 162"
+      },
+      {
+        "label": "Partner",
+        "value": "SUP-0008"
+      },
+      {
+        "label": "Roles",
+        "value": "Supplier + Customer"
+      }
+    ],
+    "commands": [
+      "CREATE_PARTNER",
+      "UPDATE_PARTNER",
+      "SET_ROLES"
+    ],
+    "exceptionTitle": "PARTNER_CODE_IMMUTABLE",
+    "exceptionDetail": "Partner code đã tạo phải immutable; role/active state thay đổi có validation."
+  },
+  "WH-01": {
+    "title": "Warehouse Master",
+    "subtitle": "Quản lý kho, scope truy cập, timezone và trạng thái vận hành.",
+    "mode": "configuration",
+    "stages": [
+      "List",
+      "Detail",
+      "Scope",
+      "Operational state"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "WH-01"
+      },
+      {
+        "label": "Module",
+        "value": "Kho & Vị trí"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "16, 60, 148"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Timezone",
+        "value": "Asia/Ho_Chi_Minh"
+      }
+    ],
+    "commands": [
+      "CREATE_WAREHOUSE",
+      "UPDATE_WAREHOUSE",
+      "CHANGE_OPERATIONAL_STATE"
+    ],
+    "exceptionTitle": "WAREHOUSE_SCOPE_CONFLICT",
+    "exceptionDetail": "Warehouse identity/scope không được thay đổi làm phá membership hoặc document history."
+  },
+  "IN-03": {
+    "title": "Goods Receipt Work Center",
+    "subtitle": "Tìm/lọc/tạo/mở receipt theo state và warehouse scope.",
+    "mode": "workbench",
+    "stages": [
+      "DRAFT",
+      "RECEIVING",
+      "QC_PENDING",
+      "READY_TO_POST",
+      "POSTED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "IN-03"
+      },
+      {
+        "label": "Module",
+        "value": "Nhập kho"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "34, 216, 228, 229"
+      },
+      {
+        "label": "Receipt",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      }
+    ],
+    "commands": [
+      "CREATE_RECEIPT",
+      "OPEN_RECEIVING",
+      "OPEN_POSTING"
+    ],
+    "exceptionTitle": "RECEIPT_VERSION_CONFLICT",
+    "exceptionDetail": "Receipt state/version thay đổi giữa lúc user đang thao tác."
+  },
+  "IN-04": {
+    "title": "Receiving Workbench",
+    "subtitle": "Scan hàng, nhập quantity/UOM, lot/serial/expiry và discrepancy.",
+    "mode": "scan",
+    "stages": [
+      "Scan product",
+      "Capture tracking",
+      "Enter quantity",
+      "Save line"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "IN-04"
+      },
+      {
+        "label": "Module",
+        "value": "Nhập kho"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "34, 228, 229"
+      },
+      {
+        "label": "Receipt",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      }
+    ],
+    "commands": [
+      "SCAN_PRODUCT",
+      "CAPTURE_LOT_SERIAL",
+      "SAVE_RECEIVING_LINE"
+    ],
+    "exceptionTitle": "RECEIVING_LINE_INVALID",
+    "exceptionDetail": "Quantity/UOM/lot/serial/expiry không hợp lệ hoặc vượt tolerance.",
+    "quantity": {
+      "label": "Receive quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 8
+    }
+  },
+  "IN-07": {
+    "title": "Receipt Posting",
+    "subtitle": "Boundary ghi nhận inventory, idempotent, concurrency-safe và audit/outbox.",
+    "mode": "wizard",
+    "stages": [
+      "READY_TO_POST",
+      "VALIDATING",
+      "POSTING",
+      "POSTED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "IN-07"
+      },
+      {
+        "label": "Module",
+        "value": "Nhập kho"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "29, 34, 228"
+      },
+      {
+        "label": "Receipt",
+        "value": "GR-2026-1045"
+      },
+      {
+        "label": "Idempotency key",
+        "value": "post-GR-1045-v3"
+      }
+    ],
+    "commands": [
+      "VALIDATE_POST",
+      "POST_RECEIPT",
+      "OPEN_LEDGER_ENTRY"
+    ],
+    "exceptionTitle": "RECEIPT_POST_CONFLICT",
+    "exceptionDetail": "Posting phải fail closed khi state/version/inventory precondition thay đổi.",
+    "quantity": {
+      "label": "Posted quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 96
+    }
+  },
+  "IN-08": {
+    "title": "Putaway Task Execution",
+    "subtitle": "Phân công, start, move, exception, resume, cancel và hoàn tất cất hàng.",
+    "mode": "scan",
+    "stages": [
+      "ASSIGNED",
+      "IN_PROGRESS",
+      "MOVED",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "IN-08"
+      },
+      {
+        "label": "Module",
+        "value": "Nhập kho"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "35, 229"
+      },
+      {
+        "label": "Task",
+        "value": "PUT-2026-3321"
+      },
+      {
+        "label": "Destination",
+        "value": "A01-R02-L03-B04"
+      }
+    ],
+    "commands": [
+      "START_TASK",
+      "CONFIRM_MOVE",
+      "COMPLETE_TASK"
+    ],
+    "exceptionTitle": "PUTAWAY_TASK_BLOCKED",
+    "exceptionDetail": "Destination/status/capacity thay đổi làm task cần exception/resume path."
+  },
+  "OUT-01": {
+    "title": "Sales / Export Order",
+    "subtitle": "Quản lý phiếu xuất và điều kiện release.",
+    "mode": "workbench",
+    "stages": [
+      "DRAFT",
+      "RELEASED",
+      "FULFILLING",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "OUT-01"
+      },
+      {
+        "label": "Module",
+        "value": "Xuất kho"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "72, 87, 161, 228"
+      },
+      {
+        "label": "Order",
+        "value": "SO-2026-5108"
+      },
+      {
+        "label": "Customer",
+        "value": "CUS-0042"
+      }
+    ],
+    "commands": [
+      "CREATE_ORDER",
+      "RELEASE_ORDER",
+      "CANCEL_ORDER"
+    ],
+    "exceptionTitle": "ORDER_RELEASE_BLOCKED",
+    "exceptionDetail": "Order không đủ điều kiện release do validation, permission hoặc state."
+  },
+  "OUT-02": {
+    "title": "Reservation Workbench",
+    "subtitle": "Giữ quantity khả dụng mà chưa gắn location cụ thể.",
+    "mode": "workbench",
+    "stages": [
+      "Demand",
+      "Check availability",
+      "Reserved",
+      "Consumed/Released"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "OUT-02"
+      },
+      {
+        "label": "Module",
+        "value": "Xuất kho"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "30, 72"
+      },
+      {
+        "label": "Order",
+        "value": "SO-2026-5108"
+      },
+      {
+        "label": "Reserved",
+        "value": "120 Cái"
+      }
+    ],
+    "commands": [
+      "CREATE_RESERVATION",
+      "RELEASE_RESERVATION",
+      "REALLOCATE_DEMAND"
+    ],
+    "exceptionTitle": "RESERVATION_INSUFFICIENT_AVAILABLE",
+    "exceptionDetail": "Available quantity không đủ sau status/lock/existing reservation."
+  },
+  "INV-01": {
+    "title": "Inventory Browser",
+    "subtitle": "Tra cứu OnHand, Available, Reserved, Allocated, Picked, QC Hold, Quarantine, Blocked, In Transit.",
+    "mode": "workbench",
+    "stages": [
+      "Search",
+      "Balance",
+      "Status split",
+      "Drill-down"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "INV-01"
+      },
+      {
+        "label": "Module",
+        "value": "Tồn kho & Inventory Control"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "29, 41, 73, 77, 78, 82, 88, 222"
+      },
+      {
+        "label": "SKU",
+        "value": "SKU-1001"
+      },
+      {
+        "label": "On Hand",
+        "value": "1,350 Cái"
+      }
+    ],
+    "commands": [
+      "SEARCH_INVENTORY",
+      "OPEN_STATUS",
+      "OPEN_LEDGER"
+    ],
+    "exceptionTitle": "INVENTORY_SCOPE_FORBIDDEN",
+    "exceptionDetail": "Inventory ngoài warehouse/security scope không được trả về."
+  },
+  "INV-02": {
+    "title": "Immutable Inventory Ledger",
+    "subtitle": "Lưu mọi movement bất biến, có source reference và signed delta.",
+    "mode": "trace",
+    "stages": [
+      "Filter",
+      "Entry detail",
+      "Source correlation",
+      "Reversal link"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "INV-02"
+      },
+      {
+        "label": "Module",
+        "value": "Tồn kho & Inventory Control"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "28, 29, 32"
+      },
+      {
+        "label": "Entry",
+        "value": "LED-2026-882177"
+      },
+      {
+        "label": "Delta",
+        "value": "+96 Cái"
+      }
+    ],
+    "commands": [
+      "FILTER_LEDGER",
+      "OPEN_SOURCE",
+      "OPEN_REVERSAL"
+    ],
+    "exceptionTitle": "LEDGER_MUTATION_FORBIDDEN",
+    "exceptionDetail": "Posted ledger entry không được edit/delete; sửa sai bằng reversal/corrective transaction."
+  },
+  "INV-03": {
+    "title": "Inventory Balance Projection",
+    "subtitle": "Projection có thể rebuild từ ledger và dùng cho operational queries.",
+    "mode": "trace",
+    "stages": [
+      "Ledger input",
+      "Projection",
+      "Compare",
+      "Rebuild"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "INV-03"
+      },
+      {
+        "label": "Module",
+        "value": "Tồn kho & Inventory Control"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "29, 82"
+      },
+      {
+        "label": "Projection key",
+        "value": "WH-HCM-01/SKU-1001/A01-R02-L03-B04"
+      },
+      {
+        "label": "Balance",
+        "value": "420 Cái"
+      }
+    ],
+    "commands": [
+      "REBUILD_PROJECTION",
+      "COMPARE_LEDGER",
+      "VERIFY_BALANCE"
+    ],
+    "exceptionTitle": "PROJECTION_MISMATCH",
+    "exceptionDetail": "Projection không khớp immutable ledger và phải rebuild/reconcile."
+  },
+  "INV-04": {
+    "title": "Inventory Availability Engine",
+    "subtitle": "Tính eligible inventory sau status/lock/reservation/allocation rules.",
+    "mode": "workbench",
+    "stages": [
+      "On Hand",
+      "Subtract holds",
+      "Subtract reservation/allocation",
+      "Eligible"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "INV-04"
+      },
+      {
+        "label": "Module",
+        "value": "Tồn kho & Inventory Control"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "30, 41, 77, 88"
+      },
+      {
+        "label": "On Hand",
+        "value": "1,350 Cái"
+      },
+      {
+        "label": "Available",
+        "value": "1,120 Cái"
+      }
+    ],
+    "commands": [
+      "CALCULATE_AVAILABLE",
+      "EXPLAIN_ELIGIBILITY",
+      "OPEN_BLOCKERS"
+    ],
+    "exceptionTitle": "AVAILABILITY_INCONSISTENT",
+    "exceptionDetail": "Status/lock/reservation/allocation snapshot không nhất quán."
+  },
+  "TR-01": {
+    "title": "Warehouse Transfer",
+    "subtitle": "Tạo và quản lý chuyển kho source → transit → destination.",
+    "mode": "workbench",
+    "stages": [
+      "DRAFT",
+      "APPROVED",
+      "DISPATCHED",
+      "IN_TRANSIT",
+      "RECEIVED",
+      "CLOSED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "TR-01"
+      },
+      {
+        "label": "Module",
+        "value": "Điều chuyển & Replenishment"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "39, 157"
+      },
+      {
+        "label": "Transfer",
+        "value": "TRF-2026-0018"
+      },
+      {
+        "label": "Route",
+        "value": "WH-HCM-01 → WH-DN-01"
+      }
+    ],
+    "commands": [
+      "CREATE_TRANSFER",
+      "APPROVE_TRANSFER",
+      "OPEN_DISPATCH"
+    ],
+    "exceptionTitle": "TRANSFER_STATE_CONFLICT",
+    "exceptionDetail": "Transfer state/version thay đổi hoặc source/destination scope không hợp lệ."
+  },
+  "TR-03": {
+    "title": "Transfer Dispatch",
+    "subtitle": "Rời source và chuyển quantity sang transit đúng một lần.",
+    "mode": "wizard",
+    "stages": [
+      "APPROVED",
+      "VALIDATING",
+      "DISPATCHED",
+      "IN_TRANSIT"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "TR-03"
+      },
+      {
+        "label": "Module",
+        "value": "Điều chuyển & Replenishment"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "39"
+      },
+      {
+        "label": "Transfer",
+        "value": "TRF-2026-0018"
+      },
+      {
+        "label": "Source",
+        "value": "WH-HCM-01"
+      }
+    ],
+    "commands": [
+      "VALIDATE_DISPATCH",
+      "DISPATCH_TRANSFER",
+      "OPEN_TRANSIT"
+    ],
+    "exceptionTitle": "TRANSFER_DISPATCH_CONFLICT",
+    "exceptionDetail": "Source stock/version thay đổi; dispatch không được double-deduct."
+  },
+  "TR-04": {
+    "title": "Transfer Receive",
+    "subtitle": "Nhận transit vào destination và reconcile thiếu/thừa.",
+    "mode": "wizard",
+    "stages": [
+      "IN_TRANSIT",
+      "ARRIVED",
+      "RECEIVING",
+      "RECEIVED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "TR-04"
+      },
+      {
+        "label": "Module",
+        "value": "Điều chuyển & Replenishment"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "39"
+      },
+      {
+        "label": "Transfer",
+        "value": "TRF-2026-0018"
+      },
+      {
+        "label": "Destination",
+        "value": "WH-DN-01"
+      }
+    ],
+    "commands": [
+      "MARK_ARRIVED",
+      "RECEIVE_TRANSFER",
+      "RECONCILE_VARIANCE"
+    ],
+    "exceptionTitle": "TRANSFER_RECEIVE_VARIANCE",
+    "exceptionDetail": "Received quantity khác transit quantity và cần reconciliation rõ ràng."
+  },
+  "CT-01": {
+    "title": "Full Count",
+    "subtitle": "Kiểm kê toàn kho theo policy và progress tracking.",
+    "mode": "workbench",
+    "stages": [
+      "PLANNED",
+      "RELEASED",
+      "COUNTING",
+      "REVIEW",
+      "COMPLETED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "CT-01"
+      },
+      {
+        "label": "Module",
+        "value": "Kiểm kê & Điều chỉnh"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "40, 216"
+      },
+      {
+        "label": "Count",
+        "value": "CNT-2026-0098"
+      },
+      {
+        "label": "Scope",
+        "value": "WH-HCM-01"
+      }
+    ],
+    "commands": [
+      "PLAN_COUNT",
+      "RELEASE_COUNT",
+      "COMPLETE_COUNT"
+    ],
+    "exceptionTitle": "COUNT_NOT_RECONCILED",
+    "exceptionDetail": "Count còn variance/recount/adjustment chưa resolve nên không thể complete."
+  },
+  "CT-02": {
+    "title": "Cycle Count",
+    "subtitle": "Lập kế hoạch kiểm kê định kỳ theo rule/ABC/risk.",
+    "mode": "workbench",
+    "stages": [
+      "Rule",
+      "Generate plan",
+      "Release",
+      "Measure accuracy"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "CT-02"
+      },
+      {
+        "label": "Module",
+        "value": "Kiểm kê & Điều chỉnh"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "40"
+      },
+      {
+        "label": "Rule",
+        "value": "ABC-A weekly"
+      },
+      {
+        "label": "Locations selected",
+        "value": "48"
+      }
+    ],
+    "commands": [
+      "GENERATE_CYCLE_COUNT",
+      "RELEASE_COUNT",
+      "OPEN_ACCURACY"
+    ],
+    "exceptionTitle": "CYCLE_COUNT_SCOPE_EMPTY",
+    "exceptionDetail": "Rule không tạo ra eligible scope hoặc trùng count đang mở."
+  },
+  "RP-01": {
+    "title": "Inventory Snapshot Report",
+    "subtitle": "Báo cáo tồn kho theo sản phẩm/kho và export.",
+    "mode": "control",
+    "stages": [
+      "Filter",
+      "Snapshot",
+      "Drill-down",
+      "Export"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "RP-01"
+      },
+      {
+        "label": "Module",
+        "value": "Báo cáo & Analytics"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "82, 227"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Rows",
+        "value": "2,441"
+      }
+    ],
+    "commands": [
+      "RUN_REPORT",
+      "DRILL_DOWN",
+      "EXPORT_REPORT"
+    ],
+    "exceptionTitle": "REPORT_SNAPSHOT_STALE",
+    "exceptionDetail": "Read model freshness phải hiển thị rõ khi không cùng thời điểm với transaction truth."
+  },
+  "RP-02": {
+    "title": "Xuất - Nhập - Tồn",
+    "subtitle": "Opening, in, out, closing theo kỳ.",
+    "mode": "control",
+    "stages": [
+      "Period",
+      "Opening",
+      "In/Out",
+      "Closing",
+      "Export"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "RP-02"
+      },
+      {
+        "label": "Module",
+        "value": "Báo cáo & Analytics"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "13, 82, 227"
+      },
+      {
+        "label": "Period",
+        "value": "01–02/10/2026"
+      },
+      {
+        "label": "Closing qty",
+        "value": "128,442 Cái"
+      }
+    ],
+    "commands": [
+      "RUN_IN_OUT_STOCK",
+      "OPEN_MOVEMENTS",
+      "EXPORT_REPORT"
+    ],
+    "exceptionTitle": "REPORT_PERIOD_INVALID",
+    "exceptionDetail": "Period/timezone không hợp lệ hoặc read model chưa đủ dữ liệu."
+  },
+  "AD-01": {
+    "title": "User Administration",
+    "subtitle": "Tạo/khóa user, lifecycle và warehouse membership.",
+    "mode": "configuration",
+    "stages": [
+      "User",
+      "Membership",
+      "Role",
+      "Enabled/Locked"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "AD-01"
+      },
+      {
+        "label": "Module",
+        "value": "Quản trị & Bảo mật"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "17, 112, 113, 225, 276"
+      },
+      {
+        "label": "User",
+        "value": "U-HCM-OP-01"
+      },
+      {
+        "label": "Warehouse membership",
+        "value": "WH-HCM-01"
+      }
+    ],
+    "commands": [
+      "CREATE_USER",
+      "SET_MEMBERSHIP",
+      "LOCK_USER"
+    ],
+    "exceptionTitle": "USER_MEMBERSHIP_CONFLICT",
+    "exceptionDetail": "Membership/role thay đổi phải giữ scope, SoD và session security."
+  },
+  "AD-02": {
+    "title": "Role & Permission Matrix",
+    "subtitle": "Permission code registry dùng chung backend/frontend/tests.",
+    "mode": "configuration",
+    "stages": [
+      "Role",
+      "Permissions",
+      "Scope",
+      "Effective"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "AD-02"
+      },
+      {
+        "label": "Module",
+        "value": "Quản trị & Bảo mật"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "17, 225"
+      },
+      {
+        "label": "Role",
+        "value": "WAREHOUSE_SUPERVISOR"
+      },
+      {
+        "label": "Permissions",
+        "value": "38 codes"
+      }
+    ],
+    "commands": [
+      "CREATE_ROLE",
+      "ASSIGN_PERMISSION",
+      "REMOVE_PERMISSION"
+    ],
+    "exceptionTitle": "PERMISSION_POLICY_CONFLICT",
+    "exceptionDetail": "Permission thay đổi không được tạo privilege escalation ngoài governance."
+  },
+  "AD-03": {
+    "title": "Warehouse Scope Enforcement",
+    "subtitle": "Chặn cross-warehouse access dù biết record ID.",
+    "mode": "control",
+    "stages": [
+      "Identity",
+      "Membership",
+      "Requested warehouse",
+      "ALLOW/DENY"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "AD-03"
+      },
+      {
+        "label": "Module",
+        "value": "Quản trị & Bảo mật"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "17, 99, 225"
+      },
+      {
+        "label": "User",
+        "value": "U-DN-MGR"
+      },
+      {
+        "label": "Allowed",
+        "value": "WH-DN-01"
+      }
+    ],
+    "commands": [
+      "CHECK_SCOPE",
+      "SIMULATE_CROSS_WAREHOUSE",
+      "OPEN_MEMBERSHIP"
+    ],
+    "exceptionTitle": "WAREHOUSE_SCOPE_DENIED",
+    "exceptionDetail": "Biết record ID không được phép bypass warehouse membership."
+  },
+  "AD-04": {
+    "title": "Approval Workflow",
+    "subtitle": "Workflow, SoD, threshold, SLA và escalation.",
+    "mode": "wizard",
+    "stages": [
+      "REQUESTED",
+      "PENDING_APPROVAL",
+      "APPROVED",
+      "EXECUTED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "AD-04"
+      },
+      {
+        "label": "Module",
+        "value": "Quản trị & Bảo mật"
+      },
+      {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Spec",
+        "value": "70, 221"
+      },
+      {
+        "label": "Workflow",
+        "value": "Inventory Adjustment > threshold"
+      },
+      {
+        "label": "SLA",
+        "value": "30 phút"
+      }
+    ],
+    "commands": [
+      "SUBMIT_APPROVAL",
+      "APPROVE",
+      "ESCALATE"
+    ],
+    "exceptionTitle": "APPROVAL_SOD_CONFLICT",
+    "exceptionDetail": "Requester không được tự approve khi workflow yêu cầu segregation-of-duties."
+  },
+  "AD-06": {
+    "title": "Audit Trail Explorer",
+    "subtitle": "Audit hành động critical, trước/sau và actor/context.",
+    "mode": "trace",
+    "stages": [
+      "Search",
+      "Event detail",
+      "Before/After",
+      "Correlation"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "AD-06"
+      },
+      {
+        "label": "Module",
+        "value": "Quản trị & Bảo mật"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "08, 17, 83, 280"
+      },
+      {
+        "label": "Actor",
+        "value": "U-HCM-SUP-01"
+      },
+      {
+        "label": "Entity",
+        "value": "GR-2026-1045"
+      }
+    ],
+    "commands": [
+      "SEARCH_AUDIT",
+      "OPEN_EVENT",
+      "TRACE_CORRELATION"
+    ],
+    "exceptionTitle": "AUDIT_EVENT_REDACTED",
+    "exceptionDetail": "Sensitive fields phải redact theo permission/classification nhưng event không được mất."
+  },
+  "IG-04": {
+    "title": "Transactional Outbox",
+    "subtitle": "Business mutation + event commit cùng transaction.",
+    "mode": "trace",
+    "stages": [
+      "Business transaction",
+      "Outbox pending",
+      "Published",
+      "Acknowledged"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "IG-04"
+      },
+      {
+        "label": "Module",
+        "value": "Tích hợp"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "09, 19, 103, 107"
+      },
+      {
+        "label": "Event",
+        "value": "GoodsReceiptPosted"
+      },
+      {
+        "label": "Outbox ID",
+        "value": "OBX-2026-88421"
+      }
+    ],
+    "commands": [
+      "PUBLISH_PENDING",
+      "RETRY_EVENT",
+      "OPEN_CORRELATION"
+    ],
+    "exceptionTitle": "OUTBOX_DELIVERY_FAILED",
+    "exceptionDetail": "Business commit giữ nguyên; event delivery retry idempotently, không rollback inventory tự động."
+  },
+  "OP-01": {
+    "title": "Observability & Monitoring",
+    "subtitle": "500/409/412, deadlock, latency, outbox backlog và business integrity alerts.",
+    "mode": "control",
+    "stages": [
+      "Metrics",
+      "Logs",
+      "Trace",
+      "Alert"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "OP-01"
+      },
+      {
+        "label": "Module",
+        "value": "Vận hành & Resilience"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "10, 121, 122, 123"
+      },
+      {
+        "label": "API p95",
+        "value": "240 ms"
+      },
+      {
+        "label": "Error rate",
+        "value": "0.18%"
+      }
+    ],
+    "commands": [
+      "OPEN_METRIC",
+      "OPEN_TRACE",
+      "ACK_ALERT"
+    ],
+    "exceptionTitle": "OBSERVABILITY_SIGNAL_GAP",
+    "exceptionDetail": "Thiếu metrics/logs/traces phải được coi là coverage gap, không phải hệ thống khỏe."
+  },
+  "OP-03": {
+    "title": "Backup / Restore Drill",
+    "subtitle": "Chứng minh recovery và bảo vệ ledger/audit/document transactions.",
+    "mode": "wizard",
+    "stages": [
+      "Backup selected",
+      "Restore isolated",
+      "Integrity check",
+      "Drill passed"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "OP-03"
+      },
+      {
+        "label": "Module",
+        "value": "Vận hành & Resilience"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Spec",
+        "value": "11, 142, 143"
+      },
+      {
+        "label": "Backup",
+        "value": "2026-10-02T01:00Z"
+      },
+      {
+        "label": "Target",
+        "value": "Isolated restore environment"
+      }
+    ],
+    "commands": [
+      "START_RESTORE_DRILL",
+      "VERIFY_INTEGRITY",
+      "CLOSE_DRILL"
+    ],
+    "exceptionTitle": "RESTORE_DRILL_FAILED",
+    "exceptionDetail": "Backup không được coi là usable cho tới khi restore và integrity verification PASS."
+  },
+  "INV-11": {
+    "title": "Inventory Integrity & Reconciliation",
+    "subtitle": "So sánh immutable ledger với balance projection và rebuild có kiểm soát.",
+    "mode": "control",
+    "stages": [
+      "Snapshot",
+      "Compare",
+      "Investigate mismatch",
+      "Rebuild projection",
+      "Verify green"
+    ],
+    "fields": [
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Ledger total",
+        "value": "128,442 Cái"
+      },
+      {
+        "label": "Balance total",
+        "value": "128,430 Cái"
+      },
+      {
+        "label": "Mismatch",
+        "value": "12 Cái"
+      },
+      {
+        "label": "Affected keys",
+        "value": "2 SKU/location buckets"
+      }
+    ],
+    "commands": [
+      "RUN_RECONCILIATION",
+      "OPEN_MISMATCH",
+      "REBUILD_PROJECTION",
+      "VERIFY"
+    ],
+    "exceptionTitle": "RECONCILIATION_NOT_GREEN",
+    "exceptionDetail": "Projection rebuild vẫn không khớp ledger; warehouse/release gate phải giữ blocked."
+  }
+}
