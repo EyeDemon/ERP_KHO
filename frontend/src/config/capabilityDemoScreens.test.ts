@@ -43,7 +43,7 @@ describe('interactive capability demo registry', () => {
     const implemented = allCapabilities.filter(({ capability }) =>
       capability.status === 'live' || capability.status === 'foundation'
     );
-    expect(implemented).toHaveLength(33);
+    expect(implemented).toHaveLength(34);
 
     for (const { module, capability } of implemented) {
       const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
