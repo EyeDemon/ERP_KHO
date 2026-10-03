@@ -7,6 +7,7 @@ import { mockUsers } from '../mocks/erpWmsMockData';
 import { useMockDemo } from '../context/MockDemoContext';
 import { canViewApprovals, canViewStocktakes, hasPermission, beginPermissionRefresh, setCurrentPermissions, usePermissionSet } from '../services/authorization';
 import { blueprintDemoReadPermissions, isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { productionNavigation, productionSections, resolveProductionPage, type ProductionNavItem } from '../config/productionNavigation';
 
 const MainLayout = () => {
   usePermissionSet();
@@ -14,6 +15,7 @@ const MainLayout = () => {
   const blueprintMode = pathname.startsWith('/system-blueprint');
   const demoRuntime = isBlueprintDemoRuntime();
   const mockDemo = useMockDemo();
+  const pageMeta = blueprintMode ? undefined : resolveProductionPage(pathname);
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
@@ -39,7 +41,18 @@ const MainLayout = () => {
     return () => { active = false; };
   }, [blueprintMode, demoRuntime, pathname]);
 
-  const showStocktakes = canViewStocktakes();
+  useEffect(() => {
+    const label = blueprintMode ? 'Bản đồ hệ thống' : (pageMeta?.label ?? 'ERP WMS');
+    document.title = label + ' • ERP WMS';
+  }, [blueprintMode, pageMeta?.label]);
+
+  const showStocktakes = demoRuntime || canViewStocktakes();
+  const canShowProductionItem = (item: ProductionNavItem) => {
+    if (item.permission) return hasPermission(item.permission);
+    if (item.access === 'stocktake') return showStocktakes;
+    if (item.access === 'approvals') return canViewApprovals();
+    return true;
+  };
   const navLink = (to: string, label: string, accent = false) => {
     const active = pathname === to || (to !== '/system-blueprint' && pathname.startsWith(to + '/'));
     let linkColor = '#dbe5f1';
@@ -92,33 +105,35 @@ const MainLayout = () => {
             </ul>
           </>
         ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            <li style={{ margin: '10px 0' }}><Link to="/" style={{ color: 'white', textDecoration: 'none' }}>Tổng quan</Link></li>
-            <li style={{ margin: '10px 0' }}>
-              <Link to="/system-blueprint" style={{ color: '#8fc3ff', textDecoration: 'none', display: 'flex', gap: 7, alignItems: 'center', fontWeight: 700 }}>
+          <>
+            <div style={{ margin: '2px 0 10px' }}>
+              <Link to="/system-blueprint" style={{ color: '#8fc3ff', textDecoration: 'none', display: 'flex', gap: 7, alignItems: 'center', fontWeight: 700, fontSize: 12, padding: '7px 9px' }}>
                 <Layers3 size={16} /> Bản đồ hệ thống
               </Link>
-            </li>
-            {hasPermission('product.read') && <li style={{ margin: '10px 0' }}><Link to="/products" style={{ color: 'white', textDecoration: 'none' }}>Sản phẩm</Link></li>}
-            {hasPermission('warehouse.read') && <li style={{ margin: '10px 0' }}><Link to="/warehouses" style={{ color: 'white', textDecoration: 'none' }}>Kho hàng</Link></li>}
-            {hasPermission('uom.read') && <li style={{ margin: '10px 0' }}><Link to="/units" style={{ color: 'white', textDecoration: 'none' }}>Đơn vị tính</Link></li>}
-            {hasPermission('partner.read') && <li style={{ margin: '10px 0' }}><Link to="/business-partners" style={{ color: 'white', textDecoration: 'none' }}>Đối tác</Link></li>}
-            {hasPermission('receipt.read') && <li style={{ margin: '10px 0' }}><Link to="/import-receipts" style={{ color: 'white', textDecoration: 'none' }}>Phiếu nhập kho</Link></li>}
-            <li style={{ margin: '10px 0' }}><Link to="/export-receipts" style={{ color: 'white', textDecoration: 'none' }}>Phiếu xuất kho</Link></li>
-            <li style={{ margin: '10px 0' }}><Link to="/inventory" style={{ color: 'white', textDecoration: 'none' }}>Tồn kho</Link></li>
-            <li style={{ margin: '10px 0' }}><Link to="/inventory-reconciliation" style={{ color: 'white', textDecoration: 'none' }}>Đối chiếu tồn kho</Link></li>
-            {hasPermission('putaway.read') && <li style={{ margin: '10px 0' }}><Link to="/putaway-tasks" style={{ color: 'white', textDecoration: 'none' }}>Cất hàng</Link></li>}
-            {showStocktakes && <li style={{ margin: '10px 0' }}><Link to="/stocktakes" style={{ color: 'white', textDecoration: 'none' }}>Kiểm kê kho</Link></li>}
-            <li style={{ margin: '10px 0' }}><Link to="/stock-transfers" style={{ color: 'white', textDecoration: 'none' }}>Điều chuyển kho</Link></li>
-            <li style={{ margin: '10px 0' }}><Link to="/stock-reservations" style={{ color: 'white', textDecoration: 'none' }}>Giữ hàng</Link></li>
-            {canViewApprovals() && <li style={{ margin: '10px 0' }}><Link to="/approvals" style={{ color: 'white', textDecoration: 'none' }}>Phê duyệt</Link></li>}
-            {hasPermission('permission.read') && <li><Link to="/permissions" style={{ color: 'white' }}>Quản trị quyền truy cập</Link></li>}
-          </ul>
+            </div>
+            {productionSections.map((section) => {
+              const items = productionNavigation.filter((item) => item.section === section && canShowProductionItem(item));
+              if (items.length === 0) return null;
+              return <div key={section}>
+                <div style={{ margin: '14px 9px 5px', color: '#7188a4', fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>{section}</div>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  {items.map((item) => navLink(item.path, item.label))}
+                </ul>
+              </div>;
+            })}
+          </>
         )}
       </aside>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <header style={{ height: '60px', backgroundColor: '#ffffff', borderBottom: '1px solid #d9e1eb', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'flex-end' }}>
+        <header style={{ minHeight: '64px', backgroundColor: '#ffffff', borderBottom: '1px solid #d9e1eb', display: 'flex', alignItems: 'center', padding: '8px 20px', justifyContent: 'space-between', gap: 16 }}>
+          {!blueprintMode && pageMeta && (
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: '#7a899c', fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>{pageMeta.section}</div>
+              <div style={{ color: '#21344a', fontSize: 14, fontWeight: 800, marginTop: 2 }}>{pageMeta.label}</div>
+              <div style={{ color: '#6c7c90', fontSize: 10, marginTop: 2, maxWidth: 760, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pageMeta.description}</div>
+            </div>
+          )}
           {blueprintMode && (
             <>
               <span style={{ marginRight: 10, fontSize: 11, fontWeight: 800, color: '#6f4bc3', background: '#f4efff', border: '1px solid #dfd3f8', borderRadius: 999, padding: '5px 8px' }}>DEMO / MOCK • READ ONLY</span>
@@ -156,6 +171,19 @@ const MainLayout = () => {
         </header>
 
         <main style={{ padding: '20px', flex: 1, backgroundColor: '#f5f7fb', minWidth: 0 }}>
+          {demoRuntime && !blueprintMode && (
+            <section role="note" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16, padding: '12px 14px', background: '#fff9e8', border: '1px solid #ead58a', borderRadius: 10, color: '#5f4a18' }}>
+              <div style={{ minWidth: 260, flex: 1 }}>
+                <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>Vercel Blueprint Demo • Read only</div>
+                <div style={{ fontSize: 12, fontWeight: 800, marginTop: 3 }}>Đây là production UI đang chạy với demo API adapter, chưa phải backend staging.</div>
+                <div style={{ fontSize: 10, marginTop: 4, lineHeight: 1.5 }}>GET được phục vụ bằng dữ liệu mock có kiểm soát; POST/PUT/DELETE bị chặn 405 và dữ liệu không được lưu sau phiên test.</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Link to="/system-blueprint" style={{ color: '#315f91', fontSize: 10, fontWeight: 800, textDecoration: 'none', background: '#fff', border: '1px solid #d5dfeb', borderRadius: 7, padding: '7px 9px' }}>Mở bản đồ hệ thống</Link>
+                <Link to="/system-blueprint/coverage" style={{ color: '#315f91', fontSize: 10, fontWeight: 800, textDecoration: 'none', background: '#fff', border: '1px solid #d5dfeb', borderRadius: 7, padding: '7px 9px' }}>Coverage & Readiness</Link>
+              </div>
+            </section>
+          )}
           {identityState === 'loading' ? <p role="status">Đang xác minh quyền truy cập...</p>
             : identityState === 'error' ? <p role="alert">Không thể xác minh quyền truy cập. Vui lòng tải lại.</p>
               : <Outlet />}
