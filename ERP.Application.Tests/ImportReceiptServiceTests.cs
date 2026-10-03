@@ -105,6 +105,48 @@ namespace ERP.Application.Tests
             _mockUnitOfWork.Verify(x => x.CommitTransactionAsync(), Times.Once);
         }
 
+        private ImportReceiptService AuthorizedService(Mock<IUserRepository> permissions)
+        {
+            var current = new Mock<ERP.Application.Interfaces.ICurrentUser>();
+            current.SetupGet(u => u.UserId).Returns(33);
+            var scope = new Mock<ERP.Application.Interfaces.IWarehouseAuthorizationService>();
+            scope.Setup(w => w.EnsureWarehouseAccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            return new ImportReceiptService(_mockImportRepo.Object, _mockStockRepo.Object, _mockTransactionRepo.Object,
+                _mockWarehouseRepo.Object, _mockProductRepo.Object, _mockUnitOfWork.Object, _mockAuditRepo.Object,
+                scope.Object, current.Object, permissions.Object);
+        }
+
+        [Theory]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        public async Task Shared_Qc_service_requires_execute_and_complete_without_a_controller(bool execute, bool complete)
+        {
+            var permissions = new Mock<IUserRepository>();
+            permissions.Setup(p => p.HasPermissionAsync(33, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int _, string code, CancellationToken _) => code == "quality_inspection.execute" ? execute : complete);
+            var receipt = new ImportReceipt { Id = 9, WarehouseId = 4, Status = ReceiptStatus.QcPending,
+                Details = [new() { Id = 2, RequiresQc = true, QcState = ReceiptLineQcState.QcPending, ReceivedQuantity = 5 }] };
+            _mockImportRepo.Setup(r => r.GetByIdWithDetailsForUpdateAsync(9)).ReturnsAsync(receipt);
+            await Assert.ThrowsAsync<ForbiddenException>(() => AuthorizedService(permissions).RecordQcDispositionAsync(9,
+                new RecordQcDispositionDto { Lines = [new() { LineId = 2, AcceptedQuantity = 5 }] }, 999));
+            _mockImportRepo.Verify(r => r.UpdateAsync(It.IsAny<ImportReceipt>(), It.IsAny<CancellationToken>()), Times.Never);
+            _mockAuditRepo.Verify(r => r.AddAsync(It.IsAny<AuditLog>()), Times.Never);
+        }
+
+        [Theory]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        public async Task Shared_Qc_approval_requires_both_grants_without_a_controller(bool complete, bool approveQc)
+        {
+            var permissions = new Mock<IUserRepository>();
+            permissions.Setup(p => p.HasPermissionAsync(33, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((int _, string code, CancellationToken _) => code == "receipt.complete" ? complete : approveQc);
+            _mockImportRepo.Setup(r => r.GetByIdWithDetailsAsync(9)).ReturnsAsync(new ImportReceipt { Id = 9, WarehouseId = 4, Status = ReceiptStatus.QcCompleted, CreatedBy = 99 });
+            await Assert.ThrowsAsync<ForbiddenException>(() => AuthorizedService(permissions).ApproveImportReceiptAsync(9, 999));
+            _mockImportRepo.Verify(r => r.UpdateAsync(It.IsAny<ImportReceipt>(), It.IsAny<CancellationToken>()), Times.Never);
+            _mockAuditRepo.Verify(r => r.AddAsync(It.IsAny<AuditLog>()), Times.Never);
+        }
+
         [Fact]
         public async Task CreateAsync_OperationUom_SnapshotsConversionAndBaseExpectedQuantity()
         {
@@ -199,6 +241,7 @@ namespace ERP.Application.Tests
             var qc = new ImportReceiptDetail { Id = 2, ProductId = 2, RequiresQc = true, QcState = ReceiptLineQcState.QcPending, ReceivedQuantity = 10, BaseReceivedQuantity = 10, ConversionFactor = 1, OperationUnitDecimalPlaces = 0, BaseUnitDecimalPlaces = 0 };
             var receipt = new ImportReceipt { Id = 9, WarehouseId = 4, Status = ReceiptStatus.QcPending, Details = [noQc, qc] };
             _mockImportRepo.Setup(x => x.GetByIdWithDetailsAsync(9)).ReturnsAsync(receipt);
+            _mockImportRepo.Setup(x => x.GetByIdWithDetailsForUpdateAsync(9)).ReturnsAsync(receipt);
             _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(It.IsAny<int>(), 4)).ReturnsAsync((InventoryStock?)null);
             _mockStockRepo.Setup(x => x.GetByProductWarehouseAndStatusAsync(It.IsAny<int>(), 4, It.IsAny<InventoryStatus>())).ReturnsAsync((InventoryStock?)null);
 

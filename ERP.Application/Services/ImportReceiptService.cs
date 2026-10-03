@@ -20,6 +20,7 @@ namespace ERP.Application.Services
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
         private readonly ICurrentUser? _currentUser;
         private readonly IReceiptPutawayIntegration? _putaway;
+        private readonly IUserRepository? _permissionUsers;
 
         internal ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository)
         {
@@ -41,7 +42,8 @@ namespace ERP.Application.Services
             IUnitOfWork unitOfWork,
             IAuditLogRepository auditLogRepository,
             IWarehouseAuthorizationService warehouseAuthorization,
-            ICurrentUser currentUser)
+            ICurrentUser currentUser,
+            IUserRepository permissionUsers)
         {
             _importReceiptRepository = importReceiptRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -52,10 +54,11 @@ namespace ERP.Application.Services
             _auditLogRepository = auditLogRepository;
             _warehouseAuthorization = warehouseAuthorization;
             _currentUser = currentUser;
+            _permissionUsers = permissionUsers;
         }
 
-        public ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, IWarehouseAuthorizationService warehouseAuthorization, ICurrentUser currentUser, IReceiptPutawayIntegration putaway)
-            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser) => _putaway = putaway;
+        public ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, IWarehouseAuthorizationService warehouseAuthorization, ICurrentUser currentUser, IUserRepository permissionUsers, IReceiptPutawayIntegration putaway)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers) => _putaway = putaway;
 
         public async Task<ImportReceiptDto> CreateAsync(CreateImportReceiptDto dto, int userId)
         {
@@ -251,6 +254,7 @@ namespace ERP.Application.Services
         public async Task ApproveImportReceiptAsync(int id, int approvedByUserId)
         {
             if (_currentUser is not null) approvedByUserId = _currentUser.UserId;
+            await EnsurePermissionAsync(approvedByUserId, "receipt.complete");
             try
             {
                 await _unitOfWork.BeginTransactionAsync();
@@ -264,6 +268,8 @@ namespace ERP.Application.Services
                     throw Conflict("Chỉ có thể duyệt phiếu đã hoàn tất nhận hàng");
 
                 var previousStatus = receipt.Status;
+                if (previousStatus == ReceiptStatus.QcCompleted)
+                    await EnsurePermissionAsync(approvedByUserId, "quality_disposition.approve");
                 receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
                 receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
 
@@ -355,10 +361,11 @@ namespace ERP.Application.Services
         public async Task RecordQcDispositionAsync(int id, RecordQcDispositionDto dto, int completedByUserId)
         {
             if (_currentUser is not null) completedByUserId = _currentUser.UserId;
+            await EnsurePermissionAsync(completedByUserId, "quality_inspection.execute");
             await _unitOfWork.BeginTransactionAsync();
             try
             {
-                var receipt = await _importReceiptRepository.GetByIdWithDetailsAsync(id)
+                var receipt = await _importReceiptRepository.GetByIdWithDetailsForUpdateAsync(id)
                     ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
                 if (receipt.Status != ReceiptStatus.QcPending) throw Conflict("Chỉ có thể ghi disposition khi phiếu đang chờ QC");
@@ -391,7 +398,10 @@ namespace ERP.Application.Services
                     detail.QcState = ReceiptLineQcState.QcCompleted;
                 }
                 if (receipt.Details.Where(x => x.RequiresQc).All(x => x.QcState == ReceiptLineQcState.QcCompleted))
+                {
+                    await EnsurePermissionAsync(completedByUserId, "quality_inspection.complete");
                     receipt.Status = ReceiptStatus.QcCompleted;
+                }
                 await _importReceiptRepository.UpdateAsync(receipt);
                 await _auditLogRepository.AddAsync(new AuditLog { UserId = completedByUserId, Action = "ImportReceipt.QcDispositionRecorded", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.QcPending}", NewValues = $"Status: {receipt.Status}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
                 await _unitOfWork.CommitTransactionAsync();
@@ -464,6 +474,12 @@ namespace ERP.Application.Services
             var exception = new BusinessRuleException(message);
             exception.Data["HttpStatusCode"] = 409;
             return exception;
+        }
+
+        private async Task EnsurePermissionAsync(int userId, string permission)
+        {
+            if (_permissionUsers is not null && !await _permissionUsers.HasPermissionAsync(userId, permission))
+                throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
         }
         public async Task<IEnumerable<ImportReceiptDto>> GetAllAsync(Domain.Enums.ReceiptStatus? status = null)
         {

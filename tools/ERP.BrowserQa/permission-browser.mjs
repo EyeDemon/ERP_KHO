@@ -173,6 +173,93 @@ async function main(manifestPath) {
     }
     password = undefined;
     const admin = actors.admin, manager = actors.manager, viewer = actors.viewer, reader = actors.reader;
+    await run('Conditional QC partial/final/approval/replay', 'UI workflow + browser HTTP + SQL postconditions', async () => {
+      const qc = await sql(`
+        SET NOCOUNT ON; BEGIN TRAN;
+        INSERT ImportReceipts(Code,WarehouseId,Status,CreatedBy,CreatedAt) VALUES('QA-QC-PARTIAL',@warehouse,7,@admin,SYSUTCDATETIME());
+        DECLARE @partial int=SCOPE_IDENTITY();
+        INSERT ImportReceiptDetails(ImportReceiptId,ProductId,Quantity,ExpectedQuantity,ReceivedQuantity,AcceptedQuantity,BaseExpectedQuantity,BaseReceivedQuantity,BaseAcceptedQuantity,UnitPrice,OperationUnitId,OperationUnitCodeSnapshot,OperationUnitDecimalPlaces,BaseUnitId,BaseUnitCodeSnapshot,BaseUnitDecimalPlaces,ConversionFactor,ConversionVersion,RequiresQc,QcState)
+          SELECT TOP 2 @partial,p.Id,5,5,5,0,5,5,0,0,u.Id,u.Code,u.DecimalPlaces,u.Id,u.Code,u.DecimalPlaces,1,1,1,1 FROM Products p JOIN Units u ON u.Id=p.UnitId ORDER BY p.Id;
+        INSERT ImportReceipts(Code,WarehouseId,Status,CreatedBy,CreatedAt) VALUES('QA-QC-APPROVAL',@warehouse,8,@admin,SYSUTCDATETIME());
+        DECLARE @approval int=SCOPE_IDENTITY();
+        INSERT ImportReceiptDetails(ImportReceiptId,ProductId,Quantity,ExpectedQuantity,ReceivedQuantity,AcceptedQuantity,BaseExpectedQuantity,BaseReceivedQuantity,BaseAcceptedQuantity,UnitPrice,OperationUnitId,OperationUnitCodeSnapshot,OperationUnitDecimalPlaces,BaseUnitId,BaseUnitCodeSnapshot,BaseUnitDecimalPlaces,ConversionFactor,ConversionVersion,RequiresQc,QcState)
+          SELECT TOP 1 @approval,p.Id,5,5,5,5,5,5,5,0,u.Id,u.Code,u.DecimalPlaces,u.Id,u.Code,u.DecimalPlaces,1,1,1,2 FROM Products p JOIN Units u ON u.Id=p.UnitId ORDER BY p.Id;
+        COMMIT; SELECT @partial AS partial,@approval AS approval FOR JSON PATH,WITHOUT_ARRAY_WRAPPER`, { warehouse: fixture.warehouse, admin: fixture.admin });
+      const state = () => sql(`SELECT
+        (SELECT Status FROM ImportReceipts WHERE Id=@receipt) AS receiptState,
+        (SELECT COUNT(*) FROM ImportReceiptDetails WHERE ImportReceiptId=@receipt AND QcState=2) AS completedLines,
+        (SELECT COUNT(*) FROM AuditLogs WHERE EntityId=@receipt AND Action='ImportReceipt.QcDispositionRecorded' AND Result='Success') AS qcAudits,
+        (SELECT COUNT(*) FROM AuditLogs WHERE EntityId=@approval AND Action='ImportReceipt.Approved' AND Result='Success') AS approvalAudits,
+        (SELECT COUNT(*) FROM IdempotencyRecords WHERE CommandScope IN ('ImportReceipt.QcDisposition','ImportReceipt.Approve')) AS commandClaims,
+        (SELECT SUM(Quantity) FROM InventoryStocks) AS stock,
+        (SELECT COUNT(*) FROM InventoryTransactions) AS ledger FOR JSON PATH,WITHOUT_ARRAY_WRAPPER`, { receipt: qc.partial, approval: qc.approval });
+      const before = await state();
+      expectStatus(await grant(fixture.managerRole, 'quality_inspection.complete', false), 200);
+      await manager.page.goto(manifest.FrontendUrl + '/import-receipts');
+      const partialRow = manager.page.getByRole('row').filter({ hasText: 'QA-QC-PARTIAL' });
+      await partialRow.getByRole('button', { name: 'Chi tiết', exact: true }).click();
+      const detail = await fetchFromBrowser(manager, `/api/importreceipts/${qc.partial}`); expectStatus(detail, 200);
+      assert.equal(detail.data.details.length, 2);
+      const [first, second] = detail.data.details;
+      const body = lines => ({ lines: lines.map(line => ({ lineId: line.id, acceptedQuantity: 5, damagedQuantity: 0, rejectedQuantity: 0, reasonCode: '', note: '' })) });
+      await manager.page.getByLabel(`Kiểm tra chất lượng: chấp nhận ${first.productCode}`, { exact: true }).fill('5');
+      await manager.page.getByLabel(`Ghi kết quả kiểm tra ${second.productCode}`, { exact: true }).uncheck();
+      const response = manager.page.waitForResponse(r => r.url().endsWith(`/${qc.partial}/qc-disposition`) && r.request().method() === 'POST');
+      await manager.page.getByRole('button', { name: 'Ghi nhận kết quả kiểm tra chất lượng', exact: true }).click();
+      const partialResponse = await response; assert.equal(partialResponse.status(), 200);
+      const partialKey = partialResponse.request().headers()['idempotency-key']; assert(partialKey);
+      await quiesce(manager);
+      let effects = await state(); assert.equal(effects.receiptState, 7); assert.equal(effects.completedLines, 1); assert.equal(effects.qcAudits, 1);
+      await manager.page.getByLabel(`Kiểm tra chất lượng: chấp nhận ${second.productCode}`, { exact: true }).fill('5');
+      let uiRequests = 0;
+      const observe = request => { if (request.method() === 'POST' && request.url().endsWith(`/${qc.partial}/qc-disposition`)) uiRequests++; };
+      manager.page.on('request', observe);
+      await manager.page.getByRole('button', { name: 'Ghi nhận kết quả kiểm tra chất lượng', exact: true }).click();
+      await manager.page.getByText('Bạn không có quyền hoàn tất kiểm tra chất lượng. Hãy ghi kết quả từng phần hoặc liên hệ người có quyền.', { exact: true }).waitFor();
+      assert.equal(uiRequests, 0, 'UI does not submit an unauthorized completing command');
+      manager.page.off('request', observe);
+      expectStatus(await fetchFromBrowser(manager, `/api/importreceipts/${qc.partial}/qc-disposition`, 'POST', body([second])), 403);
+      assert.deepEqual(await state(), effects, 'Denied final QC leaves no line/state/audit/claim/stock/ledger effect');
+      expectStatus(await grant(fixture.managerRole, 'quality_inspection.complete', true), 200);
+      await manager.page.reload();
+      await manager.page.getByRole('row').filter({ hasText: 'QA-QC-PARTIAL' }).getByRole('button', { name: 'Chi tiết', exact: true }).click();
+      await manager.page.getByLabel(`Kiểm tra chất lượng: chấp nhận ${second.productCode}`, { exact: true }).fill('5');
+      const finalResponsePromise = manager.page.waitForResponse(r => r.url().endsWith(`/${qc.partial}/qc-disposition`) && r.request().method() === 'POST');
+      await manager.page.getByRole('button', { name: 'Ghi nhận kết quả kiểm tra chất lượng', exact: true }).click();
+      const finalResponse = await finalResponsePromise; assert.equal(finalResponse.status(), 200);
+      const finalKey = finalResponse.request().headers()['idempotency-key']; assert(finalKey);
+      const finalBody = finalResponse.request().postDataJSON();
+      effects = await state(); assert.equal(effects.receiptState, 8); assert.equal(effects.completedLines, 2); assert.equal(effects.qcAudits, 2);
+      expectStatus(await fetchFromBrowser(manager, `/api/importreceipts/${qc.partial}/qc-disposition`, 'POST', finalBody, finalKey), 200);
+      expectStatus(await fetchFromBrowser(manager, `/api/importreceipts/${qc.partial}/qc-disposition`, 'POST', body([first]), finalKey), 409);
+      expectStatus(await grant(fixture.managerRole, 'quality_inspection.complete', false), 200);
+      const denied = await fetchFromBrowser(manager, `/api/importreceipts/${qc.partial}/qc-disposition`, 'POST', finalBody, finalKey); expectStatus(denied, 403);
+      assert.equal(denied.data.message, 'Bạn không có quyền thực hiện thao tác này.');
+      expectStatus(await fetchFromBrowser(manager, `/api/importreceipts/${qc.partial}/qc-disposition`, 'POST', partialResponse.request().postDataJSON(), partialKey), 200);
+      assert.deepEqual(await state(), effects, 'Original partial replay stays partial after later completion; no duplicate effect');
+      expectStatus(await grant(fixture.managerRole, 'quality_disposition.approve', false), 200);
+      await manager.page.goto(manifest.FrontendUrl + '/approvals');
+      const approvalRow = manager.page.getByRole('row').filter({ hasText: 'QA-QC-APPROVAL' });
+      await approvalRow.waitFor(); assert.equal(await approvalRow.getByTitle('Duyệt', { exact: true }).count(), 0);
+      const queue = await fetchFromBrowser(manager, '/api/approvals/queue?documentType=ImportReceipt'); expectStatus(queue, 200);
+      const entry = queue.data.items.find(item => item.documentId === qc.approval); assert(entry); assert.equal(entry.pendingState, 'QcCompleted'); assert.equal(entry.canApprove, false);
+      const approvalPath = `/api/importreceipts/${qc.approval}/approve`, approvalKey = key();
+      expectStatus(await fetchFromBrowser(manager, approvalPath, 'POST', undefined, approvalKey), 403);
+      expectStatus(await grant(fixture.managerRole, 'quality_disposition.approve', true), 200);
+      expectStatus(await grant(fixture.managerRole, 'quality_inspection.execute', false), 200);
+      await manager.page.reload();
+      await manager.page.getByRole('row').filter({ hasText: 'QA-QC-APPROVAL' }).getByTitle('Duyệt', { exact: true }).waitFor();
+      expectStatus(await fetchFromBrowser(manager, approvalPath, 'POST', undefined, approvalKey), 200);
+      expectStatus(await fetchFromBrowser(manager, approvalPath, 'POST', undefined, approvalKey), 200);
+      expectStatus(await grant(fixture.managerRole, 'quality_disposition.approve', false), 200);
+      expectStatus(await fetchFromBrowser(manager, approvalPath, 'POST', undefined, approvalKey), 403);
+      effects = await state(); assert.equal(effects.qcAudits, 2); assert.equal(effects.approvalAudits, 1); assert.equal(effects.commandClaims, before.commandClaims + 3);
+      assert.equal(effects.stock, before.stock); assert.equal(effects.ledger, before.ledger);
+      expectStatus(await grant(fixture.managerRole, 'quality_inspection.execute', true), 200);
+      expectStatus(await grant(fixture.managerRole, 'quality_inspection.complete', true), 200);
+      expectStatus(await grant(fixture.managerRole, 'quality_disposition.approve', true), 200);
+      return { actor: 'Manager same authenticated session; Admin grant/revoke from browser context', statuses: [200, 403, 200, 200, 409, 403, 200, 403, 200, 200, 403], finalDeniedUiRequests: uiRequests, baseline: before, postconditions: effects, assertions: ['execute-only partial UI succeeds', 'final UI safely blocked without complete; raw HTTP also 403 with zero effects', 'regrant enables final QC on reload', 'original partial/final replay rights remain distinct', 'QC approval needs disposition.approve; execute not required', 'Approval Center state-aware action visibility', 'two QC audits, one approval audit, three additional claims; inventory/ledger unchanged'] };
+    });
     await run('Viewer raw list/detail/history/destinations and safe errors', 'Browser HTTP + SQL postconditions', async () => {
       let task = await fetchFromBrowser(manager, `/api/putaway-tasks/${fixture.task}`); expectStatus(task, 200);
       let response = await fetchFromBrowser(manager, `/api/putaway-tasks/${fixture.task}/assign`, 'POST', { rowVersion: task.data.rowVersion, assignedUserId: fixture.manager }); expectStatus(response, 200); task = response;

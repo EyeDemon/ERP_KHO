@@ -79,6 +79,8 @@ const ImportReceipts = () => {
   const canReceive = usePermission('receipt.receive');
   const canPost = usePermission('receipt.post');
   const canQc = usePermission('quality_inspection.execute');
+  const canCompleteQc = usePermission('quality_inspection.complete');
+  const canApproveQc = usePermission('quality_disposition.approve');
   const canReadDiscrepancy = usePermission('receiving_discrepancy.read');
   const canObserve = usePermission('receiving_discrepancy.create');
   const canSubmit = usePermission('receiving_discrepancy.submit');
@@ -98,6 +100,7 @@ const ImportReceipts = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceipt | null>(null);
   const [receiveLines, setReceiveLines] = useState<Record<number, ReceiveLineForm>>({});
+  const [qcExcludedLines, setQcExcludedLines] = useState<number[]>([]);
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
   const [reasonCodes, setReasonCodes] = useState<ReasonCode[]>([]);
   const [resolutionForms, setResolutionForms] = useState<Record<number, ResolutionForm>>({});
@@ -183,7 +186,7 @@ const ImportReceipts = () => {
   }, [canRead, canReadDiscrepancy, canReadReasons, canReadPartners, canReadProducts, canReadWarehouses]);
 
   const handleApprove = async (id: number) => {
-    if (!canApprove || approveInFlight.current !== null) return;
+    if (!canApprove || (receipts.find(r => r.id === id)?.status === 'QcCompleted' && !canApproveQc) || approveInFlight.current !== null) return;
     approveInFlight.current = id;
     setApprovingId(id);
     setError('');
@@ -231,7 +234,7 @@ const ImportReceipts = () => {
     try {
       const res = await apiClient.get(`/api/importreceipts/${id}`);
       if (request !== detailRequest.current || !hasPermission('receipt.read')) return;
-      setSelectedReceipt(res.data);
+      setSelectedReceipt(res.data); setQcExcludedLines([]);
       setDiscrepancies([]); setReasonCodes([]); setResolutionForms({});
       setReceiveLines(Object.fromEntries((res.data.details as ImportReceiptDetail[]).map(d => [d.id, { receivedQuantity: d.receivedQuantity || d.expectedQuantity, acceptedQuantity: d.requiresQc ? d.acceptedQuantity : d.expectedQuantity, damagedQuantity: d.damagedQuantity, rejectedQuantity: d.rejectedQuantity, reasonCode: d.qcDispositionReasonCode || '', note: d.qcDispositionNote || '' }])));
       const [discrepancyRes, reasonRes] = await Promise.allSettled([
@@ -390,11 +393,16 @@ const ImportReceipts = () => {
       const action = `import-${command}:${id}`;
       const source = !receipt && (command === 'receive' || command === 'qc-disposition' || command === 'post') ? (await apiClient.get(`/api/importreceipts/${id}`)).data as ImportReceipt : receipt;
       const body = command === 'receive' ? { lines: (source?.details || []).map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.requiresQc ? 0 : d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }) })) }
-        : command === 'qc-disposition' ? { lines: (source?.details || []).filter(d => d.requiresQc && d.qcState === 'QcPending').map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { acceptedQuantity: 0, damagedQuantity: 0, rejectedQuantity: 0 }), reasonCode: receiveLines[d.id]?.reasonCode, note: receiveLines[d.id]?.note })) } : undefined;
+        : command === 'qc-disposition' ? { lines: (source?.details || []).filter(d => d.requiresQc && d.qcState === 'QcPending' && !qcExcludedLines.includes(d.id)).map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { acceptedQuantity: 0, damagedQuantity: 0, rejectedQuantity: 0 }), reasonCode: receiveLines[d.id]?.reasonCode, note: receiveLines[d.id]?.note })) } : undefined;
       if (command === 'receive' && body?.lines.some(line => line.receivedQuantity <= 0 || line.acceptedQuantity < 0 || (!source?.details.find(d => d.id === line.lineId)?.requiresQc && line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== line.receivedQuantity)))
         throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận.');
       if (command === 'qc-disposition' && body?.lines.some(line => line.acceptedQuantity < 0 || line.damagedQuantity < 0 || line.rejectedQuantity < 0 || line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== source?.details.find(d => d.id === line.lineId)?.receivedQuantity || ((line.damagedQuantity > 0 || line.rejectedQuantity > 0) && !line.reasonCode?.trim())))
         throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận; lượng hư hỏng hoặc từ chối cần mã lý do.');
+      if (command === 'qc-disposition') {
+        if (!body?.lines.length) return setError('Chọn ít nhất một dòng để ghi kết quả kiểm tra chất lượng.');
+        const pendingCount = source?.details.filter(d => d.requiresQc && d.qcState === 'QcPending').length;
+        if (body.lines.length === pendingCount && !canCompleteQc) return setError('Bạn không có quyền hoàn tất kiểm tra chất lượng. Hãy ghi kết quả từng phần hoặc liên hệ người có quyền.');
+      }
       if (command === 'post') {
         const available = source?.details.reduce((sum, line) => sum + line.baseAcceptedQuantity, 0) ?? 0;
         const damaged = source?.details.reduce((sum, line) => sum + line.damagedQuantity * line.conversionFactor, 0) ?? 0;
@@ -549,7 +557,7 @@ const ImportReceipts = () => {
                     {canCancel && <button onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '3px' }}>Hủy</button>}
                   </>
                 )}
-                {(r.status === 'Received' || r.status === 'QcCompleted') && canApprove && r.createdBy !== userId && <button
+                {(r.status === 'Received' || (r.status === 'QcCompleted' && canApproveQc)) && canApprove && r.createdBy !== userId && <button
                       onClick={() => handleApprove(r.id)} 
                       disabled={approvingId === r.id}
                       style={{ 
@@ -618,6 +626,7 @@ const ImportReceipts = () => {
                       {!d.requiresQc && <label>Số lượng chấp nhận <input aria-label={`Số lượng chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...(x[d.id]||{receivedQuantity:d.expectedQuantity,acceptedQuantity:d.expectedQuantity,damagedQuantity:0,rejectedQuantity:0}),acceptedQuantity:Number(e.target.value)}}))}/></label>}
                       <span>{d.requiresQc ? 'Kết quả kiểm tra được nhập sau khi nhận; chưa ghi tồn.' : 'Hư hỏng: 0 · Từ chối: 0 (không kiểm tra chất lượng)'}</span>
                     </div> : selectedReceipt.status === 'QcPending' && canQc && d.requiresQc && d.qcState === 'QcPending' ? <div style={{display:'grid', gap:'4px'}}>
+                      <label><input type="checkbox" aria-label={`Ghi kết quả kiểm tra ${d.productCode}`} checked={!qcExcludedLines.includes(d.id)} onChange={e => setQcExcludedLines(ids => e.target.checked ? ids.filter(id => id !== d.id) : [...ids, d.id])}/> Ghi kết quả dòng này</label>
                       <label>Chấp nhận <input aria-label={`Kiểm tra chất lượng: chấp nhận ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.acceptedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],acceptedQuantity:Number(e.target.value)}}))}/></label>
                       <label>Hư hỏng <input aria-label={`Kiểm tra chất lượng: hư hỏng ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.damagedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],damagedQuantity:Number(e.target.value)}}))}/></label>
                       <label>Từ chối giữ tại kho <input aria-label={`Kiểm tra chất lượng: từ chối ${d.productCode}`} type="number" min="0" step="any" value={receiveLines[d.id]?.rejectedQuantity ?? 0} onChange={e=>setReceiveLines(x=>({...x,[d.id]:{...x[d.id],rejectedQuantity:Number(e.target.value)}}))}/></label>

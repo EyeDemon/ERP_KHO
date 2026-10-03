@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { render, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Approvals from './Approvals';
 import apiClient from '../services/apiClient';
 import userEvent from '@testing-library/user-event';
+import { setCurrentPermissions } from '../services/authorization';
 
 vi.mock('../services/apiClient',()=>({default:{get:vi.fn(),post:vi.fn()}}));
 const item={documentType:'StockTransfer',documentId:7,documentCode:'TRF-7',pendingState:'Draft',creatorName:'Maker',requestedAtUtc:'2026-09-05T01:00:00Z',waitingMinutes:1500,slaStatus:'Warning' as const,warehouseName:'WH01',destinationWarehouseName:'WH02',totalQuantity:5,canApprove:false,canReject:true};
@@ -11,6 +12,17 @@ const page=(items= [item])=>({items,totalRecords:items.length,pageIndex:1,pageSi
 
 describe('Approvals page',()=>{
   afterEach(cleanup);
+  it('QC approval requires both grants even when a previously loaded server capability says yes', async () => {
+    const qc = { ...item, documentType: 'ImportReceipt', pendingState: 'QcCompleted', canApprove: true, canReject: false };
+    vi.mocked(apiClient.get).mockResolvedValue({ data: page([qc]) });
+    setCurrentPermissions(['receipt.read', 'receipt.complete']);
+    const view = render(<Approvals />); await view.findByText('TRF-7');
+    expect(view.queryByTitle('Duyệt')).toBeNull();
+    act(() => setCurrentPermissions(['receipt.read', 'receipt.complete', 'quality_disposition.approve']));
+    await waitFor(() => expect(view.getByTitle('Duyệt')).toBeTruthy());
+    act(() => setCurrentPermissions(['receipt.read', 'quality_disposition.approve']));
+    await waitFor(() => expect(view.queryByTitle('Duyệt')).toBeNull());
+  });
   beforeEach(()=>{vi.resetAllMocks();vi.mocked(apiClient.get).mockResolvedValue({data:page()});});
   it('renders loading, queue data, capabilities, filters, and pagination',async()=>{
     let resolve!: (value:unknown)=>void;vi.mocked(apiClient.get).mockReturnValueOnce(new Promise(r=>{resolve=r}) as never);

@@ -320,6 +320,7 @@ namespace ERP.Application.Tests
             }
 
             public Task<ImportReceipt?> GetByIdWithDetailsAsync(int id) => _inner.GetByIdWithDetailsAsync(id);
+            public Task<ImportReceipt?> GetByIdWithDetailsForUpdateAsync(int id) => _inner.GetByIdWithDetailsForUpdateAsync(id);
             public Task<ImportReceipt?> GetByIdAsync(int id, CancellationToken cancellationToken = default) => _inner.GetByIdAsync(id, cancellationToken);
             public Task<IEnumerable<ImportReceipt>> GetAllAsync(CancellationToken cancellationToken = default) => _inner.GetAllAsync(cancellationToken);
             public Task<IEnumerable<ImportReceipt>> FindAsync(Expression<Func<ImportReceipt, bool>> predicate, CancellationToken cancellationToken = default) => _inner.FindAsync(predicate, cancellationToken);

@@ -30,6 +30,7 @@ Wait until the startup helper exits successfully; the runner requires the comple
 | Membership aggregate | Empty-set token, held same-token grant/revoke race, replay/stale/fingerprint and revoked capability | Browser HTTP; SQL coordination/postconditions; API-only owner scope |
 | Master capability separation | Product/Category/Barcode and Warehouse/Location grants independently toggled; raw denied/allowed actions and UI controls | Browser HTTP + UI observation |
 | Operational guards | Maker/checker/poster, scoped assigned WarehouseStaff, membership-revoked terminal replay | Browser HTTP; SQL role fixture only |
+| Conditional QC | Execute-only partial UI, blocked final UI/raw 403, regrant completion, original partial/terminal replay rights, state-aware Approval Center visibility, QC approval without execute; inventory/ledger unchanged | UI workflow + browser HTTP + SQL postconditions; focused selection only |
 | Vietnamese history/accessibility | Nonempty inbound history, translated states, title, dialog focus/return and route-denial copy | UI workflow |
 
 SQL fixture grants/role changes are labelled setup, never called browser administration. A registry/component/API PASS does not replace an unrun browser case. The runner reports partial/failure and production NO-GO unless every mandatory matrix case actually passes.

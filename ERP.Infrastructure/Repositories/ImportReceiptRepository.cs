@@ -34,9 +34,17 @@ namespace ERP.Infrastructure.Repositories
             _warehouseAuthorization = warehouseAuthorization;
         }
 
-        public async Task<ImportReceipt?> GetByIdWithDetailsAsync(int id)
+        public Task<ImportReceipt?> GetByIdWithDetailsAsync(int id) => LoadWithDetailsAsync(id, false);
+
+        public Task<ImportReceipt?> GetByIdWithDetailsForUpdateAsync(int id) => LoadWithDetailsAsync(id, true);
+
+        private async Task<ImportReceipt?> LoadWithDetailsAsync(int id, bool forUpdate)
         {
-            var query = _dbSet
+            // Status alone does not protect two partial QC updates that remain QcPending.
+            var source = forUpdate && _context.Database.IsSqlServer()
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.ImportReceipts WITH (UPDLOCK,HOLDLOCK) WHERE Id = {id}")
+                : _dbSet.AsQueryable();
+            var query = source
                 .Include(i => i.Warehouse)
                 .Include(i => i.Supplier)
                 .Include(i => i.Details)

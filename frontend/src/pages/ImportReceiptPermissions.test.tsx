@@ -16,6 +16,48 @@ describe('quyền độc lập trên phiếu nhập', () => {
   });
   afterEach(cleanup);
 
+  it('người chỉ thực hiện ghi được từng phần nhưng không gửi command hoàn tất kiểm tra', async () => {
+    setCurrentPermissions(['receipt.read', 'quality_inspection.execute']);
+    const qc = { ...receipt, status: 'QcPending', details: [1, 2].map(id => ({
+      id, productId: id, productCode: `SP${id}`, productName: `Sản phẩm ${id}`, requiresQc: true,
+      qcState: 'QcPending', expectedQuantity: 5, receivedQuantity: 5, acceptedQuantity: 0,
+      damagedQuantity: 0, rejectedQuantity: 0, conversionFactor: 1, operationUnitCode: 'EA', baseUnitCode: 'EA',
+    })) };
+    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [qc] : qc }) as never);
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+    const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
+    fireEvent.click(view.getByText('Chi tiết'));
+    fireEvent.change(await view.findByLabelText('Kiểm tra chất lượng: chấp nhận SP1'), { target: { value: '5' } });
+    fireEvent.change(view.getByLabelText('Kiểm tra chất lượng: chấp nhận SP2'), { target: { value: '5' } });
+    fireEvent.click(view.getByText('Ghi nhận kết quả kiểm tra chất lượng'));
+    expect(await view.findByText(/Bạn không có quyền hoàn tất kiểm tra chất lượng/)).toBeTruthy();
+    expect(apiClient.post).not.toHaveBeenCalled();
+    fireEvent.click(view.getByLabelText('Ghi kết quả kiểm tra SP2'));
+    fireEvent.click(view.getByText('Ghi nhận kết quả kiểm tra chất lượng'));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiClient.post).mock.calls[0][1]).toEqual({ lines: [expect.objectContaining({ lineId: 1, acceptedQuantity: 5 })] });
+  });
+
+  it('duyệt phiếu đã kiểm tra cần cả quyền hoàn tất phiếu và duyệt kết quả, không cần thực hiện', async () => {
+    const qc = { ...receipt, status: 'QcCompleted' };
+    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [qc] : qc }) as never);
+    setCurrentPermissions(['receipt.read', 'receipt.complete']);
+    const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
+    expect(view.queryByText('Duyệt để ghi nhận tồn kho')).toBeNull();
+    act(() => setCurrentPermissions(['receipt.read', 'receipt.complete', 'quality_disposition.approve']));
+    expect(await view.findByText('Duyệt để ghi nhận tồn kho')).toBeTruthy();
+    act(() => setCurrentPermissions(['receipt.read', 'quality_disposition.approve']));
+    expect(view.queryByText('Duyệt để ghi nhận tồn kho')).toBeNull();
+  });
+
+  it('duyệt phiếu không kiểm tra không cần quyền kiểm tra chất lượng', async () => {
+    const noQc = { ...receipt, status: 'Received' };
+    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [noQc] : noQc }) as never);
+    setCurrentPermissions(['receipt.read', 'receipt.complete']);
+    const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
+    expect(view.getByText('Duyệt để ghi nhận tồn kho')).toBeTruthy();
+  });
+
   it('receipt-only reader xem chi tiết mà không gọi dependency không có quyền', async () => {
     const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
     fireEvent.click(view.getByText('Chi tiết'));

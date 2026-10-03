@@ -1,8 +1,12 @@
 # Permission Code Authorization — current checkpoint
 
-Status: **OWNER BROWSERQA FINDINGS CLOSED; ACCUMULATED OWNER REVIEW INCOMPLETE**. Both requested BrowserQA findings retain PASS evidence. The subsequent whole-PR review found an unresolved QC endpoint/permission mapping; see `ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md` for findings, successor verification and source association. Final published-HEAD CI is tracked separately in Draft PR #1. Production NO-GO; no deployment authorization.
+Status: **ACCUMULATED PR READY FOR OWNER ACCEPTANCE**. Owner-approved conditional QC authorization and original-transition replay are now verified; both prior BrowserQA findings retain their precise PASS evidence. See [accumulated acceptance review](ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md) for source association, findings, fresh gates and cleanup. Final published-HEAD CI is tracked separately in Draft PR #1. Production NO-GO; no deployment authorization.
 
-## Owner BrowserQA findings successor — 2026-10-03
+## Current QC authorization successor — 2026-10-03
+
+Page 17 §33.4.4 write/read-back timestamp is **2026-10-03T15:19:58.948Z**, superseding **2026-09-30T19:50:06.373Z** for this conditional mapping. Execute always protects disposition; complete additionally protects the command that finishes QC. Receipt.complete protects readiness approval; disposition.approve additionally protects approval from QcCompleted. Shared services and original-transition replay enforce these requirements; Approval Center and Vietnamese partial-line UI reflect them. Catalog, bundles, model and migrations are unchanged. Fresh Application **352/352**, API **189/189**, frontend **89/89**, build/EF/lint/build/audit PASS; focused browser **7e83a8d3c6d347de9b80688ec98da134 PASS**, including cleanup. Full details and failed precursor scope are in the accumulated report. Membership UI remains **DEFERRED_BY_OWNER**.
+
+## Historical owner BrowserQA findings successor — 2026-10-03
 
 Both owner findings are **CLOSED by fresh evidence**. This successor changes only BrowserQA/test-host code and documentation. Production runtime/model remains `285ad837`; no SQL suite is rerun locally for test-only changes. Final published HEAD CI is tracked separately in Draft PR #1; this local evidence does not claim an unobserved CI result.
 
@@ -311,9 +315,9 @@ Origin remains https://github.com/EyeDemon/ERP_KHO.git. Read-only DNS succeeded;
 | Controller action | Permission code |
 | --- | --- |
 | ImportReceiptsController.Create | `receipt.create` |
-| ImportReceiptsController.Approve | `receipt.complete` |
+| ImportReceiptsController.Approve | `receipt.complete`; shared service additionally `quality_disposition.approve` from QcCompleted; original-transition replay |
 | ImportReceiptsController.Receive | `receipt.receive` |
-| ImportReceiptsController.RecordQcDisposition | `quality_inspection.execute` |
+| ImportReceiptsController.RecordQcDisposition | `quality_inspection.execute`; shared service additionally `quality_inspection.complete` when the validated batch finishes QC; original-transition replay |
 | ImportReceiptsController.Post | `receipt.post` |
 | ImportReceiptsController.GetAll | `receipt.read` |
 | ImportReceiptsController.GetById | `receipt.read` |
