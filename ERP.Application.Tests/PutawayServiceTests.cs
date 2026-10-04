@@ -54,11 +54,24 @@ public sealed class PutawayServiceTests : IDisposable
     public async Task Location_master_normalizes_code_and_protects_system_location()
     {
         var ids = await SeedAsync(); await using var db = Create(); var service = Service(db, ids.WarehouseId, ids.UserId);
-        var created = await service.CreateLocationAsync(new CreateWarehouseLocationDto { WarehouseId=ids.WarehouseId, Code="  shelf-c  ", Name="Kệ C", LocationType="Storage", IsPickable=true });
-        created.Code.Should().Be("SHELF-C"); created.LocationType.Should().Be(nameof(WarehouseLocationType.Storage));
+        var created = await service.CreateLocationAsync(new CreateWarehouseLocationDto { WarehouseId=ids.WarehouseId, Code="  shelf-c  ", Name="Kệ C", StructurePath=" zone-a / a01 / r02 / l03 / b04 ", LocationType="Storage", IsPickable=true });
+        created.Code.Should().Be("SHELF-C"); created.LocationType.Should().Be(nameof(WarehouseLocationType.Storage)); created.StructurePath.Should().Be("ZONE-A/A01/R02/L03/B04");
         var receiving = (await service.ListLocationsAsync(ids.WarehouseId)).Single(x => x.Id == ids.Receiving);
         var action = () => service.UpdateLocationAsync(receiving.Id, new UpdateWarehouseLocationDto { Name=receiving.Name, IsActive=false, IsReceivable=true, RowVersion=receiving.RowVersion! });
         await action.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>();
+    }
+
+    [Fact]
+    public async Task Location_structure_path_is_write_once_and_validated()
+    {
+        var ids = await SeedAsync(); await using var db = Create(); var service = Service(db, ids.WarehouseId, ids.UserId);
+        var invalid = () => service.CreateLocationAsync(new CreateWarehouseLocationDto { WarehouseId=ids.WarehouseId, Code="BAD-PATH", Name="Sai cấu trúc", StructurePath="ZONE-A/A01/R02/L03", LocationType="Storage", IsPickable=true });
+        await invalid.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>();
+
+        var created = await service.CreateLocationAsync(new CreateWarehouseLocationDto { WarehouseId=ids.WarehouseId, Code="STRUCT-01", Name="Ô cấu trúc", StructurePath="ZONE-A/A01/R02/L03/B10", LocationType="Storage", IsPickable=true });
+        var change = () => service.UpdateLocationAsync(created.Id, new UpdateWarehouseLocationDto { Name=created.Name, StructurePath="ZONE-B/A01/R02/L03/B10", IsActive=true, IsPickable=true, RowVersion=created.RowVersion! });
+        await change.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
+            .Where(x => Equals(x.Data["HttpStatusCode"], 409));
     }
 
     [Fact]

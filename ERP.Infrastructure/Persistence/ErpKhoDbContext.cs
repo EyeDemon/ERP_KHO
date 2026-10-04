@@ -89,9 +89,15 @@ public class ErpKhoDbContext : DbContext
             modelBuilder.Entity<ProductCategory>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
             modelBuilder.Entity<ProductBarcode>().Property(x => x.Value).UseCollation("Latin1_General_100_BIN2");
             modelBuilder.Entity<WarehouseLocation>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
-            modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t => t.HasCheckConstraint(
-                "CK_WarehouseLocations_Code",
-                "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0"));
+            modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_WarehouseLocations_Code",
+                    "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
+                t.HasCheckConstraint(
+                    "CK_WarehouseLocations_StructurePath",
+                    "[StructurePath] IS NULL OR ([StructurePath] = UPPER(LTRIM(RTRIM([StructurePath]))) AND LEN([StructurePath]) > 0)");
+            });
             modelBuilder.Entity<PutawayTaskItem>().ToTable("PutawayTaskItems", t =>
             {
                 t.HasCheckConstraint("CK_PutawayTaskItems_Required", "[RequiredBaseQuantity] > 0");

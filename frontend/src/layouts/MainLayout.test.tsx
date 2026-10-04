@@ -91,13 +91,13 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.queryByText('DEMO / MOCK • READ ONLY')).toBeNull();
   });
 
-  it('keeps the planned WH-02 mock out of production navigation even when location.read is granted', async () => {
+  it('shows the real WH-02 production route when location.read is granted', async () => {
     const authorization = await import('../services/authorization');
     vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'location.read');
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['location.read'] } });
     const view = renderAt('/');
     await view.findByText('Production home');
-    expect(view.queryByRole('link', { name: 'Cấu trúc vị trí' })).toBeNull();
+    expect(view.getByRole('link', { name: 'Cấu trúc vị trí' }).getAttribute('href')).toBe('/warehouse-structure');
   });
 
   it('opens production UI routes on the Vercel blueprint demo without calling real auth', async () => {

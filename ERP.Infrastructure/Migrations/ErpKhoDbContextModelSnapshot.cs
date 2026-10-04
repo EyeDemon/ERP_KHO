@@ -2379,6 +2379,10 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("StructurePath")
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -2399,9 +2403,13 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("WarehouseId", "Code")
                         .IsUnique();
 
+                    b.HasIndex("WarehouseId", "StructurePath");
+
                     b.ToTable("WarehouseLocations", null, t =>
                         {
                             t.HasCheckConstraint("CK_WarehouseLocations_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
+
+                            t.HasCheckConstraint("CK_WarehouseLocations_StructurePath", "[StructurePath] IS NULL OR ([StructurePath] = UPPER(LTRIM(RTRIM([StructurePath]))) AND LEN([StructurePath]) > 0)");
                         });
                 });
 

@@ -10,6 +10,7 @@ namespace ERP.Api.Controllers;
 [ApiController, Route("api/putaway-tasks"), Authorize]
 public sealed class PutawayTasksController(IPutawayService service) : ControllerBase
 {
+    [HttpGet("location-warehouses"),PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationWarehouses(CancellationToken ct)=>Ok(await service.ListLocationWarehousesAsync(ct));
     [HttpGet("locations"),PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> Locations([FromQuery]int warehouseId,CancellationToken ct)=>Ok(await service.ListLocationsAsync(warehouseId,ct));
     [HttpPost("locations"),PermissionAuthorize(AppPermissions.LocationManage)] public async Task<IActionResult> CreateLocation(CreateWarehouseLocationDto dto,CancellationToken ct)=>Ok(await service.CreateLocationAsync(dto,ct));
     [HttpPut("locations/{locationId:int}"),PermissionAuthorize(AppPermissions.LocationManage)] public async Task<IActionResult> UpdateLocation(int locationId,UpdateWarehouseLocationDto dto,CancellationToken ct)=>Ok(await service.UpdateLocationAsync(locationId,dto,ct));

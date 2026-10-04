@@ -8,6 +8,7 @@ public class WarehouseLocation
     public int WarehouseId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string? StructurePath { get; set; }
     public WarehouseLocationType LocationType { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsBlocked { get; set; }

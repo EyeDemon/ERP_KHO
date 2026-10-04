@@ -78,3 +78,22 @@ WH-02 follows the repository's UI UX Pro Max master direction:
 ## Production promotion
 
 WH-02 must remain `planned` until a separate production implementation is intentionally designed, implemented and verified with its own backend/database/API/permission/QA evidence. A Blueprint `mockRoute` is not production evidence, and production `route` values must never point into `/system-blueprint`.
+
+
+## Production implementation — 2026-10-04
+
+WH-02 now has a separate production route: `/warehouse-structure`.
+
+Production implementation uses the existing real `WarehouseLocations` aggregate and APIs under `/api/putaway-tasks/locations`, with warehouse-scope authorization and optimistic concurrency. A nullable `StructurePath` stores the physical hierarchy in canonical `ZONE/AISLE/RACK/LEVEL/BIN` form.
+
+Safety rules:
+
+- existing locations are not auto-mapped; null `StructurePath` remains visible as unmapped legacy data;
+- `Code` stays the stable location identifier;
+- once a `StructurePath` is assigned it is immutable;
+- an unmapped location can only receive a structure path when it has no non-zero stock, no movement history and no active putaway source usage;
+- system-managed RECEIVING/LEGACY locations cannot be assigned into the user-managed physical hierarchy;
+- deactivation keeps the existing stock/task safety checks;
+- production write controls remain permission-gated by `location.manage`.
+
+The Blueprint workbench remains under `mockRoute` and is still demo-only. The production `route` is `/warehouse-structure`.

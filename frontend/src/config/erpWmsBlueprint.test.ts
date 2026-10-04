@@ -39,7 +39,8 @@ describe('ERP WMS blueprint registry', () => {
   it('keeps production and Blueprint routes strictly separated', () => {
     const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
     const wh02 = capabilities.find((capability) => capability.id === 'WH-02');
-    expect(wh02?.route).toBeUndefined();
+    expect(wh02?.status).toBe('live');
+    expect(wh02?.route).toBe('/warehouse-structure');
     expect(wh02?.mockRoute).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
 
     for (const capability of capabilities) {

@@ -16,6 +16,7 @@ import {
   demoTransfers,
   demoUnits,
   demoWarehouses,
+  demoWarehouseStructures,
 } from '../mocks/demoApiData';
 import { demoReconciliationRows, demoReconciliationWarehouses } from '../mocks/inventoryReconciliationDemo';
 
@@ -146,6 +147,31 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     if (/^\/api\/stock-transfers\/\d+$/.test(path)) {
       const item = demoTransfers.find(transfer => transfer.id === findNumericId(path));
       return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy transfer demo.');
+    }
+
+    if (path === '/api/putaway-tasks/location-warehouses') return ok(config, demoWarehouses);
+    if (path === '/api/putaway-tasks/locations') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const structure = demoWarehouseStructures.find(item => item.warehouseId === warehouseId);
+      if (!structure) return ok(config, []);
+      const physical = structure.zones.flatMap(zone =>
+        zone.aisles.flatMap(aisle =>
+          aisle.racks.flatMap(rack =>
+            rack.levels.flatMap(level =>
+              level.locations.map(location => ({
+                ...location,
+                structurePath: [zone.code, aisle.code, rack.code, 'L' + String(level.levelNo).padStart(2, '0'), location.code.split('-').slice(-1)[0]].join('/'),
+                rowVersion: null,
+              }))
+            )
+          )
+        )
+      );
+      return ok(config, [
+        ...physical,
+        ...structure.unmappedLocations.map(location => ({ ...location, structurePath: null, rowVersion: null })),
+        ...structure.systemLocations.map(location => ({ ...location, structurePath: null, rowVersion: null })),
+      ]);
     }
 
     if (path === '/api/putaway-tasks') return ok(config, demoPutawayTasks);

@@ -33,7 +33,7 @@ describe('CapabilityPreview', () => {
     expect(view.queryByText('Mở chức năng hiện có')).toBeNull();
   });
 
-  it('labels the planned WH-02 route as a specialized mock instead of a production feature', () => {
+  it('keeps the WH-02 specialized mock separate after the production route goes live', () => {
     const view = renderPreview('warehouse-structure', 'WH-02');
     const link = view.getByText('Mở mock chuyên biệt');
     expect(link.getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
