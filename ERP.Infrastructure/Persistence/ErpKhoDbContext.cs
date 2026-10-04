@@ -89,6 +89,15 @@ public class ErpKhoDbContext : DbContext
             modelBuilder.Entity<ProductCategory>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
             modelBuilder.Entity<ProductBarcode>().Property(x => x.Value).UseCollation("Latin1_General_100_BIN2");
             modelBuilder.Entity<WarehouseLocation>().Property(x => x.Code).UseCollation("Latin1_General_100_CI_AS");
+            modelBuilder.Entity<Product>().ToTable("Products", t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_Products_StorageClass",
+                    "[StorageClass] IS NULL OR ([StorageClass] = UPPER(LTRIM(RTRIM([StorageClass]))) AND LEN([StorageClass]) > 0)");
+                t.HasCheckConstraint(
+                    "CK_Products_StorageMetrics",
+                    "([UnitWeightKg] IS NULL OR [UnitWeightKg] > 0) AND ([UnitVolumeM3] IS NULL OR [UnitVolumeM3] > 0) AND ([UnitPalletEquivalent] IS NULL OR [UnitPalletEquivalent] > 0)");
+            });
             modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t =>
             {
                 t.HasCheckConstraint(

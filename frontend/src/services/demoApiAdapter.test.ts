@@ -62,7 +62,7 @@ describe('Blueprint demo API adapter', () => {
     expect(rows.find(item => item.code === 'A01-R02-L03-B04')?.maxWeightKg).toBe(1500);
   });
 
-  it('does not expose WH-02 pseudo-backend reads', async () => {  it('does not expose WH-02 pseudo-backend reads', async () => {
+  it('does not expose WH-02 pseudo-backend reads', async () => {
     for (const url of [
       '/api/warehouses/1/structure',
       '/api/warehouses/1/zones',

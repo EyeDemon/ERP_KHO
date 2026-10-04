@@ -89,7 +89,7 @@ describe('Products category and barcode UI (mocked API)', () => {
     })));
   });
 
-  it('product update does not expose category or barcode management', async () => {  it('product update does not expose category or barcode management', async () => {
+  it('product update does not expose category or barcode management', async () => {
     localStorage.setItem('permissions', '["product.read","product.update","uom.read"]');
     const view = render(<Products />); await view.findByText('P001');
     expect(view.queryByText('Thêm danh mục')).toBeNull();

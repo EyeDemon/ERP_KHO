@@ -120,7 +120,7 @@ describe('WarehouseLocations production UI', () => {
     })));
   });
 
-  it('hides mutation controls from a location reader', async () => {  it('hides mutation controls from a location reader', async () => {
+  it('hides mutation controls from a location reader', async () => {
     localStorage.setItem('permissions', '["location.read"]');
     const view = render(<WarehouseLocations />);
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
