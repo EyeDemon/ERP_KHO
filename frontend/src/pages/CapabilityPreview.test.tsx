@@ -85,6 +85,33 @@ describe('CapabilityPreview', () => {
     }
   });
 
+  it('renders specialized outbound mocks only for capabilities that still need domain workbenches', () => {
+    const cases = [
+      ['OUT-03', 'Allocation Candidate Workbench'],
+      ['OUT-04', 'Wave / Batch / Cluster Planning'],
+      ['OUT-07', 'Staging & Loading Control'],
+      ['OUT-08', 'Shipment Dispatch Boundary'],
+      ['OUT-09', 'Backorder & Promise Replanning'],
+      ['OUT-10', 'Shipment Tracking / POD Timeline'],
+    ];
+
+    for (const [capabilityId, title] of cases) {
+      const view = renderPreview('outbound', capabilityId);
+      expect(view.getByTestId('outbound-capability-mock-' + capabilityId)).toBeTruthy();
+      expect(view.getByRole('heading', { name: title })).toBeTruthy();
+      expect(view.getByText(/Không gọi API production/)).toBeTruthy();
+      view.unmount();
+    }
+  });
+
+  it('does not shadow live or already-specialized outbound screens with another domain panel', () => {
+    for (const capabilityId of ['OUT-01', 'OUT-02', 'OUT-05', 'OUT-06']) {
+      const view = renderPreview('outbound', capabilityId);
+      expect(view.queryByTestId('outbound-capability-mock-' + capabilityId)).toBeNull();
+      view.unmount();
+    }
+  });
+
   it('renders scan-first phone preview for mobile capabilities', () => {
     const view = renderPreview('mobile', 'MO-04');
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
