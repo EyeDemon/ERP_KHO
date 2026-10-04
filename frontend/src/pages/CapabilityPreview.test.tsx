@@ -33,6 +33,31 @@ describe('CapabilityPreview', () => {
     expect(link.getAttribute('href')).toBe('/products');
   });
 
+  it('labels the planned WH-02 route as a specialized mock instead of a production feature', () => {
+    const view = renderPreview('warehouse-structure', 'WH-02');
+    const link = view.getByText('Mở mock chuyên biệt');
+    expect(link.getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
+    expect(view.queryByText('Mở chức năng hiện có')).toBeNull();
+  });
+
+  it('renders domain-specific warehouse mock panels for WH-03 through WH-07', () => {
+    const cases = [
+      ['WH-03', 'Sức chứa vị trí & Storage Constraints'],
+      ['WH-04', 'Bản đồ kho & Heatmap'],
+      ['WH-05', 'Lịch vận hành & Ca làm việc'],
+      ['WH-06', 'Dock & Yard Control Board'],
+      ['WH-07', 'Operational Calendar Exception Precedence'],
+    ];
+
+    for (const [capabilityId, title] of cases) {
+      const view = renderPreview('warehouse-structure', capabilityId);
+      expect(view.getByTestId('warehouse-capability-mock-' + capabilityId)).toBeTruthy();
+      expect(view.getByText(title)).toBeTruthy();
+      expect(view.getAllByText(/Không gọi API production|Production effect/).length).toBeGreaterThan(0);
+      view.unmount();
+    }
+  });
+
   it('renders scan-first phone preview for mobile capabilities', () => {
     const view = renderPreview('mobile', 'MO-04');
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();

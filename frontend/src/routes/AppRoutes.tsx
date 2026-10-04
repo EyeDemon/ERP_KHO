@@ -57,6 +57,7 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/warehouse-structure" element={<Navigate to="/system-blueprint/warehouse-structure/WH-02/workbench" replace />} />
       <Route path="/" element={<MockDemoProvider><MainLayout /></MockDemoProvider>}>
         <Route index element={<Dashboard />} />
         <Route path="system-blueprint" element={<SystemBlueprint />} />
@@ -64,11 +65,11 @@ const AppRoutes = () => {
         <Route path="system-blueprint/mock-data" element={<MockDataLab />} />
         <Route path="system-blueprint/search" element={<MockGlobalSearch />} />
         <Route path="system-blueprint/coverage" element={<SystemCoverage />} />
+        <Route path="system-blueprint/warehouse-structure/WH-02/workbench" element={<WarehouseStructure />} />
         <Route path="system-blueprint/:moduleKey/:capabilityId" element={<CapabilityPreview />} />
         <Route path="system-blueprint/:moduleKey" element={<ModuleBlueprint />} />
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
-        <Route path="warehouse-structure" element={<PermissionRoute permission="location.read"><WarehouseStructure /></PermissionRoute>} />
         <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
         <Route path="business-partners" element={<PermissionRoute permission="partner.read"><BusinessPartners /></PermissionRoute>} />
         <Route path="export-receipts" element={<ExportReceipts />} />

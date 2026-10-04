@@ -33,7 +33,9 @@ These are design decisions for future production implementation, not evidence th
 
 ## Frontend mock behavior
 
-Route: `/warehouse-structure`
+Blueprint workbench route: `/system-blueprint/warehouse-structure/WH-02/workbench`
+
+Compatibility route: `/warehouse-structure` redirects to the Blueprint workbench and is not registered in production navigation.
 
 The page reads fixtures directly from `frontend/src/mocks/demoApiData.ts` and does not depend on WH-02 production APIs.
 
@@ -57,7 +59,7 @@ Frontend-only permission definitions remain available to illustrate the target a
 - `location.manage`
 - `warehouse_zone.manage`
 
-The Blueprint route may require `location.read`, but this does not imply production backend permission seeds exist.
+These permissions are illustrative target semantics only. The WH-02 workbench is Blueprint-only and is intentionally excluded from production navigation; it does not imply production backend permission seeds exist.
 
 ## Demo adapter
 
@@ -75,4 +77,4 @@ WH-02 follows the repository's UI UX Pro Max master direction:
 
 ## Production promotion
 
-WH-02 must remain `planned` until a separate production implementation is intentionally designed, implemented and verified with its own backend/database/API/permission/QA evidence.
+WH-02 must remain `planned` until a separate production implementation is intentionally designed, implemented and verified with its own backend/database/API/permission/QA evidence. A Blueprint route or compatibility redirect is not production evidence.

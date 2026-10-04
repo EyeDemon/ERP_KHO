@@ -13,6 +13,7 @@ import { useMockDemo } from '../context/MockDemoContext';
 import { evidenceStatusLabels, getCapabilityGovernanceProfile } from '../config/capabilityGovernance';
 import { getSpecializedScreenPreview } from '../config/reviewRequiredScreens';
 import CapabilityInteractiveDemo from './CapabilityInteractiveDemo';
+import WarehouseCapabilityMock from './WarehouseCapabilityMock';
 import './CapabilityPreview.css';
 
 const statusIcon = (status: BlueprintStatus) =>
@@ -65,7 +66,10 @@ const CapabilityPreview = () => {
           </div>
         </div>
         {capability.route ? (
-          <Link to={capability.route} className="capability-real-link"><ExternalLink size={16} /> Mở chức năng hiện có</Link>
+          <Link to={capability.route} className="capability-real-link">
+            <ExternalLink size={16} aria-hidden="true" />
+            {capability.status === 'planned' || capability.status === 'optional' ? 'Mở mock chuyên biệt' : 'Mở chức năng hiện có'}
+          </Link>
         ) : (
           <span className="capability-preview-badge">MOCK / SPEC PREVIEW</span>
         )}
@@ -81,6 +85,8 @@ const CapabilityPreview = () => {
           </div>
         </section>
       )}
+
+      <WarehouseCapabilityMock capabilityId={capability.id} />
 
       {specializedPreview && (
         <section className="capability-panel specialized-preview">
