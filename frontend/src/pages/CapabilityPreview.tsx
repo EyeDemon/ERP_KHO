@@ -14,6 +14,7 @@ import { evidenceStatusLabels, getCapabilityGovernanceProfile } from '../config/
 import { getSpecializedScreenPreview } from '../config/reviewRequiredScreens';
 import CapabilityInteractiveDemo from './CapabilityInteractiveDemo';
 import WarehouseCapabilityMock from './WarehouseCapabilityMock';
+import InboundCapabilityMock from './InboundCapabilityMock';
 import './CapabilityPreview.css';
 
 const statusIcon = (status: BlueprintStatus) =>
@@ -87,6 +88,7 @@ const CapabilityPreview = () => {
       )}
 
       <WarehouseCapabilityMock capabilityId={capability.id} />
+      <InboundCapabilityMock capabilityId={capability.id} />
 
       {specializedPreview && (
         <section className="capability-panel specialized-preview">

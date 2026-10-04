@@ -58,6 +58,33 @@ describe('CapabilityPreview', () => {
     }
   });
 
+  it('renders domain-specific planned inbound mocks without promoting them to production', () => {
+    const cases = [
+      ['IN-01', 'Purchase Order / ASN Reconciliation'],
+      ['IN-02', 'Receiving Appointment Board'],
+      ['IN-05', 'Over / Under Receipt Resolution'],
+      ['IN-06', 'Inbound QC Inspection'],
+      ['IN-09', 'Putaway Recommendation Explainability'],
+    ];
+
+    for (const [capabilityId, title] of cases) {
+      const view = renderPreview('inbound', capabilityId);
+      expect(view.getByTestId('inbound-capability-mock-' + capabilityId)).toBeTruthy();
+      expect(view.getByRole('heading', { name: title })).toBeTruthy();
+      expect(view.getByText(/Không gọi API production/)).toBeTruthy();
+      expect(view.getAllByText('Theo đặc tả — chưa triển khai').length).toBeGreaterThan(0);
+      view.unmount();
+    }
+  });
+
+  it('does not add planned-domain panels on inbound foundation work centers', () => {
+    for (const capabilityId of ['IN-03', 'IN-04', 'IN-07', 'IN-08']) {
+      const view = renderPreview('inbound', capabilityId);
+      expect(view.queryByTestId('inbound-capability-mock-' + capabilityId)).toBeNull();
+      view.unmount();
+    }
+  });
+
   it('renders scan-first phone preview for mobile capabilities', () => {
     const view = renderPreview('mobile', 'MO-04');
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
