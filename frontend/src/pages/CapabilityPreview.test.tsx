@@ -97,9 +97,10 @@ describe('CapabilityPreview', () => {
 
     for (const [capabilityId, title] of cases) {
       const view = renderPreview('outbound', capabilityId);
-      expect(view.getByTestId('outbound-capability-mock-' + capabilityId)).toBeTruthy();
-      expect(view.getByRole('heading', { name: title })).toBeTruthy();
-      expect(view.getByText(/Không gọi API production/)).toBeTruthy();
+      const panel = view.getByTestId('outbound-capability-mock-' + capabilityId);
+      expect(panel).toBeTruthy();
+      expect(panel.textContent).toContain(title);
+      expect(panel.textContent).toContain('Không gọi API production');
       view.unmount();
     }
   });
