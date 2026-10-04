@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowRight, Boxes, CheckCircle2, CircleDashed, Database, ExternalLink,
+  ArrowLeft, ArrowRight, Boxes, CheckCircle2, CircleDashed, Database,
   FileCheck2, LockKeyhole, MonitorSmartphone, Route, ShieldCheck, Smartphone, Workflow
 } from 'lucide-react';
 import {
@@ -270,7 +270,8 @@ const ModuleBlueprint = () => {
                   <td>
                     <div className="table-capability-links">
                       <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + capability.id}>Preview</Link>
-                      {capability.route ? <Link className="table-open-link" to={capability.route}><ExternalLink size={14} /> Mở thật</Link> : null}
+                      {capability.mockRoute ? <Link className="table-open-link" to={capability.mockRoute}>Mock chuyên biệt</Link> : null}
+                      {capability.route ? <span className="table-production-note">Có trong hệ thống thật</span> : null}
                     </div>
                   </td>
                 </tr>

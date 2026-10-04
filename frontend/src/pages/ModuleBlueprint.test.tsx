@@ -68,6 +68,17 @@ describe('ModuleBlueprint mock work center', () => {
     expect(view.queryByText('GR-2026-1041')).toBeNull();
   });
 
+  it('keeps production links out of Blueprint module coverage', () => {
+    const master = renderModule('master-data');
+    expect(master.queryByText('Mở thật')).toBeNull();
+    expect(master.getAllByText('Có trong hệ thống thật').length).toBeGreaterThan(0);
+    master.unmount();
+
+    const warehouse = renderModule('warehouse-structure');
+    expect(warehouse.queryByText('Mở thật')).toBeNull();
+    expect(warehouse.getByText('Mock chuyên biệt').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
+  });
+
   it('shows a safe not-found state for an unknown module', () => {
     const view = renderModule('does-not-exist');
     expect(view.getByText('Không tìm thấy module')).toBeTruthy();
