@@ -43,7 +43,7 @@ describe('interactive capability demo registry', () => {
     const implemented = allCapabilities.filter(({ capability }) =>
       capability.status === 'live' || capability.status === 'foundation'
     );
-    expect(implemented.map(({ capability }) => capability.id)).not.toContain('WH-02');
+    expect(implemented.map(({ capability }) => capability.id)).toContain('WH-02');
 
     for (const { module, capability } of implemented) {
       const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
@@ -61,19 +61,21 @@ describe('interactive capability demo registry', () => {
     }
   });
 
-  it('keeps WH-02 as a planned frontend-only hierarchy mock', () => {
+  it('keeps the WH-02 Blueprint preview separate while reflecting its live production implementation', () => {
     const entry = allCapabilities.find(({ capability }) => capability.id === 'WH-02');
     if (!entry) throw new Error('WH-02 capability missing');
 
-    expect(entry.capability.status).toBe('planned');
+    expect(entry.capability.status).toBe('live');
+    expect(entry.capability.route).toBe('/warehouse-structure');
+    expect(entry.capability.mockRoute).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
     expect(coreInteractiveDemoIds).toContain('WH-02');
 
     const demo = getCapabilityDemoDefinition(entry.capability, entry.module.name, entry.module.flow);
     expect(demo.exceptionTitle).toBe('WAREHOUSE_HIERARCHY_RULE_VIOLATION');
     expect(demo.stages).toContain('Bin / Location');
     expect(demo.commands).toContain('SHOW_UNMAPPED_LOCATIONS');
-    expect(demo.fields).toContainEqual({ label: 'Mock scope', value: 'Frontend only' });
-    expect(demo.fields.some((field) => field.label === 'Production maturity')).toBe(false);
+    expect(demo.fields).toContainEqual({ label: 'Production maturity', value: 'LIVE' });
+    expect(demo.fields).toContainEqual({ label: 'Production route', value: '/warehouse-structure' });
   });
 
   it('keeps canonical inventory boundaries concrete in detailed core demos', () => {

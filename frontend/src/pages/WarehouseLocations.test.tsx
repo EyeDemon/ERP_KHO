@@ -36,7 +36,7 @@ describe('WarehouseLocations production UI', () => {
 
   it('renders real hierarchy, unmapped legacy locations and system locations', async () => {
     const view = render(<WarehouseLocations />);
-    expect(await view.findByText('ZONE-A')).toBeTruthy();
+    expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
     expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
     expect(view.getByText('LEGACY-UNMAPPED-01')).toBeTruthy();
     expect(view.getByText('RECEIVING')).toBeTruthy();
@@ -46,7 +46,7 @@ describe('WarehouseLocations production UI', () => {
 
   it('normalizes and submits the five-level StructurePath on create', async () => {
     const view = render(<WarehouseLocations />);
-    await view.findByText('ZONE-A');
+    expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
     fireEvent.click(view.getByText('Thêm vị trí'));
     fireEvent.change(view.getByLabelText('Mã vị trí'), { target: { value: ' bin-10 ' } });
     fireEvent.change(view.getByLabelText('Tên vị trí'), { target: { value: 'Ô mới' } });
@@ -69,7 +69,7 @@ describe('WarehouseLocations production UI', () => {
 
   it('locks an assigned StructurePath and sends rowVersion on edit', async () => {
     const view = render(<WarehouseLocations />);
-    await view.findByText('ZONE-A');
+    expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
     const row = view.getAllByText('A01-R02-L03-B04')[0].closest('tr');
     expect(row).toBeTruthy();
     fireEvent.click(row!.querySelector('button')!);
@@ -87,7 +87,7 @@ describe('WarehouseLocations production UI', () => {
   it('hides mutation controls from a location reader', async () => {
     localStorage.setItem('permissions', '["location.read"]');
     const view = render(<WarehouseLocations />);
-    await view.findByText('ZONE-A');
+    expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
     expect(view.queryByText('Thêm vị trí')).toBeNull();
     expect(view.queryByText('Gắn cấu trúc / Sửa')).toBeNull();
   });

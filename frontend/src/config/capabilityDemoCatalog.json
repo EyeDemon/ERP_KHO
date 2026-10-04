@@ -3821,8 +3821,12 @@
     ],
     "fields": [
       {
-        "label": "Mock scope",
-        "value": "Frontend only"
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Production route",
+        "value": "/warehouse-structure"
       },
       {
         "label": "Warehouse",
@@ -3848,6 +3852,6 @@
       "SHOW_BLOCKED_LOCATIONS"
     ],
     "exceptionTitle": "WAREHOUSE_HIERARCHY_RULE_VIOLATION",
-    "exceptionDetail": "Mock minh họa parent scope, immutable code, location lifecycle và system/legacy compatibility; production backend chưa được triển khai."
+    "exceptionDetail": "Minh họa parent scope, immutable code, StructurePath write-once, location lifecycle và system/legacy compatibility; production API/database tồn tại riêng với warehouse scope và optimistic concurrency."
   }
 }
