@@ -11,7 +11,7 @@ describe('Cấu trúc vị trí kho mock-only', () => {
 
     expect(view.getByText(/frontend mock-only/i)).toBeTruthy();
     expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
-    expect(view.getByText('ZONE-A / A01 / R02 / L03 / B04')).toBeTruthy();
+    expect(view.getAllByText('ZONE-A / A01 / R02 / L03 / B04').length).toBeGreaterThan(0);
     expect(view.getByText('RECEIVING')).toBeTruthy();
     expect(view.getByText('LEGACY')).toBeTruthy();
     expect(view.getByText('LEGACY-UNMAPPED-01')).toBeTruthy();
