@@ -73,7 +73,7 @@ describe('Blueprint demo API adapter', () => {
     expect(data.items.some(item => item.code === 'A01-R02-L03-B04' && item.activityLevel === 'High' && item.mapX === 6)).toBe(true);
   });
 
-  it('does not expose WH-02 pseudo-backend reads', async () => {  it('does not expose WH-02 pseudo-backend reads', async () => {
+  it('does not expose WH-02 pseudo-backend reads', async () => {
     for (const url of [
       '/api/warehouses/1/structure',
       '/api/warehouses/1/zones',
