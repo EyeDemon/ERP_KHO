@@ -1,0 +1,78 @@
+# WH-02 — Warehouse Location Hierarchy Blueprint Mock
+
+Status: **PLANNED / FRONTEND MOCK ONLY**
+
+## Scope
+
+This branch uses WH-02 only as an interactive frontend Blueprint. It is illustrative, read-only and intended to validate information architecture, hierarchy semantics, lifecycle states and UI/UX before production implementation.
+
+The WH-02 production backend/database is **not implemented by this branch**.
+
+No production claim is made for:
+- EF entities/configuration;
+- database migration or schema;
+- API/controller/service;
+- backend permission seed;
+- mutation persistence;
+- production QA.
+
+## Target hierarchy
+
+Future production design direction:
+
+`Warehouse → WarehouseZone → WarehouseAisle → WarehouseRack → WarehouseRackLevel → WarehouseLocation`
+
+Design notes:
+- keep current `int` PK/FK types for WH-02; any bigint widening is separate cross-cutting work;
+- keep `WarehouseLocation` as the canonical Bin/Location leaf;
+- existing system/legacy/unmapped Locations may have nullable hierarchy links;
+- new user-created Locations should belong to a Zone;
+- capacity, weight and volume belong to WH-03.
+
+These are design decisions for future production implementation, not evidence that the schema exists today.
+
+## Frontend mock behavior
+
+Route: `/warehouse-structure`
+
+The page reads fixtures directly from `frontend/src/mocks/demoApiData.ts` and does not depend on WH-02 production APIs.
+
+The mock demonstrates:
+- Warehouse → Zone → Aisle → Rack → Level → Bin / Location;
+- full physical paths;
+- normal storage and reserve non-pickable storage;
+- blocked and inactive Locations;
+- Damaged and Rejected non-pickable Locations;
+- system-managed RECEIVING and LEGACY;
+- legacy/non-system unmapped Location without invented historical hierarchy;
+- local warehouse/status/type filters;
+- local detail inspection.
+
+There are no create/update persistence controls and no WH-02 POST/PUT/PATCH calls.
+
+## Permission mock
+
+Frontend-only permission definitions remain available to illustrate the target authorization matrix:
+- `location.read`
+- `location.manage`
+- `warehouse_zone.manage`
+
+The Blueprint route may require `location.read`, but this does not imply production backend permission seeds exist.
+
+## Demo adapter
+
+WH-02 pseudo-backend handlers are intentionally absent. Unsupported writes remain fail-closed with HTTP 405 under the global Blueprint demo rule.
+
+## UI/UX
+
+WH-02 follows the repository's UI UX Pro Max master direction:
+- shared `ProductionUi` primitives;
+- flat/minimal operational styling;
+- semantic status badges with text;
+- accessible labels and keyboard-operable controls;
+- responsive table containers;
+- no page-level horizontal overflow.
+
+## Production promotion
+
+WH-02 must remain `planned` until a separate production implementation is intentionally designed, implemented and verified with its own backend/database/API/permission/QA evidence.

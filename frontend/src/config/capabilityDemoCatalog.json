@@ -3806,5 +3806,48 @@
     ],
     "exceptionTitle": "SUPPORT_ACTION_FORBIDDEN",
     "exceptionDetail": "Requested action vượt support permission hoặc bypass business command contract."
+  },
+  "WH-02": {
+    "title": "Warehouse Location Hierarchy",
+    "subtitle": "Minh họa cấu trúc Warehouse → Zone → Aisle → Rack → Level → Bin / Location.",
+    "mode": "configuration",
+    "stages": [
+      "Warehouse",
+      "Zone",
+      "Aisle",
+      "Rack",
+      "Level",
+      "Bin / Location"
+    ],
+    "fields": [
+      {
+        "label": "Mock scope",
+        "value": "Frontend only"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Physical path",
+        "value": "ZONE-A / A01 / R02 / L03 / B04"
+      },
+      {
+        "label": "Code rule",
+        "value": "Stable after creation"
+      },
+      {
+        "label": "History rule",
+        "value": "Inactive/blocked locations remain traceable"
+      }
+    ],
+    "commands": [
+      "OPEN_HIERARCHY",
+      "SHOW_SYSTEM_LOCATIONS",
+      "SHOW_UNMAPPED_LOCATIONS",
+      "SHOW_BLOCKED_LOCATIONS"
+    ],
+    "exceptionTitle": "WAREHOUSE_HIERARCHY_RULE_VIOLATION",
+    "exceptionDetail": "Mock minh họa parent scope, immutable code, location lifecycle và system/legacy compatibility; production backend chưa được triển khai."
   }
 }

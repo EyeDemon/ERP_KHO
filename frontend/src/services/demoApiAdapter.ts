@@ -16,7 +16,6 @@ import {
   demoTransfers,
   demoUnits,
   demoWarehouses,
-  demoWarehouseStructures,
 } from '../mocks/demoApiData';
 import { demoReconciliationRows, demoReconciliationWarehouses } from '../mocks/inventoryReconciliationDemo';
 
@@ -83,36 +82,6 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     }
 
     if (path === '/api/warehouses') return ok(config, demoWarehouses);
-    if (/^\/api\/warehouses\/\d+\/structure$/.test(path)) {
-      const warehouseId = findNumericId(path);
-      const item = demoWarehouseStructures.find(entry => entry.warehouseId === warehouseId);
-      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy cấu trúc kho demo.');
-    }
-    if (/^\/api\/warehouses\/\d+\/zones$/.test(path)) {
-      const warehouseId = findNumericId(path);
-      const item = demoWarehouseStructures.find(entry => entry.warehouseId === warehouseId);
-      return item ? ok(config, item.zones) : fail(config, 404, 'Không tìm thấy khu vực kho demo.');
-    }
-    if (/^\/api\/warehouses\/\d+\/locations$/.test(path)) {
-      const warehouseId = findNumericId(path);
-      const item = demoWarehouseStructures.find(entry => entry.warehouseId === warehouseId);
-      if (!item) return fail(config, 404, 'Không tìm thấy vị trí kho demo.');
-      const nested = item.zones.flatMap(zone => [
-        ...zone.locations,
-        ...zone.aisles.flatMap(aisle => aisle.racks.flatMap(rack => rack.levels.flatMap(level => level.locations))),
-      ]);
-      return ok(config, [...item.systemLocations, ...item.unmappedLocations, ...nested]);
-    }
-    if (path === '/api/locations') {
-      const warehouseId = Number(params.get('warehouseId') ?? 0);
-      const item = demoWarehouseStructures.find(entry => entry.warehouseId === warehouseId);
-      if (!item) return ok(config, []);
-      const nested = item.zones.flatMap(zone => [
-        ...zone.locations,
-        ...zone.aisles.flatMap(aisle => aisle.racks.flatMap(rack => rack.levels.flatMap(level => level.locations))),
-      ]);
-      return ok(config, [...item.systemLocations, ...nested]);
-    }
     if (path === '/api/units') return ok(config, demoUnits);
     if (path === '/api/product-categories') return ok(config, demoCategories);
 

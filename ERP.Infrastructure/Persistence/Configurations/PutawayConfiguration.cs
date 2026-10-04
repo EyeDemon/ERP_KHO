@@ -9,16 +9,9 @@ public sealed class WarehouseLocationConfiguration : IEntityTypeConfiguration<Wa
     public void Configure(EntityTypeBuilder<WarehouseLocation> b)
     {
         b.ToTable("WarehouseLocations");
-        b.HasKey(x => x.Id);
-        b.Property(x => x.Code).IsRequired().HasMaxLength(64);
-        b.Property(x => x.Name).IsRequired().HasMaxLength(200);
-        b.Property(x => x.Barcode).HasMaxLength(100);
-        b.Property(x => x.RowVersion).IsRowVersion();
+        b.HasKey(x => x.Id); b.Property(x => x.Code).HasMaxLength(64); b.Property(x => x.Name).HasMaxLength(200); b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
-        b.HasIndex(x => x.Barcode);
         b.HasOne(x => x.Warehouse).WithMany(x => x.Locations).HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
-        b.HasOne(x => x.Zone).WithMany(x => x.Locations).HasForeignKey(x => x.ZoneId).OnDelete(DeleteBehavior.Restrict);
-        b.HasOne(x => x.RackLevel).WithMany(x => x.Locations).HasForeignKey(x => x.RackLevelId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

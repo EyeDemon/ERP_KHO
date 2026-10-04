@@ -27,18 +27,39 @@ export const demoWarehouses = mockWarehouses.map((warehouse, index) => ({
 
 export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => {
   const base = (index + 1) * 1000;
-  const storageLocation = {
-    id: base + 101,
+  const rackCode = index === 0 ? 'R02' : 'R01';
+  const levelNo = index === 0 ? 3 : 1;
+
+  const location = (
+    offset: number,
+    code: string,
+    name: string,
+    overrides: Partial<{
+      zoneId: number | null;
+      zoneCode: string | null;
+      rackLevelId: number | null;
+      aisleCode: string | null;
+      rackCode: string | null;
+      levelNo: number | null;
+      locationType: string;
+      isActive: boolean;
+      isBlocked: boolean;
+      isPickable: boolean;
+      isReceivable: boolean;
+      isSystemManaged: boolean;
+    }> = {},
+  ) => ({
+    id: base + offset,
     warehouseId: warehouse.id,
     zoneId: base + 10,
     zoneCode: 'ZONE-A',
     rackLevelId: base + 40,
     aisleCode: 'A01',
-    rackCode: 'R02',
-    levelNo: 3,
-    code: index === 0 ? 'A01-R02-L03-B04' : 'A01-R01-L01-B01',
-    name: index === 0 ? 'Ô A01-R02-L03-B04' : 'Ô lưu trữ 01',
-    barcode: index === 0 ? 'LOC-HCM-A01-R02-L03-B04' : 'LOC-' + warehouse.code + '-01',
+    rackCode,
+    levelNo,
+    code,
+    name,
+    barcode: 'LOC-' + warehouse.code + '-' + code,
     pickPriority: 10,
     putawayPriority: 10,
     locationType: 'Storage',
@@ -47,7 +68,32 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
     isPickable: true,
     isReceivable: false,
     isSystemManaged: false,
-  };
+    ...overrides,
+  });
+
+  const physicalLocations = index === 0
+    ? [
+        location(101, 'A01-R02-L03-B04', 'Ô lưu trữ chính B04'),
+        location(102, 'A01-R02-L03-B05', 'Ô dự trữ B05', { isPickable: false }),
+        location(103, 'A01-R02-L03-B06', 'Ô đang khóa B06', { isBlocked: true }),
+        location(104, 'A01-R02-L03-B07', 'Ô ngừng hoạt động B07', { isActive: false }),
+        location(105, 'A01-R02-L03-B08', 'Ô hàng hư hỏng B08', { locationType: 'Damaged', isPickable: false }),
+        location(106, 'A01-R02-L03-B09', 'Ô hàng bị từ chối B09', { locationType: 'Rejected', isPickable: false }),
+      ]
+    : [location(101, 'A01-R01-L01-B01', 'Ô lưu trữ 01')];
+
+  const unmappedLocations = index === 0
+    ? [location(901, 'LEGACY-UNMAPPED-01', 'Vị trí lịch sử chưa gắn cấu trúc', {
+        zoneId: null,
+        zoneCode: null,
+        rackLevelId: null,
+        aisleCode: null,
+        rackCode: null,
+        levelNo: null,
+        isPickable: false,
+      })]
+    : [];
+
   return {
     warehouseId: warehouse.id,
     warehouseCode: warehouse.code,
@@ -69,22 +115,28 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
         racks: [{
           id: base + 30,
           aisleId: base + 20,
-          code: index === 0 ? 'R02' : 'R01',
+          code: rackCode,
           name: index === 0 ? 'Kệ 02' : 'Kệ 01',
           levels: [{
             id: base + 40,
             rackId: base + 30,
-            levelNo: index === 0 ? 3 : 1,
-            locations: [storageLocation],
+            levelNo,
+            locations: physicalLocations,
           }],
         }],
       }],
       locations: [],
     }],
-    unmappedLocations: [],
+    unmappedLocations,
     systemLocations: [
-      { id: base + 1, warehouseId: warehouse.id, code: 'RECEIVING', name: 'Vị trí nhận hàng', locationType: 'Receiving', isActive: true, isBlocked: false, isPickable: false, isReceivable: true, isSystemManaged: true },
-      { id: base + 2, warehouseId: warehouse.id, code: 'LEGACY', name: 'Tồn kho kế thừa', locationType: 'Legacy', isActive: true, isBlocked: false, isPickable: true, isReceivable: false, isSystemManaged: true },
+      location(1, 'RECEIVING', 'Vị trí nhận hàng', {
+        zoneId: null, zoneCode: null, rackLevelId: null, aisleCode: null, rackCode: null, levelNo: null,
+        locationType: 'Receiving', isPickable: false, isReceivable: true, isSystemManaged: true,
+      }),
+      location(2, 'LEGACY', 'Tồn kho kế thừa', {
+        zoneId: null, zoneCode: null, rackLevelId: null, aisleCode: null, rackCode: null, levelNo: null,
+        locationType: 'Legacy', isPickable: true, isSystemManaged: true,
+      }),
     ],
   };
 });

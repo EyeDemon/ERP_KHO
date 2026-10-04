@@ -16,6 +16,5 @@ public class Warehouse
     public ICollection<ExportReceipt> ExportReceipts { get; set; } = new List<ExportReceipt>();
     public ICollection<Stocktake> Stocktakes { get; set; } = new List<Stocktake>();
     public ICollection<UserWarehouse> UserAccesses { get; set; } = new List<UserWarehouse>();
-    public ICollection<WarehouseZone> Zones { get; set; } = new List<WarehouseZone>();
     public ICollection<WarehouseLocation> Locations { get; set; } = new List<WarehouseLocation>();
 }

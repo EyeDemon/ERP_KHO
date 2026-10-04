@@ -1,8 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
-import apiClient from '../services/apiClient';
-import { usePermission } from '../services/authorization';
-import { permissionError } from '../services/permissionPresentation';
+import { useMemo, useState } from 'react';
+import { demoWarehouseStructures, demoWarehouses } from '../mocks/demoApiData';
 import {
   UiBadge,
   UiCard,
@@ -17,8 +14,7 @@ import {
 } from '../ui/ProductionUi';
 import './WarehouseStructure.css';
 
-type Warehouse = { id: number; code: string; name: string; isActive: boolean };
-type Location = {
+type DemoLocation = {
   id: number;
   warehouseId: number;
   zoneId?: number | null;
@@ -38,49 +34,13 @@ type Location = {
   isPickable: boolean;
   isReceivable: boolean;
   isSystemManaged: boolean;
-  rowVersion?: string | null;
 };
-type Level = { id: number; rackId: number; levelNo: number; rowVersion?: string | null; locations: Location[] };
-type Rack = { id: number; aisleId: number; code: string; name?: string | null; rowVersion?: string | null; levels: Level[] };
-type Aisle = { id: number; zoneId: number; code: string; name?: string | null; rowVersion?: string | null; racks: Rack[] };
-type Zone = {
-  id: number;
-  warehouseId: number;
-  code: string;
-  name: string;
-  zoneType: string;
-  pickPriority?: number | null;
-  putawayPriority?: number | null;
-  isActive: boolean;
-  rowVersion?: string | null;
-  aisles: Aisle[];
-  locations: Location[];
-};
-type Structure = {
-  warehouseId: number;
-  warehouseCode: string;
-  warehouseName: string;
-  zones: Zone[];
-  systemLocations: Location[];
-  unmappedLocations: Location[];
-};
-
-type StructureKind = 'zone' | 'aisle' | 'rack' | 'level';
-type EditNode =
-  | { kind: 'zone'; zone: Zone }
-  | { kind: 'aisle'; zoneId: number; aisle: Aisle }
-  | { kind: 'rack'; aisleId: number; rack: Rack }
-  | null;
-
-const zoneLabels: Record<string, string> = {
-  RECEIVING: 'Khu nhận hàng',
-  STORAGE: 'Khu lưu trữ',
-  PICKING: 'Khu lấy hàng',
-  QC: 'Khu kiểm tra chất lượng',
-  QUARANTINE: 'Khu cách ly',
-  STAGING: 'Khu chờ xuất',
-  SHIPPING: 'Khu xuất hàng',
-};
+type DemoLevel = { id: number; rackId: number; levelNo: number; locations: DemoLocation[] };
+type DemoRack = { id: number; aisleId: number; code: string; name?: string | null; levels: DemoLevel[] };
+type DemoAisle = { id: number; zoneId: number; code: string; name?: string | null; racks: DemoRack[] };
+type DemoZone = { id: number; warehouseId: number; code: string; name: string; zoneType: string; isActive: boolean; aisles: DemoAisle[]; locations: DemoLocation[] };
+type DemoStructure = { warehouseId: number; warehouseCode: string; warehouseName: string; zones: DemoZone[]; systemLocations: DemoLocation[]; unmappedLocations: DemoLocation[] };
+type HierarchyRow = { key: string; depth: number; level: string; code: string; name: string; path: string; location?: DemoLocation };
 
 const locationLabels: Record<string, string> = {
   Receiving: 'Nhận hàng',
@@ -90,284 +50,117 @@ const locationLabels: Record<string, string> = {
   Legacy: 'Tương thích hệ thống',
 };
 
-const toNumber = (value: string): number | null => value.trim() ? Number(value) : null;
+const locationStatus = (location: DemoLocation) => {
+  if (!location.isActive) return { label: 'Ngừng hoạt động', tone: 'neutral' as const };
+  if (location.isBlocked) return { label: 'Bị khóa', tone: 'danger' as const };
+  return { label: 'Đang hoạt động', tone: 'success' as const };
+};
+
+const availabilityLabel = (location: DemoLocation) => {
+  if (!location.isActive || location.isBlocked) return 'Không khả dụng';
+  return location.isPickable ? 'Có thể pick' : 'Không pick';
+};
 
 const WarehouseStructure = () => {
-  const canManageStructure = usePermission('warehouse_zone.manage');
-  const canManageLocations = usePermission('location.manage');
+  const [warehouseId, setWarehouseId] = useState<number>(demoWarehouses[0]?.id ?? 0);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [selectedLocationCode, setSelectedLocationCode] = useState<string | null>(null);
 
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [warehouseId, setWarehouseId] = useState<number | ''>('');
-  const [structure, setStructure] = useState<Structure | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [structureLoading, setStructureLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const structure = useMemo(
+    () => demoWarehouseStructures.find((item) => item.warehouseId === warehouseId) as DemoStructure | undefined,
+    [warehouseId],
+  );
 
-  const [structureKind, setStructureKind] = useState<StructureKind>('zone');
-  const [parentId, setParentId] = useState<number | ''>('');
-  const [nodeCode, setNodeCode] = useState('');
-  const [nodeName, setNodeName] = useState('');
-  const [zoneType, setZoneType] = useState('STORAGE');
-  const [pickPriority, setPickPriority] = useState('');
-  const [putawayPriority, setPutawayPriority] = useState('');
-  const [levelNo, setLevelNo] = useState('');
-  const [nodeSaving, setNodeSaving] = useState(false);
-  const [editNode, setEditNode] = useState<EditNode>(null);
+  const hierarchyRows = useMemo(() => {
+    const rows: HierarchyRow[] = [];
+    if (!structure) return rows;
 
-  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
-  const [locationCode, setLocationCode] = useState('');
-  const [locationName, setLocationName] = useState('');
-  const [locationZoneId, setLocationZoneId] = useState<number | ''>('');
-  const [locationLevelId, setLocationLevelId] = useState<number | ''>('');
-  const [locationType, setLocationType] = useState('Storage');
-  const [locationBarcode, setLocationBarcode] = useState('');
-  const [locationPickPriority, setLocationPickPriority] = useState('');
-  const [locationPutawayPriority, setLocationPutawayPriority] = useState('');
-  const [locationActive, setLocationActive] = useState(true);
-  const [locationBlocked, setLocationBlocked] = useState(false);
-  const [locationPickable, setLocationPickable] = useState(true);
-  const [locationSaving, setLocationSaving] = useState(false);
+    structure.zones.forEach((zone) => {
+      rows.push({ key: 'zone-' + zone.id, depth: 0, level: 'Khu vực', code: zone.code, name: zone.name, path: zone.code });
 
-  const loadStructure = useCallback(async (id: number) => {
-    setStructureLoading(true);
-    setError('');
-    try {
-      const response = await apiClient.get<Structure>(`/api/warehouses/${id}/structure`);
-      setStructure(response.data);
-    } catch (failure) {
-      setStructure(null);
-      setError(permissionError(failure, 'Không thể tải cấu trúc vị trí. Vui lòng thử lại.'));
-    } finally {
-      setStructureLoading(false);
-    }
-  }, []);
+      zone.locations.forEach((location) => {
+        rows.push({
+          key: 'zone-location-' + location.id,
+          depth: 1,
+          level: 'Ô / Vị trí',
+          code: location.code,
+          name: location.name,
+          path: zone.code + ' / ' + location.code,
+          location,
+        });
+      });
 
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const response = await apiClient.get<Warehouse[]>('/api/warehouses');
-        if (!active) return;
-        const available = response.data.filter(item => item.isActive);
-        setWarehouses(available);
-        const initial = available[0]?.id ?? '';
-        setWarehouseId(initial);
-        if (initial) await loadStructure(initial);
-      } catch (failure) {
-        if (active) setError(permissionError(failure, 'Không thể tải danh sách kho. Vui lòng thử lại.'));
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    void load();
-    return () => { active = false; };
-  }, [loadStructure]);
+      zone.aisles.forEach((aisle) => {
+        const aislePath = zone.code + ' / ' + aisle.code;
+        rows.push({ key: 'aisle-' + aisle.id, depth: 1, level: 'Dãy kệ', code: aisle.code, name: aisle.name || '—', path: aislePath });
 
-  const aisles = useMemo(() => structure?.zones.flatMap(zone => zone.aisles.map(aisle => ({ ...aisle, zoneCode: zone.code }))) ?? [], [structure]);
-  const racks = useMemo(() => aisles.flatMap(aisle => aisle.racks.map(rack => ({ ...rack, zoneCode: aisle.zoneCode, aisleCode: aisle.code }))), [aisles]);
-  const levels = useMemo(() => racks.flatMap(rack => rack.levels.map(level => ({ ...level, zoneCode: rack.zoneCode, aisleCode: rack.aisleCode, rackCode: rack.code }))), [racks]);
-  const userLocations = useMemo(() => {
-    if (!structure) return [];
-    return structure.zones.flatMap(zone => [
-      ...zone.locations,
-      ...zone.aisles.flatMap(aisle => aisle.racks.flatMap(rack => rack.levels.flatMap(level => level.locations))),
-    ]);
+        aisle.racks.forEach((rack) => {
+          const rackPath = aislePath + ' / ' + rack.code;
+          rows.push({ key: 'rack-' + rack.id, depth: 2, level: 'Kệ', code: rack.code, name: rack.name || '—', path: rackPath });
+
+          rack.levels.forEach((level) => {
+            const levelCode = 'L' + String(level.levelNo).padStart(2, '0');
+            const levelPath = rackPath + ' / ' + levelCode;
+            rows.push({ key: 'level-' + level.id, depth: 3, level: 'Tầng', code: levelCode, name: 'Tầng ' + level.levelNo, path: levelPath });
+
+            level.locations.forEach((location) => {
+              const leafCode = location.code.split('-').slice(-1)[0];
+              rows.push({
+                key: 'location-' + location.id,
+                depth: 4,
+                level: 'Ô / Vị trí',
+                code: location.code,
+                name: location.name,
+                path: levelPath + ' / ' + leafCode,
+                location,
+              });
+            });
+          });
+        });
+      });
+    });
+
+    return rows;
   }, [structure]);
 
-  const resetStructureForm = () => {
-    setParentId('');
-    setNodeCode('');
-    setNodeName('');
-    setZoneType('STORAGE');
-    setPickPriority('');
-    setPutawayPriority('');
-    setLevelNo('');
-  };
+  const physicalLocations = useMemo(
+    () => hierarchyRows.filter((row) => row.location).map((row) => ({ row, location: row.location as DemoLocation })),
+    [hierarchyRows],
+  );
 
-  const resetLocationForm = () => {
-    setEditingLocation(null);
-    setLocationCode('');
-    setLocationName('');
-    setLocationZoneId('');
-    setLocationLevelId('');
-    setLocationType('Storage');
-    setLocationBarcode('');
-    setLocationPickPriority('');
-    setLocationPutawayPriority('');
-    setLocationActive(true);
-    setLocationBlocked(false);
-    setLocationPickable(true);
-  };
+  const allLocations = useMemo(
+    () => [
+      ...physicalLocations.map((item) => item.location),
+      ...(structure?.systemLocations ?? []),
+      ...(structure?.unmappedLocations ?? []),
+    ],
+    [physicalLocations, structure],
+  );
 
-  const selectWarehouse = (value: string) => {
-    const id = value ? Number(value) : '';
-    setWarehouseId(id);
-    setSuccess('');
-    setEditNode(null);
-    resetLocationForm();
-    if (id) void loadStructure(id);
-    else setStructure(null);
-  };
+  const filteredLocations = useMemo(
+    () => physicalLocations.filter(({ location }) => {
+      const statusMatches =
+        statusFilter === 'all'
+        || (statusFilter === 'active' && location.isActive && !location.isBlocked)
+        || (statusFilter === 'blocked' && location.isBlocked)
+        || (statusFilter === 'inactive' && !location.isActive);
+      const typeMatches = typeFilter === 'all' || location.locationType === typeFilter;
+      return statusMatches && typeMatches;
+    }),
+    [physicalLocations, statusFilter, typeFilter],
+  );
 
-  const submitStructure = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!warehouseId || nodeSaving) return;
-    setNodeSaving(true);
-    setError('');
-    setSuccess('');
-    try {
-      if (structureKind === 'zone') {
-        await apiClient.post(`/api/warehouses/${warehouseId}/zones`, {
-          code: nodeCode,
-          name: nodeName,
-          zoneType,
-          pickPriority: toNumber(pickPriority),
-          putawayPriority: toNumber(putawayPriority),
-        });
-      } else if (structureKind === 'aisle') {
-        await apiClient.post(`/api/warehouses/${warehouseId}/zones/${parentId}/aisles`, { code: nodeCode, name: nodeName || null });
-      } else if (structureKind === 'rack') {
-        await apiClient.post(`/api/warehouses/${warehouseId}/aisles/${parentId}/racks`, { code: nodeCode, name: nodeName || null });
-      } else {
-        await apiClient.post(`/api/warehouses/${warehouseId}/racks/${parentId}/levels`, { levelNo: Number(levelNo) });
-      }
-      setSuccess('Đã tạo cấu trúc vị trí.');
-      resetStructureForm();
-      await loadStructure(warehouseId);
-    } catch (failure) {
-      setError(permissionError(failure, 'Không thể tạo cấu trúc vị trí. Vui lòng kiểm tra dữ liệu và thử lại.'));
-    } finally {
-      setNodeSaving(false);
-    }
-  };
-
-  const submitNodeEdit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!warehouseId || !editNode || nodeSaving) return;
-    setNodeSaving(true);
-    setError('');
-    setSuccess('');
-    try {
-      if (editNode.kind === 'zone') {
-        await apiClient.put(`/api/warehouses/${warehouseId}/zones/${editNode.zone.id}`, {
-          name: nodeName,
-          zoneType,
-          pickPriority: toNumber(pickPriority),
-          putawayPriority: toNumber(putawayPriority),
-          isActive: locationActive,
-          rowVersion: editNode.zone.rowVersion,
-        });
-      } else if (editNode.kind === 'aisle') {
-        await apiClient.put(`/api/warehouses/${warehouseId}/zones/${editNode.zoneId}/aisles/${editNode.aisle.id}`, {
-          name: nodeName || null,
-          rowVersion: editNode.aisle.rowVersion,
-        });
-      } else {
-        await apiClient.put(`/api/warehouses/${warehouseId}/aisles/${editNode.aisleId}/racks/${editNode.rack.id}`, {
-          name: nodeName || null,
-          rowVersion: editNode.rack.rowVersion,
-        });
-      }
-      setSuccess('Đã cập nhật cấu trúc vị trí.');
-      setEditNode(null);
-      resetStructureForm();
-      await loadStructure(warehouseId);
-    } catch (failure) {
-      setError(permissionError(failure, 'Không thể cập nhật cấu trúc vị trí. Vui lòng tải lại và thử lại.'));
-    } finally {
-      setNodeSaving(false);
-    }
-  };
-
-  const beginNodeEdit = (target: Exclude<EditNode, null>) => {
-    setEditNode(target);
-    if (target.kind === 'zone') {
-      setNodeName(target.zone.name);
-      setZoneType(target.zone.zoneType);
-      setPickPriority(target.zone.pickPriority?.toString() ?? '');
-      setPutawayPriority(target.zone.putawayPriority?.toString() ?? '');
-      setLocationActive(target.zone.isActive);
-    } else if (target.kind === 'aisle') {
-      setNodeName(target.aisle.name ?? '');
-    } else {
-      setNodeName(target.rack.name ?? '');
-    }
-  };
-
-  const beginLocationEdit = (location: Location) => {
-    setEditingLocation(location);
-    setLocationCode(location.code);
-    setLocationName(location.name);
-    setLocationZoneId(location.zoneId ?? '');
-    setLocationLevelId(location.rackLevelId ?? '');
-    setLocationType(location.locationType);
-    setLocationBarcode(location.barcode ?? '');
-    setLocationPickPriority(location.pickPriority?.toString() ?? '');
-    setLocationPutawayPriority(location.putawayPriority?.toString() ?? '');
-    setLocationActive(location.isActive);
-    setLocationBlocked(location.isBlocked);
-    setLocationPickable(location.isPickable);
-  };
-
-  const submitLocation = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!warehouseId || locationSaving) return;
-    setLocationSaving(true);
-    setError('');
-    setSuccess('');
-    try {
-      if (editingLocation) {
-        await apiClient.patch(`/api/locations/${editingLocation.id}`, {
-          zoneId: locationZoneId || null,
-          rackLevelId: locationLevelId || null,
-          name: locationName,
-          barcode: locationBarcode || null,
-          pickPriority: toNumber(locationPickPriority),
-          putawayPriority: toNumber(locationPutawayPriority),
-          isActive: locationActive,
-          isBlocked: locationBlocked,
-          isPickable: locationPickable,
-          isReceivable: editingLocation.isReceivable,
-          rowVersion: editingLocation.rowVersion,
-        });
-        setSuccess('Đã cập nhật vị trí.');
-      } else {
-        await apiClient.post('/api/locations', {
-          warehouseId,
-          zoneId: locationZoneId || null,
-          rackLevelId: locationLevelId || null,
-          code: locationCode,
-          name: locationName,
-          barcode: locationBarcode || null,
-          pickPriority: toNumber(locationPickPriority),
-          putawayPriority: toNumber(locationPutawayPriority),
-          locationType,
-          isPickable: locationType === 'Storage' ? locationPickable : false,
-          isReceivable: false,
-        });
-        setSuccess('Đã tạo vị trí.');
-      }
-      resetLocationForm();
-      await loadStructure(warehouseId);
-    } catch (failure) {
-      setError(permissionError(failure, 'Không thể lưu vị trí. Vui lòng kiểm tra dữ liệu và thử lại.'));
-    } finally {
-      setLocationSaving(false);
-    }
-  };
-
-  const selectedZoneLevels = levels.filter(level => {
-    const zone = structure?.zones.find(item => item.id === locationZoneId);
-    return zone?.aisles.some(aisle => aisle.racks.some(rack => rack.levels.some(item => item.id === level.id)));
-  });
-
+  const selectedLocation = allLocations.find((location) => location.code === selectedLocationCode) ?? null;
   const zoneCount = structure?.zones.length ?? 0;
-  const aisleCount = aisles.length;
-  const rackCount = racks.length;
-  const levelCount = levels.length;
-  const locationCount = userLocations.length + (structure?.systemLocations.length ?? 0) + (structure?.unmappedLocations.length ?? 0);
+  const aisleCount = structure?.zones.reduce((count, zone) => count + zone.aisles.length, 0) ?? 0;
+  const rackCount = structure?.zones.reduce(
+    (count, zone) => count + zone.aisles.reduce((aisleTotal, aisle) => aisleTotal + aisle.racks.length, 0),
+    0,
+  ) ?? 0;
+  const locationCount = allLocations.length;
+  const blockedCount = allLocations.filter((location) => location.isBlocked).length;
+  const inactiveCount = allLocations.filter((location) => !location.isActive).length;
 
   return (
     <UiPage>
@@ -375,355 +168,189 @@ const WarehouseStructure = () => {
         <UiPageHeader
           eyebrow="Kho & Vị trí"
           title="Cấu trúc vị trí kho"
-          description="Quản lý cấu trúc vật lý Warehouse → Khu vực → Dãy kệ → Kệ → Tầng → Ô/Vị trí. Capacity và storage constraints được quản lý ở capability riêng."
+          description="Mock tương tác Warehouse → Zone → Aisle → Rack → Level → Bin / Location để kiểm tra IA, trạng thái và quy tắc WH-02 trước khi triển khai production."
         />
 
-        {error && <p role="alert">{error}</p>}
-        {success && <p role="status" className="ui-success-text">{success}</p>}
+        <UiCard title="Phạm vi Blueprint WH-02">
+          <p className="ui-muted-text">
+            Đây là frontend mock-only. Production backend, database, migration và API mutation cho WH-02 chưa được triển khai trong branch Blueprint.
+          </p>
+          <p className="ui-muted-text">
+            Mã vị trí được minh họa là ổn định; vị trí ngừng hoạt động hoặc bị khóa vẫn giữ để truy vết lịch sử. Capacity/weight/volume thuộc WH-03.
+          </p>
+        </UiCard>
 
         <UiToolbar>
           <UiToolbarField label="Kho">
-            <select aria-label="Kho cấu trúc vị trí" value={warehouseId} onChange={event => selectWarehouse(event.target.value)} disabled={loading}>
-              <option value="">-- Chọn kho --</option>
-              {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>)}
+            <select
+              aria-label="Kho cấu trúc vị trí"
+              value={warehouseId}
+              onChange={(event) => {
+                setWarehouseId(Number(event.target.value));
+                setSelectedLocationCode(null);
+              }}
+            >
+              {demoWarehouses.map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.code} — {warehouse.name}
+                </option>
+              ))}
             </select>
           </UiToolbarField>
-          <div className="ui-auto-actions ui-muted-text">
-            Mã cấu trúc và mã vị trí không đổi sau khi tạo.
-          </div>
+
+          <UiToolbarField label="Trạng thái vị trí">
+            <select aria-label="Trạng thái vị trí" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="all">Tất cả</option>
+              <option value="active">Đang hoạt động</option>
+              <option value="blocked">Bị khóa</option>
+              <option value="inactive">Ngừng hoạt động</option>
+            </select>
+          </UiToolbarField>
+
+          <UiToolbarField label="Loại vị trí">
+            <select aria-label="Loại vị trí" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+              <option value="all">Tất cả</option>
+              <option value="Storage">Lưu trữ</option>
+              <option value="Damaged">Hư hỏng</option>
+              <option value="Rejected">Hàng bị từ chối</option>
+            </select>
+          </UiToolbarField>
         </UiToolbar>
 
-        {structure && (
-          <UiMetricGrid>
-            <UiMetric value={zoneCount} label="Khu vực" />
-            <UiMetric value={aisleCount} label="Dãy kệ" />
-            <UiMetric value={rackCount} label="Kệ" />
-            <UiMetric value={levelCount} label="Tầng" />
-            <UiMetric value={locationCount} label="Ô / Vị trí" />
-          </UiMetricGrid>
-        )}
+        {!structure ? (
+          <UiEmptyState title="Không có dữ liệu mock cho kho đã chọn." />
+        ) : (
+          <>
+            <UiMetricGrid>
+              <UiMetric value={zoneCount} label="Khu vực" />
+              <UiMetric value={aisleCount} label="Dãy kệ" />
+              <UiMetric value={rackCount} label="Kệ" />
+              <UiMetric value={locationCount} label="Tổng vị trí" />
+              <UiMetric value={blockedCount} label="Bị khóa" />
+              <UiMetric value={inactiveCount} label="Ngừng hoạt động" />
+            </UiMetricGrid>
 
-        {canManageStructure && warehouseId && (
-          <UiCard title={editNode ? 'Cập nhật cấu trúc' : 'Thêm cấu trúc vật lý'}>
-            {editNode ? (
-              <form className="warehouse-structure-form" onSubmit={submitNodeEdit}>
-                <div className="warehouse-structure-form-grid">
-                  <label className="ui-stack">
-                    <span>Mã</span>
-                    <input value={editNode.kind === 'zone' ? editNode.zone.code : editNode.kind === 'aisle' ? editNode.aisle.code : editNode.rack.code} disabled />
-                  </label>
-                  <label className="ui-stack">
-                    <span>Tên</span>
-                    <input value={nodeName} onChange={event => setNodeName(event.target.value)} />
-                  </label>
-                  {editNode.kind === 'zone' && (
-                    <>
-                      <label className="ui-stack">
-                        <span>Loại khu vực</span>
-                        <select value={zoneType} onChange={event => setZoneType(event.target.value)}>
-                          {Object.entries(zoneLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </select>
-                      </label>
-                      <label className="ui-stack">
-                        <span>Ưu tiên lấy hàng</span>
-                        <input type="number" value={pickPriority} onChange={event => setPickPriority(event.target.value)} />
-                      </label>
-                      <label className="ui-stack">
-                        <span>Ưu tiên cất hàng</span>
-                        <input type="number" value={putawayPriority} onChange={event => setPutawayPriority(event.target.value)} />
-                      </label>
-                      <label className="ui-checkbox-label">
-                        <input type="checkbox" checked={locationActive} onChange={event => setLocationActive(event.target.checked)} />
-                        Khu vực đang hoạt động
-                      </label>
-                    </>
-                  )}
-                </div>
-                <div className="warehouse-structure-actions">
-                  <button type="button" onClick={() => { setEditNode(null); resetStructureForm(); }}>Hủy sửa</button>
-                  <button type="submit" disabled={nodeSaving}>{nodeSaving ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
-                </div>
-              </form>
-            ) : (
-              <form className="warehouse-structure-form" onSubmit={submitStructure}>
-                <div className="warehouse-structure-form-grid">
-                  <label className="ui-stack">
-                    <span>Cấp cấu trúc</span>
-                    <select value={structureKind} onChange={event => { setStructureKind(event.target.value as StructureKind); resetStructureForm(); }}>
-                      <option value="zone">Khu vực</option>
-                      <option value="aisle">Dãy kệ</option>
-                      <option value="rack">Kệ</option>
-                      <option value="level">Tầng</option>
-                    </select>
-                  </label>
-
-                  {structureKind !== 'zone' && (
-                    <label className="ui-stack">
-                      <span>Cấp cha</span>
-                      <select required value={parentId} onChange={event => setParentId(event.target.value ? Number(event.target.value) : '')}>
-                        <option value="">-- Chọn cấp cha --</option>
-                        {structureKind === 'aisle' && structure?.zones.filter(zone => zone.isActive).map(zone => <option key={zone.id} value={zone.id}>{zone.code} — {zone.name}</option>)}
-                        {structureKind === 'rack' && aisles.map(aisle => <option key={aisle.id} value={aisle.id}>{aisle.zoneCode} / {aisle.code}</option>)}
-                        {structureKind === 'level' && racks.map(rack => <option key={rack.id} value={rack.id}>{rack.zoneCode} / {rack.aisleCode} / {rack.code}</option>)}
-                      </select>
-                    </label>
-                  )}
-
-                  {structureKind !== 'level' ? (
-                    <>
-                      <label className="ui-stack">
-                        <span>Mã</span>
-                        <input required value={nodeCode} onChange={event => setNodeCode(event.target.value.toUpperCase())} placeholder="Ví dụ: ZONE-A" />
-                      </label>
-                      <label className="ui-stack">
-                        <span>Tên</span>
-                        <input required={structureKind === 'zone'} value={nodeName} onChange={event => setNodeName(event.target.value)} />
-                      </label>
-                    </>
-                  ) : (
-                    <label className="ui-stack">
-                      <span>Số tầng</span>
-                      <input required type="number" min="1" value={levelNo} onChange={event => setLevelNo(event.target.value)} />
-                    </label>
-                  )}
-
-                  {structureKind === 'zone' && (
-                    <>
-                      <label className="ui-stack">
-                        <span>Loại khu vực</span>
-                        <select value={zoneType} onChange={event => setZoneType(event.target.value)}>
-                          {Object.entries(zoneLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </select>
-                      </label>
-                      <label className="ui-stack">
-                        <span>Ưu tiên lấy hàng</span>
-                        <input type="number" value={pickPriority} onChange={event => setPickPriority(event.target.value)} />
-                      </label>
-                      <label className="ui-stack">
-                        <span>Ưu tiên cất hàng</span>
-                        <input type="number" value={putawayPriority} onChange={event => setPutawayPriority(event.target.value)} />
-                      </label>
-                    </>
-                  )}
-                </div>
-                <div className="warehouse-structure-actions">
-                  <button type="submit" disabled={nodeSaving}>{nodeSaving ? 'Đang tạo...' : 'Tạo cấu trúc'}</button>
-                </div>
-              </form>
-            )}
-          </UiCard>
-        )}
-
-        {canManageLocations && warehouseId && (
-          <UiCard title={editingLocation ? 'Cập nhật ô / vị trí' : 'Thêm ô / vị trí'}>
-            <form className="warehouse-structure-form" onSubmit={submitLocation}>
-              <div className="warehouse-structure-form-grid">
-                <label className="ui-stack">
-                  <span>Mã vị trí</span>
-                  <input required value={locationCode} disabled={!!editingLocation} onChange={event => setLocationCode(event.target.value.toUpperCase())} placeholder="A01-R02-L03-B04" />
-                </label>
-                <label className="ui-stack">
-                  <span>Tên vị trí</span>
-                  <input required value={locationName} onChange={event => setLocationName(event.target.value)} />
-                </label>
-                <label className="ui-stack">
-                  <span>Khu vực</span>
-                  <select required value={locationZoneId} disabled={!!editingLocation?.zoneId} onChange={event => { setLocationZoneId(event.target.value ? Number(event.target.value) : ''); setLocationLevelId(''); }}>
-                    <option value="">-- Chọn khu vực --</option>
-                    {structure?.zones.filter(zone => zone.isActive || zone.id === locationZoneId).map(zone => <option key={zone.id} value={zone.id}>{zone.code} — {zone.name}</option>)}
-                  </select>
-                </label>
-                <label className="ui-stack">
-                  <span>Tầng kệ (không bắt buộc)</span>
-                  <select value={locationLevelId} disabled={!!editingLocation?.rackLevelId || !locationZoneId} onChange={event => setLocationLevelId(event.target.value ? Number(event.target.value) : '')}>
-                    <option value="">Vị trí trực tiếp trong khu vực</option>
-                    {selectedZoneLevels.map(level => <option key={level.id} value={level.id}>{level.aisleCode} / {level.rackCode} / Tầng {level.levelNo}</option>)}
-                  </select>
-                </label>
-                <label className="ui-stack">
-                  <span>Loại vị trí</span>
-                  <select value={locationType} disabled={!!editingLocation} onChange={event => { const next = event.target.value; setLocationType(next); setLocationPickable(next === 'Storage'); }}>
-                    <option value="Storage">Lưu trữ</option>
-                    <option value="Damaged">Hư hỏng</option>
-                    <option value="Rejected">Hàng bị từ chối</option>
-                  </select>
-                </label>
-                <label className="ui-stack">
-                  <span>Mã vạch</span>
-                  <input value={locationBarcode} onChange={event => setLocationBarcode(event.target.value)} placeholder="Quét hoặc nhập mã vị trí" />
-                </label>
-                <label className="ui-stack">
-                  <span>Ưu tiên lấy hàng</span>
-                  <input type="number" value={locationPickPriority} onChange={event => setLocationPickPriority(event.target.value)} />
-                </label>
-                <label className="ui-stack">
-                  <span>Ưu tiên cất hàng</span>
-                  <input type="number" value={locationPutawayPriority} onChange={event => setLocationPutawayPriority(event.target.value)} />
-                </label>
-                <label className="ui-checkbox-label">
-                  <input type="checkbox" checked={locationPickable} disabled={locationType !== 'Storage'} onChange={event => setLocationPickable(event.target.checked)} />
-                  Cho phép lấy hàng
-                </label>
-                {editingLocation && (
-                  <>
-                    <label className="ui-checkbox-label">
-                      <input type="checkbox" checked={locationActive} onChange={event => setLocationActive(event.target.checked)} />
-                      Đang hoạt động
-                    </label>
-                    <label className="ui-checkbox-label">
-                      <input type="checkbox" checked={locationBlocked} onChange={event => setLocationBlocked(event.target.checked)} />
-                      Tạm khóa vị trí
-                    </label>
-                  </>
-                )}
-              </div>
-              <div className="warehouse-structure-actions">
-                {editingLocation && <button type="button" onClick={resetLocationForm}>Hủy sửa</button>}
-                <button type="submit" disabled={locationSaving}>{locationSaving ? 'Đang lưu...' : editingLocation ? 'Lưu vị trí' : 'Tạo vị trí'}</button>
-              </div>
-            </form>
-          </UiCard>
-        )}
-
-        <UiCard title="Cây cấu trúc vật lý">
-          {structureLoading || loading ? (
-            <p role="status">Đang tải cấu trúc vị trí...</p>
-          ) : !structure ? (
-            <UiEmptyState title="Chọn kho để xem cấu trúc vị trí." />
-          ) : structure.zones.length === 0 ? (
-            <UiEmptyState title="Kho chưa có khu vực vật lý." detail={canManageStructure ? 'Tạo khu vực đầu tiên để bắt đầu cấu hình Zone / Aisle / Rack / Level / Bin.' : undefined} />
-          ) : (
-            <UiTableScroll>
-              <table aria-label="Cấu trúc vị trí kho">
-                <thead>
-                  <tr>
-                    <th>Cấp</th>
-                    <th>Mã / Tên</th>
-                    <th>Đường dẫn</th>
-                    <th>Loại</th>
-                    <th>Trạng thái</th>
-                    {(canManageStructure || canManageLocations) && <th>Hành động</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {structure.zones.flatMap(zone => {
-                    const rows: ReactNode[] = [
-                      <tr key={'zone-' + zone.id}>
-                        <td><UiBadge>Khu vực</UiBadge></td>
-                        <td><strong>{zone.code}</strong><br /><small>{zone.name}</small></td>
-                        <td>{zone.code}</td>
-                        <td>{zoneLabels[zone.zoneType] || zone.zoneType}</td>
-                        <td><UiBadge tone={zone.isActive ? 'success' : 'neutral'}>{zone.isActive ? 'Đang hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
-                        {(canManageStructure || canManageLocations) && <td>{canManageStructure && <button type="button" onClick={() => beginNodeEdit({ kind: 'zone', zone })}>Sửa khu vực</button>}</td>}
-                      </tr>,
-                    ];
-                    zone.locations.forEach(location => rows.push(
-                      <tr key={'location-' + location.id}>
-                        <td><span className="warehouse-structure-depth depth-1">Ô / Vị trí</span></td>
-                        <td><strong>{location.code}</strong><br /><small>{location.name}</small></td>
-                        <td>{zone.code} / {location.code}</td>
-                        <td>{locationLabels[location.locationType] || location.locationType}</td>
-                        <td><UiBadge tone={!location.isActive || location.isBlocked ? 'danger' : 'success'}>{!location.isActive ? 'Ngừng hoạt động' : location.isBlocked ? 'Đang khóa' : 'Có thể sử dụng'}</UiBadge></td>
-                        {(canManageStructure || canManageLocations) && <td>{canManageLocations && !location.isSystemManaged && <button type="button" onClick={() => beginLocationEdit(location)}>Sửa vị trí</button>}</td>}
-                      </tr>
-                    ));
-                    zone.aisles.forEach(aisle => {
-                      rows.push(
-                        <tr key={'aisle-' + aisle.id}>
-                          <td><span className="warehouse-structure-depth depth-1">Dãy kệ</span></td>
-                          <td><strong>{aisle.code}</strong><br /><small>{aisle.name || '—'}</small></td>
-                          <td>{zone.code} / {aisle.code}</td>
-                          <td>—</td>
-                          <td>—</td>
-                          {(canManageStructure || canManageLocations) && <td>{canManageStructure && <button type="button" onClick={() => beginNodeEdit({ kind: 'aisle', zoneId: zone.id, aisle })}>Sửa dãy</button>}</td>}
+            <UiCard title="Cây cấu trúc vật lý">
+              <UiTableScroll>
+                <table aria-label="Cấu trúc vị trí kho">
+                  <thead>
+                    <tr>
+                      <th>Cấp</th>
+                      <th>Mã / Tên</th>
+                      <th>Đường dẫn đầy đủ</th>
+                      <th>Loại</th>
+                      <th>Trạng thái</th>
+                      <th>Khả dụng</th>
+                      <th>Chi tiết</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hierarchyRows.map((row) => {
+                      const status = row.location ? locationStatus(row.location) : null;
+                      return (
+                        <tr key={row.key}>
+                          <td><span className={'warehouse-structure-depth depth-' + row.depth}>{row.level}</span></td>
+                          <td><strong>{row.code}</strong><br /><small>{row.name}</small></td>
+                          <td>{row.path}</td>
+                          <td>{row.location ? (locationLabels[row.location.locationType] || row.location.locationType) : '—'}</td>
+                          <td>{status ? <UiBadge tone={status.tone}>{status.label}</UiBadge> : '—'}</td>
+                          <td>{row.location ? availabilityLabel(row.location) : '—'}</td>
+                          <td>
+                            {row.location ? (
+                              <button type="button" onClick={() => setSelectedLocationCode(row.location?.code ?? null)}>Xem</button>
+                            ) : '—'}
+                          </td>
                         </tr>
                       );
-                      aisle.racks.forEach(rack => {
-                        rows.push(
-                          <tr key={'rack-' + rack.id}>
-                            <td><span className="warehouse-structure-depth depth-2">Kệ</span></td>
-                            <td><strong>{rack.code}</strong><br /><small>{rack.name || '—'}</small></td>
-                            <td>{zone.code} / {aisle.code} / {rack.code}</td>
-                            <td>—</td>
-                            <td>—</td>
-                            {(canManageStructure || canManageLocations) && <td>{canManageStructure && <button type="button" onClick={() => beginNodeEdit({ kind: 'rack', aisleId: aisle.id, rack })}>Sửa kệ</button>}</td>}
+                    })}
+                  </tbody>
+                </table>
+              </UiTableScroll>
+            </UiCard>
+
+            <UiCard title="Vị trí vật lý theo bộ lọc">
+              {filteredLocations.length === 0 ? (
+                <UiEmptyState title="Không có vị trí phù hợp bộ lọc." />
+              ) : (
+                <UiTableScroll>
+                  <table aria-label="Vị trí vật lý theo bộ lọc">
+                    <thead><tr><th>Mã</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Pick</th></tr></thead>
+                    <tbody>
+                      {filteredLocations.map(({ row, location }) => {
+                        const status = locationStatus(location);
+                        return (
+                          <tr key={'filtered-' + location.id}>
+                            <td><strong>{location.code}</strong><br /><small>{location.name}</small></td>
+                            <td>{row.path}</td>
+                            <td>{locationLabels[location.locationType] || location.locationType}</td>
+                            <td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>
+                            <td>{availabilityLabel(location)}</td>
                           </tr>
                         );
-                        rack.levels.forEach(level => {
-                          rows.push(
-                            <tr key={'level-' + level.id}>
-                              <td><span className="warehouse-structure-depth depth-3">Tầng</span></td>
-                              <td><strong>Tầng {level.levelNo}</strong></td>
-                              <td>{zone.code} / {aisle.code} / {rack.code} / Tầng {level.levelNo}</td>
-                              <td>—</td>
-                              <td>—</td>
-                              {(canManageStructure || canManageLocations) && <td>—</td>}
-                            </tr>
-                          );
-                          level.locations.forEach(location => rows.push(
-                            <tr key={'location-' + location.id}>
-                              <td><span className="warehouse-structure-depth depth-4">Ô / Vị trí</span></td>
-                              <td><strong>{location.code}</strong><br /><small>{location.name}</small></td>
-                              <td>{zone.code} / {aisle.code} / {rack.code} / Tầng {level.levelNo} / {location.code}</td>
-                              <td>{locationLabels[location.locationType] || location.locationType}</td>
-                              <td><UiBadge tone={!location.isActive || location.isBlocked ? 'danger' : 'success'}>{!location.isActive ? 'Ngừng hoạt động' : location.isBlocked ? 'Đang khóa' : 'Có thể sử dụng'}</UiBadge></td>
-                              {(canManageStructure || canManageLocations) && <td>{canManageLocations && !location.isSystemManaged && <button type="button" onClick={() => beginLocationEdit(location)}>Sửa vị trí</button>}</td>}
-                            </tr>
-                          ));
-                        });
-                      });
-                    });
-                    return rows;
-                  })}
-                </tbody>
-              </table>
-            </UiTableScroll>
-          )}
-        </UiCard>
+                      })}
+                    </tbody>
+                  </table>
+                </UiTableScroll>
+              )}
+            </UiCard>
 
-        {structure && structure.unmappedLocations.length > 0 && (
-          <UiCard title="Vị trí chưa gắn cấu trúc">
-            <p className="ui-muted-text">
-              Đây là dữ liệu vị trí có từ trước WH-02. Hãy gắn vào một khu vực/tầng kệ phù hợp; hệ thống không tự tạo cấu trúc giả cho lịch sử cũ.
-            </p>
-            <UiTableScroll>
-              <table aria-label="Vị trí chưa gắn cấu trúc">
-                <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th>{canManageLocations && <th>Hành động</th>}</tr></thead>
-                <tbody>
-                  {structure.unmappedLocations.map(location => (
-                    <tr key={location.id}>
-                      <td><strong>{location.code}</strong></td>
-                      <td>{location.name}</td>
-                      <td>{locationLabels[location.locationType] || location.locationType}</td>
-                      <td><UiBadge tone={!location.isActive || location.isBlocked ? 'danger' : 'warning'}>{!location.isActive ? 'Ngừng hoạt động' : location.isBlocked ? 'Đang khóa' : 'Chưa gắn cấu trúc'}</UiBadge></td>
-                      {canManageLocations && <td><button type="button" onClick={() => beginLocationEdit(location)}>Gắn cấu trúc</button></td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </UiTableScroll>
-          </UiCard>
-        )}
+            {selectedLocation && (
+              <UiCard title={'Chi tiết mock • ' + selectedLocation.code}>
+                <div className="warehouse-structure-form-grid">
+                  <div><strong>Loại</strong><br />{locationLabels[selectedLocation.locationType] || selectedLocation.locationType}</div>
+                  <div><strong>Trạng thái</strong><br />{locationStatus(selectedLocation).label}</div>
+                  <div><strong>Pick</strong><br />{availabilityLabel(selectedLocation)}</div>
+                  <div><strong>System managed</strong><br />{selectedLocation.isSystemManaged ? 'Có' : 'Không'}</div>
+                </div>
+              </UiCard>
+            )}
 
-        {structure && structure.systemLocations.length > 0 && (
-          <UiCard title="Vị trí hệ thống">
-            <p className="ui-muted-text">RECEIVING và LEGACY được hệ thống quản lý để giữ tương thích nghiệp vụ và lịch sử tồn kho.</p>
-            <UiTableScroll>
-              <table aria-label="Vị trí hệ thống">
-                <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th></tr></thead>
-                <tbody>
-                  {structure.systemLocations.map(location => (
-                    <tr key={location.id}>
-                      <td><strong>{location.code}</strong></td>
-                      <td>{location.name}</td>
-                      <td>{locationLabels[location.locationType] || location.locationType}</td>
-                      <td><UiBadge tone={location.isActive ? 'success' : 'neutral'}>{location.isActive ? 'Đang hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </UiTableScroll>
-          </UiCard>
+            {structure.unmappedLocations.length > 0 && (
+              <UiCard title="Vị trí chưa gắn cấu trúc">
+                <p className="ui-muted-text">Dữ liệu legacy/non-system được giữ nguyên, không tự bịa Zone/Rack lịch sử.</p>
+                <UiTableScroll>
+                  <table aria-label="Vị trí chưa gắn cấu trúc">
+                    <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th></tr></thead>
+                    <tbody>
+                      {structure.unmappedLocations.map((location) => {
+                        const status = locationStatus(location);
+                        return (
+                          <tr key={location.id}>
+                            <td><strong>{location.code}</strong></td>
+                            <td>{location.name}</td>
+                            <td>{locationLabels[location.locationType] || location.locationType}</td>
+                            <td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </UiTableScroll>
+              </UiCard>
+            )}
+
+            <UiCard title="Vị trí hệ thống">
+              <p className="ui-muted-text">
+                RECEIVING và LEGACY là ví dụ system-managed để minh họa compatibility; đây không phải bằng chứng production seed/API.
+              </p>
+              <UiTableScroll>
+                <table aria-label="Vị trí hệ thống">
+                  <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Receivable</th><th>Pick</th></tr></thead>
+                  <tbody>
+                    {structure.systemLocations.map((location) => (
+                      <tr key={location.id}>
+                        <td><strong>{location.code}</strong></td>
+                        <td>{location.name}</td>
+                        <td>{locationLabels[location.locationType] || location.locationType}</td>
+                        <td>{location.isReceivable ? 'Có' : 'Không'}</td>
+                        <td>{location.isPickable ? 'Có thể pick' : 'Không pick'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </UiTableScroll>
+            </UiCard>
+          </>
         )}
       </div>
     </UiPage>

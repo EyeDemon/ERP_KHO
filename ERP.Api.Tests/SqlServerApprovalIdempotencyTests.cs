@@ -1,4 +1,3 @@
-using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
@@ -36,7 +35,6 @@ public sealed class SqlServerApprovalIdempotencyTests
     public async Task PermissionMigrationRequiresCanonicalUnlockedBootstrapAndRollsBackFailure()
     {
         const string previous = "20260927014531_AddInboundPutawayLocationMovement";
-        var expectedPermissionCount = AppPermissions.Catalog.Length;
         foreach (var scenario in new[] { "missing", "inactive", "locked", "ambiguous", "valid" })
         {
             await using var owned = await ApprovalSafetyDatabase.CreateAsync(
@@ -68,14 +66,14 @@ public sealed class SqlServerApprovalIdempotencyTests
                 var before = await db.InventoryStocks.AsNoTracking().OrderBy(s => s.Id)
                     .Select(s => new { s.ProductId, s.WarehouseId, s.LocationId, s.Status, s.Quantity, s.ReservedQuantity }).ToListAsync();
                 await migrator.MigrateAsync();
-                Assert.Equal(expectedPermissionCount, await db.Permissions.CountAsync());
-                Assert.Equal(expectedPermissionCount, await db.RolePermissions.CountAsync(p => p.Role.RoleName == "Admin"));
+                Assert.Equal(53, await db.Permissions.CountAsync());
+                Assert.Equal(53, await db.RolePermissions.CountAsync(p => p.Role.RoleName == "Admin"));
                 Assert.False(await db.RolePermissions.AnyAsync(p => p.Role.RoleName == "UnmappedFixture"));
                 // Owned fixture only, before any grant administration: exercise additive Down/Up.
                 await migrator.MigrateAsync(previous);
                 Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.tables WHERE name IN ('Permissions','RolePermissions')").SingleAsync());
                 await migrator.MigrateAsync();
-                Assert.Equal(expectedPermissionCount, await db.Permissions.CountAsync());
+                Assert.Equal(53, await db.Permissions.CountAsync());
                 var after = await db.InventoryStocks.AsNoTracking().OrderBy(s => s.Id)
                     .Select(s => new { s.ProductId, s.WarehouseId, s.LocationId, s.Status, s.Quantity, s.ReservedQuantity }).ToListAsync();
                 Assert.Equal(before, after);

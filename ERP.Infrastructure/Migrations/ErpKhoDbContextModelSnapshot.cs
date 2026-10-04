@@ -2336,210 +2336,6 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("Warehouses", (string)null);
                 });
 
-            modelBuilder.Entity("ERP.Domain.Entities.WarehouseAisle", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .UseCollation("Latin1_General_100_CI_AS");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Name")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ZoneId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ZoneId", "Code")
-                        .IsUnique();
-
-                    b.ToTable("WarehouseAisles", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_WarehouseAisles_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
-                        });
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.WarehouseRack", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AisleId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .UseCollation("Latin1_General_100_CI_AS");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Name")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AisleId", "Code")
-                        .IsUnique();
-
-                    b.ToTable("WarehouseRacks", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_WarehouseRacks_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
-                        });
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.WarehouseRackLevel", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int>("LevelNo")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RackId")
-                        .HasColumnType("int");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RackId", "LevelNo")
-                        .IsUnique();
-
-                    b.ToTable("WarehouseRackLevels", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_WarehouseRackLevels_LevelNo", "[LevelNo] > 0");
-                        });
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.WarehouseZone", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .UseCollation("Latin1_General_100_CI_AS");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int?>("PickPriority")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PutawayPriority")
-                        .HasColumnType("int");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int>("WarehouseId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ZoneType")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("WarehouseId", "Code")
-                        .IsUnique();
-
-                    b.ToTable("WarehouseZones", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_WarehouseZones_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
-
-                            t.HasCheckConstraint("CK_WarehouseZones_Type", "[ZoneType] = UPPER(LTRIM(RTRIM([ZoneType]))) AND LEN([ZoneType]) > 0");
-                        });
-                });
-
             modelBuilder.Entity("ERP.Domain.Entities.WarehouseLocation", b =>
                 {
                     b.Property<int>("Id")
@@ -2547,10 +2343,6 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Barcode")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Code")
                         .IsRequired()
@@ -2587,15 +2379,6 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int?>("PickPriority")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PutawayPriority")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("RackLevelId")
-                        .HasColumnType("int");
-
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -2611,16 +2394,7 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("WarehouseId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("ZoneId")
-                        .HasColumnType("int");
-
                     b.HasKey("Id");
-
-                    b.HasIndex("Barcode");
-
-                    b.HasIndex("RackLevelId");
-
-                    b.HasIndex("ZoneId");
 
                     b.HasIndex("WarehouseId", "Code")
                         .IsUnique();
@@ -2628,8 +2402,6 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("WarehouseLocations", null, t =>
                         {
                             t.HasCheckConstraint("CK_WarehouseLocations_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
-
-                            t.HasCheckConstraint("CK_WarehouseLocations_RackLevelRequiresZone", "[RackLevelId] IS NULL OR [ZoneId] IS NOT NULL");
                         });
                 });
 
@@ -3326,73 +3098,15 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Warehouse");
                 });
 
-            modelBuilder.Entity("ERP.Domain.Entities.WarehouseAisle", b =>
-                {
-                    b.HasOne("ERP.Domain.Entities.WarehouseZone", "Zone")
-                        .WithMany("Aisles")
-                        .HasForeignKey("ZoneId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Zone");
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.WarehouseRack", b =>
-                {
-                    b.HasOne("ERP.Domain.Entities.WarehouseAisle", "Aisle")
-                        .WithMany("Racks")
-                        .HasForeignKey("AisleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Aisle");
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.WarehouseRackLevel", b =>
-                {
-                    b.HasOne("ERP.Domain.Entities.WarehouseRack", "Rack")
-                        .WithMany("Levels")
-                        .HasForeignKey("RackId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Rack");
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.WarehouseZone", b =>
-                {
-                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
-                        .WithMany("Zones")
-                        .HasForeignKey("WarehouseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Warehouse");
-                });
-
             modelBuilder.Entity("ERP.Domain.Entities.WarehouseLocation", b =>
                 {
-                    b.HasOne("ERP.Domain.Entities.WarehouseRackLevel", "RackLevel")
-                        .WithMany("Locations")
-                        .HasForeignKey("RackLevelId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
                         .WithMany("Locations")
                         .HasForeignKey("WarehouseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("ERP.Domain.Entities.WarehouseZone", "Zone")
-                        .WithMany("Locations")
-                        .HasForeignKey("ZoneId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("RackLevel");
-
                     b.Navigation("Warehouse");
-
-                    b.Navigation("Zone");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.BusinessPartner", b =>
@@ -3503,8 +3217,6 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Stocktakes");
 
                     b.Navigation("UserAccesses");
-
-                    b.Navigation("Zones");
                 });
 #pragma warning restore 612, 618
         }
