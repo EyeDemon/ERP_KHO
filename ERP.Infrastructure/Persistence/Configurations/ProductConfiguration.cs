@@ -8,12 +8,21 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
 {
     public void Configure(EntityTypeBuilder<Product> builder)
     {
-        builder.ToTable("Products");
+        builder.ToTable("Products", t =>
+        {
+            t.HasCheckConstraint("CK_Products_StorageClass", "[StorageClass] IS NULL OR ([StorageClass] = UPPER(LTRIM(RTRIM([StorageClass]))) AND LEN([StorageClass]) > 0)");
+            t.HasCheckConstraint("CK_Products_StorageMetrics", "([UnitWeightKg] IS NULL OR [UnitWeightKg] > 0) AND ([UnitVolumeM3] IS NULL OR [UnitVolumeM3] > 0) AND ([UnitPalletEquivalent] IS NULL OR [UnitPalletEquivalent] > 0)");
+        });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
         builder.HasIndex(x => x.Code).IsUnique().HasDatabaseName("IX_ProductCode");
+        builder.HasIndex(x => x.StorageClass);
         builder.Property(x => x.Name).IsRequired().HasMaxLength(200);
         builder.Property(x => x.Description).HasMaxLength(500);
+        builder.Property(x => x.StorageClass).HasMaxLength(32);
+        builder.Property(x => x.UnitWeightKg).HasPrecision(18, 6);
+        builder.Property(x => x.UnitVolumeM3).HasPrecision(18, 8);
+        builder.Property(x => x.UnitPalletEquivalent).HasPrecision(18, 8);
 
         builder.HasOne(x => x.Unit)
                .WithMany(u => u.Products)

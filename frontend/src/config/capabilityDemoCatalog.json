@@ -12,33 +12,37 @@
     ],
     "fields": [
       {
+        "label": "Production maturity",
+        "value": "LIVE"
+      },
+      {
+        "label": "Production route",
+        "value": "/warehouse-structure"
+      },
+      {
         "label": "Location",
         "value": "A01-R02-L03-B04"
       },
       {
         "label": "Storage class",
-        "value": "DRY-A"
+        "value": "AMBIENT"
       },
       {
         "label": "Capacity",
-        "value": "1,200 kg / 8 pallet"
+        "value": "1,500 kg / 10 m³ / 5 pallet-eq"
       },
       {
-        "label": "Đang sử dụng",
-        "value": "890 kg / 6 pallet"
-      },
-      {
-        "label": "Incoming",
-        "value": "120 kg / 1 pallet"
+        "label": "Current usage",
+        "value": "1,260 kg / 8.2 m³ / 4 pallet-eq"
       }
     ],
     "commands": [
-      "CHECK_CAPACITY",
+      "OPEN_CAPACITY_DASHBOARD",
       "CHECK_COMPATIBILITY",
-      "RESERVE_CAPACITY"
+      "VERIFY_PUTAWAY_GUARD"
     ],
     "exceptionTitle": "LOCATION_CAPACITY_EXCEEDED",
-    "exceptionDetail": "Incoming load làm vượt weight/volume/pallet capacity hoặc vi phạm storage compatibility."
+    "exceptionDetail": "Production Putaway fail-closed khi Storage Class không tương thích, profile sản phẩm thiếu cho constraint đang bật hoặc projected weight/volume/pallet-equivalent vượt giới hạn."
   },
   "WH-04": {
     "title": "Warehouse Map & Heatmap",

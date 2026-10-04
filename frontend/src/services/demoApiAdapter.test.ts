@@ -52,7 +52,17 @@ describe('Blueprint demo API adapter', () => {
     }
   });
 
-  it('does not expose WH-02 pseudo-backend reads', async () => {
+  it('serves WH-03 location capacity data for the production warehouse page', async () => {
+    const config = request('/api/putaway-tasks/location-capacity', 'get', { warehouseId: 1 });
+    const response = await createBlueprintDemoApiAdapter(config)(config);
+    const rows = response.data as Array<{ code: string; state: string; maxWeightKg?: number | null }>;
+
+    expect(response.status).toBe(200);
+    expect(rows.some(item => item.code === 'A01-R02-L03-B04' && item.state === 'NearCapacity')).toBe(true);
+    expect(rows.find(item => item.code === 'A01-R02-L03-B04')?.maxWeightKg).toBe(1500);
+  });
+
+  it('does not expose WH-02 pseudo-backend reads', async () => {  it('does not expose WH-02 pseudo-backend reads', async () => {
     for (const url of [
       '/api/warehouses/1/structure',
       '/api/warehouses/1/zones',

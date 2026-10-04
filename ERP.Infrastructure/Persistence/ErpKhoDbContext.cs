@@ -97,6 +97,12 @@ public class ErpKhoDbContext : DbContext
                 t.HasCheckConstraint(
                     "CK_WarehouseLocations_StructurePath",
                     "[StructurePath] IS NULL OR ([StructurePath] = UPPER(LTRIM(RTRIM([StructurePath]))) AND LEN([StructurePath]) > 0)");
+                t.HasCheckConstraint(
+                    "CK_WarehouseLocations_StorageClass",
+                    "[StorageClass] IS NULL OR ([StorageClass] = UPPER(LTRIM(RTRIM([StorageClass]))) AND LEN([StorageClass]) > 0)");
+                t.HasCheckConstraint(
+                    "CK_WarehouseLocations_Capacity",
+                    "([MaxWeightKg] IS NULL OR [MaxWeightKg] > 0) AND ([MaxVolumeM3] IS NULL OR [MaxVolumeM3] > 0) AND ([MaxPalletEquivalent] IS NULL OR [MaxPalletEquivalent] > 0)");
             });
             modelBuilder.Entity<PutawayTaskItem>().ToTable("PutawayTaskItems", t =>
             {

@@ -44,6 +44,7 @@ describe('interactive capability demo registry', () => {
       capability.status === 'live' || capability.status === 'foundation'
     );
     expect(implemented.map(({ capability }) => capability.id)).toContain('WH-02');
+    expect(implemented.map(({ capability }) => capability.id)).toContain('WH-03');
 
     for (const { module, capability } of implemented) {
       const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
@@ -76,6 +77,21 @@ describe('interactive capability demo registry', () => {
     expect(demo.commands).toContain('SHOW_UNMAPPED_LOCATIONS');
     expect(demo.fields).toContainEqual({ label: 'Production maturity', value: 'LIVE' });
     expect(demo.fields).toContainEqual({ label: 'Production route', value: '/warehouse-structure' });
+  });
+
+  it('reflects WH-03 live capacity enforcement while keeping its Blueprint preview separate', () => {
+    const entry = allCapabilities.find(({ capability }) => capability.id === 'WH-03');
+    if (!entry) throw new Error('WH-03 capability missing');
+
+    expect(entry.capability.status).toBe('live');
+    expect(entry.capability.route).toBe('/warehouse-structure');
+    expect(coreInteractiveDemoIds).toContain('WH-03');
+
+    const demo = getCapabilityDemoDefinition(entry.capability, entry.module.name, entry.module.flow);
+    expect(demo.exceptionTitle).toBe('LOCATION_CAPACITY_EXCEEDED');
+    expect(demo.fields).toContainEqual({ label: 'Production maturity', value: 'LIVE' });
+    expect(demo.fields).toContainEqual({ label: 'Production route', value: '/warehouse-structure' });
+    expect(demo.commands).toContain('VERIFY_PUTAWAY_GUARD');
   });
 
   it('keeps canonical inventory boundaries concrete in detailed core demos', () => {

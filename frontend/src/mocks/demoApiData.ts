@@ -42,6 +42,10 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
       rackCode: string | null;
       levelNo: number | null;
       locationType: string;
+      storageClass: string | null;
+      maxWeightKg: number | null;
+      maxVolumeM3: number | null;
+      maxPalletEquivalent: number | null;
       isActive: boolean;
       isBlocked: boolean;
       isPickable: boolean;
@@ -63,6 +67,10 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
     pickPriority: 10,
     putawayPriority: 10,
     locationType: 'Storage',
+    storageClass: null,
+    maxWeightKg: null,
+    maxVolumeM3: null,
+    maxPalletEquivalent: null,
     isActive: true,
     isBlocked: false,
     isPickable: true,
@@ -73,8 +81,8 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
 
   const physicalLocations = index === 0
     ? [
-        location(101, 'A01-R02-L03-B04', 'Ô lưu trữ chính B04'),
-        location(102, 'A01-R02-L03-B05', 'Ô dự trữ B05', { isPickable: false }),
+        location(101, 'A01-R02-L03-B04', 'Ô lưu trữ chính B04', { storageClass: 'AMBIENT', maxWeightKg: 1500, maxVolumeM3: 10, maxPalletEquivalent: 5 }),
+        location(102, 'A01-R02-L03-B05', 'Ô dự trữ B05', { isPickable: false, storageClass: 'AMBIENT', maxWeightKg: 1500, maxVolumeM3: 10, maxPalletEquivalent: 5 }),
         location(103, 'A01-R02-L03-B06', 'Ô đang khóa B06', { isBlocked: true }),
         location(104, 'A01-R02-L03-B07', 'Ô ngừng hoạt động B07', { isActive: false }),
         location(105, 'A01-R02-L03-B08', 'Ô hàng hư hỏng B08', { locationType: 'Damaged', isPickable: false }),
@@ -144,11 +152,19 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
 export const demoProducts = mockProducts.map((product, index) => {
   const unitId = unitByName[product.baseUom] ?? 3;
   const categoryId = categoryByName[product.category] ?? null;
+  const profiles = [
+    { storageClass: 'AMBIENT', unitWeightKg: 0.5, unitVolumeM3: 0.002, unitPalletEquivalent: 0.02 },
+    { storageClass: 'ELECTRONICS', unitWeightKg: 1.2, unitVolumeM3: 0.004, unitPalletEquivalent: 0.03 },
+    { storageClass: 'AMBIENT', unitWeightKg: 0.08, unitVolumeM3: 0.001, unitPalletEquivalent: 0.005 },
+    { storageClass: 'AMBIENT', unitWeightKg: 0.65, unitVolumeM3: 0.0015, unitPalletEquivalent: 0.015 },
+  ];
+  const profile = profiles[index % profiles.length];
   return {
     id: index + 1,
     code: product.code,
     name: product.name,
     description: product.tracking === 'None' ? 'Không theo dõi lot/serial' : 'Theo dõi ' + product.tracking,
+    ...profile,
     unitId,
     unitCode: demoUnits.find(item => item.id === unitId)?.code ?? 'CAI',
     unitName: product.baseUom,

@@ -6,6 +6,10 @@ namespace ERP.Application.DTOs
         public string Code { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
+        public string? StorageClass { get; set; }
+        public decimal? UnitWeightKg { get; set; }
+        public decimal? UnitVolumeM3 { get; set; }
+        public decimal? UnitPalletEquivalent { get; set; }
         public int UnitId { get; set; }
         public string? UnitName { get; set; }
         public string? UnitCode { get; set; }

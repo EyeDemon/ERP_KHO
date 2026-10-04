@@ -75,6 +75,78 @@ public sealed class PutawayServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Move_rejects_storage_class_mismatch_without_effect()
+    {
+        var ids = await SeedAsync(); await using var db = Create();
+        var product = await db.Products.SingleAsync(x => x.Id == ids.ProductId);
+        var location = await db.WarehouseLocations.SingleAsync(x => x.Id == ids.Storage1);
+        product.StorageClass = "CHILLED";
+        location.StorageClass = "AMBIENT";
+        await db.SaveChangesAsync();
+        var service = Service(db, ids.WarehouseId, ids.UserId);
+        var task = await service.GetAsync(ids.TaskId);
+
+        var action = () => service.MoveAsync(task.Id, new MovePutawayItemDto { ItemId=ids.ItemId, DestinationLocationId=ids.Storage1, Quantity=1, UnitCode="EA", RowVersion=task.RowVersion! });
+
+        await action.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>().WithMessage("*Storage Class*");
+        (await db.InventoryLocationMovements.CountAsync()).Should().Be(0);
+        (await db.InventoryStocks.SingleAsync(x => x.LocationId == ids.Receiving)).Quantity.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task Move_rejects_projected_capacity_and_dashboard_reports_current_usage()
+    {
+        var ids = await SeedAsync(); await using var db = Create();
+        var product = await db.Products.SingleAsync(x => x.Id == ids.ProductId);
+        var location = await db.WarehouseLocations.SingleAsync(x => x.Id == ids.Storage1);
+        product.StorageClass = "AMBIENT";
+        product.UnitWeightKg = 2m;
+        location.StorageClass = "AMBIENT";
+        location.MaxWeightKg = 4.5m;
+        db.InventoryStocks.Add(new InventoryStock { ProductId=ids.ProductId, WarehouseId=ids.WarehouseId, LocationId=ids.Storage1, Status=InventoryStatus.Available, Quantity=2 });
+        await db.SaveChangesAsync();
+        var service = Service(db, ids.WarehouseId, ids.UserId);
+
+        var capacity = (await service.ListLocationCapacitiesAsync(ids.WarehouseId)).Single(x => x.LocationId == ids.Storage1);
+        capacity.UsedWeightKg.Should().Be(4m);
+        capacity.State.Should().Be("NearCapacity");
+
+        var task = await service.GetAsync(ids.TaskId);
+        var action = () => service.MoveAsync(task.Id, new MovePutawayItemDto { ItemId=ids.ItemId, DestinationLocationId=ids.Storage1, Quantity=1, UnitCode="EA", RowVersion=task.RowVersion! });
+        await action.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>().WithMessage("*Vượt giới hạn trọng lượng*");
+        (await db.InventoryLocationMovements.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Capacity_dashboard_marks_legacy_profile_gap_and_constraint_update_fails_closed()
+    {
+        var ids = await SeedAsync(); await using var db = Create();
+        var location = await db.WarehouseLocations.SingleAsync(x => x.Id == ids.Storage1);
+        location.MaxVolumeM3 = 10m;
+        db.InventoryStocks.Add(new InventoryStock { ProductId=ids.ProductId, WarehouseId=ids.WarehouseId, LocationId=ids.Storage1, Status=InventoryStatus.Available, Quantity=2 });
+        await db.SaveChangesAsync();
+        var service = Service(db, ids.WarehouseId, ids.UserId);
+
+        var capacity = (await service.ListLocationCapacitiesAsync(ids.WarehouseId)).Single(x => x.LocationId == ids.Storage1);
+        capacity.ProfileIncomplete.Should().BeTrue();
+        capacity.State.Should().Be("ProfileIncomplete");
+
+        var dto = (await service.ListLocationsAsync(ids.WarehouseId)).Single(x => x.Id == ids.Storage1);
+        var action = () => service.UpdateLocationAsync(ids.Storage1, new UpdateWarehouseLocationDto
+        {
+            Name = dto.Name,
+            IsActive = true,
+            IsPickable = true,
+            UpdateConstraints = true,
+            StorageClass = "AMBIENT",
+            MaxVolumeM3 = 5m,
+            RowVersion = dto.RowVersion!
+        });
+        await action.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
+            .Where(x => Equals(x.Data["HttpStatusCode"], 409));
+    }
+
+    [Fact]
     public async Task Mutation_reuses_ambient_idempotency_transaction()
     {
         var ids = await SeedAsync(); await using var db = Create(); var service = Service(db, ids.WarehouseId, ids.UserId);

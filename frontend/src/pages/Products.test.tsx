@@ -6,7 +6,7 @@ import apiClient from '../services/apiClient';
 
 vi.mock('../services/apiClient', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 
-const product = { id: 1, code: 'P001', name: 'Sản phẩm', unitId: 1, unitName: 'Cái', categoryId: null, barcodes: [{ id: 2, productId: 1, value: '001Ab' }], isActive: true };
+const product = { id: 1, code: 'P001', name: 'Sản phẩm', storageClass: 'AMBIENT', unitWeightKg: 0.5, unitVolumeM3: 0.002, unitPalletEquivalent: 0.02, unitId: 1, unitName: 'Cái', categoryId: null, barcodes: [{ id: 2, productId: 1, value: '001Ab' }], isActive: true };
 
 describe('Products category and barcode UI (mocked API)', () => {
   afterEach(cleanup);
@@ -73,7 +73,23 @@ describe('Products category and barcode UI (mocked API)', () => {
     await waitFor(() => expect(view.queryByText('Đang xử lý...')).toBeNull());
   });
 
-  it('product update does not expose category or barcode management', async () => {
+  it('submits the explicit storage profile on product update', async () => {
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} } as never);
+    const view = render(<Products />); await view.findByText('P001');
+    fireEvent.click(view.getByText('Sửa'));
+    fireEvent.change(view.getByLabelText('Storage Class sản phẩm'), { target: { value: 'chilled' } });
+    fireEvent.change(view.getByLabelText('Trọng lượng đơn vị kg'), { target: { value: '1.25' } });
+    fireEvent.submit(view.getByText('Lưu').closest('form')!);
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/products/1', expect.objectContaining({
+      updateStorageProfile: true,
+      storageClass: 'CHILLED',
+      unitWeightKg: 1.25,
+      unitVolumeM3: 0.002,
+      unitPalletEquivalent: 0.02,
+    })));
+  });
+
+  it('product update does not expose category or barcode management', async () => {  it('product update does not expose category or barcode management', async () => {
     localStorage.setItem('permissions', '["product.read","product.update","uom.read"]');
     const view = render(<Products />); await view.findByText('P001');
     expect(view.queryByText('Thêm danh mục')).toBeNull();

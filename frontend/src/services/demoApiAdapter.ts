@@ -174,6 +174,46 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       ]);
     }
 
+    if (path === '/api/putaway-tasks/location-capacity') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const structure = demoWarehouseStructures.find(item => item.warehouseId === warehouseId);
+      if (!structure) return ok(config, []);
+      const physical = structure.zones.flatMap(zone => zone.aisles.flatMap(aisle => aisle.racks.flatMap(rack => rack.levels.flatMap(level =>
+        level.locations.map(location => {
+          const usage = location.code.endsWith('B04')
+            ? { usedWeightKg: 1260, usedVolumeM3: 8.2, usedPalletEquivalent: 4 }
+            : location.code.endsWith('B05')
+              ? { usedWeightKg: 620, usedVolumeM3: 4.1, usedPalletEquivalent: 2 }
+              : { usedWeightKg: 0, usedVolumeM3: 0, usedPalletEquivalent: 0 };
+          const ratios = [
+            location.maxWeightKg ? usage.usedWeightKg / location.maxWeightKg : 0,
+            location.maxVolumeM3 ? usage.usedVolumeM3 / location.maxVolumeM3 : 0,
+            location.maxPalletEquivalent ? usage.usedPalletEquivalent / location.maxPalletEquivalent : 0,
+          ];
+          const state = !location.isActive ? 'Inactive' : location.isBlocked ? 'Blocked' : Math.max(...ratios) >= 0.85 ? 'NearCapacity' : 'Available';
+          return {
+            locationId: location.id,
+            code: location.code,
+            name: location.name,
+            structurePath: [zone.code, aisle.code, rack.code, 'L' + String(level.levelNo).padStart(2, '0'), location.code.split('-').slice(-1)[0]].join('/'),
+            storageClass: location.storageClass,
+            maxWeightKg: location.maxWeightKg,
+            usedWeightKg: usage.usedWeightKg,
+            maxVolumeM3: location.maxVolumeM3,
+            usedVolumeM3: usage.usedVolumeM3,
+            maxPalletEquivalent: location.maxPalletEquivalent,
+            usedPalletEquivalent: usage.usedPalletEquivalent,
+            profileIncomplete: false,
+            compatibilityConflict: false,
+            isActive: location.isActive,
+            isBlocked: location.isBlocked,
+            state,
+          };
+        })
+      ))));
+      return ok(config, physical);
+    }
+
     if (path === '/api/putaway-tasks') return ok(config, demoPutawayTasks);
     if (/^\/api\/putaway-tasks\/\d+$/.test(path)) {
       const item = demoPutawayTasks.find(task => task.id === findNumericId(path));

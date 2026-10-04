@@ -27,6 +27,10 @@ type WarehouseLocation = {
   code: string;
   name: string;
   structurePath?: string | null;
+  storageClass?: string | null;
+  maxWeightKg?: number | null;
+  maxVolumeM3?: number | null;
+  maxPalletEquivalent?: number | null;
   locationType: string;
   isActive: boolean;
   isBlocked: boolean;
@@ -46,9 +50,32 @@ type LocationForm = {
   rack: string;
   level: string;
   bin: string;
+  storageClass: string;
+  maxWeightKg: string;
+  maxVolumeM3: string;
+  maxPalletEquivalent: string;
   isActive: boolean;
   isBlocked: boolean;
   rowVersion?: string | null;
+};
+
+type LocationCapacity = {
+  locationId: number;
+  code: string;
+  name: string;
+  structurePath?: string | null;
+  storageClass?: string | null;
+  maxWeightKg?: number | null;
+  usedWeightKg?: number | null;
+  maxVolumeM3?: number | null;
+  usedVolumeM3?: number | null;
+  maxPalletEquivalent?: number | null;
+  usedPalletEquivalent?: number | null;
+  profileIncomplete: boolean;
+  compatibilityConflict: boolean;
+  isActive: boolean;
+  isBlocked: boolean;
+  state: string;
 };
 
 type HierarchyRow = {
@@ -80,7 +107,7 @@ const splitStructurePath = (value?: string | null): string[] | null => {
   return parts.length === 5 ? parts : null;
 };
 
-const normalizeSegment = (value: string) => value.trim().toUpperCase().replace(/s+/g, '-');
+const normalizeSegment = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '-');
 
 const structurePathOf = (form: LocationForm) =>
   [form.zone, form.aisle, form.rack, form.level, form.bin].map(normalizeSegment).join('/');
@@ -97,6 +124,10 @@ const formFromLocation = (location: WarehouseLocation): LocationForm => {
     rack: parts[2],
     level: parts[3],
     bin: parts[4],
+    storageClass: location.storageClass || '',
+    maxWeightKg: location.maxWeightKg?.toString() || '',
+    maxVolumeM3: location.maxVolumeM3?.toString() || '',
+    maxPalletEquivalent: location.maxPalletEquivalent?.toString() || '',
     isActive: location.isActive,
     isBlocked: location.isBlocked,
     rowVersion: location.rowVersion,
@@ -112,9 +143,35 @@ const emptyForm = (): LocationForm => ({
   rack: '',
   level: '',
   bin: '',
+  storageClass: '',
+  maxWeightKg: '',
+  maxVolumeM3: '',
+  maxPalletEquivalent: '',
   isActive: true,
   isBlocked: false,
 });
+
+const nullableNumber = (value: string) => value.trim() === '' ? null : Number(value);
+const capacityTone = (state: string) =>
+  state === 'Available' ? 'success' as const
+    : state === 'NearCapacity' || state === 'ProfileIncomplete' ? 'warning' as const
+      : state === 'Inactive' ? 'neutral' as const
+        : 'danger' as const;
+const capacityLabel: Record<string, string> = {
+  Available: 'Còn sức chứa',
+  NearCapacity: 'Gần đầy',
+  OverCapacity: 'Vượt sức chứa',
+  ProfileIncomplete: 'Thiếu profile',
+  CompatibilityConflict: 'Xung đột class',
+  Blocked: 'Bị khóa',
+  Inactive: 'Ngừng hoạt động',
+};
+const capacityUsage = (used?: number | null, max?: number | null, unit = '') => {
+  if (max == null) return 'Không giới hạn';
+  if (used == null) return 'Thiếu profile / ' + max + (unit ? ' ' + unit : '');
+  const percent = Math.round((used / max) * 100);
+  return used + ' / ' + max + (unit ? ' ' + unit : '') + ' • ' + percent + '%';
+};
 
 const messageOf = (failure: unknown, fallback: string) => {
   const response = failure as { response?: { status?: number; data?: { message?: string } } };
@@ -129,6 +186,7 @@ const WarehouseLocations = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState<number>(0);
   const [locations, setLocations] = useState<WarehouseLocation[]>([]);
+  const [capacities, setCapacities] = useState<LocationCapacity[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -151,10 +209,15 @@ const WarehouseLocations = () => {
   const loadLocations = useCallback(async (targetWarehouseId: number) => {
     if (!targetWarehouseId) {
       setLocations([]);
+      setCapacities([]);
       return;
     }
-    const response = await apiClient.get('/api/putaway-tasks/locations', { params: { warehouseId: targetWarehouseId } });
-    setLocations(response.data as WarehouseLocation[]);
+    const [locationResponse, capacityResponse] = await Promise.all([
+      apiClient.get('/api/putaway-tasks/locations', { params: { warehouseId: targetWarehouseId } }),
+      apiClient.get('/api/putaway-tasks/location-capacity', { params: { warehouseId: targetWarehouseId } }),
+    ]);
+    setLocations(locationResponse.data as WarehouseLocation[]);
+    setCapacities(capacityResponse.data as LocationCapacity[]);
   }, []);
 
   const load = useCallback(async () => {
@@ -184,7 +247,8 @@ const WarehouseLocations = () => {
     setError('');
     void loadLocations(warehouseId).catch((failure) => {
       setLocations([]);
-      setError(messageOf(failure, 'Không thể tải vị trí của kho đã chọn.'));
+      setCapacities([]);
+      setError(messageOf(failure, 'Không thể tải vị trí hoặc sức chứa của kho đã chọn.'));
     });
   }, [warehouseId, loadLocations, loading]);
 
@@ -241,7 +305,7 @@ const WarehouseLocations = () => {
         || (statusFilter === 'blocked' && location.isBlocked)
         || (statusFilter === 'inactive' && !location.isActive);
       const typeMatches = typeFilter === 'all' || location.locationType === typeFilter;
-      const searchMatches = !query || [location.code, location.name, location.structurePath ?? '', location.locationType]
+      const searchMatches = !query || [location.code, location.name, location.structurePath ?? '', location.storageClass ?? '', location.locationType]
         .join(' ')
         .toLocaleLowerCase('vi')
         .includes(query);
@@ -252,6 +316,8 @@ const WarehouseLocations = () => {
   const zoneCount = new Set(mapped.map((location) => splitStructurePath(location.structurePath)?.[0]).filter(Boolean)).size;
   const blockedCount = locations.filter((location) => location.isBlocked).length;
   const inactiveCount = locations.filter((location) => !location.isActive).length;
+  const nearCapacityCount = capacities.filter((item) => item.state === 'NearCapacity').length;
+  const capacityIssueCount = capacities.filter((item) => ['OverCapacity', 'ProfileIncomplete', 'CompatibilityConflict'].includes(item.state)).length;
   const editing = form.id !== undefined;
   const editingLocation = editing ? locations.find((location) => location.id === form.id) : undefined;
   const hasLockedStructure = Boolean(editingLocation?.structurePath);
@@ -285,11 +351,6 @@ const WarehouseLocations = () => {
     const required = [
       ['Mã vị trí', form.code],
       ['Tên vị trí', form.name],
-      ['Zone', form.zone],
-      ['Aisle', form.aisle],
-      ['Rack', form.rack],
-      ['Level', form.level],
-      ['Bin', form.bin],
     ] as const;
     const missing = required.find(([, value]) => !value.trim());
     if (missing) {
@@ -297,7 +358,21 @@ const WarehouseLocations = () => {
       return;
     }
 
-    const structurePath = structurePathOf(form);
+    const structureFields = [
+      ['Zone', form.zone],
+      ['Aisle', form.aisle],
+      ['Rack', form.rack],
+      ['Level', form.level],
+      ['Bin', form.bin],
+    ] as const;
+    const hasAnyStructure = structureFields.some(([, value]) => value.trim());
+    const structureMissing = structureFields.find(([, value]) => !value.trim());
+    if ((!editing || hasAnyStructure) && structureMissing) {
+      setFormError(structureMissing[0] + ' là bắt buộc khi gán cấu trúc vật lý.');
+      return;
+    }
+
+    const structurePath = hasAnyStructure ? structurePathOf(form) : null;
     setSaving(true);
     try {
       if (editing && form.id !== undefined) {
@@ -308,6 +383,11 @@ const WarehouseLocations = () => {
         await apiClient.put('/api/putaway-tasks/locations/' + form.id, {
           name: form.name.trim(),
           structurePath,
+          updateConstraints: true,
+          storageClass: form.storageClass.trim() || null,
+          maxWeightKg: nullableNumber(form.maxWeightKg),
+          maxVolumeM3: nullableNumber(form.maxVolumeM3),
+          maxPalletEquivalent: nullableNumber(form.maxPalletEquivalent),
           isActive: form.isActive,
           isBlocked: form.isBlocked,
           isPickable: form.locationType === 'Storage',
@@ -321,6 +401,10 @@ const WarehouseLocations = () => {
           code: form.code.trim(),
           name: form.name.trim(),
           structurePath,
+          storageClass: form.storageClass.trim() || null,
+          maxWeightKg: nullableNumber(form.maxWeightKg),
+          maxVolumeM3: nullableNumber(form.maxVolumeM3),
+          maxPalletEquivalent: nullableNumber(form.maxPalletEquivalent),
           locationType: form.locationType,
           isPickable: form.locationType === 'Storage',
           isReceivable: false,
@@ -343,7 +427,7 @@ const WarehouseLocations = () => {
       <UiPageHeader
         eyebrow="Dữ liệu nền"
         title="Cấu trúc vị trí kho"
-        description="Quản lý cấu trúc Zone → Aisle → Rack → Level → Bin trên dữ liệu WarehouseLocation thật. Mã vị trí là định danh ổn định; StructurePath đã gán được khóa để bảo toàn truy vết lịch sử."
+        description="Quản lý Zone → Aisle → Rack → Level → Bin, Storage Class và sức chứa trên WarehouseLocation thật. Putaway dùng chính constraint này để chặn vị trí không tương thích hoặc vượt capacity."
         actions={canManage ? <button type="button" className="ui-primary-button" onClick={openCreate}>Thêm vị trí</button> : undefined}
       />
 
@@ -357,6 +441,8 @@ const WarehouseLocations = () => {
         <UiMetric value={unmapped.length} label="Chưa gắn cấu trúc" />
         <UiMetric value={blockedCount} label="Bị khóa" />
         <UiMetric value={inactiveCount} label="Ngừng hoạt động" />
+        <UiMetric value={nearCapacityCount} label="Gần đầy" />
+        <UiMetric value={capacityIssueCount} label="Capacity cần xử lý" />
       </UiMetricGrid>
 
       <UiToolbar>
@@ -394,6 +480,29 @@ const WarehouseLocations = () => {
         <UiEmptyState title="Không có kho nào trong phạm vi được phép." />
       ) : (
         <>
+          <UiCard title="Sức chứa & Storage Constraints">
+            <p className="ui-muted-text">Số liệu sử dụng được tính từ InventoryStock theo base UOM × profile sản phẩm. Trạng thái thiếu profile hoặc xung đột Storage Class sẽ chặn Putaway vào vị trí có constraint tương ứng.</p>
+            {capacities.length === 0 ? (
+              <UiEmptyState title="Chưa có vị trí vật lý để theo dõi capacity." />
+            ) : (
+              <UiTableScroll>
+                <table aria-label="Sức chứa vị trí kho thật">
+                  <thead><tr><th>Vị trí</th><th>Storage Class</th><th>Trọng lượng</th><th>Thể tích</th><th>Pallet-eq</th><th>Trạng thái</th></tr></thead>
+                  <tbody>{capacities.map((item) => (
+                    <tr key={item.locationId}>
+                      <td><strong>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
+                      <td>{item.storageClass || 'Không giới hạn class'}</td>
+                      <td>{capacityUsage(item.usedWeightKg, item.maxWeightKg, 'kg')}</td>
+                      <td>{capacityUsage(item.usedVolumeM3, item.maxVolumeM3, 'm³')}</td>
+                      <td>{capacityUsage(item.usedPalletEquivalent, item.maxPalletEquivalent)}</td>
+                      <td><UiBadge tone={capacityTone(item.state)}>{capacityLabel[item.state] || item.state}</UiBadge></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </UiTableScroll>
+            )}
+          </UiCard>
+
           <UiCard title={'Cây cấu trúc vật lý' + (currentWarehouse ? ' • ' + currentWarehouse.code : '')}>
             {hierarchyRows.length === 0 ? (
               <UiEmptyState title="Kho chưa có vị trí được gắn StructurePath." detail="Vị trí cũ vẫn được giữ nguyên ở bảng Chưa gắn cấu trúc bên dưới." />
@@ -487,8 +596,20 @@ const WarehouseLocations = () => {
               <label className="ui-stack"><span>Loại vị trí *</span><select aria-label="Loại vị trí form" value={form.locationType} onChange={(event) => setForm((current) => ({ ...current, locationType: event.target.value as LocationForm['locationType'] }))} disabled={saving || editing}><option value="Storage">Lưu trữ</option><option value="Damaged">Hư hỏng</option><option value="Rejected">Hàng bị từ chối</option></select></label>
             </div>
 
+            <fieldset disabled={saving}>
+              <legend>Storage Class & Capacity</legend>
+              <p className="ui-muted-text">Để trống nghĩa là không áp giới hạn theo chiều đó. Nếu đã có tồn kho, backend chỉ cho lưu constraint khi tải hiện tại vẫn hợp lệ.</p>
+              <div className="warehouse-location-capacity-grid">
+                <label className="ui-stack"><span>Storage Class</span><input aria-label="Storage Class vị trí" value={form.storageClass} onChange={(event) => setForm((current) => ({ ...current, storageClass: event.target.value.toUpperCase() }))} maxLength={32} placeholder="AMBIENT" /></label>
+                <label className="ui-stack"><span>Max kg</span><input aria-label="Giới hạn trọng lượng kg" type="number" min="0.000001" step="0.000001" value={form.maxWeightKg} onChange={(event) => setForm((current) => ({ ...current, maxWeightKg: event.target.value }))} placeholder="1500" /></label>
+                <label className="ui-stack"><span>Max m³</span><input aria-label="Giới hạn thể tích m3" type="number" min="0.00000001" step="0.00000001" value={form.maxVolumeM3} onChange={(event) => setForm((current) => ({ ...current, maxVolumeM3: event.target.value }))} placeholder="10" /></label>
+                <label className="ui-stack"><span>Max pallet-eq</span><input aria-label="Giới hạn pallet equivalent" type="number" min="0.00000001" step="0.00000001" value={form.maxPalletEquivalent} onChange={(event) => setForm((current) => ({ ...current, maxPalletEquivalent: event.target.value }))} placeholder="5" /></label>
+              </div>
+            </fieldset>
+
             <fieldset disabled={saving || hasLockedStructure}>
               <legend>Cấu trúc vật lý • Zone / Aisle / Rack / Level / Bin</legend>
+              {!editing || hasLockedStructure ? null : <p className="ui-muted-text">Vị trí legacy có thể giữ nguyên chưa gắn cấu trúc. Nếu gán mới, cần nhập đủ cả 5 cấp.</p>}
               <div className="warehouse-location-path-grid">
                 <label className="ui-stack"><span>Zone *</span><input aria-label="Zone" value={form.zone} onChange={(event) => setForm((current) => ({ ...current, zone: event.target.value }))} maxLength={32} placeholder="ZONE-A" /></label>
                 <label className="ui-stack"><span>Aisle *</span><input aria-label="Aisle" value={form.aisle} onChange={(event) => setForm((current) => ({ ...current, aisle: event.target.value }))} maxLength={32} placeholder="A01" /></label>

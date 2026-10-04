@@ -8,6 +8,10 @@ public class Product
     public int UnitId { get; set; }
     public int? CategoryId { get; set; }
     public string? Description { get; set; }
+    public string? StorageClass { get; set; }
+    public decimal? UnitWeightKg { get; set; }
+    public decimal? UnitVolumeM3 { get; set; }
+    public decimal? UnitPalletEquivalent { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }

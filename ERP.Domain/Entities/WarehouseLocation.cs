@@ -9,6 +9,10 @@ public class WarehouseLocation
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? StructurePath { get; set; }
+    public string? StorageClass { get; set; }
+    public decimal? MaxWeightKg { get; set; }
+    public decimal? MaxVolumeM3 { get; set; }
+    public decimal? MaxPalletEquivalent { get; set; }
     public WarehouseLocationType LocationType { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsBlocked { get; set; }

@@ -28,17 +28,88 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         return (await context.WarehouseLocations.AsNoTracking().Where(x => x.WarehouseId == warehouseId).OrderBy(x => x.Code).ToListAsync(token)).Select(Location).ToList();
     }
 
+    public async Task<IReadOnlyList<WarehouseLocationCapacityDto>> ListLocationCapacitiesAsync(int warehouseId, CancellationToken token = default)
+    {
+        await warehouses.EnsureWarehouseAccessAsync(warehouseId, token);
+        var locations = await context.WarehouseLocations.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouseId && !x.IsSystemManaged)
+            .OrderBy(x => x.Code)
+            .ToListAsync(token);
+        var stocks = await context.InventoryStocks.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouseId && x.Quantity > 0)
+            .Join(context.Products.AsNoTracking(), stock => stock.ProductId, product => product.Id,
+                (stock, product) => new
+                {
+                    stock.LocationId,
+                    stock.Quantity,
+                    product.StorageClass,
+                    product.UnitWeightKg,
+                    product.UnitVolumeM3,
+                    product.UnitPalletEquivalent
+                })
+            .ToListAsync(token);
+
+        return locations.Select(location =>
+        {
+            var rows = stocks.Where(x => x.LocationId == location.Id).ToList();
+            var usedWeight = rows.Count == 0 ? 0m : rows.All(x => x.UnitWeightKg.HasValue) ? rows.Sum(x => x.Quantity * x.UnitWeightKg!.Value) : (decimal?)null;
+            var usedVolume = rows.Count == 0 ? 0m : rows.All(x => x.UnitVolumeM3.HasValue) ? rows.Sum(x => x.Quantity * x.UnitVolumeM3!.Value) : (decimal?)null;
+            var usedPallet = rows.Count == 0 ? 0m : rows.All(x => x.UnitPalletEquivalent.HasValue) ? rows.Sum(x => x.Quantity * x.UnitPalletEquivalent!.Value) : (decimal?)null;
+            var profileIncomplete = (location.MaxWeightKg.HasValue && !usedWeight.HasValue)
+                || (location.MaxVolumeM3.HasValue && !usedVolume.HasValue)
+                || (location.MaxPalletEquivalent.HasValue && !usedPallet.HasValue);
+            var compatibilityConflict = location.StorageClass is not null
+                && rows.Any(x => !string.Equals(x.StorageClass, location.StorageClass, StringComparison.Ordinal));
+            var overCapacity = (location.MaxWeightKg.HasValue && usedWeight.HasValue && usedWeight > location.MaxWeightKg)
+                || (location.MaxVolumeM3.HasValue && usedVolume.HasValue && usedVolume > location.MaxVolumeM3)
+                || (location.MaxPalletEquivalent.HasValue && usedPallet.HasValue && usedPallet > location.MaxPalletEquivalent);
+            var nearCapacity = (location.MaxWeightKg.HasValue && usedWeight.HasValue && usedWeight >= location.MaxWeightKg * 0.85m)
+                || (location.MaxVolumeM3.HasValue && usedVolume.HasValue && usedVolume >= location.MaxVolumeM3 * 0.85m)
+                || (location.MaxPalletEquivalent.HasValue && usedPallet.HasValue && usedPallet >= location.MaxPalletEquivalent * 0.85m);
+
+            var state = !location.IsActive ? "Inactive"
+                : location.IsBlocked ? "Blocked"
+                : compatibilityConflict ? "CompatibilityConflict"
+                : profileIncomplete ? "ProfileIncomplete"
+                : overCapacity ? "OverCapacity"
+                : nearCapacity ? "NearCapacity"
+                : "Available";
+
+            return new WarehouseLocationCapacityDto
+            {
+                LocationId = location.Id,
+                Code = location.Code,
+                Name = location.Name,
+                StructurePath = location.StructurePath,
+                StorageClass = location.StorageClass,
+                MaxWeightKg = location.MaxWeightKg,
+                UsedWeightKg = usedWeight,
+                MaxVolumeM3 = location.MaxVolumeM3,
+                UsedVolumeM3 = usedVolume,
+                MaxPalletEquivalent = location.MaxPalletEquivalent,
+                UsedPalletEquivalent = usedPallet,
+                ProfileIncomplete = profileIncomplete,
+                CompatibilityConflict = compatibilityConflict,
+                IsActive = location.IsActive,
+                IsBlocked = location.IsBlocked,
+                State = state
+            };
+        }).ToList();
+    }
+
     public async Task<WarehouseLocationDto> CreateLocationAsync(CreateWarehouseLocationDto dto, CancellationToken token = default)
     {
         await warehouses.EnsureWarehouseAccessAsync(dto.WarehouseId, token);
         var code = Required(dto.Code, "Mã vị trí").ToUpperInvariant();
         var name = Required(dto.Name, "Tên vị trí");
         var structurePath = NormalizeStructurePath(dto.StructurePath);
+        var storageClass = NormalizeStorageClass(dto.StorageClass);
+        ValidateCapacityLimits(dto.MaxWeightKg, dto.MaxVolumeM3, dto.MaxPalletEquivalent);
         if (!Enum.TryParse<WarehouseLocationType>(dto.LocationType, true, out var type) || type is WarehouseLocationType.Receiving or WarehouseLocationType.Legacy)
             throw new BusinessRuleException("Loại vị trí không hợp lệ cho vị trí do người dùng tạo.");
         if (await context.WarehouseLocations.AnyAsync(x => x.WarehouseId == dto.WarehouseId && x.Code == code, token)) throw Conflict("Mã vị trí đã tồn tại trong kho.");
         ValidateFlags(type, dto.IsPickable, dto.IsReceivable);
-        var entity = new WarehouseLocation { WarehouseId=dto.WarehouseId, Code=code, Name=name, StructurePath=structurePath, LocationType=type, IsPickable=dto.IsPickable, IsReceivable=dto.IsReceivable, CreatedBy=currentUser.UserId };
+        var entity = new WarehouseLocation { WarehouseId=dto.WarehouseId, Code=code, Name=name, StructurePath=structurePath, StorageClass=storageClass, MaxWeightKg=dto.MaxWeightKg, MaxVolumeM3=dto.MaxVolumeM3, MaxPalletEquivalent=dto.MaxPalletEquivalent, LocationType=type, IsPickable=dto.IsPickable, IsReceivable=dto.IsReceivable, CreatedBy=currentUser.UserId };
         context.WarehouseLocations.Add(entity); await context.SaveChangesAsync(token); return Location(entity);
     }
 
@@ -49,8 +120,8 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId, token);
         ApplyLocationVersion(entity, dto.RowVersion);
         var structurePath = NormalizeStructurePath(dto.StructurePath);
-        if (entity.IsSystemManaged && (!dto.IsActive || dto.IsBlocked || dto.IsPickable != entity.IsPickable || dto.IsReceivable != entity.IsReceivable || structurePath is not null))
-            throw new BusinessRuleException("Không thể thay đổi thuộc tính vận hành hoặc cấu trúc của vị trí hệ thống.");
+        if (entity.IsSystemManaged && (!dto.IsActive || dto.IsBlocked || dto.IsPickable != entity.IsPickable || dto.IsReceivable != entity.IsReceivable || structurePath is not null || dto.UpdateConstraints))
+            throw new BusinessRuleException("Không thể thay đổi thuộc tính vận hành, cấu trúc hoặc capacity của vị trí hệ thống.");
         if (entity.StructurePath is not null && structurePath is not null && !string.Equals(entity.StructurePath, structurePath, StringComparison.Ordinal))
             throw Conflict("Đường dẫn cấu trúc đã gán không được thay đổi. Hãy tạo vị trí mới để bảo toàn truy vết lịch sử.");
         if (entity.StructurePath is null && structurePath is not null)
@@ -60,6 +131,16 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
                 || await context.PutawayTaskItems.AnyAsync(x => x.SourceLocationId == id && x.PutawayTask.Status != PutawayTaskStatus.Completed && x.PutawayTask.Status != PutawayTaskStatus.Cancelled, token);
             if (hasUsage) throw Conflict("Không thể gắn cấu trúc cho vị trí đã có tồn kho, movement hoặc nhiệm vụ đang hoạt động.");
             entity.StructurePath = structurePath;
+        }
+        if (dto.UpdateConstraints)
+        {
+            var storageClass = NormalizeStorageClass(dto.StorageClass);
+            ValidateCapacityLimits(dto.MaxWeightKg, dto.MaxVolumeM3, dto.MaxPalletEquivalent);
+            await EnsureExistingStockFitsConstraintsAsync(entity.Id, storageClass, dto.MaxWeightKg, dto.MaxVolumeM3, dto.MaxPalletEquivalent, token);
+            entity.StorageClass = storageClass;
+            entity.MaxWeightKg = dto.MaxWeightKg;
+            entity.MaxVolumeM3 = dto.MaxVolumeM3;
+            entity.MaxPalletEquivalent = dto.MaxPalletEquivalent;
         }
         ValidateFlags(entity.LocationType, dto.IsPickable, dto.IsReceivable);
         if (!dto.IsActive && (await context.InventoryStocks.AnyAsync(x => x.LocationId == id && x.Quantity != 0, token) ||
@@ -116,7 +197,9 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
     {
         var task = await Load(taskId, token); var item = task.Items.SingleOrDefault(x=>x.Id==itemId) ?? throw new NotFoundException("Không tìm thấy dòng hàng.");
         var type = RequiredType(item.InventoryStatus);
-        return (await context.WarehouseLocations.AsNoTracking().Where(x=>x.WarehouseId==task.WarehouseId && x.IsActive && !x.IsBlocked && x.LocationType==type && (item.InventoryStatus!=InventoryStatus.Available || x.IsPickable))
+        var productStorageClass = item.ReceiptLine.Product.StorageClass;
+        return (await context.WarehouseLocations.AsNoTracking().Where(x=>x.WarehouseId==task.WarehouseId && x.IsActive && !x.IsBlocked && x.LocationType==type && (item.InventoryStatus!=InventoryStatus.Available || x.IsPickable)
+                && (x.StorageClass == null || (productStorageClass != null && x.StorageClass == productStorageClass)))
             .OrderBy(x=>x.Code).ToListAsync(token)).Select(Location).ToList();
     }
 
@@ -139,6 +222,8 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
             if(destination.WarehouseId!=task.WarehouseId) throw new NotFoundException("Không tìm thấy vị trí đích.");
             if(!destination.IsActive||destination.IsBlocked||destination.LocationType!=RequiredType(item.InventoryStatus)||(item.InventoryStatus==InventoryStatus.Available&&!destination.IsPickable)) throw new BusinessRuleException("Vị trí đích không phù hợp với hàng hóa này.");
             var baseQty=ToBase(dto.Quantity,dto.UnitCode,item); if(baseQty>item.RemainingBaseQuantity) throw new BusinessRuleException("Số lượng cất vượt quá số lượng còn lại.");
+            var product=await ProductForCapacity(item.ProductId,token)??throw new NotFoundException("Không tìm thấy sản phẩm.");
+            await EnsurePutawayCapacityAsync(destination, product, baseQty, token);
             var source=await context.InventoryStocks.SingleOrDefaultAsync(x=>x.ProductId==item.ProductId&&x.WarehouseId==task.WarehouseId&&x.Status==item.InventoryStatus&&x.LocationId==item.SourceLocationId,token);
             if(source is null||source.Quantity-source.ReservedQuantity<baseQty) throw Conflict("Tồn tại vị trí nguồn đã thay đổi. Vui lòng tải lại.");
             var dest=await context.InventoryStocks.SingleOrDefaultAsync(x=>x.ProductId==item.ProductId&&x.WarehouseId==task.WarehouseId&&x.Status==item.InventoryStatus&&x.LocationId==destination.Id,token);
@@ -162,6 +247,10 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         (context.Database.IsSqlServer()
             ? context.WarehouseLocations.FromSqlInterpolated($"SELECT * FROM dbo.WarehouseLocations WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}")
             : context.WarehouseLocations.Where(x => x.Id == id)).SingleOrDefaultAsync(token);
+    private Task<Product?> ProductForCapacity(int id, CancellationToken token) =>
+        (context.Database.IsSqlServer()
+            ? context.Products.FromSqlInterpolated($"SELECT * FROM dbo.Products WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}").AsNoTracking()
+            : context.Products.AsNoTracking().Where(x => x.Id == id)).SingleOrDefaultAsync(token);
     private IQueryable<PutawayTask> Query()=>context.PutawayTasks.Include(x=>x.Receipt).Include(x=>x.Warehouse).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).Include(x=>x.Items).ThenInclude(x=>x.SourceLocation);
     private void EnsureActor(PutawayTask task){if(task.AssignedUserId!=currentUser.UserId&&!currentUser.IsGlobalAdmin&&currentUser.Role is not "Admin" and not "Manager")throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");}
     private static decimal ToBase(decimal qty,string unit,PutawayTaskItem item){var code=unit.Trim().ToUpperInvariant();var result=code==item.BaseUnitCodeSnapshot.ToUpperInvariant()?qty:code==item.OperationUnitCodeSnapshot.ToUpperInvariant()?qty*item.ConversionFactorSnapshot:throw new BusinessRuleException("Đơn vị tính không được hỗ trợ.");if(decimal.Round(result,item.BaseUnitDecimalPlaces)!=result)throw new BusinessRuleException("Số lượng vượt quá độ chính xác cho phép; hệ thống không tự làm tròn.");return result;}
@@ -170,7 +259,7 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
     private async Task<PutawayTaskDto> MapAsync(PutawayTask t,CancellationToken token){var moves=await context.InventoryLocationMovements.AsNoTracking().Where(x=>x.PutawayTaskId==t.Id).Join(context.WarehouseLocations,x=>x.FromLocationId,x=>x.Id,(m,f)=>new{m,f}).Join(context.WarehouseLocations,x=>x.m.ToLocationId,x=>x.Id,(x,d)=>new PutawayMovementDto{Id=x.m.Id,ItemId=x.m.PutawayTaskItemId,FromLocationCode=x.f.Code,ToLocationCode=d.Code,BaseQuantity=x.m.BaseQuantity,CreatedAt=x.m.CreatedAt}).ToListAsync(token);var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";return new PutawayTaskDto{Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=t.Receipt.Code,WarehouseId=t.WarehouseId,WarehouseName=t.Warehouse.Name,Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,Items=t.Items.Select(x=>new PutawayTaskItemDto{Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=x.ReceiptLine.Product.Code,ProductName=x.ReceiptLine.Product.Name,InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=x.SourceLocation.Code,OperationUnitCode=x.OperationUnitCodeSnapshot,BaseUnitCode=x.BaseUnitCodeSnapshot,RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate?Convert.ToBase64String(x.RowVersion):null}).ToList(),Movements=moves};}
     private static AuditLog Audit(int user,string action,int entity,int warehouse,string values)=>new(){UserId=user,Action=action,EntityName="PutawayTask",EntityId=entity,WarehouseId=warehouse,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
     private static BusinessRuleException Conflict(string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;return e;}
-    private WarehouseLocationDto Location(WarehouseLocation x)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,Code=x.Code,Name=x.Name,StructurePath=x.StructurePath,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff"?Convert.ToBase64String(x.RowVersion):null};
+    private WarehouseLocationDto Location(WarehouseLocation x)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,Code=x.Code,Name=x.Name,StructurePath=x.StructurePath,StorageClass=x.StorageClass,MaxWeightKg=x.MaxWeightKg,MaxVolumeM3=x.MaxVolumeM3,MaxPalletEquivalent=x.MaxPalletEquivalent,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff"?Convert.ToBase64String(x.RowVersion):null};
     private static string Required(string value,string label)=>string.IsNullOrWhiteSpace(value)?throw new BusinessRuleException($"{label} là bắt buộc."):value.Trim();
     private static string? NormalizeStructurePath(string? value)
     {
@@ -186,6 +275,74 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         var normalized = string.Join("/", parts);
         if (normalized.Length > 160) throw new BusinessRuleException("Đường dẫn cấu trúc vượt quá độ dài cho phép.");
         return normalized;
+    }
+    private static string? NormalizeStorageClass(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized=value.Trim().ToUpperInvariant();
+        if (normalized.Length>32 || normalized.Any(ch=>!((ch>='A'&&ch<='Z')||char.IsDigit(ch)||ch is '-' or '_')))
+            throw new BusinessRuleException("Storage Class chỉ được dùng chữ A-Z, số, dấu gạch ngang hoặc gạch dưới.");
+        return normalized;
+    }
+    private static void ValidateCapacityLimits(decimal? weight,decimal? volume,decimal? pallet)
+    {
+        if(weight.HasValue&&weight<=0)throw new BusinessRuleException("Giới hạn trọng lượng phải lớn hơn 0.");
+        if(volume.HasValue&&volume<=0)throw new BusinessRuleException("Giới hạn thể tích phải lớn hơn 0.");
+        if(pallet.HasValue&&pallet<=0)throw new BusinessRuleException("Giới hạn pallet-equivalent phải lớn hơn 0.");
+    }
+    private async Task EnsureExistingStockFitsConstraintsAsync(int locationId,string? storageClass,decimal? maxWeight,decimal? maxVolume,decimal? maxPallet,CancellationToken token)
+    {
+        var rows=await context.InventoryStocks.AsNoTracking().Where(x=>x.LocationId==locationId&&x.Quantity>0)
+            .Join(context.Products.AsNoTracking(),s=>s.ProductId,p=>p.Id,(s,p)=>new{s.Quantity,p.Code,p.StorageClass,p.UnitWeightKg,p.UnitVolumeM3,p.UnitPalletEquivalent})
+            .ToListAsync(token);
+        if(storageClass is not null&&rows.Any(x=>!string.Equals(x.StorageClass,storageClass,StringComparison.Ordinal)))
+            throw Conflict("Không thể áp Storage Class vì vị trí đang chứa sản phẩm không tương thích.");
+        if(maxWeight.HasValue)
+        {
+            if(rows.Any(x=>!x.UnitWeightKg.HasValue))throw Conflict("Không thể áp giới hạn trọng lượng vì có sản phẩm trong vị trí chưa có UnitWeightKg.");
+            if(rows.Sum(x=>x.Quantity*x.UnitWeightKg!.Value)>maxWeight.Value)throw Conflict("Giới hạn trọng lượng mới thấp hơn tải hiện tại của vị trí.");
+        }
+        if(maxVolume.HasValue)
+        {
+            if(rows.Any(x=>!x.UnitVolumeM3.HasValue))throw Conflict("Không thể áp giới hạn thể tích vì có sản phẩm trong vị trí chưa có UnitVolumeM3.");
+            if(rows.Sum(x=>x.Quantity*x.UnitVolumeM3!.Value)>maxVolume.Value)throw Conflict("Giới hạn thể tích mới thấp hơn tải hiện tại của vị trí.");
+        }
+        if(maxPallet.HasValue)
+        {
+            if(rows.Any(x=>!x.UnitPalletEquivalent.HasValue))throw Conflict("Không thể áp giới hạn pallet-equivalent vì có sản phẩm trong vị trí chưa có UnitPalletEquivalent.");
+            if(rows.Sum(x=>x.Quantity*x.UnitPalletEquivalent!.Value)>maxPallet.Value)throw Conflict("Giới hạn pallet-equivalent mới thấp hơn tải hiện tại của vị trí.");
+        }
+    }
+    private async Task EnsurePutawayCapacityAsync(WarehouseLocation location,Product product,decimal incomingBaseQty,CancellationToken token)
+    {
+        if(location.StorageClass is not null&&!string.Equals(location.StorageClass,product.StorageClass,StringComparison.Ordinal))
+            throw new BusinessRuleException($"Storage Class không tương thích. Vị trí yêu cầu {location.StorageClass}, sản phẩm là {product.StorageClass ?? "CHƯA CẤU HÌNH"}.");
+        var rows=await context.InventoryStocks.AsNoTracking().Where(x=>x.LocationId==location.Id&&x.Quantity>0)
+            .Join(context.Products.AsNoTracking(),s=>s.ProductId,p=>p.Id,(s,p)=>new{s.Quantity,p.Code,p.StorageClass,p.UnitWeightKg,p.UnitVolumeM3,p.UnitPalletEquivalent})
+            .ToListAsync(token);
+        if(location.StorageClass is not null&&rows.Any(x=>!string.Equals(x.StorageClass,location.StorageClass,StringComparison.Ordinal)))
+            throw Conflict("Vị trí đang có tồn kho không tương thích Storage Class; cần xử lý master data trước khi tiếp tục.");
+        if(location.MaxWeightKg.HasValue)
+        {
+            if(!product.UnitWeightKg.HasValue)throw new BusinessRuleException("Sản phẩm chưa có UnitWeightKg nên không thể xác minh sức chứa.");
+            if(rows.Any(x=>!x.UnitWeightKg.HasValue))throw Conflict("Vị trí có tồn kho thiếu UnitWeightKg nên không thể xác minh sức chứa.");
+            var projected=rows.Sum(x=>x.Quantity*x.UnitWeightKg!.Value)+incomingBaseQty*product.UnitWeightKg.Value;
+            if(projected>location.MaxWeightKg.Value)throw new BusinessRuleException($"Vượt giới hạn trọng lượng vị trí: {projected:0.######}/{location.MaxWeightKg.Value:0.######} kg.");
+        }
+        if(location.MaxVolumeM3.HasValue)
+        {
+            if(!product.UnitVolumeM3.HasValue)throw new BusinessRuleException("Sản phẩm chưa có UnitVolumeM3 nên không thể xác minh sức chứa.");
+            if(rows.Any(x=>!x.UnitVolumeM3.HasValue))throw Conflict("Vị trí có tồn kho thiếu UnitVolumeM3 nên không thể xác minh sức chứa.");
+            var projected=rows.Sum(x=>x.Quantity*x.UnitVolumeM3!.Value)+incomingBaseQty*product.UnitVolumeM3.Value;
+            if(projected>location.MaxVolumeM3.Value)throw new BusinessRuleException($"Vượt giới hạn thể tích vị trí: {projected:0.########}/{location.MaxVolumeM3.Value:0.########} m³.");
+        }
+        if(location.MaxPalletEquivalent.HasValue)
+        {
+            if(!product.UnitPalletEquivalent.HasValue)throw new BusinessRuleException("Sản phẩm chưa có UnitPalletEquivalent nên không thể xác minh sức chứa.");
+            if(rows.Any(x=>!x.UnitPalletEquivalent.HasValue))throw Conflict("Vị trí có tồn kho thiếu UnitPalletEquivalent nên không thể xác minh sức chứa.");
+            var projected=rows.Sum(x=>x.Quantity*x.UnitPalletEquivalent!.Value)+incomingBaseQty*product.UnitPalletEquivalent.Value;
+            if(projected>location.MaxPalletEquivalent.Value)throw new BusinessRuleException($"Vượt giới hạn pallet-equivalent vị trí: {projected:0.########}/{location.MaxPalletEquivalent.Value:0.########}.");
+        }
     }
     private static void ValidateFlags(WarehouseLocationType type,bool pickable,bool receivable){if(type==WarehouseLocationType.Storage&&!pickable)throw new BusinessRuleException("Vị trí lưu trữ phải cho phép lấy hàng.");if((type is WarehouseLocationType.Damaged or WarehouseLocationType.Rejected)&&pickable)throw new BusinessRuleException("Vị trí hư hỏng hoặc từ chối không được cho phép lấy hàng.");if(receivable)throw new BusinessRuleException("Chỉ vị trí nhận hàng do hệ thống quản lý được phép nhận hàng.");}
     private void ApplyLocationVersion(WarehouseLocation x,string encoded){byte[] expected;try{expected=Convert.FromBase64String(encoded);}catch{throw new BusinessRuleException("Phiên bản dữ liệu không hợp lệ.");}if(!x.RowVersion.SequenceEqual(expected))throw Conflict("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");context.Entry(x).Property(y=>y.RowVersion).OriginalValue=expected;}
