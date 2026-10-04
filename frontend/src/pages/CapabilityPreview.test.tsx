@@ -134,7 +134,7 @@ describe('CapabilityPreview', () => {
 
   it('shows domain-specific warehouse lifecycle instead of a spec-only card', () => {
     const view = renderPreview('warehouse-structure', 'WH-06');
-    expect(view.getByText(/Dock & Yard Control/)).toBeTruthy();
+    expect(view.getAllByText(/Dock & Yard Control/).length).toBeGreaterThan(0);
     expect(view.getAllByText('CHECKED_IN').length).toBeGreaterThan(0);
     expect(view.getByText('ASSIGN_DOCK')).toBeTruthy();
     fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
