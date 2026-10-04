@@ -35,7 +35,7 @@ These are design decisions for future production implementation, not evidence th
 
 Blueprint workbench route: `/system-blueprint/warehouse-structure/WH-02/workbench`
 
-Compatibility route: `/warehouse-structure` redirects to the Blueprint workbench and is not registered in production navigation.
+There is intentionally **no production-style `/warehouse-structure` route** while WH-02 remains planned. The Blueprint mock is never exposed as a real-system destination.
 
 The page reads fixtures directly from `frontend/src/mocks/demoApiData.ts` and does not depend on WH-02 production APIs.
 
@@ -77,4 +77,4 @@ WH-02 follows the repository's UI UX Pro Max master direction:
 
 ## Production promotion
 
-WH-02 must remain `planned` until a separate production implementation is intentionally designed, implemented and verified with its own backend/database/API/permission/QA evidence. A Blueprint route or compatibility redirect is not production evidence.
+WH-02 must remain `planned` until a separate production implementation is intentionally designed, implemented and verified with its own backend/database/API/permission/QA evidence. A Blueprint `mockRoute` is not production evidence, and production `route` values must never point into `/system-blueprint`.

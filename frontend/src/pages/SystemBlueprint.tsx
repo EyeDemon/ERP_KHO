@@ -179,7 +179,7 @@ const SystemBlueprint = () => {
                     <span>Spec {capability.spec}</span>
                     <div className="capability-links">
                       <Link to={'/system-blueprint/' + module.key + '/' + capability.id}>Mở mock →</Link>
-                      {capability.route ? <Link to={capability.route}>Mở thật →</Link> : null}
+                      {capability.mockRoute ? <Link to={capability.mockRoute}>Mở mock chuyên biệt →</Link> : null}
                     </div>
                   </footer>
                 </article>

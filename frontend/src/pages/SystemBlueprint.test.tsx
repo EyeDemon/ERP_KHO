@@ -39,6 +39,12 @@ describe('SystemBlueprint', () => {
     expect(view.queryByText('Allocation')).toBeNull();
   });
 
+  it('keeps real-system actions out of the Blueprint capability cards', () => {
+    const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
+    expect(view.queryByText('Mở thật →')).toBeNull();
+    expect(view.getByText('Mở mock chuyên biệt →').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
+  });
+
   it('links every visible module to its mock work center preview', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     const links = view.getAllByText('Xem work center →');

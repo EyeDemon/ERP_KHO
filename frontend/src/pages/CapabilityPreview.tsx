@@ -70,11 +70,13 @@ const CapabilityPreview = () => {
             ))}
           </div>
         </div>
-        {capability.route ? (
-          <Link to={capability.route} className="capability-real-link">
+        {capability.mockRoute ? (
+          <Link to={capability.mockRoute} className="capability-real-link">
             <ExternalLink size={16} aria-hidden="true" />
-            {capability.status === 'planned' || capability.status === 'optional' ? 'Mở mock chuyên biệt' : 'Mở chức năng hiện có'}
+            Mở mock chuyên biệt
           </Link>
+        ) : capability.route ? (
+          <span className="capability-preview-badge">PRODUCTION • XEM Ở HỆ THỐNG THẬT</span>
         ) : (
           <span className="capability-preview-badge">MOCK / SPEC PREVIEW</span>
         )}

@@ -25,8 +25,26 @@ describe('ERP WMS blueprint registry', () => {
         expect(capability.spec).not.toMatch(/\d+\s*-\s*\d+/);
         expect(capability.surfaces.length).toBeGreaterThan(0);
         expect(['live', 'foundation', 'planned', 'optional']).toContain(capability.status);
-        if (capability.route) expect(capability.route.startsWith('/')).toBe(true);
+        if (capability.route) {
+          expect(capability.route.startsWith('/')).toBe(true);
+          expect(capability.route.startsWith('/system-blueprint')).toBe(false);
+        }
+        if (capability.mockRoute) {
+          expect(capability.mockRoute.startsWith('/system-blueprint/')).toBe(true);
+        }
       }
+    }
+  });
+
+  it('keeps production and Blueprint routes strictly separated', () => {
+    const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
+    const wh02 = capabilities.find((capability) => capability.id === 'WH-02');
+    expect(wh02?.route).toBeUndefined();
+    expect(wh02?.mockRoute).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
+
+    for (const capability of capabilities) {
+      if (capability.route) expect(capability.route.startsWith('/system-blueprint')).toBe(false);
+      if (capability.mockRoute) expect(capability.mockRoute.startsWith('/system-blueprint/')).toBe(true);
     }
   });
 

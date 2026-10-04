@@ -26,11 +26,11 @@ describe('CapabilityPreview', () => {
     expect(view.getByText('Technical contract')).toBeTruthy();
   });
 
-  it('renders a live capability with link to the real screen', () => {
+  it('keeps live production navigation outside the Blueprint preview', () => {
     const view = renderPreview('master-data', 'MD-01');
     expect(view.getByText('Sản phẩm / SKU')).toBeTruthy();
-    const link = view.getByText('Mở chức năng hiện có');
-    expect(link.getAttribute('href')).toBe('/products');
+    expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+    expect(view.queryByText('Mở chức năng hiện có')).toBeNull();
   });
 
   it('labels the planned WH-02 route as a specialized mock instead of a production feature', () => {

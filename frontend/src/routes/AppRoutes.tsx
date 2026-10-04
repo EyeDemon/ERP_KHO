@@ -57,7 +57,6 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/warehouse-structure" element={<Navigate to="/system-blueprint/warehouse-structure/WH-02/workbench" replace />} />
       <Route path="/" element={<MockDemoProvider><MainLayout /></MockDemoProvider>}>
         <Route index element={<Dashboard />} />
         <Route path="system-blueprint" element={<SystemBlueprint />} />
