@@ -164,6 +164,33 @@ describe('CapabilityPreview', () => {
     }
   });
 
+  it('renders specialized count-adjustment mocks only for planned capabilities', () => {
+    const cases = [
+      ['CT-03', 'Blind Count Execution'],
+      ['CT-04', 'Count Freeze Strategy'],
+      ['CT-05', 'Recount & Immutable Attempt History'],
+      ['CT-06', 'Variance Resolution Workbench'],
+      ['CT-07', 'Inventory Adjustment Approval & Posting'],
+    ];
+
+    for (const [capabilityId, title] of cases) {
+      const view = renderPreview('count-adjustment', capabilityId);
+      const panel = view.getByTestId('count-capability-mock-' + capabilityId);
+      expect(panel).toBeTruthy();
+      expect(panel.textContent).toContain(title);
+      expect(panel.textContent).toContain('Không gọi API production');
+      view.unmount();
+    }
+  });
+
+  it('does not shadow live or foundation count surfaces', () => {
+    for (const capabilityId of ['CT-01', 'CT-02']) {
+      const view = renderPreview('count-adjustment', capabilityId);
+      expect(view.queryByTestId('count-capability-mock-' + capabilityId)).toBeNull();
+      view.unmount();
+    }
+  });
+
   it('renders scan-first phone preview for mobile capabilities', () => {
     const view = renderPreview('mobile', 'MO-04');
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
