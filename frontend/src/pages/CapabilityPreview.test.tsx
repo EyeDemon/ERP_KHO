@@ -191,6 +191,27 @@ describe('CapabilityPreview', () => {
     }
   });
 
+  it('renders specialized quality-return mocks for all planned QR capabilities', () => {
+    const cases = [
+      ['QR-01', 'QC Inspection Work Center'],
+      ['QR-02', 'QC Hold / Quarantine Eligibility'],
+      ['QR-03', 'Damaged Inventory Triage'],
+      ['QR-04', 'Customer Return / RMA Workbench'],
+      ['QR-05', 'Recall Exposure & Control'],
+      ['QR-06', 'Scrap Approval & Inventory Posting'],
+    ];
+
+    for (const [capabilityId, title] of cases) {
+      const view = renderPreview('quality-returns', capabilityId);
+      const panel = view.getByTestId('quality-capability-mock-' + capabilityId);
+      expect(panel).toBeTruthy();
+      expect(panel.textContent).toContain(title);
+      expect(panel.textContent).toContain('Không gọi API production');
+      expect(view.getAllByText('Theo đặc tả — chưa triển khai').length).toBeGreaterThan(0);
+      view.unmount();
+    }
+  });
+
   it('renders scan-first phone preview for mobile capabilities', () => {
     const view = renderPreview('mobile', 'MO-04');
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();

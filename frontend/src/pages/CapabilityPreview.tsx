@@ -19,6 +19,7 @@ import OutboundCapabilityMock from './OutboundCapabilityMock';
 import InventoryCapabilityMock from './InventoryCapabilityMock';
 import TransferCapabilityMock from './TransferCapabilityMock';
 import CountAdjustmentCapabilityMock from './CountAdjustmentCapabilityMock';
+import QualityReturnsCapabilityMock from './QualityReturnsCapabilityMock';
 import './CapabilityPreview.css';
 
 const statusIcon = (status: BlueprintStatus) =>
@@ -99,6 +100,7 @@ const CapabilityPreview = () => {
       <InventoryCapabilityMock capabilityId={capability.id} />
       <TransferCapabilityMock capabilityId={capability.id} />
       <CountAdjustmentCapabilityMock capabilityId={capability.id} />
+      <QualityReturnsCapabilityMock capabilityId={capability.id} />
 
       {specializedPreview && (
         <section className="capability-panel specialized-preview">
