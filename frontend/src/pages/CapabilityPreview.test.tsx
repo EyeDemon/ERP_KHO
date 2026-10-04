@@ -140,6 +140,30 @@ describe('CapabilityPreview', () => {
     }
   });
 
+  it('renders specialized transfer-replenishment mocks for the remaining planned capabilities', () => {
+    const cases = [
+      ['TR-02', 'In-Transit Inventory Reconciliation'],
+      ['TR-05', 'Replenishment Source & Pick-Face Plan'],
+    ];
+
+    for (const [capabilityId, title] of cases) {
+      const view = renderPreview('transfer-replenishment', capabilityId);
+      const panel = view.getByTestId('transfer-capability-mock-' + capabilityId);
+      expect(panel).toBeTruthy();
+      expect(panel.textContent).toContain(title);
+      expect(panel.textContent).toContain('Không gọi API production');
+      view.unmount();
+    }
+  });
+
+  it('does not shadow live or foundation transfer surfaces', () => {
+    for (const capabilityId of ['TR-01', 'TR-03', 'TR-04']) {
+      const view = renderPreview('transfer-replenishment', capabilityId);
+      expect(view.queryByTestId('transfer-capability-mock-' + capabilityId)).toBeNull();
+      view.unmount();
+    }
+  });
+
   it('renders scan-first phone preview for mobile capabilities', () => {
     const view = renderPreview('mobile', 'MO-04');
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
