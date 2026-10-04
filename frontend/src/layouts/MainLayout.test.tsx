@@ -98,6 +98,7 @@ describe('MainLayout blueprint navigation mode', () => {
     const view = renderAt('/');
     await view.findByText('Production home');
     expect(view.getByRole('link', { name: 'Cấu trúc vị trí' }).getAttribute('href')).toBe('/warehouse-structure');
+    expect(view.getByRole('link', { name: 'Bản đồ kho' }).getAttribute('href')).toBe('/warehouse-map');
   });
 
   it('opens production UI routes on the Vercel blueprint demo without calling real auth', async () => {

@@ -45,6 +45,9 @@ describe('ERP WMS blueprint registry', () => {
     const wh03 = capabilities.find((capability) => capability.id === 'WH-03');
     expect(wh03?.status).toBe('live');
     expect(wh03?.route).toBe('/warehouse-structure');
+    const wh04 = capabilities.find((capability) => capability.id === 'WH-04');
+    expect(wh04?.status).toBe('live');
+    expect(wh04?.route).toBe('/warehouse-map');
 
     for (const capability of capabilities) {
       if (capability.route) expect(capability.route.startsWith('/system-blueprint')).toBe(false);

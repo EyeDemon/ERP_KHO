@@ -62,7 +62,18 @@ describe('Blueprint demo API adapter', () => {
     expect(rows.find(item => item.code === 'A01-R02-L03-B04')?.maxWeightKg).toBe(1500);
   });
 
-  it('does not expose WH-02 pseudo-backend reads', async () => {
+  it('serves WH-04 warehouse map snapshots from demo data', async () => {
+    const config = request('/api/putaway-tasks/location-map', 'get', { warehouseId: 1 });
+    const response = await createBlueprintDemoApiAdapter(config)(config);
+    const data = response.data as { warehouseId: number; generatedAtUtc: string; items: Array<{ code: string; activityLevel: string; mapX?: number | null }> };
+
+    expect(response.status).toBe(200);
+    expect(data.warehouseId).toBe(1);
+    expect(data.generatedAtUtc).toBeTruthy();
+    expect(data.items.some(item => item.code === 'A01-R02-L03-B04' && item.activityLevel === 'High' && item.mapX === 6)).toBe(true);
+  });
+
+  it('does not expose WH-02 pseudo-backend reads', async () => {  it('does not expose WH-02 pseudo-backend reads', async () => {
     for (const url of [
       '/api/warehouses/1/structure',
       '/api/warehouses/1/zones',

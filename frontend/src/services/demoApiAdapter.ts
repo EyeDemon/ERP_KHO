@@ -214,6 +214,41 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       return ok(config, physical);
     }
 
+    if (path === '/api/putaway-tasks/location-map') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const structure = demoWarehouseStructures.find(item => item.warehouseId === warehouseId);
+      if (!structure) return ok(config, { warehouseId, generatedAtUtc: new Date().toISOString(), items: [] });
+      const items = structure.zones.flatMap(zone => zone.aisles.flatMap(aisle => aisle.racks.flatMap(rack => rack.levels.flatMap(level =>
+        level.locations.map((location, index) => {
+          const utilization = location.code.endsWith('B04') ? 86.67 : location.code.endsWith('B05') ? 41.33 : 0;
+          const capacityState = !location.isActive ? 'Inactive' : location.isBlocked ? 'Blocked' : utilization >= 85 ? 'NearCapacity' : 'Available';
+          const recentMovementCount = index === 0 ? 12 : index === 1 ? 5 : index === 2 ? 2 : 0;
+          const activePutawayCount = index === 0 ? 5 : index === 1 ? 2 : 0;
+          const activityLevel = recentMovementCount >= 10 || activePutawayCount >= 5 ? 'High' : recentMovementCount >= 4 || activePutawayCount >= 2 ? 'Medium' : 'Low';
+          return {
+            locationId: location.id,
+            code: location.code,
+            name: location.name,
+            structurePath: [zone.code, aisle.code, rack.code, 'L' + String(level.levelNo).padStart(2, '0'), location.code.split('-').slice(-1)[0]].join('/'),
+            storageClass: location.storageClass,
+            mapX: location.mapX,
+            mapY: location.mapY,
+            mapWidth: location.mapWidth,
+            mapHeight: location.mapHeight,
+            utilizationPercent: utilization,
+            capacityState,
+            recentMovementCount,
+            activePutawayCount,
+            activityLevel,
+            isActive: location.isActive,
+            isBlocked: location.isBlocked,
+            rowVersion: null,
+          };
+        })
+      ))));
+      return ok(config, { warehouseId, generatedAtUtc: new Date().toISOString(), items });
+    }
+
     if (path === '/api/putaway-tasks') return ok(config, demoPutawayTasks);
     if (/^\/api\/putaway-tasks\/\d+$/.test(path)) {
       const item = demoPutawayTasks.find(task => task.id === findNumericId(path));

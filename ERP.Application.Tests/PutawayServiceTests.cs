@@ -147,6 +147,62 @@ public sealed class PutawayServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Location_layout_requires_complete_bounded_rectangle_and_writes_audit()
+    {
+        var ids = await SeedAsync(); await using var db = Create(); var service = Service(db, ids.WarehouseId, ids.UserId);
+        var location = (await service.ListLocationsAsync(ids.WarehouseId)).Single(x => x.Id == ids.Storage1);
+
+        var invalid = () => service.UpdateLocationLayoutAsync(ids.Storage1, new UpdateWarehouseLocationLayoutDto
+        {
+            MapX = 10m,
+            RowVersion = location.RowVersion!
+        });
+        await invalid.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>().WithMessage("*đủ X, Y, Width và Height*");
+
+        var updated = await service.UpdateLocationLayoutAsync(ids.Storage1, new UpdateWarehouseLocationLayoutDto
+        {
+            MapX = 10m,
+            MapY = 20m,
+            MapWidth = 30m,
+            MapHeight = 40m,
+            RowVersion = location.RowVersion!
+        });
+
+        updated.MapX.Should().Be(10m);
+        updated.MapY.Should().Be(20m);
+        updated.MapWidth.Should().Be(30m);
+        updated.MapHeight.Should().Be(40m);
+        (await db.AuditLogs.CountAsync(x => x.Action == "WarehouseLocation.LayoutUpdated" && x.EntityId == ids.Storage1)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Warehouse_map_uses_real_capacity_and_recent_movement_without_fabricating_missing_layout()
+    {
+        var ids = await SeedAsync(); await using var db = Create();
+        var product = await db.Products.SingleAsync(x => x.Id == ids.ProductId);
+        var location = await db.WarehouseLocations.SingleAsync(x => x.Id == ids.Storage1);
+        product.UnitWeightKg = 1m;
+        location.MaxWeightKg = 10m;
+        location.MapX = 5m;
+        location.MapY = 10m;
+        location.MapWidth = 20m;
+        location.MapHeight = 15m;
+        db.InventoryStocks.Add(new InventoryStock { ProductId=ids.ProductId, WarehouseId=ids.WarehouseId, LocationId=ids.Storage1, Status=InventoryStatus.Available, Quantity=5 });
+        db.InventoryLocationMovements.Add(new InventoryLocationMovement { WarehouseId=ids.WarehouseId, ProductId=ids.ProductId, InventoryStatus=InventoryStatus.Available, FromLocationId=ids.Receiving, ToLocationId=ids.Storage1, BaseQuantity=1, EnteredQuantity=1, EnteredUnitCode="EA", PutawayTaskId=ids.TaskId, PutawayTaskItemId=ids.ItemId, ReceiptId=1, ReceiptLineId=1, CreatedBy=ids.UserId, CreatedAt=DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
+        var map = await Service(db, ids.WarehouseId, ids.UserId).GetWarehouseMapAsync(ids.WarehouseId);
+        var mapped = map.Items.Single(x => x.LocationId == ids.Storage1);
+        var unmapped = map.Items.Single(x => x.LocationId == ids.Storage2);
+
+        mapped.UtilizationPercent.Should().Be(50m);
+        mapped.RecentMovementCount.Should().Be(1);
+        mapped.MapX.Should().Be(5m);
+        unmapped.MapX.Should().BeNull();
+        map.GeneratedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public async Task Mutation_reuses_ambient_idempotency_transaction()
     {
         var ids = await SeedAsync(); await using var db = Create(); var service = Service(db, ids.WarehouseId, ids.UserId);

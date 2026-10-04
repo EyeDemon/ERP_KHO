@@ -76,7 +76,7 @@ export const erpWmsBlueprint: BlueprintModule[] = [
       { id: 'WH-01', name: 'Warehouse', goal: 'Quản lý kho, scope truy cập, timezone và trạng thái vận hành.', surfaces: ['Web', 'API'], status: 'live', spec: '16, 60, 148', route: '/warehouses' },
       { id: 'WH-02', name: 'Zone / Aisle / Rack / Level / Bin', goal: 'Cấu trúc vị trí lưu trữ nhiều cấp.', surfaces: ['Web', 'Mobile', 'API'], status: 'live', spec: '02, 16, 17, 67, 84, 216, 282', route: '/warehouse-structure', mockRoute: '/system-blueprint/warehouse-structure/WH-02/workbench' },
       { id: 'WH-03', name: 'Capacity & Storage Constraints', goal: 'Kiểm tra sức chứa và compatibility trước putaway/move.', surfaces: ['Web', 'API'], status: 'live', spec: '85, 194', route: '/warehouse-structure' },
-      { id: 'WH-04', name: 'Warehouse Map & Heatmap', goal: 'Hiển thị bản đồ kho, utilization, congestion và operational heatmap.', surfaces: ['Web'], status: 'planned', spec: '67' },
+      { id: 'WH-04', name: 'Warehouse Map & Heatmap', goal: 'Hiển thị bản đồ kho, utilization, congestion và operational heatmap.', surfaces: ['Web'], status: 'live', spec: '67', route: '/warehouse-map' },
       { id: 'WH-05', name: 'Warehouse Calendar & Shift', goal: 'Lịch mở cửa, ca làm việc, cutoff và capacity vận hành.', surfaces: ['Web', 'API'], status: 'planned', spec: '60' },
       { id: 'WH-06', name: 'Dock & Yard', goal: 'Quản lý dock door, yard position, check-in và queue.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '46, 248' },
       { id: 'WH-07', name: 'Operational Calendar Exceptions', goal: 'Quản lý company/warehouse/shift calendar exception và emergency override với precedence rõ ràng.', surfaces: ['Web', 'API'], status: 'planned', spec: '60, 175, 176' },

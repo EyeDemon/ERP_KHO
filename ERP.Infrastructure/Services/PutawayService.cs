@@ -97,6 +97,106 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
         }).ToList();
     }
 
+    public async Task<WarehouseMapDto> GetWarehouseMapAsync(int warehouseId, CancellationToken token = default)
+    {
+        await warehouses.EnsureWarehouseAccessAsync(warehouseId, token);
+        var generatedAt = DateTime.UtcNow;
+        var capacities = await ListLocationCapacitiesAsync(warehouseId, token);
+        var capacityById = capacities.ToDictionary(x => x.LocationId);
+        var locations = await context.WarehouseLocations.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouseId && !x.IsSystemManaged)
+            .OrderBy(x => x.Code)
+            .ToListAsync(token);
+
+        var recentSince = generatedAt.AddMinutes(-60);
+        var recentMovements = await context.InventoryLocationMovements.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouseId && x.CreatedAt >= recentSince)
+            .Select(x => new { x.FromLocationId, x.ToLocationId })
+            .ToListAsync(token);
+        var recentCounts = new Dictionary<int, int>();
+        foreach (var movement in recentMovements)
+        {
+            recentCounts[movement.FromLocationId] = recentCounts.GetValueOrDefault(movement.FromLocationId) + 1;
+            recentCounts[movement.ToLocationId] = recentCounts.GetValueOrDefault(movement.ToLocationId) + 1;
+        }
+
+        var activeCounts = await context.PutawayTaskItems.AsNoTracking()
+            .Where(x => x.PutawayTask.WarehouseId == warehouseId
+                && x.PutawayTask.Status != PutawayTaskStatus.Completed
+                && x.PutawayTask.Status != PutawayTaskStatus.Cancelled)
+            .GroupBy(x => x.SourceLocationId)
+            .Select(group => new { LocationId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(x => x.LocationId, x => x.Count, token);
+
+        var canMutate = currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";
+        return new WarehouseMapDto
+        {
+            WarehouseId = warehouseId,
+            GeneratedAtUtc = generatedAt,
+            Items = locations.Select(location =>
+            {
+                capacityById.TryGetValue(location.Id, out var capacity);
+                var utilization = CapacityUtilizationPercent(capacity);
+                var recent = recentCounts.GetValueOrDefault(location.Id);
+                var active = activeCounts.GetValueOrDefault(location.Id);
+                var activity = recent >= 10 || active >= 5 ? "High" : recent >= 4 || active >= 2 ? "Medium" : "Low";
+                return new WarehouseLocationMapItemDto
+                {
+                    LocationId = location.Id,
+                    Code = location.Code,
+                    Name = location.Name,
+                    StructurePath = location.StructurePath,
+                    StorageClass = location.StorageClass,
+                    MapX = location.MapX,
+                    MapY = location.MapY,
+                    MapWidth = location.MapWidth,
+                    MapHeight = location.MapHeight,
+                    UtilizationPercent = utilization,
+                    CapacityState = capacity?.State ?? "Available",
+                    RecentMovementCount = recent,
+                    ActivePutawayCount = active,
+                    ActivityLevel = activity,
+                    IsActive = location.IsActive,
+                    IsBlocked = location.IsBlocked,
+                    RowVersion = canMutate ? Convert.ToBase64String(location.RowVersion) : null
+                };
+            }).ToList()
+        };
+    }
+
+    public async Task<WarehouseLocationDto> UpdateLocationLayoutAsync(int id, UpdateWarehouseLocationLayoutDto dto, CancellationToken token = default)
+    {
+        await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
+        var entity = await LocationForMutation(id, token) ?? throw new NotFoundException("Không tìm thấy vị trí hoặc bạn không có quyền truy cập.");
+        await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId, token);
+        ApplyLocationVersion(entity, dto.RowVersion);
+        if (entity.IsSystemManaged) throw new BusinessRuleException("Không thể cấu hình layout cho vị trí hệ thống.");
+
+        ValidateMapLayout(dto.MapX, dto.MapY, dto.MapWidth, dto.MapHeight);
+        entity.MapX = dto.MapX;
+        entity.MapY = dto.MapY;
+        entity.MapWidth = dto.MapWidth;
+        entity.MapHeight = dto.MapHeight;
+        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedBy = currentUser.UserId;
+        context.AuditLogs.Add(new AuditLog
+        {
+            UserId = currentUser.UserId,
+            Action = "WarehouseLocation.LayoutUpdated",
+            EntityName = "WarehouseLocation",
+            EntityId = entity.Id,
+            WarehouseId = entity.WarehouseId,
+            NewValues = $"MapX: {entity.MapX}; MapY: {entity.MapY}; MapWidth: {entity.MapWidth}; MapHeight: {entity.MapHeight}",
+            Result = "Success",
+            Timestamp = DateTime.UtcNow
+        });
+
+        try { await context.SaveChangesAsync(token); }
+        catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.", ex); }
+        if (transaction is not null) await transaction.CommitAsync(token);
+        return Location(entity);
+    }
+
     public async Task<WarehouseLocationDto> CreateLocationAsync(CreateWarehouseLocationDto dto, CancellationToken token = default)
     {
         await warehouses.EnsureWarehouseAccessAsync(dto.WarehouseId, token);
@@ -259,7 +359,25 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
     private async Task<PutawayTaskDto> MapAsync(PutawayTask t,CancellationToken token){var moves=await context.InventoryLocationMovements.AsNoTracking().Where(x=>x.PutawayTaskId==t.Id).Join(context.WarehouseLocations,x=>x.FromLocationId,x=>x.Id,(m,f)=>new{m,f}).Join(context.WarehouseLocations,x=>x.m.ToLocationId,x=>x.Id,(x,d)=>new PutawayMovementDto{Id=x.m.Id,ItemId=x.m.PutawayTaskItemId,FromLocationCode=x.f.Code,ToLocationCode=d.Code,BaseQuantity=x.m.BaseQuantity,CreatedAt=x.m.CreatedAt}).ToListAsync(token);var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";return new PutawayTaskDto{Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=t.Receipt.Code,WarehouseId=t.WarehouseId,WarehouseName=t.Warehouse.Name,Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,Items=t.Items.Select(x=>new PutawayTaskItemDto{Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=x.ReceiptLine.Product.Code,ProductName=x.ReceiptLine.Product.Name,InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=x.SourceLocation.Code,OperationUnitCode=x.OperationUnitCodeSnapshot,BaseUnitCode=x.BaseUnitCodeSnapshot,RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate?Convert.ToBase64String(x.RowVersion):null}).ToList(),Movements=moves};}
     private static AuditLog Audit(int user,string action,int entity,int warehouse,string values)=>new(){UserId=user,Action=action,EntityName="PutawayTask",EntityId=entity,WarehouseId=warehouse,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
     private static BusinessRuleException Conflict(string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;return e;}
-    private WarehouseLocationDto Location(WarehouseLocation x)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,Code=x.Code,Name=x.Name,StructurePath=x.StructurePath,StorageClass=x.StorageClass,MaxWeightKg=x.MaxWeightKg,MaxVolumeM3=x.MaxVolumeM3,MaxPalletEquivalent=x.MaxPalletEquivalent,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff"?Convert.ToBase64String(x.RowVersion):null};
+    private WarehouseLocationDto Location(WarehouseLocation x)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,Code=x.Code,Name=x.Name,StructurePath=x.StructurePath,StorageClass=x.StorageClass,MaxWeightKg=x.MaxWeightKg,MaxVolumeM3=x.MaxVolumeM3,MaxPalletEquivalent=x.MaxPalletEquivalent,MapX=x.MapX,MapY=x.MapY,MapWidth=x.MapWidth,MapHeight=x.MapHeight,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff"?Convert.ToBase64String(x.RowVersion):null};
+    private static decimal? CapacityUtilizationPercent(WarehouseLocationCapacityDto? capacity)
+    {
+        if (capacity is null) return null;
+        var ratios = new List<decimal>();
+        if (capacity.MaxWeightKg.HasValue && capacity.UsedWeightKg.HasValue && capacity.MaxWeightKg > 0) ratios.Add(capacity.UsedWeightKg.Value / capacity.MaxWeightKg.Value * 100m);
+        if (capacity.MaxVolumeM3.HasValue && capacity.UsedVolumeM3.HasValue && capacity.MaxVolumeM3 > 0) ratios.Add(capacity.UsedVolumeM3.Value / capacity.MaxVolumeM3.Value * 100m);
+        if (capacity.MaxPalletEquivalent.HasValue && capacity.UsedPalletEquivalent.HasValue && capacity.MaxPalletEquivalent > 0) ratios.Add(capacity.UsedPalletEquivalent.Value / capacity.MaxPalletEquivalent.Value * 100m);
+        return ratios.Count == 0 ? null : decimal.Round(ratios.Max(), 2);
+    }
+    private static void ValidateMapLayout(decimal? x, decimal? y, decimal? width, decimal? height)
+    {
+        var values = new[] { x, y, width, height };
+        var populated = values.Count(value => value.HasValue);
+        if (populated == 0) return;
+        if (populated != 4) throw new BusinessRuleException("Layout phải có đủ X, Y, Width và Height hoặc để trống toàn bộ.");
+        if (x < 0 || y < 0 || width <= 0 || height <= 0 || x > 100 || y > 100 || width > 100 || height > 100 || x + width > 100 || y + height > 100)
+            throw new BusinessRuleException("Layout phải nằm trong canvas 0–100% và không vượt biên.");
+    }
     private static string Required(string value,string label)=>string.IsNullOrWhiteSpace(value)?throw new BusinessRuleException($"{label} là bắt buộc."):value.Trim();
     private static string? NormalizeStructurePath(string? value)
     {

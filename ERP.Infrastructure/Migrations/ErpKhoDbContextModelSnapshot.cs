@@ -2402,6 +2402,23 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<decimal?>("MapHeight")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal?>("MapWidth")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal?>("MapX")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal?>("MapY")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+
                     b.Property<decimal?>("MaxPalletEquivalent")
                         .HasPrecision(18, 8)
                         .HasColumnType("decimal(18,8)");
@@ -2451,6 +2468,8 @@ namespace ERP.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_WarehouseLocations_Capacity", "([MaxWeightKg] IS NULL OR [MaxWeightKg] > 0) AND ([MaxVolumeM3] IS NULL OR [MaxVolumeM3] > 0) AND ([MaxPalletEquivalent] IS NULL OR [MaxPalletEquivalent] > 0)");
 
                             t.HasCheckConstraint("CK_WarehouseLocations_Code", "[Code] = UPPER(LTRIM(RTRIM([Code]))) AND LEN([Code]) > 0");
+
+                            t.HasCheckConstraint("CK_WarehouseLocations_MapLayout", "([MapX] IS NULL AND [MapY] IS NULL AND [MapWidth] IS NULL AND [MapHeight] IS NULL) OR ([MapX] IS NOT NULL AND [MapY] IS NOT NULL AND [MapWidth] IS NOT NULL AND [MapHeight] IS NOT NULL AND [MapX] >= 0 AND [MapY] >= 0 AND [MapWidth] > 0 AND [MapHeight] > 0 AND [MapX] <= 100 AND [MapY] <= 100 AND [MapWidth] <= 100 AND [MapHeight] <= 100 AND [MapX] + [MapWidth] <= 100 AND [MapY] + [MapHeight] <= 100)");
 
                             t.HasCheckConstraint("CK_WarehouseLocations_StorageClass", "[StorageClass] IS NULL OR ([StorageClass] = UPPER(LTRIM(RTRIM([StorageClass]))) AND LEN([StorageClass]) > 0)");
 

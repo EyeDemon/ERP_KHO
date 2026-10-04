@@ -9,7 +9,7 @@ public sealed class WarehouseLocationConfiguration : IEntityTypeConfiguration<Wa
     public void Configure(EntityTypeBuilder<WarehouseLocation> b)
     {
         b.ToTable("WarehouseLocations");
-        b.HasKey(x => x.Id); b.Property(x => x.Code).HasMaxLength(64); b.Property(x => x.Name).HasMaxLength(200); b.Property(x => x.StructurePath).HasMaxLength(160); b.Property(x => x.StorageClass).HasMaxLength(32); b.Property(x => x.MaxWeightKg).HasPrecision(18,6); b.Property(x => x.MaxVolumeM3).HasPrecision(18,8); b.Property(x => x.MaxPalletEquivalent).HasPrecision(18,8); b.Property(x => x.RowVersion).IsRowVersion();
+        b.HasKey(x => x.Id); b.Property(x => x.Code).HasMaxLength(64); b.Property(x => x.Name).HasMaxLength(200); b.Property(x => x.StructurePath).HasMaxLength(160); b.Property(x => x.StorageClass).HasMaxLength(32); b.Property(x => x.MaxWeightKg).HasPrecision(18,6); b.Property(x => x.MaxVolumeM3).HasPrecision(18,8); b.Property(x => x.MaxPalletEquivalent).HasPrecision(18,8); b.Property(x => x.MapX).HasPrecision(5,2); b.Property(x => x.MapY).HasPrecision(5,2); b.Property(x => x.MapWidth).HasPrecision(5,2); b.Property(x => x.MapHeight).HasPrecision(5,2); b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
         b.HasIndex(x => new { x.WarehouseId, x.StructurePath });
         b.HasIndex(x => new { x.WarehouseId, x.StorageClass });

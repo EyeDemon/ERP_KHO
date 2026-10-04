@@ -57,33 +57,38 @@
     ],
     "fields": [
       {
-        "label": "Warehouse",
-        "value": "WH-HCM-01"
+        "label": "Production maturity",
+        "value": "LIVE"
       },
       {
-        "label": "Zone nóng nhất",
-        "value": "PICK-A • 91% utilization"
+        "label": "Production route",
+        "value": "/warehouse-map"
       },
       {
-        "label": "Congestion",
-        "value": "AISLE A03 • High"
+        "label": "Layout model",
+        "value": "Explicit X/Y/Width/Height • 0–100%"
       },
       {
-        "label": "Blocked bins",
-        "value": "3"
+        "label": "Utilization",
+        "value": "Capacity projection from WH-03"
       },
       {
-        "label": "Open tasks",
-        "value": "27"
+        "label": "Activity window",
+        "value": "60 phút movement + active putaway"
+      },
+      {
+        "label": "Freshness",
+        "value": "GeneratedAtUtc"
       }
     ],
     "commands": [
+      "OPEN_PRODUCTION_MAP",
       "CHANGE_LAYER",
-      "FOCUS_ZONE",
-      "OPEN_LOCATION_DETAIL"
+      "FOCUS_LOCATION",
+      "CONFIGURE_LAYOUT"
     ],
     "exceptionTitle": "MAP_STALE_SNAPSHOT",
-    "exceptionDetail": "Heatmap snapshot cũ hơn operational read model; cần refresh trước khi điều phối."
+    "exceptionDetail": "Production map không tự suy đoán tọa độ. Location thiếu layout được liệt kê riêng; snapshot hiển thị GeneratedAtUtc để người dùng refresh trước khi điều phối khi dữ liệu cũ."
   },
   "WH-05": {
     "title": "Warehouse Calendar & Shift",

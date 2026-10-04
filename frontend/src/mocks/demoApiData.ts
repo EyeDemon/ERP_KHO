@@ -46,6 +46,10 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
       maxWeightKg: number | null;
       maxVolumeM3: number | null;
       maxPalletEquivalent: number | null;
+      mapX: number | null;
+      mapY: number | null;
+      mapWidth: number | null;
+      mapHeight: number | null;
       isActive: boolean;
       isBlocked: boolean;
       isPickable: boolean;
@@ -71,6 +75,10 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
     maxWeightKg: null,
     maxVolumeM3: null,
     maxPalletEquivalent: null,
+    mapX: null,
+    mapY: null,
+    mapWidth: null,
+    mapHeight: null,
     isActive: true,
     isBlocked: false,
     isPickable: true,
@@ -81,10 +89,10 @@ export const demoWarehouseStructures = demoWarehouses.map((warehouse, index) => 
 
   const physicalLocations = index === 0
     ? [
-        location(101, 'A01-R02-L03-B04', 'Ô lưu trữ chính B04', { storageClass: 'AMBIENT', maxWeightKg: 1500, maxVolumeM3: 10, maxPalletEquivalent: 5 }),
-        location(102, 'A01-R02-L03-B05', 'Ô dự trữ B05', { isPickable: false, storageClass: 'AMBIENT', maxWeightKg: 1500, maxVolumeM3: 10, maxPalletEquivalent: 5 }),
-        location(103, 'A01-R02-L03-B06', 'Ô đang khóa B06', { isBlocked: true }),
-        location(104, 'A01-R02-L03-B07', 'Ô ngừng hoạt động B07', { isActive: false }),
+        location(101, 'A01-R02-L03-B04', 'Ô lưu trữ chính B04', { storageClass: 'AMBIENT', maxWeightKg: 1500, maxVolumeM3: 10, maxPalletEquivalent: 5, mapX: 6, mapY: 10, mapWidth: 18, mapHeight: 20 }),
+        location(102, 'A01-R02-L03-B05', 'Ô dự trữ B05', { isPickable: false, storageClass: 'AMBIENT', maxWeightKg: 1500, maxVolumeM3: 10, maxPalletEquivalent: 5, mapX: 28, mapY: 10, mapWidth: 18, mapHeight: 20 }),
+        location(103, 'A01-R02-L03-B06', 'Ô đang khóa B06', { isBlocked: true, mapX: 50, mapY: 10, mapWidth: 18, mapHeight: 20 }),
+        location(104, 'A01-R02-L03-B07', 'Ô ngừng hoạt động B07', { isActive: false, mapX: 72, mapY: 10, mapWidth: 18, mapHeight: 20 }),
         location(105, 'A01-R02-L03-B08', 'Ô hàng hư hỏng B08', { locationType: 'Damaged', isPickable: false }),
         location(106, 'A01-R02-L03-B09', 'Ô hàng bị từ chối B09', { locationType: 'Rejected', isPickable: false }),
       ]
