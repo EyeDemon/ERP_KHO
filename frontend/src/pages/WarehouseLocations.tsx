@@ -321,6 +321,12 @@ const WarehouseLocations = () => {
   const editing = form.id !== undefined;
   const editingLocation = editing ? locations.find((location) => location.id === form.id) : undefined;
   const hasLockedStructure = Boolean(editingLocation?.structurePath);
+  const constraintsChanged = Boolean(editingLocation) && (
+    (editingLocation?.storageClass || '') !== form.storageClass.trim().toUpperCase()
+    || (editingLocation?.maxWeightKg ?? null) !== nullableNumber(form.maxWeightKg)
+    || (editingLocation?.maxVolumeM3 ?? null) !== nullableNumber(form.maxVolumeM3)
+    || (editingLocation?.maxPalletEquivalent ?? null) !== nullableNumber(form.maxPalletEquivalent)
+  );
 
   const openCreate = () => {
     setForm(emptyForm());
@@ -383,7 +389,7 @@ const WarehouseLocations = () => {
         await apiClient.put('/api/putaway-tasks/locations/' + form.id, {
           name: form.name.trim(),
           structurePath,
-          updateConstraints: true,
+          updateConstraints: constraintsChanged,
           storageClass: form.storageClass.trim() || null,
           maxWeightKg: nullableNumber(form.maxWeightKg),
           maxVolumeM3: nullableNumber(form.maxVolumeM3),

@@ -93,11 +93,27 @@ describe('WarehouseLocations production UI', () => {
     await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/101', expect.objectContaining({
       name: 'Ô chính mới',
       structurePath: 'ZONE-A/A01/R02/L03/B04',
-      updateConstraints: true,
+      updateConstraints: false,
       storageClass: 'AMBIENT',
       maxWeightKg: 1500,
       maxVolumeM3: 10,
       maxPalletEquivalent: 5,
+      rowVersion: 'AQ==',
+    })));
+  });
+
+  it('only raises the constraint-write flag when capacity fields actually change', async () => {
+    const view = render(<WarehouseLocations />);
+    expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
+    const hierarchy = view.getByRole('table', { name: 'Cây cấu trúc vị trí thật' });
+    const row = within(hierarchy).getByText('A01-R02-L03-B04').closest('tr');
+    fireEvent.click(within(row!).getByRole('button', { name: 'Sửa' }));
+    fireEvent.change(view.getByLabelText('Giới hạn trọng lượng kg'), { target: { value: '1600' } });
+    fireEvent.submit(view.getByText('Lưu vị trí').closest('form')!);
+
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/101', expect.objectContaining({
+      updateConstraints: true,
+      maxWeightKg: 1600,
       rowVersion: 'AQ==',
     })));
   });
