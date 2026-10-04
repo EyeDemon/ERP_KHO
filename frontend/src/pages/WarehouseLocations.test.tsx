@@ -38,8 +38,8 @@ describe('WarehouseLocations production UI', () => {
     const view = render(<WarehouseLocations />);
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
     expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
-    expect(view.getByText('LEGACY-UNMAPPED-01')).toBeTruthy();
-    expect(view.getByText('RECEIVING')).toBeTruthy();
+    expect(view.getAllByText('LEGACY-UNMAPPED-01').length).toBeGreaterThan(0);
+    expect(view.getAllByText('RECEIVING').length).toBeGreaterThan(0);
     expect(view.getByRole('table', { name: 'Cây cấu trúc vị trí thật' })).toBeTruthy();
     expect(get).toHaveBeenCalledWith('/api/putaway-tasks/locations', { params: { warehouseId: 1 } });
   });
