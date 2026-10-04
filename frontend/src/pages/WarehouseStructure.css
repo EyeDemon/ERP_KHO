@@ -1,3 +1,12 @@
+.warehouse-structure-surface {
+  min-width: 0;
+  width: 100%;
+}
+
+.warehouse-structure-surface > .ui-page {
+  width: 100%;
+}
+
 .warehouse-structure-page {
   display: grid;
   gap: var(--ui-space-4);

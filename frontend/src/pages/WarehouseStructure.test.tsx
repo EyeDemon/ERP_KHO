@@ -9,6 +9,8 @@ describe('Cấu trúc vị trí kho mock-only', () => {
   it('renders canonical hierarchy, system, unmapped and lifecycle examples without mutation controls', () => {
     const view = render(<WarehouseStructure />);
 
+    expect(view.container.firstElementChild?.classList.contains('production-ui')).toBe(true);
+    expect(view.container.firstElementChild?.classList.contains('warehouse-structure-surface')).toBe(true);
     expect(view.getByText(/frontend mock-only/i)).toBeTruthy();
     expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
     expect(view.getAllByText('ZONE-A / A01 / R02 / L03 / B04').length).toBeGreaterThan(0);

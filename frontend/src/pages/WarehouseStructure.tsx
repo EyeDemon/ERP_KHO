@@ -163,8 +163,9 @@ const WarehouseStructure = () => {
   const inactiveCount = allLocations.filter((location) => !location.isActive).length;
 
   return (
-    <UiPage>
-      <div className="warehouse-structure-page">
+    <div className="production-ui warehouse-structure-surface">
+      <UiPage>
+        <div className="warehouse-structure-page">
         <UiPageHeader
           eyebrow="Kho & Vị trí"
           title="Cấu trúc vị trí kho"
@@ -352,8 +353,9 @@ const WarehouseStructure = () => {
             </UiCard>
           </>
         )}
-      </div>
-    </UiPage>
+        </div>
+      </UiPage>
+    </div>
   );
 };
 
