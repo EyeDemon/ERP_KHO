@@ -113,6 +113,33 @@ describe('CapabilityPreview', () => {
     }
   });
 
+  it('renders specialized inventory-control mocks for planned capabilities that still need domain panels', () => {
+    const cases = [
+      ['INV-05', 'Inventory Status Eligibility Board'],
+      ['INV-06', 'Lot / Serial / Expiry Explorer'],
+      ['INV-07', 'Inventory Lock / Freeze Policy'],
+      ['INV-09', 'Inventory Reversal / Corrective Chain'],
+      ['INV-10', 'Traceability & Genealogy Graph'],
+    ];
+
+    for (const [capabilityId, title] of cases) {
+      const view = renderPreview('inventory-control', capabilityId);
+      const panel = view.getByTestId('inventory-capability-mock-' + capabilityId);
+      expect(panel).toBeTruthy();
+      expect(panel.textContent).toContain(title);
+      expect(panel.textContent).toContain('Không gọi API production');
+      view.unmount();
+    }
+  });
+
+  it('does not shadow foundation or Screen Matrix inventory-control surfaces', () => {
+    for (const capabilityId of ['INV-01', 'INV-02', 'INV-03', 'INV-04', 'INV-08', 'INV-11']) {
+      const view = renderPreview('inventory-control', capabilityId);
+      expect(view.queryByTestId('inventory-capability-mock-' + capabilityId)).toBeNull();
+      view.unmount();
+    }
+  });
+
   it('renders scan-first phone preview for mobile capabilities', () => {
     const view = renderPreview('mobile', 'MO-04');
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
