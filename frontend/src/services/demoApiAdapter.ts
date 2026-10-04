@@ -181,7 +181,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       const physical = structure.zones.flatMap(zone => zone.aisles.flatMap(aisle => aisle.racks.flatMap(rack => rack.levels.flatMap(level =>
         level.locations.map(location => {
           const usage = location.code.endsWith('B04')
-            ? { usedWeightKg: 1260, usedVolumeM3: 8.2, usedPalletEquivalent: 4 }
+            ? { usedWeightKg: 1300, usedVolumeM3: 8.2, usedPalletEquivalent: 4 }
             : location.code.endsWith('B05')
               ? { usedWeightKg: 620, usedVolumeM3: 4.1, usedPalletEquivalent: 2 }
               : { usedWeightKg: 0, usedVolumeM3: 0, usedPalletEquivalent: 0 };

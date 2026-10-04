@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WarehouseLocations from './WarehouseLocations';
 import apiClient from '../services/apiClient';
@@ -12,7 +12,7 @@ const put = vi.mocked(apiClient.put);
 
 const warehouses = [{ id: 1, code: 'WH-HCM-01', name: 'DC Hồ Chí Minh' }];
 const capacities = [
-  { locationId: 101, code: 'A01-R02-L03-B04', name: 'Ô chính', structurePath: 'ZONE-A/A01/R02/L03/B04', storageClass: 'AMBIENT', maxWeightKg: 1500, usedWeightKg: 1260, maxVolumeM3: 10, usedVolumeM3: 8.2, maxPalletEquivalent: 5, usedPalletEquivalent: 4, profileIncomplete: false, compatibilityConflict: false, isActive: true, isBlocked: false, state: 'NearCapacity' },
+  { locationId: 101, code: 'A01-R02-L03-B04', name: 'Ô chính', structurePath: 'ZONE-A/A01/R02/L03/B04', storageClass: 'AMBIENT', maxWeightKg: 1500, usedWeightKg: 1300, maxVolumeM3: 10, usedVolumeM3: 8.2, maxPalletEquivalent: 5, usedPalletEquivalent: 4, profileIncomplete: false, compatibilityConflict: false, isActive: true, isBlocked: false, state: 'NearCapacity' },
 ];
 
 const locations = [
@@ -82,9 +82,10 @@ describe('WarehouseLocations production UI', () => {
   it('locks an assigned StructurePath and sends rowVersion on edit', async () => {
     const view = render(<WarehouseLocations />);
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
-    const row = view.getAllByText('A01-R02-L03-B04')[0].closest('tr');
+    const hierarchy = view.getByRole('table', { name: 'Cây cấu trúc vị trí thật' });
+    const row = within(hierarchy).getByText('A01-R02-L03-B04').closest('tr');
     expect(row).toBeTruthy();
-    fireEvent.click(row!.querySelector('button')!);
+    fireEvent.click(within(row!).getByRole('button', { name: 'Sửa' }));
     const zone = view.getByLabelText('Zone') as HTMLInputElement;
     expect(zone.closest('fieldset')?.disabled).toBe(true);
     fireEvent.change(view.getByLabelText('Tên vị trí'), { target: { value: 'Ô chính mới' } });
