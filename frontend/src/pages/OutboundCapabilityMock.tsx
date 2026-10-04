@@ -5,7 +5,7 @@ import './OutboundCapabilityMock.css';
 type OutboundMockProps = { capabilityId?: string };
 type Tone = 'success' | 'warning' | 'danger' | 'neutral';
 
-const Badge = ({ tone, children }: { tone: Tone; children: string }) => (
+const Badge = ({ tone, children }: { tone: Tone; children: ReactNode }) => (
   <span className={'outbound-mock-badge ' + tone}>{children}</span>
 );
 
