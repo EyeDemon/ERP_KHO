@@ -11,7 +11,7 @@ public interface IShipmentService
     Task<ShipmentDto> GetAsync(int id, CancellationToken cancellationToken = default);
     Task<ShipmentDto> StageAsync(
         int id,
-        ShipmentStateCommandDto request,
+        StageShipmentDto request,
         CancellationToken cancellationToken = default);
     Task<ShipmentDto> StartLoadingAsync(
         int id,
