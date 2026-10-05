@@ -185,6 +185,149 @@ public sealed class SqlServerPickingTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task OpenPickingTask_ManualReservationRelease_CancelsTaskAndReleasesReservedStock()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            int reservationId;
+            await using (var reserve = CreateContext())
+            {
+                reservationId = (await CreateReservationService(reserve, fixture.UserId).CreateAsync(new()
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    Quantity = 10
+                })).Id;
+            }
+
+            await using (var allocate = CreateContext())
+            {
+                await CreateAllocationService(allocate, fixture.UserId, withPicking: true).AutoAllocateAsync(new()
+                {
+                    ReservationId = reservationId,
+                    Quantity = 10
+                });
+            }
+
+            await using (var release = CreateContext())
+            {
+                await CreateReservationService(release, fixture.UserId, withPicking: true).ReleaseAsync(
+                    reservationId,
+                    new ReleaseStockReservationDto { Reason = "manual reservation cancelled before picking starts" });
+            }
+
+            await using var verify = CreateContext();
+            (await verify.PickingTasks.AsNoTracking().SingleAsync()).Status.Should().Be(PickingTaskStatus.Cancelled);
+            (await verify.StockAllocations.AsNoTracking().SingleAsync()).Status.Should().Be(StockAllocationStatus.Released);
+            (await verify.StockReservations.AsNoTracking().SingleAsync()).Status.Should().Be(StockReservationStatus.Released);
+            (await verify.InventoryStocks.AsNoTracking()
+                .Where(x => x.ProductId == fixture.ProductId)
+                .SumAsync(x => x.ReservedQuantity)).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task InProgressPicking_BlocksReservationRelease_AndPreservesCommitment()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var task = await PrepareStartedTaskAsync(fixture);
+
+            int reservationId;
+            await using (var lookup = CreateContext())
+            {
+                reservationId = await lookup.PickingTaskLines.AsNoTracking()
+                    .Where(x => x.PickingTaskId == task.Id)
+                    .Select(x => x.Allocation.ReservationId)
+                    .SingleAsync();
+            }
+
+            await using (var release = CreateContext())
+            {
+                var service = CreateReservationService(release, fixture.UserId, withPicking: true);
+                await FluentActions.Awaiting(() => service.ReleaseAsync(
+                        reservationId,
+                        new ReleaseStockReservationDto { Reason = "must be blocked after movement starts" }))
+                    .Should().ThrowAsync<ConcurrencyException>();
+            }
+
+            await using var verify = CreateContext();
+            (await verify.PickingTasks.AsNoTracking().SingleAsync()).Status.Should().Be(PickingTaskStatus.InProgress);
+            (await verify.StockAllocations.AsNoTracking().SingleAsync()).Status.Should().Be(StockAllocationStatus.Picking);
+            (await verify.InventoryStocks.AsNoTracking()
+                .Where(x => x.ProductId == fixture.ProductId)
+                .SumAsync(x => x.ReservedQuantity)).Should().Be(10);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task CompletedPicking_ProtectsReservationPastOriginalExpiry_UntilDispatchConsumption()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var task = await PrepareStartedTaskAsync(fixture);
+            PickingTaskDto picked;
+            await using (var pick = CreateContext())
+            {
+                picked = await CreatePickingService(pick, fixture.UserId).PickAsync(task.Id, new PickScanDto
+                {
+                    TaskLineId = task.Lines.Single().Id,
+                    LocationBarcode = fixture.FirstLocationCode,
+                    ProductBarcode = fixture.ProductCode,
+                    Quantity = 10,
+                    RowVersion = task.RowVersion!
+                });
+            }
+
+            await using (var complete = CreateContext())
+            {
+                await CreatePickingService(complete, fixture.UserId).CompleteAsync(task.Id, new PickingStateCommandDto
+                {
+                    RowVersion = picked.RowVersion!
+                });
+            }
+
+            int reservationId;
+            await using (var expire = CreateContext())
+            {
+                reservationId = await expire.StockReservations.AsNoTracking().Select(x => x.Id).SingleAsync();
+                var oldCreated = DateTime.UtcNow.AddHours(-2);
+                var oldExpiry = DateTime.UtcNow.AddHours(-1);
+                await expire.StockReservations
+                    .Where(x => x.Id == reservationId)
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.CreatedAt, oldCreated)
+                        .SetProperty(x => x.ExpiresAt, oldExpiry));
+
+                var expiredCount = await CreateReservationService(expire, fixture.UserId, withPicking: true).ExpireAsync();
+                expiredCount.Should().Be(0);
+            }
+
+            await using (var dispatch = CreateContext())
+            {
+                var reservation = await dispatch.StockReservations.SingleAsync(x => x.Id == reservationId);
+                var reservationService = CreateReservationService(dispatch, fixture.UserId, withPicking: true);
+                var consumed = await reservationService.ConsumeAsync(reservation, fixture.UserId);
+                consumed.Sum(x => x.Quantity).Should().Be(10);
+                await new UnitOfWork(dispatch).SaveChangesAsync();
+            }
+
+            await using var verify = CreateContext();
+            (await verify.StockReservations.AsNoTracking().SingleAsync()).Status.Should().Be(StockReservationStatus.Consumed);
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.FirstLocationId);
+            stock.Quantity.Should().Be(0);
+            stock.ReservedQuantity.Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     private static async Task<PickingTaskDto> PrepareStartedTaskAsync(Fixture fixture)
     {
         int reservationId;
@@ -227,7 +370,10 @@ public sealed class SqlServerPickingTests
         });
     }
 
-    private static StockReservationService CreateReservationService(ErpKhoDbContext db, int userId)
+    private static StockReservationService CreateReservationService(
+        ErpKhoDbContext db,
+        int userId,
+        bool withPicking = false)
     {
         var current = new CurrentUser(userId);
         return new StockReservationService(
@@ -236,7 +382,8 @@ public sealed class SqlServerPickingTests
             new UnitOfWork(db),
             new WarehouseAuthorizationService(db, current),
             current,
-            new StockReservationOptions());
+            new StockReservationOptions(),
+            withPicking ? new PickingTaskIntegration(db) : null);
     }
 
     private static StockAllocationService CreateAllocationService(
