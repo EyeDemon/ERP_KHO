@@ -224,10 +224,11 @@ Blueprint implementation status has been refreshed against the main integration 
 
 Production capabilities now reflected as `live` include:
 - Product Category, multi-barcode and Business Partner work centers.
-- Inbound: Purchase Order / ASN, Receiving Appointment, Goods Receipt, Receiving, Discrepancy, line-level QC, Receipt POST and Cất hàng.
-- ExportReceipt MVP: Draft → Approved/Reserved → Dispatched plus Reservation.
+- Inbound: Purchase Order / ASN, Goods Receipt, Receiving, Discrepancy, line-level QC, Receipt POST and Cất hàng are live; Receiving Appointment is `foundation` because Dock/Yard scheduling/check-in exists but canonical PO/ASN/Receipt linkage is incomplete.
+- ExportReceipt MVP: Draft → Approved/Reserved → Dispatched plus Reservation; this is explicitly separate from Shipment LOADED/DISPATCHED.
+- Transfer: TR-03 Dispatch and TR-04 Receive are live on `/stock-transfers`; TR-02 in-transit inventory remains `foundation` because the current view is transfer-centric rather than a complete owner-aware inventory browser.
 - Gate Check-in, Dock Scheduling and Yard Management from WH-06 Dock & Yard.
-- Ledger Reconciliation work center.
+- Inventory reconciliation is a live route/read model but INV-11 remains `foundation`: mismatch detection exists, controlled rebuild/remediation does not.
 - Role & Permission Matrix with database-backed grant/revoke.
 
 The following outbound capabilities remain intentionally **not live** and must not be inferred from ExportReceipt MVP:
@@ -248,6 +249,6 @@ Continue production implementation by the canonical dependency order from Notion
 4. OUT-07 Staging & Loading.
 5. OUT-08 Shipment Dispatch only after LOADED/HU/allocation prerequisites exist.
 6. OUT-10 Tracking / POD after Shipment Dispatch.
-7. Inventory Control / Transfer / Count / Returns according to remaining evidence and customer priority.
+7. Continue remaining Inventory Control / Transfer enhancements / Count / Returns according to evidence and customer priority; do not re-implement Transfer Dispatch/Receive, which are already live.
 
 Do not treat ExportReceipt `APPROVED` as Shipment `LOADED`; the two workflows remain separate.

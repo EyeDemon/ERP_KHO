@@ -107,6 +107,23 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('IN-02')?.route).toBe('/dock-yard');
     expect(byId.get('IN-02')?.goal).toMatch(/liên kết canonical.*PO\/ASN\/Receipt.*hoàn thiện/i);
 
+    expect(byId.get('IN-06')?.status).toBe('live');
+    expect(byId.get('QR-01')?.status).toBe('planned');
+    expect(byId.get('QR-01')?.goal).toMatch(/Inbound QC.*IN-06.*chưa.*live/i);
+
+    expect(byId.get('TR-02')?.status).toBe('foundation');
+    expect(byId.get('TR-02')?.route).toBe('/stock-transfers');
+    for (const id of ['TR-03', 'TR-04']) {
+      expect(byId.get(id)?.status).toBe('live');
+      expect(byId.get(id)?.route).toBe('/stock-transfers');
+    }
+
+    expect(byId.get('INV-11')?.status).toBe('foundation');
+    expect(byId.get('INV-11')?.goal).toMatch(/read-only reconciliation.*controlled rebuild\/remediation.*chưa/i);
+    expect(byId.get('OUT-01')?.goal).toMatch(/không đồng nghĩa Shipment LOADED\/DISPATCHED/i);
+    expect(byId.get('OUT-08')?.status).toBe('planned');
+    expect(byId.get('OUT-08')?.goal).toMatch(/Shipment state machine riêng/i);
+
     for (const id of ['OUT-03', 'OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'OUT-09', 'OUT-10']) {
       expect(byId.get(id)?.status).not.toBe('live');
     }
