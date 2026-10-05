@@ -2009,8 +2009,6 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("ReservationId");
 
-                    b.HasIndex("WarehouseId");
-
                     b.HasIndex("ReservationId", "LocationId", "InventoryStatus", "Status");
 
                     b.HasIndex("WarehouseId", "LocationId", "ProductId", "Status");
