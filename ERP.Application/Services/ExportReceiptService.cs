@@ -19,6 +19,7 @@ namespace ERP.Application.Services
         private readonly ICurrentUser? _currentUser;
         private readonly IStockReservationService? _stockReservationService;
         private readonly IPickingDispatchReadiness? _pickingDispatchReadiness;
+        private readonly IPackingDispatchReadiness? _packingDispatchReadiness;
         private readonly ExportReceiptOptions _options;
 
         internal ExportReceiptService(IExportReceiptRepository exportReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, ExportReceiptOptions? options = null)
@@ -30,6 +31,7 @@ namespace ERP.Application.Services
             _auditLogRepository = auditLogRepository;
             _stockReservationService = null;
             _pickingDispatchReadiness = null;
+            _packingDispatchReadiness = null;
             _options = options ?? new ExportReceiptOptions();
         }
 
@@ -43,7 +45,8 @@ namespace ERP.Application.Services
             ICurrentUser currentUser,
             IStockReservationService stockReservationService,
             ExportReceiptOptions? options = null,
-            IPickingDispatchReadiness? pickingDispatchReadiness = null)
+            IPickingDispatchReadiness? pickingDispatchReadiness = null,
+            IPackingDispatchReadiness? packingDispatchReadiness = null)
         {
             _exportReceiptRepository = exportReceiptRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -54,6 +57,7 @@ namespace ERP.Application.Services
             _currentUser = currentUser;
             _stockReservationService = stockReservationService;
             _pickingDispatchReadiness = pickingDispatchReadiness;
+            _packingDispatchReadiness = packingDispatchReadiness;
             _options = options ?? new ExportReceiptOptions();
         }
 
@@ -257,6 +261,8 @@ namespace ERP.Application.Services
                 if (_stockReservationService is null) throw new InvalidOperationException("Stock reservation service is required for export dispatch.");
                 if (_pickingDispatchReadiness is not null)
                     await _pickingDispatchReadiness.EnsureSourceReadyAsync("ExportReceipt", receipt.Id);
+                if (_packingDispatchReadiness is not null)
+                    await _packingDispatchReadiness.EnsureSourceReadyAsync("ExportReceipt", receipt.Id);
 
                 foreach (var detail in receipt.Details.OrderBy(x => x.ProductId))
                 {
