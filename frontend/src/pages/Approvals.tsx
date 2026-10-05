@@ -228,9 +228,17 @@ export default function Approvals() {
 
   const canApproveItem = (item: QueueItem) =>
     item.canApprove &&
-    (item.documentType !== 'ImportReceipt' ||
-      (hasPermission('receipt.complete') &&
-        (item.pendingState !== 'QcCompleted' || hasPermission('quality_disposition.approve'))));
+    (item.documentType === 'ExportReceipt'
+      ? hasPermission('export_receipt.approve')
+      : item.documentType !== 'ImportReceipt' ||
+        (hasPermission('receipt.complete') &&
+          (item.pendingState !== 'QcCompleted' || hasPermission('quality_disposition.approve'))));
+
+  const canRejectItem = (item: QueueItem) =>
+    item.canReject &&
+    (item.documentType === 'ExportReceipt'
+      ? hasPermission('approval.reject') && hasPermission('export_receipt.cancel')
+      : item.documentType !== 'ImportReceipt' || hasPermission('approval.reject'));
 
   const approve = async (item: QueueItem) => {
     if (submitting.current || !canApproveItem(item)) return;
@@ -266,8 +274,7 @@ export default function Approvals() {
     if (
       !selected ||
       submitting.current ||
-      !selected.canReject ||
-      (selected.documentType === 'ImportReceipt' && !hasPermission('approval.reject'))
+      !canRejectItem(selected)
     ) {
       return;
     }
@@ -474,8 +481,7 @@ export default function Approvals() {
                               <Check size={17} aria-hidden="true" />
                             </button>
                           )}
-                          {item.canReject &&
-                            (item.documentType !== 'ImportReceipt' || hasPermission('approval.reject')) && (
+                          {canRejectItem(item) && (
                               <button
                                 type="button"
                                 title="Từ chối"

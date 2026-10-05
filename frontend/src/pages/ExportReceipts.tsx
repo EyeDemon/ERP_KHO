@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../services/apiClient';
-import { currentRole, currentUserId } from '../services/authorization';
+import { currentUserId, hasPermission, usePermissionSet } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
@@ -11,7 +11,7 @@ interface ExportReceiptDetail {
   productCode: string;
   productName: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   note?: string;
 }
 
@@ -24,6 +24,7 @@ interface ExportReceipt {
   createdBy: number;
   createdByName: string;
   createdAt: string;
+  approvedBy?: number;
   approvedByName?: string;
   approvedAt?: string;
   dispatchedByName?: string;
@@ -59,11 +60,14 @@ interface ReceiptDetailForm {
 }
 
 const ExportReceipts = () => {
-  const role = currentRole();
+  usePermissionSet();
   const userId = currentUserId();
-  // Export authorization has not moved to permission codes in this inbound slice.
-  const canOperate = role !== 'Viewer';
-  const canApproveAndReserve = role === 'Admin' || role === 'Manager';
+  const canCreate = hasPermission('export_receipt.create');
+  const canUpdate = hasPermission('export_receipt.update');
+  const canApproveAndReserve = hasPermission('export_receipt.approve');
+  const canDispatch = hasPermission('export_receipt.dispatch');
+  const canCancel = hasPermission('export_receipt.cancel');
+  const canReadPartners = hasPermission('partner.read');
   const [receipts, setReceipts] = useState<ExportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -93,14 +97,18 @@ const ExportReceipts = () => {
 
   const fetchData = async () => {
     try {
-      const [whRes, prRes, bpRes] = await Promise.all([
-        apiClient.get('/api/warehouses'),
-        apiClient.get('/api/products'),
-        apiClient.get('/api/business-partners', { params: { role: 'customer', pageSize: 100 } })
-      ]);
-      setWarehouses(whRes.data);
-      setProducts(prRes.data);
-      setCustomers(bpRes.data.items);
+      if (canCreate) {
+        const [whRes, prRes] = await Promise.all([
+          apiClient.get('/api/warehouses'),
+          apiClient.get('/api/products')
+        ]);
+        setWarehouses(whRes.data);
+        setProducts(prRes.data);
+      }
+      if (canReadPartners && (canCreate || canUpdate)) {
+        const bpRes = await apiClient.get('/api/business-partners', { params: { role: 'customer', pageSize: 100 } });
+        setCustomers(bpRes.data.items);
+      }
     } catch (err: any) {
       console.error(err);
       setError('Lỗi khi tải dữ liệu khởi tạo');
@@ -118,9 +126,11 @@ const ExportReceipts = () => {
   };
 
   useEffect(() => {
-    fetchData();
-    fetchReceipts();
-  }, []);
+    void fetchData();
+    void fetchReceipts();
+    // Permission changes invalidate auxiliary data visibility.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCreate, canUpdate, canReadPartners]);
 
   // Fetch stock logic
   useEffect(() => {
@@ -171,9 +181,9 @@ const ExportReceipts = () => {
 
   const handleWorkflowAction = async (id: number, action: 'approve-and-reserve' | 'approve-and-dispatch' | 'dispatch') => {
     const messages = {
-      'approve-and-reserve': 'Phiếu sẽ được duyệt và giữ hàng. Tồn thực tế chưa giảm cho đến khi thủ kho xác nhận xuất.',
+      'approve-and-reserve': 'Phiếu sẽ được duyệt và giữ hàng. Tồn thực tế chưa giảm cho đến khi người có quyền dispatch xác nhận hàng đã rời kho.',
       'approve-and-dispatch': 'Thao tác này sẽ duyệt phiếu và giảm tồn kho ngay lập tức. Bạn có chắc hàng đã được giao khỏi kho?',
-      dispatch: 'Xác nhận hàng đã rời kho. Tồn thực tế sẽ giảm ngay.'
+      dispatch: 'Xác nhận hàng đã rời kho. Reservation sẽ được tiêu thụ và tồn thực tế sẽ giảm ngay.'
     };
     if (!confirm(messages[action])) return;
     setActionInFlight(`${id}-${action}`);
@@ -334,7 +344,7 @@ const ExportReceipts = () => {
           </div>
         )}
 
-        {canOperate && (
+        {canCreate && (
           <UiCard title="Tạo Phiếu Xuất Kho">
             <form onSubmit={handleCreate} className="export-form">
               <div className="export-form-grid">
@@ -353,13 +363,15 @@ const ExportReceipts = () => {
                   <span>Ghi chú phiếu</span>
                   <input aria-label="Ghi chú phiếu" value={note} onChange={e => setNote(e.target.value)} />
                 </label>
-                <label className="ui-stack">
-                  <span>Khách hàng</span>
-                  <select aria-label="Khách hàng" value={customerId} onChange={e => setCustomerId(e.target.value ? Number(e.target.value) : '')}>
-                    <option value="">-- Không chọn --</option>
-                    {customers.filter(x => x.isActive).map(x => <option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}
-                  </select>
-                </label>
+                {canReadPartners && (
+                  <label className="ui-stack">
+                    <span>Khách hàng</span>
+                    <select aria-label="Khách hàng" value={customerId} onChange={e => setCustomerId(e.target.value ? Number(e.target.value) : '')}>
+                      <option value="">-- Không chọn --</option>
+                      {customers.filter(x => x.isActive).map(x => <option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}
+                    </select>
+                  </label>
+                )}
               </div>
 
               <h3>Chi tiết phiếu</h3>
@@ -470,25 +482,31 @@ const ExportReceipts = () => {
                         <button type="button" disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)}>
                           {printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}
                         </button>
-                        {canOperate && r.status === 'Draft' && (
+                        {r.status === 'Draft' && (
                           <>
                             {canApproveAndReserve && r.createdBy !== userId && (
                               <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')}>
                                 Duyệt và giữ hàng
                               </button>
                             )}
-                            {(role === 'Admin' || role === 'Manager') && r.createdBy !== userId && (
+                            {r.allowPerReceiptDispatchMode && canApproveAndReserve && canDispatch && r.createdBy !== userId && (
                               <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')}>
-                                Duyệt và xuất ngay
+                                Duyệt và xuất ngay (tương thích)
                               </button>
                             )}
-                            <button type="button" disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)}>Hủy</button>
+                            {canCancel && (
+                              <button type="button" disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)}>Hủy</button>
+                            )}
                           </>
                         )}
-                        {canOperate && r.status === 'Approved' && (
+                        {r.status === 'Approved' && (
                           <>
-                            <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')}>Xác nhận xuất kho</button>
-                            <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)}>Hủy và giải phóng hàng</button>
+                            {canDispatch && r.approvedBy !== userId && (
+                              <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')}>Xác nhận xuất kho</button>
+                            )}
+                            {canCancel && (
+                              <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)}>Hủy và giải phóng hàng</button>
+                            )}
                           </>
                         )}
                       </div>
@@ -506,7 +524,7 @@ const ExportReceipts = () => {
             <div className="export-detail-meta">
               <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
               <div><strong>Khách hàng:</strong> {selectedReceipt.customerCode ? selectedReceipt.customerCode + ' - ' + selectedReceipt.customerName : '—'}</div>
-              {selectedReceipt.status === 'Draft' && canOperate && (
+              {selectedReceipt.status === 'Draft' && canUpdate && canReadPartners && (
                 <div>
                   <label className="ui-stack">
                     <span>Đổi khách hàng</span>
@@ -552,7 +570,7 @@ const ExportReceipts = () => {
                     <tr key={d.id}>
                       <td>{d.productCode} - {d.productName}</td>
                       <td className="export-numeric">{d.quantity}</td>
-                      <td className="export-numeric">{d.unitPrice}</td>
+                      <td className="export-numeric">{d.unitPrice == null ? '—' : d.unitPrice}</td>
                     </tr>
                   ))}
                   {selectedReceipt.details.length === 0 && <tr><td colSpan={3} className="ui-empty-cell">Không có chi tiết</td></tr>}

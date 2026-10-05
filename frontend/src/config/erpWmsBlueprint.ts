@@ -105,7 +105,7 @@ export const erpWmsBlueprint: BlueprintModule[] = [
     description: 'Luồng từ order tới reservation, allocation, picking, packing, loading và dispatch.',
     flow: ['Order', 'Release', 'Reserve', 'Allocate', 'Pick', 'Pack', 'Stage', 'Load', 'Dispatch', 'Track / POD'],
     capabilities: [
-      { id: 'OUT-01', name: 'Sales / Export Order', goal: 'Quản lý phiếu xuất và điều kiện release.', surfaces: ['Web', 'API'], status: 'live', spec: '72, 87, 161, 228', route: '/export-receipts' },
+      { id: 'OUT-01', name: 'ExportReceipt MVP', goal: 'Draft → Approved/Reserved → Dispatched; approval chỉ giữ hàng, dispatch mới trừ OnHand. Compatibility approve-and-dispatch là lệnh riêng có kiểm soát.', surfaces: ['Web', 'API'], status: 'live', spec: '17 §34, 30 §20, 38 §14, 228, 229', route: '/export-receipts' },
       { id: 'OUT-02', name: 'Reservation', goal: 'Giữ quantity khả dụng mà chưa gắn location cụ thể.', surfaces: ['Web', 'API'], status: 'live', spec: '30, 72', route: '/stock-reservations' },
       { id: 'OUT-03', name: 'Allocation', goal: 'Gắn reserved quantity vào location/lot/serial hợp lệ.', surfaces: ['Web', 'API'], status: 'planned', spec: '30, 86, 228' },
       { id: 'OUT-04', name: 'Wave / Batch / Cluster', goal: 'Nhóm order/pick task để tối ưu thực thi.', surfaces: ['Web', 'Mobile', 'API'], status: 'optional', spec: '45' },

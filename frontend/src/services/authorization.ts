@@ -40,4 +40,4 @@ export const currentUserId = (): number | null => {
 // Stocktake remains outside the inbound permission cutover.
 export const canViewStocktakes = (role: AppRole = currentRole()) => role !== 'Viewer';
 // Inbound reads use grants; other approval document types retain their compatibility role gate.
-export const canViewApprovals = () => hasPermission('receipt.read') || currentRole() === 'Admin' || currentRole() === 'Manager';
+export const canViewApprovals = () => hasPermission('receipt.read') || hasPermission('export_receipt.read') || currentRole() === 'Admin' || currentRole() === 'Manager';
