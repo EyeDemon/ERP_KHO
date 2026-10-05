@@ -8,7 +8,7 @@ namespace ERP.Infrastructure.Migrations;
 
 [DbContext(typeof(ErpKhoDbContext))]
 [Migration("20261005214500_AllowLocationSplitExportLedger")]
-public sealed class AllowLocationSplitExportLedger : Migration
+public class AllowLocationSplitExportLedger : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {

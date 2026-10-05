@@ -59,8 +59,34 @@ interface ReceiptDetailForm {
   note: string;
 }
 
+const safeRequestError = (error: any, fallback: string): string => {
+  const status = error?.response?.status;
+  if (status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+  if (status === 403) return 'Bạn không còn quyền thực hiện thao tác này.';
+  if (status === 404) return 'Dữ liệu không còn tồn tại hoặc bạn không có quyền truy cập.';
+  if (status === 409) return 'Dữ liệu đã thay đổi. Danh sách đã được làm mới, vui lòng kiểm tra lại.';
+  if (status === 400) return 'Dữ liệu phiếu xuất không hợp lệ. Vui lòng kiểm tra lại.';
+  if (typeof status === 'number' && status >= 500) return 'Hệ thống đang bận. Vui lòng thử lại.';
+  return fallback;
+};
+
+const dispatchModeLabel = (mode?: string): string => ({
+  RequireSeparateDispatch: 'Duyệt và giữ hàng → xác nhận xuất kho',
+  DispatchOnApproval: 'Duyệt và xuất ngay (tương thích)',
+}[mode || ''] || 'Không xác định');
+
+const reservationStatusLabel = (status?: string): string => ({
+  Active: 'Đang giữ hàng',
+  PartiallyConsumed: 'Đã tiêu thụ một phần',
+  Consumed: 'Đã tiêu thụ',
+  Released: 'Đã giải phóng',
+  Cancelled: 'Đã giải phóng',
+  Expired: 'Đã hết hạn',
+  PendingApproval: 'Chờ duyệt',
+}[status || ''] || 'Không xác định');
+
 const ExportReceipts = () => {
-  usePermissionSet();
+  const permissionSnapshot = usePermissionSet();
   const userId = currentUserId();
   const canCreate = hasPermission('export_receipt.create');
   const canUpdate = hasPermission('export_receipt.update');
@@ -84,6 +110,11 @@ const ExportReceipts = () => {
   const [printFetchedAt, setPrintFetchedAt] = useState<Date | null>(null);
   const [printLoadingId, setPrintLoadingId] = useState<number | null>(null);
   const printTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const workflowInFlight = useRef(false);
+  const auxiliaryGeneration = useRef(0);
+  const listGeneration = useRef(0);
+  const detailGeneration = useRef(0);
+  const printGeneration = useRef(0);
 
   // Form states
   const [code, setCode] = useState('');
@@ -96,41 +127,65 @@ const ExportReceipts = () => {
   const [stockCache, setStockCache] = useState<Record<string, number | null>>({});
 
   const fetchData = async () => {
+    const generation = ++auxiliaryGeneration.current;
     try {
+      const nextWarehouses: Warehouse[] = [];
+      const nextProducts: Product[] = [];
+      let nextCustomers: Partner[] = [];
+
       if (canCreate) {
         const [whRes, prRes] = await Promise.all([
           apiClient.get('/api/warehouses'),
           apiClient.get('/api/products')
         ]);
-        setWarehouses(whRes.data);
-        setProducts(prRes.data);
+        nextWarehouses.push(...whRes.data);
+        nextProducts.push(...prRes.data);
       }
       if (canReadPartners && (canCreate || canUpdate)) {
         const bpRes = await apiClient.get('/api/business-partners', { params: { role: 'customer', pageSize: 100 } });
-        setCustomers(bpRes.data.items);
+        nextCustomers = bpRes.data.items;
       }
+
+      if (generation !== auxiliaryGeneration.current) return;
+      setWarehouses(nextWarehouses);
+      setProducts(nextProducts);
+      setCustomers(nextCustomers);
     } catch (err: any) {
-      console.error(err);
-      setError('Lỗi khi tải dữ liệu khởi tạo');
+      if (generation !== auxiliaryGeneration.current) return;
+      setWarehouses([]);
+      setProducts([]);
+      setCustomers([]);
+      setError(safeRequestError(err, 'Không thể tải dữ liệu hỗ trợ phiếu xuất.'));
     }
   };
 
   const fetchReceipts = async () => {
+    const generation = ++listGeneration.current;
     try {
       const res = await apiClient.get('/api/exportreceipts');
+      if (generation !== listGeneration.current) return;
       setReceipts(res.data);
     } catch (err: any) {
-      console.error(err);
-      setError('Lỗi khi tải danh sách phiếu xuất');
+      if (generation !== listGeneration.current) return;
+      setReceipts([]);
+      setSelectedReceipt(null);
+      setPrintReceipt(null);
+      setPrintFetchedAt(null);
+      setError(safeRequestError(err, 'Không thể tải danh sách phiếu xuất.'));
     }
   };
 
   useEffect(() => {
+    detailGeneration.current++;
+    printGeneration.current++;
+    setSelectedReceipt(null);
+    setPrintReceipt(null);
+    setPrintFetchedAt(null);
     void fetchData();
     void fetchReceipts();
-    // Permission changes invalidate auxiliary data visibility.
+    // The serialized permission snapshot is the generation boundary for revoked/granted access.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canCreate, canUpdate, canReadPartners]);
+  }, [permissionSnapshot, canCreate, canUpdate, canReadPartners]);
 
   // Fetch stock logic
   useEffect(() => {
@@ -142,7 +197,9 @@ const ExportReceipts = () => {
           setStockCache(prev => ({ ...prev, [key]: null }));
           apiClient.get('/api/inventorystocks/current', { params: { warehouseId, productId: d.productId } })
             .then(res => {
-              const stock = (res.data && res.data.length > 0) ? res.data[0].availableQuantity : 0;
+              const stock = Array.isArray(res.data)
+                ? res.data.reduce((total: number, row: { availableQuantity?: number }) => total + Number(row.availableQuantity || 0), 0)
+                : 0;
               setStockCache(prev => ({ ...prev, [key]: stock }));
             })
             .catch(() => {
@@ -155,28 +212,27 @@ const ExportReceipts = () => {
   }, [warehouseId, details]);
 
   const handleCancel = async (id: number) => {
-    if (!confirm('Bạn có chắc muốn hủy phiếu xuất này?')) return;
+    if (workflowInFlight.current || !confirm('Bạn có chắc muốn hủy phiếu xuất này?')) return;
+    workflowInFlight.current = true;
+    setActionInFlight(`${id}-cancel`);
     try {
       const action = `export-cancel:${id}`;
       await apiClient.post(`/api/exportreceipts/${id}/cancel`, undefined, { headers: idempotencyHeaders(action) });
       completeIdempotentAction(action);
-      alert('Hủy thành công');
-      fetchReceipts();
-      if (selectedReceipt?.id === id) {
-        const res = await apiClient.get(`/api/exportreceipts/${id}`);
-        setSelectedReceipt(res.data);
-      }
+      setSuccessMsg('Đã hủy phiếu xuất.');
+      await refreshAfterAction(id);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lỗi khi hủy phiếu xuất');
+      setError(safeRequestError(err, 'Không thể hủy phiếu xuất.'));
+      if (err?.response?.status === 409) await refreshAfterAction(id);
+    } finally {
+      workflowInFlight.current = false;
+      setActionInFlight(null);
     }
   };
 
   const refreshAfterAction = async (id: number) => {
     await fetchReceipts();
-    if (selectedReceipt?.id === id) {
-      const res = await apiClient.get(`/api/exportreceipts/${id}`);
-      setSelectedReceipt(res.data);
-    }
+    if (selectedReceipt?.id === id) await handleViewDetails(id);
   };
 
   const handleWorkflowAction = async (id: number, action: 'approve-and-reserve' | 'approve-and-dispatch' | 'dispatch') => {
@@ -185,7 +241,8 @@ const ExportReceipts = () => {
       'approve-and-dispatch': 'Thao tác này sẽ duyệt phiếu và giảm tồn kho ngay lập tức. Bạn có chắc hàng đã được giao khỏi kho?',
       dispatch: 'Xác nhận hàng đã rời kho. Reservation sẽ được tiêu thụ và tồn thực tế sẽ giảm ngay.'
     };
-    if (!confirm(messages[action])) return;
+    if (workflowInFlight.current || !confirm(messages[action])) return;
+    workflowInFlight.current = true;
     setActionInFlight(`${id}-${action}`);
     try {
       const logicalAction = `export-${action}:${id}`;
@@ -193,18 +250,24 @@ const ExportReceipts = () => {
       completeIdempotentAction(logicalAction);
       await refreshAfterAction(id);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Không thể xử lý phiếu xuất.');
+      setError(safeRequestError(err, 'Không thể xử lý phiếu xuất.'));
+      if (err?.response?.status === 409) await refreshAfterAction(id);
     } finally {
+      workflowInFlight.current = false;
       setActionInFlight(null);
     }
   };
 
   const handleViewDetails = async (id: number) => {
+    const generation = ++detailGeneration.current;
     try {
       const res = await apiClient.get(`/api/exportreceipts/${id}`);
+      if (generation !== detailGeneration.current) return;
       setSelectedReceipt(res.data);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi tải chi tiết phiếu');
+      if (generation !== detailGeneration.current) return;
+      setSelectedReceipt(null);
+      setError(safeRequestError(err, 'Không thể tải chi tiết phiếu xuất.'));
     }
   };
 
@@ -287,7 +350,7 @@ const ExportReceipts = () => {
       
       fetchReceipts();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi tạo phiếu xuất');
+      setError(safeRequestError(err, 'Không thể tạo phiếu xuất.'));
     } finally {
       createInFlight.current = false; setCreating(false);
     }
@@ -297,17 +360,34 @@ const ExportReceipts = () => {
     if (!selectedReceipt || partnerMutationInFlight.current) return;
     partnerMutationInFlight.current = true; setPartnerUpdating(true); setError('');
     try { await apiClient.put(`/api/exportreceipts/${selectedReceipt.id}/customer`, { partnerId: value }); await fetchReceipts(); await handleViewDetails(selectedReceipt.id); }
-    catch (x: any) { setError(x.response?.data?.message || 'Không đổi được khách hàng.'); }
+    catch (x: any) { setError(safeRequestError(x, 'Không đổi được khách hàng.')); }
     finally { partnerMutationInFlight.current = false; setPartnerUpdating(false); }
   };
 
   const openPrintPreview = async (id: number, trigger: HTMLButtonElement) => {
+    const generation = ++printGeneration.current;
     printTriggerRef.current = trigger; setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(id); setError('');
-    try { const res = await apiClient.get(`/api/exportreceipts/${id}`); setPrintReceipt(res.data); setPrintFetchedAt(new Date()); }
-    catch (x: any) { setError(x.response?.data?.message || 'Không tải được dữ liệu bản in.'); }
-    finally { setPrintLoadingId(null); }
+    try {
+      const res = await apiClient.get(`/api/exportreceipts/${id}`);
+      if (generation !== printGeneration.current) return;
+      setPrintReceipt(res.data);
+      setPrintFetchedAt(new Date());
+    }
+    catch (x: any) {
+      if (generation !== printGeneration.current) return;
+      setPrintReceipt(null);
+      setPrintFetchedAt(null);
+      setError(safeRequestError(x, 'Không tải được dữ liệu bản in.'));
+    }
+    finally { if (generation === printGeneration.current) setPrintLoadingId(null); }
   };
-  const closePrintPreview = () => { setPrintReceipt(null); setPrintFetchedAt(null); queueMicrotask(() => printTriggerRef.current?.focus()); };
+  const closePrintPreview = () => {
+    printGeneration.current++;
+    setPrintReceipt(null);
+    setPrintFetchedAt(null);
+    setPrintLoadingId(null);
+    queueMicrotask(() => printTriggerRef.current?.focus());
+  };
 
   const getStockDisplay = (wId: number | '', pId: number | '') => {
     if (wId === '' || pId === '') return '-';
@@ -325,7 +405,7 @@ const ExportReceipts = () => {
     return 'neutral';
   };
 
-  const statusLabel = (status: string) => ({ Draft: 'Nháp', Approved: 'Đã duyệt', Dispatched: 'Đã xuất kho', Cancelled: 'Đã hủy', Completed: 'Hoàn tất' }[status] || status);
+  const statusLabel = (status: string) => ({ Draft: 'Nháp', Approved: 'Đã duyệt và giữ hàng', Dispatched: 'Đã xuất kho', Cancelled: 'Đã hủy', Completed: 'Hoàn tất' }[status] || 'Không xác định');
 
   return (
     <UiPage>
@@ -541,14 +621,14 @@ const ExportReceipts = () => {
               <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString('vi-VN')}</div>
               {selectedReceipt.status === 'Approved' && (
                 <>
-                  <div><strong>Đang giữ hàng:</strong> {selectedReceipt.reservationStatus || '—'}</div>
+                  <div><strong>Đang giữ hàng:</strong> {reservationStatusLabel(selectedReceipt.reservationStatus)}</div>
                   <div><strong>Người duyệt:</strong> {selectedReceipt.approvedByName || '—'}</div>
                   <div><strong>Thời gian duyệt:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString('vi-VN') : '—'}</div>
                 </>
               )}
               {selectedReceipt.status === 'Dispatched' && (
                 <>
-                  <div><strong>Đã xuất kho:</strong> {selectedReceipt.dispatchMode || '—'}</div>
+                  <div><strong>Luồng xuất:</strong> {dispatchModeLabel(selectedReceipt.dispatchMode)}</div>
                   <div><strong>Người duyệt/xuất:</strong> {selectedReceipt.approvedByName || '—'} / {selectedReceipt.dispatchedByName || '—'}</div>
                   <div><strong>Thời gian duyệt/xuất:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString('vi-VN') : '—'} / {selectedReceipt.dispatchedAt ? new Date(selectedReceipt.dispatchedAt).toLocaleString('vi-VN') : '—'}</div>
                 </>

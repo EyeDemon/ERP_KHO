@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../services/apiClient';
 import ExportReceipts from './ExportReceipts';
@@ -57,6 +57,72 @@ describe('ExportReceipts shared production UI', () => {
     expect(view.queryByRole('button', { name: 'Duyệt và giữ hàng' })).toBeNull();
     expect(view.queryByRole('button', { name: /Duyệt và xuất ngay/ })).toBeNull();
     expect(view.queryByRole('button', { name: 'Hủy' })).toBeNull();
+  });
+
+  it('aggregates availability across eligible locations before blocking draft creation', async () => {
+    localStorage.setItem('role', 'Manager');
+    localStorage.setItem('userId', '99');
+    setCurrentPermissions(['export_receipt.read', 'export_receipt.create']);
+    get.mockImplementation(async (url) => {
+      if (url === '/api/exportreceipts') return { data: [] } as never;
+      if (url === '/api/warehouses') return { data: [{ id: 1, name: 'Kho A' }] } as never;
+      if (url === '/api/products') return { data: [{ id: 7, code: 'SKU-7', name: 'Sản phẩm 7' }] } as never;
+      if (url === '/api/inventorystocks/current') return { data: [{ availableQuantity: 20 }, { availableQuantity: 30 }] } as never;
+      return { data: [] } as never;
+    });
+
+    const view = render(<ExportReceipts />);
+    await view.findByText('Tạo Phiếu Xuất Kho');
+
+    fireEvent.change(view.getByLabelText('Mã phiếu'), { target: { value: 'EX-ML-01' } });
+    fireEvent.change(view.getByLabelText('Kho'), { target: { value: '1' } });
+    fireEvent.click(view.getByRole('button', { name: '+ Thêm dòng' }));
+    fireEvent.change(view.getByLabelText('Sản phẩm dòng 1'), { target: { value: '7' } });
+    fireEvent.change(view.getByLabelText('Số lượng dòng 1'), { target: { value: '40' } });
+    fireEvent.change(view.getByLabelText('Đơn giá dòng 1'), { target: { value: '1' } });
+
+    await view.findByText('Tồn: 50');
+    await waitFor(() => expect((view.getByRole('button', { name: 'Tạo Phiếu Xuất' }) as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('renders canonical Vietnamese states and never exposes raw dispatch mode', async () => {
+    localStorage.setItem('role', 'Viewer');
+    setCurrentPermissions(['export_receipt.read']);
+    const dispatched = {
+      ...draftReceipt,
+      id: 22,
+      code: 'ER-2026-0022',
+      status: 'Dispatched',
+      dispatchMode: 'RequireSeparateDispatch',
+      approvedByName: 'Người duyệt',
+      dispatchedByName: 'Thủ kho',
+      approvedAt: '2026-10-03T11:00:00Z',
+      dispatchedAt: '2026-10-03T12:00:00Z',
+    };
+    get.mockImplementation(async (url) => {
+      if (url === '/api/exportreceipts') return { data: [dispatched] } as never;
+      if (url === '/api/exportreceipts/22') return { data: dispatched } as never;
+      return { data: [] } as never;
+    });
+
+    const view = render(<ExportReceipts />);
+    await view.findByText('ER-2026-0022');
+    fireEvent.click(view.getByRole('button', { name: 'Chi tiết' }));
+
+    expect(await view.findByText('Duyệt và giữ hàng → xác nhận xuất kho')).toBeTruthy();
+    expect(view.queryByText('RequireSeparateDispatch')).toBeNull();
+  });
+
+  it('fails closed without exposing backend error details', async () => {
+    localStorage.setItem('role', 'Viewer');
+    setCurrentPermissions(['export_receipt.read']);
+    get.mockRejectedValue({ response: { status: 403, data: { message: 'SQL/internal secret' } } });
+
+    const view = render(<ExportReceipts />);
+
+    expect(await view.findByText('Bạn không còn quyền thực hiện thao tác này.')).toBeTruthy();
+    expect(view.queryByText('SQL/internal secret')).toBeNull();
+    expect(view.queryByText('ER-2026-0021')).toBeNull();
   });
 
   it('keeps write-gated workflow buttons disabled during maintenance', async () => {
