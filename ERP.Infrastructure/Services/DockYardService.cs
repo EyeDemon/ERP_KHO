@@ -213,7 +213,7 @@ public sealed class DockYardService(
         }
 
         var rows = await source.OrderBy(x => x.PlannedStartUtc).ThenBy(x => x.Code).Take(500).ToListAsync(token);
-        return rows.Select(MapAppointment).ToList();
+        return rows.Select(x => MapAppointment(x)).ToList();
     }
 
     public async Task<DockAppointmentDto> GetAppointmentAsync(int id, CancellationToken token = default)
