@@ -51,6 +51,14 @@ public class StockReservationService(
         {
             throw new ConcurrencyException("Phiếu xuất đã được giữ hàng bởi yêu cầu đồng thời khác.", exception);
         }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: 1205 })
+        {
+            throw new DeadlockException("Giao dịch giữ hàng bị deadlock.", exception);
+        }
+        catch (SqlException exception) when (exception.Number == 1205)
+        {
+            throw new DeadlockException("Giao dịch giữ hàng bị deadlock.", exception);
+        }
     }
 
     private static bool IsExportReservationSourceConflict(DbUpdateException exception) =>
