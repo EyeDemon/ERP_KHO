@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -50,7 +51,7 @@ public sealed class IdempotentCommandFilter(
         var fingerprint = Fingerprint(commandScope, actionContext.ActionArguments);
         metadata.IdempotencyKeyHash = keyHash;
         metadata.RequestFingerprint = fingerprint;
-        await using var transaction = await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevelFor(commandScope), actionContext.HttpContext.RequestAborted);
         var record = new IdempotencyRecord
         {
             UserId = userId, CommandScope = commandScope, KeyHash = keyHash,
@@ -181,6 +182,11 @@ public sealed class IdempotentCommandFilter(
     }
 
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    public static IsolationLevel IsolationLevelFor(string scope) =>
+        scope is "DockYard.Appointment.CheckIn" or "DockYard.Appointment.AssignDock"
+            ? IsolationLevel.Serializable
+            : IsolationLevel.ReadCommitted;
     private static bool IsUniqueViolation(DbUpdateException ex)
     {
         if (ex.InnerException is SqlException { Number: 2601 or 2627 }) return true;

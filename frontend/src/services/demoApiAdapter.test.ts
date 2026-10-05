@@ -34,6 +34,30 @@ describe('Blueprint demo API adapter', () => {
     expect(calendar.shifts.length).toBeGreaterThan(0);
   });
 
+  it('serves WH-06 Dock & Yard production reads without enabling writes', async () => {
+    const warehouseConfig = request('/api/dock-yard/warehouses');
+    const warehouses = await createBlueprintDemoApiAdapter(warehouseConfig)(warehouseConfig);
+    expect((warehouses.data as Array<{ timeZoneId: string }>)[0].timeZoneId).toBe('Asia/Ho_Chi_Minh');
+
+    const appointmentsConfig = request('/api/dock-yard/appointments', 'get', { warehouseId: 1 });
+    const appointments = await createBlueprintDemoApiAdapter(appointmentsConfig)(appointmentsConfig);
+    expect(appointments.status).toBe(200);
+    expect((appointments.data as Array<{ code: string; status: number }>).some(item => item.code === 'APT-2026-1042' && item.status === 3)).toBe(true);
+
+    const docksConfig = request('/api/dock-yard/docks', 'get', { warehouseId: 1 });
+    const docks = await createBlueprintDemoApiAdapter(docksConfig)(docksConfig);
+    expect((docks.data as Array<{ code: string }>).some(item => item.code === 'D-02')).toBe(true);
+
+    const detailConfig = request('/api/dock-yard/appointments/1042');
+    const detail = await createBlueprintDemoApiAdapter(detailConfig)(detailConfig);
+    expect((detail.data as { events: unknown[] }).events.length).toBeGreaterThan(0);
+
+    const writeConfig = request('/api/dock-yard/appointments/1042/check-in', 'post');
+    await expect(createBlueprintDemoApiAdapter(writeConfig)(writeConfig)).rejects.toMatchObject({
+      response: { status: 405 },
+    });
+  });
+
   it('returns paged business partner and transfer shapes used by production pages', async () => {
     const partnerConfig = request('/api/business-partners', 'get', { role: 'supplier', page: 1, pageSize: 10 });
     const partners = await createBlueprintDemoApiAdapter(partnerConfig)(partnerConfig);

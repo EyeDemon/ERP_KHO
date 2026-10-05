@@ -9,6 +9,7 @@ export type ProductionNavItem = {
 
 export const productionNavigation: ProductionNavItem[] = [
   { path: '/', label: 'Tổng quan', section: 'Vận hành', description: 'Điểm vào nhanh tới các work center và trạng thái demo/runtime.', access: 'always' },
+  { path: '/dock-yard', label: 'Dock & Yard', section: 'Vận hành', description: 'Lịch xe, gate check-in, yard slot, dock assignment và turnaround.', permission: 'dock_appointment.read' },
   { path: '/products', label: 'Sản phẩm', section: 'Dữ liệu nền', description: 'SKU, danh mục, đơn vị tính và barcode của sản phẩm.', permission: 'product.read' },
   { path: '/warehouses', label: 'Kho hàng', section: 'Dữ liệu nền', description: 'Danh mục kho và trạng thái hoạt động.', permission: 'warehouse.read' },
   { path: '/warehouse-structure', label: 'Cấu trúc vị trí', section: 'Dữ liệu nền', description: 'Zone, dãy kệ, kệ, tầng và ô/vị trí theo warehouse scope.', permission: 'location.read' },

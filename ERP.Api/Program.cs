@@ -125,6 +125,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IBusinessPartnerService, E
 builder.Services.AddScoped<ERP.Domain.Interfaces.IWarehouseRepository, ERP.Infrastructure.Repositories.WarehouseRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseService, ERP.Application.Services.WarehouseService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseCalendarService, ERP.Infrastructure.Services.WarehouseCalendarService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IDockYardService, ERP.Infrastructure.Services.DockYardService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IUnitRepository, ERP.Infrastructure.Repositories.UnitRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IUnitService, ERP.Application.Services.UnitService>();

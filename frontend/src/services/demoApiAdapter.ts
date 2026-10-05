@@ -18,6 +18,10 @@ import {
   demoWarehouses,
   demoWarehouseStructures,
   demoWarehouseCalendars,
+  demoDockYardWarehouses,
+  demoDocks,
+  demoYardSlots,
+  demoDockAppointments,
 } from '../mocks/demoApiData';
 import { demoReconciliationRows, demoReconciliationWarehouses } from '../mocks/inventoryReconciliationDemo';
 
@@ -79,7 +83,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         userId: 1,
         username: 'Blueprint Demo',
         role: 'Viewer',
-        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'uom.read', 'partner.read', 'receipt.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
+        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'receipt.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
     }
 
@@ -89,6 +93,32 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       const item = demoWarehouseCalendars.find(calendar => calendar.warehouseId === warehouseId);
       return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy lịch vận hành kho demo.');
     }
+    if (path === '/api/dock-yard/warehouses') return ok(config, demoDockYardWarehouses);
+    if (path === '/api/dock-yard/docks') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      return ok(config, demoDocks.filter(item => !warehouseId || item.warehouseId === warehouseId));
+    }
+    if (path === '/api/dock-yard/yard-slots') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      return ok(config, demoYardSlots.filter(item => !warehouseId || item.warehouseId === warehouseId));
+    }
+    if (path === '/api/dock-yard/appointments') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const status = params.get('status');
+      const direction = params.get('direction');
+      const search = (params.get('search') ?? '').toLowerCase();
+      return ok(config, demoDockAppointments.filter(item =>
+        (!warehouseId || item.warehouseId === warehouseId)
+        && (!status || String(item.status) === status)
+        && (!direction || String(item.direction) === direction)
+        && (!search || [item.code, item.carrierName ?? '', item.vehiclePlate ?? '', item.driverName ?? '', item.dockCode ?? '', item.yardSlotCode ?? ''].join(' ').toLowerCase().includes(search))
+      ));
+    }
+    if (/^\/api\/dock-yard\/appointments\/\d+$/.test(path)) {
+      const item = demoDockAppointments.find(appointment => appointment.id === findNumericId(path));
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy appointment Dock/Yard demo.');
+    }
+
     if (path === '/api/units') return ok(config, demoUnits);
     if (path === '/api/product-categories') return ok(config, demoCategories);
 

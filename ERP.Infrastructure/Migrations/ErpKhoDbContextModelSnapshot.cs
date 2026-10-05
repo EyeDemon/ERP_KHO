@@ -2480,6 +2480,285 @@ namespace ERP.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.Dock", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AllowedVehicleType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<bool>("HazardAllowed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsTemperatureControlled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<bool>("SupportsInbound")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("SupportsOutbound")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarehouseId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Docks_Warehouse_Code");
+
+                    b.ToTable("Docks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Docks_Direction", "[SupportsInbound] = 1 OR [SupportsOutbound] = 1");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.YardSlot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarehouseId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_YardSlots_Warehouse_Code");
+
+                    b.ToTable("YardSlots", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.DockAppointment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ArrivedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CarrierCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("CarrierName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("CheckedInAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CheckedOutAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DockAssignedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DockId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DriverName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("DriverPhone")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("ExceptionCode")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<bool>("Hazardous")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("PlannedEndUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("PlannedStartUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("RequiresTemperatureControl")
+                        .HasColumnType("bit");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("SealNumber")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime?>("ServiceCompletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ServiceStartedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<string>("TrailerPlate")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("VehiclePlate")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("VehicleType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("YardSlotId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("DockId", "PlannedStartUtc", "PlannedEndUtc", "Status");
+
+                    b.HasIndex("WarehouseId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DockAppointments_Warehouse_Code");
+
+                    b.HasIndex("WarehouseId", "PlannedStartUtc", "PlannedEndUtc");
+
+                    b.HasIndex("YardSlotId", "Status");
+
+                    b.ToTable("DockAppointments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DockAppointments_Window", "[PlannedStartUtc] < [PlannedEndUtc]");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.DockAppointmentEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ActorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DockAppointmentId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("DockId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EventAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("YardSlotId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("DockAppointmentId", "EventAtUtc");
+
+                    b.HasIndex("DockId");
+
+                    b.HasIndex("YardSlotId");
+
+                    b.ToTable("DockAppointmentEvents", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Warehouse", b =>
                 {
                     b.Property<int>("Id")
@@ -3488,6 +3767,95 @@ namespace ERP.Infrastructure.Migrations
                 {
                     b.Navigation("Days");
                     b.Navigation("Shifts");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.Dock", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.YardSlot", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.DockAppointment", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Dock", "Dock")
+                        .WithMany()
+                        .HasForeignKey("DockId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.YardSlot", "YardSlot")
+                        .WithMany()
+                        .HasForeignKey("YardSlotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Dock");
+
+                    b.Navigation("Warehouse");
+
+                    b.Navigation("YardSlot");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.DockAppointmentEvent", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.DockAppointment", "Appointment")
+                        .WithMany("Events")
+                        .HasForeignKey("DockAppointmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Dock", null)
+                        .WithMany()
+                        .HasForeignKey("DockId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.YardSlot", null)
+                        .WithMany()
+                        .HasForeignKey("YardSlotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("Appointment");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.DockAppointment", b =>
+                {
+                    b.Navigation("Events");
                 });
 
 #pragma warning restore 612, 618
