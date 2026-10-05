@@ -1,10 +1,12 @@
 using ERP.Application.Services;
+using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Repositories;
+using ERP.Infrastructure.Services;
 using ERP.Application.Options;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
@@ -114,17 +116,27 @@ public class SqlServerExportStockConcurrencyTests
             receiptRepository = new BarrierExportReceiptRepository(receiptRepository, barrier);
         }
 
+        var warehouseId = await context.ExportReceipts.Where(x => x.Id == receiptId).Select(x => x.WarehouseId).SingleAsync();
+        var current = new CurrentUser(userId);
+        var warehouseAuthorization = new TestWarehouseAuthorization(warehouseId);
+        var unitOfWork = new UnitOfWork(context);
+        var stockRepository = new InventoryStockRepository(context);
+        var reservationService = new StockReservationService(
+            context, stockRepository, unitOfWork, warehouseAuthorization, current, new StockReservationOptions());
         var service = new ExportReceiptService(
             receiptRepository,
-            new InventoryStockRepository(context),
+            stockRepository,
             new InventoryTransactionRepository(context),
-            new UnitOfWork(context),
+            unitOfWork,
             new AuditLogRepository(context),
+            warehouseAuthorization,
+            current,
+            reservationService,
             options);
 
         try
         {
-            await service.ApproveAsync(receiptId, userId);
+            await service.ApproveAndDispatchAsync(receiptId, userId);
             return null;
         }
         catch (Exception exception)
@@ -171,6 +183,23 @@ public class SqlServerExportStockConcurrencyTests
         public Task<ExportReceipt> AddAsync(ExportReceipt entity, CancellationToken cancellationToken = default) => _inner.AddAsync(entity, cancellationToken);
         public Task UpdateAsync(ExportReceipt entity, CancellationToken cancellationToken = default) => _inner.UpdateAsync(entity, cancellationToken);
         public Task DeleteAsync(ExportReceipt entity, CancellationToken cancellationToken = default) => _inner.DeleteAsync(entity, cancellationToken);
+    }
+
+    private sealed record CurrentUser(int UserId) : ICurrentUser
+    {
+        public bool IsAuthenticated => true;
+        public bool IsGlobalAdmin => false;
+        public string Role => "Manager";
+    }
+
+    private sealed class TestWarehouseAuthorization(int warehouseId) : IWarehouseAuthorizationService
+    {
+        public Task<IReadOnlyList<int>> GetAccessibleWarehouseIdsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<int>>([warehouseId]);
+        public Task<bool> CanAccessWarehouseAsync(int id, CancellationToken cancellationToken = default) =>
+            Task.FromResult(id == warehouseId);
+        public Task EnsureWarehouseAccessAsync(int id, CancellationToken cancellationToken = default) =>
+            id == warehouseId ? Task.CompletedTask : Task.FromException(new UnauthorizedAccessException());
     }
 
     private sealed class SqlServerScenario : IAsyncDisposable

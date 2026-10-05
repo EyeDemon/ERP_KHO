@@ -8,6 +8,7 @@ import {
   beginPermissionRefresh,
   setCurrentPermissions,
   usePermission,
+  canViewApprovals,
 } from './authorization';
 
 describe('frontend authorization matrix', () => {
@@ -59,6 +60,14 @@ describe('frontend authorization matrix', () => {
     act(() => setCurrentPermissions([]));
     expect(view.result.current).toBe(false);
     view.unmount();
+  });
+
+  it('allows Approval Center visibility from outbound read without relying on role name', () => {
+    localStorage.setItem('role', 'Viewer');
+    setCurrentPermissions(['export_receipt.read']);
+    expect(canViewApprovals()).toBe(true);
+    setCurrentPermissions([]);
+    expect(canViewApprovals()).toBe(false);
   });
 
   it('reads only a valid positive integer user id from session metadata', () => {

@@ -16,7 +16,7 @@ namespace ERP.Api.Tests
             var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController), typeof(PurchaseOrdersController), typeof(AsnsController),
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
-                typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
+                typeof(BusinessPartnersController), typeof(ExportReceiptsController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
                 typeof(PermissionsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
@@ -129,29 +129,39 @@ namespace ERP.Api.Tests
         }
 
         [Fact]
-        public void ExportReceiptsController_Get_RequiresAllRoles()
+        public void ExportReceiptsController_UsesExactCapabilityPermissions()
         {
-            var classAttr = typeof(ExportReceiptsController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
-        }
+            var expected = new Dictionary<string, string[]>
+            {
+                ["GetAll"] = [AppPermissions.ExportReceiptRead],
+                ["GetById"] = [AppPermissions.ExportReceiptRead],
+                ["Create"] = [AppPermissions.ExportReceiptCreate],
+                ["Cancel"] = [AppPermissions.ExportReceiptCancel],
+                ["ApproveAndReserve"] = [AppPermissions.ExportReceiptApprove],
+                ["ApproveAndDispatch"] = [AppPermissions.ExportReceiptApprove, AppPermissions.ExportReceiptDispatch],
+                ["Dispatch"] = [AppPermissions.ExportReceiptDispatch],
+                ["Approve"] = [AppPermissions.ExportReceiptApprove],
+                ["SetCustomer"] = [AppPermissions.ExportReceiptUpdate, AppPermissions.PartnerRead],
+            };
 
-        [Fact]
-        public void ExportReceiptsController_CreateCancel_RequiresAdminManagerOrStaff()
-        {
-            var createMethod = typeof(ExportReceiptsController).GetMethod("Create");
-            var cancelMethod = typeof(ExportReceiptsController).GetMethod("Cancel");
-
-            createMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
-            cancelMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
+            typeof(ExportReceiptsController).GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().BeNull();
+            foreach (var (methodName, permissions) in expected)
+            {
+                var grants = typeof(ExportReceiptsController).GetMethod(methodName)!
+                    .GetCustomAttributes<PermissionAuthorizeAttribute>()
+                    .Select(x => x.Permission)
+                    .ToArray();
+                grants.Should().BeEquivalentTo(permissions, $"ExportReceiptsController.{methodName}");
+                typeof(ExportReceiptsController).GetMethod(methodName)!
+                    .GetCustomAttributes<AuthorizeAttribute>()
+                    .Should().OnlyContain(x => string.IsNullOrEmpty(x.Roles) && string.IsNullOrEmpty(x.Policy));
+            }
         }
 
         [Theory]
-        [InlineData(typeof(ExportReceiptsController), "Approve")]
-        [InlineData(typeof(ExportReceiptsController), "ApproveAndReserve")]
-        [InlineData(typeof(ExportReceiptsController), "ApproveAndDispatch")]
         [InlineData(typeof(StocktakesController), "Approve")]
         [InlineData(typeof(StockTransfersController), "Approve")]
-        public void ApprovalEndpoints_RequireCheckerPolicy(Type controllerType, string methodName)
+        public void LegacyApprovalEndpoints_StillRequireCheckerPolicy(Type controllerType, string methodName)
         {
             controllerType.GetMethod(methodName)!
                 .GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(ApprovalPolicies.Checker);
