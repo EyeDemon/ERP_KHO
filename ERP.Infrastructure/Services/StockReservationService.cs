@@ -18,7 +18,8 @@ public class StockReservationService(
     IUnitOfWork unitOfWork,
     IWarehouseAuthorizationService warehouseAuthorization,
     ICurrentUser currentUser,
-    StockReservationOptions options) : IStockReservationService
+    StockReservationOptions options,
+    IPickingTaskIntegration? pickingTaskIntegration = null) : IStockReservationService
 {
     public async Task<StockReservationDto> CreateAsync(CreateStockReservationDto request, CancellationToken cancellationToken = default)
     {
@@ -82,7 +83,19 @@ public class StockReservationService(
 
     private async Task<StockReservation> ReserveCoreAsync(string sourceType, int? sourceId, string? sourceCode, int warehouseId, int productId, decimal quantity, int userId, DateTime expiresAt, CancellationToken cancellationToken)
     {
-        var stale = await context.StockReservations.Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.ExpiresAt <= DateTime.UtcNow && (x.Status == StockReservationStatus.Active || x.Status == StockReservationStatus.PartiallyConsumed || x.Status == StockReservationStatus.PartiallyAllocated || x.Status == StockReservationStatus.Allocated)).OrderBy(x => x.Id).ToListAsync(cancellationToken);
+        var stale = await context.StockReservations
+            .Where(x => x.ProductId == productId &&
+                        x.WarehouseId == warehouseId &&
+                        x.ExpiresAt <= DateTime.UtcNow &&
+                        (x.Status == StockReservationStatus.Active ||
+                         x.Status == StockReservationStatus.PartiallyConsumed ||
+                         x.Status == StockReservationStatus.PartiallyAllocated ||
+                         x.Status == StockReservationStatus.Allocated) &&
+                        !context.PickingTaskLines.Any(line =>
+                            line.Allocation.ReservationId == x.Id &&
+                            line.PickingTask.Status != PickingTaskStatus.Cancelled))
+            .OrderBy(x => x.Id)
+            .ToListAsync(cancellationToken);
         foreach (var item in stale) await ReleaseCoreAsync(item, null, userId, "Expired before availability check", StockReservationStatus.Expired, cancellationToken);
         if (!await stockRepository.TryReserveAsync(productId, warehouseId, quantity, cancellationToken))
             throw new ConcurrencyException("Không đủ tồn khả dụng để giữ hàng.");
@@ -102,7 +115,16 @@ public class StockReservationService(
     public async Task<IReadOnlyList<InventoryStockConsumption>> ConsumeAsync(StockReservation reservation, int userId, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        if (reservation.ExpiresAt <= now || reservation.Status is not StockReservationStatus.Active and not StockReservationStatus.PartiallyConsumed and not StockReservationStatus.PartiallyAllocated and not StockReservationStatus.Allocated)
+        var expired = reservation.ExpiresAt <= now;
+        var completedPickingProtectsExpiry = expired && await context.PickingTaskLines.AsNoTracking().AnyAsync(
+            line => line.Allocation.ReservationId == reservation.Id &&
+                    line.PickingTask.Status == PickingTaskStatus.Completed,
+            cancellationToken);
+        if ((expired && !completedPickingProtectsExpiry) ||
+            reservation.Status is not StockReservationStatus.Active and
+                not StockReservationStatus.PartiallyConsumed and
+                not StockReservationStatus.PartiallyAllocated and
+                not StockReservationStatus.Allocated)
             throw new ConcurrencyException("Reservation đã hết hạn hoặc không còn hiệu lực.");
         var remaining = reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity;
         if (remaining <= 0)
@@ -169,7 +191,15 @@ public class StockReservationService(
     public async Task ReleaseSourceAsync(string sourceType, int sourceId, int userId, string reason, CancellationToken cancellationToken = default)
     {
         var reservations = await context.StockReservations.Where(x => x.SourceType == sourceType && x.SourceId == sourceId && (x.Status == StockReservationStatus.Active || x.Status == StockReservationStatus.PartiallyConsumed || x.Status == StockReservationStatus.PartiallyAllocated || x.Status == StockReservationStatus.Allocated)).OrderBy(x => x.ProductId).ToListAsync(cancellationToken);
-        foreach (var reservation in reservations) await ReleaseCoreAsync(reservation, null, userId, reason, StockReservationStatus.Cancelled, cancellationToken);
+        foreach (var reservation in reservations)
+            await ReleaseCoreAsync(
+                reservation,
+                null,
+                userId,
+                reason,
+                StockReservationStatus.Cancelled,
+                cancellationToken,
+                sourceWide: true);
     }
 
     public async Task ReleaseAsync(int id, ReleaseStockReservationDto request, CancellationToken cancellationToken = default)
@@ -184,7 +214,14 @@ public class StockReservationService(
         catch { await unitOfWork.RollbackTransactionAsync(); throw; }
     }
 
-    private async Task ReleaseCoreAsync(StockReservation reservation, decimal? requested, int userId, string reason, StockReservationStatus finalStatus, CancellationToken cancellationToken)
+    private async Task ReleaseCoreAsync(
+        StockReservation reservation,
+        decimal? requested,
+        int userId,
+        string reason,
+        StockReservationStatus finalStatus,
+        CancellationToken cancellationToken,
+        bool sourceWide = false)
     {
         if (reservation.Status is not StockReservationStatus.Active and
             not StockReservationStatus.PartiallyConsumed and
@@ -200,6 +237,13 @@ public class StockReservationService(
         var releaseAll = quantity == remaining;
         if (releaseAll)
         {
+            if (pickingTaskIntegration is not null)
+                await pickingTaskIntegration.PrepareReservationReleaseAsync(
+                    reservation.Id,
+                    userId,
+                    reason,
+                    sourceWide,
+                    cancellationToken);
             await ReleaseActiveAllocationsAsync(reservation, userId, reason, cancellationToken);
         }
         else
@@ -293,7 +337,17 @@ public class StockReservationService(
         await unitOfWork.BeginTransactionAsync();
         try
         {
-            var expired = await ScopedQuery().Where(x => x.ExpiresAt <= DateTime.UtcNow && (x.Status == StockReservationStatus.Active || x.Status == StockReservationStatus.PartiallyConsumed || x.Status == StockReservationStatus.PartiallyAllocated || x.Status == StockReservationStatus.Allocated)).OrderBy(x => x.ProductId).ToListAsync(cancellationToken);
+            var expired = await ScopedQuery()
+                .Where(x => x.ExpiresAt <= DateTime.UtcNow &&
+                            (x.Status == StockReservationStatus.Active ||
+                             x.Status == StockReservationStatus.PartiallyConsumed ||
+                             x.Status == StockReservationStatus.PartiallyAllocated ||
+                             x.Status == StockReservationStatus.Allocated) &&
+                            !context.PickingTaskLines.Any(line =>
+                                line.Allocation.ReservationId == x.Id &&
+                                line.PickingTask.Status != PickingTaskStatus.Cancelled))
+                .OrderBy(x => x.ProductId)
+                .ToListAsync(cancellationToken);
             foreach (var item in expired) await ReleaseCoreAsync(item, null, currentUser.UserId, "Expired", StockReservationStatus.Expired, cancellationToken);
             await unitOfWork.CommitTransactionAsync();
             return expired.Count;
@@ -336,7 +390,11 @@ public class StockReservationService(
         var invalidReservations = await context.StockReservations.AsNoTracking()
             .Where(x => allowed.Contains(x.WarehouseId) &&
                 ((x.Status == StockReservationStatus.Active || x.Status == StockReservationStatus.PartiallyConsumed || x.Status == StockReservationStatus.PartiallyAllocated || x.Status == StockReservationStatus.Allocated) &&
-                 (x.Quantity - x.ConsumedQuantity - x.ReleasedQuantity <= 0 || x.ExpiresAt <= DateTime.UtcNow)))
+                 (x.Quantity - x.ConsumedQuantity - x.ReleasedQuantity <= 0 ||
+                  (x.ExpiresAt <= DateTime.UtcNow &&
+                   !context.PickingTaskLines.Any(line =>
+                       line.Allocation.ReservationId == x.Id &&
+                       line.PickingTask.Status != PickingTaskStatus.Cancelled)))))
             .Select(x => new ReservationReconciliationIssueDto { Issue = x.ExpiresAt <= DateTime.UtcNow ? "ExpiredStillActive" : "ActiveWithoutRemaining", ReservationId = x.Id, ProductId = x.ProductId, WarehouseId = x.WarehouseId })
             .ToListAsync(cancellationToken);
         issues.AddRange(invalidReservations);
