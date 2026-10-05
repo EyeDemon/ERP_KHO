@@ -23,6 +23,11 @@ public interface IPackingService
         int handlingUnitId,
         PackingStateCommandDto request,
         CancellationToken cancellationToken = default);
+    Task<PackingSessionDto> CancelHandlingUnitAsync(
+        int sessionId,
+        int handlingUnitId,
+        PackingStateCommandDto request,
+        CancellationToken cancellationToken = default);
     Task<PackingSessionDto> NestHandlingUnitAsync(
         int sessionId,
         int handlingUnitId,
