@@ -78,7 +78,6 @@ CHECK ([Quantity] > 0
         migrationBuilder.CreateIndex("IX_StockAllocations_ReservationId", "StockAllocations", "ReservationId");
         migrationBuilder.CreateIndex("IX_StockAllocations_AllocatedBy", "StockAllocations", "AllocatedBy");
         migrationBuilder.CreateIndex("IX_StockAllocations_ReleasedBy", "StockAllocations", "ReleasedBy");
-        migrationBuilder.CreateIndex("IX_StockAllocations_WarehouseId", "StockAllocations", "WarehouseId");
         migrationBuilder.CreateIndex("IX_StockAllocations_ProductId", "StockAllocations", "ProductId");
         migrationBuilder.CreateIndex("IX_StockAllocations_LocationId", "StockAllocations", "LocationId");
         migrationBuilder.CreateIndex(
