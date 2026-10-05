@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../services/apiClient';
-import { currentRole, currentUserId } from '../services/authorization';
+import { currentUserId, hasPermission, usePermissionSet } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 
@@ -57,11 +57,14 @@ interface ReceiptDetailForm {
 }
 
 const ExportReceipts = () => {
-  const role = currentRole();
+  usePermissionSet();
   const userId = currentUserId();
-  // Export authorization has not moved to permission codes in this inbound slice.
-  const canOperate = role !== 'Viewer';
-  const canApproveAndReserve = role === 'Admin' || role === 'Manager';
+  const canCreate = hasPermission('export_receipt.create');
+  const canUpdate = hasPermission('export_receipt.update');
+  const canApproveAndReserve = hasPermission('export_receipt.approve');
+  const canDispatch = hasPermission('export_receipt.dispatch');
+  const canCancel = hasPermission('export_receipt.cancel');
+  const canReadPartners = hasPermission('partner.read');
   const [receipts, setReceipts] = useState<ExportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -167,10 +170,9 @@ const ExportReceipts = () => {
     }
   };
 
-  const handleWorkflowAction = async (id: number, action: 'approve-and-reserve' | 'approve-and-dispatch' | 'dispatch') => {
+  const handleWorkflowAction = async (id: number, action: 'approve-and-reserve' | 'dispatch') => {
     const messages = {
       'approve-and-reserve': 'Phiếu sẽ được duyệt và giữ hàng. Tồn thực tế chưa giảm cho đến khi thủ kho xác nhận xuất.',
-      'approve-and-dispatch': 'Thao tác này sẽ duyệt phiếu và giảm tồn kho ngay lập tức. Bạn có chắc hàng đã được giao khỏi kho?',
       dispatch: 'Xác nhận hàng đã rời kho. Tồn thực tế sẽ giảm ngay.'
     };
     if (!confirm(messages[action])) return;
@@ -313,7 +315,7 @@ const ExportReceipts = () => {
       {successMsg && <div style={{ color: 'green', marginBottom: '10px' }}>{successMsg}</div>}
       {receipts.some(receipt => !receipt.writeEnabled) && <div role="status" style={{ color: '#92400e', marginBottom: '10px' }}>Workflow xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.</div>}
       
-      {canOperate && <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
+      {canCreate && <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
         <h3>Tạo Phiếu Xuất Kho</h3>
         <form onSubmit={handleCreate}>
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
@@ -332,7 +334,7 @@ const ExportReceipts = () => {
               <label style={{ display: 'block' }}>Ghi chú phiếu</label>
               <input value={note} onChange={e => setNote(e.target.value)} />
             </div>
-            <div><label style={{display:'block'}}>Khách hàng</label><select aria-label="Khách hàng" value={customerId} onChange={e=>setCustomerId(e.target.value?Number(e.target.value):'')}><option value="">-- Không chọn --</option>{customers.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}</select></div>
+            {canReadPartners && <div><label style={{display:'block'}}>Khách hàng</label><select aria-label="Khách hàng" value={customerId} onChange={e=>setCustomerId(e.target.value?Number(e.target.value):'')}><option value="">-- Không chọn --</option>{customers.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}</select></div>}
           </div>
 
           <h4>Chi tiết phiếu</h4>
@@ -431,14 +433,13 @@ const ExportReceipts = () => {
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
                 <button onClick={() => handleViewDetails(r.id)} style={{ cursor: 'pointer', marginRight: '5px' }}>Chi tiết</button>
                 <button disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)} style={{ cursor: 'pointer', marginRight: '5px' }}>{printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}</button>
-                {canOperate && r.status === 'Draft' && (
+                {r.status === 'Draft' && (
                   <>
                     {canApproveAndReserve && r.createdBy !== userId && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')} style={{ cursor: 'pointer', marginRight: '5px' }}>Duyệt và giữ hàng</button>}
-                    {(role === 'Admin' || role === 'Manager') && r.createdBy !== userId && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Duyệt và xuất ngay</button>}
-                    <button disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy</button>
+                    {canCancel && <button disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy</button>}
                   </>
                 )}
-                {canOperate && r.status === 'Approved' && <><button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Xác nhận xuất kho</button><button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy và giải phóng hàng</button></>}
+                {r.status === 'Approved' && <>{canDispatch && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Xác nhận xuất kho</button>}{canCancel && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy và giải phóng hàng</button>}</>}
               </td>
             </tr>
           ))}
@@ -451,7 +452,7 @@ const ExportReceipts = () => {
           <h3>Chi Tiết Phiếu Xuất: {selectedReceipt.code}</h3>
           <p><strong>Kho:</strong> {selectedReceipt.warehouseName}</p>
           <p><strong>Khách hàng:</strong> {selectedReceipt.customerCode ? `${selectedReceipt.customerCode} - ${selectedReceipt.customerName}` : '—'}</p>
-          {selectedReceipt.status === 'Draft' && canOperate && <p><label>Đổi khách hàng <select aria-label="Đổi khách hàng" disabled={partnerUpdating} value={selectedReceipt.customerId||''} onChange={e=>void changeCustomer(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{customers.filter(x=>x.isActive||x.id===selectedReceipt.customerId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</p>}
+          {selectedReceipt.status === 'Draft' && canUpdate && canReadPartners && <p><label>Đổi khách hàng <select aria-label="Đổi khách hàng" disabled={partnerUpdating} value={selectedReceipt.customerId||''} onChange={e=>void changeCustomer(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{customers.filter(x=>x.isActive||x.id===selectedReceipt.customerId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</p>}
           <p><strong>Trạng thái:</strong> {selectedReceipt.status}</p>
           <p><strong>Ghi chú:</strong> {selectedReceipt.note || '-'}</p>
           <p><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</p>
