@@ -301,7 +301,12 @@ public sealed class SqlServerApprovalQueueRejectTests
 
     private static async Task GrantInboundAsync(ErpKhoDbContext db, int roleId)
     {
-        foreach (var permission in await db.Permissions.Where(p => p.Code == "receipt.read" || p.Code == "approval.reject" || p.Code == "receipt.complete").ToListAsync())
+        var codes = new[]
+        {
+            "receipt.read", "approval.reject", "receipt.complete",
+            "export_receipt.read", "export_receipt.approve", "export_receipt.cancel"
+        };
+        foreach (var permission in await db.Permissions.Where(p => codes.Contains(p.Code)).ToListAsync())
             db.RolePermissions.Add(new RolePermission { RoleId = roleId, PermissionId = permission.Id });
         await db.SaveChangesAsync();
     }

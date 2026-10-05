@@ -140,6 +140,75 @@ public sealed class SqlServerStockReservationTests
     }
 
     [SqlServerFact]
+    public async Task TwoStepDispatch_WritesLocationTraceableLedgerForActualConsumedBuckets()
+    {
+        var fixture = await CreateFixtureAsync(50);
+        try
+        {
+            int firstLocationId;
+            int secondLocationId;
+            await using (var setup = CreateContext())
+            {
+                var firstStock = await setup.InventoryStocks.SingleAsync(x =>
+                    x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+                firstLocationId = firstStock.LocationId!.Value;
+                firstStock.Quantity = 20;
+
+                var secondLocation = new WarehouseLocation
+                {
+                    WarehouseId = fixture.WarehouseId,
+                    Code = $"PICK-{Guid.NewGuid():N}"[..20],
+                    Name = "Pick location 2",
+                    LocationType = WarehouseLocationType.Legacy,
+                    IsActive = true,
+                    IsPickable = true,
+                    CreatedBy = fixture.CreatorId
+                };
+                setup.WarehouseLocations.Add(secondLocation);
+                await setup.SaveChangesAsync();
+                secondLocationId = secondLocation.Id;
+                setup.InventoryStocks.Add(new InventoryStock
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    LocationId = secondLocationId,
+                    Quantity = 30,
+                    Status = InventoryStatus.Available
+                });
+                await setup.SaveChangesAsync();
+            }
+
+            var receiptId = await CreateExportReceiptAsync(fixture, 40);
+            await using (var approve = CreateContext())
+                await CreateExportService(approve, fixture.UserId).ApproveAndReserveAsync(receiptId, fixture.UserId);
+
+            await using (var dispatch = CreateContext())
+                await CreateExportService(dispatch, fixture.CreatorId).DispatchAsync(receiptId, fixture.CreatorId);
+
+            await using var verify = CreateContext();
+            var ledger = await verify.InventoryTransactions.AsNoTracking()
+                .Where(x => x.ReferenceType == "ExportReceipt" && x.ReferenceId == receiptId)
+                .OrderBy(x => x.LocationId)
+                .Select(x => new { x.LocationId, x.Quantity })
+                .ToListAsync();
+
+            ledger.Should().HaveCount(2);
+            ledger.Should().ContainSingle(x => x.LocationId == firstLocationId && x.Quantity == 20);
+            ledger.Should().ContainSingle(x => x.LocationId == secondLocationId && x.Quantity == 20);
+            ledger.Sum(x => x.Quantity).Should().Be(40);
+
+            var stocks = await verify.InventoryStocks.AsNoTracking()
+                .Where(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId)
+                .OrderBy(x => x.LocationId)
+                .Select(x => new { x.LocationId, x.Quantity, x.ReservedQuantity })
+                .ToListAsync();
+            stocks.Should().ContainSingle(x => x.LocationId == firstLocationId && x.Quantity == 0 && x.ReservedQuantity == 0);
+            stocks.Should().ContainSingle(x => x.LocationId == secondLocationId && x.Quantity == 10 && x.ReservedQuantity == 0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task ApproveReserveThenDispatchAndCancelKeepPhysicalAndReservedStockCorrect()
     {
         var fixture = await CreateFixtureAsync(100);

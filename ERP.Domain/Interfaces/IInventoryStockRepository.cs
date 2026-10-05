@@ -3,6 +3,8 @@ using ERP.Domain.Enums;
 
 namespace ERP.Domain.Interfaces
 {
+    public sealed record InventoryStockConsumption(int LocationId, decimal Quantity);
+
     public interface IInventoryStockRepository : IRepository<InventoryStock>
     {
         Task<InventoryStock?> GetByProductAndWarehouseAsync(int productId, int warehouseId);
@@ -16,6 +18,7 @@ namespace ERP.Domain.Interfaces
             CancellationToken cancellationToken = default);
         Task<bool> TryReserveAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default);
         Task<bool> TryConsumeReservationAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<InventoryStockConsumption>> ConsumeReservationWithBreakdownAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default);
         Task<bool> TryReleaseReservationAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default);
     }
 }

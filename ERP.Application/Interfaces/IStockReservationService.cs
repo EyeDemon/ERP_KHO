@@ -1,5 +1,6 @@
 using ERP.Application.DTOs;
 using ERP.Domain.Entities;
+using ERP.Domain.Interfaces;
 
 namespace ERP.Application.Interfaces;
 
@@ -13,6 +14,6 @@ public interface IStockReservationService
     Task<IReadOnlyList<ReservationReconciliationIssueDto>> ReconcileAsync(CancellationToken cancellationToken = default);
     Task<StockReservation> ReserveForExportAsync(int exportReceiptId, string exportCode, int warehouseId, int productId, decimal quantity, int userId, CancellationToken cancellationToken = default);
     Task<StockReservation> GetExportReservationAsync(int exportReceiptId, int warehouseId, int productId, CancellationToken cancellationToken = default);
-    Task ConsumeAsync(StockReservation reservation, int userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<InventoryStockConsumption>> ConsumeAsync(StockReservation reservation, int userId, CancellationToken cancellationToken = default);
     Task ReleaseSourceAsync(string sourceType, int sourceId, int userId, string reason, CancellationToken cancellationToken = default);
 }

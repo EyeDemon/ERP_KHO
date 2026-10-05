@@ -194,8 +194,8 @@ namespace ERP.Application.Services
                             receipt.Id, receipt.Code, receipt.WarehouseId, detail.ProductId, detail.Quantity, approvedByUserId);
                         if (mode == ExportDispatchMode.DispatchOnApproval)
                         {
-                            await _stockReservationService.ConsumeAsync(reservation, approvedByUserId);
-                            await AddExportTransactionAsync(receipt, detail, approvedByUserId);
+                            var consumptions = await _stockReservationService.ConsumeAsync(reservation, approvedByUserId);
+                            await AddExportTransactionsAsync(receipt, detail, consumptions, approvedByUserId);
                         }
                     }
 
@@ -255,8 +255,8 @@ namespace ERP.Application.Services
                 foreach (var detail in receipt.Details.OrderBy(x => x.ProductId))
                 {
                     var reservation = await _stockReservationService.GetExportReservationAsync(receipt.Id, receipt.WarehouseId, detail.ProductId);
-                    await _stockReservationService.ConsumeAsync(reservation, userId);
-                    await AddExportTransactionAsync(receipt, detail, userId);
+                    var consumptions = await _stockReservationService.ConsumeAsync(reservation, userId);
+                    await AddExportTransactionsAsync(receipt, detail, consumptions, userId);
                 }
 
                 receipt.Status = ReceiptStatus.Dispatched;
@@ -285,20 +285,33 @@ namespace ERP.Application.Services
             }
         }
 
-        private async Task AddExportTransactionAsync(ERP.Domain.Entities.ExportReceipt receipt, ERP.Domain.Entities.ExportReceiptDetail detail, int userId)
+        private async Task AddExportTransactionsAsync(
+            ERP.Domain.Entities.ExportReceipt receipt,
+            ERP.Domain.Entities.ExportReceiptDetail detail,
+            IReadOnlyList<InventoryStockConsumption> consumptions,
+            int userId)
         {
-            await _inventoryTransactionRepository.AddAsync(new ERP.Domain.Entities.InventoryTransaction
-                        {
-                            ProductId = detail.ProductId,
-                            WarehouseId = receipt.WarehouseId,
-                            TransactionType = TransactionType.Export,
-                            Quantity = detail.Quantity,
-                            ReferenceId = receipt.Id,
-                            ReferenceType = "ExportReceipt",
-                            TransactionDate = DateTime.UtcNow,
-                            CreatedBy = userId,
-                            Note = detail.Note
-                        });
+            if (consumptions.Count == 0 || consumptions.Any(x => x.LocationId <= 0 || x.Quantity <= 0) ||
+                consumptions.Sum(x => x.Quantity) != detail.Quantity)
+                throw new ConcurrencyException("Không thể đối soát vị trí tồn kho đã xuất.");
+
+            foreach (var consumption in consumptions)
+            {
+                await _inventoryTransactionRepository.AddAsync(new ERP.Domain.Entities.InventoryTransaction
+                {
+                    ProductId = detail.ProductId,
+                    WarehouseId = receipt.WarehouseId,
+                    LocationId = consumption.LocationId,
+                    InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Export,
+                    Quantity = consumption.Quantity,
+                    ReferenceId = receipt.Id,
+                    ReferenceType = "ExportReceipt",
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = userId,
+                    Note = detail.Note
+                });
+            }
         }
 
         public async Task<IEnumerable<ExportReceiptDto>> GetAllAsync()

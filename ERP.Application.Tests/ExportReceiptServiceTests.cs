@@ -43,6 +43,12 @@ namespace ERP.Application.Tests
             _mockReservationService.Setup(x => x.ReserveForExportAsync(
                     It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new StockReservation { Id = 1, SourceType = "ExportReceipt" });
+            _mockReservationService.Setup(x => x.ConsumeAsync(
+                    It.IsAny<StockReservation>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new InventoryStockConsumption[]
+                {
+                    new(101, 10m)
+                });
             _mockStockRepo
                 .Setup(x => x.TryDecreaseStockAsync(
                     It.IsAny<int>(),
@@ -435,7 +441,7 @@ namespace ERP.Application.Tests
             receipt.DispatchedBy.Should().Be(99);
             _mockReservationService.Verify(x => x.ConsumeAsync(reservation, 99, It.IsAny<CancellationToken>()), Times.Once);
             _mockTransactionRepo.Verify(x => x.AddAsync(It.Is<InventoryTransaction>(t =>
-                t.TransactionType == TransactionType.Export && t.ReferenceId == 1 && t.ProductId == 1 && t.Quantity == 10),
+                t.TransactionType == TransactionType.Export && t.ReferenceId == 1 && t.ProductId == 1 && t.LocationId == 101 && t.Quantity == 10),
                 It.IsAny<CancellationToken>()), Times.Once);
             _mockAuditRepo.Verify(x => x.AddAsync(It.Is<AuditLog>(a => a.Action == "ExportReceipt.ApprovedAndDispatched"),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -686,8 +692,34 @@ namespace ERP.Application.Tests
             receipt.DispatchedBy.Should().Be(99);
             _mockReservationService.Verify(x => x.ConsumeAsync(reservation, 99, It.IsAny<CancellationToken>()), Times.Once);
             _mockTransactionRepo.Verify(x => x.AddAsync(It.Is<InventoryTransaction>(t =>
-                t.TransactionType == TransactionType.Export && t.ReferenceId == 1 && t.ProductId == 1 && t.Quantity == 10 && t.CreatedBy == 99),
+                t.TransactionType == TransactionType.Export && t.ReferenceId == 1 && t.ProductId == 1 && t.LocationId == 101 && t.Quantity == 10 && t.CreatedBy == 99),
                 It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task DispatchAsync_ConsumptionBreakdownDoesNotMatchLine_RollsBackWithoutLedger()
+        {
+            var reservation = new StockReservation { Id = 77, SourceType = "ExportReceipt" };
+            var receipt = new ExportReceipt
+            {
+                Id = 1,
+                Code = "EX-1",
+                WarehouseId = 1,
+                Status = ReceiptStatus.Approved,
+                DispatchMode = ExportDispatchMode.RequireSeparateDispatch,
+                ApprovedBy = 88,
+                Details = new List<ExportReceiptDetail> { new() { ProductId = 1, Quantity = 10 } }
+            };
+            _mockExportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(receipt);
+            _mockReservationService.Setup(x => x.GetExportReservationAsync(1, 1, 1, It.IsAny<CancellationToken>())).ReturnsAsync(reservation);
+            _mockReservationService.Setup(x => x.ConsumeAsync(reservation, 99, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new InventoryStockConsumption[] { new(101, 9m) });
+
+            Func<Task> act = () => _workflowService.DispatchAsync(1, 99);
+
+            await act.Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>().WithMessage("*đối soát vị trí tồn kho*");
+            _mockTransactionRepo.Verify(x => x.AddAsync(It.IsAny<InventoryTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
+            _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
         }
 
         [Fact]
