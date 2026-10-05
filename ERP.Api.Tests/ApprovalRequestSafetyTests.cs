@@ -1,5 +1,4 @@
 using ERP.Api.Infrastructure;
-using System.Data;
 using FluentAssertions;
 using System.Reflection;
 
@@ -18,10 +17,10 @@ public sealed class ApprovalRequestSafetyTests
     [Fact]
     public void DockYardOccupancyCommandsUseSerializableIdempotencyTransaction()
     {
-        IdempotentCommandFilter.IsolationLevelFor("DockYard.Appointment.CheckIn").Should().Be(IsolationLevel.Serializable);
-        IdempotentCommandFilter.IsolationLevelFor("DockYard.Appointment.AssignDock").Should().Be(IsolationLevel.Serializable);
-        IdempotentCommandFilter.IsolationLevelFor("DockYard.Appointment.Confirm").Should().Be(IsolationLevel.ReadCommitted);
-        IdempotentCommandFilter.IsolationLevelFor("StockTransfer.Approve").Should().Be(IsolationLevel.ReadCommitted);
+        IdempotentCommandFilter.RequiresSerializableIsolation("DockYard.Appointment.CheckIn").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("DockYard.Appointment.AssignDock").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("DockYard.Appointment.Confirm").Should().BeFalse();
+        IdempotentCommandFilter.RequiresSerializableIsolation("StockTransfer.Approve").Should().BeFalse();
     }
 
     [Fact]
