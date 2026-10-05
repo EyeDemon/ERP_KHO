@@ -16,6 +16,43 @@ public sealed class PickingTaskIntegration(ErpKhoDbContext context) : IPickingTa
         StockAllocationStatus.Picked
     ];
 
+    public async Task PrepareReservationReleaseAsync(
+        int reservationId,
+        int actorId,
+        string reason,
+        bool sourceWide,
+        CancellationToken cancellationToken = default)
+    {
+        var task = await context.PickingTasks
+            .Include(x => x.Lines).ThenInclude(x => x.Allocation)
+            .SingleOrDefaultAsync(
+                x => x.Lines.Any(line => line.Allocation.ReservationId == reservationId) &&
+                     x.Status != PickingTaskStatus.Cancelled,
+                cancellationToken);
+        if (task is null) return;
+
+        if (!sourceWide && task.SourceId.HasValue)
+            throw new ConcurrencyException("Reservation thuộc Picking task theo chứng từ nguồn. Hãy hủy từ chứng từ nguồn thay vì release riêng lẻ.");
+
+        if (task.Status is not PickingTaskStatus.Open and not PickingTaskStatus.Assigned)
+            throw new ConcurrencyException("Picking đã bắt đầu hoặc hoàn tất. Không thể release reservation/allocation trực tiếp.");
+
+        task.Status = PickingTaskStatus.Cancelled;
+        context.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorId,
+            Action = "PickingTask.CancelledBySourceRelease",
+            EntityName = "PickingTask",
+            EntityId = task.Id,
+            WarehouseId = task.WarehouseId,
+            Timestamp = DateTime.UtcNow,
+            NewValues = $"Reason: {reason}; ReservationId: {reservationId}; SourceWide: {sourceWide}",
+            Result = "Success",
+            Severity = "Information"
+        });
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task EnsureForReservationAsync(
         int reservationId,
         int actorId,
