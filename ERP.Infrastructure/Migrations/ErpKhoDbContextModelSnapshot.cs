@@ -2320,6 +2320,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<DateTime?>("StagedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("StagingLocationId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -2344,6 +2347,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("PackingSessionId")
                         .IsUnique();
+
+                    b.HasIndex("StagingLocationId");
 
                     b.HasIndex("SourceType", "SourceId");
 
@@ -4432,6 +4437,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "StagingLocation")
+                        .WithMany()
+                        .HasForeignKey("StagingLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
                         .WithMany()
                         .HasForeignKey("WarehouseId")
@@ -4445,6 +4455,8 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("DockAppointment");
 
                     b.Navigation("PackingSession");
+
+                    b.Navigation("StagingLocation");
 
                     b.Navigation("Warehouse");
                 });
