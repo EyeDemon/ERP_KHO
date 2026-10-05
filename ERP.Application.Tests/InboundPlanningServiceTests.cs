@@ -108,6 +108,14 @@ public sealed class InboundPlanningServiceTests : IDisposable
             modelBuilder.Entity<BusinessPartner>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
             modelBuilder.Entity<PurchaseOrder>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
             modelBuilder.Entity<Asn>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
+            modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.OrderedQuantity).HasConversion<double>();
+            modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.BaseOrderedQuantity).HasConversion<double>();
+            modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.ConversionFactorSnapshot).HasConversion<double>();
+            modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.AllowedOverReceiptPct).HasConversion<double>();
+            modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.AllowedUnderReceiptPct).HasConversion<double>();
+            modelBuilder.Entity<AsnLine>().Property(x=>x.ExpectedQuantity).HasConversion<double>();
+            modelBuilder.Entity<AsnLine>().Property(x=>x.BaseExpectedQuantity).HasConversion<double>();
+            modelBuilder.Entity<AsnLine>().Property(x=>x.ConversionFactorSnapshot).HasConversion<double>();
         }
     }
 }
