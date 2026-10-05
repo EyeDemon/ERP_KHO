@@ -4,6 +4,8 @@ import {
   demoCategories,
   demoExportReceipts,
   demoImportReceipts,
+  demoPurchaseOrders,
+  demoAsns,
   demoInOut,
   demoInventoryStocks,
   demoInventoryTransactions,
@@ -83,7 +85,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         userId: 1,
         username: 'Blueprint Demo',
         role: 'Viewer',
-        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'receipt.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
+        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
     }
 
@@ -314,6 +316,24 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     if (path === '/api/reports/inventory-in-out-stock') return ok(config, demoInOut);
     if (path === '/api/reports/inventory/export' || path === '/api/reports/inventory-in-out-stock/export') {
       return ok(config, new Blob(['Blueprint demo export - no production data'], { type: 'text/plain' }));
+    }
+
+    if (path === '/api/purchase-orders') {
+      const status = params.get('status');
+      return ok(config, demoPurchaseOrders.filter(item => !status || item.status === status));
+    }
+    if (/^\/api\/purchase-orders\/\d+$/.test(path)) {
+      const item = demoPurchaseOrders.find(order => order.id === findNumericId(path));
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy đơn mua demo.');
+    }
+
+    if (path === '/api/asns') {
+      const status = params.get('status');
+      return ok(config, demoAsns.filter(item => !status || item.status === status));
+    }
+    if (/^\/api\/asns\/\d+$/.test(path)) {
+      const item = demoAsns.find(asn => asn.id === findNumericId(path));
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy ASN demo.');
     }
 
     if (path === '/api/importreceipts') return ok(config, demoImportReceipts);

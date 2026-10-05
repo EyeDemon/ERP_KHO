@@ -17,6 +17,8 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/warehouse-calendar', label: 'Lịch & ca kho', section: 'Dữ liệu nền', description: 'Timezone, lịch tuần, cutoff và capacity theo ca vận hành.', permission: 'warehouse.read' },
   { path: '/units', label: 'Đơn vị tính', section: 'Dữ liệu nền', description: 'Danh mục đơn vị tính dùng trong chứng từ và tồn kho.', permission: 'uom.read' },
   { path: '/business-partners', label: 'Đối tác', section: 'Dữ liệu nền', description: 'Nhà cung cấp, khách hàng và thông tin liên hệ.', permission: 'partner.read' },
+  { path: '/purchase-orders', label: 'Đơn mua (PO)', section: 'Inbound', description: 'Expected inbound từ ERP/Procurement, dung sai và trạng thái nhận hàng.', permission: 'purchase_order.read' },
+  { path: '/asns', label: 'ASN dự kiến', section: 'Inbound', description: 'Lô hàng dự kiến, vận chuyển, arrival và handoff sang tiếp nhận.', permission: 'asn.read' },
   { path: '/import-receipts', label: 'Phiếu nhập kho', section: 'Inbound', description: 'Nhận hàng, QC, discrepancy và posting nhập kho.', permission: 'receipt.read' },
   { path: '/putaway-tasks', label: 'Cất hàng', section: 'Inbound', description: 'Nhiệm vụ putaway từ khu nhận hàng tới location đích.', permission: 'putaway.read' },
   { path: '/export-receipts', label: 'Phiếu xuất kho', section: 'Outbound', description: 'Chứng từ xuất, reservation và dispatch hàng khỏi kho.', access: 'always' },

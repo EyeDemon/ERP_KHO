@@ -13,6 +13,8 @@ export const blueprintDemoReadPermissions = [
   'location.read',
   'uom.read',
   'partner.read',
+  'purchase_order.read',
+  'asn.read',
   'receipt.read',
   'receiving_discrepancy.read',
   'reason_code.read',

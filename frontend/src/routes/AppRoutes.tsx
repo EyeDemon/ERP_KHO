@@ -14,6 +14,8 @@ import DockYard from '../pages/DockYard';
 import Units from '../pages/Units';
 import ExportReceipts from '../pages/ExportReceipts';
 import ImportReceipts from '../pages/ImportReceipts';
+import PurchaseOrders from '../pages/PurchaseOrders';
+import Asns from '../pages/Asns';
 import Inventory from '../pages/Inventory';
 import InventoryReconciliation from '../pages/InventoryReconciliation';
 import Stocktakes from '../pages/Stocktakes';
@@ -80,6 +82,8 @@ const AppRoutes = () => {
         <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
         <Route path="business-partners" element={<PermissionRoute permission="partner.read"><BusinessPartners /></PermissionRoute>} />
         <Route path="export-receipts" element={<ExportReceipts />} />
+        <Route path="purchase-orders" element={<PermissionRoute permission="purchase_order.read"><PurchaseOrders /></PermissionRoute>} />
+        <Route path="asns" element={<PermissionRoute permission="asn.read"><Asns /></PermissionRoute>} />
         <Route path="import-receipts" element={<PermissionRoute permission="receipt.read"><ImportReceipts /></PermissionRoute>} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="inventory-reconciliation" element={<InventoryReconciliation />} />
