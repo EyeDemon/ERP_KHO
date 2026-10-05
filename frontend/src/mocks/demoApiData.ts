@@ -245,6 +245,52 @@ export const demoTransfers = [
   { id: 16, code: 'TRF-2026-0016', sourceWarehouseId: 1, sourceWarehouseName: 'DC Hồ Chí Minh', destinationWarehouseId: 2, destinationWarehouseName: 'Kho Đà Nẵng', status: 'Received', note: 'Demo transfer received', createdBy: 1, createdAt: '2026-10-02T10:30:00Z', receivedAt: '2026-10-03T06:40:00Z', details: [{ productId: 3, productCode: 'SKU-2001', productName: 'Tai nghe Bluetooth TWS', requestedQuantity: 10, dispatchedQuantity: 10, receivedQuantity: 10, missingQuantity: 0, damagedQuantity: 0, inTransitQuantity: 0 }] },
 ];
 
+export const demoPurchaseOrders = [
+  {
+    id: 41, externalPoId: 'ERP-PO-4521', sourceSystem: 'ERP', code: 'PO-2026-4521',
+    supplierCode: 'SUP-001', supplierName: 'Công ty Nông Sản Cao Nguyên',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 'Open',
+    orderDate: '2026-10-03T00:00:00Z', expectedDate: '2026-10-06T00:00:00Z',
+    currency: 'VND', externalVersion: 'v18', baseOrderedQuantity: 1200, rowVersion: null,
+    lines: [
+      { id: 401, externalLineId: '10', lineNo: 1, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', orderedQuantity: 1200, operationUnitCode: 'GOI', baseOrderedQuantity: 1200, baseUnitCode: 'GOI', allowedOverReceiptPct: 5, allowedUnderReceiptPct: 0 },
+    ],
+  },
+  {
+    id: 42, externalPoId: 'ERP-PO-4529', sourceSystem: 'ERP', code: 'PO-2026-4529',
+    supplierCode: 'SUP-001', supplierName: 'Công ty Nông Sản Cao Nguyên',
+    warehouseId: 2, warehouseName: 'Kho Đà Nẵng', status: 'PartiallyReceived',
+    orderDate: '2026-10-02T00:00:00Z', expectedDate: '2026-10-05T00:00:00Z',
+    currency: 'VND', externalVersion: 'v7', baseOrderedQuantity: 2400, rowVersion: null,
+    lines: [
+      { id: 402, externalLineId: '10', lineNo: 1, productId: 6, productCode: 'SKU-4001', productName: 'Nước khoáng 500ml', orderedQuantity: 2400, operationUnitCode: 'CHAI', baseOrderedQuantity: 2400, baseUnitCode: 'CHAI', allowedOverReceiptPct: 2, allowedUnderReceiptPct: 0 },
+    ],
+  },
+];
+
+export const demoAsns = [
+  {
+    id: 51, code: 'ASN-2026-1051', purchaseOrderId: 41, purchaseOrderCode: 'PO-2026-4521',
+    supplierCode: 'SUP-001', supplierName: 'Công ty Nông Sản Cao Nguyên',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 'InTransit',
+    expectedArrivalAtUtc: '2026-10-05T08:00:00Z', baseExpectedQuantity: 1200,
+    carrierName: 'Fast Logistics', vehiclePlate: '51C-882.14', note: 'Lô hàng theo PO-2026-4521', rowVersion: null,
+    lines: [
+      { id: 501, purchaseOrderLineId: 401, lineNo: 1, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', expectedQuantity: 1200, operationUnitCode: 'GOI', baseExpectedQuantity: 1200, baseUnitCode: 'GOI' },
+    ],
+  },
+  {
+    id: 52, code: 'ASN-2026-1052', purchaseOrderId: 42, purchaseOrderCode: 'PO-2026-4529',
+    supplierCode: 'SUP-001', supplierName: 'Công ty Nông Sản Cao Nguyên',
+    warehouseId: 2, warehouseName: 'Kho Đà Nẵng', status: 'Arrived',
+    expectedArrivalAtUtc: '2026-10-05T06:30:00Z', baseExpectedQuantity: 1200,
+    carrierName: 'Central Freight', vehiclePlate: '43C-711.22', note: 'Đã đến gate, chờ tiếp nhận', rowVersion: null,
+    lines: [
+      { id: 502, purchaseOrderLineId: 402, lineNo: 1, productId: 6, productCode: 'SKU-4001', productName: 'Nước khoáng 500ml', expectedQuantity: 1200, operationUnitCode: 'CHAI', baseExpectedQuantity: 1200, baseUnitCode: 'CHAI' },
+    ],
+  },
+];
+
 export const demoPutawayTasks = [
   { id: 3321, receiptCode: 'GR-2026-1038', warehouseName: 'DC Hồ Chí Minh', status: 'InProgress', assignedUserId: 101, requiredBaseQuantity: 240, movedBaseQuantity: 120, rowVersion: 'AAAAAAAAPUT1', items: [{ id: 1, productCode: 'SKU-1002', productName: 'Trà Ô Long 250g', inventoryStatus: 'Available', sourceLocationCode: 'RECV-01', operationUnitCode: 'HOP', baseUnitCode: 'HOP', requiredOperationQuantity: 240, requiredBaseQuantity: 240, movedBaseQuantity: 120, remainingBaseQuantity: 120 }] },
 ];
@@ -363,6 +409,8 @@ export const demoPermissionCatalog = [
   { code: 'warehouse_zone.manage', description: 'Quản lý cấu trúc khu vực kho' },
   { code: 'location.read', description: 'Xem vị trí kho' },
   { code: 'location.manage', description: 'Quản lý vị trí kho' },
+  { code: 'purchase_order.read', description: 'Xem đơn mua' },
+  { code: 'asn.read', description: 'Xem ASN dự kiến' },
   { code: 'receipt.read', description: 'Xem phiếu nhập' },
   { code: 'putaway.read', description: 'Xem nhiệm vụ cất hàng' },
 ];

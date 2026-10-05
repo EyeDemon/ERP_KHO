@@ -73,6 +73,8 @@ describe('Blueprint demo API adapter', () => {
     const endpoints = [
       '/api/InventoryStocks/current?',
       '/api/approvals/queue?pageIndex=1&pageSize=20',
+      '/api/purchase-orders',
+      '/api/asns',
       '/api/importreceipts',
       '/api/exportreceipts',
       '/api/putaway-tasks',

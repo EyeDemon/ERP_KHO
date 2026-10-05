@@ -222,9 +222,12 @@ export const getCapabilityDemoDefinition = (
   moduleFlow?: string[],
 ): CapabilityDemoDefinition => {
   const specialized = coreCapabilityDemos[capability.id] ?? plannedCapabilityDemos[capability.id];
+  if (capability.status === 'live' || capability.status === 'foundation') {
+    const specializedIsImplemented = specialized?.fields.some((field) => field.label === 'Production maturity') ?? false;
+    return specializedIsImplemented ? specialized : getImplementedCapabilityDemo(capability);
+  }
   if (specialized) return specialized;
   if (capability.status === 'optional') return getOptionalCapabilityDemo(capability, moduleName);
-  if (capability.status === 'live' || capability.status === 'foundation') return getImplementedCapabilityDemo(capability);
 
   const stages = moduleFlow && moduleFlow.length >= 2
     ? moduleFlow

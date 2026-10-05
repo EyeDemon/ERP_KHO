@@ -14,7 +14,8 @@ const message=(e:unknown)=>{const status=(e as {response?:{status?:number}})?.re
 
 export default function PutawayTasks(){
  const [tasks,setTasks]=useState<Task[]>([]),[selected,setSelected]=useState<Task|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState('');
- const [locations,setLocations]=useState<Record<number,Location[]>>({}),[destination,setDestination]=useState<Record<number,number>>({}),[quantity,setQuantity]=useState<Record<number,number>>({}); const lock=useRef(new Set<string>()); const mutable=usePermission('putaway.execute');
+ const [locations,setLocations]=useState<Record<number,Location[]>>({}),[destination,setDestination]=useState<Record<number,number>>({}),[quantity,setQuantity]=useState<Record<number,number>>({}); const lock=useRef(new Set<string>());
+ const canAssign=usePermission('putaway.assign'),canExecute=usePermission('putaway.execute'),canCancel=usePermission('putaway.cancel');
  const [exceptionReason,setExceptionReason]=useState('');
  const load=async()=>{setLoading(true);setError('');try{setTasks((await apiClient.get('/api/putaway-tasks')).data)}catch{setTasks([]);setSelected(null);setError('Không thể tải dữ liệu. Vui lòng thử lại.')}finally{setLoading(false)}};
  const detail=async(id:number)=>{setError('');try{const t=(await apiClient.get(`/api/putaway-tasks/${id}`)).data as Task;setSelected(t);const entries=await Promise.all(t.items.filter(i=>i.remainingBaseQuantity>0).map(async i=>[i.id,(await apiClient.get(`/api/putaway-tasks/${id}/items/${i.id}/destinations`)).data] as const));setLocations(Object.fromEntries(entries))}catch{setSelected(null);setError('Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.')}};
@@ -23,9 +24,9 @@ export default function PutawayTasks(){
  if(loading)return <p role="status">Đang tải nhiệm vụ cất hàng...</p>;
  return <UiPage>
    <UiPageHeader
-     eyebrow="Inbound"
+     eyebrow="Nhập kho"
      title="Cất hàng"
-     description="Theo dõi nhiệm vụ putaway từ khu nhận hàng tới location đích, gồm trạng thái, tiến độ và exception handling."
+     description="Theo dõi nhiệm vụ cất hàng từ vị trí nhận hàng tới vị trí đích, gồm trạng thái, tiến độ và xử lý ngoại lệ."
    />
 
    {error&&<div role="alert" className="putaway-error">{error}</div>}
@@ -51,14 +52,14 @@ export default function PutawayTasks(){
        {selected.exceptionReason&&<p><strong>Lý do cần xử lý:</strong> {selected.exceptionReason}</p>}
 
        <div className="putaway-actions">
-         {mutable&&selected.status==='Open'&&<button disabled={!!busy} onClick={()=>void mutate(`assign-${selected.id}`,`/api/putaway-tasks/${selected.id}/assign`,{assignedUserId:currentUserId(),rowVersion:selected.rowVersion})}>{busy?'Đang lưu...':'Nhận nhiệm vụ'}</button>}
-         {mutable&&selected.status==='Assigned'&&<button disabled={!!busy} onClick={()=>void mutate(`start-${selected.id}`,`/api/putaway-tasks/${selected.id}/start`,{rowVersion:selected.rowVersion})}>{busy?'Đang lưu...':'Bắt đầu cất hàng'}</button>}
-         {mutable&&selected.status==='InProgress'&&<>
+         {canAssign&&selected.status==='Open'&&<button disabled={!!busy} onClick={()=>void mutate(`assign-${selected.id}`,`/api/putaway-tasks/${selected.id}/assign`,{assignedUserId:currentUserId(),rowVersion:selected.rowVersion})}>{busy?'Đang lưu...':'Nhận nhiệm vụ'}</button>}
+         {canExecute&&selected.status==='Assigned'&&<button disabled={!!busy} onClick={()=>void mutate(`start-${selected.id}`,`/api/putaway-tasks/${selected.id}/start`,{rowVersion:selected.rowVersion})}>{busy?'Đang lưu...':'Bắt đầu cất hàng'}</button>}
+         {canExecute&&selected.status==='InProgress'&&<>
            <label>Lý do cần xử lý<input value={exceptionReason} onChange={e=>setExceptionReason(e.target.value)} /></label>
            <button disabled={!!busy||!exceptionReason.trim()} onClick={()=>void mutate(`exception-${selected.id}`,`/api/putaway-tasks/${selected.id}/exception`,{reason:exceptionReason,rowVersion:selected.rowVersion})}>Báo cần xử lý</button>
          </>}
-         {mutable&&selected.status==='Exception'&&<button disabled={!!busy} onClick={()=>void mutate(`resume-${selected.id}`,`/api/putaway-tasks/${selected.id}/resume`,{rowVersion:selected.rowVersion})}>Tiếp tục cất hàng</button>}
-         {mutable&&['Open','Assigned'].includes(selected.status)&&<button disabled={!!busy} onClick={()=>void mutate(`cancel-${selected.id}`,`/api/putaway-tasks/${selected.id}/cancel`,{rowVersion:selected.rowVersion})}>Hủy nhiệm vụ</button>}
+         {canExecute&&selected.status==='Exception'&&<button disabled={!!busy} onClick={()=>void mutate(`resume-${selected.id}`,`/api/putaway-tasks/${selected.id}/resume`,{rowVersion:selected.rowVersion})}>Tiếp tục cất hàng</button>}
+         {canCancel&&['Open','Assigned'].includes(selected.status)&&<button disabled={!!busy} onClick={()=>void mutate(`cancel-${selected.id}`,`/api/putaway-tasks/${selected.id}/cancel`,{rowVersion:selected.rowVersion})}>Hủy nhiệm vụ</button>}
        </div>
 
        <div className="ui-stack">
@@ -70,7 +71,7 @@ export default function PutawayTasks(){
            </div>
            <p>Cần cất: <strong>{item.requiredOperationQuantity} {item.operationUnitCode}</strong> ({item.requiredBaseQuantity} {item.baseUnitCode})</p>
            <p>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>
-           {mutable&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
+           {canExecute&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
              <label>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
              <label>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0" step="any" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:Number(e.target.value)}))}/></label>
              <button disabled={!!busy||!destination[item.id]||!quantity[item.id]} onClick={()=>void mutate(`move-${selected.id}-${item.id}`,`/api/putaway-tasks/${selected.id}/move`,{itemId:item.id,destinationLocationId:destination[item.id],quantity:quantity[item.id],unitCode:item.operationUnitCode,rowVersion:selected.rowVersion})}>{busy===`move-${selected.id}-${item.id}`?'Đang hoàn thành...':'Xác nhận số lượng'}</button>

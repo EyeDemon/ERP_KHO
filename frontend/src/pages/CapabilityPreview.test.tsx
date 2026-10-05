@@ -60,7 +60,6 @@ describe('CapabilityPreview', () => {
 
   it('renders domain-specific planned inbound mocks without promoting them to production', () => {
     const cases = [
-      ['IN-01', 'Purchase Order / ASN Reconciliation'],
       ['IN-02', 'Receiving Appointment Board'],
       ['IN-05', 'Over / Under Receipt Resolution'],
       ['IN-06', 'Inbound QC Inspection'],
@@ -75,6 +74,16 @@ describe('CapabilityPreview', () => {
       expect(view.getAllByText('Theo đặc tả — chưa triển khai').length).toBeGreaterThan(0);
       view.unmount();
     }
+  });
+
+  it('shows IN-01 as live while keeping its Blueprint mock read-only and separate', () => {
+    const view = renderPreview('inbound', 'IN-01');
+    expect(view.getByText('Đã có chức năng')).toBeTruthy();
+    expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+    expect(view.getByTestId('inbound-capability-mock-IN-01')).toBeTruthy();
+    expect(view.getByRole('heading', { name: 'Purchase Order / ASN Reconciliation' })).toBeTruthy();
+    expect(view.getByText(/Không gọi API production/)).toBeTruthy();
+    expect(view.queryByText('Theo đặc tả — chưa triển khai')).toBeNull();
   });
 
   it('does not add planned-domain panels on inbound foundation work centers', () => {

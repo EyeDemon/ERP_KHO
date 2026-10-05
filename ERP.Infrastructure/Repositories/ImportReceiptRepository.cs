@@ -47,6 +47,8 @@ namespace ERP.Infrastructure.Repositories
             var query = source
                 .Include(i => i.Warehouse)
                 .Include(i => i.Supplier)
+                .Include(i => i.PurchaseOrder)
+                .Include(i => i.Asn)
                 .Include(i => i.Details)
                     .ThenInclude(d => d.Product)
                         .ThenInclude(p => p.Unit)
@@ -66,6 +68,8 @@ namespace ERP.Infrastructure.Repositories
             var query = _dbSet
                 .Include(i => i.Warehouse)
                 .Include(i => i.Supplier)
+                .Include(i => i.PurchaseOrder)
+                .Include(i => i.Asn)
                 .AsQueryable();
 
             if (_warehouseAuthorization is not null)

@@ -13,7 +13,7 @@ namespace ERP.Api.Tests
         [Fact]
         public void MigratedHttpActionsHaveCataloguedPermissionsWithoutRoleAlternatives()
         {
-            var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController),
+            var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController), typeof(PurchaseOrdersController), typeof(AsnsController),
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
                 typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
@@ -155,6 +155,46 @@ namespace ERP.Api.Tests
         {
             controllerType.GetMethod(methodName)!
                 .GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(ApprovalPolicies.Checker);
+        }
+
+        [Theory]
+        [InlineData(typeof(PurchaseOrdersController), "List", AppPermissions.PurchaseOrderRead)]
+        [InlineData(typeof(PurchaseOrdersController), "Detail", AppPermissions.PurchaseOrderRead)]
+        [InlineData(typeof(PurchaseOrdersController), "Create", AppPermissions.PurchaseOrderCreate)]
+        [InlineData(typeof(PurchaseOrdersController), "Update", AppPermissions.PurchaseOrderUpdate)]
+        [InlineData(typeof(PurchaseOrdersController), "Open", AppPermissions.PurchaseOrderRelease)]
+        [InlineData(typeof(PurchaseOrdersController), "Close", AppPermissions.PurchaseOrderClose)]
+        [InlineData(typeof(PurchaseOrdersController), "Cancel", AppPermissions.PurchaseOrderCancel)]
+        [InlineData(typeof(AsnsController), "List", AppPermissions.AsnRead)]
+        [InlineData(typeof(AsnsController), "Detail", AppPermissions.AsnRead)]
+        [InlineData(typeof(AsnsController), "Create", AppPermissions.AsnCreate)]
+        [InlineData(typeof(AsnsController), "Update", AppPermissions.AsnUpdate)]
+        [InlineData(typeof(AsnsController), "Confirm", AppPermissions.AsnConfirm)]
+        [InlineData(typeof(AsnsController), "MarkInTransit", AppPermissions.AsnUpdate)]
+        [InlineData(typeof(AsnsController), "Arrive", AppPermissions.AsnReceive)]
+        [InlineData(typeof(AsnsController), "StartReceiving", AppPermissions.AsnReceive)]
+        [InlineData(typeof(AsnsController), "Complete", AppPermissions.AsnReceive)]
+        [InlineData(typeof(AsnsController), "Cancel", AppPermissions.AsnCancel)]
+        public void InboundPlanningEndpoints_RequireExactCapability(Type controllerType, string methodName, string permission)
+        {
+            controllerType.GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("List", AppPermissions.PutawayRead)]
+        [InlineData("Detail", AppPermissions.PutawayRead)]
+        [InlineData("Destinations", AppPermissions.PutawayRead)]
+        [InlineData("Assign", AppPermissions.PutawayAssign)]
+        [InlineData("Start", AppPermissions.PutawayExecute)]
+        [InlineData("Move", AppPermissions.PutawayExecute)]
+        [InlineData("Exception", AppPermissions.PutawayExecute)]
+        [InlineData("Resume", AppPermissions.PutawayExecute)]
+        [InlineData("Cancel", AppPermissions.PutawayCancel)]
+        public void PutawayEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(PutawayTasksController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
         }
 
         [Fact]

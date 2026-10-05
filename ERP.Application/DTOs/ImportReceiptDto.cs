@@ -17,6 +17,10 @@ namespace ERP.Application.DTOs
         public DateTime CreatedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
         public int? SupplierId { get; set; }
+        public int? PurchaseOrderId { get; set; }
+        public string? PurchaseOrderCode { get; set; }
+        public int? AsnId { get; set; }
+        public string? AsnCode { get; set; }
         public string? SupplierCode { get; set; }
         public string? SupplierName { get; set; }
         public bool RequiresQc { get; set; }
@@ -27,6 +31,8 @@ namespace ERP.Application.DTOs
     {
         public int Id { get; set; }
         public int ProductId { get; set; }
+        public int? PurchaseOrderLineId { get; set; }
+        public int? AsnLineId { get; set; }
         public string? ProductCode { get; set; }
         public string? ProductName { get; set; }
         public string? UnitName { get; set; }
@@ -70,12 +76,16 @@ namespace ERP.Application.DTOs
         public int WarehouseId { get; set; }
         public string? Note { get; set; }
         public int? SupplierId { get; set; }
+        public int? PurchaseOrderId { get; set; }
+        public int? AsnId { get; set; }
         public List<CreateImportReceiptDetailDto> Details { get; set; } = new();
     }
 
     public class CreateImportReceiptDetailDto
     {
         public int ProductId { get; set; }
+        public int? PurchaseOrderLineId { get; set; }
+        public int? AsnLineId { get; set; }
         public int OperationUnitId { get; set; }
         public decimal ExpectedQuantity { get; set; }
         [System.Text.Json.Serialization.JsonIgnore]

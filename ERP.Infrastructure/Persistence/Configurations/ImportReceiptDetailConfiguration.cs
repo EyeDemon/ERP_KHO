@@ -49,6 +49,19 @@ public class ImportReceiptDetailConfiguration : IEntityTypeConfiguration<ImportR
                .HasForeignKey(x => x.ProductId)
                .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(x => x.PurchaseOrderLine)
+               .WithMany()
+               .HasForeignKey(x => x.PurchaseOrderLineId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.AsnLine)
+               .WithMany()
+               .HasForeignKey(x => x.AsnLineId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => x.PurchaseOrderLineId);
+        builder.HasIndex(x => x.AsnLineId);
+
         builder.HasOne(x => x.FinalResolutionVersion)
                .WithMany()
                .HasForeignKey(x => x.FinalResolutionVersionId)

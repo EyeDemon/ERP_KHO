@@ -88,7 +88,7 @@ export const erpWmsBlueprint: BlueprintModule[] = [
     description: 'Luồng từ expected inbound tới receiving, QC, posting và putaway.',
     flow: ['PO/ASN', 'Appointment', 'Receipt', 'Receiving', 'QC', 'Ready to Post', 'Post', 'Putaway'],
     capabilities: [
-      { id: 'IN-01', name: 'Purchase Order / ASN', goal: 'Nhận expected inbound từ ERP/Procurement và theo dõi ASN.', surfaces: ['Web', 'API'], status: 'planned', spec: '34, 160' },
+      { id: 'IN-01', name: 'Purchase Order / ASN', goal: 'Nhận expected inbound từ ERP/Procurement và theo dõi ASN.', surfaces: ['Web', 'API'], status: 'live', spec: '34, 160', route: '/purchase-orders' },
       { id: 'IN-02', name: 'Receiving Appointment', goal: 'Đặt lịch xe/hàng vào kho và phân dock.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '46' },
       { id: 'IN-03', name: 'Goods Receipt Work Center', goal: 'Tìm/lọc/tạo/mở receipt theo state và warehouse scope.', surfaces: ['Web', 'API'], status: 'foundation', spec: '34, 216, 228, 229', route: '/import-receipts' },
       { id: 'IN-04', name: 'Receiving Workbench', goal: 'Scan hàng, nhập quantity/UOM, lot/serial/expiry và discrepancy.', surfaces: ['Web', 'Mobile', 'API'], status: 'foundation', spec: '34, 228, 229' },
