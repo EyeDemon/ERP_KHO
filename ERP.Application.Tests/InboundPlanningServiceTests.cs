@@ -105,6 +105,7 @@ public sealed class InboundPlanningServiceTests : IDisposable
             base.OnModelCreating(modelBuilder);
             foreach(var property in modelBuilder.Model.GetEntityTypes().SelectMany(x=>x.GetProperties()))
                 if(property.GetColumnType()?.Contains("max",StringComparison.OrdinalIgnoreCase)==true) property.SetColumnType(null);
+            modelBuilder.Entity<BusinessPartner>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
             modelBuilder.Entity<PurchaseOrder>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
             modelBuilder.Entity<Asn>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
         }
