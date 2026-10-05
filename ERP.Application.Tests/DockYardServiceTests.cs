@@ -3,6 +3,7 @@ using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
+using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Services;
 using FluentAssertions;
@@ -203,6 +204,82 @@ public sealed class DockYardServiceTests : IAsyncDisposable
             .WithMessage("*appointment khác*");
         (await _db.DockAppointments.AsNoTracking().SingleAsync(x => x.Id == waiting.Id))
             .DockId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Exception_does_not_release_physical_yard_or_dock_occupancy()
+    {
+        var dock = new Dock
+        {
+            WarehouseId = _warehouse.Id,
+            Code = "D-EX",
+            Name = "Dock Exception",
+            SupportsInbound = true,
+            SupportsOutbound = true,
+            IsActive = true,
+            RowVersion = Version(11)
+        };
+        var slot = new YardSlot
+        {
+            WarehouseId = _warehouse.Id,
+            Code = "Y-EX",
+            Name = "Yard Exception",
+            IsActive = true,
+            RowVersion = Version(12)
+        };
+        _db.AddRange(dock, slot);
+        await _db.SaveChangesAsync();
+
+        var blocked = Appointment(
+            DockAppointmentStatus.Exception,
+            new DateTime(2026, 10, 5, 1, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 10, 5, 2, 0, 0, DateTimeKind.Utc),
+            13);
+        blocked.DockId = dock.Id;
+        blocked.YardSlotId = slot.Id;
+        blocked.CheckedInAtUtc = DateTime.UtcNow;
+        blocked.ExceptionCode = "DOCK_UNAVAILABLE";
+
+        var waiting = Appointment(
+            DockAppointmentStatus.CheckedIn,
+            new DateTime(2026, 10, 5, 3, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 10, 5, 4, 0, 0, DateTimeKind.Utc),
+            14);
+        waiting.CheckedInAtUtc = DateTime.UtcNow;
+        _db.DockAppointments.AddRange(blocked, waiting);
+        await _db.SaveChangesAsync();
+
+        var yard = await _service.GetYardSlotsAsync(_warehouse.Id);
+        yard.Single(x => x.Id == slot.Id).Occupied.Should().BeTrue();
+
+        var assign = () => _service.AssignDockAsync(waiting.Id, new DockAppointmentAssignDockDto
+        {
+            DockId = dock.Id,
+            RowVersion = Convert.ToBase64String(Version(14))
+        });
+        await assign.Should().ThrowAsync<BusinessRuleException>()
+            .WithMessage("*appointment khác*");
+    }
+
+    [Fact]
+    public async Task No_show_is_rejected_after_vehicle_has_arrived()
+    {
+        var appointment = Appointment(
+            DockAppointmentStatus.Arrived,
+            new DateTime(2026, 10, 5, 1, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 10, 5, 2, 0, 0, DateTimeKind.Utc),
+            15);
+        appointment.ArrivedAtUtc = DateTime.UtcNow;
+        _db.DockAppointments.Add(appointment);
+        await _db.SaveChangesAsync();
+
+        var action = () => _service.MarkNoShowAsync(appointment.Id, new DockAppointmentCommandDto
+        {
+            RowVersion = Convert.ToBase64String(Version(15))
+        });
+
+        await action.Should().ThrowAsync<ConcurrencyException>()
+            .WithMessage("*chưa đến*");
     }
 
     [Fact]

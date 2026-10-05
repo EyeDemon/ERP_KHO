@@ -23,8 +23,8 @@ Dock/Yard coordinates vehicles, drivers, yard slots and dock doors. It does **no
 Additional terminal paths:
 
 - `DRAFT/CONFIRMED → CANCELLED`
-- `CONFIRMED/ARRIVED/CHECKED_IN → NO_SHOW`
-- non-terminal operational states → `EXCEPTION`
+- `CONFIRMED → NO_SHOW`
+- non-terminal operational states → `EXCEPTION`; nếu xe đã có yard slot/dock thì occupancy vẫn được giữ cho tới khi checkout/release thực tế
 - `COMPLETED → CHECKED_OUT` is represented by `CheckedOutAtUtc`; the appointment remains Completed for operational reporting.
 
 Every transition is Warehouse-scoped and protected by optimistic concurrency.

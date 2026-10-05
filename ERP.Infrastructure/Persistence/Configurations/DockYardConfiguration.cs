@@ -53,9 +53,9 @@ public sealed class DockAppointmentConfiguration : IEntityTypeConfiguration<Dock
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.Property(x => x.RowVersion).IsConcurrencyToken();
         builder.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique().HasDatabaseName("UX_DockAppointments_Warehouse_Code");
-        builder.HasIndex(x => new { x.WarehouseId, x.PlannedStartUtc, x.PlannedEndUtc });
-        builder.HasIndex(x => new { x.DockId, x.PlannedStartUtc, x.PlannedEndUtc, x.Status });
-        builder.HasIndex(x => new { x.YardSlotId, x.Status });
+        builder.HasIndex(x => new { x.WarehouseId, x.PlannedStartUtc, x.PlannedEndUtc }).HasDatabaseName("IX_DockAppointments_Warehouse_Window");
+        builder.HasIndex(x => new { x.DockId, x.PlannedStartUtc, x.PlannedEndUtc, x.Status }).HasDatabaseName("IX_DockAppointments_Dock_Window_Status");
+        builder.HasIndex(x => new { x.YardSlotId, x.Status }).HasDatabaseName("IX_DockAppointments_Yard_Status");
         builder.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Dock).WithMany().HasForeignKey(x => x.DockId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.YardSlot).WithMany().HasForeignKey(x => x.YardSlotId).OnDelete(DeleteBehavior.Restrict);
@@ -71,7 +71,7 @@ public sealed class DockAppointmentEventConfiguration : IEntityTypeConfiguration
         builder.HasKey(x => x.Id);
         builder.Property(x => x.EventType).IsRequired().HasMaxLength(40);
         builder.Property(x => x.Note).HasMaxLength(500);
-        builder.HasIndex(x => new { x.DockAppointmentId, x.EventAtUtc });
+        builder.HasIndex(x => new { x.DockAppointmentId, x.EventAtUtc }).HasDatabaseName("IX_DockAppointmentEvents_Appointment_Time");
         builder.HasOne(x => x.Appointment).WithMany(x => x.Events).HasForeignKey(x => x.DockAppointmentId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(x => x.Actor).WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Dock>().WithMany().HasForeignKey(x => x.DockId).OnDelete(DeleteBehavior.Restrict);

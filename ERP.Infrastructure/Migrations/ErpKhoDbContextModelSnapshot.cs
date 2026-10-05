@@ -2698,15 +2698,18 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("CreatedBy");
 
-                    b.HasIndex("DockId", "PlannedStartUtc", "PlannedEndUtc", "Status");
+                    b.HasIndex("DockId", "PlannedStartUtc", "PlannedEndUtc", "Status")
+                        .HasDatabaseName("IX_DockAppointments_Dock_Window_Status");
 
                     b.HasIndex("WarehouseId", "Code")
                         .IsUnique()
                         .HasDatabaseName("UX_DockAppointments_Warehouse_Code");
 
-                    b.HasIndex("WarehouseId", "PlannedStartUtc", "PlannedEndUtc");
+                    b.HasIndex("WarehouseId", "PlannedStartUtc", "PlannedEndUtc")
+                        .HasDatabaseName("IX_DockAppointments_Warehouse_Window");
 
-                    b.HasIndex("YardSlotId", "Status");
+                    b.HasIndex("YardSlotId", "Status")
+                        .HasDatabaseName("IX_DockAppointments_Yard_Status");
 
                     b.ToTable("DockAppointments", null, t =>
                         {
@@ -2750,7 +2753,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("ActorUserId");
 
-                    b.HasIndex("DockAppointmentId", "EventAtUtc");
+                    b.HasIndex("DockAppointmentId", "EventAtUtc")
+                        .HasDatabaseName("IX_DockAppointmentEvents_Appointment_Time");
 
                     b.HasIndex("DockId");
 

@@ -17,11 +17,10 @@ public sealed class DockYardService(
     ICurrentUser currentUser,
     TimeProvider timeProvider) : IDockYardService
 {
-    private static readonly DockAppointmentStatus[] TerminalStatuses =
+    private static readonly DockAppointmentStatus[] ReleasedStatuses =
     [
         DockAppointmentStatus.Cancelled,
-        DockAppointmentStatus.NoShow,
-        DockAppointmentStatus.Exception
+        DockAppointmentStatus.NoShow
     ];
 
     public async Task<IReadOnlyList<DockYardWarehouseDto>> GetWarehousesAsync(CancellationToken token = default)
@@ -113,7 +112,7 @@ public sealed class DockYardService(
         await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, token);
         var occupied = await context.DockAppointments.AsNoTracking()
             .Where(x => x.WarehouseId == warehouseId && x.YardSlotId != null && x.CheckedOutAtUtc == null
-                && !TerminalStatuses.Contains(x.Status))
+                && !ReleasedStatuses.Contains(x.Status))
             .Select(x => new { YardSlotId = x.YardSlotId!.Value, x.Code })
             .ToListAsync(token);
         var occupiedById = occupied.GroupBy(x => x.YardSlotId).ToDictionary(x => x.Key, x => x.OrderBy(y => y.Code).First().Code);
@@ -377,7 +376,7 @@ public sealed class DockYardService(
             x.Id != appointment.Id &&
             x.DockId == dock.Id &&
             x.CheckedOutAtUtc == null &&
-            !TerminalStatuses.Contains(x.Status) &&
+            !ReleasedStatuses.Contains(x.Status) &&
             (x.Status == DockAppointmentStatus.DockAssigned ||
              x.Status == DockAppointmentStatus.InService ||
              x.Status == DockAppointmentStatus.Completed ||
@@ -436,8 +435,8 @@ public sealed class DockYardService(
     public async Task<DockAppointmentDto> MarkNoShowAsync(int id, DockAppointmentCommandDto dto, CancellationToken token = default)
     {
         var appointment = await GetForMutationAsync(id, token);
-        if (appointment.Status is not (DockAppointmentStatus.Confirmed or DockAppointmentStatus.Arrived or DockAppointmentStatus.CheckedIn))
-            throw new ConcurrencyException("Trạng thái hiện tại không cho phép đánh dấu No-show.");
+        if (appointment.Status != DockAppointmentStatus.Confirmed)
+            throw new ConcurrencyException("Chỉ appointment đã xác nhận nhưng chưa đến mới được đánh dấu No-show.");
         ApplyVersion(appointment, dto.RowVersion);
         appointment.Status = DockAppointmentStatus.NoShow;
         Touch(appointment);
@@ -554,7 +553,7 @@ public sealed class DockYardService(
             x.Id != appointmentId &&
             x.YardSlotId == yardSlotId &&
             x.CheckedOutAtUtc == null &&
-            !TerminalStatuses.Contains(x.Status), token);
+            !ReleasedStatuses.Contains(x.Status), token);
 
     private static void ValidateDock(UpsertDockDto dto)
     {
@@ -669,7 +668,7 @@ public sealed class DockYardService(
         var occupied = await IsYardSlotOccupiedAsync(slot.Id, 0, token);
         var code = occupied
             ? await context.DockAppointments.AsNoTracking()
-                .Where(x => x.YardSlotId == slot.Id && x.CheckedOutAtUtc == null && !TerminalStatuses.Contains(x.Status))
+                .Where(x => x.YardSlotId == slot.Id && x.CheckedOutAtUtc == null && !ReleasedStatuses.Contains(x.Status))
                 .OrderBy(x => x.PlannedStartUtc)
                 .Select(x => x.Code)
                 .FirstOrDefaultAsync(token)
