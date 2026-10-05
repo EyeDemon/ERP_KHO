@@ -55,11 +55,14 @@ public sealed class SqlServerShipmentLoadingTests
             {
                 var service = CreateShipmentService(stage, fixture.UserId);
                 var current = await service.GetAsync(prepared.ShipmentId);
-                staged = await service.StageAsync(prepared.ShipmentId, new ShipmentStateCommandDto
+                staged = await service.StageAsync(prepared.ShipmentId, new StageShipmentDto
                 {
+                    StagingLocationCode = fixture.StagingLocationCode,
                     RowVersion = current.RowVersion!
                 });
                 staged.Status.Should().Be(nameof(ShipmentStatus.Staging));
+                staged.StagingLocationId.Should().Be(fixture.StagingLocationId);
+                staged.StagingLocationCode.Should().Be(fixture.StagingLocationCode);
             }
 
             int appointmentId;
@@ -139,8 +142,9 @@ public sealed class SqlServerShipmentLoadingTests
             {
                 var service = CreateShipmentService(stage, fixture.UserId);
                 var current = await service.GetAsync(prepared.ShipmentId);
-                staged = await service.StageAsync(prepared.ShipmentId, new ShipmentStateCommandDto
+                staged = await service.StageAsync(prepared.ShipmentId, new StageShipmentDto
                 {
+                    StagingLocationCode = fixture.StagingLocationCode,
                     RowVersion = current.RowVersion!
                 });
             }
@@ -182,7 +186,7 @@ public sealed class SqlServerShipmentLoadingTests
             {
                 var service = CreateShipmentService(stage, fixture.UserId);
                 var current = await service.GetAsync(prepared.ShipmentId);
-                staged = await service.StageAsync(prepared.ShipmentId, new ShipmentStateCommandDto { RowVersion = current.RowVersion! });
+                staged = await service.StageAsync(prepared.ShipmentId, new StageShipmentDto { StagingLocationCode = fixture.StagingLocationCode, RowVersion = current.RowVersion! });
             }
 
             int appointmentId;
@@ -206,7 +210,7 @@ public sealed class SqlServerShipmentLoadingTests
                     RowVersion = loading.RowVersion!
                 });
                 var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
-                thrown.Which.Data["ErrorCode"].Should().Be("HU_WRONG_SHIPMENT");
+                thrown.Which.Data["ErrorCode"].Should().Be("SHIPMENT_HU_MISMATCH");
             }
         }
         finally { await CleanupAsync(fixture); }
@@ -492,7 +496,18 @@ public sealed class SqlServerShipmentLoadingTests
             IsPickable = true,
             CreatedBy = user.Id
         };
-        db.Add(location);
+        var stagingLocation = new WarehouseLocation
+        {
+            WarehouseId = warehouse.Id,
+            Code = $"STG{suffix}",
+            Name = "Outbound staging lane",
+            LocationType = WarehouseLocationType.Staging,
+            IsActive = true,
+            IsPickable = false,
+            IsReceivable = false,
+            CreatedBy = user.Id
+        };
+        db.AddRange(location, stagingLocation);
         await db.SaveChangesAsync();
 
         db.UserWarehouses.Add(new UserWarehouse
@@ -520,7 +535,9 @@ public sealed class SqlServerShipmentLoadingTests
             product.Code,
             warehouse.Id,
             location.Id,
-            location.Code);
+            location.Code,
+            stagingLocation.Id,
+            stagingLocation.Code);
     }
 
     private static async Task CleanupAsync(Fixture fixture)
@@ -580,7 +597,9 @@ public sealed class SqlServerShipmentLoadingTests
         string ProductCode,
         int WarehouseId,
         int LocationId,
-        string LocationCode);
+        string LocationCode,
+        int StagingLocationId,
+        string StagingLocationCode);
 
     private sealed record Prepared(
         int ShipmentId,
