@@ -710,8 +710,8 @@ public sealed class DockYardService(
         Code = x.Code,
         Direction = x.Direction,
         Status = x.Status,
-        PlannedStartUtc = x.PlannedStartUtc,
-        PlannedEndUtc = x.PlannedEndUtc,
+        PlannedStartUtc = AsUtc(x.PlannedStartUtc),
+        PlannedEndUtc = AsUtc(x.PlannedEndUtc),
         CarrierCode = x.CarrierCode,
         CarrierName = x.CarrierName,
         VehiclePlate = x.VehiclePlate,
@@ -726,12 +726,12 @@ public sealed class DockYardService(
         YardSlotCode = x.YardSlot?.Code,
         DockId = x.DockId,
         DockCode = x.Dock?.Code,
-        ArrivedAtUtc = x.ArrivedAtUtc,
-        CheckedInAtUtc = x.CheckedInAtUtc,
-        DockAssignedAtUtc = x.DockAssignedAtUtc,
-        ServiceStartedAtUtc = x.ServiceStartedAtUtc,
-        ServiceCompletedAtUtc = x.ServiceCompletedAtUtc,
-        CheckedOutAtUtc = x.CheckedOutAtUtc,
+        ArrivedAtUtc = AsUtc(x.ArrivedAtUtc),
+        CheckedInAtUtc = AsUtc(x.CheckedInAtUtc),
+        DockAssignedAtUtc = AsUtc(x.DockAssignedAtUtc),
+        ServiceStartedAtUtc = AsUtc(x.ServiceStartedAtUtc),
+        ServiceCompletedAtUtc = AsUtc(x.ServiceCompletedAtUtc),
+        CheckedOutAtUtc = AsUtc(x.CheckedOutAtUtc),
         ExceptionCode = x.ExceptionCode,
         Note = x.Note,
         RowVersion = Version(x.RowVersion),
@@ -740,7 +740,7 @@ public sealed class DockYardService(
             {
                 Id = y.Id,
                 EventType = y.EventType,
-                EventAtUtc = y.EventAtUtc,
+                EventAtUtc = AsUtc(y.EventAtUtc),
                 ActorUserId = y.ActorUserId,
                 DockId = y.DockId,
                 YardSlotId = y.YardSlotId,
@@ -748,6 +748,12 @@ public sealed class DockYardService(
             }).ToList()
             : []
     };
+
+    private static DateTime AsUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static DateTime? AsUtc(DateTime? value) =>
+        value.HasValue ? AsUtc(value.Value) : null;
 
     private static string NormalizeCode(string value, string field)
     {

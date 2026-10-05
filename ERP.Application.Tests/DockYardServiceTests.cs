@@ -301,7 +301,10 @@ public sealed class DockYardServiceTests : IAsyncDisposable
         });
 
         result.Status.Should().Be(DockAppointmentStatus.Confirmed);
+        result.PlannedStartUtc.Kind.Should().Be(DateTimeKind.Utc);
+        result.PlannedEndUtc.Kind.Should().Be(DateTimeKind.Utc);
         result.Events.Should().Contain(x => x.EventType == "Confirmed");
+        result.Events.Single(x => x.EventType == "Confirmed").EventAtUtc.Kind.Should().Be(DateTimeKind.Utc);
         (await _db.InventoryStocks.CountAsync()).Should().Be(beforeStocks);
     }
 
