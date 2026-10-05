@@ -48,6 +48,7 @@ describe('interactive capability demo registry', () => {
     expect(implemented.map(({ capability }) => capability.id)).toContain('WH-04');
     expect(implemented.map(({ capability }) => capability.id)).toContain('WH-05');
     expect(implemented.map(({ capability }) => capability.id)).toContain('WH-06');
+    expect(implemented.map(({ capability }) => capability.id)).toContain('IN-01');
 
     for (const { module, capability } of implemented) {
       const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
@@ -137,6 +138,19 @@ describe('interactive capability demo registry', () => {
     expect(demo.fields).toContainEqual({ label: 'Production maturity', value: 'LIVE' });
     expect(demo.fields).toContainEqual({ label: 'Production route', value: '/dock-yard' });
     expect(demo.commands).toContain('OPEN_PRODUCTION_DOCK_YARD');
+  });
+
+  it('reflects IN-01 as a live production capability while keeping Blueprint preview semantics', () => {
+    const entry = allCapabilities.find(({ capability }) => capability.id === 'IN-01');
+    if (!entry) throw new Error('IN-01 capability missing');
+
+    expect(entry.capability.status).toBe('live');
+    expect(entry.capability.route).toBe('/purchase-orders');
+
+    const demo = getCapabilityDemoDefinition(entry.capability, entry.module.name, entry.module.flow);
+    expect(demo.fields).toContainEqual({ label: 'Production maturity', value: 'LIVE' });
+    expect(demo.commands).toContain('OPEN_REAL_SCREEN');
+    expect(demo.commands).not.toContain('SIMULATE_ACTION');
   });
 
   it('keeps canonical inventory boundaries concrete in detailed core demos', () => {
