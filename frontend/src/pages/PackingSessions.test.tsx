@@ -70,6 +70,13 @@ describe('Packing workbench',()=>{
 
   it('shows HU create and structure controls only with canonical permissions',async()=>{
     grant('packing.read','handling_unit.create','handling_unit.modify');
+    reads({
+      ...detail,
+      packedQuantity:0,
+      remainingQuantity:10,
+      lines:[{...line,packedQuantity:0,remainingQuantity:10}],
+      handlingUnits:[{...hu,status:'Open',contents:[]}],
+    });
     const view=render(<PackingSessions/>);
     await view.findByText('PACK-2026-0077');
     fireEvent.click(view.getByText('PACK-2026-0077'));
