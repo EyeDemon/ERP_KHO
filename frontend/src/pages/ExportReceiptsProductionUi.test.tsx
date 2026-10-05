@@ -172,7 +172,7 @@ describe('ExportReceipts shared production UI', () => {
 
     const view = render(<ExportReceipts />);
 
-    expect(await view.findByText('Workflow xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.')).toBeTruthy();
+    expect(await view.findByText('Luồng xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.')).toBeTruthy();
     expect((view.getByRole('button', { name: 'Duyệt và giữ hàng' }) as HTMLButtonElement).disabled).toBe(true);
     expect((view.getByRole('button', { name: 'Duyệt và xuất ngay (tương thích)' }) as HTMLButtonElement).disabled).toBe(true);
   });

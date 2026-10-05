@@ -420,7 +420,7 @@ const ExportReceipts = () => {
         {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
         {receipts.some(receipt => !receipt.writeEnabled) && (
           <div role="status" className="export-maintenance">
-            Workflow xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.
+            Luồng xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.
           </div>
         )}
 
