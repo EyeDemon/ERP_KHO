@@ -27,7 +27,7 @@ public sealed class DockYardServiceTests : IAsyncDisposable
     {
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
-        _db = new ErpKhoDbContext(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlite(_connection).Options);
+        _db = new TestDbContext(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlite(_connection).Options);
         _db.Database.EnsureCreated();
 
         var role = new Role { RoleName = "Manager" };
@@ -346,6 +346,25 @@ public sealed class DockYardServiceTests : IAsyncDisposable
     {
         await _db.DisposeAsync();
         await _connection.DisposeAsync();
+    }
+
+    private sealed class TestDbContext : ErpKhoDbContext
+    {
+        public TestDbContext(DbContextOptions<ErpKhoDbContext> options) : base(options) { }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                foreach (var property in entityType.GetProperties())
+                {
+                    var columnType = property.GetColumnType();
+                    if (columnType != null && columnType.Contains("max", StringComparison.OrdinalIgnoreCase))
+                        property.SetColumnType(null);
+                }
+            }
+        }
     }
 
     private sealed class TestCurrentUser : ICurrentUser
