@@ -343,7 +343,7 @@ export const demoPickingTasks = [
       },
     ],
     shortPicks: [],
-  },,
+  },
   {
     id: 8802, taskCode: 'PICK-2026-8802', sourceType: 'Reservation', sourceId: 9040, sourceCode: 'RSV-PACK-0040',
     warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', pickingType: 'STANDARD', status: 'Completed', priority: 0,
