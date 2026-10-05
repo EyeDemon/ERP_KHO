@@ -109,7 +109,7 @@ public sealed class ApprovalWorkflowService(
                 CanReject = x.CreatorId != currentUser.UserId && (x.Type switch
                 {
                     "ImportReceipt" => !x.QcCompleted && permissions.Contains("approval.reject"),
-                    "ExportReceipt" => permissions.Contains("export_receipt.cancel"),
+                    "ExportReceipt" => permissions.Contains("approval.reject") && permissions.Contains("export_receipt.cancel"),
                     _ => legacy
                 }),
                 DeniedReasonCode = x.CreatorId == currentUser.UserId ? "CREATOR_CANNOT_CHECK" : null
@@ -122,8 +122,9 @@ public sealed class ApprovalWorkflowService(
     {
         var permissions = await PermissionsAsync(cancellationToken);
         var inboundRead = permissions.Contains("receipt.read");
+        var outboundRead = permissions.Contains("export_receipt.read");
         var legacy = currentUser.Role is "Admin" or "Manager";
-        if (!inboundRead && !legacy) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+        if (!inboundRead && !outboundRead && !legacy) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
         ValidatePage(request.PageIndex, request.PageSize);
         if (request.DocumentId.HasValue && request.DocumentType == "ImportReceipt")
         {
@@ -151,7 +152,7 @@ public sealed class ApprovalWorkflowService(
         var codes = await ResolveDocumentCodesAsync(rows, cancellationToken);
         var items = rows.Select(x => MapHistory(x, codes.GetValueOrDefault((x.EntityName, x.EntityId ?? 0), string.Empty))).ToList();
         if (databaseRole == "Viewer")
-            foreach (var item in items.Where(i => i.DocumentType == "ImportReceipt")) { item.Reason = null; item.CorrelationId = null; }
+            foreach (var item in items.Where(i => i.DocumentType is "ImportReceipt" or "ExportReceipt")) { item.Reason = null; item.CorrelationId = null; }
         return new PagedResult<ApprovalHistoryItem> { TotalRecords = total, PageIndex = request.PageIndex, PageSize = request.PageSize, Items = items };
     }
 
@@ -201,7 +202,8 @@ public sealed class ApprovalWorkflowService(
         else if (documentType == "ExportReceipt")
         {
             summary.CanApprove &= permissions.Contains("export_receipt.approve");
-            summary.CanReject &= permissions.Contains("export_receipt.cancel");
+            summary.CanReject &= permissions.Contains("approval.reject") && permissions.Contains("export_receipt.cancel");
+            if (databaseRole == "Viewer") note = null;
         }
         var history = await GetHistoryAsync(new ApprovalHistoryQuery { DocumentType = documentType, DocumentId = id, PageSize = 20 }, cancellationToken);
         return new ApprovalDetail { Summary = summary, Note = note, Lines = lines, History = history.Items };
@@ -297,7 +299,9 @@ public sealed class ApprovalWorkflowService(
         var allowed = type switch
         {
             "ImportReceipt" => permissions.Contains(required),
-            "ExportReceipt" => permissions.Contains(required == "approval.reject" ? "export_receipt.cancel" : "export_receipt.read"),
+            "ExportReceipt" => required == "approval.reject"
+                ? permissions.Contains("approval.reject") && permissions.Contains("export_receipt.cancel")
+                : permissions.Contains("export_receipt.read"),
             _ => currentUser.Role is "Admin" or "Manager"
         };
         if (!allowed) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");

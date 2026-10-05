@@ -34,7 +34,9 @@ public sealed class ApprovalAuthorizationFilter(ErpKhoDbContext db) : IAsyncAuth
             var allowed = type switch
             {
                 "ImportReceipt" => user.Permissions.Contains(isPost ? AppPermissions.ApprovalReject : AppPermissions.ReceiptRead),
-                "ExportReceipt" => user.Permissions.Contains(isPost ? AppPermissions.ExportReceiptCancel : AppPermissions.ExportReceiptRead),
+                "ExportReceipt" => isPost
+                    ? user.Permissions.Contains(AppPermissions.ApprovalReject) && user.Permissions.Contains(AppPermissions.ExportReceiptCancel)
+                    : user.Permissions.Contains(AppPermissions.ExportReceiptRead),
                 null => legacy || user.Permissions.Contains(AppPermissions.ReceiptRead) || user.Permissions.Contains(AppPermissions.ExportReceiptRead),
                 _ => legacy
             };

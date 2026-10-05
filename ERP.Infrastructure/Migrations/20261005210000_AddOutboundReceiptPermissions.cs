@@ -40,7 +40,7 @@ SELECT r.Id,p.Id,SYSUTCDATETIME(),NULL
 FROM Roles r
 JOIN Permissions p ON p.Code IN (
     'export_receipt.read','export_receipt.create','export_receipt.update',
-    'export_receipt.dispatch','export_receipt.cancel')
+    'export_receipt.dispatch')
 WHERE LOWER(LTRIM(RTRIM(r.RoleName)))='warehousestaff'
   AND NOT EXISTS (SELECT 1 FROM RolePermissions rp WHERE rp.RoleId=r.Id AND rp.PermissionId=p.Id);
 

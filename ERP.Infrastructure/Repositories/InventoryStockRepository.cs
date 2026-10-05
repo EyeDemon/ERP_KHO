@@ -17,6 +17,8 @@ namespace ERP.Infrastructure.Repositories
         {
             return await _dbSet
                 .Include(s => s.Location)
+                .Include(s => s.Product)
+                    .ThenInclude(p => p.Unit)
                 .FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == InventoryStatus.Available && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
         }
 

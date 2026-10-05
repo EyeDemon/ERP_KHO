@@ -92,10 +92,11 @@ namespace ERP.Api.Controllers
         [IdempotentCommand("ExportReceipt.ApproveAndDispatch")]
         [PermissionAuthorize(AppPermissions.ExportReceiptApprove)]
         [PermissionAuthorize(AppPermissions.ExportReceiptDispatch)]
-        public Task<IActionResult> ApproveAndDispatch(int id)
+        public async Task<IActionResult> ApproveAndDispatch(int id)
         {
-            if (!TryGetUserId(out _)) return Task.FromResult<IActionResult>(Unauthorized());
-            return Task.FromResult<IActionResult>(Conflict(new { message = "Luồng duyệt và xuất ngay đã ngừng sử dụng. Hãy duyệt giữ hàng trước, sau đó xác nhận xuất kho." }));
+            if (!TryGetUserId(out var userId)) return Unauthorized();
+            await _exportReceiptService.ApproveAndDispatchAsync(id, userId);
+            return Ok(new { message = "Đã duyệt và xuất kho." });
         }
 
         [HttpPost("{id}/dispatch")]
