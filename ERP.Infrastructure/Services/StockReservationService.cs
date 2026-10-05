@@ -47,6 +47,10 @@ public class StockReservationService(
         {
             return await ReserveCoreAsync("ExportReceipt", exportReceiptId, exportCode, warehouseId, productId, quantity, userId, DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes), cancellationToken);
         }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new ConcurrencyException("Phiếu xuất đã được xử lý hoặc đang được xử lý bởi yêu cầu khác.", exception);
+        }
         catch (DbUpdateException exception) when (IsExportReservationSourceConflict(exception))
         {
             throw new ConcurrencyException("Phiếu xuất đã được giữ hàng bởi yêu cầu đồng thời khác.", exception);
