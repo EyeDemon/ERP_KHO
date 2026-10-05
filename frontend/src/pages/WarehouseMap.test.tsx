@@ -37,8 +37,8 @@ describe('WarehouseMap production UI', () => {
 
   it('renders mapped and unmapped locations from the real map endpoint', async () => {
     const view = render(<WarehouseMap />);
-    expect(await view.findByRole('table', { name: 'Chi tiết heatmap kho thật' })).toBeTruthy();
-    expect(view.getByLabelText('Bản đồ kho thật')).toBeTruthy();
+    expect(await view.findByLabelText('Bản đồ kho thật')).toBeTruthy();
+    expect(view.getByRole('table', { name: 'Chi tiết heatmap kho thật' })).toBeTruthy();
     expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
     expect(view.getAllByText('A01-R02-L03-B05').length).toBeGreaterThan(0);
     expect(view.getByRole('table', { name: 'Location chưa bố trí bản đồ' })).toBeTruthy();
@@ -47,8 +47,8 @@ describe('WarehouseMap production UI', () => {
 
   it('updates an explicit layout with rowVersion', async () => {
     const view = render(<WarehouseMap />);
-    await view.findByRole('table', { name: 'Chi tiết heatmap kho thật' });
-    fireEvent.click(view.getByRole('button', { name: 'Vị trí A01-R02-L03-B04' }));
+    const mappedLocation = await view.findByRole('button', { name: 'Vị trí A01-R02-L03-B04' });
+    fireEvent.click(mappedLocation);
     fireEvent.change(view.getByLabelText('Map X'), { target: { value: '12.5' } });
     fireEvent.change(view.getByLabelText('Map Y'), { target: { value: '20' } });
     fireEvent.change(view.getByLabelText('Map Width'), { target: { value: '25' } });
@@ -67,9 +67,9 @@ describe('WarehouseMap production UI', () => {
   it('keeps layout mutations hidden from a location reader', async () => {
     localStorage.setItem('permissions', '["location.read"]');
     const view = render(<WarehouseMap />);
-    await view.findByRole('table', { name: 'Chi tiết heatmap kho thật' });
+    const mappedLocation = await view.findByRole('button', { name: 'Vị trí A01-R02-L03-B04' });
     expect(view.queryByText('Sửa bố trí')).toBeNull();
     expect(view.queryByText('Bố trí')).toBeNull();
-    expect((view.getByRole('button', { name: 'Vị trí A01-R02-L03-B04' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((mappedLocation as HTMLButtonElement).disabled).toBe(true);
   });
 });
