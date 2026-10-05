@@ -1931,6 +1931,96 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("RolePermissions", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.StockAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AllocationCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("AllocatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("AllocatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("InventoryStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReleasedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ReservationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SelectionReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Strategy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocatedBy");
+
+                    b.HasIndex("AllocationCode")
+                        .IsUnique();
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("ReleasedBy");
+
+                    b.HasIndex("ReservationId");
+
+                    b.HasIndex("ReservationId", "LocationId", "InventoryStatus", "Status");
+
+                    b.HasIndex("WarehouseId", "LocationId", "ProductId", "Status");
+
+                    b.ToTable("StockAllocations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_StockAllocations_Quantity", "[Quantity] > 0");
+
+                            t.HasCheckConstraint("CK_StockAllocations_Version", "[Version] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.StockReservation", b =>
                 {
                     b.Property<int>("Id")
@@ -1938,6 +2028,14 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AllocatedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("AllocationVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
 
                     b.Property<DateTime?>("ConsumedAt")
                         .HasColumnType("datetime2");
@@ -2021,7 +2119,7 @@ namespace ERP.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_StockReservations_Expiry", "[ExpiresAt] > [CreatedAt]");
 
-                            t.HasCheckConstraint("CK_StockReservations_Quantity", "[Quantity] > 0 AND [ConsumedQuantity] >= 0 AND [ReleasedQuantity] >= 0 AND [ConsumedQuantity] + [ReleasedQuantity] <= [Quantity]");
+                            t.HasCheckConstraint("CK_StockReservations_Quantity", "[Quantity] > 0 AND [ConsumedQuantity] >= 0 AND [ReleasedQuantity] >= 0 AND [AllocatedQuantity] >= 0 AND [ConsumedQuantity] + [ReleasedQuantity] <= [Quantity] AND [AllocatedQuantity] <= [Quantity] - [ConsumedQuantity] - [ReleasedQuantity]");
                         });
                 });
 
@@ -3623,6 +3721,56 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.StockAllocation", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "AllocatedByUser")
+                        .WithMany()
+                        .HasForeignKey("AllocatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.User", "ReleasedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReleasedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.StockReservation", "Reservation")
+                        .WithMany("Allocations")
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AllocatedByUser");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("ReleasedByUser");
+
+                    b.Navigation("Reservation");
+
+                    b.Navigation("Warehouse");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.StockReservation", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
@@ -3930,6 +4078,11 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Permissions");
 
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.StockReservation", b =>
+                {
+                    b.Navigation("Allocations");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockTransfer", b =>

@@ -23,7 +23,9 @@ type Reservation = {
   quantity: number;
   consumedQuantity: number;
   releasedQuantity: number;
+  allocatedQuantity: number;
   remainingQuantity: number;
+  allocatableQuantity: number;
   status: string;
   sourceType: string;
   sourceCode?: string;
@@ -45,7 +47,7 @@ const messageOf = (failure: unknown, fallback: string) => {
 
 const toneOf = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
   if (status === 'Consumed') return 'success';
-  if (status === 'Active' || status === 'PartiallyConsumed') return 'warning';
+  if (status === 'Active' || status === 'PartiallyConsumed' || status === 'PartiallyAllocated' || status === 'Allocated') return 'warning';
   if (status === 'Cancelled' || status === 'Expired') return 'danger';
   return 'neutral';
 };
@@ -139,7 +141,7 @@ export default function StockReservations() {
             onChange={(event) => setStatus(event.target.value)}
           >
             <option value="">Tất cả</option>
-            {['Active', 'PartiallyConsumed', 'Consumed', 'Released', 'Expired', 'Cancelled'].map((value) => (
+            {['Active', 'PartiallyConsumed', 'PartiallyAllocated', 'Allocated', 'Consumed', 'Released', 'Expired', 'Cancelled'].map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
@@ -160,6 +162,8 @@ export default function StockReservations() {
                 <th>Nguồn</th>
                 <th>Ban đầu</th>
                 <th>Còn giữ</th>
+                <th>Đã Allocation</th>
+                <th>Chưa Allocation</th>
                 <th>Hết hạn</th>
                 <th>Trạng thái</th>
                 {canOperate && <th>Thao tác</th>}
@@ -167,9 +171,9 @@ export default function StockReservations() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td className="ui-empty-cell" colSpan={canOperate ? 9 : 8}>Đang tải...</td></tr>
+                <tr><td className="ui-empty-cell" colSpan={canOperate ? 11 : 10}>Đang tải...</td></tr>
               ) : data.items.length === 0 ? (
-                <tr><td className="ui-empty-cell" colSpan={canOperate ? 9 : 8}>Không có reservation phù hợp.</td></tr>
+                <tr><td className="ui-empty-cell" colSpan={canOperate ? 11 : 10}>Không có reservation phù hợp.</td></tr>
               ) : data.items.map((item) => (
                 <tr key={item.id}>
                   <td><strong>{item.reservationCode}</strong></td>
@@ -178,10 +182,12 @@ export default function StockReservations() {
                   <td>{item.sourceType}{item.sourceCode ? ` / ${item.sourceCode}` : ''}</td>
                   <td>{item.quantity}</td>
                   <td><strong>{item.remainingQuantity}</strong></td>
+                  <td>{item.allocatedQuantity}</td>
+                  <td>{item.allocatableQuantity}</td>
                   <td>{new Date(item.expiresAt).toLocaleString('vi-VN')}</td>
                   <td><UiBadge tone={toneOf(item.status)}>{item.status}</UiBadge></td>
                   {canOperate && <td>
-                    {['Active', 'PartiallyConsumed'].includes(item.status) ? (
+                    {['Active', 'PartiallyConsumed', 'PartiallyAllocated', 'Allocated'].includes(item.status) ? (
                       <button
                         type="button"
                         disabled={busy}

@@ -14,6 +14,9 @@ import {
   demoProducts,
   demoPutawayTasks,
   demoReservations,
+  demoAllocations,
+  demoAllocatableReservations,
+  demoAllocationCandidates,
   demoStocktakes,
   demoTransfers,
   demoUnits,
@@ -85,7 +88,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         userId: 1,
         username: 'Blueprint Demo',
         role: 'Viewer',
-        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
+        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
     }
 
@@ -356,6 +359,33 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       const status = params.get('status');
       const items = demoReservations.filter(item => !status || item.status === status);
       return ok(config, paged(items, Number(params.get('page') ?? 1), Number(params.get('pageSize') ?? 20)));
+    }
+
+    if (path === '/api/inventory/allocations/reservations') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      return ok(config, demoAllocatableReservations.filter(item => !warehouseId || item.warehouseId === warehouseId));
+    }
+    if (path === '/api/inventory/allocations/candidates') {
+      const reservationId = Number(params.get('reservationId') ?? 0);
+      return ok(config, demoAllocationCandidates
+        .filter(item => !reservationId || item.reservationId === reservationId)
+        .filter(item => item.allocatableQuantity > 0)
+        .map(({ reservationId: _reservationId, ...item }) => item));
+    }
+    if (path === '/api/inventory/allocations') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const reservationId = Number(params.get('reservationId') ?? 0);
+      const status = params.get('status');
+      const items = demoAllocations.filter(item =>
+        (!warehouseId || item.warehouseId === warehouseId)
+        && (!reservationId || item.reservationId === reservationId)
+        && (!status || item.status === status)
+      );
+      return ok(config, paged(items, Number(params.get('page') ?? 1), Number(params.get('pageSize') ?? 20)));
+    }
+    if (/^\/api\/inventory\/allocations\/\d+$/.test(path)) {
+      const item = demoAllocations.find(allocation => allocation.id === findNumericId(path));
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy Allocation demo.');
     }
 
     if (path === '/api/stocktakes') return ok(config, demoStocktakes.map(item => ({

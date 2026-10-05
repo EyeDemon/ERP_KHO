@@ -21,6 +21,7 @@ import InventoryReconciliation from '../pages/InventoryReconciliation';
 import Stocktakes from '../pages/Stocktakes';
 import StockTransfers from '../pages/StockTransfers';
 import StockReservations from '../pages/StockReservations';
+import StockAllocations from '../pages/StockAllocations';
 import Approvals from '../pages/Approvals';
 import BusinessPartners from '../pages/BusinessPartners';
 import PutawayTasks from '../pages/PutawayTasks';
@@ -90,6 +91,7 @@ const AppRoutes = () => {
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
         <Route path="stock-reservations" element={<StockReservations />} />
+        <Route path="stock-allocations" element={<PermissionRoute permission="allocation.read"><StockAllocations /></PermissionRoute>} />
         <Route path="approvals" element={<ApprovalRoute />} />
         <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
         <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />

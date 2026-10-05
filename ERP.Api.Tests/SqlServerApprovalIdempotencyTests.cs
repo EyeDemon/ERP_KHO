@@ -1,3 +1,4 @@
+using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
@@ -35,7 +36,7 @@ public sealed class SqlServerApprovalIdempotencyTests
     public async Task PermissionMigrationRequiresCanonicalUnlockedBootstrapAndRollsBackFailure()
     {
         const string previous = "20260927014531_AddInboundPutawayLocationMovement";
-        const int canonicalPermissionCount = 80;
+        var canonicalPermissionCount = AppPermissions.Catalog.Length;
         var outboundCodes = new[]
         {
             "export_receipt.read",

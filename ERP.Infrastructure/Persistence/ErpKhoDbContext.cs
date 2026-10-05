@@ -49,6 +49,7 @@ public class ErpKhoDbContext : DbContext
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
     public DbSet<StockTransferDetail> StockTransferDetails => Set<StockTransferDetail>();
     public DbSet<StockReservation> StockReservations => Set<StockReservation>();
+    public DbSet<StockAllocation> StockAllocations => Set<StockAllocation>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<ReceivingDiscrepancy> ReceivingDiscrepancies => Set<ReceivingDiscrepancy>();
     public DbSet<ReceivingObservationVersion> ReceivingObservationVersions => Set<ReceivingObservationVersion>();
