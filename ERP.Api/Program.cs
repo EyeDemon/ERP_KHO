@@ -182,6 +182,10 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IPackingSessionIntegration
 builder.Services.AddScoped<ERP.Infrastructure.Services.PackingService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPackingService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IPackingDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.ShipmentIntegration>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentIntegration>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.ShipmentService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();

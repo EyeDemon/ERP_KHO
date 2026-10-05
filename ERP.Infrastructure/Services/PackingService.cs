@@ -15,7 +15,8 @@ public sealed class PackingService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
     ICurrentUser currentUser,
-    IPackingSessionIntegration packingSessionIntegration) : IPackingService, IPackingDispatchReadiness
+    IPackingSessionIntegration packingSessionIntegration,
+    IShipmentIntegration? shipmentIntegration = null) : IPackingService, IPackingDispatchReadiness
 {
     public async Task<IReadOnlyList<PackingSessionListDto>> ListAsync(
         int? warehouseId = null,
@@ -282,7 +283,8 @@ public sealed class PackingService(
             session.Status = PackingSessionStatus.Packed;
             session.PackedAt = DateTime.UtcNow;
             AddAudit("PackingSession.Packed", session, $"PackedQuantity: {allContents.Sum(x => x.Quantity)}; HandlingUnits: {activeHus.Count}");
-            await Task.CompletedTask;
+            if (shipmentIntegration is not null)
+                await shipmentIntegration.EnsureForPackingSessionAsync(session.Id, currentUser.UserId, token);
         }, cancellationToken);
 
     public Task<PackingSessionDto> CloseAsync(
