@@ -499,4 +499,13 @@ export const demoPermissionCatalog = [
   { code: 'asn.read', description: 'Xem ASN dự kiến' },
   { code: 'receipt.read', description: 'Xem phiếu nhập' },
   { code: 'putaway.read', description: 'Xem nhiệm vụ cất hàng' },
+  { code: 'packing.read', description: 'Xem Packing session' },
+  { code: 'packing.execute', description: 'Thực hiện Packing' },
+  { code: 'packing.reopen', description: 'Mở lại Packing theo kiểm soát' },
+  { code: 'handling_unit.read', description: 'Xem Handling Unit' },
+  { code: 'handling_unit.create', description: 'Tạo Handling Unit' },
+  { code: 'handling_unit.modify', description: 'Sửa cấu trúc Handling Unit' },
+  { code: 'handling_unit.split', description: 'Tách Handling Unit' },
+  { code: 'handling_unit.merge', description: 'Gộp Handling Unit' },
+  { code: 'handling_unit.repack', description: 'Đóng gói lại Handling Unit' },
 ];
