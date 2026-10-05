@@ -305,7 +305,28 @@ export const demoExportReceipts = [
 ];
 
 export const demoReservations = [
-  { id: 1, reservationCode: 'RSV-2026-9031', productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', warehouseName: 'DC Hồ Chí Minh', quantity: 160, consumedQuantity: 40, releasedQuantity: 0, remainingQuantity: 120, status: 'PartiallyConsumed', sourceType: 'ExportReceipt', sourceCode: 'EX-2026-5108', createdAt: '2026-10-03T08:45:00Z', expiresAt: '2026-10-04T08:45:00Z' },
+  { id: 1, reservationCode: 'RSV-2026-9031', productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', quantity: 160, consumedQuantity: 40, releasedQuantity: 0, allocatedQuantity: 80, remainingQuantity: 120, allocatableQuantity: 40, status: 'PartiallyAllocated', sourceType: 'ExportReceipt', sourceCode: 'EX-2026-5108', createdAt: '2026-10-03T08:45:00Z', expiresAt: '2026-10-06T08:45:00Z' },
+];
+
+export const demoAllocatableReservations = [
+  { reservationId: 1, reservationCode: 'RSV-2026-9031', sourceType: 'ExportReceipt', sourceCode: 'EX-2026-5108', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', reservedQuantity: 120, allocatedQuantity: 80, allocatableQuantity: 40, expiresAt: '2026-10-06T08:45:00Z' },
+];
+
+export const demoAllocationCandidates = [
+  { reservationId: 1, locationId: 101, locationCode: 'A01-R02-L03-B04', locationName: 'Bin B04', reservedQuantity: 80, allocatedQuantity: 80, allocatableQuantity: 0, rank: 1, reason: 'Tự động theo thứ tự vị trí ổn định.' },
+  { reservationId: 1, locationId: 102, locationCode: 'A01-R02-L03-B05', locationName: 'Bin B05', reservedQuantity: 40, allocatedQuantity: 0, allocatableQuantity: 40, rank: 2, reason: 'Tự động theo thứ tự vị trí ổn định.' },
+];
+
+export const demoAllocations = [
+  {
+    id: 7711, allocationCode: 'ALC-2026-7711', reservationId: 1, reservationCode: 'RSV-2026-9031',
+    sourceType: 'ExportReceipt', sourceId: 5108, sourceCode: 'EX-2026-5108',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', productId: 1, productCode: 'SKU-1001',
+    productName: 'Cà phê Arabica 500g', locationId: 101, locationCode: 'A01-R02-L03-B04',
+    locationName: 'Bin B04', inventoryStatus: 'Available', quantity: 80, status: 'Active',
+    strategy: 'LocationOrder', selectionReason: 'Tự động theo thứ tự vị trí ổn định (LocationId tăng dần).',
+    allocatedAt: '2026-10-05T08:47:00Z', releasedAt: null, releaseReason: null,
+  },
 ];
 
 export const demoStocktakes = [
