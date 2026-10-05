@@ -485,6 +485,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("ApprovedBy")
                         .HasColumnType("int");
 
+                    b.Property<int?>("AsnId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -499,6 +502,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("PurchaseOrderId")
+                        .HasColumnType("int");
 
                     b.Property<int>("Status")
                         .IsConcurrencyToken()
@@ -521,6 +527,10 @@ namespace ERP.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ApprovedBy");
+
+                    b.HasIndex("AsnId")
+                        .IsUnique()
+                        .HasFilter("[AsnId] IS NOT NULL AND [Status] <> 2");
 
                     b.HasIndex("Code")
                         .IsUnique();
@@ -3217,6 +3227,8 @@ namespace ERP.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ApprovedByUser");
+
+                    b.Navigation("Asn");
 
                     b.Navigation("CreatedByUser");
 
