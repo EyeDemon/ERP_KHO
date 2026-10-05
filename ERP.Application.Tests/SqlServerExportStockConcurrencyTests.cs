@@ -69,7 +69,10 @@ public class SqlServerExportStockConcurrencyTests
         var outcomes = await ApproveConcurrentlyAsync(scenario.ReceiptIds[0], scenario.ReceiptIds[0], scenario.ApproverUserId);
 
         outcomes.Count(error => error is null).Should().Be(1);
-        outcomes.Count(error => error is ConcurrencyException).Should().Be(1);
+        var outcomeSummary = string.Join(" | ", outcomes.Select(error =>
+            error is null ? "<success>" : $"{error.GetType().FullName}: {error.Message}"));
+        outcomes.Count(error => error is ConcurrencyException).Should().Be(1,
+            "same-receipt loser must be a domain concurrency conflict; actual outcomes: {0}", outcomeSummary);
         await scenario.AssertStateAsync([60m], 40m, dispatchedReceiptCount: 1);
     }
 
