@@ -18,7 +18,7 @@ vi.mock('../services/idempotency',()=>({
 
 const line={id:31,allocationId:7711,allocationCode:'ALC-7711',productId:1,productCode:'SKU-1001',productName:'Cà phê',sourceLocationId:101,sourceLocationCode:'A01-R02-L03-B04',sourceLocationName:'Bin B04',requestedQuantity:10,pickedQuantity:0,remainingQuantity:10,sequence:1,status:'InProgress'};
 const summary={id:88,taskCode:'PICK-2026-0088',sourceType:'ExportReceipt',sourceId:5108,sourceCode:'EX-2026-5108',warehouseId:1,warehouseName:'DC Hồ Chí Minh',pickingType:'STANDARD',status:'InProgress',priority:0,assignedUserId:7,assignedUserName:'Picker',requestedQuantity:10,pickedQuantity:0,remainingQuantity:10,createdAt:'2026-10-06T01:00:00Z'};
-const detail={...summary,rowVersion:'AQ==',lines:[line],shortPicks:[]};
+const detail={...summary,rowVersion:'AQ==',lines:[line],shortPicks:[] as Array<Record<string, unknown>>};
 const grant=(...permissions:string[])=>{permissionState.granted.clear();permissions.forEach(p=>permissionState.granted.add(p));};
 const reads=(task=detail)=>vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/picking-tasks'?[summary]:task}) as never);
 
