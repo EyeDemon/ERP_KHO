@@ -54,9 +54,13 @@ Promoted to `live` because production code/routes and merged verification now ex
 - RP-06 Ledger Reconciliation.
 - AD-02 Role & Permission Matrix.
 
-IN-01 remains live and its traceability now explicitly includes PO/ASN state/API/permission/UX sources. IN-02 Receiving Appointment is intentionally `foundation`: Dock/Yard appointment scheduling, arrival/check-in and dock assignment are production-capable, but the canonical linkage from appointment to PO/ASN/Receipt defined by Specs 03/46 is not yet complete. OUT-01 ExportReceipt MVP and OUT-02 Reservation remain live.
+IN-01 remains live and its traceability now explicitly includes PO/ASN state/API/permission/UX sources. IN-02 Receiving Appointment is intentionally `foundation`: Dock/Yard appointment scheduling, arrival/check-in and dock assignment are production-capable, but the canonical linkage from appointment to PO/ASN/Receipt defined by Specs 03/46 is not yet complete. IN-06 is receipt-scoped Inbound QC and does not promote the separate cross-flow QR-01 QC Work Center.
 
-The refresh deliberately leaves OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch and OUT-10 Tracking/POD non-live. Notion Spec 38 keeps Shipment as a separate state machine with LOADED/HU/allocation prerequisites; ExportReceipt `APPROVED` is not Shipment `LOADED`.
+OUT-01 ExportReceipt MVP and OUT-02 Reservation remain live. OUT-01 now explicitly records that ExportReceipt `Dispatched` is not Shipment `LOADED/DISPATCHED`, and OUT-02 remains product/warehouse reservation rather than location/lot/serial allocation. The refresh deliberately leaves OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch and OUT-10 Tracking/POD non-live. Notion Spec 38 keeps Shipment as a separate state machine with LOADED/HU/allocation prerequisites.
+
+Transfer maturity was also stale: TR-03 Transfer Dispatch and TR-04 Transfer Receive are now `live` because the production Stock Transfer flow implements Approved → InTransit → Received, source deduction/TransferOut, destination receipt/TransferIn, warehouse scope and receipt discrepancy quantities. TR-02 In-Transit Inventory is `foundation`: quantity is visible per transfer/source/destination, but a global owner-aware in-transit inventory browser is not complete.
+
+Inventory capabilities remain deliberately conservative. INV-01/02/03/04 stay `foundation`: production has OnHand/Reserved/Available, movement history, InventoryStock projection and eligible-location reservation logic, but not the full location/status/lot/serial/lock/allocation model from the canonical specs. INV-11 is read-only reconciliation today; controlled rebuild/remediation is not yet implemented and is no longer described as if it were production-ready.
 
 ## Executive finding
 
