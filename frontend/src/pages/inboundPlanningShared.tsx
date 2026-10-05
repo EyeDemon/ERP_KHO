@@ -2,7 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import apiClient from '../services/apiClient';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { permissionError } from '../services/permissionPresentation';
-import { UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiMetric, UiMetricGrid, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 type ProductUnit = { unitId:number; unitCode:string; unitName:string };
 type ProductWithUnits = {
@@ -82,4 +82,37 @@ export async function runInboundStateCommand<T extends VersionedInboundDetail>({
   }finally{
     mutationLock.current.delete(action);setBusy('');
   }
+}
+
+export function InboundPlanningOverview({
+  title,description,error,success,metrics,labels,
+  statusFilter,setStatusFilter,search,setSearch,placeholder,
+}:{
+  title:string;
+  description:string;
+  error:string;
+  success:string;
+  metrics:Array<{value:number;label:string}>;
+  labels:Record<string,string>;
+  statusFilter:string;
+  setStatusFilter:Dispatch<SetStateAction<string>>;
+  search:string;
+  setSearch:Dispatch<SetStateAction<string>>;
+  placeholder:string;
+}) {
+  return <>
+    <UiPageHeader eyebrow="Nhập kho" title={title} description={description}/>
+    <InboundPlanningFeedback error={error} success={success}/>
+    <UiMetricGrid>
+      {metrics.map(metric=><UiMetric key={metric.label} value={metric.value} label={metric.label}/>)}
+    </UiMetricGrid>
+    <InboundPlanningToolbar
+      labels={labels}
+      statusFilter={statusFilter}
+      setStatusFilter={setStatusFilter}
+      search={search}
+      setSearch={setSearch}
+      placeholder={placeholder}
+    />
+  </>;
 }
