@@ -40,7 +40,7 @@ public sealed class PurchaseOrderLineDto
     public decimal AllowedUnderReceiptPct { get; set; }
 }
 
-public sealed class CreatePurchaseOrderDto
+public class CreatePurchaseOrderDto
 {
     public string ExternalPoId { get; set; } = string.Empty;
     public string SourceSystem { get; set; } = "MANUAL";
@@ -112,7 +112,7 @@ public sealed class AsnLineDto
     public string BaseUnitCode { get; set; } = string.Empty;
 }
 
-public sealed class CreateAsnDto
+public class CreateAsnDto
 {
     public string Code { get; set; } = string.Empty;
     public int? PurchaseOrderId { get; set; }
