@@ -167,7 +167,7 @@ public sealed class SqlServerPickingTests
             await using (var release = CreateContext())
             {
                 var service = CreateAllocationService(release, fixture.UserId, withPicking: true);
-                await FluentActions.Invoking(() => service.ReleaseAsync(
+                await FluentActions.Awaiting(() => service.ReleaseAsync(
                         allocationId,
                         new ReleaseStockAllocationDto { Reason = "must be blocked" }))
                     .Should().ThrowAsync<ConcurrencyException>();
@@ -176,7 +176,7 @@ public sealed class SqlServerPickingTests
             await using (var reallocate = CreateContext())
             {
                 var service = CreateAllocationService(reallocate, fixture.UserId, withPicking: true);
-                await FluentActions.Invoking(() => service.ReallocateAsync(
+                await FluentActions.Awaiting(() => service.ReallocateAsync(
                         allocationId,
                         new ReallocateStockAllocationDto { LocationId = fixture.SecondLocationId, Reason = "must be blocked" }))
                     .Should().ThrowAsync<ConcurrencyException>();
@@ -211,7 +211,7 @@ public sealed class SqlServerPickingTests
         await using (var assign = CreateContext())
         {
             var service = CreatePickingService(assign, fixture.UserId);
-            var created = (await service.ListAsync()).Single();
+            var created = (await service.ListAsync(fixture.WarehouseId)).Single();
             var detail = await service.GetAsync(created.Id);
             assigned = await service.AssignAsync(created.Id, new PickingStateCommandDto
             {
