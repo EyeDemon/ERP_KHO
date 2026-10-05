@@ -103,7 +103,7 @@ namespace ERP.Application.Services
                 if (decimal.Round(detailDto.Quantity, stock.Product.Unit.DecimalPlaces) != detailDto.Quantity)
                     throw new BusinessRuleException($"Số lượng sản phẩm ID {detailDto.ProductId} vượt quá độ chính xác Base UOM cho phép ({stock.Product.Unit.DecimalPlaces} chữ số thập phân).");
 
-                var currentStock = stock.Quantity - stock.ReservedQuantity;
+                var currentStock = await _inventoryStockRepository.GetAvailableQuantityAsync(detailDto.ProductId, dto.WarehouseId);
 
                 if (detailDto.Quantity > currentStock)
                 {

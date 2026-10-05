@@ -56,6 +56,13 @@ namespace ERP.Infrastructure.Repositories
 
         }
 
+        public Task<decimal> GetAvailableQuantityAsync(int productId, int warehouseId, CancellationToken cancellationToken = default) =>
+            _dbSet.AsNoTracking()
+                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
+                    x.Status == InventoryStatus.Available && x.Location != null &&
+                    x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
+                .SumAsync(x => x.Quantity - x.ReservedQuantity, cancellationToken);
+
         public async Task<bool> TryReserveAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
         {
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));

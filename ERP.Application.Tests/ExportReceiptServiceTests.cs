@@ -50,6 +50,9 @@ namespace ERP.Application.Tests
                     new(101, 10m)
                 });
             _mockStockRepo
+                .Setup(x => x.GetAvailableQuantityAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(20m);
+            _mockStockRepo
                 .Setup(x => x.TryDecreaseStockAsync(
                     It.IsAny<int>(),
                     It.IsAny<int>(),
@@ -290,6 +293,44 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
+        public async Task CreateAsync_AggregatedEligibleAvailability_AllowsQuantityAboveSingleLocationBalance()
+        {
+            var dto = new CreateExportReceiptDto
+            {
+                Code = "EX-MULTI-LOC",
+                WarehouseId = 1,
+                Details = new List<CreateExportReceiptDetailDto> { new() { ProductId = 1, Quantity = 40, UnitPrice = 10 } }
+            };
+            _mockExportRepo.Setup(x => x.ExistsByCodeAsync("EX-MULTI-LOC", null)).ReturnsAsync(false);
+            _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(1, 1)).ReturnsAsync(new InventoryStock
+            {
+                Quantity = 20,
+                Product = new Product
+                {
+                    Id = 1,
+                    IsActive = true,
+                    Unit = new Unit { Id = 7, Code = "EA", Name = "Cái", DecimalPlaces = 0, IsActive = true }
+                }
+            });
+            _mockStockRepo.Setup(x => x.GetAvailableQuantityAsync(1, 1, It.IsAny<CancellationToken>())).ReturnsAsync(50m);
+            _mockExportRepo.Setup(x => x.AddAsync(It.IsAny<ExportReceipt>(), It.IsAny<CancellationToken>()))
+                .Callback<ExportReceipt, CancellationToken>((entity, _) => entity.Id = 42)
+                .ReturnsAsync((ExportReceipt entity, CancellationToken _) => entity);
+            _mockExportRepo.Setup(x => x.GetByIdWithDetailsAsync(42)).ReturnsAsync(new ExportReceipt
+            {
+                Id = 42,
+                Code = "EX-MULTI-LOC",
+                WarehouseId = 1,
+                Details = new List<ExportReceiptDetail>()
+            });
+
+            var result = await _service.CreateAsync(dto, 1);
+
+            result.Id.Should().Be(42);
+            _mockStockRepo.Verify(x => x.GetAvailableQuantityAsync(1, 1, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
         public async Task CreateAsync_QuantityGreaterThanStock_ThrowsBusinessRuleException()
         {
             var dto = new CreateExportReceiptDto { Code = "EX001", WarehouseId = 1, Details = new List<CreateExportReceiptDetailDto> { new CreateExportReceiptDetailDto { ProductId = 1, Quantity = 10 } } };
@@ -303,6 +344,7 @@ namespace ERP.Application.Tests
                         Unit = new Unit { Id = 7, Code = "EA", Name = "Cái", DecimalPlaces = 0, IsActive = true }
                     }
                 });
+            _mockStockRepo.Setup(x => x.GetAvailableQuantityAsync(1, 1, It.IsAny<CancellationToken>())).ReturnsAsync(5m);
             Func<Task> act = async () => await _service.CreateAsync(dto, 1);
             await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Sản phẩm có ID 1 không đủ tồn kho*");
             _mockAuditRepo.Verify(x => x.AddAsync(It.IsAny<AuditLog>()), Times.Never);
