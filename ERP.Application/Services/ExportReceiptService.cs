@@ -28,7 +28,7 @@ namespace ERP.Application.Services
             _unitOfWork = unitOfWork;
             _auditLogRepository = auditLogRepository;
             _stockReservationService = null;
-            _options = options ?? new ExportReceiptOptions { DefaultDispatchMode = nameof(ExportDispatchMode.DispatchOnApproval) };
+            _options = options ?? new ExportReceiptOptions();
         }
 
         public ExportReceiptService(
@@ -144,27 +144,19 @@ namespace ERP.Application.Services
             }
         }
 
-        public async Task ApproveAsync(int id, int approvedByUserId)
-        {
-            var mode = _options.GetDefaultMode();
-            if (mode == ExportDispatchMode.DispatchOnApproval)
-                await ApproveAndDispatchAsync(id, approvedByUserId);
-            else
-                await ApproveAndReserveAsync(id, approvedByUserId);
-        }
+        public Task ApproveAsync(int id, int approvedByUserId) =>
+            ApproveAndReserveAsync(id, approvedByUserId);
 
         public Task ApproveAndReserveAsync(int id, int approvedByUserId) =>
-            ApproveCoreAsync(id, approvedByUserId, ExportDispatchMode.RequireSeparateDispatch);
+            ApproveCoreAsync(id, approvedByUserId);
 
         public Task ApproveAndDispatchAsync(int id, int approvedByUserId) =>
-            ApproveCoreAsync(id, approvedByUserId, ExportDispatchMode.DispatchOnApproval);
+            throw new BusinessRuleException("Luồng duyệt và xuất ngay đã ngừng sử dụng. Hãy duyệt giữ hàng trước, sau đó xác nhận xuất kho.");
 
-        private async Task ApproveCoreAsync(int id, int approvedByUserId, ExportDispatchMode requestedMode)
+        private async Task ApproveCoreAsync(int id, int approvedByUserId)
         {
             EnsureWriteEnabled();
             if (_currentUser is not null) approvedByUserId = _currentUser.UserId;
-            EnsureApprovalPermission(requestedMode);
-            var mode = _options.AllowPerReceiptDispatchMode ? requestedMode : _options.GetDefaultMode();
             var maxDeadlockAttempts = _unitOfWork.HasExternalTransaction ? 1 : 2;
 
             for (var attempt = 1; attempt <= maxDeadlockAttempts; attempt++)
@@ -184,48 +176,28 @@ namespace ERP.Application.Services
                     if (receipt.Details == null || !receipt.Details.Any())
                         throw new BusinessRuleException("Phiếu xuất phải có ít nhất 1 sản phẩm để duyệt");
 
+                    if (_stockReservationService is null)
+                        throw new InvalidOperationException("Stock reservation service is required for export approval.");
+
                     receipt.CustomerCodeSnapshot = receipt.Customer?.Code;
                     receipt.CustomerNameSnapshot = receipt.Customer?.Name;
-
-                    receipt.DispatchMode = mode;
+                    receipt.DispatchMode = ExportDispatchMode.RequireSeparateDispatch;
                     receipt.ApprovedBy = approvedByUserId;
                     receipt.ApprovedAt = DateTime.UtcNow;
 
                     foreach (var detail in receipt.Details.OrderBy(detail => detail.ProductId))
                     {
-                        if (_stockReservationService is null)
-                        {
-                            if (mode == ExportDispatchMode.RequireSeparateDispatch)
-                                throw new InvalidOperationException("Stock reservation service is required for separate export dispatch.");
-                            if (!await _inventoryStockRepository.TryDecreaseStockAsync(detail.ProductId, receipt.WarehouseId, detail.Quantity))
-                                throw new ConcurrencyException($"Không đủ tồn kho cho sản phẩm ID {detail.ProductId} hoặc tồn kho vừa được thay đổi bởi yêu cầu khác.");
-                            await AddExportTransactionAsync(receipt, detail, approvedByUserId);
-                            continue;
-                        }
-
-                        var reservation = await _stockReservationService.ReserveForExportAsync(receipt.Id, receipt.Code, receipt.WarehouseId, detail.ProductId, detail.Quantity, approvedByUserId);
-                        if (mode == ExportDispatchMode.RequireSeparateDispatch) continue;
-                        await _stockReservationService.ConsumeAsync(reservation, approvedByUserId);
-                        await AddExportTransactionAsync(receipt, detail, approvedByUserId);
+                        await _stockReservationService.ReserveForExportAsync(
+                            receipt.Id, receipt.Code, receipt.WarehouseId, detail.ProductId, detail.Quantity, approvedByUserId);
                     }
 
-                    if (mode == ExportDispatchMode.DispatchOnApproval)
-                    {
-                        receipt.Status = ReceiptStatus.Dispatched;
-                        receipt.DispatchedBy = approvedByUserId;
-                        receipt.DispatchedAt = DateTime.UtcNow;
-                    }
-                    else
-                    {
-                        receipt.Status = ReceiptStatus.Approved;
-                    }
-
+                    receipt.Status = ReceiptStatus.Approved;
                     await _exportReceiptRepository.UpdateAsync(receipt);
 
                     await _auditLogRepository.AddAsync(new ERP.Domain.Entities.AuditLog
                     {
                         UserId = approvedByUserId,
-                        Action = mode == ExportDispatchMode.DispatchOnApproval ? "ExportReceipt.ApprovedAndDispatched" : "ExportReceipt.ApprovedAndReserved",
+                        Action = "ExportReceipt.ApprovedAndReserved",
                         EntityName = "ExportReceipt",
                         EntityId = receipt.Id,
                         WarehouseId = receipt.WarehouseId,
@@ -233,7 +205,7 @@ namespace ERP.Application.Services
                         Severity = "Information",
                         Timestamp = DateTime.UtcNow,
                         OldValues = $"Status: {ReceiptStatus.Draft}",
-                        NewValues = $"WarehouseId: {receipt.WarehouseId}; DispatchMode: {mode}; Status: {receipt.Status}"
+                        NewValues = $"WarehouseId: {receipt.WarehouseId}; DispatchMode: {ExportDispatchMode.RequireSeparateDispatch}; Status: {ReceiptStatus.Approved}"
                     });
 
                     await _unitOfWork.CommitTransactionAsync();
@@ -255,7 +227,6 @@ namespace ERP.Application.Services
         {
             EnsureWriteEnabled();
             if (_currentUser is not null) userId = _currentUser.UserId;
-            EnsureDispatchPermission();
             await _unitOfWork.BeginTransactionAsync();
             try
             {
@@ -264,7 +235,7 @@ namespace ERP.Application.Services
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
                 if (receipt.Status != ReceiptStatus.Approved || receipt.DispatchMode != ExportDispatchMode.RequireSeparateDispatch)
                     throw new ConcurrencyException("Phiếu xuất không ở trạng thái có thể xác nhận xuất.");
-                if (_options.RequireDifferentDispatcher && !_currentUser!.IsGlobalAdmin && receipt.ApprovedBy == userId)
+                if (_options.RequireDifferentDispatcher && _currentUser?.IsGlobalAdmin != true && receipt.ApprovedBy == userId)
                     throw new BusinessRuleException("Người duyệt phải khác người xác nhận xuất.");
                 if (_stockReservationService is null) throw new InvalidOperationException("Stock reservation service is required for export dispatch.");
 
@@ -431,19 +402,5 @@ namespace ERP.Application.Services
                 throw new ServiceUnavailableException("Workflow xuất kho đang tạm dừng để bảo trì. Vui lòng thử lại sau.");
         }
 
-        private void EnsureApprovalPermission(ExportDispatchMode mode)
-        {
-            if (_currentUser is null) return;
-            if (_currentUser.Role is "Admin" or "Manager") return;
-            if (mode == ExportDispatchMode.DispatchOnApproval && _options.AllowWarehouseStaffDirectDispatch && _currentUser.Role == "WarehouseStaff") return;
-            throw new UnauthorizedAccessException("Bạn không có quyền duyệt phiếu xuất với chế độ này.");
-        }
-
-        private void EnsureDispatchPermission()
-        {
-            if (_currentUser is null) return;
-            if (_currentUser.Role is "Admin" or "Manager" or "WarehouseStaff") return;
-            throw new UnauthorizedAccessException("Bạn không có quyền xác nhận xuất kho.");
-        }
     }
 }

@@ -41,8 +41,9 @@ public sealed class ApprovalWorkflowService(
     {
         var permissions = await PermissionsAsync(cancellationToken);
         var inboundRead = permissions.Contains("receipt.read");
+        var outboundRead = permissions.Contains("export_receipt.read");
         var legacy = currentUser.Role is "Admin" or "Manager";
-        if (!inboundRead && !legacy) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+        if (!inboundRead && !outboundRead && !legacy) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
         ValidatePage(request.PageIndex, request.PageSize);
         var nowUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         var options = agingOptions ?? new ApprovalAgingOptions();
@@ -56,7 +57,7 @@ public sealed class ApprovalWorkflowService(
             .Select(x => new QueueRow { Type = "StockTransfer", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.SourceWarehouseId, WarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, TotalQuantity = x.Details.Sum(d => d.RequestedQuantity), QcCompleted = false });
         var stocktakes = context.Stocktakes.AsNoTracking().Where(x => x.Status == ReceiptStatus.Draft && allowed.Contains(x.WarehouseId))
             .Select(x => new QueueRow { Type = "Stocktake", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.ActualQuantity ?? d.SystemQuantity), QcCompleted = false });
-        var query = imports.Where(_ => inboundRead).Concat(exports.Where(_ => legacy)).Concat(transfers.Where(_ => legacy)).Concat(stocktakes.Where(_ => legacy));
+        var query = imports.Where(_ => inboundRead).Concat(exports.Where(_ => outboundRead)).Concat(transfers.Where(_ => legacy)).Concat(stocktakes.Where(_ => legacy));
         if (!string.IsNullOrWhiteSpace(request.DocumentType)) query = query.Where(x => x.Type == request.DocumentType.Trim());
         if (request.WarehouseId.HasValue) query = query.Where(x => x.WarehouseId == request.WarehouseId || x.DestinationWarehouseId == request.WarehouseId);
         if (request.CreatorId.HasValue) query = query.Where(x => x.CreatorId == request.CreatorId);
@@ -99,8 +100,18 @@ public sealed class ApprovalWorkflowService(
                 WarehouseName = x.WarehouseName, DestinationWarehouseId = x.DestinationWarehouseId,
                 DestinationWarehouseName = x.DestinationWarehouseName, TotalQuantity = x.TotalQuantity,
                 PendingState = x.Type == "ImportReceipt" ? (x.QcCompleted ? "QcCompleted" : "Received") : "Draft",
-                CanApprove = x.CreatorId != currentUser.UserId && (x.Type != "ImportReceipt" || (permissions.Contains("receipt.complete") && (!x.QcCompleted || permissions.Contains("quality_disposition.approve")))),
-                CanReject = x.CreatorId != currentUser.UserId && (x.Type != "ImportReceipt" || (!x.QcCompleted && permissions.Contains("approval.reject"))),
+                CanApprove = x.CreatorId != currentUser.UserId && (x.Type switch
+                {
+                    "ImportReceipt" => permissions.Contains("receipt.complete") && (!x.QcCompleted || permissions.Contains("quality_disposition.approve")),
+                    "ExportReceipt" => permissions.Contains("export_receipt.approve"),
+                    _ => legacy
+                }),
+                CanReject = x.CreatorId != currentUser.UserId && (x.Type switch
+                {
+                    "ImportReceipt" => !x.QcCompleted && permissions.Contains("approval.reject"),
+                    "ExportReceipt" => permissions.Contains("export_receipt.cancel"),
+                    _ => legacy
+                }),
                 DeniedReasonCode = x.CreatorId == currentUser.UserId ? "CREATOR_CANNOT_CHECK" : null
                 };
             }).ToList()
@@ -122,7 +133,7 @@ public sealed class ApprovalWorkflowService(
             await warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId, cancellationToken);
         }
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        var names = new[] { inboundRead ? "ImportReceipt" : "", legacy ? "ExportReceipt" : "", legacy ? "StockTransfer" : "", legacy ? "Stocktake" : "" };
+        var names = new[] { inboundRead ? "ImportReceipt" : "", outboundRead ? "ExportReceipt" : "", legacy ? "StockTransfer" : "", legacy ? "Stocktake" : "" };
         var query = context.AuditLogs.AsNoTracking().Where(x => names.Contains(x.EntityName) &&
             ((x.WarehouseId.HasValue && allowed.Contains(x.WarehouseId.Value)) ||
              (x.SourceWarehouseId.HasValue && x.DestinationWarehouseId.HasValue && allowed.Contains(x.SourceWarehouseId.Value) && allowed.Contains(x.DestinationWarehouseId.Value))));
@@ -186,6 +197,11 @@ public sealed class ApprovalWorkflowService(
             summary.CanApprove &= permissions.Contains("receipt.complete") && (summary.PendingState != "QcCompleted" || permissions.Contains("quality_disposition.approve"));
             summary.CanReject &= permissions.Contains("approval.reject");
             if (databaseRole == "Viewer") note = null;
+        }
+        else if (documentType == "ExportReceipt")
+        {
+            summary.CanApprove &= permissions.Contains("export_receipt.approve");
+            summary.CanReject &= permissions.Contains("export_receipt.cancel");
         }
         var history = await GetHistoryAsync(new ApprovalHistoryQuery { DocumentType = documentType, DocumentId = id, PageSize = 20 }, cancellationToken);
         return new ApprovalDetail { Summary = summary, Note = note, Lines = lines, History = history.Items };
@@ -278,8 +294,13 @@ public sealed class ApprovalWorkflowService(
     }
     private void EnsureCapability(string type, HashSet<string> permissions, string required)
     {
-        if (type == "ImportReceipt" ? !permissions.Contains(required) : currentUser.Role is not ("Admin" or "Manager"))
-            throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+        var allowed = type switch
+        {
+            "ImportReceipt" => permissions.Contains(required),
+            "ExportReceipt" => permissions.Contains(required == "approval.reject" ? "export_receipt.cancel" : "export_receipt.read"),
+            _ => currentUser.Role is "Admin" or "Manager"
+        };
+        if (!allowed) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
     }
     private static void ValidatePage(int page, int size) { if (page < 1 || size is < 1 or > 100) throw new BusinessRuleException("Thông tin phân trang không hợp lệ."); }
     private async Task<Dictionary<(string Type, int Id), string>> ResolveDocumentCodesAsync(IReadOnlyCollection<AuditLog> rows, CancellationToken token)
