@@ -201,6 +201,7 @@ namespace ERP.Infrastructure.Repositories
             int productId,
             int warehouseId,
             decimal quantity,
+            int? excludedReservationId,
             CancellationToken cancellationToken = default)
         {
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
@@ -213,7 +214,8 @@ namespace ERP.Infrastructure.Repositories
                     false,
                     true,
                     cancellationToken,
-                    releaseOnly: true);
+                    releaseOnly: true,
+                    excludedReservationId: excludedReservationId);
             }
             catch (SqlException exception) when (exception.Number == 1205)
             {
@@ -228,7 +230,8 @@ namespace ERP.Infrastructure.Repositories
             bool reserve,
             bool useReserved,
             CancellationToken token,
-            bool releaseOnly = false)
+            bool releaseOnly = false,
+            int? excludedReservationId = null)
         {
             var rows = await _dbSet.AsNoTracking()
                 .Where(x => x.ProductId == productId &&
@@ -249,6 +252,7 @@ namespace ERP.Infrastructure.Repositories
                             .Where(a => a.WarehouseId == x.WarehouseId &&
                                         a.ProductId == x.ProductId &&
                                         a.LocationId == x.LocationId &&
+                                        (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
                                         (a.Status == StockAllocationStatus.Active ||
                                          a.Status == StockAllocationStatus.Picking ||
                                          a.Status == StockAllocationStatus.Picked))
@@ -280,6 +284,7 @@ namespace ERP.Infrastructure.Repositories
                             .Where(a => a.WarehouseId == x.WarehouseId &&
                                         a.ProductId == x.ProductId &&
                                         a.LocationId == x.LocationId &&
+                                        (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
                                         (a.Status == StockAllocationStatus.Active ||
                                          a.Status == StockAllocationStatus.Picking ||
                                          a.Status == StockAllocationStatus.Picked))
