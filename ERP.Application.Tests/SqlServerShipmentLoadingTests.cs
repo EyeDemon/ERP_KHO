@@ -38,7 +38,7 @@ public sealed class SqlServerShipmentLoadingTests
                 .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
             stock.Quantity.Should().Be(10);
             stock.ReservedQuantity.Should().Be(10);
-            (await verify.InventoryTransactions.CountAsync()).Should().Be(0);
+            (await verify.InventoryTransactions.CountAsync(x => x.WarehouseId == fixture.WarehouseId)).Should().Be(0);
         }
         finally { await CleanupAsync(fixture); }
     }
