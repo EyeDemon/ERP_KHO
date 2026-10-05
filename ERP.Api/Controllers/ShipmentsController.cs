@@ -30,7 +30,7 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
     [IdempotentCommand("Shipment.Stage")]
     public async Task<ActionResult<ShipmentDto>> Stage(
         int id,
-        ShipmentStateCommandDto request,
+        StageShipmentDto request,
         CancellationToken cancellationToken) =>
         Ok(await service.StageAsync(id, request, cancellationToken));
 
