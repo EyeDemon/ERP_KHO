@@ -7,10 +7,13 @@ import {
   UiBadge,
   UiCard,
   UiEmptyState,
+  UiMetric,
+  UiMetricGrid,
   UiPage,
+  UiPageHeader,
   UiTableScroll,
 } from '../ui/ProductionUi';
-import { InboundPlanningOverview, productUnitOptions, runInboundStateCommand } from './inboundPlanningShared';
+import { InboundPlanningFeedback, InboundPlanningToolbar, productUnitOptions, runInboundStateCommand } from './inboundPlanningShared';
 import './InboundPlanning.css';
 
 type AsnList={
@@ -208,24 +211,22 @@ export default function Asns(){
   if(loading)return <p role="status">Đang tải ASN...</p>;
 
   return <UiPage>
-    <InboundPlanningOverview
+    <UiPageHeader
+      eyebrow="Nhập kho"
       title="ASN dự kiến"
       description="Theo dõi lô hàng dự kiến từ nhà cung cấp tới kho trước khi tiếp nhận. Hoàn tất ASN vẫn chưa tạo tồn kho."
-      error={error}
-      success={success}
-      metrics={[
-        {value:items.length,label:'ASN trong phạm vi hiện tại'},
-        {value:items.filter(x=>x.status==='InTransit').length,label:'Đang vận chuyển'},
-        {value:items.filter(x=>x.status==='Arrived').length,label:'Đã đến kho'},
-        {value:items.filter(x=>x.status==='Receiving').length,label:'Đang tiếp nhận'},
-      ]}
-      labels={labels}
-      statusFilter={statusFilter}
-      setStatusFilter={setStatusFilter}
-      search={search}
-      setSearch={setSearch}
-      placeholder="Mã ASN, PO, nhà cung cấp, kho"
     />
+
+    <InboundPlanningFeedback error={error} success={success}/>
+
+    <UiMetricGrid>
+      <UiMetric value={items.length} label="ASN trong phạm vi hiện tại"/>
+      <UiMetric value={items.filter(x=>x.status==='InTransit').length} label="Đang vận chuyển"/>
+      <UiMetric value={items.filter(x=>x.status==='Arrived').length} label="Đã đến kho"/>
+      <UiMetric value={items.filter(x=>x.status==='Receiving').length} label="Đang tiếp nhận"/>
+    </UiMetricGrid>
+
+    <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã ASN, PO, nhà cung cấp, kho"/>
 
     <div className="inbound-planning-grid">
       <UiCard title="Danh sách ASN">

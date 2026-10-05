@@ -109,14 +109,12 @@ public sealed class ReceiptInboundPlanningIntegrationTests : IDisposable
     private async Task<(int WarehouseId,int SupplierId,int ProductId,int UnitId,int UserId,int PurchaseOrderId,int PurchaseOrderLineId,int AsnId,int AsnLineId)> SeedAsync()
     {
         await using var db = Create();
-        var role = new Role { RoleName = "Manager" };
-        var user = new User { Username = "receipt-plan-test", PasswordHash = "x", FullName = "Receipt Planning QA", Role = role };
-        var unit = new Unit { Code = "EA", Name = "Cái", DecimalPlaces = 0 };
-        var warehouse = new Warehouse { Code = "W-RPL", Name = "Kho Receipt Planning", IsActive = true };
-        var supplier = new BusinessPartner { Code = "SUP-RPL", Name = "Nhà cung cấp", IsSupplier = true, IsActive = true, RowVersion = Guid.NewGuid().ToByteArray() };
-        var product = new Product { Code = "P-RPL", Name = "Sản phẩm", Unit = unit, IsActive = true };
-        db.AddRange(role,user,unit,warehouse,supplier,product);
-        await db.SaveChangesAsync();
+        var seed=await InboundPlanningTestSeed.SeedBaseAsync(db,"RPL","receipt-plan-test","Receipt Planning QA");
+        var warehouse=seed.Warehouse;
+        var supplier=seed.Supplier;
+        var product=seed.Product;
+        var unit=seed.Unit;
+        var user=seed.User;
 
         var po = new PurchaseOrder
         {

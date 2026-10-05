@@ -7,10 +7,13 @@ import {
   UiBadge,
   UiCard,
   UiEmptyState,
+  UiMetric,
+  UiMetricGrid,
   UiPage,
+  UiPageHeader,
   UiTableScroll,
 } from '../ui/ProductionUi';
-import { InboundPlanningOverview, productUnitOptions, runInboundStateCommand } from './inboundPlanningShared';
+import { InboundPlanningFeedback, InboundPlanningToolbar, productUnitOptions, runInboundStateCommand } from './inboundPlanningShared';
 import './InboundPlanning.css';
 
 type PurchaseOrderList = {
@@ -180,24 +183,22 @@ export default function PurchaseOrders(){
   if(loading)return <p role="status">Đang tải đơn mua...</p>;
 
   return <UiPage>
-    <InboundPlanningOverview
+    <UiPageHeader
+      eyebrow="Nhập kho"
       title="Đơn mua (PO)"
       description="Theo dõi nguồn hàng dự kiến từ ERP/Procurement trước khi tạo ASN và tiếp nhận. PO không làm tăng tồn kho."
-      error={error}
-      success={success}
-      metrics={[
-        {value:items.length,label:'PO trong phạm vi hiện tại'},
-        {value:items.filter(x=>x.status==='Open').length,label:'Đang mở'},
-        {value:items.filter(x=>x.status==='PartiallyReceived').length,label:'Đã nhận một phần'},
-        {value:items.filter(x=>x.status==='Received').length,label:'Đã nhận đủ'},
-      ]}
-      labels={labels}
-      statusFilter={statusFilter}
-      setStatusFilter={setStatusFilter}
-      search={search}
-      setSearch={setSearch}
-      placeholder="Mã PO, mã nguồn, nhà cung cấp, kho"
     />
+
+    <InboundPlanningFeedback error={error} success={success}/>
+
+    <UiMetricGrid>
+      <UiMetric value={items.length} label="PO trong phạm vi hiện tại"/>
+      <UiMetric value={items.filter(x=>x.status==='Open').length} label="Đang mở"/>
+      <UiMetric value={items.filter(x=>x.status==='PartiallyReceived').length} label="Đã nhận một phần"/>
+      <UiMetric value={items.filter(x=>x.status==='Received').length} label="Đã nhận đủ"/>
+    </UiMetricGrid>
+
+    <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã PO, mã nguồn, nhà cung cấp, kho"/>
 
     <div className="inbound-planning-grid">
       <UiCard title="Danh sách đơn mua">

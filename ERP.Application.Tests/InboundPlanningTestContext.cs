@@ -32,3 +32,30 @@ internal sealed class InboundPlanningTestContext(DbContextOptions<ErpKhoDbContex
         modelBuilder.Entity<AsnLine>().Property(x=>x.ConversionFactorSnapshot).HasConversion<double>();
     }
 }
+
+internal sealed record InboundPlanningBaseSeed(
+    Warehouse Warehouse,
+    BusinessPartner Supplier,
+    Product Product,
+    Unit Unit,
+    User User);
+
+internal static class InboundPlanningTestSeed
+{
+    public static async Task<InboundPlanningBaseSeed> SeedBaseAsync(
+        ErpKhoDbContext db,
+        string codeSuffix,
+        string username,
+        string fullName)
+    {
+        var role=new Role{RoleName="Manager"};
+        var user=new User{Username=username,PasswordHash="x",FullName=fullName,Role=role};
+        var unit=new Unit{Code="EA",Name="Cái",DecimalPlaces=0};
+        var warehouse=new Warehouse{Code="W-"+codeSuffix,Name="Kho "+codeSuffix,IsActive=true};
+        var supplier=new BusinessPartner{Code="SUP-"+codeSuffix,Name="Nhà cung cấp",IsSupplier=true,IsActive=true,RowVersion=Guid.NewGuid().ToByteArray()};
+        var product=new Product{Code="P-"+codeSuffix,Name="Sản phẩm",Unit=unit,IsActive=true};
+        db.AddRange(role,user,unit,warehouse,supplier,product);
+        await db.SaveChangesAsync();
+        return new InboundPlanningBaseSeed(warehouse,supplier,product,unit,user);
+    }
+}

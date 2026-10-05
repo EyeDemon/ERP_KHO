@@ -64,15 +64,8 @@ public sealed class InboundPlanningServiceTests : IDisposable
     private async Task<(int WarehouseId,int SupplierId,int ProductId,int UnitId,int UserId)> SeedAsync()
     {
         await using var db=Create();
-        var role=new Role{RoleName="Manager"};
-        var user=new User{Username="inbound-planning-test",PasswordHash="x",FullName="Inbound QA",Role=role};
-        var unit=new Unit{Code="EA",Name="Cái",DecimalPlaces=0};
-        var warehouse=new Warehouse{Code="W-INB",Name="Kho Inbound",IsActive=true};
-        var supplier=new BusinessPartner{Code="SUP-INB",Name="Nhà cung cấp",IsSupplier=true,IsActive=true,RowVersion=Guid.NewGuid().ToByteArray()};
-        var product=new Product{Code="P-INB",Name="Sản phẩm",Unit=unit,IsActive=true};
-        db.AddRange(role,user,unit,warehouse,supplier,product);
-        await db.SaveChangesAsync();
-        return(warehouse.Id,supplier.Id,product.Id,unit.Id,user.Id);
+        var seed=await InboundPlanningTestSeed.SeedBaseAsync(db,"INB","inbound-planning-test","Inbound QA");
+        return(seed.Warehouse.Id,seed.Supplier.Id,seed.Product.Id,seed.Unit.Id,seed.User.Id);
     }
 
     private InboundPlanningTestContext Create() => new(options);
