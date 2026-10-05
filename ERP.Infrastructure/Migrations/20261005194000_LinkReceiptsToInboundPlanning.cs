@@ -1,9 +1,13 @@
+using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace ERP.Infrastructure.Migrations;
 
+[DbContext(typeof(ErpKhoDbContext))]
+[Migration("20261005194000_LinkReceiptsToInboundPlanning")]
 public partial class LinkReceiptsToInboundPlanning : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

@@ -1,10 +1,14 @@
+using ERP.Infrastructure.Persistence;
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace ERP.Infrastructure.Migrations;
 
+[DbContext(typeof(ErpKhoDbContext))]
+[Migration("20261005190000_AddInboundPurchaseOrdersAndAsns")]
 public partial class AddInboundPurchaseOrdersAndAsns : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
