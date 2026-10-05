@@ -34,6 +34,8 @@ public sealed class ApprovalRequestSafetyTests
         IdempotentCommandFilter.RequiresSerializableIsolation("Packing.Pack").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Packing.Complete").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("HandlingUnit.Nest").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.Stage").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.LoadHu").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Export.Dispatch").Should().BeFalse();
     }
 
@@ -116,6 +118,10 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "Complete")]
     [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "Close")]
     [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "Cancel")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "Stage")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "StartLoading")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "LoadHandlingUnit")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "CompleteLoading")]
     public void InventoryMutationEndpoints_RequireIdempotency(Type controller, string method)
     {
         controller.GetMethod(method)!.GetCustomAttribute<IdempotentCommandAttribute>().Should().NotBeNull();
