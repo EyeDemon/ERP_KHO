@@ -39,7 +39,7 @@ const AppRoutes = () => {
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
         <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
         <Route path="business-partners" element={<PermissionRoute permission="partner.read"><BusinessPartners /></PermissionRoute>} />
-        <Route path="export-receipts" element={<ExportReceipts />} />
+        <Route path="export-receipts" element={<PermissionRoute permission="export_receipt.read"><ExportReceipts /></PermissionRoute>} />
         <Route path="import-receipts" element={<PermissionRoute permission="receipt.read"><ImportReceipts /></PermissionRoute>} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
