@@ -42,7 +42,6 @@ Promoted to `live` because production code/routes and merged verification now ex
 - MD-02 Product Category.
 - MD-03 multi-barcode.
 - MD-05 Business Partner.
-- IN-02 Receiving Appointment.
 - IN-03 Goods Receipt Work Center.
 - IN-04 Receiving Workbench.
 - IN-05 Receiving Discrepancy.
@@ -55,7 +54,7 @@ Promoted to `live` because production code/routes and merged verification now ex
 - RP-06 Ledger Reconciliation.
 - AD-02 Role & Permission Matrix.
 
-IN-01 remains live and its traceability now explicitly includes PO/ASN state/API/permission/UX sources. OUT-01 ExportReceipt MVP and OUT-02 Reservation remain live.
+IN-01 remains live and its traceability now explicitly includes PO/ASN state/API/permission/UX sources. IN-02 Receiving Appointment is intentionally `foundation`: Dock/Yard appointment scheduling, arrival/check-in and dock assignment are production-capable, but the canonical linkage from appointment to PO/ASN/Receipt defined by Specs 03/46 is not yet complete. OUT-01 ExportReceipt MVP and OUT-02 Reservation remain live.
 
 The refresh deliberately leaves OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch and OUT-10 Tracking/POD non-live. Notion Spec 38 keeps Shipment as a separate state machine with LOADED/HU/allocation prerequisites; ExportReceipt `APPROVED` is not Shipment `LOADED`.
 

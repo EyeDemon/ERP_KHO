@@ -89,7 +89,7 @@ export const erpWmsBlueprint: BlueprintModule[] = [
     flow: ['PO/ASN', 'Appointment', 'Receipt', 'Receiving', 'QC', 'Ready to Post', 'Post', 'Putaway'],
     capabilities: [
       { id: 'IN-01', name: 'Purchase Order / ASN', goal: 'Quản lý expected inbound từ Purchase Order và ASN; production work center hiện có tại /purchase-orders và /asns.', surfaces: ['Web', 'API'], status: 'live', spec: '01, 03, 17, 34, 160, 228', route: '/purchase-orders' },
-      { id: 'IN-02', name: 'Receiving Appointment', goal: 'Đặt lịch xe/hàng vào kho, arrival/check-in và phân dock trong Dock & Yard work center.', surfaces: ['Web', 'API'], status: 'live', spec: '46, 248', route: '/dock-yard' },
+      { id: 'IN-02', name: 'Receiving Appointment', goal: 'Dock/Yard appointment, arrival/check-in và phân dock đã có; liên kết canonical từ appointment tới PO/ASN/Receipt vẫn đang hoàn thiện.', surfaces: ['Web', 'API'], status: 'foundation', spec: '03, 46, 248', route: '/dock-yard' },
       { id: 'IN-03', name: 'Goods Receipt Work Center', goal: 'Tìm/lọc/tạo/mở receipt theo state và warehouse scope.', surfaces: ['Web', 'API'], status: 'live', spec: '34, 216, 228, 229', route: '/import-receipts' },
       { id: 'IN-04', name: 'Receiving Workbench', goal: 'Nhận hàng theo quantity/UOM snapshot, ghi nhận observed quantity và handoff sang discrepancy/QC.', surfaces: ['Web', 'API'], status: 'live', spec: '34, 228, 229', route: '/import-receipts' },
       { id: 'IN-05', name: 'Over/Under Receipt Discrepancy', goal: 'Ghi observation version, typed resolution, approval/reject/recount và custody boundary trước QC/Post.', surfaces: ['Web', 'API'], status: 'live', spec: '17, 34, 70, 71, 228, 229', route: '/import-receipts' },

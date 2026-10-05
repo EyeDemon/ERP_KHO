@@ -94,7 +94,7 @@ describe('ERP WMS blueprint registry', () => {
 
     for (const id of [
       'MD-02', 'MD-03', 'MD-05',
-      'IN-01', 'IN-02', 'IN-03', 'IN-04', 'IN-05', 'IN-06', 'IN-07', 'IN-08',
+      'IN-01', 'IN-03', 'IN-04', 'IN-05', 'IN-06', 'IN-07', 'IN-08',
       'OUT-01', 'OUT-02',
       'DY-01', 'DY-02', 'DY-03',
       'RP-06', 'AD-02',
@@ -102,6 +102,10 @@ describe('ERP WMS blueprint registry', () => {
       expect(byId.get(id)?.status).toBe('live');
       expect(byId.get(id)?.route).toBeTruthy();
     }
+
+    expect(byId.get('IN-02')?.status).toBe('foundation');
+    expect(byId.get('IN-02')?.route).toBe('/dock-yard');
+    expect(byId.get('IN-02')?.goal).toMatch(/liên kết canonical.*PO\/ASN\/Receipt.*hoàn thiện/i);
 
     for (const id of ['OUT-03', 'OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'OUT-09', 'OUT-10']) {
       expect(byId.get(id)?.status).not.toBe('live');

@@ -68,7 +68,6 @@ describe('CapabilityPreview', () => {
 
   it('reflects merged inbound execution capabilities as live while keeping Blueprint mocks read-only', () => {
     const cases = [
-      ['IN-02', 'Receiving Appointment Board'],
       ['IN-05', 'Over / Under Receipt Resolution'],
       ['IN-06', 'Inbound QC Inspection'],
     ];
@@ -83,6 +82,15 @@ describe('CapabilityPreview', () => {
       expect(view.queryByText('Theo đặc tả — chưa triển khai')).toBeNull();
       view.unmount();
     }
+  });
+
+  it('shows IN-02 as foundation because Dock/Yard appointments are not yet linked canonically to inbound documents', () => {
+    const view = renderPreview('inbound', 'IN-02');
+    expect(view.getByText('Đã có nền / đang hoàn thiện')).toBeTruthy();
+    expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+    expect(view.getByTestId('inbound-capability-mock-IN-02')).toBeTruthy();
+    expect(view.getByRole('heading', { name: 'Receiving Appointment Board' })).toBeTruthy();
+    expect(view.getByText(/liên kết canonical.*PO\/ASN\/Receipt.*hoàn thiện/i)).toBeTruthy();
   });
 
   it('shows IN-01 as live while keeping its Blueprint mock read-only and separate', () => {
