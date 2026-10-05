@@ -20,7 +20,7 @@ describe('CapabilityPreview', () => {
     const view = renderPreview('outbound', 'OUT-08');
     expect(view.getAllByText('Shipment Dispatch').length).toBeGreaterThan(0);
     expect(view.getByText('MOCK / SPEC PREVIEW')).toBeTruthy();
-    expect(view.getByText(/Dispatch mới giảm OnHand|Boundary trừ OnHand/)).toBeTruthy();
+    expect(view.getByText(/Shipment state machine riêng.*LOADED.*ExportReceipt dispatch/i)).toBeTruthy();
     expect(view.getAllByText('SHP-2026-5108').length).toBeGreaterThan(0);
     expect(view.getByText('Expected UX states')).toBeTruthy();
     expect(view.getByText('Technical contract')).toBeTruthy();
