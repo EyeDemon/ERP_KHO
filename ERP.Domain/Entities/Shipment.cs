@@ -12,6 +12,7 @@ public sealed class Shipment
     public int? SourceId { get; set; }
     public string? SourceCode { get; set; }
     public ShipmentStatus Status { get; set; } = ShipmentStatus.Ready;
+    public int? StagingLocationId { get; set; }
     public int? DockAppointmentId { get; set; }
     public int? DockId { get; set; }
     public string? VehiclePlate { get; set; }
@@ -26,6 +27,7 @@ public sealed class Shipment
 
     public PackingSession PackingSession { get; set; } = null!;
     public Warehouse Warehouse { get; set; } = null!;
+    public WarehouseLocation? StagingLocation { get; set; }
     public DockAppointment? DockAppointment { get; set; }
     public Dock? Dock { get; set; }
     public User CreatedByUser { get; set; } = null!;
