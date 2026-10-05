@@ -18,6 +18,7 @@ namespace ERP.Application.Services
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
         private readonly ICurrentUser? _currentUser;
         private readonly IStockReservationService? _stockReservationService;
+        private readonly IPickingDispatchReadiness? _pickingDispatchReadiness;
         private readonly ExportReceiptOptions _options;
 
         internal ExportReceiptService(IExportReceiptRepository exportReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, ExportReceiptOptions? options = null)
@@ -28,6 +29,7 @@ namespace ERP.Application.Services
             _unitOfWork = unitOfWork;
             _auditLogRepository = auditLogRepository;
             _stockReservationService = null;
+            _pickingDispatchReadiness = null;
             _options = options ?? new ExportReceiptOptions();
         }
 
@@ -40,7 +42,8 @@ namespace ERP.Application.Services
             IWarehouseAuthorizationService warehouseAuthorization,
             ICurrentUser currentUser,
             IStockReservationService stockReservationService,
-            ExportReceiptOptions? options = null)
+            ExportReceiptOptions? options = null,
+            IPickingDispatchReadiness? pickingDispatchReadiness = null)
         {
             _exportReceiptRepository = exportReceiptRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -50,6 +53,7 @@ namespace ERP.Application.Services
             _warehouseAuthorization = warehouseAuthorization;
             _currentUser = currentUser;
             _stockReservationService = stockReservationService;
+            _pickingDispatchReadiness = pickingDispatchReadiness;
             _options = options ?? new ExportReceiptOptions();
         }
 
@@ -251,6 +255,8 @@ namespace ERP.Application.Services
                 if (_options.RequireDifferentDispatcher && receipt.ApprovedBy == userId)
                     throw new BusinessRuleException("Người duyệt phải khác người xác nhận xuất.");
                 if (_stockReservationService is null) throw new InvalidOperationException("Stock reservation service is required for export dispatch.");
+                if (_pickingDispatchReadiness is not null)
+                    await _pickingDispatchReadiness.EnsureSourceReadyAsync("ExportReceipt", receipt.Id);
 
                 foreach (var detail in receipt.Details.OrderBy(x => x.ProductId))
                 {
