@@ -45,13 +45,26 @@ public sealed class ShipmentService(
 
     public Task<ShipmentDto> StageAsync(
         int id,
-        ShipmentStateCommandDto request,
+        StageShipmentDto request,
         CancellationToken cancellationToken = default) =>
         MutateAsync(id, request.RowVersion, async (shipment, token) =>
         {
             RequireStatus(shipment, ShipmentStatus.Ready, "Chỉ Shipment READY mới có thể đưa vào staging.");
             if (shipment.PackingSession.Status is not PackingSessionStatus.Packed and not PackingSessionStatus.Closed)
                 throw Conflict("SHIPMENT_PACKING_NOT_READY", "Packing session chưa hoàn tất.");
+
+            var locationCode = request.StagingLocationCode?.Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(locationCode))
+                throw new BusinessRuleException("Staging location là bắt buộc.");
+            var stagingLocation = await context.WarehouseLocations.SingleOrDefaultAsync(
+                x => x.WarehouseId == shipment.WarehouseId &&
+                     x.Code == locationCode &&
+                     x.LocationType == WarehouseLocationType.Staging &&
+                     x.IsActive &&
+                     !x.IsBlocked,
+                token);
+            if (stagingLocation is null)
+                throw Conflict("SHIPMENT_STAGING_LOCATION_INVALID", "Không tìm thấy staging location hợp lệ trong kho.");
 
             var active = ActivePackingHus(shipment);
             ValidateAssignedRoots(shipment, active);
@@ -61,9 +74,10 @@ public sealed class ShipmentService(
             var now = DateTime.UtcNow;
             foreach (var hu in active) hu.Status = HandlingUnitStatus.Staged;
             foreach (var link in shipment.HandlingUnits) link.StagedAt = now;
+            shipment.StagingLocationId = stagingLocation.Id;
             shipment.Status = ShipmentStatus.Staging;
             shipment.StagedAt = now;
-            AddAudit("Shipment.Staged", shipment, $"HandlingUnits: {shipment.HandlingUnits.Count}");
+            AddAudit("Shipment.Staged", shipment, $"HandlingUnits: {shipment.HandlingUnits.Count}; StagingLocationId: {stagingLocation.Id}; Code: {stagingLocation.Code}");
             await Task.CompletedTask;
         }, cancellationToken);
 
@@ -100,6 +114,7 @@ public sealed class ShipmentService(
             shipment.DockId = appointment.DockId;
             shipment.VehiclePlate = appointment.VehiclePlate;
             shipment.TrailerPlate = appointment.TrailerPlate;
+            shipment.SealNumber = NormalizeSeal(appointment.SealNumber);
             shipment.Status = ShipmentStatus.Loading;
             shipment.LoadingStartedAt = DateTime.UtcNow;
             AddAudit(
@@ -131,13 +146,13 @@ public sealed class ShipmentService(
                     x.WarehouseId == shipment.WarehouseId &&
                     (x.Barcode == scan || x.HuCode == scan || x.Sscc == scan), token);
                 throw existsElsewhere
-                    ? Conflict("HU_WRONG_SHIPMENT", "Handling Unit không thuộc Shipment này.")
+                    ? Conflict("SHIPMENT_HU_MISMATCH", "Handling Unit không thuộc Shipment này.")
                     : Conflict("HU_NOT_FOUND", "Không tìm thấy Handling Unit theo mã đã quét.");
             }
 
             var link = shipment.HandlingUnits.SingleOrDefault(x => x.HandlingUnitId == scanned.Id);
             if (link is null)
-                throw Conflict("HU_WRONG_SHIPMENT", "Hãy quét Handling Unit gốc đã được gắn vào Shipment, không quét HU con.");
+                throw Conflict("SHIPMENT_HU_MISMATCH", "Hãy quét Handling Unit gốc đã được gắn vào Shipment, không quét HU con.");
 
             if (link.LoadedAt.HasValue || scanned.Status == HandlingUnitStatus.Loaded)
                 throw Conflict("HU_ALREADY_LOADED", "Handling Unit đã được load lên xe.");
@@ -246,6 +261,7 @@ public sealed class ShipmentService(
             .AsSplitQuery()
             .Include(x => x.Warehouse)
             .Include(x => x.PackingSession).ThenInclude(x => x.HandlingUnits).ThenInclude(x => x.Contents)
+            .Include(x => x.StagingLocation)
             .Include(x => x.DockAppointment)
             .Include(x => x.Dock)
             .Include(x => x.HandlingUnits).ThenInclude(x => x.HandlingUnit);
@@ -332,6 +348,8 @@ public sealed class ShipmentService(
         SourceId = shipment.SourceId,
         SourceCode = shipment.SourceCode,
         Status = shipment.Status.ToString(),
+        StagingLocationId = shipment.StagingLocationId,
+        StagingLocationCode = shipment.StagingLocation?.Code,
         HandlingUnitCount = shipment.HandlingUnits.Count,
         LoadedHandlingUnitCount = shipment.HandlingUnits.Count(x => x.LoadedAt.HasValue),
         DockAppointmentId = shipment.DockAppointmentId,
@@ -363,6 +381,8 @@ public sealed class ShipmentService(
             SourceId = summary.SourceId,
             SourceCode = summary.SourceCode,
             Status = summary.Status,
+            StagingLocationId = summary.StagingLocationId,
+            StagingLocationCode = summary.StagingLocationCode,
             HandlingUnitCount = summary.HandlingUnitCount,
             LoadedHandlingUnitCount = summary.LoadedHandlingUnitCount,
             DockAppointmentId = summary.DockAppointmentId,
