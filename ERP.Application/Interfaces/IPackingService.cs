@@ -63,3 +63,11 @@ public interface IPackingSessionIntegration
         int actorId,
         CancellationToken cancellationToken = default);
 }
+
+public interface IPackingDispatchReadiness
+{
+    Task EnsureSourceReadyAsync(
+        string sourceType,
+        int sourceId,
+        CancellationToken cancellationToken = default);
+}
