@@ -101,6 +101,15 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.getByRole('link', { name: 'Bản đồ kho' }).getAttribute('href')).toBe('/warehouse-map');
   });
 
+  it('shows the WH-05 production calendar when warehouse.read is granted', async () => {
+    const authorization = await import('../services/authorization');
+    vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'warehouse.read');
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['warehouse.read'] } });
+    const view = renderAt('/');
+    await view.findByText('Production home');
+    expect(view.getByRole('link', { name: 'Lịch & ca kho' }).getAttribute('href')).toBe('/warehouse-calendar');
+  });
+
   it('opens production UI routes on the Vercel blueprint demo without calling real auth', async () => {
     vi.mocked(isBlueprintDemoRuntime).mockReturnValue(true);
     vi.mocked(apiClient.get).mockRejectedValue(new Error('backend unavailable'));

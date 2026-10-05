@@ -23,6 +23,17 @@ describe('Blueprint demo API adapter', () => {
     expect((warehouses.data as Array<{ code: string }>).some(item => item.code === 'WH-HCM-01')).toBe(true);
   });
 
+  it('serves warehouse calendar data for the WH-05 production screen', async () => {
+    const config = request('/api/warehouses/1/calendar');
+    const response = await createBlueprintDemoApiAdapter(config)(config);
+    expect(response.status).toBe(200);
+    const calendar = response.data as { warehouseId: number; timeZoneId: string; days: unknown[]; shifts: unknown[] };
+    expect(calendar.warehouseId).toBe(1);
+    expect(calendar.timeZoneId).toBe('Asia/Ho_Chi_Minh');
+    expect(calendar.days).toHaveLength(7);
+    expect(calendar.shifts.length).toBeGreaterThan(0);
+  });
+
   it('returns paged business partner and transfer shapes used by production pages', async () => {
     const partnerConfig = request('/api/business-partners', 'get', { role: 'supplier', page: 1, pageSize: 10 });
     const partners = await createBlueprintDemoApiAdapter(partnerConfig)(partnerConfig);

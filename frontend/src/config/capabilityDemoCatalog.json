@@ -92,44 +92,44 @@
   },
   "WH-05": {
     "title": "Warehouse Calendar & Shift",
-    "subtitle": "Mô phỏng timezone, ca làm việc, cutoff và capacity theo ngày vận hành.",
+    "subtitle": "Lịch vận hành production theo timezone, ngày làm việc, cutoff và capacity theo ca.",
     "mode": "configuration",
     "stages": [
-      "Chọn ngày",
-      "Kiểm tra lịch kho",
-      "Kiểm tra ca",
-      "Áp cutoff",
-      "Xác nhận capacity"
+      "Chọn kho",
+      "Lịch tuần",
+      "Cutoff",
+      "Ca làm việc",
+      "Capacity"
     ],
     "fields": [
       {
-        "label": "Warehouse timezone",
-        "value": "Asia/Ho_Chi_Minh"
+        "label": "Production maturity",
+        "value": "LIVE"
       },
       {
-        "label": "Ngày",
-        "value": "02/10/2026"
+        "label": "Production route",
+        "value": "/warehouse-calendar"
       },
       {
-        "label": "Shift",
-        "value": "Ca 1 • 06:00–14:00"
+        "label": "Timezone",
+        "value": "Warehouse-local wall clock + UTC audit"
       },
       {
-        "label": "Inbound cutoff",
-        "value": "12:30"
+        "label": "Schedule",
+        "value": "7-day baseline • overnight supported"
       },
       {
         "label": "Capacity",
-        "value": "18 / 24 dock-hours còn lại"
+        "value": "Headcount • dock • labor • staging • packing • equipment"
       }
     ],
     "commands": [
-      "ADD_SHIFT",
-      "SET_CUTOFF",
-      "CLOSE_DAY"
+      "OPEN_PRODUCTION_CALENDAR",
+      "REVIEW_WEEKLY_SCHEDULE",
+      "REVIEW_SHIFT_CAPACITY"
     ],
-    "exceptionTitle": "WAREHOUSE_CALENDAR_CLOSED",
-    "exceptionDetail": "Action được yêu cầu ngoài giờ mở cửa/cutoff hoặc capacity ca đã hết."
+    "exceptionTitle": "WAREHOUSE_CALENDAR_VALIDATION_FAILED",
+    "exceptionDetail": "Production chặn timezone không hợp lệ, cutoff ngoài giờ mở, ca có break vượt thời lượng hoặc capacity âm. Holiday/maintenance override thuộc WH-07."
   },
   "WH-06": {
     "title": "Dock & Yard Control",
