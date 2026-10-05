@@ -80,7 +80,6 @@ namespace ERP.Api.Controllers
 
         [HttpPost("{id}/approve-and-reserve")]
         [IdempotentCommand("ExportReceipt.ApproveAndReserve")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
         [PermissionAuthorize(AppPermissions.ExportReceiptApprove)]
         public async Task<IActionResult> ApproveAndReserve(int id)
         {
@@ -91,7 +90,6 @@ namespace ERP.Api.Controllers
 
         [HttpPost("{id}/approve-and-dispatch")]
         [IdempotentCommand("ExportReceipt.ApproveAndDispatch")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
         [PermissionAuthorize(AppPermissions.ExportReceiptApprove)]
         [PermissionAuthorize(AppPermissions.ExportReceiptDispatch)]
         public async Task<IActionResult> ApproveAndDispatch(int id)
