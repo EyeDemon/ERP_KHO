@@ -75,6 +75,7 @@ public sealed class ShipmentService(
             foreach (var hu in active) hu.Status = HandlingUnitStatus.Staged;
             foreach (var link in shipment.HandlingUnits) link.StagedAt = now;
             shipment.StagingLocationId = stagingLocation.Id;
+            shipment.StagingLocation = stagingLocation;
             shipment.Status = ShipmentStatus.Staging;
             shipment.StagedAt = now;
             AddAudit("Shipment.Staged", shipment, $"HandlingUnits: {shipment.HandlingUnits.Count}; StagingLocationId: {stagingLocation.Id}; Code: {stagingLocation.Code}");
@@ -111,7 +112,9 @@ public sealed class ShipmentService(
                 throw Conflict("SHIPMENT_HU_NOT_STAGED", "Tất cả Handling Unit phải ở STAGED trước khi loading.");
 
             shipment.DockAppointmentId = appointment.Id;
+            shipment.DockAppointment = appointment;
             shipment.DockId = appointment.DockId;
+            shipment.Dock = appointment.Dock;
             shipment.VehiclePlate = appointment.VehiclePlate;
             shipment.TrailerPlate = appointment.TrailerPlate;
             shipment.SealNumber = NormalizeSeal(appointment.SealNumber);
