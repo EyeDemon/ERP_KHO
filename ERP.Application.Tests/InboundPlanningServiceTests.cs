@@ -68,7 +68,7 @@ public sealed class InboundPlanningServiceTests : IDisposable
         var user=new User{Username="inbound-planning-test",PasswordHash="x",FullName="Inbound QA",Role=role};
         var unit=new Unit{Code="EA",Name="Cái",DecimalPlaces=0};
         var warehouse=new Warehouse{Code="W-INB",Name="Kho Inbound",IsActive=true};
-        var supplier=new BusinessPartner{Code="SUP-INB",Name="Nhà cung cấp",IsSupplier=true,IsActive=true};
+        var supplier=new BusinessPartner{Code="SUP-INB",Name="Nhà cung cấp",IsSupplier=true,IsActive=true,RowVersion=Guid.NewGuid().ToByteArray()};
         var product=new Product{Code="P-INB",Name="Sản phẩm",Unit=unit,IsActive=true};
         db.AddRange(role,user,unit,warehouse,supplier,product);
         await db.SaveChangesAsync();
