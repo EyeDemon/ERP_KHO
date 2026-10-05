@@ -24,6 +24,7 @@ import StockReservations from '../pages/StockReservations';
 import StockAllocations from '../pages/StockAllocations';
 import PickingTasks from '../pages/PickingTasks';
 import PackingSessions from '../pages/PackingSessions';
+import Shipments from '../pages/Shipments';
 import Approvals from '../pages/Approvals';
 import BusinessPartners from '../pages/BusinessPartners';
 import PutawayTasks from '../pages/PutawayTasks';
@@ -96,6 +97,7 @@ const AppRoutes = () => {
         <Route path="stock-allocations" element={<PermissionRoute permission="allocation.read"><StockAllocations /></PermissionRoute>} />
         <Route path="picking-tasks" element={<PermissionRoute permission="picking.read"><PickingTasks /></PermissionRoute>} />
         <Route path="packing-sessions" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
+        <Route path="shipments" element={<PermissionRoute permission="shipment.read"><Shipments /></PermissionRoute>} />
         <Route path="approvals" element={<ApprovalRoute />} />
         <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
         <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
