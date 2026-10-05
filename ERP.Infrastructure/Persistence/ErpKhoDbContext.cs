@@ -31,6 +31,10 @@ public class ErpKhoDbContext : DbContext
     public DbSet<YardSlot> YardSlots => Set<YardSlot>();
     public DbSet<DockAppointment> DockAppointments => Set<DockAppointment>();
     public DbSet<DockAppointmentEvent> DockAppointmentEvents => Set<DockAppointmentEvent>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+    public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
+    public DbSet<Asn> Asns => Set<Asn>();
+    public DbSet<AsnLine> AsnLines => Set<AsnLine>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<ImportReceipt> ImportReceipts => Set<ImportReceipt>();
@@ -95,6 +99,8 @@ public class ErpKhoDbContext : DbContext
             modelBuilder.Entity<Dock>().Property(x => x.RowVersion).IsRowVersion();
             modelBuilder.Entity<YardSlot>().Property(x => x.RowVersion).IsRowVersion();
             modelBuilder.Entity<DockAppointment>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<PurchaseOrder>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<Asn>().Property(x => x.RowVersion).IsRowVersion();
             // SQL deployments backfill LocationId before enforcing the final required relationship.
             // The nullable CLR shape also lets pre-migration compatibility tests represent legacy rows.
             modelBuilder.Entity<InventoryStock>().Property(x => x.LocationId).IsRequired();
