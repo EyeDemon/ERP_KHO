@@ -39,9 +39,9 @@ describe('Inbound planning production UI',()=>{
 
     const view=render(<PurchaseOrders/>);
 
-    expect(await view.findByText('PO-2026-4521')).toBeTruthy();
+    const poCode=await view.findByText('PO-2026-4521');
     expect(view.getByRole('table',{name:'Danh sách đơn mua'})).toBeTruthy();
-    expect(view.getByText('Đang mở')).toBeTruthy();
+    expect(poCode.closest('tr')?.textContent).toContain('Đang mở');
     expect(view.queryByText('Tạo đơn mua nháp')).toBeNull();
     expect(view.queryByRole('button',{name:'Mở đơn mua'})).toBeNull();
     expect(get).toHaveBeenCalledWith('/api/purchase-orders',{params:{status:undefined}});
@@ -59,9 +59,9 @@ describe('Inbound planning production UI',()=>{
 
     const view=render(<Asns/>);
 
-    expect(await view.findByText('ASN-2026-1051')).toBeTruthy();
+    const asnCode=await view.findByText('ASN-2026-1051');
     expect(view.getByRole('table',{name:'Danh sách ASN'})).toBeTruthy();
-    expect(view.getByText('Đang vận chuyển')).toBeTruthy();
+    expect(asnCode.closest('tr')?.textContent).toContain('Đang vận chuyển');
     expect(view.queryByText('Tạo ASN nháp')).toBeNull();
     expect(view.queryByRole('button',{name:'Ghi nhận đến kho'})).toBeNull();
     expect(get).toHaveBeenCalledWith('/api/asns',{params:{status:undefined}});
