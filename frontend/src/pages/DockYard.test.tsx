@@ -114,6 +114,6 @@ describe('DockYard production UI', () => {
     const end = view.getByLabelText('Kết thúc appointment theo timezone kho') as HTMLInputElement;
     expect(start.value).toBe('2026-10-05T16:00');
     expect(end.value).toBe('2026-10-05T17:00');
-    expect(view.getByText(/Asia\/Ho_Chi_Minh/)).toBeTruthy();
+    expect(start.closest('label')?.textContent).toContain('Asia/Ho_Chi_Minh');
   });
 });
