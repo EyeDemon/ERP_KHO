@@ -159,7 +159,7 @@ public partial class AddInboundPurchaseOrdersAndAsns : Migration
         migrationBuilder.CreateIndex("IX_AsnLines_AsnId_LineNo", "AsnLines", new[] { "AsnId", "LineNo" }, unique: true);
 
         migrationBuilder.Sql(@"
-DECLARE @codes TABLE(Code nvarchar(100), Description nvarchar(250));
+DECLARE @codes TABLE(Code nvarchar(100) COLLATE Latin1_General_100_BIN2, Description nvarchar(250));
 INSERT INTO @codes VALUES
 ('purchase_order.read','Đọc đơn mua'),
 ('purchase_order.create','Tạo đơn mua'),
