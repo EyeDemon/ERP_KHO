@@ -11,7 +11,7 @@ public sealed class WarehouseCalendarConfiguration : IEntityTypeConfiguration<Wa
         builder.ToTable("WarehouseCalendars");
         builder.HasKey(x => x.WarehouseId);
         builder.Property(x => x.TimeZoneId).IsRequired().HasMaxLength(100);
-        builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.Property(x => x.RowVersion).IsConcurrencyToken();
         builder.HasOne(x => x.Warehouse).WithOne().HasForeignKey<WarehouseCalendar>(x => x.WarehouseId).OnDelete(DeleteBehavior.Cascade);
     }
 }
@@ -47,7 +47,7 @@ public sealed class WarehouseShiftConfiguration : IEntityTypeConfiguration<Wareh
         builder.Property(x => x.OutboundOrdersPerHour).HasPrecision(18, 4);
         builder.Property(x => x.LaborHours).HasPrecision(18, 4);
         builder.Property(x => x.StagingCapacity).HasPrecision(18, 4);
-        builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.Property(x => x.RowVersion).IsConcurrencyToken();
         builder.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique().HasDatabaseName("UX_WarehouseShifts_Warehouse_Code");
         builder.HasOne(x => x.Calendar).WithMany(x => x.Shifts).HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Cascade);
     }

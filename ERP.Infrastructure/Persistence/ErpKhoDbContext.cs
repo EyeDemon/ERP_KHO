@@ -27,6 +27,10 @@ public class ErpKhoDbContext : DbContext
     public DbSet<WarehouseCalendar> WarehouseCalendars => Set<WarehouseCalendar>();
     public DbSet<WarehouseCalendarDay> WarehouseCalendarDays => Set<WarehouseCalendarDay>();
     public DbSet<WarehouseShift> WarehouseShifts => Set<WarehouseShift>();
+    public DbSet<Dock> Docks => Set<Dock>();
+    public DbSet<YardSlot> YardSlots => Set<YardSlot>();
+    public DbSet<DockAppointment> DockAppointments => Set<DockAppointment>();
+    public DbSet<DockAppointmentEvent> DockAppointmentEvents => Set<DockAppointmentEvent>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<ImportReceipt> ImportReceipts => Set<ImportReceipt>();
@@ -86,6 +90,11 @@ public class ErpKhoDbContext : DbContext
             modelBuilder.Entity<Permission>().Property(x => x.Code).UseCollation("Latin1_General_100_BIN2");
             modelBuilder.Entity<Role>().Property(x => x.RowVersion).IsRowVersion();
             modelBuilder.Entity<RolePermission>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<WarehouseCalendar>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<WarehouseShift>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<Dock>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<YardSlot>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<DockAppointment>().Property(x => x.RowVersion).IsRowVersion();
             // SQL deployments backfill LocationId before enforcing the final required relationship.
             // The nullable CLR shape also lets pre-migration compatibility tests represent legacy rows.
             modelBuilder.Entity<InventoryStock>().Property(x => x.LocationId).IsRequired();

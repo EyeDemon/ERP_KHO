@@ -110,6 +110,15 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.getByRole('link', { name: 'Lịch & ca kho' }).getAttribute('href')).toBe('/warehouse-calendar');
   });
 
+  it('shows the WH-06 Dock & Yard production route with dock appointment read access', async () => {
+    const authorization = await import('../services/authorization');
+    vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'dock_appointment.read');
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['dock_appointment.read'] } });
+    const view = renderAt('/');
+    await view.findByText('Production home');
+    expect(view.getByRole('link', { name: 'Dock & Yard' }).getAttribute('href')).toBe('/dock-yard');
+  });
+
   it('opens production UI routes on the Vercel blueprint demo without calling real auth', async () => {
     vi.mocked(isBlueprintDemoRuntime).mockReturnValue(true);
     vi.mocked(apiClient.get).mockRejectedValue(new Error('backend unavailable'));

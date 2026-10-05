@@ -26,6 +26,7 @@ import {
   Search,
   Shield,
   Warehouse,
+  Truck,
   X,
 } from 'lucide-react';
 import apiClient, { logout } from '../services/apiClient';
@@ -56,6 +57,7 @@ const productionIcons: Record<string, LucideIcon> = {
   '/warehouse-structure': MapPinned,
   '/warehouse-map': MapIcon,
   '/warehouse-calendar': ClipboardCheck,
+  '/dock-yard': Truck,
   '/units': Ruler,
   '/business-partners': Handshake,
   '/import-receipts': Clipboard,

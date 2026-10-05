@@ -132,8 +132,8 @@
     "exceptionDetail": "Production chặn timezone không hợp lệ, cutoff ngoài giờ mở, ca có break vượt thời lượng hoặc capacity âm. Holiday/maintenance override thuộc WH-07."
   },
   "WH-06": {
-    "title": "Dock & Yard Control",
-    "subtitle": "Theo dõi xe từ gate arrival đến check-in, dock assignment, in-service và completion.",
+    "title": "Dock & Yard",
+    "subtitle": "Điều phối appointment, gate check-in, yard slot và dock assignment trên hệ thống production.",
     "mode": "control",
     "stages": [
       "DRAFT",
@@ -146,34 +146,35 @@
     ],
     "fields": [
       {
-        "label": "Appointment",
-        "value": "APT-2026-1042"
+        "label": "Production maturity",
+        "value": "LIVE"
       },
       {
-        "label": "Vehicle",
-        "value": "51C-882.14"
+        "label": "Production route",
+        "value": "/dock-yard"
       },
       {
-        "label": "Carrier",
-        "value": "CAR-FAST-01"
+        "label": "Concurrency",
+        "value": "RowVersion + Serializable dock/yard assignment"
       },
       {
-        "label": "Dock",
-        "value": "D-04"
+        "label": "Scheduling",
+        "value": "WH-05 calendar / cutoff validation"
       },
       {
-        "label": "Queue position",
-        "value": "#2"
+        "label": "Inventory boundary",
+        "value": "No inventory effect in Dock/Yard"
       }
     ],
     "commands": [
-      "CHECK_IN",
+      "OPEN_PRODUCTION_DOCK_YARD",
+      "GATE_CHECK_IN",
       "ASSIGN_DOCK",
       "START_SERVICE",
-      "COMPLETE_SERVICE"
+      "CHECK_OUT"
     ],
     "exceptionTitle": "DOCK_DOUBLE_ASSIGNMENT",
-    "exceptionDetail": "Dock đã được giữ bởi appointment khác hoặc vehicle chưa CHECKED_IN."
+    "exceptionDetail": "Production chặn double-book dock/yard, vehicle mismatch, dock compatibility conflict và appointment ngoài calendar/cutoff. Gate/Yard không làm thay đổi tồn kho."
   },
   "WH-07": {
     "title": "Operational Calendar Exceptions",

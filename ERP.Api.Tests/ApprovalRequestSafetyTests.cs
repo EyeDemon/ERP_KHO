@@ -15,6 +15,15 @@ public sealed class ApprovalRequestSafetyTests
         CorrelationIdMiddleware.IsValid(value).Should().Be(expected);
 
     [Fact]
+    public void DockYardOccupancyCommandsUseSerializableIdempotencyTransaction()
+    {
+        IdempotentCommandFilter.RequiresSerializableIsolation("DockYard.Appointment.CheckIn").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("DockYard.Appointment.AssignDock").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("DockYard.Appointment.Confirm").Should().BeFalse();
+        IdempotentCommandFilter.RequiresSerializableIsolation("StockTransfer.Approve").Should().BeFalse();
+    }
+
+    [Fact]
     public void Fingerprint_IsCanonicalAcrossArgumentInsertionOrder()
     {
         var first = new Dictionary<string, object?> { ["id"] = 7, ["request"] = new { Quantity = 2m } };
@@ -63,6 +72,19 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.StockTransfersController), "Dispatch")]
     [InlineData(typeof(ERP.Api.Controllers.StockTransfersController), "Receive")]
     [InlineData(typeof(ERP.Api.Controllers.StockTransfersController), "Complete")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "CreateDock")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "CreateYardSlot")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "CreateAppointment")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "Confirm")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "Arrive")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "CheckIn")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "AssignDock")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "StartService")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "Complete")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "Checkout")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "Cancel")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "MarkNoShow")]
+    [InlineData(typeof(ERP.Api.Controllers.DockYardController), "MarkException")]
     public void InventoryMutationEndpoints_RequireIdempotency(Type controller, string method)
     {
         controller.GetMethod(method)!.GetCustomAttribute<IdempotentCommandAttribute>().Should().NotBeNull();

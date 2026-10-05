@@ -291,10 +291,75 @@ export const demoWarehouseCalendars = demoWarehouses.map((warehouse, index) => (
   ],
 }));
 
+export const demoDockYardWarehouses = demoWarehouses.map(warehouse => {
+  const calendar = demoWarehouseCalendars.find(item => item.warehouseId === warehouse.id);
+  return {
+    id: warehouse.id,
+    code: warehouse.code,
+    name: warehouse.name,
+    timeZoneId: calendar?.timeZoneId ?? 'UTC',
+    calendarConfigured: Boolean(calendar),
+  };
+});
+
+export const demoDocks = demoWarehouses.flatMap((warehouse, warehouseIndex) => [
+  { id: warehouse.id * 100 + 1, warehouseId: warehouse.id, code: 'D-01', name: 'Dock Inbound 01', supportsInbound: true, supportsOutbound: false, allowedVehicleType: 'TRUCK', isTemperatureControlled: false, hazardAllowed: false, isActive: true, rowVersion: null },
+  { id: warehouse.id * 100 + 2, warehouseId: warehouse.id, code: 'D-02', name: 'Dock linh hoạt 02', supportsInbound: true, supportsOutbound: true, allowedVehicleType: null, isTemperatureControlled: warehouseIndex === 0, hazardAllowed: false, isActive: true, rowVersion: null },
+  { id: warehouse.id * 100 + 4, warehouseId: warehouse.id, code: 'D-04', name: 'Dock Outbound 04', supportsInbound: false, supportsOutbound: true, allowedVehicleType: 'TRUCK', isTemperatureControlled: false, hazardAllowed: false, isActive: true, rowVersion: null },
+]);
+
+export const demoYardSlots = demoWarehouses.flatMap(warehouse => [
+  { id: warehouse.id * 100 + 51, warehouseId: warehouse.id, code: 'Y-01', name: 'Yard chờ 01', isActive: true, occupied: false, occupiedByAppointmentCode: null, rowVersion: null },
+  { id: warehouse.id * 100 + 52, warehouseId: warehouse.id, code: 'Y-02', name: 'Yard chờ 02', isActive: true, occupied: warehouse.id === 1, occupiedByAppointmentCode: warehouse.id === 1 ? 'APT-2026-1042' : null, rowVersion: null },
+]);
+
+export const demoDockAppointments = [
+  {
+    id: 1042, warehouseId: 1, warehouseCode: demoWarehouses[0]?.code ?? 'WH-01', warehouseName: demoWarehouses[0]?.name ?? 'Kho',
+    code: 'APT-2026-1042', direction: 0, status: 3, plannedStartUtc: '2026-10-05T09:00:00Z', plannedEndUtc: '2026-10-05T10:00:00Z',
+    carrierCode: 'CAR-FAST-01', carrierName: 'Fast Logistics', vehiclePlate: '51C-882.14', trailerPlate: null, vehicleType: 'TRUCK',
+    requiresTemperatureControl: false, hazardous: false, driverName: 'Nguyễn Văn Minh', driverPhone: '0900000001', sealNumber: 'SEAL-1042',
+    yardSlotId: 152, yardSlotCode: 'Y-02', dockId: null, dockCode: null, arrivedAtUtc: '2026-10-05T08:46:00Z', checkedInAtUtc: '2026-10-05T08:52:00Z',
+    dockAssignedAtUtc: null, serviceStartedAtUtc: null, serviceCompletedAtUtc: null, checkedOutAtUtc: null, exceptionCode: null,
+    note: 'Chờ gọi vào dock', rowVersion: null,
+    events: [
+      { id: 1, eventType: 'Confirmed', eventAtUtc: '2026-10-04T09:00:00Z', actorUserId: 101, dockId: null, yardSlotId: null, note: null },
+      { id: 2, eventType: 'Arrived', eventAtUtc: '2026-10-05T08:46:00Z', actorUserId: 101, dockId: null, yardSlotId: null, note: null },
+      { id: 3, eventType: 'CheckedIn', eventAtUtc: '2026-10-05T08:52:00Z', actorUserId: 101, dockId: null, yardSlotId: 152, note: 'Security check OK' },
+    ],
+  },
+  {
+    id: 1043, warehouseId: 1, warehouseCode: demoWarehouses[0]?.code ?? 'WH-01', warehouseName: demoWarehouses[0]?.name ?? 'Kho',
+    code: 'APT-2026-1043', direction: 1, status: 4, plannedStartUtc: '2026-10-05T10:00:00Z', plannedEndUtc: '2026-10-05T11:00:00Z',
+    carrierCode: 'CAR-MEKONG', carrierName: 'Mekong Transport', vehiclePlate: '50H-220.18', trailerPlate: null, vehicleType: 'TRUCK',
+    requiresTemperatureControl: false, hazardous: false, driverName: 'Trần Quốc Nam', driverPhone: null, sealNumber: null,
+    yardSlotId: null, yardSlotCode: null, dockId: 102, dockCode: 'D-02', arrivedAtUtc: '2026-10-05T09:40:00Z', checkedInAtUtc: '2026-10-05T09:45:00Z',
+    dockAssignedAtUtc: '2026-10-05T09:55:00Z', serviceStartedAtUtc: null, serviceCompletedAtUtc: null, checkedOutAtUtc: null, exceptionCode: null,
+    note: 'Outbound staging ready', rowVersion: null, events: [],
+  },
+  {
+    id: 2041, warehouseId: 2, warehouseCode: demoWarehouses[1]?.code ?? 'WH-02', warehouseName: demoWarehouses[1]?.name ?? 'Kho',
+    code: 'APT-2026-2041', direction: 0, status: 9, plannedStartUtc: '2026-10-05T07:00:00Z', plannedEndUtc: '2026-10-05T08:00:00Z',
+    carrierCode: 'CAR-CENTRAL', carrierName: 'Central Freight', vehiclePlate: '43C-711.22', trailerPlate: null, vehicleType: 'TRUCK',
+    requiresTemperatureControl: false, hazardous: false, driverName: null, driverPhone: null, sealNumber: null,
+    yardSlotId: null, yardSlotCode: null, dockId: null, dockCode: null, arrivedAtUtc: '2026-10-05T07:40:00Z', checkedInAtUtc: null,
+    dockAssignedAtUtc: null, serviceStartedAtUtc: null, serviceCompletedAtUtc: null, checkedOutAtUtc: null, exceptionCode: 'LATE_ARRIVAL',
+    note: 'Đến trễ ngoài window', rowVersion: null, events: [],
+  },
+];
+
 export const demoPermissionCatalog = [
   { code: 'product.read', description: 'Xem sản phẩm' },
   { code: 'warehouse.read', description: 'Xem kho' },
   { code: 'warehouse_calendar.manage', description: 'Quản lý lịch vận hành và ca kho' },
+  { code: 'dock.read', description: 'Xem dock cửa kho' },
+  { code: 'dock.manage', description: 'Quản lý dock và yard slot' },
+  { code: 'dock_appointment.read', description: 'Xem lịch xe dock/yard' },
+  { code: 'dock_appointment.manage', description: 'Quản lý lịch xe dock/yard' },
+  { code: 'yard.read', description: 'Xem yard' },
+  { code: 'yard.checkin', description: 'Gate check-in' },
+  { code: 'yard.assign_dock', description: 'Gán dock' },
+  { code: 'yard.checkout', description: 'Gate checkout' },
   { code: 'warehouse_zone.manage', description: 'Quản lý cấu trúc khu vực kho' },
   { code: 'location.read', description: 'Xem vị trí kho' },
   { code: 'location.manage', description: 'Quản lý vị trí kho' },
