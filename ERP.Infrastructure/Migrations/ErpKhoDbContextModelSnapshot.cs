@@ -1145,6 +1145,199 @@ namespace ERP.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.HandlingUnit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Barcode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("GrossWeightKg")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("HuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal?>("NetWeightKg")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("PackingSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ParentHandlingUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("SealedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Sscc")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("VolumeM3")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ParentHandlingUnitId");
+
+                    b.HasIndex("Sscc")
+                        .IsUnique()
+                        .HasFilter("[Sscc] IS NOT NULL");
+
+                    b.HasIndex("PackingSessionId", "Status");
+
+                    b.HasIndex("WarehouseId", "Barcode")
+                        .IsUnique();
+
+                    b.HasIndex("WarehouseId", "HuCode")
+                        .IsUnique();
+
+                    b.ToTable("HandlingUnits", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_HandlingUnits_Metrics", "([GrossWeightKg] IS NULL OR [GrossWeightKg] > 0) AND ([NetWeightKg] IS NULL OR [NetWeightKg] > 0) AND ([VolumeM3] IS NULL OR [VolumeM3] > 0) AND ([GrossWeightKg] IS NULL OR [NetWeightKg] IS NULL OR [GrossWeightKg] >= [NetWeightKg])");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.HandlingUnitContent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("HandlingUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("PackedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("PackedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PickingTaskLineId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PackedBy");
+
+                    b.HasIndex("PickingTaskLineId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("HandlingUnitId", "PickingTaskLineId")
+                        .IsUnique();
+
+                    b.ToTable("HandlingUnitContents", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_HandlingUnitContents_Quantity", "[Quantity] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PackingSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PackedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("PickingTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("SessionCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("PickingTaskId")
+                        .IsUnique();
+
+                    b.HasIndex("WarehouseId", "SessionCode")
+                        .IsUnique();
+
+                    b.HasIndex("WarehouseId", "Status", "CreatedAt");
+
+                    b.ToTable("PackingSessions", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
                 {
                     b.Property<int>("Id")
@@ -3741,6 +3934,102 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Unit");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.HandlingUnit", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PackingSession", "PackingSession")
+                        .WithMany("HandlingUnits")
+                        .HasForeignKey("PackingSessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.HandlingUnit", "ParentHandlingUnit")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentHandlingUnitId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("PackingSession");
+
+                    b.Navigation("ParentHandlingUnit");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.HandlingUnitContent", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.HandlingUnit", "HandlingUnit")
+                        .WithMany("Contents")
+                        .HasForeignKey("HandlingUnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.User", "PackedByUser")
+                        .WithMany()
+                        .HasForeignKey("PackedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PickingTaskLine", "PickingTaskLine")
+                        .WithMany()
+                        .HasForeignKey("PickingTaskLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("HandlingUnit");
+
+                    b.Navigation("PackedByUser");
+
+                    b.Navigation("PickingTaskLine");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PackingSession", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PickingTask", "PickingTask")
+                        .WithOne()
+                        .HasForeignKey("ERP.Domain.Entities.PackingSession", "PickingTaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("PickingTask");
+
+                    b.Navigation("Warehouse");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.User", "AssignedUser")
@@ -4342,6 +4631,18 @@ namespace ERP.Infrastructure.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.ProductCategory", b =>
                 {
                     b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.HandlingUnit", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Contents");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PackingSession", b =>
+                {
+                    b.Navigation("HandlingUnits");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>

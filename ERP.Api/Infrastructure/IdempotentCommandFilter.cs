@@ -188,7 +188,9 @@ public sealed class IdempotentCommandFilter(
     public static bool RequiresSerializableIsolation(string scope) =>
         scope is "DockYard.Appointment.CheckIn" or "DockYard.Appointment.AssignDock"
         || scope.StartsWith("InventoryAllocation.", StringComparison.Ordinal)
-        || scope.StartsWith("Picking.", StringComparison.Ordinal);
+        || scope.StartsWith("Picking.", StringComparison.Ordinal)
+        || scope.StartsWith("Packing.", StringComparison.Ordinal)
+        || scope.StartsWith("HandlingUnit.", StringComparison.Ordinal);
     private static bool IsUniqueViolation(DbUpdateException ex)
     {
         if (ex.InnerException is SqlException { Number: 2601 or 2627 }) return true;

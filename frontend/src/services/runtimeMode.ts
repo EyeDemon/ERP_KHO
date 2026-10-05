@@ -19,6 +19,8 @@ export const blueprintDemoReadPermissions = [
   'export_receipt.read',
   'allocation.read',
   'picking.read',
+  'packing.read',
+  'handling_unit.read',
   'receiving_discrepancy.read',
   'reason_code.read',
   'putaway.read',

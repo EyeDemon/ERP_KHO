@@ -71,14 +71,16 @@ describe('capability governance metadata', () => {
     expect(platformStandards.find((item) => item.spec === 265)?.mappedCapabilityIds).toContain('OP-09');
   });
 
-  it('reports Picking foundation as partial implementation without claiming production completeness', () => {
-    const picking = findCapability('OUT-05');
-    const profile = getCapabilityGovernanceProfile(picking.module, picking.capability);
-    expect(picking.capability.status).toBe('foundation');
-    expect(profile.maturity).toBe('M1');
-    expect(profile.evidence.find((item) => item.key === 'api')?.status).toBe('partial');
-    expect(profile.evidence.find((item) => item.key === 'permission')?.status).toBe('spec-only');
-    expect(profile.evidence.find((item) => item.key === 'test')?.status).toBe('spec-only');
-    expect(profile.evidence.find((item) => item.key === 'ux')?.status).toBe('covered');
+  it('reports outbound execution foundations as partial implementation without claiming production completeness', () => {
+    for (const id of ['OUT-05', 'OUT-06']) {
+      const item = findCapability(id);
+      const profile = getCapabilityGovernanceProfile(item.module, item.capability);
+      expect(item.capability.status).toBe('foundation');
+      expect(profile.maturity).toBe('M1');
+      expect(profile.evidence.find((evidence) => evidence.key === 'api')?.status).toBe('partial');
+      expect(profile.evidence.find((evidence) => evidence.key === 'permission')?.status).toBe('spec-only');
+      expect(profile.evidence.find((evidence) => evidence.key === 'test')?.status).toBe('spec-only');
+      expect(profile.evidence.find((evidence) => evidence.key === 'ux')?.status).toBe('covered');
+    }
   });
 });

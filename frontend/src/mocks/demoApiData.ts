@@ -344,7 +344,55 @@ export const demoPickingTasks = [
     ],
     shortPicks: [],
   },
+  {
+    id: 8802, taskCode: 'PICK-2026-8802', sourceType: 'Reservation', sourceId: 9040, sourceCode: 'RSV-PACK-0040',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', pickingType: 'STANDARD', status: 'Completed', priority: 0,
+    assignedUserId: 103, assignedUserName: 'Lê Hoàng Nam', requestedQuantity: 40, pickedQuantity: 40, remainingQuantity: 0,
+    createdAt: '2026-10-06T01:30:00Z', startedAt: '2026-10-06T01:35:00Z', completedAt: '2026-10-06T01:50:00Z', rowVersion: 'AAAAAAAAPICK2',
+    lines: [
+      {
+        id: 8821, allocationId: 7712, allocationCode: 'ALC-2026-7712', productId: 1, productCode: 'SKU-1001',
+        productName: 'Cà phê Arabica 500g', sourceLocationId: 101, sourceLocationCode: 'A01-R02-L03-B04',
+        sourceLocationName: 'Bin B04', requestedQuantity: 40, pickedQuantity: 40, remainingQuantity: 0, sequence: 1, status: 'Picked',
+      },
+    ],
+    shortPicks: [],
+  }
 ];
+
+
+export const demoPackingSessions = [
+  {
+    id: 9901, sessionCode: 'PACK-2026-9901', pickingTaskId: 8802, pickingTaskCode: 'PICK-2026-8802',
+    sourceType: 'Reservation', sourceId: 9040, sourceCode: 'RSV-PACK-0040',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 'InProgress',
+    requiredQuantity: 40, packedQuantity: 20, remainingQuantity: 20, handlingUnitCount: 1,
+    createdAt: '2026-10-06T01:51:00Z', startedAt: '2026-10-06T01:52:00Z', packedAt: null, closedAt: null,
+    rowVersion: 'AAAAAAAAPACK1',
+    lines: [
+      {
+        pickingTaskLineId: 8821, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g',
+        pickedQuantity: 40, packedQuantity: 20, remainingQuantity: 20,
+      },
+    ],
+    handlingUnits: [
+      {
+        id: 9911, huCode: 'CARTON-9901-01', barcode: 'CARTON-9901-01', sscc: null,
+        warehouseId: 1, packingSessionId: 9901, parentHandlingUnitId: null, parentHandlingUnitCode: null,
+        type: 'Carton', status: 'InUse', grossWeightKg: 6.4, netWeightKg: 6.0, volumeM3: 0.04,
+        sealedAt: null, createdAt: '2026-10-06T01:52:00Z', closedAt: null, rowVersion: 'AAAAAAAAHU01',
+        contents: [
+          {
+            id: 9921, pickingTaskLineId: 8821, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g',
+            quantity: 20, packedAt: '2026-10-06T01:54:00Z',
+          },
+        ],
+      },
+    ],
+  },
+];
+
+export const demoHandlingUnits = demoPackingSessions.flatMap(session => session.handlingUnits);
 
 export const demoStocktakes = [
   { id: 142, code: 'CC-2026-0142', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 0, note: 'Cycle count khu A', createdBy: 101, createdByName: 'Trần Quốc Bảo', createdAt: '2026-10-03T08:00:00Z', detailCount: 1, details: [{ id: 1, stocktakeId: 142, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', unitName: 'Gói', systemQuantity: 1250, actualQuantity: 1248, differenceQuantity: -2, note: 'Recount accepted' }] },
@@ -451,4 +499,13 @@ export const demoPermissionCatalog = [
   { code: 'asn.read', description: 'Xem ASN dự kiến' },
   { code: 'receipt.read', description: 'Xem phiếu nhập' },
   { code: 'putaway.read', description: 'Xem nhiệm vụ cất hàng' },
+  { code: 'packing.read', description: 'Xem Packing session' },
+  { code: 'packing.execute', description: 'Thực hiện Packing' },
+  { code: 'packing.reopen', description: 'Mở lại Packing theo kiểm soát' },
+  { code: 'handling_unit.read', description: 'Xem Handling Unit' },
+  { code: 'handling_unit.create', description: 'Tạo Handling Unit' },
+  { code: 'handling_unit.modify', description: 'Sửa cấu trúc Handling Unit' },
+  { code: 'handling_unit.split', description: 'Tách Handling Unit' },
+  { code: 'handling_unit.merge', description: 'Gộp Handling Unit' },
+  { code: 'handling_unit.repack', description: 'Đóng gói lại Handling Unit' },
 ];

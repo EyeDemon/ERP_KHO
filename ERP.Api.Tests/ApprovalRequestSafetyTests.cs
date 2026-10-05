@@ -31,6 +31,9 @@ public sealed class ApprovalRequestSafetyTests
         IdempotentCommandFilter.RequiresSerializableIsolation("Picking.Assign").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Picking.Pick").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Picking.ShortPick.Resolve").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Packing.Pack").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Packing.Complete").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("HandlingUnit.Nest").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Export.Dispatch").Should().BeFalse();
     }
 
@@ -103,6 +106,16 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "ResolveShortPick")]
     [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "OverrideShortPick")]
     [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "Complete")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "Create")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "CreateHandlingUnit")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "Pack")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "CloseHandlingUnit")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "CancelHandlingUnit")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "NestHandlingUnit")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "UnnestHandlingUnit")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "Complete")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "Close")]
+    [InlineData(typeof(ERP.Api.Controllers.PackingSessionsController), "Cancel")]
     public void InventoryMutationEndpoints_RequireIdempotency(Type controller, string method)
     {
         controller.GetMethod(method)!.GetCustomAttribute<IdempotentCommandAttribute>().Should().NotBeNull();

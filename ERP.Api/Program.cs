@@ -177,6 +177,11 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IPickingTaskIntegration>(s
 builder.Services.AddScoped<ERP.Infrastructure.Services.PickingService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPickingService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PickingService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IPickingDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PickingService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PackingSessionIntegration>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingSessionIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingSessionIntegration>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PackingService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();

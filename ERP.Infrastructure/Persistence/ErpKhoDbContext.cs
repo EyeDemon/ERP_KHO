@@ -64,6 +64,9 @@ public class ErpKhoDbContext : DbContext
     public DbSet<PickingTask> PickingTasks => Set<PickingTask>();
     public DbSet<PickingTaskLine> PickingTaskLines => Set<PickingTaskLine>();
     public DbSet<ShortPickException> ShortPickExceptions => Set<ShortPickException>();
+    public DbSet<PackingSession> PackingSessions => Set<PackingSession>();
+    public DbSet<HandlingUnit> HandlingUnits => Set<HandlingUnit>();
+    public DbSet<HandlingUnitContent> HandlingUnitContents => Set<HandlingUnitContent>();
 
     public override int SaveChanges()
     {

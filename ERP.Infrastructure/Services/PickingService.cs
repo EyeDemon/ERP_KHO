@@ -14,7 +14,8 @@ namespace ERP.Infrastructure.Services;
 public sealed class PickingService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
-    ICurrentUser currentUser) : IPickingService, IPickingDispatchReadiness
+    ICurrentUser currentUser,
+    IPackingSessionIntegration? packingSessionIntegration = null) : IPickingService, IPickingDispatchReadiness
 {
     private static readonly StockAllocationStatus[] CapacityStatuses =
     [
@@ -271,7 +272,8 @@ public sealed class PickingService(
             task.Status = PickingTaskStatus.Completed;
             task.CompletedAt = DateTime.UtcNow;
             AddAudit("PickingTask.Completed", task, $"PickedQuantity: {task.Lines.Sum(x => x.PickedQuantity)}");
-            await Task.CompletedTask;
+            if (packingSessionIntegration is not null)
+                await packingSessionIntegration.EnsureForPickingTaskAsync(task.Id, currentUser.UserId, token);
         }, cancellationToken);
 
     public async Task EnsureSourceReadyAsync(

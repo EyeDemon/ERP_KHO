@@ -16,7 +16,7 @@ namespace ERP.Api.Tests
             var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController), typeof(PurchaseOrdersController), typeof(AsnsController),
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
-                typeof(BusinessPartnersController), typeof(ExportReceiptsController), typeof(StockAllocationsController), typeof(PickingTasksController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
+                typeof(BusinessPartnersController), typeof(ExportReceiptsController), typeof(StockAllocationsController), typeof(PickingTasksController), typeof(PackingSessionsController), typeof(HandlingUnitsController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
                 typeof(PermissionsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
@@ -221,6 +221,32 @@ namespace ERP.Api.Tests
         {
             typeof(PickingTasksController).GetMethod(methodName)!
                 .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("List", AppPermissions.PackingRead)]
+        [InlineData("Get", AppPermissions.PackingRead)]
+        [InlineData("Create", AppPermissions.PackingExecute)]
+        [InlineData("CreateHandlingUnit", AppPermissions.HandlingUnitCreate)]
+        [InlineData("Pack", AppPermissions.PackingExecute)]
+        [InlineData("CloseHandlingUnit", AppPermissions.PackingExecute)]
+        [InlineData("CancelHandlingUnit", AppPermissions.HandlingUnitModify)]
+        [InlineData("NestHandlingUnit", AppPermissions.HandlingUnitModify)]
+        [InlineData("UnnestHandlingUnit", AppPermissions.HandlingUnitModify)]
+        [InlineData("Complete", AppPermissions.PackingExecute)]
+        [InlineData("Close", AppPermissions.PackingExecute)]
+        [InlineData("Cancel", AppPermissions.PackingExecute)]
+        public void PackingEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(PackingSessionsController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Fact]
+        public void HandlingUnitReadController_RequiresExactCapability()
+        {
+            typeof(HandlingUnitsController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.HandlingUnitRead);
         }
 
         [Fact]
