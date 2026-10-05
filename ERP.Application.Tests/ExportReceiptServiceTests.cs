@@ -411,7 +411,7 @@ namespace ERP.Application.Tests
                 a.EntityName == "ExportReceipt" &&
                 a.EntityId == 1 &&
                 a.Timestamp >= expectedTime.AddSeconds(-2) && a.Timestamp <= expectedTime.AddSeconds(2)
-            ), It.IsAny<CancellationToken>()), Times.Once);
+            )), Times.Once);
 
             _mockUnitOfWork.Verify(x => x.CommitTransactionAsync(), Times.Once);
         }
@@ -443,8 +443,7 @@ namespace ERP.Application.Tests
             _mockTransactionRepo.Verify(x => x.AddAsync(It.Is<InventoryTransaction>(t =>
                 t.TransactionType == TransactionType.Export && t.ReferenceId == 1 && t.ProductId == 1 && t.LocationId == 101 && t.Quantity == 10),
                 It.IsAny<CancellationToken>()), Times.Once);
-            _mockAuditRepo.Verify(x => x.AddAsync(It.Is<AuditLog>(a => a.Action == "ExportReceipt.ApprovedAndDispatched"),
-                It.IsAny<CancellationToken>()), Times.Once);
+            _mockAuditRepo.Verify(x => x.AddAsync(It.Is<AuditLog>(a => a.Action == "ExportReceipt.ApprovedAndDispatched")), Times.Once);
         }
 
         [Fact]
