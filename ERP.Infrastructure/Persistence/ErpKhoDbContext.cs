@@ -61,6 +61,9 @@ public class ErpKhoDbContext : DbContext
     public DbSet<PutawayTask> PutawayTasks => Set<PutawayTask>();
     public DbSet<PutawayTaskItem> PutawayTaskItems => Set<PutawayTaskItem>();
     public DbSet<InventoryLocationMovement> InventoryLocationMovements => Set<InventoryLocationMovement>();
+    public DbSet<PickingTask> PickingTasks => Set<PickingTask>();
+    public DbSet<PickingTaskLine> PickingTaskLines => Set<PickingTaskLine>();
+    public DbSet<ShortPickException> ShortPickExceptions => Set<ShortPickException>();
 
     public override int SaveChanges()
     {
