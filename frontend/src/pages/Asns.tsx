@@ -12,9 +12,8 @@ import {
   UiPage,
   UiPageHeader,
   UiTableScroll,
-  UiToolbar,
-  UiToolbarField,
 } from '../ui/ProductionUi';
+import { InboundPlanningFeedback, InboundPlanningToolbar, productUnitOptions } from './inboundPlanningShared';
 import './InboundPlanning.css';
 
 type AsnList={
@@ -134,13 +133,6 @@ export default function Asns(){
     catch(err:unknown){setSelected(null);setError(permissionError(err,'Không tìm thấy ASN hoặc bạn không có quyền truy cập.'));}
   };
 
-  const productUnits=(productId:number|'')=>{
-    const product=products.find(x=>x.id===productId);
-    if(!product)return [];
-    const base={unitId:product.unitId,unitCode:product.unitCode,unitName:product.unitName};
-    return [base,...(product.uoms??[])].filter((item,index,array)=>array.findIndex(x=>x.unitId===item.unitId)===index);
-  };
-
   const choosePurchaseOrder=async(value:string)=>{
     const id=value?Number(value):'';
     setPurchaseOrderId(id);setPoDetail(null);setLines([emptyLine()]);
@@ -231,8 +223,7 @@ export default function Asns(){
       description="Theo dõi lô hàng dự kiến từ nhà cung cấp tới kho trước khi tiếp nhận. Hoàn tất ASN vẫn chưa tạo tồn kho."
     />
 
-    {error&&<div role="alert">{error}</div>}
-    {success&&<p role="status" className="ui-success-text">{success}</p>}
+    <InboundPlanningFeedback error={error} success={success}/>
 
     <UiMetricGrid>
       <UiMetric value={items.length} label="ASN trong phạm vi hiện tại"/>
@@ -241,17 +232,7 @@ export default function Asns(){
       <UiMetric value={items.filter(x=>x.status==='Receiving').length} label="Đang tiếp nhận"/>
     </UiMetricGrid>
 
-    <UiToolbar>
-      <UiToolbarField label="Trạng thái">
-        <select className="inbound-planning-status-filter" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-          <option value="">Tất cả trạng thái</option>
-          {Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}
-        </select>
-      </UiToolbarField>
-      <UiToolbarField label="Tìm trong danh sách">
-        <input className="inbound-planning-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Mã ASN, PO, nhà cung cấp, kho"/>
-      </UiToolbarField>
-    </UiToolbar>
+    <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã ASN, PO, nhà cung cấp, kho"/>
 
     <div className="inbound-planning-grid">
       <UiCard title="Danh sách ASN">
@@ -336,7 +317,7 @@ export default function Asns(){
                 {lines.map((line,index)=><div className="inbound-planning-line compact" key={index}>
                   {purchaseOrderId?<label>Dòng PO<select required value={line.purchaseOrderLineId} onChange={e=>changeLine(index,{purchaseOrderLineId:e.target.value?Number(e.target.value):''})}><option value="">Chọn dòng PO</option>{poDetail?.lines.map(x=><option key={x.id} value={x.id}>{x.externalLineId} — {x.productCode} — còn dự kiến tối đa theo PO</option>)}</select></label>:
                     <label>Sản phẩm<select required value={line.productId} onChange={e=>changeLine(index,{productId:e.target.value?Number(e.target.value):''})}><option value="">Chọn sản phẩm</option>{products.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>}
-                  <label>Đơn vị<select required value={line.operationUnitId} onChange={e=>changeLine(index,{operationUnitId:e.target.value?Number(e.target.value):''})}><option value="">Chọn đơn vị</option>{productUnits(line.productId).map(x=><option key={x.unitId} value={x.unitId}>{x.unitCode}</option>)}</select></label>
+                  <label>Đơn vị<select required value={line.operationUnitId} onChange={e=>changeLine(index,{operationUnitId:e.target.value?Number(e.target.value):''})}><option value="">Chọn đơn vị</option>{productUnitOptions(products,line.productId).map(x=><option key={x.unitId} value={x.unitId}>{x.unitCode}</option>)}</select></label>
                   <label>Số lượng dự kiến<input required min="0" step="any" type="number" value={line.expectedQuantity} onChange={e=>changeLine(index,{expectedQuantity:e.target.value===''?'':Number(e.target.value)})}/></label>
                   <div><strong>{products.find(x=>x.id===line.productId)?.code||'Chưa chọn'}</strong><br/><small>{products.find(x=>x.id===line.productId)?.name||'Chọn nguồn dòng để xác định sản phẩm'}</small></div>
                   <button type="button" disabled={lines.length===1} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}>Xóa</button>
