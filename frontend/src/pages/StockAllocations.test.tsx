@@ -31,7 +31,9 @@ describe('StockAllocations production UI',()=>{
   it('creates automatic Allocation once with idempotency',async()=>{
     localStorage.setItem('permissions',JSON.stringify(['allocation.read','allocation.create']));
     const view=render(<StockAllocations/>);await view.findByText('ALC-2026-7711');
-    const button=await view.findByRole('button',{name:/Tự động/});fireEvent.click(button);fireEvent.click(button);
+    const button=await view.findByRole('button',{name:/Tự động/});
+    await waitFor(()=>expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(post).toHaveBeenCalledTimes(1));
     expect(post).toHaveBeenCalledWith('/api/inventory/allocations/auto',{reservationId:9031,quantity:40,locationId:null},{headers:{'Idempotency-Key':'key:allocation:auto:9031:40:auto'}});
   });
