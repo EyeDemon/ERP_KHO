@@ -68,6 +68,14 @@ describe('ModuleBlueprint mock work center', () => {
     expect(view.queryByText('GR-2026-1041')).toBeNull();
   });
 
+  it('maps the combined PO/ASN capability to both production work centers', () => {
+    const view = renderModule('inbound');
+    expect(view.getByText('Có trong hệ thống thật • 2 màn hình')).toBeTruthy();
+    expect(view.getByText('Over/Under Receipt Discrepancy')).toBeTruthy();
+    expect(view.getByText('Inbound QC')).toBeTruthy();
+    expect(view.getAllByText('Có trong hệ thống thật').length).toBeGreaterThan(0);
+  });
+
   it('keeps production links out of Blueprint module coverage', () => {
     const master = renderModule('master-data');
     expect(master.queryByText('Mở thật')).toBeNull();

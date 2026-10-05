@@ -10,6 +10,7 @@ export interface BlueprintCapability {
   status: BlueprintStatus;
   spec: string;
   route?: string;
+  relatedRoutes?: string[];
   mockRoute?: string;
 }
 
@@ -34,6 +35,12 @@ export const blueprintDemoStatusLabels: Record<BlueprintStatus, string> = {
   planned: 'Có mock tương tác • production chưa có',
   optional: 'Có mock nâng cao • bật khi cần',
 };
+
+export const blueprintImplementationCheckpoint = {
+  asOf: '05/10/2026',
+  label: 'Đã đối chiếu production: Inbound + ExportReceipt Outbound MVP',
+  note: 'Shipment/Picking/Packing/HU vẫn theo đặc tả và chưa được đánh dấu production.',
+} as const;
 
 export const erpWmsBlueprint: BlueprintModule[] = [
   {
@@ -88,13 +95,13 @@ export const erpWmsBlueprint: BlueprintModule[] = [
     description: 'Luồng từ expected inbound tới receiving, QC, posting và putaway.',
     flow: ['PO/ASN', 'Appointment', 'Receipt', 'Receiving', 'QC', 'Ready to Post', 'Post', 'Putaway'],
     capabilities: [
-      { id: 'IN-01', name: 'Purchase Order / ASN', goal: 'Nhận expected inbound từ ERP/Procurement và theo dõi ASN.', surfaces: ['Web', 'API'], status: 'live', spec: '34, 160', route: '/purchase-orders' },
+      { id: 'IN-01', name: 'Purchase Order / ASN', goal: 'Nhận expected inbound từ ERP/Procurement, quản lý PO và theo dõi ASN trên hai work center production.', surfaces: ['Web', 'API'], status: 'live', spec: '34, 160', route: '/purchase-orders', relatedRoutes: ['/asns'] },
       { id: 'IN-02', name: 'Receiving Appointment', goal: 'Đặt lịch xe/hàng vào kho và phân dock.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '46' },
       { id: 'IN-03', name: 'Goods Receipt Work Center', goal: 'Tìm/lọc/tạo/mở receipt theo state và warehouse scope.', surfaces: ['Web', 'API'], status: 'foundation', spec: '34, 216, 228, 229', route: '/import-receipts' },
-      { id: 'IN-04', name: 'Receiving Workbench', goal: 'Scan hàng, nhập quantity/UOM, lot/serial/expiry và discrepancy.', surfaces: ['Web', 'Mobile', 'API'], status: 'foundation', spec: '34, 228, 229' },
-      { id: 'IN-05', name: 'Over/Under Receipt Discrepancy', goal: 'Xử lý tolerance, thiếu/thừa và approval khi vượt ngưỡng.', surfaces: ['Web', 'API'], status: 'planned', spec: '34, 70, 71, 228, 229' },
-      { id: 'IN-06', name: 'Inbound QC', goal: 'Kiểm tra line bắt buộc QC, evidence và disposition.', surfaces: ['Web', 'Mobile', 'API'], status: 'planned', spec: '34, 41, 57, 62, 90' },
-      { id: 'IN-07', name: 'Receipt Posting', goal: 'Boundary ghi nhận inventory, idempotent, concurrency-safe và audit/outbox.', surfaces: ['Web', 'API'], status: 'foundation', spec: '29, 34, 228' },
+      { id: 'IN-04', name: 'Receiving Workbench', goal: 'Nhận hàng, nhập quantity/UOM và handoff sang discrepancy/QC; Lot/Serial/Expiry UI đầy đủ vẫn đang hoàn thiện.', surfaces: ['Web', 'Mobile', 'API'], status: 'foundation', spec: '34, 228, 229', route: '/import-receipts' },
+      { id: 'IN-05', name: 'Over/Under Receipt Discrepancy', goal: 'Đã có observe/recount, typed resolution, submit/approve/reject và permission; policy breadth tiếp tục hoàn thiện theo spec.', surfaces: ['Web', 'API'], status: 'foundation', spec: '34, 70, 71, 228, 229', route: '/import-receipts' },
+      { id: 'IN-06', name: 'Inbound QC', goal: 'Đã có line-level QC/no-QC path, disposition và permission trên Web/API; mobile/evidence breadth tiếp tục hoàn thiện.', surfaces: ['Web', 'Mobile', 'API'], status: 'foundation', spec: '34, 41, 57, 62, 90', route: '/import-receipts' },
+      { id: 'IN-07', name: 'Receipt Posting', goal: 'Boundary ghi nhận inventory đã có trên production; idempotency/concurrency/atomicity đã có evidence, còn mở rộng outbox/platform breadth theo spec.', surfaces: ['Web', 'API'], status: 'foundation', spec: '29, 34, 228', route: '/import-receipts' },
       { id: 'IN-08', name: 'Putaway Tasks', goal: 'Phân công, start, move, exception, resume, cancel và hoàn tất cất hàng.', surfaces: ['Web', 'Mobile', 'API'], status: 'foundation', spec: '35, 229', route: '/putaway-tasks' },
       { id: 'IN-09', name: 'Putaway Rule Engine', goal: 'Đề xuất vị trí dựa trên capacity, status, owner và product rule.', surfaces: ['Web', 'API'], status: 'planned', spec: '35, 85' },
     ],
