@@ -171,6 +171,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IUserSessionService, ERP.I
 builder.Services.AddScoped<ERP.Application.Interfaces.IAccessTokenSessionValidator, ERP.Infrastructure.Services.AccessTokenSessionValidator>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockTransferService, ERP.Infrastructure.Services.StockTransferService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockReservationService, ERP.Infrastructure.Services.StockReservationService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IStockAllocationService, ERP.Infrastructure.Services.StockAllocationService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();

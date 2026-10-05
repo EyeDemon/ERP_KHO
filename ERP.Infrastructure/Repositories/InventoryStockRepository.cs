@@ -135,6 +135,42 @@ namespace ERP.Infrastructure.Repositories
             }
         }
 
+        public async Task<bool> TryConsumeReservationAtLocationAsync(
+            int productId,
+            int warehouseId,
+            int locationId,
+            decimal quantity,
+            CancellationToken cancellationToken = default)
+        {
+            if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
+            try
+            {
+                var now = DateTime.UtcNow;
+                var affected = await _dbSet
+                    .Where(x => x.ProductId == productId &&
+                                x.WarehouseId == warehouseId &&
+                                x.LocationId == locationId &&
+                                x.Status == InventoryStatus.Available &&
+                                x.Location != null &&
+                                x.Location.IsActive &&
+                                !x.Location.IsBlocked &&
+                                x.Location.IsPickable &&
+                                x.ReservedQuantity >= quantity &&
+                                x.Quantity >= quantity)
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.Quantity, x => x.Quantity - quantity)
+                        .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - quantity)
+                        .SetProperty(x => x.LastUpdated, now), cancellationToken);
+                return affected == 1;
+            }
+            catch (SqlException exception) when (exception.Number == 1205)
+            {
+                throw new ERP.Domain.Exceptions.DeadlockException(
+                    "Giao dịch tiêu thụ giữ hàng tại vị trí bị deadlock.",
+                    exception);
+            }
+        }
+
         public async Task<bool> TryReleaseReservationAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
         {
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
