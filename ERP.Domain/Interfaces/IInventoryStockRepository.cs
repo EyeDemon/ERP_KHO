@@ -21,6 +21,6 @@ namespace ERP.Domain.Interfaces
         Task<bool> TryConsumeReservationAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default);
         Task<IReadOnlyList<InventoryStockConsumption>> ConsumeReservationWithBreakdownAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default);
         Task<bool> TryConsumeReservationAtLocationAsync(int productId, int warehouseId, int locationId, decimal quantity, CancellationToken cancellationToken = default);
-        Task<bool> TryReleaseReservationAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default);
+        Task<bool> TryReleaseReservationAsync(int productId, int warehouseId, decimal quantity, int? excludedReservationId, CancellationToken cancellationToken = default);
     }
 }
