@@ -58,20 +58,29 @@ describe('CapabilityPreview', () => {
     }
   });
 
-  it('renders domain-specific planned inbound mocks without promoting them to production', () => {
+  it('keeps the remaining planned inbound capability explicitly non-production', () => {
+    const view = renderPreview('inbound', 'IN-09');
+    expect(view.getByTestId('inbound-capability-mock-IN-09')).toBeTruthy();
+    expect(view.getByRole('heading', { name: 'Putaway Recommendation Explainability' })).toBeTruthy();
+    expect(view.getByText(/Không gọi API production/)).toBeTruthy();
+    expect(view.getAllByText('Theo đặc tả — chưa triển khai').length).toBeGreaterThan(0);
+  });
+
+  it('reflects merged inbound execution capabilities as live while keeping Blueprint mocks read-only', () => {
     const cases = [
       ['IN-02', 'Receiving Appointment Board'],
       ['IN-05', 'Over / Under Receipt Resolution'],
       ['IN-06', 'Inbound QC Inspection'],
-      ['IN-09', 'Putaway Recommendation Explainability'],
     ];
 
     for (const [capabilityId, title] of cases) {
       const view = renderPreview('inbound', capabilityId);
+      expect(view.getByText('Đã có chức năng')).toBeTruthy();
+      expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
       expect(view.getByTestId('inbound-capability-mock-' + capabilityId)).toBeTruthy();
       expect(view.getByRole('heading', { name: title })).toBeTruthy();
       expect(view.getByText(/Không gọi API production/)).toBeTruthy();
-      expect(view.getAllByText('Theo đặc tả — chưa triển khai').length).toBeGreaterThan(0);
+      expect(view.queryByText('Theo đặc tả — chưa triển khai')).toBeNull();
       view.unmount();
     }
   });
@@ -86,7 +95,7 @@ describe('CapabilityPreview', () => {
     expect(view.queryByText('Theo đặc tả — chưa triển khai')).toBeNull();
   });
 
-  it('does not add planned-domain panels on inbound foundation work centers', () => {
+  it('does not shadow live inbound work centers that already have production surfaces', () => {
     for (const capabilityId of ['IN-03', 'IN-04', 'IN-07', 'IN-08']) {
       const view = renderPreview('inbound', capabilityId);
       expect(view.queryByTestId('inbound-capability-mock-' + capabilityId)).toBeNull();
