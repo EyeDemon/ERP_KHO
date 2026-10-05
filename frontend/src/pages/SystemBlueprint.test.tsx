@@ -16,6 +16,8 @@ describe('SystemBlueprint', () => {
     expect(view.getAllByText('Xuất kho').length).toBeGreaterThan(0);
     expect(view.getAllByText('Mobile WMS').length).toBeGreaterThan(0);
     expect(view.getAllByText('Advanced WMS & Planning').length).toBeGreaterThan(0);
+    expect(view.getByText(/Đồng bộ triển khai 05\/10\/2026:/)).toBeTruthy();
+    expect(view.getByText(/Inbound \+ ExportReceipt Outbound MVP/)).toBeTruthy();
   });
 
   it('separates mock coverage from production maturity in the visible labels', () => {

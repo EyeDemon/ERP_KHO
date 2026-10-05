@@ -271,7 +271,11 @@ const ModuleBlueprint = () => {
                     <div className="table-capability-links">
                       <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + capability.id}>Preview</Link>
                       {capability.mockRoute ? <Link className="table-open-link" to={capability.mockRoute}>Mock chuyên biệt</Link> : null}
-                      {capability.route ? <span className="table-production-note">Có trong hệ thống thật</span> : null}
+                      {capability.route ? (
+                        <span className="table-production-note">
+                          Có trong hệ thống thật{capability.relatedRoutes?.length ? ` • ${1 + capability.relatedRoutes.length} màn hình` : ''}
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

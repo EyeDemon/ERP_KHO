@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import {
   blueprintDemoStatusLabels,
+  blueprintImplementationCheckpoint,
   blueprintTotals,
   erpWmsBlueprint,
   type BlueprintStatus,
@@ -57,6 +58,10 @@ const SystemBlueprint = () => {
           <p>
             Blueprint này là môi trường minh họa tương tác từ bộ đặc tả Notion. Mọi capability đều có preview mock;
             badge bên dưới chỉ mô tả mức độ production/backend thực tế, không phải mức độ hoàn thiện của mock.
+          </p>
+          <p>
+            <strong>Đồng bộ triển khai {blueprintImplementationCheckpoint.asOf}:</strong>{' '}
+            {blueprintImplementationCheckpoint.label}. {blueprintImplementationCheckpoint.note}
           </p>
         </div>
         <div className="hero-badge">

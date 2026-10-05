@@ -46,6 +46,8 @@ const CapabilityPreview = () => {
     );
   }
 
+  const productionRoutes = [capability.route, ...(capability.relatedRoutes ?? [])].filter((route): route is string => Boolean(route));
+
   return (
     <div className="capability-page">
       <Link to={'/system-blueprint/' + module.key} className="capability-back">
@@ -63,6 +65,7 @@ const CapabilityPreview = () => {
             {governance && <span>Wave {governance.releaseWave}</span>}
             {governance && <span>{governance.applicability}</span>}
             {governance && <span>{governance.maturity}</span>}
+            {productionRoutes.length > 0 && <span>Production: {productionRoutes.join(' • ')}</span>}
             {capability.surfaces.map((surface) => (
               <span key={surface}>
                 {surface === 'Mobile' ? <Smartphone size={13} /> : <MonitorSmartphone size={13} />}
