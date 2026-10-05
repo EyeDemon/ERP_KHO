@@ -2261,6 +2261,142 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("RolePermissions", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.Shipment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("DockAppointmentId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("DockId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("LoadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LoadingStartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("PackingSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("SealNumber")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("ShipmentCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("SourceCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<int?>("SourceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTime?>("StagedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TrailerPlate")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("VehiclePlate")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("DockAppointmentId");
+
+                    b.HasIndex("DockId");
+
+                    b.HasIndex("PackingSessionId")
+                        .IsUnique();
+
+                    b.HasIndex("SourceType", "SourceId");
+
+                    b.HasIndex("WarehouseId", "ShipmentCode")
+                        .IsUnique();
+
+                    b.HasIndex("WarehouseId", "Status", "CreatedAt");
+
+                    b.ToTable("Shipments", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShipmentHandlingUnit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("HandlingUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("LoadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("LoadedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShipmentId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("StagedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HandlingUnitId")
+                        .IsUnique();
+
+                    b.HasIndex("LoadedBy");
+
+                    b.HasIndex("ShipmentId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("ShipmentHandlingUnits", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ShortPickException", b =>
                 {
                     b.Property<int>("Id")
@@ -4272,6 +4408,73 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.Shipment", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.DockAppointment", "DockAppointment")
+                        .WithMany()
+                        .HasForeignKey("DockAppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Dock", "Dock")
+                        .WithMany()
+                        .HasForeignKey("DockId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.PackingSession", "PackingSession")
+                        .WithOne()
+                        .HasForeignKey("ERP.Domain.Entities.Shipment", "PackingSessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Dock");
+
+                    b.Navigation("DockAppointment");
+
+                    b.Navigation("PackingSession");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShipmentHandlingUnit", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.HandlingUnit", "HandlingUnit")
+                        .WithMany()
+                        .HasForeignKey("HandlingUnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.User", "LoadedByUser")
+                        .WithMany()
+                        .HasForeignKey("LoadedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Shipment", "Shipment")
+                        .WithMany("HandlingUnits")
+                        .HasForeignKey("ShipmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("HandlingUnit");
+
+                    b.Navigation("LoadedByUser");
+
+                    b.Navigation("Shipment");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ShortPickException", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
@@ -4677,6 +4880,11 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Permissions");
 
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.Shipment", b =>
+                {
+                    b.Navigation("HandlingUnits");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockReservation", b =>
