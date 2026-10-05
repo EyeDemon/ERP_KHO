@@ -1,4 +1,7 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import apiClient from '../services/apiClient';
+import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { permissionError } from '../services/permissionPresentation';
 import { UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 type ProductUnit = { unitId:number; unitCode:string; unitName:string };
@@ -51,4 +54,32 @@ export function InboundPlanningToolbar({
       <input className="inbound-planning-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder={placeholder}/>
     </UiToolbarField>
   </UiToolbar>;
+}
+
+type VersionedInboundDetail={rowVersion?:string};
+
+export async function runInboundStateCommand<T extends VersionedInboundDetail>({
+  selected,path,action,successMessage,errorMessage,mutationLock,
+  setBusy,setError,setSuccess,setSelected,reload,
+}:{
+  selected:T|null;path:string;action:string;successMessage:string;errorMessage:string;
+  mutationLock:MutableRefObject<Set<string>>;
+  setBusy:Dispatch<SetStateAction<string>>;
+  setError:Dispatch<SetStateAction<string>>;
+  setSuccess:Dispatch<SetStateAction<string>>;
+  setSelected:Dispatch<SetStateAction<T|null>>;
+  reload:()=>Promise<void>;
+}) {
+  if(!selected?.rowVersion||mutationLock.current.has(action))return;
+  mutationLock.current.add(action);setBusy(action);setError('');setSuccess('');
+  try{
+    const response=await apiClient.post<T>(path,{rowVersion:selected.rowVersion},{headers:idempotencyHeaders(action)});
+    completeIdempotentAction(action);
+    setSelected(response.data);setSuccess(successMessage);await reload();
+  }catch(err:unknown){
+    if((err as {response?:{status?:number}})?.response?.status===409)setSelected(null);
+    setError(permissionError(err,errorMessage));
+  }finally{
+    mutationLock.current.delete(action);setBusy('');
+  }
 }

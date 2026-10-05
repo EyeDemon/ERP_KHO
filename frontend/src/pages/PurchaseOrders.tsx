@@ -13,7 +13,7 @@ import {
   UiPageHeader,
   UiTableScroll,
 } from '../ui/ProductionUi';
-import { InboundPlanningFeedback, InboundPlanningToolbar, productUnitOptions } from './inboundPlanningShared';
+import { InboundPlanningFeedback, InboundPlanningToolbar, productUnitOptions, runInboundStateCommand } from './inboundPlanningShared';
 import './InboundPlanning.css';
 
 type PurchaseOrderList = {
@@ -174,18 +174,11 @@ export default function PurchaseOrders(){
     finally{setCreating(false);}
   };
 
-  const command=async(path:string,action:string,successMessage:string)=>{
-    if(!selected?.rowVersion||mutationLock.current.has(action))return;
-    mutationLock.current.add(action);setBusy(action);setError('');setSuccess('');
-    try{
-      const response=await apiClient.post(path,{rowVersion:selected.rowVersion},{headers:idempotencyHeaders(action)});
-      completeIdempotentAction(action);
-      setSelected(response.data);setSuccess(successMessage);await loadList();
-    }catch(err:unknown){
-      if((err as {response?:{status?:number}})?.response?.status===409)setSelected(null);
-      setError(permissionError(err,'Không thể chuyển trạng thái đơn mua. Vui lòng tải lại và thử lại.'));
-    }finally{mutationLock.current.delete(action);setBusy('');}
-  };
+  const command=(path:string,action:string,successMessage:string)=>
+    runInboundStateCommand({
+      selected,path,action,successMessage,errorMessage:'Không thể chuyển trạng thái đơn mua. Vui lòng tải lại và thử lại.',
+      mutationLock,setBusy,setError,setSuccess,setSelected,reload:loadList,
+    });
 
   if(loading)return <p role="status">Đang tải đơn mua...</p>;
 
