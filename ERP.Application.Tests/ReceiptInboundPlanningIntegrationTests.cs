@@ -154,28 +154,7 @@ public sealed class ReceiptInboundPlanningIntegrationTests : IDisposable
         return (warehouse.Id,supplier.Id,product.Id,unit.Id,user.Id,po.Id,poLine.Id,asn.Id,asnLine.Id);
     }
 
-    private TestContext Create() => new(options);
+    private InboundPlanningTestContext Create() => new(options);
     public void Dispose() => connection.Dispose();
 
-    private sealed class TestContext(DbContextOptions<ErpKhoDbContext> options) : ErpKhoDbContext(options)
-    {
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-            foreach (var property in modelBuilder.Model.GetEntityTypes().SelectMany(x => x.GetProperties()))
-                if (property.GetColumnType()?.Contains("max", StringComparison.OrdinalIgnoreCase) == true) property.SetColumnType(null);
-
-            modelBuilder.Entity<BusinessPartner>().Property(x => x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
-            modelBuilder.Entity<PurchaseOrder>().Property(x => x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
-            modelBuilder.Entity<Asn>().Property(x => x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
-            modelBuilder.Entity<PurchaseOrderLine>().Property(x => x.OrderedQuantity).HasConversion<double>();
-            modelBuilder.Entity<PurchaseOrderLine>().Property(x => x.BaseOrderedQuantity).HasConversion<double>();
-            modelBuilder.Entity<PurchaseOrderLine>().Property(x => x.ConversionFactorSnapshot).HasConversion<double>();
-            modelBuilder.Entity<PurchaseOrderLine>().Property(x => x.AllowedOverReceiptPct).HasConversion<double>();
-            modelBuilder.Entity<PurchaseOrderLine>().Property(x => x.AllowedUnderReceiptPct).HasConversion<double>();
-            modelBuilder.Entity<AsnLine>().Property(x => x.ExpectedQuantity).HasConversion<double>();
-            modelBuilder.Entity<AsnLine>().Property(x => x.BaseExpectedQuantity).HasConversion<double>();
-            modelBuilder.Entity<AsnLine>().Property(x => x.ConversionFactorSnapshot).HasConversion<double>();
-        }
-    }
 }
