@@ -16,7 +16,7 @@ vi.mock('../services/idempotency',()=>({
 }));
 
 const hu={id:1,handlingUnitId:9911,huCode:'PALLET-01',barcode:'PALLET-01',type:'Pallet',status:'Closed',sequence:1,contentQuantity:40,assignedAt:'2026-10-06T03:00:00Z'};
-const summary={id:7701,shipmentCode:'SHIP-2026-7701',packingSessionId:9901,packingSessionCode:'PACK-2026-9901',warehouseId:1,warehouseName:'DC Hồ Chí Minh',sourceType:'Reservation',sourceId:9040,sourceCode:'RSV-PACK-0040',status:'Ready',handlingUnitCount:1,loadedHandlingUnitCount:0,createdAt:'2026-10-06T03:00:00Z'};
+const summary={id:7701,shipmentCode:'SHIP-2026-7701',packingSessionId:9901,packingSessionCode:'PACK-2026-9901',warehouseId:1,warehouseName:'DC Hồ Chí Minh',sourceType:'Reservation',sourceId:9040,sourceCode:'RSV-PACK-0040',status:'Ready',stagingLocationId:undefined,stagingLocationCode:undefined,handlingUnitCount:1,loadedHandlingUnitCount:0,createdAt:'2026-10-06T03:00:00Z'};
 const detail={...summary,rowVersion:'AQ==',handlingUnits:[hu]};
 const appointment={id:1043,code:'APT-2026-1043',warehouseId:1,direction:1,status:5,dockId:102,dockCode:'D-02',vehiclePlate:'50H-220.18'};
 const grant=(...permissions:string[])=>{permissionState.granted.clear();permissions.forEach(p=>permissionState.granted.add(p));};
@@ -45,10 +45,12 @@ describe('Shipment staging & loading workbench',()=>{
     const view=render(<Shipments/>);
     await view.findByText('SHIP-2026-7701');
     fireEvent.click(view.getByText('SHIP-2026-7701'));
-    const button=await view.findByText('Đưa vào Staging');
+    const input=await view.findByLabelText('Shipment staging location');
+    fireEvent.change(input,{target:{value:'STG-OUT-01'}});
+    const button=view.getByText('Xác nhận Staging');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/shipments/7701/stage',{rowVersion:'AQ=='},{headers:{'Idempotency-Key':'key:shipment-stage-7701'}});
+    expect(apiClient.post).toHaveBeenCalledWith('/api/shipments/7701/stage',{stagingLocationCode:'STG-OUT-01',rowVersion:'AQ=='},{headers:{'Idempotency-Key':'key:shipment-stage-7701'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('shipment-stage-7701');
   });
 
@@ -73,7 +75,7 @@ describe('Shipment staging & loading workbench',()=>{
   it('maps wrong-HU loading conflict to actionable Vietnamese copy',async()=>{
     grant('shipment.read','shipment.load','loading.execute');
     reads({...detail,status:'Loading',dockCode:'D-02',vehiclePlate:'50H-220.18',handlingUnits:[{...hu,status:'Staged'}]});
-    vi.mocked(apiClient.post).mockRejectedValue({response:{status:409,data:{code:'HU_WRONG_SHIPMENT',message:'wrong'}}});
+    vi.mocked(apiClient.post).mockRejectedValue({response:{status:409,data:{code:'SHIPMENT_HU_MISMATCH',message:'wrong'}}});
     const view=render(<Shipments/>);
     await view.findByText('SHIP-2026-7701');
     fireEvent.click(view.getByText('SHIP-2026-7701'));
