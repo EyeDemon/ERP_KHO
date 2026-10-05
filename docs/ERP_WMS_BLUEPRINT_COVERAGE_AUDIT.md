@@ -34,6 +34,31 @@ The blueprint registry has now been corrected in the same feature branch:
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
+## Implementation status refresh — 2026-10-05
+
+A fresh comparison against the deployed main integration branch found that the registry had become stale after later production merges. This is a **status synchronization correction**, not a change to canonical business semantics.
+
+Promoted to `live` because production code/routes and merged verification now exist:
+- MD-02 Product Category.
+- MD-03 multi-barcode.
+- MD-05 Business Partner.
+- IN-02 Receiving Appointment.
+- IN-03 Goods Receipt Work Center.
+- IN-04 Receiving Workbench.
+- IN-05 Receiving Discrepancy.
+- IN-06 Inbound QC.
+- IN-07 Receipt Posting.
+- IN-08 Putaway Tasks.
+- DY-01 Gate Check-in.
+- DY-02 Dock Scheduling.
+- DY-03 Yard Management.
+- RP-06 Ledger Reconciliation.
+- AD-02 Role & Permission Matrix.
+
+IN-01 remains live and its traceability now explicitly includes PO/ASN state/API/permission/UX sources. OUT-01 ExportReceipt MVP and OUT-02 Reservation remain live.
+
+The refresh deliberately leaves OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch and OUT-10 Tracking/POD non-live. Notion Spec 38 keeps Shipment as a separate state machine with LOADED/HU/allocation prerequisites; ExportReceipt `APPROVED` is not Shipment `LOADED`.
+
 ## Executive finding
 
 The canonical documentation set is substantially complete. Spec 275 states that after pages 276–281 there are no obvious foundational solution-architecture/product/operations documentation gaps; conditional capabilities remain conditional.

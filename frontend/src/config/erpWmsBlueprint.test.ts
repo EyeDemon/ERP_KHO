@@ -88,6 +88,26 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('MO-12')?.spec.split(/,\s*/)).toContain('71');
   });
 
+  it('keeps merged production capabilities synchronized with the main integration branch', () => {
+    const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
+    const byId = new Map(capabilities.map((capability) => [capability.id, capability]));
+
+    for (const id of [
+      'MD-02', 'MD-03', 'MD-05',
+      'IN-01', 'IN-02', 'IN-03', 'IN-04', 'IN-05', 'IN-06', 'IN-07', 'IN-08',
+      'OUT-01', 'OUT-02',
+      'DY-01', 'DY-02', 'DY-03',
+      'RP-06', 'AD-02',
+    ]) {
+      expect(byId.get(id)?.status).toBe('live');
+      expect(byId.get(id)?.route).toBeTruthy();
+    }
+
+    for (const id of ['OUT-03', 'OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'OUT-09', 'OUT-10']) {
+      expect(byId.get(id)?.status).not.toBe('live');
+    }
+  });
+
   it('keeps critical core modules in the blueprint', () => {
     const keys = new Set(erpWmsBlueprint.map((module) => module.key));
     for (const key of [

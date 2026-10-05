@@ -218,14 +218,36 @@ Statuses remain explicit:
 
 No planned/optional mock screen is treated as transactional truth.
 
+## Production synchronization checkpoint — 2026-10-05
+
+Blueprint implementation status has been refreshed against the main integration branch and current Notion contracts.
+
+Production capabilities now reflected as `live` include:
+- Product Category, multi-barcode and Business Partner work centers.
+- Inbound: Purchase Order / ASN, Receiving Appointment, Goods Receipt, Receiving, Discrepancy, line-level QC, Receipt POST and Cất hàng.
+- ExportReceipt MVP: Draft → Approved/Reserved → Dispatched plus Reservation.
+- Gate Check-in, Dock Scheduling and Yard Management from WH-06 Dock & Yard.
+- Ledger Reconciliation work center.
+- Role & Permission Matrix with database-backed grant/revoke.
+
+The following outbound capabilities remain intentionally **not live** and must not be inferred from ExportReceipt MVP:
+- Allocation.
+- Picking / Short Pick.
+- Packing / HU.
+- Staging & Loading.
+- Shipment Dispatch.
+- Shipment Tracking / POD.
+
 ## Next implementation sequence
 
-After this blueprint/mock checkpoint is QA clean, production implementation should continue by dependency:
+Continue production implementation by the canonical dependency order from Notion:
 
-1. Inventory integrity / posting primitives.
-2. Receipt Post production evidence.
-3. Reservation / Allocation.
-4. Shipment Dispatch.
-5. Inventory Control.
-6. Transfer / Count / Returns based on customer evidence.
-7. Advanced WMS only after core integrity and commercial need are proven.
+1. OUT-03 Allocation.
+2. OUT-05 Picking / Short Pick.
+3. OUT-06 Packing / HU foundation.
+4. OUT-07 Staging & Loading.
+5. OUT-08 Shipment Dispatch only after LOADED/HU/allocation prerequisites exist.
+6. OUT-10 Tracking / POD after Shipment Dispatch.
+7. Inventory Control / Transfer / Count / Returns according to remaining evidence and customer priority.
+
+Do not treat ExportReceipt `APPROVED` as Shipment `LOADED`; the two workflows remain separate.
