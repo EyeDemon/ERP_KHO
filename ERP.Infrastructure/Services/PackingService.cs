@@ -15,7 +15,7 @@ public sealed class PackingService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
     ICurrentUser currentUser,
-    IPackingSessionIntegration packingSessionIntegration) : IPackingService
+    IPackingSessionIntegration packingSessionIntegration) : IPackingService, IPackingDispatchReadiness
 {
     public async Task<IReadOnlyList<PackingSessionListDto>> ListAsync(
         int? warehouseId = null,
@@ -79,9 +79,11 @@ public sealed class PackingService(
 
             var now = DateTime.UtcNow;
             var generated = $"HU-{now:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..33].ToUpperInvariant();
-            var code = NormalizeIdentity(request.HuCode, generated);
-            var barcode = NormalizeIdentity(request.Barcode, code);
+            var code = NormalizeIdentity(request.HuCode, generated, 50);
+            var barcode = NormalizeIdentity(request.Barcode, code, 64);
             var sscc = string.IsNullOrWhiteSpace(request.Sscc) ? null : request.Sscc.Trim();
+            if (sscc is { Length: > 32 })
+                throw new BusinessRuleException("SSCC không được vượt quá 32 ký tự.");
 
             session.HandlingUnits.Add(new HandlingUnit
             {
@@ -172,7 +174,7 @@ public sealed class PackingService(
                 throw Conflict("HU_CLOSED", "Handling Unit đã đóng.");
             if (hu.Status is HandlingUnitStatus.Staged or HandlingUnitStatus.Loaded or HandlingUnitStatus.Shipped or HandlingUnitStatus.Cancelled)
                 throw Conflict("HU_CLOSED", "Handling Unit không còn ở trạng thái cho phép đóng.");
-            if (hu.Contents.Count == 0)
+            if (hu.Contents.Count == 0 && hu.Children.Count == 0)
                 throw Conflict("HU_CONTENT_MISMATCH", "Handling Unit rỗng không thể đóng.");
 
             hu.Status = HandlingUnitStatus.Closed;
@@ -313,6 +315,32 @@ public sealed class PackingService(
             AddAudit("PackingSession.Cancelled", session, $"HandlingUnits: {session.HandlingUnits.Count}");
             await Task.CompletedTask;
         }, cancellationToken);
+
+    public async Task EnsureSourceReadyAsync(
+        string sourceType,
+        int sourceId,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await Query().AsNoTracking().SingleOrDefaultAsync(
+            x => x.PickingTask.SourceType == sourceType && x.PickingTask.SourceId == sourceId,
+            cancellationToken);
+        if (session is null) return;
+
+        if (session.Status is not PackingSessionStatus.Packed and not PackingSessionStatus.Closed)
+            throw new ConcurrencyException("Packing session của chứng từ chưa hoàn tất.");
+
+        var contents = session.HandlingUnits.SelectMany(x => x.Contents).ToList();
+        foreach (var line in session.PickingTask.Lines)
+        {
+            var packed = contents.Where(x => x.PickingTaskLineId == line.Id).Sum(x => x.Quantity);
+            if (packed != line.PickedQuantity)
+                throw new ConcurrencyException("Packing content không còn khớp số lượng đã Picking.");
+        }
+        if (session.HandlingUnits
+            .Where(x => x.Status != HandlingUnitStatus.Cancelled)
+            .Any(x => x.Status != HandlingUnitStatus.Closed))
+            throw new ConcurrencyException("Handling Unit chưa được đóng đầy đủ.");
+    }
 
     public async Task<IReadOnlyList<HandlingUnitDto>> ListHandlingUnitsAsync(
         int? warehouseId = null,
@@ -461,10 +489,10 @@ public sealed class PackingService(
             throw new BusinessRuleException("Gross weight không được nhỏ hơn net weight.");
     }
 
-    private static string NormalizeIdentity(string? requested, string fallback)
+    private static string NormalizeIdentity(string? requested, string fallback, int maxLength)
     {
         var value = string.IsNullOrWhiteSpace(requested) ? fallback : requested.Trim().ToUpperInvariant();
-        if (value.Length is < 1 or > 64)
+        if (value.Length is < 1 || value.Length > maxLength)
             throw new BusinessRuleException("Mã/Barcode Handling Unit không hợp lệ.");
         return value;
     }
