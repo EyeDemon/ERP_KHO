@@ -193,22 +193,22 @@ public sealed class InboundPlanningService(
     public Task<AsnDto> CancelAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
         MutateAsnAsync(id,dto,[AsnStatus.Draft,AsnStatus.Confirmed],AsnStatus.Cancelled,"Asn.Cancelled",token);
 
-    private async Task<PurchaseOrderDto> MutatePurchaseOrderAsync(int id,InboundStateCommandDto dto,PurchaseOrderStatus[] allowed,PurchaseOrderStatus target,string action,CancellationToken token)
+    private async Task<PurchaseOrderDto> MutatePurchaseOrderAsync(int id,InboundStateCommandDto dto,PurchaseOrderStatus[] allowedStates,PurchaseOrderStatus target,string action,CancellationToken token)
     {
-        var allowed=await warehouses.GetAccessibleWarehouseIdsAsync(token);
-        var entity=await PurchaseOrderQuery().SingleOrDefaultAsync(x=>x.Id==id&&allowed.Contains(x.WarehouseId),token)??throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
-        if(!allowed.Contains(entity.Status)) throw Conflict("Trạng thái đơn mua không cho phép thao tác này.");
+        var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        var entity=await PurchaseOrderQuery().SingleOrDefaultAsync(x=>x.Id==id&&accessibleWarehouseIds.Contains(x.WarehouseId),token)??throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        if(!allowedStates.Contains(entity.Status)) throw Conflict("Trạng thái đơn mua không cho phép thao tác này.");
         ApplyVersion(entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion));
         entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;
         context.AuditLogs.Add(Audit(action,"PurchaseOrder",entity.Id,entity.WarehouseId,$"Status: {target}"));
         await SaveAsync(token); return await GetPurchaseOrderAsync(id,token);
     }
 
-    private async Task<AsnDto> MutateAsnAsync(int id,InboundStateCommandDto dto,AsnStatus[] allowed,AsnStatus target,string action,CancellationToken token)
+    private async Task<AsnDto> MutateAsnAsync(int id,InboundStateCommandDto dto,AsnStatus[] allowedStates,AsnStatus target,string action,CancellationToken token)
     {
-        var allowed=await warehouses.GetAccessibleWarehouseIdsAsync(token);
-        var entity=await AsnQuery().SingleOrDefaultAsync(x=>x.Id==id&&allowed.Contains(x.WarehouseId),token)??throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
-        if(!allowed.Contains(entity.Status)) throw Conflict("Trạng thái ASN không cho phép thao tác này.");
+        var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        var entity=await AsnQuery().SingleOrDefaultAsync(x=>x.Id==id&&accessibleWarehouseIds.Contains(x.WarehouseId),token)??throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        if(!allowedStates.Contains(entity.Status)) throw Conflict("Trạng thái ASN không cho phép thao tác này.");
         ApplyVersion(entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion));
         entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;
         context.AuditLogs.Add(Audit(action,"Asn",entity.Id,entity.WarehouseId,$"Status: {target}"));
