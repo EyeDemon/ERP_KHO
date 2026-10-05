@@ -78,10 +78,31 @@ namespace ERP.Application.Tests
 
             var product = new Product { Code = "SKU-EXP", Name = "SP Export", Unit = unit, IsActive = true };
             ctx.Products.Add(product);
+            await ctx.SaveChangesAsync();
 
-            var stock = new InventoryStock { Product = product, Warehouse = warehouse, Quantity = 100, LastUpdated = DateTime.UtcNow };
+            var location = new WarehouseLocation
+            {
+                WarehouseId = warehouse.Id,
+                Code = "LEGACY",
+                Name = "Legacy pickable",
+                LocationType = WarehouseLocationType.Legacy,
+                IsActive = true,
+                IsPickable = true,
+                IsSystemManaged = true,
+                CreatedBy = user.Id
+            };
+            ctx.WarehouseLocations.Add(location);
+            await ctx.SaveChangesAsync();
+
+            var stock = new InventoryStock
+            {
+                ProductId = product.Id,
+                WarehouseId = warehouse.Id,
+                LocationId = location.Id,
+                Quantity = 100,
+                LastUpdated = DateTime.UtcNow
+            };
             ctx.InventoryStocks.Add(stock);
-
             await ctx.SaveChangesAsync();
 
             return (warehouse.Id, product.Id, user.Id);

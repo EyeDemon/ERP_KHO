@@ -346,6 +346,10 @@ public class SqlServerExportStockConcurrencyTests
             await context.AuditLogs
                 .Where(log => log.EntityName == "ExportReceipt" && log.EntityId.HasValue && ReceiptIds.Contains(log.EntityId.Value))
                 .ExecuteDeleteAsync();
+            await context.StockReservations
+                .Where(reservation => reservation.SourceType == "ExportReceipt" &&
+                    reservation.SourceId.HasValue && ReceiptIds.Contains(reservation.SourceId.Value))
+                .ExecuteDeleteAsync();
             await context.ExportReceiptDetails
                 .Where(detail => ReceiptIds.Contains(detail.ExportReceiptId))
                 .ExecuteDeleteAsync();
