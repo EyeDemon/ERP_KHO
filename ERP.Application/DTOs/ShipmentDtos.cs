@@ -12,6 +12,8 @@ public class ShipmentListDto
     public int? SourceId { get; set; }
     public string? SourceCode { get; set; }
     public string Status { get; set; } = string.Empty;
+    public int? StagingLocationId { get; set; }
+    public string? StagingLocationCode { get; set; }
     public int HandlingUnitCount { get; set; }
     public int LoadedHandlingUnitCount { get; set; }
     public int? DockAppointmentId { get; set; }
@@ -53,6 +55,11 @@ public sealed class ShipmentHandlingUnitDto
 public sealed class ShipmentStateCommandDto
 {
     public string RowVersion { get; set; } = string.Empty;
+}
+
+public sealed class StageShipmentDto : ShipmentStateCommandDto
+{
+    public string StagingLocationCode { get; set; } = string.Empty;
 }
 
 public sealed class StartShipmentLoadingDto : ShipmentStateCommandDto
