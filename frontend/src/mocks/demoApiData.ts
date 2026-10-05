@@ -399,7 +399,7 @@ export const demoShipments = [
   {
     id: 7701, shipmentCode: 'SHIP-2026-7701', packingSessionId: 9901, packingSessionCode: 'PACK-2026-9901',
     warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', sourceType: 'Reservation', sourceId: 9040, sourceCode: 'RSV-PACK-0040',
-    status: 'Staging', handlingUnitCount: 1, loadedHandlingUnitCount: 0,
+    status: 'Staging', stagingLocationId: 1701, stagingLocationCode: 'STG-OUT-01', handlingUnitCount: 1, loadedHandlingUnitCount: 0,
     dockAppointmentId: null, dockAppointmentCode: null, dockId: null, dockCode: null,
     vehiclePlate: null, trailerPlate: null, sealNumber: null,
     createdAt: '2026-10-06T02:06:00Z', stagedAt: '2026-10-06T02:08:00Z', loadingStartedAt: null, loadedAt: null,
