@@ -329,6 +329,23 @@ export const demoAllocations = [
   },
 ];
 
+export const demoPickingTasks = [
+  {
+    id: 8801, taskCode: 'PICK-2026-8801', sourceType: 'ExportReceipt', sourceId: 5108, sourceCode: 'EX-2026-5108',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', pickingType: 'STANDARD', status: 'InProgress', priority: 0,
+    assignedUserId: 103, assignedUserName: 'Lê Hoàng Nam', requestedQuantity: 80, pickedQuantity: 30, remainingQuantity: 50,
+    createdAt: '2026-10-06T01:00:00Z', startedAt: '2026-10-06T01:05:00Z', completedAt: null, rowVersion: 'AAAAAAAAPICK1',
+    lines: [
+      {
+        id: 8811, allocationId: 7711, allocationCode: 'ALC-2026-7711', productId: 1, productCode: 'SKU-1001',
+        productName: 'Cà phê Arabica 500g', sourceLocationId: 101, sourceLocationCode: 'A01-R02-L03-B04',
+        sourceLocationName: 'Bin B04', requestedQuantity: 80, pickedQuantity: 30, remainingQuantity: 50, sequence: 1, status: 'InProgress',
+      },
+    ],
+    shortPicks: [],
+  },
+];
+
 export const demoStocktakes = [
   { id: 142, code: 'CC-2026-0142', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 0, note: 'Cycle count khu A', createdBy: 101, createdByName: 'Trần Quốc Bảo', createdAt: '2026-10-03T08:00:00Z', detailCount: 1, details: [{ id: 1, stocktakeId: 142, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', unitName: 'Gói', systemQuantity: 1250, actualQuantity: 1248, differenceQuantity: -2, note: 'Recount accepted' }] },
 ];

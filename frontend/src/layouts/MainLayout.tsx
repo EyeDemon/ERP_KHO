@@ -69,6 +69,7 @@ const productionIcons: Record<string, LucideIcon> = {
   '/export-receipts': Package,
   '/stock-reservations': Lock,
   '/stock-allocations': Layers3,
+  '/picking-tasks': ClipboardCheck,
   '/inventory': Boxes,
   '/inventory-reconciliation': Scale,
   '/stocktakes': ClipboardCheck,

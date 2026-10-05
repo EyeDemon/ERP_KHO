@@ -14,7 +14,8 @@ namespace ERP.Infrastructure.Services;
 public sealed class StockAllocationService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
-    ICurrentUser currentUser) : IStockAllocationService
+    ICurrentUser currentUser,
+    IPickingTaskIntegration? pickingTaskIntegration = null) : IStockAllocationService
 {
     private static readonly StockAllocationStatus[] CapacityStatuses =
     [
@@ -154,6 +155,8 @@ public sealed class StockAllocationService(
 
             if (allocation.Status != StockAllocationStatus.Active)
                 throw new ConcurrencyException("Allocation không còn ở trạng thái có thể giải phóng.");
+            if (await context.PickingTaskLines.AnyAsync(x => x.AllocationId == allocation.Id, token))
+                throw new ConcurrencyException("Allocation đã được đưa vào nhiệm vụ Picking và không thể giải phóng trực tiếp.");
 
             allocation.Status = StockAllocationStatus.Released;
             allocation.ReleasedAt = DateTime.UtcNow;
@@ -196,6 +199,8 @@ public sealed class StockAllocationService(
 
             if (original.Status != StockAllocationStatus.Active)
                 throw new ConcurrencyException("Chỉ Allocation đang hoạt động mới có thể phân bổ lại.");
+            if (await context.PickingTaskLines.AnyAsync(x => x.AllocationId == original.Id, token))
+                throw new ConcurrencyException("Allocation đã được đưa vào nhiệm vụ Picking và không thể phân bổ lại trực tiếp.");
             if (request.LocationId == original.LocationId)
                 throw new BusinessRuleException("Vị trí mới phải khác vị trí Allocation hiện tại.");
 
@@ -221,6 +226,8 @@ public sealed class StockAllocationService(
             await context.SaveChangesAsync(token);
             AddAllocationAudits(created, "StockAllocation.Reallocated", $"FromAllocation: {original.AllocationCode}; Reason: {request.Reason.Trim()}");
             await context.SaveChangesAsync(token);
+            if (pickingTaskIntegration is not null)
+                await pickingTaskIntegration.EnsureForReservationAsync(original.ReservationId, currentUser.UserId, token);
             return await LoadDtosAsync(created.Select(x => x.Id).ToArray(), token);
         }, cancellationToken);
     }
@@ -262,6 +269,8 @@ public sealed class StockAllocationService(
             await context.SaveChangesAsync(token);
             AddAllocationAudits(rows, "StockAllocation.Created", $"Reservation: {reservation.ReservationCode}");
             await context.SaveChangesAsync(token);
+            if (pickingTaskIntegration is not null)
+                await pickingTaskIntegration.EnsureForReservationAsync(reservation.Id, currentUser.UserId, token);
             return await LoadDtosAsync(rows.Select(x => x.Id).ToArray(), token);
         }, cancellationToken);
     }

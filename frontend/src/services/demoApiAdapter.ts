@@ -15,6 +15,7 @@ import {
   demoPutawayTasks,
   demoReservations,
   demoAllocations,
+  demoPickingTasks,
   demoAllocatableReservations,
   demoAllocationCandidates,
   demoStocktakes,
@@ -88,7 +89,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         userId: 1,
         username: 'Blueprint Demo',
         role: 'Viewer',
-        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
+        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
     }
 
@@ -386,6 +387,18 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     if (/^\/api\/inventory\/allocations\/\d+$/.test(path)) {
       const item = demoAllocations.find(allocation => allocation.id === findNumericId(path));
       return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy Allocation demo.');
+    }
+
+    if (path === '/api/picking-tasks') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const status = params.get('status');
+      return ok(config, demoPickingTasks
+        .filter(item => (!warehouseId || item.warehouseId === warehouseId) && (!status || item.status === status))
+        .map(({ lines: _lines, shortPicks: _shortPicks, rowVersion: _rowVersion, ...item }) => item));
+    }
+    if (/^\/api\/picking-tasks\/\d+$/.test(path)) {
+      const item = demoPickingTasks.find(task => task.id === findNumericId(path));
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy nhiệm vụ Picking demo.');
     }
 
     if (path === '/api/stocktakes') return ok(config, demoStocktakes.map(item => ({

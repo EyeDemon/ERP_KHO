@@ -4,6 +4,7 @@ public static class AppPermissions
 {
     public const string ApprovalReject = "approval.reject";
     public const string AllocationRead = "allocation.read", AllocationCreate = "allocation.create", AllocationRelease = "allocation.release", AllocationReallocate = "allocation.reallocate";
+    public const string PickingRead = "picking.read", PickingAssign = "picking.assign", PickingExecute = "picking.execute", PickingShortPick = "picking.short_pick", PickingOverride = "picking.override";
     public const string ExportReceiptRead = "export_receipt.read", ExportReceiptCreate = "export_receipt.create", ExportReceiptUpdate = "export_receipt.update", ExportReceiptApprove = "export_receipt.approve", ExportReceiptDispatch = "export_receipt.dispatch", ExportReceiptCancel = "export_receipt.cancel";
     public const string DockRead="dock.read", DockManage="dock.manage", DockAppointmentRead="dock_appointment.read", DockAppointmentManage="dock_appointment.manage", YardRead="yard.read", YardCheckIn="yard.checkin", YardAssignDock="yard.assign_dock", YardCheckout="yard.checkout";
     public const string CategoryRead="product_category.read", CategoryManage="product_category.manage", BarcodeManage="product_barcode.manage", WarehouseRead="warehouse.read", WarehouseManage="warehouse.manage", WarehouseCalendarManage="warehouse_calendar.manage";

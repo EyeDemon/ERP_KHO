@@ -1145,6 +1145,143 @@ namespace ERP.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AssignedUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PickingType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("SourceCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("SourceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TaskCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedUserId");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("SourceType", "SourceId")
+                        .IsUnique()
+                        .HasFilter("[SourceId] IS NOT NULL");
+
+                    b.HasIndex("WarehouseId", "Status", "Priority");
+
+                    b.HasIndex("WarehouseId", "TaskCode")
+                        .IsUnique();
+
+                    b.ToTable("PickingTasks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PickingTasks_Priority", "[Priority] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTaskLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AllocationId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("PickedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("PickingTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("RequestedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SourceLocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationId")
+                        .IsUnique();
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("SourceLocationId");
+
+                    b.HasIndex("PickingTaskId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("PickingTaskLines", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PickingTaskLines_Picked", "[PickedQuantity] >= 0 AND [PickedQuantity] <= [RequestedQuantity]");
+
+                            t.HasCheckConstraint("CK_PickingTaskLines_Requested", "[RequestedQuantity] > 0");
+
+                            t.HasCheckConstraint("CK_PickingTaskLines_Sequence", "[Sequence] > 0");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
                 {
                     b.Property<int>("Id")
@@ -1929,6 +2066,70 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("PermissionId");
 
                     b.ToTable("RolePermissions", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShortPickException", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ExpectedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("PickedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("PickingTaskLineId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("ResolutionType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ResolvedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ShortageQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ResolvedBy");
+
+                    b.HasIndex("PickingTaskLineId", "Status");
+
+                    b.ToTable("ShortPickExceptions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ShortPickExceptions_Quantities", "[ExpectedQuantity] > 0 AND [PickedQuantity] >= 0 AND [ShortageQuantity] > 0 AND [PickedQuantity] + [ShortageQuantity] = [ExpectedQuantity]");
+                        });
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockAllocation", b =>
@@ -3540,6 +3741,67 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Unit");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "AssignedUser")
+                        .WithMany()
+                        .HasForeignKey("AssignedUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AssignedUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTaskLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.StockAllocation", "Allocation")
+                        .WithMany()
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PickingTask", "PickingTask")
+                        .WithMany("Lines")
+                        .HasForeignKey("PickingTaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "SourceLocation")
+                        .WithMany()
+                        .HasForeignKey("SourceLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+
+                    b.Navigation("PickingTask");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("SourceLocation");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.ImportReceipt", "Receipt")
@@ -3719,6 +3981,32 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Permission");
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShortPickException", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PickingTaskLine", "PickingTaskLine")
+                        .WithMany("ShortPicks")
+                        .HasForeignKey("PickingTaskLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.User", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("PickingTaskLine");
+
+                    b.Navigation("ResolvedByUser");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockAllocation", b =>
@@ -4054,6 +4342,16 @@ namespace ERP.Infrastructure.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.ProductCategory", b =>
                 {
                     b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTaskLine", b =>
+                {
+                    b.Navigation("ShortPicks");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>

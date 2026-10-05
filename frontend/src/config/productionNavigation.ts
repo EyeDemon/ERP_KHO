@@ -24,6 +24,7 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/export-receipts', label: 'Phiếu xuất kho', section: 'Outbound', description: 'Chứng từ xuất, reservation và dispatch hàng khỏi kho.', permission: 'export_receipt.read' },
   { path: '/stock-reservations', label: 'Giữ hàng', section: 'Outbound', description: 'Theo dõi tồn đã cam kết theo chứng từ và thời hạn.', access: 'always' },
   { path: '/stock-allocations', label: 'Allocation', section: 'Outbound', description: 'Gắn reservation vào vị trí pickable cụ thể, release và reallocate có kiểm soát.', permission: 'allocation.read' },
+  { path: '/picking-tasks', label: 'Picking', section: 'Outbound', description: 'Scan-first Picking theo Allocation, Short Pick và exception resolution.', permission: 'picking.read' },
   { path: '/inventory', label: 'Tồn kho', section: 'Inventory Control', description: 'Tồn hiện tại, lịch sử movement và báo cáo xuất-nhập-tồn.', access: 'always' },
   { path: '/inventory-reconciliation', label: 'Đối chiếu tồn kho', section: 'Inventory Control', description: 'So sánh operational balance với immutable ledger để phát hiện lệch.', access: 'always' },
   { path: '/stocktakes', label: 'Kiểm kê kho', section: 'Inventory Control', description: 'Phiếu kiểm kê, variance và quy trình duyệt điều chỉnh.', access: 'stocktake' },

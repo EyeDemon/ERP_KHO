@@ -24,6 +24,17 @@ public sealed class ApprovalRequestSafetyTests
     }
 
     [Fact]
+    public void AllocationAndPickingCommandsUseSerializableIdempotencyTransaction()
+    {
+        IdempotentCommandFilter.RequiresSerializableIsolation("InventoryAllocation.Create").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("InventoryAllocation.Reallocate").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Picking.Assign").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Picking.Pick").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Picking.ShortPick.Resolve").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Export.Dispatch").Should().BeFalse();
+    }
+
+    [Fact]
     public void Fingerprint_IsCanonicalAcrossArgumentInsertionOrder()
     {
         var first = new Dictionary<string, object?> { ["id"] = 7, ["request"] = new { Quantity = 2m } };
@@ -85,6 +96,13 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.DockYardController), "Cancel")]
     [InlineData(typeof(ERP.Api.Controllers.DockYardController), "MarkNoShow")]
     [InlineData(typeof(ERP.Api.Controllers.DockYardController), "MarkException")]
+    [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "Assign")]
+    [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "Start")]
+    [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "Pick")]
+    [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "ReportShortPick")]
+    [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "ResolveShortPick")]
+    [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "OverrideShortPick")]
+    [InlineData(typeof(ERP.Api.Controllers.PickingTasksController), "Complete")]
     public void InventoryMutationEndpoints_RequireIdempotency(Type controller, string method)
     {
         controller.GetMethod(method)!.GetCustomAttribute<IdempotentCommandAttribute>().Should().NotBeNull();
