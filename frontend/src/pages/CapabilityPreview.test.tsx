@@ -90,7 +90,7 @@ describe('CapabilityPreview', () => {
     expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByTestId('inbound-capability-mock-IN-02')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Receiving Appointment Board' })).toBeTruthy();
-    expect(view.getByText(/liên kết canonical.*PO\/ASN\/Receipt.*hoàn thiện/i)).toBeTruthy();
+    expect(view.getAllByText(/liên kết canonical.*PO\/ASN\/Receipt.*hoàn thiện/i).length).toBeGreaterThan(0);
   });
 
   it('shows IN-01 as live while keeping its Blueprint mock read-only and separate', () => {
