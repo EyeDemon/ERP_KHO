@@ -1282,77 +1282,6 @@ namespace ERP.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
-                {
-                    b.HasOne("ERP.Domain.Entities.User", "AssignedUser")
-                        .WithMany()
-                        .HasForeignKey("AssignedUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedBy")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
-                        .WithMany()
-                        .HasForeignKey("WarehouseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AssignedUser");
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("Warehouse");
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.PickingTaskLine", b =>
-                {
-                    b.HasOne("ERP.Domain.Entities.StockAllocation", "Allocation")
-                        .WithMany()
-                        .HasForeignKey("AllocationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("ERP.Domain.Entities.PickingTask", "PickingTask")
-                        .WithMany("Lines")
-                        .HasForeignKey("PickingTaskId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("ERP.Domain.Entities.Product", "Product")
-                        .WithMany()
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "SourceLocation")
-                        .WithMany()
-                        .HasForeignKey("SourceLocationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Allocation");
-
-                    b.Navigation("PickingTask");
-
-                    b.Navigation("Product");
-
-                    b.Navigation("SourceLocation");
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
-                {
-                    b.Navigation("Lines");
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.PickingTaskLine", b =>
-                {
-                    b.Navigation("ShortPicks");
-                });
-
             modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
                 {
                     b.Property<int>("Id")
@@ -2201,32 +2130,6 @@ namespace ERP.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_ShortPickExceptions_Quantities", "[ExpectedQuantity] > 0 AND [PickedQuantity] >= 0 AND [ShortageQuantity] > 0 AND [PickedQuantity] + [ShortageQuantity] = [ExpectedQuantity]");
                         });
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.ShortPickException", b =>
-                {
-                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedBy")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("ERP.Domain.Entities.PickingTaskLine", "PickingTaskLine")
-                        .WithMany("ShortPicks")
-                        .HasForeignKey("PickingTaskLineId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("ERP.Domain.Entities.User", "ResolvedByUser")
-                        .WithMany()
-                        .HasForeignKey("ResolvedBy")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("PickingTaskLine");
-
-                    b.Navigation("ResolvedByUser");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockAllocation", b =>
@@ -3838,6 +3741,67 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Unit");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "AssignedUser")
+                        .WithMany()
+                        .HasForeignKey("AssignedUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AssignedUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTaskLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.StockAllocation", "Allocation")
+                        .WithMany()
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PickingTask", "PickingTask")
+                        .WithMany("Lines")
+                        .HasForeignKey("PickingTaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "SourceLocation")
+                        .WithMany()
+                        .HasForeignKey("SourceLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+
+                    b.Navigation("PickingTask");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("SourceLocation");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.ImportReceipt", "Receipt")
@@ -4017,6 +3981,32 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Permission");
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShortPickException", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PickingTaskLine", "PickingTaskLine")
+                        .WithMany("ShortPicks")
+                        .HasForeignKey("PickingTaskLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.User", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("PickingTaskLine");
+
+                    b.Navigation("ResolvedByUser");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockAllocation", b =>
@@ -4352,6 +4342,16 @@ namespace ERP.Infrastructure.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.ProductCategory", b =>
                 {
                     b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTask", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PickingTaskLine", b =>
+                {
+                    b.Navigation("ShortPicks");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
