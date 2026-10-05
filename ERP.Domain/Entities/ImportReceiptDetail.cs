@@ -7,6 +7,8 @@ public class ImportReceiptDetail
     public int Id { get; set; }
     public int ImportReceiptId { get; set; }
     public int ProductId { get; set; }
+    public int? PurchaseOrderLineId { get; set; }
+    public int? AsnLineId { get; set; }
     public decimal Quantity { get; set; }
     public decimal ExpectedQuantity { get; set; }
     public decimal ReceivedQuantity { get; set; }
@@ -53,5 +55,7 @@ public class ImportReceiptDetail
     // Navigation
     public ImportReceipt ImportReceipt { get; set; } = null!;
     public Product Product { get; set; } = null!;
+    public PurchaseOrderLine? PurchaseOrderLine { get; set; }
+    public AsnLine? AsnLine { get; set; }
     public ICollection<ReceivingDiscrepancy> ReceivingDiscrepancies { get; set; } = [];
 }

@@ -296,6 +296,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("ApprovedBy")
                         .HasColumnType("int");
 
+                    b.Property<int?>("AsnId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -331,6 +334,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<int?>("PurchaseOrderId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Status")
                         .IsConcurrencyToken()
                         .HasColumnType("int");
@@ -341,6 +347,10 @@ namespace ERP.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ApprovedBy");
+
+                    b.HasIndex("AsnId")
+                        .IsUnique()
+                        .HasFilter("[AsnId] IS NOT NULL AND [Status] <> 2");
 
                     b.HasIndex("Code")
                         .IsUnique();
@@ -517,6 +527,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("CreatedBy");
 
+                    b.HasIndex("PurchaseOrderId");
+
                     b.HasIndex("SupplierId");
 
                     b.HasIndex("WarehouseId");
@@ -531,6 +543,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AsnLineId")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("AcceptedQuantity")
                         .HasPrecision(18, 4)
@@ -638,6 +653,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("PurchaseOrderLineId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("QcCompletedAt")
                         .HasColumnType("datetime2");
 
@@ -693,11 +711,15 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AsnLineId");
+
                     b.HasIndex("FinalResolutionVersionId");
 
                     b.HasIndex("ImportReceiptId");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("PurchaseOrderLineId");
 
                     b.ToTable("ImportReceiptDetails", (string)null);
                 });
@@ -3075,6 +3097,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("ApprovedByUser");
 
+                    b.Navigation("Asn");
+
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("Customer");
@@ -3160,6 +3184,11 @@ namespace ERP.Infrastructure.Migrations
 
             modelBuilder.Entity("ERP.Domain.Entities.ImportReceipt", b =>
                 {
+                    b.HasOne("ERP.Domain.Entities.Asn", "Asn")
+                        .WithMany()
+                        .HasForeignKey("AsnId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.User", "ApprovedByUser")
                         .WithMany()
                         .HasForeignKey("ApprovedBy")
@@ -3170,6 +3199,11 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("CreatedBy")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.PurchaseOrder", "PurchaseOrder")
+                        .WithMany()
+                        .HasForeignKey("PurchaseOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Entities.BusinessPartner", "Supplier")
                         .WithMany("ImportReceipts")
@@ -3186,6 +3220,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("CreatedByUser");
 
+                    b.Navigation("PurchaseOrder");
+
                     b.Navigation("Supplier");
 
                     b.Navigation("Warehouse");
@@ -3193,6 +3229,11 @@ namespace ERP.Infrastructure.Migrations
 
             modelBuilder.Entity("ERP.Domain.Entities.ImportReceiptDetail", b =>
                 {
+                    b.HasOne("ERP.Domain.Entities.AsnLine", "AsnLine")
+                        .WithMany()
+                        .HasForeignKey("AsnLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.ReceivingResolutionVersion", "FinalResolutionVersion")
                         .WithMany()
                         .HasForeignKey("FinalResolutionVersionId")
@@ -3210,11 +3251,20 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.PurchaseOrderLine", "PurchaseOrderLine")
+                        .WithMany()
+                        .HasForeignKey("PurchaseOrderLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AsnLine");
+
                     b.Navigation("FinalResolutionVersion");
 
                     b.Navigation("ImportReceipt");
 
                     b.Navigation("Product");
+
+                    b.Navigation("PurchaseOrderLine");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.InventoryLocationMovement", b =>

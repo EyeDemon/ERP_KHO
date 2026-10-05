@@ -20,6 +20,7 @@ namespace ERP.Application.Services
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
         private readonly ICurrentUser? _currentUser;
         private readonly IReceiptPutawayIntegration? _putaway;
+        private readonly IReceiptInboundPlanningIntegration? _inboundPlanning;
         private readonly IUserRepository? _permissionUsers;
 
         internal ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository)
@@ -59,6 +60,9 @@ namespace ERP.Application.Services
 
         public ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, IWarehouseAuthorizationService warehouseAuthorization, ICurrentUser currentUser, IUserRepository permissionUsers, IReceiptPutawayIntegration putaway)
             : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers) => _putaway = putaway;
+
+        public ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, IWarehouseAuthorizationService warehouseAuthorization, ICurrentUser currentUser, IUserRepository permissionUsers, IReceiptPutawayIntegration putaway, IReceiptInboundPlanningIntegration inboundPlanning)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers, putaway) => _inboundPlanning = inboundPlanning;
 
         public async Task<ImportReceiptDto> CreateAsync(CreateImportReceiptDto dto, int userId)
         {
@@ -106,7 +110,8 @@ namespace ERP.Application.Services
                     throw new BusinessRuleException($"Sản phẩm ID {detailDto.ProductId} không hoạt động");
                 if (detailDto.ExpectedQuantity <= 0)
                     throw new BusinessRuleException($"Số lượng dự kiến của sản phẩm ID {detailDto.ProductId} phải lớn hơn 0");
-                var operationUnitId = detailDto.OperationUnitId > 0 ? detailDto.OperationUnitId : product.UnitId;
+                var sourceBacked = detailDto.AsnLineId.HasValue || detailDto.PurchaseOrderLineId.HasValue;
+                var operationUnitId = sourceBacked ? product.UnitId : detailDto.OperationUnitId > 0 ? detailDto.OperationUnitId : product.UnitId;
 
                 var conversion = operationUnitId == product.UnitId
                     ? new { Unit = product.Unit, Factor = 1m, Version = 1 }
@@ -116,9 +121,9 @@ namespace ERP.Application.Services
                         .FirstOrDefault();
                 if (conversion is null || conversion.Factor <= 0)
                     throw new BusinessRuleException($"UOM thao tác không hợp lệ cho sản phẩm ID {detailDto.ProductId}");
-                EnsurePrecision(detailDto.ExpectedQuantity, conversion.Unit.DecimalPlaces, "Số lượng dự kiến");
+                if (!sourceBacked) EnsurePrecision(detailDto.ExpectedQuantity, conversion.Unit.DecimalPlaces, "Số lượng dự kiến");
                 var baseExpected = detailDto.ExpectedQuantity * conversion.Factor;
-                EnsurePrecision(baseExpected, product.Unit.DecimalPlaces, "Số lượng Base UOM");
+                if (!sourceBacked) EnsurePrecision(baseExpected, product.Unit.DecimalPlaces, "Số lượng Base UOM");
 
                 if (detailDto.UnitPrice < 0)
                     throw new BusinessRuleException($"Đơn giá của sản phẩm ID {detailDto.ProductId} không được âm");
@@ -159,6 +164,7 @@ namespace ERP.Application.Services
             await _unitOfWork.BeginTransactionAsync();
             try
             {
+                if (_inboundPlanning is not null) await _inboundPlanning.AttachSourceAsync(receipt, dto);
                 await _importReceiptRepository.AddAsync(receipt);
                 
                 await _auditLogRepository.AddAsync(new AuditLog
@@ -205,6 +211,10 @@ namespace ERP.Application.Services
                 CreatedAt = receipt.CreatedAt,
                 ApprovedAt = receipt.ApprovedAt,
                 SupplierId = receipt.SupplierId,
+                PurchaseOrderId = receipt.PurchaseOrderId,
+                PurchaseOrderCode = receipt.PurchaseOrder?.Code,
+                AsnId = receipt.AsnId,
+                AsnCode = receipt.Asn?.Code,
                 SupplierCode = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Code : receipt.SupplierCodeSnapshot,
                 SupplierName = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Name : receipt.SupplierNameSnapshot,
                 RequiresQc = receipt.Details.Any(x => x.RequiresQc),
@@ -212,6 +222,8 @@ namespace ERP.Application.Services
                 {
                     Id = d.Id,
                     ProductId = d.ProductId,
+                    PurchaseOrderLineId = d.PurchaseOrderLineId,
+                    AsnLineId = d.AsnLineId,
                     ProductCode = d.Product?.Code,
                     ProductName = d.Product?.Name,
                     UnitName = d.OperationUnitCodeSnapshot.Length > 0 ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Name,
@@ -351,6 +363,7 @@ namespace ERP.Application.Services
                     detail.BaseRejectedQuantity = 0;
                 }
                 receipt.Status = receipt.Details.Any(x => x.RequiresQc) ? ReceiptStatus.QcPending : ReceiptStatus.Received;
+                if (_inboundPlanning is not null) await _inboundPlanning.MarkReceivingAsync(receipt);
                 await _importReceiptRepository.UpdateAsync(receipt);
                 await _auditLogRepository.AddAsync(new AuditLog { UserId = receivedByUserId, Action = "ImportReceipt.Received", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.Draft}", NewValues = $"Status: {ReceiptStatus.Received}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
                 await _unitOfWork.CommitTransactionAsync();
@@ -422,6 +435,7 @@ namespace ERP.Application.Services
                 Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, postedByUserId);
                 if (receipt.Status != ReceiptStatus.ReadyToPost)
                     throw Conflict("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
+                if (_inboundPlanning is not null) await _inboundPlanning.ValidatePostAsync(receipt);
                 int? receivingLocationId = _putaway is null ? null : await _putaway.GetReceivingLocationIdAsync(receipt.WarehouseId);
                 foreach (var detail in receipt.Details)
                 {
@@ -435,6 +449,7 @@ namespace ERP.Application.Services
                     detail.BasePostedQuantity = detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity;
                 }
                 receipt.Status = ReceiptStatus.Posted;
+                if (_inboundPlanning is not null) await _inboundPlanning.ApplyPostedStateAsync(receipt, postedByUserId);
                 if (_putaway is not null) await _putaway.CreateForPostedReceiptAsync(receipt, receivingLocationId!.Value, postedByUserId);
                 await _importReceiptRepository.UpdateAsync(receipt);
                 await _auditLogRepository.AddAsync(new AuditLog { UserId = postedByUserId, Action = "ImportReceipt.Posted", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.ReadyToPost}", NewValues = $"Status: {ReceiptStatus.Posted}", Result = "Success", Severity = "Warning", Timestamp = DateTime.UtcNow });

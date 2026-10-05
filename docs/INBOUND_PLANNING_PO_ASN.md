@@ -52,3 +52,20 @@ Command mutations sử dụng existing Idempotency-Key/fingerprint middleware v�
 - Reconciliation Ordered / ASN / Received / Posted.
 - Production frontend PO/ASN work centers.
 - Browser QA toàn tuyến Inbound.
+
+
+## Receipt integration checkpoint — 2026-10-05
+
+Receipt có thể tham chiếu trực tiếp Purchase Order hoặc ASN, và từng Receipt line lưu source line tương ứng.
+
+Quy tắc transaction:
+- Create Receipt chỉ attach/validate source và snapshot nguồn; chưa tạo tồn kho.
+- Receipt từ ASN chỉ được tạo khi ASN đã Arrived hoặc đang Receiving.
+- Khi Receipt thực hiện Receive, ASN nguồn chuyển Arrived → Receiving trong cùng transaction.
+- Trước POST, hệ thống kiểm tra tổng lượng đã POST theo PO line không vượt Ordered Base Qty + over-receipt tolerance.
+- Khi POST thành công, ASN nguồn chuyển Completed và PO được reconcile thành PartiallyReceived hoặc Received trong cùng transaction inventory.
+- Nếu POST rollback, inventory + Putaway task + ASN/PO state đều rollback cùng nhau.
+- Một ASN chỉ có tối đa một Receipt đang hoạt động; Receipt Draft đã Cancelled không khóa việc tạo lại Receipt từ ASN.
+- Receipt source dùng immutable UOM/conversion snapshot của PO/ASN, không phụ thuộc conversion hiện hành đã thay đổi sau đó.
+
+Regression test khóa flow ASN → Receipt → POST và chứng minh planning state không tự tạo InventoryStock/InventoryTransaction.
