@@ -46,6 +46,7 @@ describe('interactive capability demo registry', () => {
     expect(implemented.map(({ capability }) => capability.id)).toContain('WH-02');
     expect(implemented.map(({ capability }) => capability.id)).toContain('WH-03');
     expect(implemented.map(({ capability }) => capability.id)).toContain('WH-04');
+    expect(implemented.map(({ capability }) => capability.id)).toContain('WH-05');
 
     for (const { module, capability } of implemented) {
       const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
@@ -107,6 +108,20 @@ describe('interactive capability demo registry', () => {
     expect(demo.fields).toContainEqual({ label: 'Production maturity', value: 'LIVE' });
     expect(demo.fields).toContainEqual({ label: 'Production route', value: '/warehouse-map' });
     expect(demo.commands).toContain('OPEN_PRODUCTION_MAP');
+  });
+
+  it('reflects WH-05 live warehouse calendar while keeping its Blueprint preview separate', () => {
+    const entry = allCapabilities.find(({ capability }) => capability.id === 'WH-05');
+    if (!entry) throw new Error('WH-05 capability missing');
+
+    expect(entry.capability.status).toBe('live');
+    expect(entry.capability.route).toBe('/warehouse-calendar');
+
+    const demo = getCapabilityDemoDefinition(entry.capability, entry.module.name, entry.module.flow);
+    expect(demo.exceptionTitle).toBe('WAREHOUSE_CALENDAR_VALIDATION_FAILED');
+    expect(demo.fields).toContainEqual({ label: 'Production maturity', value: 'LIVE' });
+    expect(demo.fields).toContainEqual({ label: 'Production route', value: '/warehouse-calendar' });
+    expect(demo.commands).toContain('OPEN_PRODUCTION_CALENDAR');
   });
 
   it('keeps canonical inventory boundaries concrete in detailed core demos', () => {

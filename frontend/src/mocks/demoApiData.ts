@@ -266,9 +266,35 @@ export const demoStocktakes = [
   { id: 142, code: 'CC-2026-0142', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 0, note: 'Cycle count khu A', createdBy: 101, createdByName: 'Trần Quốc Bảo', createdAt: '2026-10-03T08:00:00Z', detailCount: 1, details: [{ id: 1, stocktakeId: 142, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', unitName: 'Gói', systemQuantity: 1250, actualQuantity: 1248, differenceQuantity: -2, note: 'Recount accepted' }] },
 ];
 
+export const demoWarehouseCalendars = demoWarehouses.map((warehouse, index) => ({
+  warehouseId: warehouse.id,
+  warehouseCode: warehouse.code,
+  warehouseName: warehouse.name,
+  isConfigured: true,
+  timeZoneId: 'Asia/Ho_Chi_Minh',
+  localNow: '2026-10-05T10:30:00+07:00',
+  isOpenNow: index !== 2,
+  currentShiftCode: index !== 2 ? 'CA-1' : null,
+  rowVersion: null,
+  days: [
+    { dayOfWeek: 0, dayName: 'Chủ nhật', isOpen: false, opensAtLocal: null, closesAtLocal: null, inboundCutoffLocal: null, outboundCutoffLocal: null, overnight: false },
+    { dayOfWeek: 1, dayName: 'Thứ hai', isOpen: true, opensAtLocal: '06:00', closesAtLocal: '22:00', inboundCutoffLocal: '20:00', outboundCutoffLocal: '19:30', overnight: false },
+    { dayOfWeek: 2, dayName: 'Thứ ba', isOpen: true, opensAtLocal: '06:00', closesAtLocal: '22:00', inboundCutoffLocal: '20:00', outboundCutoffLocal: '19:30', overnight: false },
+    { dayOfWeek: 3, dayName: 'Thứ tư', isOpen: true, opensAtLocal: '06:00', closesAtLocal: '22:00', inboundCutoffLocal: '20:00', outboundCutoffLocal: '19:30', overnight: false },
+    { dayOfWeek: 4, dayName: 'Thứ năm', isOpen: true, opensAtLocal: '06:00', closesAtLocal: '22:00', inboundCutoffLocal: '20:00', outboundCutoffLocal: '19:30', overnight: false },
+    { dayOfWeek: 5, dayName: 'Thứ sáu', isOpen: true, opensAtLocal: '06:00', closesAtLocal: '22:00', inboundCutoffLocal: '20:00', outboundCutoffLocal: '19:30', overnight: false },
+    { dayOfWeek: 6, dayName: 'Thứ bảy', isOpen: true, opensAtLocal: '07:00', closesAtLocal: '17:00', inboundCutoffLocal: '15:00', outboundCutoffLocal: '14:30', overnight: false },
+  ],
+  shifts: [
+    { id: warehouse.id * 10 + 1, warehouseId: warehouse.id, code: 'CA-1', name: 'Ca sáng', startTimeLocal: '06:00', endTimeLocal: '14:00', overnight: false, breakMinutes: 30, plannedHeadcount: 18, inboundPalletsPerHour: 24, outboundOrdersPerHour: 40, dockSlots: 6, laborHours: 126, stagingCapacity: 180, packingStations: 8, equipmentAvailable: 12, isActive: true, rowVersion: null },
+    { id: warehouse.id * 10 + 2, warehouseId: warehouse.id, code: 'CA-2', name: 'Ca chiều', startTimeLocal: '14:00', endTimeLocal: '22:00', overnight: false, breakMinutes: 30, plannedHeadcount: 16, inboundPalletsPerHour: 20, outboundOrdersPerHour: 36, dockSlots: 5, laborHours: 112, stagingCapacity: 150, packingStations: 7, equipmentAvailable: 10, isActive: true, rowVersion: null },
+  ],
+}));
+
 export const demoPermissionCatalog = [
   { code: 'product.read', description: 'Xem sản phẩm' },
   { code: 'warehouse.read', description: 'Xem kho' },
+  { code: 'warehouse_calendar.manage', description: 'Quản lý lịch vận hành và ca kho' },
   { code: 'warehouse_zone.manage', description: 'Quản lý cấu trúc khu vực kho' },
   { code: 'location.read', description: 'Xem vị trí kho' },
   { code: 'location.manage', description: 'Quản lý vị trí kho' },

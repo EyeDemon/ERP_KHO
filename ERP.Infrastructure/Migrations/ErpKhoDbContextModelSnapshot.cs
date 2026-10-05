@@ -2319,6 +2319,167 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("UserWarehouses", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseCalendar", b =>
+                {
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.HasKey("WarehouseId");
+
+                    b.ToTable("WarehouseCalendars", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseCalendarDay", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("int");
+
+                    b.Property<TimeSpan?>("ClosesAtLocal")
+                        .HasColumnType("time");
+
+                    b.Property<TimeSpan?>("InboundCutoffLocal")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsOpen")
+                        .HasColumnType("bit");
+
+                    b.Property<TimeSpan?>("OpensAtLocal")
+                        .HasColumnType("time");
+
+                    b.Property<TimeSpan?>("OutboundCutoffLocal")
+                        .HasColumnType("time");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarehouseId", "DayOfWeek")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WarehouseCalendarDays_Warehouse_Day");
+
+                    b.ToTable("WarehouseCalendarDays", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_WarehouseCalendarDays_DayOfWeek", "[DayOfWeek] BETWEEN 0 AND 6");
+                            t.HasCheckConstraint("CK_WarehouseCalendarDays_OpenHours", "([IsOpen] = 0 AND [OpensAtLocal] IS NULL AND [ClosesAtLocal] IS NULL AND [InboundCutoffLocal] IS NULL AND [OutboundCutoffLocal] IS NULL) OR ([IsOpen] = 1 AND [OpensAtLocal] IS NOT NULL AND [ClosesAtLocal] IS NOT NULL AND [OpensAtLocal] <> [ClosesAtLocal])");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseShift", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BreakMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DockSlots")
+                        .HasColumnType("int");
+
+                    b.Property<TimeSpan>("EndTimeLocal")
+                        .HasColumnType("time");
+
+                    b.Property<int?>("EquipmentAvailable")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("InboundPalletsPerHour")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("LaborHours")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<decimal?>("OutboundOrdersPerHour")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int?>("PackingStations")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlannedHeadcount")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<TimeSpan>("StartTimeLocal")
+                        .HasColumnType("time");
+
+                    b.Property<decimal?>("StagingCapacity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarehouseId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WarehouseShifts_Warehouse_Code");
+
+                    b.ToTable("WarehouseShifts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_WarehouseShifts_NonNegative", "[BreakMinutes] >= 0 AND [PlannedHeadcount] >= 0 AND ([InboundPalletsPerHour] IS NULL OR [InboundPalletsPerHour] >= 0) AND ([OutboundOrdersPerHour] IS NULL OR [OutboundOrdersPerHour] >= 0) AND ([DockSlots] IS NULL OR [DockSlots] >= 0) AND ([LaborHours] IS NULL OR [LaborHours] >= 0) AND ([StagingCapacity] IS NULL OR [StagingCapacity] >= 0) AND ([PackingStations] IS NULL OR [PackingStations] >= 0) AND ([EquipmentAvailable] IS NULL OR [EquipmentAvailable] >= 0)");
+                            t.HasCheckConstraint("CK_WarehouseShifts_Time", "[StartTimeLocal] <> [EndTimeLocal]");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Warehouse", b =>
                 {
                     b.Property<int>("Id")
@@ -3290,6 +3451,45 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("UserAccesses");
                 });
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseCalendar", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithOne()
+                        .HasForeignKey("ERP.Domain.Entities.WarehouseCalendar", "WarehouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseCalendarDay", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.WarehouseCalendar", "Calendar")
+                        .WithMany("Days")
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Calendar");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseShift", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.WarehouseCalendar", "Calendar")
+                        .WithMany("Shifts")
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Calendar");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.WarehouseCalendar", b =>
+                {
+                    b.Navigation("Days");
+                    b.Navigation("Shifts");
+                });
+
 #pragma warning restore 612, 618
         }
     }

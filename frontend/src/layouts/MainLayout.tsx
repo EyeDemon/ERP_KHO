@@ -55,6 +55,7 @@ const productionIcons: Record<string, LucideIcon> = {
   '/warehouses': Warehouse,
   '/warehouse-structure': MapPinned,
   '/warehouse-map': MapIcon,
+  '/warehouse-calendar': ClipboardCheck,
   '/units': Ruler,
   '/business-partners': Handshake,
   '/import-receipts': Clipboard,

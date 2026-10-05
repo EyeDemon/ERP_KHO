@@ -17,6 +17,7 @@ import {
   demoUnits,
   demoWarehouses,
   demoWarehouseStructures,
+  demoWarehouseCalendars,
 } from '../mocks/demoApiData';
 import { demoReconciliationRows, demoReconciliationWarehouses } from '../mocks/inventoryReconciliationDemo';
 
@@ -83,6 +84,11 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     }
 
     if (path === '/api/warehouses') return ok(config, demoWarehouses);
+    if (/^\/api\/warehouses\/\d+\/calendar$/.test(path)) {
+      const warehouseId = findNumericId(path);
+      const item = demoWarehouseCalendars.find(calendar => calendar.warehouseId === warehouseId);
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy lịch vận hành kho demo.');
+    }
     if (path === '/api/units') return ok(config, demoUnits);
     if (path === '/api/product-categories') return ok(config, demoCategories);
 

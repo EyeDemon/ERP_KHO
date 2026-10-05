@@ -9,6 +9,7 @@ import Warehouses from '../pages/Warehouses';
 import WarehouseStructure from '../pages/WarehouseStructure';
 import WarehouseLocations from '../pages/WarehouseLocations';
 import WarehouseMap from '../pages/WarehouseMap';
+import WarehouseCalendar from '../pages/WarehouseCalendar';
 import Units from '../pages/Units';
 import ExportReceipts from '../pages/ExportReceipts';
 import ImportReceipts from '../pages/ImportReceipts';
@@ -73,6 +74,7 @@ const AppRoutes = () => {
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
         <Route path="warehouse-structure" element={<PermissionRoute permission="location.read"><WarehouseLocations /></PermissionRoute>} />
         <Route path="warehouse-map" element={<PermissionRoute permission="location.read"><WarehouseMap /></PermissionRoute>} />
+        <Route path="warehouse-calendar" element={<PermissionRoute permission="warehouse.read"><WarehouseCalendar /></PermissionRoute>} />
         <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
         <Route path="business-partners" element={<PermissionRoute permission="partner.read"><BusinessPartners /></PermissionRoute>} />
         <Route path="export-receipts" element={<ExportReceipts />} />
