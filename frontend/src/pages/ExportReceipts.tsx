@@ -237,9 +237,9 @@ const ExportReceipts = () => {
 
   const handleWorkflowAction = async (id: number, action: 'approve-and-reserve' | 'approve-and-dispatch' | 'dispatch') => {
     const messages = {
-      'approve-and-reserve': 'Phiếu sẽ được duyệt và giữ hàng. Tồn thực tế chưa giảm cho đến khi người có quyền dispatch xác nhận hàng đã rời kho.',
+      'approve-and-reserve': 'Phiếu sẽ được duyệt và giữ hàng. Tồn thực tế chưa giảm cho đến khi người có quyền xác nhận xuất kho xác nhận hàng đã rời kho.',
       'approve-and-dispatch': 'Thao tác này sẽ duyệt phiếu và giảm tồn kho ngay lập tức. Bạn có chắc hàng đã được giao khỏi kho?',
-      dispatch: 'Xác nhận hàng đã rời kho. Reservation sẽ được tiêu thụ và tồn thực tế sẽ giảm ngay.'
+      dispatch: 'Xác nhận hàng đã rời kho. Lượng hàng đã giữ sẽ được tiêu thụ và tồn thực tế sẽ giảm ngay.'
     };
     if (workflowInFlight.current || !confirm(messages[action])) return;
     workflowInFlight.current = true;
@@ -411,7 +411,7 @@ const ExportReceipts = () => {
     <UiPage>
       <div className="export-receipts">
         <UiPageHeader
-          eyebrow="Outbound"
+          eyebrow="Xuất kho"
           title="Quản Lý Phiếu Xuất Kho"
           description="Tạo và theo dõi phiếu xuất từ kiểm tra tồn khả dụng, duyệt và giữ hàng đến xác nhận hàng rời kho."
         />

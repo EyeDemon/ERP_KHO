@@ -47,6 +47,7 @@ namespace ERP.Application.Tests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 base.OnModelCreating(modelBuilder);
+                modelBuilder.Entity<WarehouseLocation>().Property(x => x.RowVersion).ValueGeneratedNever();
                 foreach (var entityType in modelBuilder.Model.GetEntityTypes())
                 {
                     foreach (var property in entityType.GetProperties())
@@ -89,7 +90,8 @@ namespace ERP.Application.Tests
                 IsActive = true,
                 IsPickable = true,
                 IsSystemManaged = true,
-                CreatedBy = user.Id
+                CreatedBy = user.Id,
+                RowVersion = new byte[8]
             };
             ctx.WarehouseLocations.Add(location);
             await ctx.SaveChangesAsync();

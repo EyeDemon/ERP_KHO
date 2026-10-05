@@ -7,6 +7,7 @@ using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Persistence;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Services;
@@ -42,8 +43,19 @@ public class StockReservationService(
     {
         var existing = await context.StockReservations.FirstOrDefaultAsync(x => x.SourceType == "ExportReceipt" && x.SourceId == exportReceiptId && x.ProductId == productId, cancellationToken);
         if (existing is not null) return existing;
-        return await ReserveCoreAsync("ExportReceipt", exportReceiptId, exportCode, warehouseId, productId, quantity, userId, DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes), cancellationToken);
+        try
+        {
+            return await ReserveCoreAsync("ExportReceipt", exportReceiptId, exportCode, warehouseId, productId, quantity, userId, DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes), cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsExportReservationSourceConflict(exception))
+        {
+            throw new ConcurrencyException("Phiếu xuất đã được giữ hàng bởi yêu cầu đồng thời khác.", exception);
+        }
     }
+
+    private static bool IsExportReservationSourceConflict(DbUpdateException exception) =>
+        exception.InnerException is SqlException { Number: 2601 or 2627 } sql &&
+        sql.Message.Contains("IX_StockReservations_SourceType_SourceId_ProductId", StringComparison.OrdinalIgnoreCase);
 
     public async Task<StockReservation> GetExportReservationAsync(int exportReceiptId, int warehouseId, int productId, CancellationToken cancellationToken = default)
     {

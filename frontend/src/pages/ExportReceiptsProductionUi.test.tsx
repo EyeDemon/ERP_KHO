@@ -125,6 +125,31 @@ describe('ExportReceipts shared production UI', () => {
     expect(view.queryByText('ER-2026-0021')).toBeNull();
   });
 
+  it('uses the canonical approved-and-reserved wording in export print preview', async () => {
+    localStorage.setItem('role', 'Viewer');
+    setCurrentPermissions(['export_receipt.read']);
+    const approved = {
+      ...draftReceipt,
+      id: 23,
+      code: 'ER-2026-0023',
+      status: 'Approved',
+      approvedByName: 'Người duyệt',
+      approvedAt: '2026-10-03T11:00:00Z',
+    };
+    get.mockImplementation(async (url) => {
+      if (url === '/api/exportreceipts') return { data: [approved] } as never;
+      if (url === '/api/exportreceipts/23') return { data: approved } as never;
+      return { data: [] } as never;
+    });
+
+    const view = render(<ExportReceipts />);
+    await view.findByText('ER-2026-0023');
+    fireEvent.click(view.getByRole('button', { name: 'Xem bản in' }));
+
+    expect((await view.findAllByText('Đã duyệt và giữ hàng')).length).toBeGreaterThanOrEqual(2);
+    expect(view.queryByText(/^Đã duyệt$/)).toBeNull();
+  });
+
   it('keeps write-gated workflow buttons disabled during maintenance', async () => {
     localStorage.setItem('role', 'Manager');
     localStorage.setItem('userId', '99');
