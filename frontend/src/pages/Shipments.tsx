@@ -10,8 +10,8 @@ type ShipmentHu = {
 };
 type Shipment = {
   id:number; shipmentCode:string; packingSessionId:number; packingSessionCode:string; warehouseId:number; warehouseName:string;
-  sourceType:string; sourceId?:number; sourceCode?:string; status:string; handlingUnitCount:number; loadedHandlingUnitCount:number;
-  dockAppointmentId?:number; dockAppointmentCode?:string; dockId?:number; dockCode?:string; vehiclePlate?:string; trailerPlate?:string;
+  sourceType:string; sourceId?:number; sourceCode?:string; status:string; stagingLocationId?:number; stagingLocationCode?:string;
+  handlingUnitCount:number; loadedHandlingUnitCount:number; dockAppointmentId?:number; dockAppointmentCode?:string; dockId?:number; dockCode?:string; vehiclePlate?:string; trailerPlate?:string;
   sealNumber?:string; createdAt:string; stagedAt?:string; loadingStartedAt?:string; loadedAt?:string; rowVersion?:string;
   handlingUnits?:ShipmentHu[];
 };
@@ -38,7 +38,8 @@ const messageFor=(e:unknown)=>{
   if(code==='SHIPMENT_DOCK_APPOINTMENT_INVALID') return response?.data?.message??'Outbound appointment chưa sẵn sàng để loading.';
   if(code==='SHIPMENT_HU_NOT_LOADED') return 'Chưa load đủ Handling Unit của Shipment.';
   if(code==='SHIPMENT_HU_NOT_STAGED') return 'Handling Unit chưa ở staging.';
-  if(code==='HU_WRONG_SHIPMENT') return 'Handling Unit không thuộc Shipment này hoặc bạn đang quét HU con.';
+  if(code==='SHIPMENT_STAGING_LOCATION_INVALID') return response?.data?.message??'Staging location không hợp lệ.';
+  if(code==='SHIPMENT_HU_MISMATCH') return 'Handling Unit không thuộc Shipment này hoặc bạn đang quét HU con.';
   if(code==='HU_NOT_FOUND') return 'Không tìm thấy Handling Unit theo mã đã quét.';
   if(code==='HU_ALREADY_LOADED') return 'Handling Unit này đã được load.';
   if(code==='SHIPMENT_VERSION_CONFLICT'||response?.status===409) return response?.data?.message??'Shipment đã thay đổi. Vui lòng tải lại.';
@@ -52,6 +53,7 @@ export default function Shipments(){
   const [selected,setSelected]=useState<Shipment|null>(null);
   const [appointments,setAppointments]=useState<DockAppointment[]>([]);
   const [appointmentId,setAppointmentId]=useState('');
+  const [stagingCode,setStagingCode]=useState('');
   const [huScan,setHuScan]=useState('');
   const [seal,setSeal]=useState('');
   const [loading,setLoading]=useState(true);
@@ -74,6 +76,7 @@ export default function Shipments(){
     try{
       const value=(await apiClient.get('/api/shipments/'+id)).data as Shipment;
       setSelected(value);
+      setStagingCode(value.stagingLocationCode??'');
       setSeal(value.sealNumber??'');
       if(value.status==='Staging'&&canLoad){
         const response=await apiClient.get('/api/dock-yard/appointments',{params:{warehouseId:value.warehouseId,direction:1,status:5}});
@@ -90,6 +93,7 @@ export default function Shipments(){
       const value=(await apiClient.post(path,body,{headers:idempotencyHeaders(key)})).data as Shipment;
       completeIdempotentAction(key);
       setSelected(value);
+      setStagingCode(value.stagingLocationCode??stagingCode);
       setSeal(value.sealNumber??seal);
       setHuScan('');
       await list();
@@ -134,10 +138,11 @@ export default function Shipments(){
           <UiBadge tone={tone(selected.status)}>{statusLabels[selected.status]??selected.status}</UiBadge>
           <span className="ui-muted-text">{selected.packingSessionCode} • {selected.sourceCode??selected.sourceType} • {selected.warehouseName}</span>
           <span>HU loaded <strong>{selected.loadedHandlingUnitCount}</strong> / {selected.handlingUnitCount}</span>
+          {selected.stagingLocationCode&&<span>Staging: <strong>{selected.stagingLocationCode}</strong></span>}
         </div>
         <p className="ui-muted-text">
-          Foundation hiện quản lý Shipment READY/STAGING/LOADING/LOADED, root-HU ownership, dock appointment và vehicle/seal context.
-          Dispatch/SHIP ledger, load optimization, staging-location capacity và carrier/POD vẫn chưa thuộc phần này.
+          Foundation hiện quản lý Shipment READY/STAGING/LOADING/LOADED, staging lane, root-HU ownership, dock appointment và vehicle/seal context.
+          Dispatch/SHIP ledger, load optimization/capacity và carrier/POD vẫn chưa thuộc phần này.
         </p>
 
         <UiTableScroll>
@@ -153,9 +158,24 @@ export default function Shipments(){
           </table>
         </UiTableScroll>
 
-        {selected.status==='Ready'&&canStage&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
-          'shipment-stage-'+selected.id,'/api/shipments/'+selected.id+'/stage',{rowVersion:selected.rowVersion}
-        )}>Đưa vào Staging</button>}
+        {selected.status==='Ready'&&canStage&&<fieldset>
+          <legend>Đưa vào Staging</legend>
+          <div className="ui-inline-wrap">
+            <label>Quét / nhập staging location
+              <input
+                aria-label="Shipment staging location"
+                value={stagingCode}
+                onChange={e=>setStagingCode(e.target.value)}
+                placeholder="Ví dụ STG-OUT-01"
+                autoComplete="off"
+              />
+            </label>
+            <button type="button" disabled={!!busy||!stagingCode.trim()} onClick={()=>void mutate(
+              'shipment-stage-'+selected.id,'/api/shipments/'+selected.id+'/stage',
+              {stagingLocationCode:stagingCode.trim(),rowVersion:selected.rowVersion}
+            )}>Xác nhận Staging</button>
+          </div>
+        </fieldset>}
 
         {selected.status==='Staging'&&canLoad&&<fieldset>
           <legend>Bắt đầu Loading</legend>
