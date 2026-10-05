@@ -186,17 +186,47 @@ public class StockReservationService(
 
     private async Task ReleaseCoreAsync(StockReservation reservation, decimal? requested, int userId, string reason, StockReservationStatus finalStatus, CancellationToken cancellationToken)
     {
-        if (reservation.Status is not StockReservationStatus.Active and not StockReservationStatus.PartiallyConsumed and not StockReservationStatus.PartiallyAllocated and not StockReservationStatus.Allocated) throw new ConcurrencyException("Reservation không còn có thể giải phóng.");
-        await ReleaseActiveAllocationsAsync(reservation, userId, reason, cancellationToken);
+        if (reservation.Status is not StockReservationStatus.Active and
+            not StockReservationStatus.PartiallyConsumed and
+            not StockReservationStatus.PartiallyAllocated and
+            not StockReservationStatus.Allocated)
+            throw new ConcurrencyException("Reservation không còn có thể giải phóng.");
+
         var remaining = reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity;
         var quantity = requested ?? remaining;
-        if (quantity <= 0 || quantity > remaining) throw new BusinessRuleException("Số lượng giải phóng không hợp lệ.");
-        if (!await stockRepository.TryReleaseReservationAsync(reservation.ProductId, reservation.WarehouseId, quantity, cancellationToken)) throw new ConcurrencyException("Dữ liệu giữ hàng đã thay đổi.");
+        if (quantity <= 0 || quantity > remaining)
+            throw new BusinessRuleException("Số lượng giải phóng không hợp lệ.");
+
+        var releaseAll = quantity == remaining;
+        if (releaseAll)
+        {
+            await ReleaseActiveAllocationsAsync(reservation, userId, reason, cancellationToken);
+        }
+        else
+        {
+            var unallocated = remaining - reservation.AllocatedQuantity;
+            if (quantity > unallocated)
+                throw new BusinessRuleException("Số lượng giải phóng vượt phần reservation chưa Allocation. Hãy giải phóng Allocation trước.");
+        }
+
+        if (!await stockRepository.TryReleaseReservationAsync(
+                reservation.ProductId,
+                reservation.WarehouseId,
+                quantity,
+                reservation.Id,
+                cancellationToken))
+            throw new ConcurrencyException("Dữ liệu giữ hàng đã thay đổi.");
+
         reservation.ReleasedQuantity += quantity;
         reservation.ReleasedAt = DateTime.UtcNow;
         reservation.ReleasedBy = userId;
         reservation.ReleaseReason = reason;
-        reservation.Status = reservation.ConsumedQuantity + reservation.ReleasedQuantity == reservation.Quantity ? finalStatus : StockReservationStatus.PartiallyConsumed;
+
+        if (reservation.ConsumedQuantity + reservation.ReleasedQuantity == reservation.Quantity)
+            reservation.Status = finalStatus;
+        else
+            UpdateActiveReservationStatus(reservation);
+
         context.AuditLogs.Add(Audit(userId, "StockReservation.Released", reservation, $"Quantity: {quantity}, Reason: {reason}"));
     }
 
@@ -204,7 +234,9 @@ public class StockReservationService(
     {
         var allocations = await context.StockAllocations
             .Where(x => x.ReservationId == reservation.Id &&
-                        (x.Status == StockAllocationStatus.Active || x.Status == StockAllocationStatus.Picking || x.Status == StockAllocationStatus.Picked))
+                        (x.Status == StockAllocationStatus.Active ||
+                         x.Status == StockAllocationStatus.Picking ||
+                         x.Status == StockAllocationStatus.Picked))
             .OrderBy(x => x.Id)
             .ToListAsync(cancellationToken);
         if (allocations.Count == 0)
@@ -213,6 +245,10 @@ public class StockReservationService(
                 throw new ConcurrencyException("Dữ liệu Allocation của reservation cần được đối soát.");
             return;
         }
+
+        var activeQuantity = allocations.Sum(x => x.Quantity);
+        if (activeQuantity != reservation.AllocatedQuantity)
+            throw new ConcurrencyException("Dữ liệu Allocation của reservation cần được đối soát.");
 
         foreach (var allocation in allocations)
         {
@@ -237,6 +273,19 @@ public class StockReservationService(
 
         reservation.AllocatedQuantity = 0;
         reservation.AllocationVersion++;
+    }
+
+    private static void UpdateActiveReservationStatus(StockReservation reservation)
+    {
+        var remaining = reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity;
+        if (reservation.AllocatedQuantity <= 0)
+            reservation.Status = reservation.ConsumedQuantity > 0
+                ? StockReservationStatus.PartiallyConsumed
+                : StockReservationStatus.Active;
+        else if (reservation.AllocatedQuantity < remaining)
+            reservation.Status = StockReservationStatus.PartiallyAllocated;
+        else
+            reservation.Status = StockReservationStatus.Allocated;
     }
 
     public async Task<int> ExpireAsync(CancellationToken cancellationToken = default)

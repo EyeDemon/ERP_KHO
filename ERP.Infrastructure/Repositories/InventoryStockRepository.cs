@@ -100,10 +100,24 @@ namespace ERP.Infrastructure.Repositories
                         x.Status == InventoryStatus.Available && x.LocationId.HasValue &&
                         x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
                     .OrderBy(x => x.LocationId)
-                    .Select(x => new { x.Id, x.LocationId, x.Quantity, x.ReservedQuantity })
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.LocationId,
+                        x.Quantity,
+                        x.ReservedQuantity,
+                        CommittedAllocationQuantity = _context.StockAllocations
+                            .Where(a => a.WarehouseId == x.WarehouseId &&
+                                        a.ProductId == x.ProductId &&
+                                        a.LocationId == x.LocationId &&
+                                        (a.Status == StockAllocationStatus.Active ||
+                                         a.Status == StockAllocationStatus.Picking ||
+                                         a.Status == StockAllocationStatus.Picked))
+                            .Sum(a => (decimal?)a.Quantity) ?? 0m
+                    })
                     .ToListAsync(cancellationToken);
 
-                if (rows.Sum(x => x.ReservedQuantity) < quantity)
+                if (rows.Sum(x => Math.Max(0m, x.ReservedQuantity - x.CommittedAllocationQuantity)) < quantity)
                     return Array.Empty<InventoryStockConsumption>();
 
                 var remaining = quantity;
@@ -111,23 +125,35 @@ namespace ERP.Infrastructure.Repositories
                 var now = DateTime.UtcNow;
                 foreach (var row in rows)
                 {
-                    var take = Math.Min(remaining, row.ReservedQuantity);
+                    var unallocatedReserved = Math.Max(0m, row.ReservedQuantity - row.CommittedAllocationQuantity);
+                    var take = Math.Min(remaining, unallocatedReserved);
                     if (take <= 0) continue;
+
                     var affected = await _dbSet
-                        .Where(x => x.Id == row.Id && x.ReservedQuantity >= take && x.Quantity >= take)
+                        .Where(x => x.Id == row.Id &&
+                                    x.Quantity >= take &&
+                                    x.ReservedQuantity -
+                                    (_context.StockAllocations
+                                        .Where(a => a.WarehouseId == x.WarehouseId &&
+                                                    a.ProductId == x.ProductId &&
+                                                    a.LocationId == x.LocationId &&
+                                                    (a.Status == StockAllocationStatus.Active ||
+                                                     a.Status == StockAllocationStatus.Picking ||
+                                                     a.Status == StockAllocationStatus.Picked))
+                                        .Sum(a => (decimal?)a.Quantity) ?? 0m) >= take)
                         .ExecuteUpdateAsync(s => s
                             .SetProperty(x => x.Quantity, x => x.Quantity - take)
                             .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
                             .SetProperty(x => x.LastUpdated, now), cancellationToken);
                     if (affected != 1)
-                        throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu tồn kho tại vị trí đã thay đổi trong lúc tiêu thụ reservation.");
+                        throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu giữ hàng chưa Allocation đã thay đổi trong lúc tiêu thụ reservation.");
 
                     consumed.Add(new InventoryStockConsumption(row.LocationId!.Value, take));
                     remaining -= take;
                     if (remaining == 0) return consumed;
                 }
 
-                throw new ERP.Domain.Exceptions.ConcurrencyException("Không thể xác định đầy đủ vị trí tồn kho đã tiêu thụ.");
+                throw new ERP.Domain.Exceptions.ConcurrencyException("Không thể xác định đầy đủ vị trí tồn kho chưa Allocation để tiêu thụ.");
             }
             catch (SqlException exception) when (exception.Number == 1205)
             {
@@ -171,40 +197,123 @@ namespace ERP.Infrastructure.Repositories
             }
         }
 
-        public async Task<bool> TryReleaseReservationAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
+        public async Task<bool> TryReleaseReservationAsync(
+            int productId,
+            int warehouseId,
+            decimal quantity,
+            int reservationId,
+            CancellationToken cancellationToken = default)
         {
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             try
             {
-                return await AllocateAsync(productId, warehouseId, quantity, false, true, cancellationToken, releaseOnly: true);
+                return await AllocateAsync(
+                    productId,
+                    warehouseId,
+                    quantity,
+                    false,
+                    true,
+                    cancellationToken,
+                    releaseOnly: true,
+                    excludedReservationId: reservationId);
             }
-            catch (SqlException exception) when (exception.Number == 1205) { throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch giải phóng giữ hàng bị deadlock.", exception); }
+            catch (SqlException exception) when (exception.Number == 1205)
+            {
+                throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch giải phóng giữ hàng bị deadlock.", exception);
+            }
         }
 
-        private async Task<bool> AllocateAsync(int productId, int warehouseId, decimal quantity, bool reserve, bool useReserved, CancellationToken token, bool releaseOnly = false)
+        private async Task<bool> AllocateAsync(
+            int productId,
+            int warehouseId,
+            decimal quantity,
+            bool reserve,
+            bool useReserved,
+            CancellationToken token,
+            bool releaseOnly = false,
+            int? excludedReservationId = null)
         {
             var rows = await _dbSet.AsNoTracking()
-                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.Status == InventoryStatus.Available && x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
-                .OrderBy(x => x.LocationId).Select(x => new { x.Id, x.Quantity, x.ReservedQuantity }).ToListAsync(token);
-            var capacity = rows.Sum(x => useReserved ? x.ReservedQuantity : x.Quantity - x.ReservedQuantity);
+                .Where(x => x.ProductId == productId &&
+                            x.WarehouseId == warehouseId &&
+                            x.Status == InventoryStatus.Available &&
+                            x.Location != null &&
+                            x.Location.IsActive &&
+                            !x.Location.IsBlocked &&
+                            x.Location.IsPickable)
+                .OrderBy(x => x.LocationId)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.Quantity,
+                    x.ReservedQuantity,
+                    CommittedAllocationQuantity = useReserved
+                        ? (_context.StockAllocations
+                            .Where(a => a.WarehouseId == x.WarehouseId &&
+                                        a.ProductId == x.ProductId &&
+                                        a.LocationId == x.LocationId &&
+                                        (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
+                                        (a.Status == StockAllocationStatus.Active ||
+                                         a.Status == StockAllocationStatus.Picking ||
+                                         a.Status == StockAllocationStatus.Picked))
+                            .Sum(a => (decimal?)a.Quantity) ?? 0m)
+                        : 0m
+                })
+                .ToListAsync(token);
+
+            var capacity = rows.Sum(x => useReserved
+                ? Math.Max(0m, x.ReservedQuantity - x.CommittedAllocationQuantity)
+                : x.Quantity - x.ReservedQuantity);
             if (capacity < quantity) return false;
+
             var remaining = quantity;
             foreach (var row in rows)
             {
-                var available = useReserved ? row.ReservedQuantity : row.Quantity - row.ReservedQuantity;
+                var available = useReserved
+                    ? Math.Max(0m, row.ReservedQuantity - row.CommittedAllocationQuantity)
+                    : row.Quantity - row.ReservedQuantity;
                 var take = Math.Min(remaining, available);
                 if (take <= 0) continue;
+
                 var query = _dbSet.Where(x => x.Id == row.Id);
-                if (useReserved) query = query.Where(x => x.ReservedQuantity >= take && (releaseOnly || x.Quantity >= take));
-                else query = query.Where(x => x.Quantity - x.ReservedQuantity >= take);
+                if (useReserved)
+                {
+                    query = query.Where(x =>
+                        x.ReservedQuantity -
+                        (_context.StockAllocations
+                            .Where(a => a.WarehouseId == x.WarehouseId &&
+                                        a.ProductId == x.ProductId &&
+                                        a.LocationId == x.LocationId &&
+                                        (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
+                                        (a.Status == StockAllocationStatus.Active ||
+                                         a.Status == StockAllocationStatus.Picking ||
+                                         a.Status == StockAllocationStatus.Picked))
+                            .Sum(a => (decimal?)a.Quantity) ?? 0m) >= take &&
+                        (releaseOnly || x.Quantity >= take));
+                }
+                else
+                {
+                    query = query.Where(x => x.Quantity - x.ReservedQuantity >= take);
+                }
+
                 var now = DateTime.UtcNow;
                 var affected = reserve
-                    ? await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity + take).SetProperty(x => x.LastUpdated, now), token)
+                    ? await query.ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity + take)
+                        .SetProperty(x => x.LastUpdated, now), token)
                     : useReserved
                         ? releaseOnly
-                            ? await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take).SetProperty(x => x.LastUpdated, now), token)
-                            : await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.Quantity, x => x.Quantity - take).SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take).SetProperty(x => x.LastUpdated, now), token)
-                        : await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.Quantity, x => x.Quantity - take).SetProperty(x => x.LastUpdated, now), token);
+                            ? await query.ExecuteUpdateAsync(s => s
+                                .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
+                                .SetProperty(x => x.LastUpdated, now), token)
+                            : await query.ExecuteUpdateAsync(s => s
+                                .SetProperty(x => x.Quantity, x => x.Quantity - take)
+                                .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
+                                .SetProperty(x => x.LastUpdated, now), token)
+                        : await query.ExecuteUpdateAsync(s => s
+                            .SetProperty(x => x.Quantity, x => x.Quantity - take)
+                            .SetProperty(x => x.LastUpdated, now), token);
+
                 if (affected != 1) return false;
                 remaining -= take;
                 if (remaining == 0) return true;

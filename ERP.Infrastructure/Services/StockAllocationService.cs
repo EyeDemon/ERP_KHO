@@ -524,6 +524,4 @@ public sealed class StockAllocationService(
             .ToListAsync(cancellationToken);
         return rows.Select(Map).ToList();
     }
-
-;
 }
