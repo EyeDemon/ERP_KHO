@@ -18,6 +18,12 @@ public interface IPickingService
 public interface IPickingTaskIntegration
 {
     Task EnsureForReservationAsync(int reservationId, int actorId, CancellationToken cancellationToken = default);
+    Task PrepareReservationReleaseAsync(
+        int reservationId,
+        int actorId,
+        string reason,
+        bool sourceWide,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IPickingDispatchReadiness
