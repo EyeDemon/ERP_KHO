@@ -213,6 +213,7 @@ public class StockReservationService(
                 reservation.ProductId,
                 reservation.WarehouseId,
                 quantity,
+                releaseAll ? reservation.Id : null,
                 cancellationToken))
             throw new ConcurrencyException("Dữ liệu giữ hàng đã thay đổi.");
 
