@@ -71,6 +71,7 @@ const productionIcons: Record<string, LucideIcon> = {
   '/stock-allocations': Layers3,
   '/picking-tasks': ClipboardCheck,
   '/packing-sessions': PackageCheck,
+  '/shipments': Truck,
   '/inventory': Boxes,
   '/inventory-reconciliation': Scale,
   '/stocktakes': ClipboardCheck,
