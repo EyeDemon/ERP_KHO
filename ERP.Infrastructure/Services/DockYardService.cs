@@ -380,6 +380,7 @@ public sealed class DockYardService(
             (x.Status == DockAppointmentStatus.DockAssigned ||
              x.Status == DockAppointmentStatus.InService ||
              x.Status == DockAppointmentStatus.Completed ||
+             x.Status == DockAppointmentStatus.Exception ||
              (x.PlannedStartUtc < appointment.PlannedEndUtc && appointment.PlannedStartUtc < x.PlannedEndUtc)), token);
         if (conflict)
             throw new BusinessRuleException("Dock đang được appointment khác giữ trong khung giờ này.");
@@ -405,7 +406,10 @@ public sealed class DockYardService(
     public async Task<DockAppointmentDto> CheckoutAsync(int id, DockAppointmentCommandDto dto, CancellationToken token = default)
     {
         var appointment = await GetForMutationAsync(id, token);
-        RequireStatus(appointment, DockAppointmentStatus.Completed, "Chỉ appointment đã hoàn thành loading/unloading mới được checkout.");
+        var canCheckout = appointment.Status == DockAppointmentStatus.Completed
+            || (appointment.Status == DockAppointmentStatus.Exception && appointment.CheckedInAtUtc.HasValue);
+        if (!canCheckout)
+            throw new ConcurrencyException("Chỉ appointment đã hoàn thành hoặc exception sau check-in mới được checkout.");
         if (appointment.CheckedOutAtUtc.HasValue)
             throw new ConcurrencyException("Appointment đã checkout.");
         ApplyVersion(appointment, dto.RowVersion);

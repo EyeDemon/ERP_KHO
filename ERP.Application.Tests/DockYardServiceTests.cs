@@ -259,6 +259,22 @@ public sealed class DockYardServiceTests : IAsyncDisposable
         });
         await assign.Should().ThrowAsync<BusinessRuleException>()
             .WithMessage("*appointment khác*");
+
+        await _service.CheckoutAsync(blocked.Id, new DockAppointmentCommandDto
+        {
+            RowVersion = Convert.ToBase64String(Version(13)),
+            Note = "Xe exception đã rời cổng"
+        });
+
+        (await _service.GetYardSlotsAsync(_warehouse.Id)).Single(x => x.Id == slot.Id).Occupied.Should().BeFalse();
+
+        var reassigned = await _service.AssignDockAsync(waiting.Id, new DockAppointmentAssignDockDto
+        {
+            DockId = dock.Id,
+            RowVersion = Convert.ToBase64String(Version(14))
+        });
+        reassigned.DockId.Should().Be(dock.Id);
+        reassigned.Status.Should().Be(DockAppointmentStatus.DockAssigned);
     }
 
     [Fact]

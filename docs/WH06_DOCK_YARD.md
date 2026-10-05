@@ -24,8 +24,9 @@ Additional terminal paths:
 
 - `DRAFT/CONFIRMED → CANCELLED`
 - `CONFIRMED → NO_SHOW`
-- non-terminal operational states → `EXCEPTION`; nếu xe đã có yard slot/dock thì occupancy vẫn được giữ cho tới khi checkout/release thực tế
+- non-terminal operational states → `EXCEPTION`; nếu xe đã check-in và có yard slot/dock thì occupancy vẫn được giữ cho tới gate checkout
 - `COMPLETED → CHECKED_OUT` is represented by `CheckedOutAtUtc`; the appointment remains Completed for operational reporting.
+- `EXCEPTION` sau check-in cũng được phép gate checkout; status vẫn là Exception nhưng `CheckedOutAtUtc` giải phóng yard/dock occupancy.
 
 Every transition is Warehouse-scoped and protected by optimistic concurrency.
 
