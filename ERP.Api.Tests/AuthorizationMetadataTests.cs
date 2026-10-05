@@ -157,6 +157,22 @@ namespace ERP.Api.Tests
                 .GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(ApprovalPolicies.Checker);
         }
 
+        [Theory]
+        [InlineData("List", AppPermissions.PutawayRead)]
+        [InlineData("Detail", AppPermissions.PutawayRead)]
+        [InlineData("Destinations", AppPermissions.PutawayRead)]
+        [InlineData("Assign", AppPermissions.PutawayAssign)]
+        [InlineData("Start", AppPermissions.PutawayExecute)]
+        [InlineData("Move", AppPermissions.PutawayExecute)]
+        [InlineData("Exception", AppPermissions.PutawayExecute)]
+        [InlineData("Resume", AppPermissions.PutawayExecute)]
+        [InlineData("Cancel", AppPermissions.PutawayCancel)]
+        public void PutawayEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(PutawayTasksController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
         [Fact]
         public void ReportsController_Get_RequiresAdminManagerOrViewer()
         {
