@@ -17,6 +17,8 @@ namespace ERP.Infrastructure.Repositories
         {
             return await _dbSet
                 .Include(s => s.Location)
+                .Include(s => s.Product)
+                    .ThenInclude(p => p.Unit)
                 .FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == InventoryStatus.Available && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
         }
 
@@ -54,6 +56,13 @@ namespace ERP.Infrastructure.Repositories
 
         }
 
+        public Task<decimal> GetAvailableQuantityAsync(int productId, int warehouseId, CancellationToken cancellationToken = default) =>
+            _dbSet.AsNoTracking()
+                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
+                    x.Status == InventoryStatus.Available && x.Location != null &&
+                    x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
+                .SumAsync(x => x.Quantity - x.ReservedQuantity, cancellationToken);
+
         public async Task<bool> TryReserveAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
         {
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
@@ -75,6 +84,55 @@ namespace ERP.Infrastructure.Repositories
                 return await AllocateAsync(productId, warehouseId, quantity, false, true, cancellationToken);
             }
             catch (SqlException exception) when (exception.Number == 1205) { throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch tiêu thụ giữ hàng bị deadlock.", exception); }
+        }
+
+        public async Task<IReadOnlyList<InventoryStockConsumption>> ConsumeReservationWithBreakdownAsync(
+            int productId,
+            int warehouseId,
+            decimal quantity,
+            CancellationToken cancellationToken = default)
+        {
+            if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
+            try
+            {
+                var rows = await _dbSet.AsNoTracking()
+                    .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
+                        x.Status == InventoryStatus.Available && x.LocationId.HasValue &&
+                        x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
+                    .OrderBy(x => x.LocationId)
+                    .Select(x => new { x.Id, x.LocationId, x.Quantity, x.ReservedQuantity })
+                    .ToListAsync(cancellationToken);
+
+                if (rows.Sum(x => x.ReservedQuantity) < quantity)
+                    return Array.Empty<InventoryStockConsumption>();
+
+                var remaining = quantity;
+                var consumed = new List<InventoryStockConsumption>();
+                var now = DateTime.UtcNow;
+                foreach (var row in rows)
+                {
+                    var take = Math.Min(remaining, row.ReservedQuantity);
+                    if (take <= 0) continue;
+                    var affected = await _dbSet
+                        .Where(x => x.Id == row.Id && x.ReservedQuantity >= take && x.Quantity >= take)
+                        .ExecuteUpdateAsync(s => s
+                            .SetProperty(x => x.Quantity, x => x.Quantity - take)
+                            .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
+                            .SetProperty(x => x.LastUpdated, now), cancellationToken);
+                    if (affected != 1)
+                        throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu tồn kho tại vị trí đã thay đổi trong lúc tiêu thụ reservation.");
+
+                    consumed.Add(new InventoryStockConsumption(row.LocationId!.Value, take));
+                    remaining -= take;
+                    if (remaining == 0) return consumed;
+                }
+
+                throw new ERP.Domain.Exceptions.ConcurrencyException("Không thể xác định đầy đủ vị trí tồn kho đã tiêu thụ.");
+            }
+            catch (SqlException exception) when (exception.Number == 1205)
+            {
+                throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch tiêu thụ giữ hàng bị deadlock.", exception);
+            }
         }
 
         public async Task<bool> TryReleaseReservationAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)

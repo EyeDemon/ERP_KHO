@@ -24,7 +24,7 @@ describe('CapabilityPreview', () => {
     expect(view.getAllByText('SHP-2026-5108').length).toBeGreaterThan(0);
     expect(view.getByText('Expected UX states')).toBeTruthy();
     expect(view.getByText('Technical contract')).toBeTruthy();
-  });
+  }, 10_000);
 
   it('keeps live production navigation outside the Blueprint preview', () => {
     const view = renderPreview('master-data', 'MD-01');

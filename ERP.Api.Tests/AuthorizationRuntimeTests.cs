@@ -72,13 +72,43 @@ namespace ERP.Api.Tests
                 db.Database.EnsureCreated();
                 var databaseRole = new Role { Id = 1, RoleName = role };
                 var user = new User { Id = 99, Username = "AuthorizationTest", RoleId = 1, Role = databaseRole };
+                var permissionCodes = new HashSet<string>(StringComparer.Ordinal);
                 if (role is AppRoles.Admin or AppRoles.Manager)
                 {
-                    foreach (var code in new[] { AppPermissions.ProductCreate, AppPermissions.ProductUpdate, AppPermissions.ProductDeactivate, AppPermissions.ReceiptCreate, AppPermissions.ReceiptComplete })
+                    permissionCodes.UnionWith(new[]
                     {
-                        var permission = new Permission(code);
-                        databaseRole.Permissions.Add(new RolePermission { Role = databaseRole, Permission = permission });
-                    }
+                        AppPermissions.ProductCreate,
+                        AppPermissions.ProductUpdate,
+                        AppPermissions.ProductDeactivate,
+                        AppPermissions.ReceiptCreate,
+                        AppPermissions.ReceiptComplete,
+                        AppPermissions.ExportReceiptRead,
+                        AppPermissions.ExportReceiptCreate,
+                        AppPermissions.ExportReceiptUpdate,
+                        AppPermissions.ExportReceiptApprove,
+                        AppPermissions.ExportReceiptDispatch,
+                        AppPermissions.ExportReceiptCancel
+                    });
+                }
+                else if (role == AppRoles.WarehouseStaff)
+                {
+                    permissionCodes.UnionWith(new[]
+                    {
+                        AppPermissions.ExportReceiptRead,
+                        AppPermissions.ExportReceiptCreate,
+                        AppPermissions.ExportReceiptUpdate,
+                        AppPermissions.ExportReceiptDispatch
+                    });
+                }
+                else if (role == AppRoles.Viewer)
+                {
+                    permissionCodes.Add(AppPermissions.ExportReceiptRead);
+                }
+
+                foreach (var code in permissionCodes)
+                {
+                    var permission = new Permission(code);
+                    databaseRole.Permissions.Add(new RolePermission { Role = databaseRole, Permission = permission });
                 }
                 db.Users.Add(user);
                 db.SaveChanges();

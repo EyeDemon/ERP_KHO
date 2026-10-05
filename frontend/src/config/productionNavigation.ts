@@ -21,7 +21,7 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/asns', label: 'ASN dự kiến', section: 'Inbound', description: 'Lô hàng dự kiến, vận chuyển, arrival và handoff sang tiếp nhận.', permission: 'asn.read' },
   { path: '/import-receipts', label: 'Phiếu nhập kho', section: 'Inbound', description: 'Nhận hàng, QC, discrepancy và posting nhập kho.', permission: 'receipt.read' },
   { path: '/putaway-tasks', label: 'Cất hàng', section: 'Inbound', description: 'Nhiệm vụ putaway từ khu nhận hàng tới location đích.', permission: 'putaway.read' },
-  { path: '/export-receipts', label: 'Phiếu xuất kho', section: 'Outbound', description: 'Chứng từ xuất, reservation và dispatch hàng khỏi kho.', access: 'always' },
+  { path: '/export-receipts', label: 'Phiếu xuất kho', section: 'Outbound', description: 'Chứng từ xuất, reservation và dispatch hàng khỏi kho.', permission: 'export_receipt.read' },
   { path: '/stock-reservations', label: 'Giữ hàng', section: 'Outbound', description: 'Theo dõi tồn đã cam kết theo chứng từ và thời hạn.', access: 'always' },
   { path: '/inventory', label: 'Tồn kho', section: 'Inventory Control', description: 'Tồn hiện tại, lịch sử movement và báo cáo xuất-nhập-tồn.', access: 'always' },
   { path: '/inventory-reconciliation', label: 'Đối chiếu tồn kho', section: 'Inventory Control', description: 'So sánh operational balance với immutable ledger để phát hiện lệch.', access: 'always' },

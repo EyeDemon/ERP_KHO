@@ -16,6 +16,7 @@ export const blueprintDemoReadPermissions = [
   'purchase_order.read',
   'asn.read',
   'receipt.read',
+  'export_receipt.read',
   'receiving_discrepancy.read',
   'reason_code.read',
   'putaway.read',

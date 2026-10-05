@@ -7,6 +7,7 @@ using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Persistence;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Services;
@@ -42,8 +43,31 @@ public class StockReservationService(
     {
         var existing = await context.StockReservations.FirstOrDefaultAsync(x => x.SourceType == "ExportReceipt" && x.SourceId == exportReceiptId && x.ProductId == productId, cancellationToken);
         if (existing is not null) return existing;
-        return await ReserveCoreAsync("ExportReceipt", exportReceiptId, exportCode, warehouseId, productId, quantity, userId, DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes), cancellationToken);
+        try
+        {
+            return await ReserveCoreAsync("ExportReceipt", exportReceiptId, exportCode, warehouseId, productId, quantity, userId, DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes), cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new ConcurrencyException("Phiếu xuất đã được xử lý hoặc đang được xử lý bởi yêu cầu khác.", exception);
+        }
+        catch (DbUpdateException exception) when (IsExportReservationSourceConflict(exception))
+        {
+            throw new ConcurrencyException("Phiếu xuất đã được giữ hàng bởi yêu cầu đồng thời khác.", exception);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: 1205 })
+        {
+            throw new DeadlockException("Giao dịch giữ hàng bị deadlock.", exception);
+        }
+        catch (SqlException exception) when (exception.Number == 1205)
+        {
+            throw new DeadlockException("Giao dịch giữ hàng bị deadlock.", exception);
+        }
     }
+
+    private static bool IsExportReservationSourceConflict(DbUpdateException exception) =>
+        exception.InnerException is SqlException { Number: 2601 or 2627 } sql &&
+        sql.Message.Contains("IX_StockReservations_SourceType_SourceId_ProductId", StringComparison.OrdinalIgnoreCase);
 
     public async Task<StockReservation> GetExportReservationAsync(int exportReceiptId, int warehouseId, int productId, CancellationToken cancellationToken = default)
     {
@@ -75,18 +99,25 @@ public class StockReservationService(
         return reservation;
     }
 
-    public async Task ConsumeAsync(StockReservation reservation, int userId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<InventoryStockConsumption>> ConsumeAsync(StockReservation reservation, int userId, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
         if (reservation.ExpiresAt <= now || reservation.Status is not StockReservationStatus.Active and not StockReservationStatus.PartiallyConsumed)
             throw new ConcurrencyException("Reservation đã hết hạn hoặc không còn hiệu lực.");
         var remaining = reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity;
-        if (remaining <= 0 || !await stockRepository.TryConsumeReservationAsync(reservation.ProductId, reservation.WarehouseId, remaining, cancellationToken))
+        if (remaining <= 0)
+            throw new ConcurrencyException("Reservation không còn số lượng để tiêu thụ.");
+
+        var consumptions = await stockRepository.ConsumeReservationWithBreakdownAsync(
+            reservation.ProductId, reservation.WarehouseId, remaining, cancellationToken);
+        if (consumptions.Count == 0 || consumptions.Sum(x => x.Quantity) != remaining)
             throw new ConcurrencyException("Reservation không thể được tiêu thụ do dữ liệu tồn kho đã thay đổi.");
+
         reservation.ConsumedQuantity += remaining;
         reservation.ConsumedAt = now;
         reservation.Status = StockReservationStatus.Consumed;
         context.AuditLogs.Add(Audit(userId, "StockReservation.Consumed", reservation, $"Quantity: {remaining}"));
+        return consumptions;
     }
 
     public async Task ReleaseSourceAsync(string sourceType, int sourceId, int userId, string reason, CancellationToken cancellationToken = default)

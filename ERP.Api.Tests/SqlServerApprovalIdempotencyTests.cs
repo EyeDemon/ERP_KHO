@@ -35,6 +35,16 @@ public sealed class SqlServerApprovalIdempotencyTests
     public async Task PermissionMigrationRequiresCanonicalUnlockedBootstrapAndRollsBackFailure()
     {
         const string previous = "20260927014531_AddInboundPutawayLocationMovement";
+        const int canonicalPermissionCount = 80;
+        var outboundCodes = new[]
+        {
+            "export_receipt.read",
+            "export_receipt.create",
+            "export_receipt.update",
+            "export_receipt.approve",
+            "export_receipt.dispatch",
+            "export_receipt.cancel"
+        };
         foreach (var scenario in new[] { "missing", "inactive", "locked", "ambiguous", "valid" })
         {
             await using var owned = await ApprovalSafetyDatabase.CreateAsync(
@@ -66,14 +76,17 @@ public sealed class SqlServerApprovalIdempotencyTests
                 var before = await db.InventoryStocks.AsNoTracking().OrderBy(s => s.Id)
                     .Select(s => new { s.ProductId, s.WarehouseId, s.LocationId, s.Status, s.Quantity, s.ReservedQuantity }).ToListAsync();
                 await migrator.MigrateAsync();
-                Assert.Equal(74, await db.Permissions.CountAsync());
-                Assert.Equal(74, await db.RolePermissions.CountAsync(p => p.Role.RoleName == "Admin"));
+                Assert.Equal(canonicalPermissionCount, await db.Permissions.CountAsync());
+                Assert.Equal(canonicalPermissionCount, await db.RolePermissions.CountAsync(p => p.Role.RoleName == "Admin"));
+                Assert.Equal(outboundCodes.Length, await db.Permissions.CountAsync(p => outboundCodes.Contains(p.Code)));
+                Assert.Equal(outboundCodes.Length, await db.RolePermissions.CountAsync(p =>
+                    p.Role.RoleName == "Admin" && outboundCodes.Contains(p.Permission.Code)));
                 Assert.False(await db.RolePermissions.AnyAsync(p => p.Role.RoleName == "UnmappedFixture"));
                 // Owned fixture only, before any grant administration: exercise additive Down/Up.
                 await migrator.MigrateAsync(previous);
                 Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.tables WHERE name IN ('Permissions','RolePermissions')").SingleAsync());
                 await migrator.MigrateAsync();
-                Assert.Equal(74, await db.Permissions.CountAsync());
+                Assert.Equal(canonicalPermissionCount, await db.Permissions.CountAsync());
                 var after = await db.InventoryStocks.AsNoTracking().OrderBy(s => s.Id)
                     .Select(s => new { s.ProductId, s.WarehouseId, s.LocationId, s.Status, s.Quantity, s.ReservedQuantity }).ToListAsync();
                 Assert.Equal(before, after);

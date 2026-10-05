@@ -13,6 +13,8 @@ public class ExportReceiptDetailConfiguration : IEntityTypeConfiguration<ExportR
         builder.Property(x => x.Quantity).HasPrecision(18, 4);
         builder.Property(x => x.UnitPrice).HasPrecision(18, 2);
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.BaseUomCodeSnapshot).HasMaxLength(50);
+        builder.Property(x => x.BaseUomNameSnapshot).HasMaxLength(100);
 
         builder.HasOne(x => x.ExportReceipt)
                .WithMany(r => r.Details)
