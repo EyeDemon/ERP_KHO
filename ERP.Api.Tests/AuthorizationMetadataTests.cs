@@ -17,7 +17,7 @@ namespace ERP.Api.Tests
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
                 typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
-                typeof(PermissionsController) };
+                typeof(PermissionsController), typeof(ExportReceiptsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
             foreach (var controller in controllers)
@@ -128,30 +128,35 @@ namespace ERP.Api.Tests
                 .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.ReceiptComplete);
         }
 
-        [Fact]
-        public void ExportReceiptsController_Get_RequiresAllRoles()
+        [Theory]
+        [InlineData("GetAll", AppPermissions.ExportReceiptRead)]
+        [InlineData("GetById", AppPermissions.ExportReceiptRead)]
+        [InlineData("Create", AppPermissions.ExportReceiptCreate)]
+        [InlineData("Cancel", AppPermissions.ExportReceiptCancel)]
+        [InlineData("Approve", AppPermissions.ExportReceiptApprove)]
+        [InlineData("ApproveAndReserve", AppPermissions.ExportReceiptApprove)]
+        [InlineData("Dispatch", AppPermissions.ExportReceiptDispatch)]
+        public void ExportReceiptsController_UsesOutboundPermissions(string methodName, string expectedPermission)
         {
-            var classAttr = typeof(ExportReceiptsController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
+            var permissions = typeof(ExportReceiptsController).GetMethod(methodName)!
+                .GetCustomAttributes<PermissionAuthorizeAttribute>().Select(x => x.Permission);
+            permissions.Should().Contain(expectedPermission);
         }
 
         [Fact]
-        public void ExportReceiptsController_CreateCancel_RequiresAdminManagerOrStaff()
+        public void ExportReceiptsController_ApproveAndDispatch_IsPermissionProtectedButNoLongerRoleGated()
         {
-            var createMethod = typeof(ExportReceiptsController).GetMethod("Create");
-            var cancelMethod = typeof(ExportReceiptsController).GetMethod("Cancel");
-
-            createMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
-            cancelMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
+            var method = typeof(ExportReceiptsController).GetMethod("ApproveAndDispatch")!;
+            method.GetCustomAttributes<PermissionAuthorizeAttribute>().Select(x => x.Permission)
+                .Should().BeEquivalentTo(AppPermissions.ExportReceiptApprove, AppPermissions.ExportReceiptDispatch);
+            method.GetCustomAttributes<AuthorizeAttribute>()
+                .Should().OnlyContain(a => string.IsNullOrEmpty(a.Roles) && string.IsNullOrEmpty(a.Policy));
         }
 
         [Theory]
-        [InlineData(typeof(ExportReceiptsController), "Approve")]
-        [InlineData(typeof(ExportReceiptsController), "ApproveAndReserve")]
-        [InlineData(typeof(ExportReceiptsController), "ApproveAndDispatch")]
         [InlineData(typeof(StocktakesController), "Approve")]
         [InlineData(typeof(StockTransfersController), "Approve")]
-        public void ApprovalEndpoints_RequireCheckerPolicy(Type controllerType, string methodName)
+        public void LegacyApprovalEndpoints_RequireCheckerPolicy(Type controllerType, string methodName)
         {
             controllerType.GetMethod(methodName)!
                 .GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(ApprovalPolicies.Checker);
