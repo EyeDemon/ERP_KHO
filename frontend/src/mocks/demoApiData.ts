@@ -412,6 +412,22 @@ export const demoShipments = [
       },
     ],
   },
+  {
+    id: 7702, shipmentCode: 'SHIP-2026-7702', packingSessionId: 9902, packingSessionCode: 'PACK-2026-9902',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', sourceType: 'ExportReceipt', sourceId: 5109, sourceCode: 'EX-2026-5109',
+    status: 'Loaded', stagingLocationId: 1701, stagingLocationCode: 'STG-OUT-01', handlingUnitCount: 1, loadedHandlingUnitCount: 1,
+    dockAppointmentId: 1043, dockAppointmentCode: 'APT-2026-1043', dockId: 102, dockCode: 'D-02',
+    vehiclePlate: '50H-220.18', trailerPlate: null, sealNumber: 'SEAL-7702',
+    createdAt: '2026-10-06T03:06:00Z', stagedAt: '2026-10-06T03:08:00Z', loadingStartedAt: '2026-10-06T03:15:00Z', loadedAt: '2026-10-06T03:25:00Z',
+    dispatchedAt: null, dispatchedBy: null, rowVersion: 'AAAAAAAASHIP2',
+    handlingUnits: [
+      {
+        id: 7721, handlingUnitId: 9921, huCode: 'PALLET-9902-01', barcode: 'PALLET-9902-01', sscc: null,
+        type: 'Pallet', status: 'Loaded', sequence: 1, contentQuantity: 10,
+        assignedAt: '2026-10-06T03:06:00Z', stagedAt: '2026-10-06T03:08:00Z', loadedAt: '2026-10-06T03:22:00Z',
+      },
+    ],
+  },
 ];
 
 
@@ -533,5 +549,6 @@ export const demoPermissionCatalog = [
   { code: 'shipment.update', description: 'Cập nhật Shipment' },
   { code: 'shipment.stage', description: 'Đưa Shipment vào staging' },
   { code: 'shipment.load', description: 'Thực hiện Shipment loading' },
+  { code: 'shipment.dispatch', description: 'Xác nhận Shipment rời kho và ghi SHIP ledger' },
   { code: 'loading.execute', description: 'Thực hiện loading tại dock' },
 ];
