@@ -274,6 +274,26 @@ namespace ERP.Api.Tests
                 .Should().BeEquivalentTo(AppPermissions.ShipmentLoad, AppPermissions.LoadingExecute);
         }
 
+        [Theory]
+        [InlineData(typeof(SalesOrdersController), "List", AppPermissions.SalesOrderRead)]
+        [InlineData(typeof(SalesOrdersController), "Get", AppPermissions.SalesOrderRead)]
+        [InlineData(typeof(SalesOrdersController), "Create", AppPermissions.SalesOrderCreate)]
+        [InlineData(typeof(SalesOrdersController), "Hold", AppPermissions.SalesOrderHold)]
+        [InlineData(typeof(SalesOrdersController), "Release", AppPermissions.SalesOrderRelease)]
+        [InlineData(typeof(SalesOrdersController), "Cancel", AppPermissions.SalesOrderCancel)]
+        [InlineData(typeof(BackordersController), "List", AppPermissions.BackorderRead)]
+        [InlineData(typeof(BackordersController), "Get", AppPermissions.BackorderRead)]
+        [InlineData(typeof(BackordersController), "Reallocate", AppPermissions.BackorderManage)]
+        [InlineData(typeof(BackordersController), "Cancel", AppPermissions.BackorderManage)]
+        public void DemandAndBackorderEndpoints_RequireExactCapability(
+            Type controllerType,
+            string methodName,
+            string permission)
+        {
+            controllerType.GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
         [Fact]
         public void ReportsController_Get_RequiresAdminManagerOrViewer()
         {
