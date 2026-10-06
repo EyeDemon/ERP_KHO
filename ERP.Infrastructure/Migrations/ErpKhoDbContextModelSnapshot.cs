@@ -927,6 +927,11 @@ namespace ERP.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[ReferenceType] = 'StockTransfer'");
 
+                    b.HasIndex("ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InventoryTransactions_ShipmentReference")
+                        .HasFilter("[ReferenceType] = 'Shipment'");
+
                     b.ToTable("InventoryTransactions", (string)null);
                 });
 
@@ -2281,6 +2286,12 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("DockId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("DispatchedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DispatchedBy")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("LoadedAt")
                         .HasColumnType("datetime2");
 
@@ -2344,6 +2355,8 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("DockAppointmentId");
 
                     b.HasIndex("DockId");
+
+                    b.HasIndex("DispatchedBy");
 
                     b.HasIndex("PackingSessionId")
                         .IsUnique();
@@ -4431,6 +4444,11 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("DockId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("ERP.Domain.Entities.User", "DispatchedByUser")
+                        .WithMany()
+                        .HasForeignKey("DispatchedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.PackingSession", "PackingSession")
                         .WithOne()
                         .HasForeignKey("ERP.Domain.Entities.Shipment", "PackingSessionId")
@@ -4453,6 +4471,8 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Dock");
 
                     b.Navigation("DockAppointment");
+
+                    b.Navigation("DispatchedByUser");
 
                     b.Navigation("PackingSession");
 
