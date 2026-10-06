@@ -39,19 +39,26 @@ public sealed class SalesOrderBackorderService(
             accessible = [warehouseId.Value];
         }
 
-        var query = OrderQuery().AsNoTracking().Where(x => accessible.Contains(x.WarehouseId));
-        if (Enum.TryParse<SalesOrderStatus>(status, true, out var parsed))
-            query = query.Where(x => x.Status == parsed);
+        var parsedStatus = Enum.TryParse<SalesOrderStatus>(status, true, out var requestedStatus)
+            ? requestedStatus
+            : (SalesOrderStatus?)null;
 
-        var orders = await query
+        var orders = await OrderQuery().AsNoTracking()
+            .Where(x => accessible.Contains(x.WarehouseId))
             .OrderByDescending(x => x.CreatedAt)
             .ThenByDescending(x => x.Id)
-            .Take(100)
+            .Take(parsedStatus.HasValue ? 250 : 100)
             .ToListAsync(cancellationToken);
 
         var result = new List<SalesOrderListDto>(orders.Count);
         foreach (var order in orders)
-            result.Add(await BuildOrderDtoAsync(order, false, cancellationToken));
+        {
+            var dto = await BuildOrderDtoAsync(order, false, cancellationToken);
+            if (!parsedStatus.HasValue ||
+                string.Equals(dto.Status, parsedStatus.Value.ToString(), StringComparison.OrdinalIgnoreCase))
+                result.Add(dto);
+            if (result.Count == 100) break;
+        }
         return result;
     }
 
@@ -251,14 +258,15 @@ public sealed class SalesOrderBackorderService(
             accessible = [warehouseId.Value];
         }
 
-        var query = BackorderQuery().AsNoTracking().Where(x => accessible.Contains(x.WarehouseId));
-        if (Enum.TryParse<BackorderStatus>(status, true, out var parsed))
-            query = query.Where(x => x.Status == parsed);
+        var parsedStatus = Enum.TryParse<BackorderStatus>(status, true, out var requestedStatus)
+            ? requestedStatus
+            : (BackorderStatus?)null;
 
-        var rows = await query
+        var rows = await BackorderQuery().AsNoTracking()
+            .Where(x => accessible.Contains(x.WarehouseId))
             .OrderByDescending(x => x.CreatedAt)
             .ThenByDescending(x => x.Id)
-            .Take(250)
+            .Take(parsedStatus.HasValue ? 500 : 250)
             .ToListAsync(cancellationToken);
 
         var cache = new Dictionary<int, Dictionary<int, LineProgress>>();
@@ -271,7 +279,12 @@ public sealed class SalesOrderBackorderService(
                 progress = await BuildLineProgressAsync(order, cancellationToken);
                 cache[order.Id] = progress;
             }
-            result.Add(MapBackorder(row, progress));
+
+            var dto = MapBackorder(row, progress);
+            if (!parsedStatus.HasValue ||
+                string.Equals(dto.Status, parsedStatus.Value.ToString(), StringComparison.OrdinalIgnoreCase))
+                result.Add(dto);
+            if (result.Count == 250) break;
         }
         return result;
     }
