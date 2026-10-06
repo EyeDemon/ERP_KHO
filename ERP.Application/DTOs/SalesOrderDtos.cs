@@ -24,7 +24,7 @@ public sealed class SalesOrderStateCommandDto
     public string? Reason { get; set; }
 }
 
-public sealed class SalesOrderListDto
+public class SalesOrderListDto
 {
     public int Id { get; set; }
     public string OrderCode { get; set; } = string.Empty;
