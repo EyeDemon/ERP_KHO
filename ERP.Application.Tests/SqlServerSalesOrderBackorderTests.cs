@@ -249,6 +249,241 @@ public sealed class SqlServerSalesOrderBackorderTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task PartialShipment_PreservesBackorder_AndCancelOnlyCancelsRemainder()
+    {
+        var fixture = await CreateFixtureAsync(stockQuantity: 6m);
+        try
+        {
+            var order = await CreateOrderAsync(fixture, 10m);
+
+            SalesOrderDto released;
+            await using (var release = CreateContext())
+            {
+                released = await CreateDemandService(release, fixture.UserId).ReleaseSalesOrderAsync(order.Id, new()
+                {
+                    RowVersion = order.RowVersion
+                });
+            }
+
+            PickingTaskDto assigned;
+            await using (var assign = CreateContext())
+            {
+                var picking = CreatePickingService(assign, fixture.UserId);
+                var summary = (await picking.ListAsync(fixture.WarehouseId)).Single();
+                var detail = await picking.GetAsync(summary.Id);
+                assigned = await picking.AssignAsync(summary.Id, new PickingStateCommandDto
+                {
+                    AssignedUserId = fixture.UserId,
+                    RowVersion = detail.RowVersion!
+                });
+            }
+
+            PickingTaskDto started;
+            await using (var start = CreateContext())
+            {
+                started = await CreatePickingService(start, fixture.UserId).StartAsync(assigned.Id, new PickingStateCommandDto
+                {
+                    RowVersion = assigned.RowVersion!
+                });
+            }
+
+            PickingTaskDto picked;
+            await using (var pick = CreateContext())
+            {
+                picked = await CreatePickingService(pick, fixture.UserId).PickAsync(started.Id, new PickScanDto
+                {
+                    TaskLineId = started.Lines.Single().Id,
+                    LocationBarcode = fixture.LocationCode,
+                    ProductBarcode = fixture.ProductCode,
+                    Quantity = 6m,
+                    RowVersion = started.RowVersion!
+                });
+            }
+
+            await using (var completePick = CreateContext())
+            {
+                await CreatePickingService(completePick, fixture.UserId, withPacking: true).CompleteAsync(
+                    picked.Id,
+                    new PickingStateCommandDto { RowVersion = picked.RowVersion! });
+            }
+
+            PackingSessionDto packingSession;
+            await using (var readPacking = CreateContext())
+            {
+                var packing = CreatePackingService(readPacking, fixture.UserId);
+                var summary = (await packing.ListAsync(fixture.WarehouseId)).Single();
+                packingSession = await packing.GetAsync(summary.Id);
+            }
+
+            PackingSessionDto withHu;
+            await using (var createHu = CreateContext())
+            {
+                withHu = await CreatePackingService(createHu, fixture.UserId).CreateHandlingUnitAsync(
+                    packingSession.Id,
+                    new CreateHandlingUnitDto
+                    {
+                        Type = "Carton",
+                        HuCode = $"SO-HU-{fixture.Suffix}",
+                        Barcode = $"SO-HU-{fixture.Suffix}",
+                        RowVersion = packingSession.RowVersion!
+                    });
+            }
+
+            var hu = withHu.HandlingUnits.Single();
+            PackingSessionDto packedSession;
+            await using (var pack = CreateContext())
+            {
+                packedSession = await CreatePackingService(pack, fixture.UserId).PackAsync(
+                    packingSession.Id,
+                    new PackIntoHandlingUnitDto
+                    {
+                        HandlingUnitId = hu.Id,
+                        PickingTaskLineId = withHu.Lines.Single().PickingTaskLineId,
+                        ProductBarcode = fixture.ProductCode,
+                        Quantity = 6m,
+                        RowVersion = withHu.RowVersion!
+                    });
+            }
+
+            PackingSessionDto huClosed;
+            await using (var closeHu = CreateContext())
+            {
+                huClosed = await CreatePackingService(closeHu, fixture.UserId).CloseHandlingUnitAsync(
+                    packingSession.Id,
+                    hu.Id,
+                    new PackingStateCommandDto { RowVersion = packedSession.RowVersion! });
+            }
+
+            await using (var completePacking = CreateContext())
+            {
+                await CreatePackingService(completePacking, fixture.UserId, withShipment: true).CompleteAsync(
+                    packingSession.Id,
+                    new PackingStateCommandDto { RowVersion = huClosed.RowVersion! });
+            }
+
+            ShipmentDto staged;
+            int shipmentId;
+            await using (var stage = CreateContext())
+            {
+                var shipmentService = CreateShipmentService(stage, fixture.UserId);
+                var shipment = (await shipmentService.ListAsync(fixture.WarehouseId)).Single();
+                shipmentId = shipment.Id;
+                var detail = await shipmentService.GetAsync(shipmentId);
+                staged = await shipmentService.StageAsync(shipmentId, new StageShipmentDto
+                {
+                    StagingLocationCode = fixture.StagingLocationCode,
+                    RowVersion = detail.RowVersion!
+                });
+            }
+
+            int appointmentId;
+            await using (var dock = CreateContext())
+            {
+                appointmentId = await CreateOutboundAppointmentAsync(
+                    dock,
+                    fixture,
+                    DockAppointmentStatus.InService);
+            }
+
+            ShipmentDto loading;
+            await using (var startLoading = CreateContext())
+            {
+                loading = await CreateShipmentService(startLoading, fixture.UserId).StartLoadingAsync(
+                    shipmentId,
+                    new StartShipmentLoadingDto
+                    {
+                        DockAppointmentId = appointmentId,
+                        RowVersion = staged.RowVersion!
+                    });
+            }
+
+            ShipmentDto huLoaded;
+            await using (var load = CreateContext())
+            {
+                huLoaded = await CreateShipmentService(load, fixture.UserId).LoadHandlingUnitAsync(
+                    shipmentId,
+                    new LoadShipmentHandlingUnitDto
+                    {
+                        HandlingUnitBarcode = hu.Barcode,
+                        RowVersion = loading.RowVersion!
+                    });
+            }
+
+            ShipmentDto loaded;
+            await using (var completeLoading = CreateContext())
+            {
+                loaded = await CreateShipmentService(completeLoading, fixture.UserId).CompleteLoadingAsync(
+                    shipmentId,
+                    new CompleteShipmentLoadingDto
+                    {
+                        SealNumber = $"SO-SEAL-{fixture.Suffix}",
+                        RowVersion = huLoaded.RowVersion!
+                    });
+            }
+
+            await using (var dispatch = CreateContext())
+            {
+                await CreateShipmentService(dispatch, fixture.UserId).DispatchAsync(
+                    shipmentId,
+                    new ShipmentStateCommandDto { RowVersion = loaded.RowVersion! });
+            }
+
+            SalesOrderDto partiallyFulfilled;
+            await using (var readOrder = CreateContext())
+            {
+                partiallyFulfilled = await CreateDemandService(readOrder, fixture.UserId).GetSalesOrderAsync(order.Id);
+            }
+
+            partiallyFulfilled.Status.Should().Be(nameof(SalesOrderStatus.PartiallyFulfilled));
+            partiallyFulfilled.OrderedQuantity.Should().Be(10m);
+            partiallyFulfilled.ShippedQuantity.Should().Be(6m);
+            partiallyFulfilled.BackorderQuantity.Should().Be(4m);
+            partiallyFulfilled.CancelledQuantity.Should().Be(0m);
+            partiallyFulfilled.OpenQuantity.Should().Be(4m);
+            (partiallyFulfilled.ShippedQuantity + partiallyFulfilled.OpenQuantity + partiallyFulfilled.CancelledQuantity)
+                .Should().Be(partiallyFulfilled.OrderedQuantity);
+
+            SalesOrderDto cancelled;
+            await using (var cancel = CreateContext())
+            {
+                cancelled = await CreateDemandService(cancel, fixture.UserId).CancelSalesOrderAsync(order.Id, new()
+                {
+                    RowVersion = partiallyFulfilled.RowVersion,
+                    Reason = "Customer cancelled only the unshipped remainder"
+                });
+            }
+
+            cancelled.Status.Should().Be(nameof(SalesOrderStatus.Cancelled));
+            cancelled.OrderedQuantity.Should().Be(10m);
+            cancelled.ShippedQuantity.Should().Be(6m);
+            cancelled.BackorderQuantity.Should().Be(0m);
+            cancelled.CancelledQuantity.Should().Be(4m);
+            cancelled.OpenQuantity.Should().Be(0m);
+            (cancelled.ShippedQuantity + cancelled.OpenQuantity + cancelled.CancelledQuantity)
+                .Should().Be(cancelled.OrderedQuantity);
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+            stock.Quantity.Should().Be(0m);
+            stock.ReservedQuantity.Should().Be(0m);
+
+            var shipLedger = await verify.InventoryTransactions.AsNoTracking()
+                .Where(x => x.ReferenceType == "Shipment" &&
+                            x.ReferenceId == shipmentId &&
+                            x.TransactionType == TransactionType.Ship)
+                .ToListAsync();
+            shipLedger.Should().ContainSingle();
+            shipLedger.Single().Quantity.Should().Be(6m);
+
+            var backorder = await verify.Backorders.AsNoTracking().SingleAsync();
+            backorder.Status.Should().Be(BackorderStatus.Cancelled);
+            backorder.CancelledQuantity.Should().Be(4m);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     private static async Task<SalesOrderDto> CreateOrderAsync(Fixture fixture, decimal quantity)
     {
         await using var db = CreateContext();
@@ -296,10 +531,88 @@ public sealed class SqlServerSalesOrderBackorderTests
             current);
     }
 
-    private static PickingService CreatePickingService(ErpKhoDbContext db, int userId)
+    private static PickingService CreatePickingService(
+        ErpKhoDbContext db,
+        int userId,
+        bool withPacking = false)
     {
         var current = new CurrentUser(userId);
-        return new PickingService(db, new WarehouseAuthorizationService(db, current), current);
+        return new PickingService(
+            db,
+            new WarehouseAuthorizationService(db, current),
+            current,
+            withPacking ? new PackingSessionIntegration(db) : null);
+    }
+
+    private static PackingService CreatePackingService(
+        ErpKhoDbContext db,
+        int userId,
+        bool withShipment = false)
+    {
+        var current = new CurrentUser(userId);
+        return new PackingService(
+            db,
+            new WarehouseAuthorizationService(db, current),
+            current,
+            new PackingSessionIntegration(db),
+            withShipment ? new ShipmentIntegration(db) : null);
+    }
+
+    private static ShipmentService CreateShipmentService(ErpKhoDbContext db, int userId)
+    {
+        var current = new CurrentUser(userId);
+        return new ShipmentService(
+            db,
+            new WarehouseAuthorizationService(db, current),
+            current,
+            new StockReservationService(
+                db,
+                new InventoryStockRepository(db),
+                new UnitOfWork(db),
+                new WarehouseAuthorizationService(db, current),
+                current,
+                new StockReservationOptions()));
+    }
+
+    private static async Task<int> CreateOutboundAppointmentAsync(
+        ErpKhoDbContext db,
+        Fixture fixture,
+        DockAppointmentStatus status)
+    {
+        var dock = new Dock
+        {
+            WarehouseId = fixture.WarehouseId,
+            Code = $"SO-DOCK-{fixture.Suffix}",
+            Name = "Sales order outbound dock",
+            SupportsInbound = false,
+            SupportsOutbound = true,
+            IsActive = true
+        };
+        db.Docks.Add(dock);
+        await db.SaveChangesAsync();
+
+        var now = DateTime.UtcNow;
+        var appointment = new DockAppointment
+        {
+            WarehouseId = fixture.WarehouseId,
+            Code = $"SO-APT-{fixture.Suffix}",
+            Direction = DockAppointmentDirection.Outbound,
+            Status = status,
+            PlannedStartUtc = now.AddMinutes(-30),
+            PlannedEndUtc = now.AddHours(2),
+            VehiclePlate = "51C-54321",
+            TrailerPlate = "SO-TR-100",
+            DockId = dock.Id,
+            DockAssignedAtUtc = now.AddMinutes(-20),
+            ServiceStartedAtUtc = status == DockAppointmentStatus.InService ? now.AddMinutes(-10) : null,
+            CreatedBy = fixture.UserId,
+            CreatedAtUtc = now.AddHours(-1),
+            UpdatedBy = fixture.UserId,
+            UpdatedAtUtc = now
+        };
+        db.DockAppointments.Add(appointment);
+        await db.SaveChangesAsync();
+        return appointment.Id;
     }
 
     private static async Task<Fixture> CreateFixtureAsync(decimal stockQuantity)
@@ -337,7 +650,18 @@ public sealed class SqlServerSalesOrderBackorderTests
             IsPickable = true,
             CreatedBy = user.Id
         };
-        db.Add(location);
+        var stagingLocation = new WarehouseLocation
+        {
+            WarehouseId = warehouse.Id,
+            Code = $"SOSTG{suffix}",
+            Name = "Sales order outbound staging",
+            LocationType = WarehouseLocationType.Staging,
+            IsActive = true,
+            IsPickable = false,
+            IsReceivable = false,
+            CreatedBy = user.Id
+        };
+        db.AddRange(location, stagingLocation);
         await db.SaveChangesAsync();
 
         db.UserWarehouses.Add(new UserWarehouse
@@ -363,14 +687,35 @@ public sealed class SqlServerSalesOrderBackorderTests
             customer.Id,
             unit.Id,
             product.Id,
+            product.Code,
             warehouse.Id,
-            location.Id);
+            location.Id,
+            location.Code,
+            stagingLocation.Id,
+            stagingLocation.Code);
     }
 
     private static async Task CleanupAsync(Fixture fixture)
     {
         await using var db = CreateContext();
         await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
+        await db.InventoryTransactions
+            .Where(x => x.WarehouseId == fixture.WarehouseId && x.ProductId == fixture.ProductId)
+            .ExecuteDeleteAsync();
+        await db.ShipmentHandlingUnits
+            .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)
+            .ExecuteDeleteAsync();
+        await db.Shipments.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+        await db.DockAppointmentEvents
+            .Where(x => x.Appointment.WarehouseId == fixture.WarehouseId)
+            .ExecuteDeleteAsync();
+        await db.DockAppointments.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+        await db.Docks.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+        await db.HandlingUnitContents
+            .Where(x => x.HandlingUnit.WarehouseId == fixture.WarehouseId)
+            .ExecuteDeleteAsync();
+        await db.HandlingUnits.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+        await db.PackingSessions.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.ShortPickExceptions
             .Where(x => x.PickingTaskLine.PickingTask.WarehouseId == fixture.WarehouseId)
             .ExecuteDeleteAsync();
@@ -412,6 +757,10 @@ public sealed class SqlServerSalesOrderBackorderTests
         int CustomerId,
         int UnitId,
         int ProductId,
+        string ProductCode,
         int WarehouseId,
-        int LocationId);
+        int LocationId,
+        string LocationCode,
+        int StagingLocationId,
+        string StagingLocationCode);
 }
