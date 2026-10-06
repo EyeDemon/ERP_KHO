@@ -63,12 +63,16 @@ public sealed class PickingTaskIntegration(ErpKhoDbContext context) : IPickingTa
             ?? throw new ConcurrencyException("Không tìm thấy reservation để tạo nhiệm vụ Picking.");
 
         List<StockReservation> reservations;
+        PickingTask? existingTask = null;
         if (seed.SourceId.HasValue)
         {
-            if (await context.PickingTasks.AnyAsync(
-                    x => x.SourceType == seed.SourceType && x.SourceId == seed.SourceId,
-                    cancellationToken))
-                return;
+            existingTask = await context.PickingTasks
+                .Include(x => x.Lines)
+                .SingleOrDefaultAsync(
+                    x => x.SourceType == seed.SourceType &&
+                         x.SourceId == seed.SourceId &&
+                         x.Status != PickingTaskStatus.Cancelled,
+                    cancellationToken);
 
             reservations = await context.StockReservations
                 .Where(x => x.SourceType == seed.SourceType &&
@@ -115,6 +119,47 @@ public sealed class PickingTaskIntegration(ErpKhoDbContext context) : IPickingTa
         }
 
         if (allocations.Count == 0) return;
+
+        if (existingTask is not null)
+        {
+            if (existingTask.Status is not PickingTaskStatus.Open and not PickingTaskStatus.Assigned)
+                return;
+
+            var existingAllocationIds = existingTask.Lines.Select(x => x.AllocationId).ToHashSet();
+            var additions = allocations.Where(x => !existingAllocationIds.Contains(x.Id)).ToList();
+            if (additions.Count == 0) return;
+
+            var nextSequence = existingTask.Lines.Count == 0 ? 0 : existingTask.Lines.Max(x => x.Sequence);
+            foreach (var allocation in additions)
+            {
+                existingTask.Lines.Add(new PickingTaskLine
+                {
+                    AllocationId = allocation.Id,
+                    ProductId = allocation.ProductId,
+                    SourceLocationId = allocation.LocationId,
+                    RequestedQuantity = allocation.Quantity,
+                    PickedQuantity = 0,
+                    Sequence = ++nextSequence,
+                    Status = PickingTaskLineStatus.Open
+                });
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+            context.AuditLogs.Add(new AuditLog
+            {
+                UserId = actorId,
+                Action = "PickingTask.ExpandedForRecoveredDemand",
+                EntityName = "PickingTask",
+                EntityId = existingTask.Id,
+                WarehouseId = existingTask.WarehouseId,
+                Timestamp = DateTime.UtcNow,
+                NewValues = $"AddedLines: {additions.Count}; Source: {existingTask.SourceType}/{existingTask.SourceId}",
+                Result = "Success",
+                Severity = "Information"
+            });
+            await context.SaveChangesAsync(cancellationToken);
+            return;
+        }
 
         var now = DateTime.UtcNow;
         var task = new PickingTask

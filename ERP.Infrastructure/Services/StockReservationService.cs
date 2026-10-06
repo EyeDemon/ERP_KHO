@@ -66,6 +66,109 @@ public class StockReservationService(
         }
     }
 
+    public async Task<StockReservation> ReserveForSourceAsync(
+        string sourceType,
+        int sourceId,
+        string sourceCode,
+        int warehouseId,
+        int productId,
+        decimal quantity,
+        int userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sourceType) || sourceId <= 0 || string.IsNullOrWhiteSpace(sourceCode) || quantity <= 0)
+            throw new BusinessRuleException("Nguồn reservation và số lượng phải hợp lệ.");
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+
+        var existing = await context.StockReservations.FirstOrDefaultAsync(
+            x => x.SourceType == sourceType &&
+                 x.SourceId == sourceId &&
+                 x.ProductId == productId,
+            cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.WarehouseId == warehouseId &&
+                existing.Quantity == quantity &&
+                existing.Status is StockReservationStatus.Active or
+                    StockReservationStatus.PartiallyAllocated or
+                    StockReservationStatus.Allocated)
+                return existing;
+            throw new ConcurrencyException("Nguồn demand đã có reservation khác với yêu cầu hiện tại.");
+        }
+
+        try
+        {
+            return await ReserveCoreAsync(
+                sourceType.Trim(),
+                sourceId,
+                sourceCode.Trim(),
+                warehouseId,
+                productId,
+                quantity,
+                userId,
+                DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes),
+                cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: 2601 or 2627 })
+        {
+            throw new ConcurrencyException("Nguồn demand đã được giữ hàng bởi yêu cầu đồng thời khác.", exception);
+        }
+    }
+
+    public async Task<StockReservation> IncreaseSourceReservationAsync(
+        string sourceType,
+        int sourceId,
+        string sourceCode,
+        int warehouseId,
+        int productId,
+        decimal additionalQuantity,
+        int userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (additionalQuantity <= 0)
+            throw new BusinessRuleException("Số lượng bổ sung reservation phải lớn hơn 0.");
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+
+        var reservation = await context.StockReservations.SingleOrDefaultAsync(
+            x => x.SourceType == sourceType &&
+                 x.SourceId == sourceId &&
+                 x.ProductId == productId,
+            cancellationToken);
+        if (reservation is null)
+            return await ReserveForSourceAsync(
+                sourceType,
+                sourceId,
+                sourceCode,
+                warehouseId,
+                productId,
+                additionalQuantity,
+                userId,
+                cancellationToken);
+
+        if (reservation.WarehouseId != warehouseId)
+            throw new ConcurrencyException("Reservation nguồn không cùng kho.");
+        if (reservation.ExpiresAt <= DateTime.UtcNow)
+            throw new ConcurrencyException("Reservation nguồn đã hết hạn.");
+        if (reservation.Status is not StockReservationStatus.Active and
+            not StockReservationStatus.PartiallyAllocated and
+            not StockReservationStatus.Allocated)
+            throw new ConcurrencyException("Reservation nguồn không còn có thể tăng số lượng.");
+
+        if (!await stockRepository.TryReserveAsync(productId, warehouseId, additionalQuantity, cancellationToken))
+            throw new ConcurrencyException("Không đủ tồn khả dụng để bổ sung reservation.");
+
+        reservation.Quantity += additionalQuantity;
+        reservation.ExpiresAt = DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes);
+        UpdateActiveReservationStatus(reservation);
+        context.AuditLogs.Add(Audit(
+            userId,
+            "StockReservation.Increased",
+            reservation,
+            $"AdditionalQuantity: {additionalQuantity}; Source: {sourceType}/{sourceId}"));
+        await context.SaveChangesAsync(cancellationToken);
+        return reservation;
+    }
+
     private static bool IsExportReservationSourceConflict(DbUpdateException exception) =>
         exception.InnerException is SqlException { Number: 2601 or 2627 } sql &&
         sql.Message.Contains("IX_StockReservations_SourceType_SourceId_ProductId", StringComparison.OrdinalIgnoreCase);

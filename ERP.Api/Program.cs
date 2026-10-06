@@ -187,6 +187,8 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentIntegration>(sp =
 builder.Services.AddScoped<ERP.Infrastructure.Services.ShipmentService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.SalesOrderBackorderService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ISalesOrderBackorderService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.SalesOrderBackorderService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();

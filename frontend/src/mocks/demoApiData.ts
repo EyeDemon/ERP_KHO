@@ -446,6 +446,54 @@ export const demoShipments = [
   },
 ];
 
+export const demoSalesOrders = [
+  {
+    id: 88001, orderCode: 'SO-2026-88001', externalOrderId: 'WEB-ORDER-88001',
+    customerId: 2, customerCode: 'CUS-0002', customerName: 'Công ty Minh An',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', requestedShipDate: '2026-10-08T00:00:00Z',
+    priority: 20, shippingMethod: 'Standard', status: 'Released',
+    orderedQuantity: 100, reservedQuantity: 70, allocatedQuantity: 70, pickedQuantity: 30,
+    shippedQuantity: 20, backorderQuantity: 30, cancelledQuantity: 0, openQuantity: 80,
+    createdAt: '2026-10-06T04:00:00Z', releasedAt: '2026-10-06T04:05:00Z', rowVersion: 'AAAAAAAASO01',
+    lines: [
+      {
+        id: 88101, externalLineId: '1', productId: 1, productCode: 'SKU-1001',
+        productName: 'Cà phê Arabica 500g', uomCode: 'GOI', orderedQuantity: 100,
+        reservedQuantity: 70, allocatedQuantity: 70, pickedQuantity: 30, shippedQuantity: 20,
+        backorderQuantity: 30, cancelledQuantity: 0, openQuantity: 80,
+      },
+    ],
+  },
+  {
+    id: 88002, orderCode: 'SO-2026-88002', externalOrderId: 'B2B-ORDER-88002',
+    customerId: 2, customerCode: 'CUS-0002', customerName: 'Công ty Minh An',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', requestedShipDate: '2026-10-06T00:00:00Z',
+    priority: 10, shippingMethod: 'Express', status: 'Fulfilled',
+    orderedQuantity: 24, reservedQuantity: 0, allocatedQuantity: 0, pickedQuantity: 24,
+    shippedQuantity: 24, backorderQuantity: 0, cancelledQuantity: 0, openQuantity: 0,
+    createdAt: '2026-10-05T02:00:00Z', releasedAt: '2026-10-05T02:05:00Z', rowVersion: 'AAAAAAAASO02',
+    lines: [
+      {
+        id: 88102, externalLineId: '1', productId: 1, productCode: 'SKU-1001',
+        productName: 'Cà phê Arabica 500g', uomCode: 'GOI', orderedQuantity: 24,
+        reservedQuantity: 0, allocatedQuantity: 0, pickedQuantity: 24, shippedQuantity: 24,
+        backorderQuantity: 0, cancelledQuantity: 0, openQuantity: 0,
+      },
+    ],
+  },
+];
+
+export const demoBackorders = [
+  {
+    id: 89001, backorderCode: 'BO-2026-89001', salesOrderId: 88001, orderCode: 'SO-2026-88001',
+    externalOrderId: 'WEB-ORDER-88001', salesOrderLineId: 88101, warehouseId: 1, warehouseName: 'DC Hồ Chí Minh',
+    productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g',
+    orderedQuantity: 100, quantity: 30, recoveredQuantity: 0, cancelledQuantity: 0,
+    remainingQuantity: 30, status: 'Open', createdAt: '2026-10-06T04:05:00Z', updatedAt: null,
+    rowVersion: 'AAAAAAAABO01',
+  },
+];
+
 export const demoStocktakes = [
   { id: 142, code: 'CC-2026-0142', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 0, note: 'Cycle count khu A', createdBy: 101, createdByName: 'Trần Quốc Bảo', createdAt: '2026-10-03T08:00:00Z', detailCount: 1, details: [{ id: 1, stocktakeId: 142, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', unitName: 'Gói', systemQuantity: 1250, actualQuantity: 1248, differenceQuantity: -2, note: 'Recount accepted' }] },
 ];
@@ -566,4 +614,13 @@ export const demoPermissionCatalog = [
   { code: 'shipment.load', description: 'Thực hiện Shipment loading' },
   { code: 'shipment.dispatch', description: 'Dispatch Shipment và ghi SHIP ledger' },
   { code: 'loading.execute', description: 'Thực hiện loading tại dock' },
+  { code: 'sales_order.read', description: 'Xem Sales Order' },
+  { code: 'sales_order.create', description: 'Tạo Sales Order' },
+  { code: 'sales_order.update', description: 'Cập nhật Sales Order' },
+  { code: 'sales_order.hold', description: 'Hold Sales Order' },
+  { code: 'sales_order.release', description: 'Release Sales Order' },
+  { code: 'sales_order.cancel', description: 'Hủy Sales Order' },
+  { code: 'sales_order.close', description: 'Đóng Sales Order' },
+  { code: 'backorder.read', description: 'Xem Backorder' },
+  { code: 'backorder.manage', description: 'Quản lý Backorder' },
 ];

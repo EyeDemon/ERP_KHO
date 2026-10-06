@@ -22,6 +22,8 @@ export const blueprintDemoReadPermissions = [
   'packing.read',
   'handling_unit.read',
   'shipment.read',
+  'sales_order.read',
+  'backorder.read',
   'receiving_discrepancy.read',
   'reason_code.read',
   'putaway.read',

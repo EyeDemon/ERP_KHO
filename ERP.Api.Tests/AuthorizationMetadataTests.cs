@@ -16,7 +16,7 @@ namespace ERP.Api.Tests
             var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController), typeof(PurchaseOrdersController), typeof(AsnsController),
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
-                typeof(BusinessPartnersController), typeof(ExportReceiptsController), typeof(StockAllocationsController), typeof(PickingTasksController), typeof(PackingSessionsController), typeof(HandlingUnitsController), typeof(ShipmentsController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
+                typeof(BusinessPartnersController), typeof(ExportReceiptsController), typeof(StockAllocationsController), typeof(PickingTasksController), typeof(PackingSessionsController), typeof(HandlingUnitsController), typeof(ShipmentsController), typeof(SalesOrdersController), typeof(BackordersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
                 typeof(PermissionsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
@@ -272,6 +272,26 @@ namespace ERP.Api.Tests
                 .GetCustomAttributes<PermissionAuthorizeAttribute>()
                 .Select(x => x.Permission)
                 .Should().BeEquivalentTo(AppPermissions.ShipmentLoad, AppPermissions.LoadingExecute);
+        }
+
+        [Theory]
+        [InlineData(typeof(SalesOrdersController), "List", AppPermissions.SalesOrderRead)]
+        [InlineData(typeof(SalesOrdersController), "Get", AppPermissions.SalesOrderRead)]
+        [InlineData(typeof(SalesOrdersController), "Create", AppPermissions.SalesOrderCreate)]
+        [InlineData(typeof(SalesOrdersController), "Hold", AppPermissions.SalesOrderHold)]
+        [InlineData(typeof(SalesOrdersController), "Release", AppPermissions.SalesOrderRelease)]
+        [InlineData(typeof(SalesOrdersController), "Cancel", AppPermissions.SalesOrderCancel)]
+        [InlineData(typeof(BackordersController), "List", AppPermissions.BackorderRead)]
+        [InlineData(typeof(BackordersController), "Get", AppPermissions.BackorderRead)]
+        [InlineData(typeof(BackordersController), "Reallocate", AppPermissions.BackorderManage)]
+        [InlineData(typeof(BackordersController), "Cancel", AppPermissions.BackorderManage)]
+        public void DemandAndBackorderEndpoints_RequireExactCapability(
+            Type controllerType,
+            string methodName,
+            string permission)
+        {
+            controllerType.GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
         }
 
         [Fact]
