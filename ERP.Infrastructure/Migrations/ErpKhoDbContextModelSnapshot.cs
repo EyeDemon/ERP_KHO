@@ -927,7 +927,7 @@ namespace ERP.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[ReferenceType] = 'StockTransfer'");
 
-                    b.HasIndex("ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId")
+                    b.HasIndex("ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId", "InventoryStatus")
                         .IsUnique()
                         .HasDatabaseName("IX_InventoryTransactions_ShipmentReference")
                         .HasFilter("[ReferenceType] = 'Shipment'");
