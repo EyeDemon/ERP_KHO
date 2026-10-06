@@ -24,8 +24,7 @@ public sealed class SalesOrderBackorderService(
     [
         StockAllocationStatus.Active,
         StockAllocationStatus.Picking,
-        StockAllocationStatus.Picked,
-        StockAllocationStatus.Consumed
+        StockAllocationStatus.Picked
     ];
 
     public async Task<IReadOnlyList<SalesOrderListDto>> ListSalesOrdersAsync(
@@ -566,7 +565,9 @@ public sealed class SalesOrderBackorderService(
                 ? 0m
                 : Math.Max(0m, backorder.Quantity - backorder.RecoveredQuantity - backorder.CancelledQuantity);
             result[line.ProductId] = new LineProgress(
-                reservation?.Quantity ?? 0m,
+                reservation is null
+                    ? 0m
+                    : Math.Max(0m, reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity),
                 allocated.GetValueOrDefault(line.ProductId),
                 picked.GetValueOrDefault(line.ProductId),
                 shipped.GetValueOrDefault(line.ProductId),
