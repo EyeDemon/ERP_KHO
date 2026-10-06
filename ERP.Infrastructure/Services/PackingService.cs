@@ -338,7 +338,9 @@ public sealed class PackingService(
             if (packed != line.PickedQuantity)
                 throw new ConcurrencyException("Packing content không còn khớp số lượng đã Picking.");
         }
-        if (session.HandlingUnits
+        var shipmentExists = await context.Shipments.AsNoTracking()
+            .AnyAsync(x => x.PackingSessionId == session.Id, cancellationToken);
+        if (!shipmentExists && session.HandlingUnits
             .Where(x => x.Status != HandlingUnitStatus.Cancelled)
             .Any(x => x.Status != HandlingUnitStatus.Closed))
             throw new ConcurrencyException("Handling Unit chưa được đóng đầy đủ.");
