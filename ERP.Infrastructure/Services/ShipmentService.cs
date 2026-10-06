@@ -321,6 +321,22 @@ public sealed class ShipmentService(
             shipment.Status = ShipmentStatus.Dispatched;
             shipment.DispatchedAt = dispatchedAt;
             shipment.DispatchedBy = currentUser.UserId;
+
+            if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
+            {
+                var receipt = await context.ExportReceipts.SingleOrDefaultAsync(
+                    x => x.Id == shipment.SourceId.Value,
+                    token);
+                if (receipt is null)
+                    throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Không tìm thấy phiếu xuất nguồn của Shipment.");
+                if (receipt.Status != ReceiptStatus.Approved)
+                    throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Phiếu xuất nguồn không còn ở trạng thái APPROVED.");
+
+                receipt.Status = ReceiptStatus.Dispatched;
+                receipt.DispatchedAt = dispatchedAt;
+                receipt.DispatchedBy = currentUser.UserId;
+            }
+
             AddAudit(
                 "Shipment.Dispatched",
                 shipment,
@@ -332,29 +348,13 @@ public sealed class ShipmentService(
         int sourceId,
         CancellationToken cancellationToken = default)
     {
-        var shipment = await Query().AsNoTracking().SingleOrDefaultAsync(
+        var shipmentExists = await context.Shipments.AsNoTracking().AnyAsync(
             x => x.SourceType == sourceType && x.SourceId == sourceId,
             cancellationToken);
-        if (shipment is null) return;
+        if (!shipmentExists) return;
 
-        if (shipment.Status != ShipmentStatus.Loaded)
-            throw new ConcurrencyException("Shipment của chứng từ chưa ở trạng thái LOADED.");
-
-        if (shipment.HandlingUnits.Count == 0 || shipment.HandlingUnits.Any(x => !x.LoadedAt.HasValue))
-            throw new ConcurrencyException("Shipment chưa load đủ Handling Unit.");
-
-        var active = ActivePackingHus(shipment);
-        try
-        {
-            ValidateAssignedRoots(shipment, active);
-        }
-        catch (BusinessRuleException ex)
-        {
-            throw new ConcurrencyException("Shipment Handling Unit không còn khớp Packing session.", ex);
-        }
-
-        if (active.Any(x => x.Status != HandlingUnitStatus.Loaded))
-            throw new ConcurrencyException("Shipment Handling Unit hierarchy chưa ở trạng thái LOADED.");
+        throw new ConcurrencyException(
+            "Chứng từ đã đi vào canonical Shipment workflow. Hãy dispatch tại Shipment để tránh double inventory movement.");
     }
 
     private async Task<ShipmentDto> MutateAsync(
