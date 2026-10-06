@@ -16,7 +16,7 @@ namespace ERP.Api.Tests
             var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController), typeof(PurchaseOrdersController), typeof(AsnsController),
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
-                typeof(BusinessPartnersController), typeof(ExportReceiptsController), typeof(StockAllocationsController), typeof(PickingTasksController), typeof(PackingSessionsController), typeof(HandlingUnitsController), typeof(ShipmentsController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
+                typeof(BusinessPartnersController), typeof(ExportReceiptsController), typeof(StockAllocationsController), typeof(PickingTasksController), typeof(PackingSessionsController), typeof(HandlingUnitsController), typeof(ShipmentsController), typeof(SalesOrdersController), typeof(BackordersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
                 typeof(PermissionsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
