@@ -50,6 +50,7 @@ public sealed class SqlServerShipmentLoadingTests
         try
         {
             var prepared = await PreparePackedNestedShipmentAsync(fixture);
+            var canonicalSource = await AssignCanonicalExportSourceAsync(prepared.ShipmentId, fixture);
             ShipmentDto staged;
             await using (var stage = CreateContext())
             {
@@ -124,11 +125,11 @@ public sealed class SqlServerShipmentLoadingTests
             await using (var readiness = CreateContext())
             {
                 await CreatePackingService(readiness, fixture.UserId).EnsureSourceReadyAsync(
-                    loaded.SourceType,
-                    loaded.SourceId!.Value);
+                    canonicalSource.SourceType,
+                    canonicalSource.SourceId);
                 await CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
-                    loaded.SourceType,
-                    loaded.SourceId!.Value);
+                    canonicalSource.SourceType,
+                    canonicalSource.SourceId);
             }
 
             await using var verify = CreateContext();
@@ -148,6 +149,7 @@ public sealed class SqlServerShipmentLoadingTests
         try
         {
             var prepared = await PreparePackedNestedShipmentAsync(fixture);
+            var canonicalSource = await AssignCanonicalExportSourceAsync(prepared.ShipmentId, fixture);
             ShipmentDto staged;
             await using (var stage = CreateContext())
             {
@@ -162,13 +164,13 @@ public sealed class SqlServerShipmentLoadingTests
 
             await using var db = CreateContext();
             await CreatePackingService(db, fixture.UserId).EnsureSourceReadyAsync(
-                staged.SourceType,
-                staged.SourceId!.Value);
+                canonicalSource.SourceType,
+                canonicalSource.SourceId);
 
             var service = CreateShipmentService(db, fixture.UserId);
             await FluentActions.Awaiting(() => service.EnsureSourceReadyAsync(
-                    staged.SourceType,
-                    staged.SourceId!.Value))
+                    canonicalSource.SourceType,
+                    canonicalSource.SourceId))
                 .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
                 .WithMessage("*chưa ở trạng thái LOADED*");
         }
@@ -259,6 +261,28 @@ public sealed class SqlServerShipmentLoadingTests
             }
         }
         finally { await CleanupAsync(fixture); }
+    }
+
+    private static async Task<(string SourceType, int SourceId)> AssignCanonicalExportSourceAsync(
+        int shipmentId,
+        Fixture fixture)
+    {
+        const string sourceType = "ExportReceipt";
+        var sourceId = shipmentId + 1_000_000;
+        await using var db = CreateContext();
+        var shipment = await db.Shipments
+            .Include(x => x.PackingSession)
+            .ThenInclude(x => x.PickingTask)
+            .SingleAsync(x => x.Id == shipmentId);
+        var sourceCode = $"EXP-{fixture.Suffix}";
+        shipment.SourceType = sourceType;
+        shipment.SourceId = sourceId;
+        shipment.SourceCode = sourceCode;
+        shipment.PackingSession.PickingTask.SourceType = sourceType;
+        shipment.PackingSession.PickingTask.SourceId = sourceId;
+        shipment.PackingSession.PickingTask.SourceCode = sourceCode;
+        await db.SaveChangesAsync();
+        return (sourceType, sourceId);
     }
 
     private static async Task<Prepared> PreparePackedNestedShipmentAsync(Fixture fixture)
