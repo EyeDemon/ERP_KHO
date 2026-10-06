@@ -436,6 +436,15 @@ public sealed class SqlServerSalesOrderBackorderTests
             }
 
             partiallyFulfilled.Status.Should().Be(nameof(SalesOrderStatus.PartiallyFulfilled));
+
+            await using (var filtered = CreateContext())
+            {
+                var rows = await CreateDemandService(filtered, fixture.UserId).ListSalesOrdersAsync(
+                    fixture.WarehouseId,
+                    nameof(SalesOrderStatus.PartiallyFulfilled));
+                rows.Should().ContainSingle(x => x.Id == order.Id);
+            }
+
             partiallyFulfilled.OrderedQuantity.Should().Be(10m);
             partiallyFulfilled.ShippedQuantity.Should().Be(6m);
             partiallyFulfilled.BackorderQuantity.Should().Be(4m);
