@@ -268,21 +268,41 @@ public sealed class SqlServerShipmentLoadingTests
         Fixture fixture)
     {
         const string sourceType = "ExportReceipt";
-        var sourceId = shipmentId + 1_000_000;
         await using var db = CreateContext();
+        var receipt = new ExportReceipt
+        {
+            Code = $"EXP-{fixture.Suffix}",
+            WarehouseId = fixture.WarehouseId,
+            Status = ReceiptStatus.Approved,
+            DispatchMode = ExportDispatchMode.RequireSeparateDispatch,
+            CreatedBy = fixture.UserId,
+            ApprovedBy = fixture.UserId,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-30),
+            ApprovedAt = DateTime.UtcNow.AddMinutes(-20),
+            Details =
+            [
+                new ExportReceiptDetail
+                {
+                    ProductId = fixture.ProductId,
+                    Quantity = 10
+                }
+            ]
+        };
+        db.ExportReceipts.Add(receipt);
+        await db.SaveChangesAsync();
+
         var shipment = await db.Shipments
             .Include(x => x.PackingSession)
             .ThenInclude(x => x.PickingTask)
             .SingleAsync(x => x.Id == shipmentId);
-        var sourceCode = $"EXP-{fixture.Suffix}";
         shipment.SourceType = sourceType;
-        shipment.SourceId = sourceId;
-        shipment.SourceCode = sourceCode;
+        shipment.SourceId = receipt.Id;
+        shipment.SourceCode = receipt.Code;
         shipment.PackingSession.PickingTask.SourceType = sourceType;
-        shipment.PackingSession.PickingTask.SourceId = sourceId;
-        shipment.PackingSession.PickingTask.SourceCode = sourceCode;
+        shipment.PackingSession.PickingTask.SourceId = receipt.Id;
+        shipment.PackingSession.PickingTask.SourceCode = receipt.Code;
         await db.SaveChangesAsync();
-        return (sourceType, sourceId);
+        return (sourceType, receipt.Id);
     }
 
     private static async Task<Prepared> PreparePackedNestedShipmentAsync(Fixture fixture)
@@ -535,7 +555,8 @@ public sealed class SqlServerShipmentLoadingTests
         return new ShipmentService(
             db,
             new WarehouseAuthorizationService(db, current),
-            current);
+            current,
+            CreateReservationService(db, userId));
     }
 
     private static async Task<Fixture> CreateFixtureAsync()
@@ -637,6 +658,10 @@ public sealed class SqlServerShipmentLoadingTests
         await db.PickingTasks.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.StockAllocations.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.StockReservations.Where(x => x.CreatedBy == fixture.UserId).ExecuteDeleteAsync();
+        await db.ExportReceiptDetails
+            .Where(x => x.ExportReceipt.WarehouseId == fixture.WarehouseId)
+            .ExecuteDeleteAsync();
+        await db.ExportReceipts.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.UserWarehouses.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == fixture.ProductId).ExecuteDeleteAsync();
