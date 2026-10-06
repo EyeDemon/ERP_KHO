@@ -12,7 +12,7 @@ type Shipment = {
   id:number; shipmentCode:string; packingSessionId:number; packingSessionCode:string; warehouseId:number; warehouseName:string;
   sourceType:string; sourceId?:number; sourceCode?:string; status:string; stagingLocationId?:number; stagingLocationCode?:string;
   handlingUnitCount:number; loadedHandlingUnitCount:number; dockAppointmentId?:number; dockAppointmentCode?:string; dockId?:number; dockCode?:string; vehiclePlate?:string; trailerPlate?:string;
-  sealNumber?:string; createdAt:string; stagedAt?:string; loadingStartedAt?:string; loadedAt?:string; rowVersion?:string;
+  sealNumber?:string; createdAt:string; stagedAt?:string; loadingStartedAt?:string; loadedAt?:string; dispatchedAt?:string; dispatchedBy?:number; rowVersion?:string;
   handlingUnits?:ShipmentHu[];
 };
 type DockAppointment = {
@@ -42,6 +42,12 @@ const messageFor=(e:unknown)=>{
   if(code==='SHIPMENT_HU_MISMATCH') return 'Handling Unit không thuộc Shipment này hoặc bạn đang quét HU con.';
   if(code==='HU_NOT_FOUND') return 'Không tìm thấy Handling Unit theo mã đã quét.';
   if(code==='HU_ALREADY_LOADED') return 'Handling Unit này đã được load.';
+  if(code==='SHIPMENT_ALLOCATION_INVALID') return response?.data?.message??'Allocation/Picked quantity không còn khớp để dispatch.';
+  if(code==='SHIPMENT_PACKING_MISMATCH') return response?.data?.message??'Packing content không còn khớp số lượng đã Picking.';
+  if(code==='SHIPMENT_RESERVATION_INVALID') return response?.data?.message??'Reservation không thuộc Shipment hoặc đã thay đổi.';
+  if(code==='SHIPMENT_SOURCE_INVALID'||code==='SHIPMENT_SOURCE_STATE_INVALID') return response?.data?.message??'Chứng từ nguồn không còn hợp lệ để dispatch.';
+  if(code==='SHIPMENT_BACKORDER_NOT_SUPPORTED') return response?.data?.message??'Shipment còn Short Pick cần xử lý ở Backorder.';
+  if(code==='SHIPMENT_LEDGER_EXISTS') return 'Shipment đã có SHIP ledger. Hãy đối soát trước khi retry.';
   if(code==='SHIPMENT_VERSION_CONFLICT'||response?.status===409) return response?.data?.message??'Shipment đã thay đổi. Vui lòng tải lại.';
   if(response?.status===403)return 'Bạn không có quyền thực hiện thao tác Shipment này.';
   if(response?.status===404)return 'Không tìm thấy Shipment trong phạm vi kho của bạn.';
@@ -63,6 +69,7 @@ export default function Shipments(){
   const canStage=usePermission('shipment.stage');
   const canShipmentLoad=usePermission('shipment.load');
   const canLoadingExecute=usePermission('loading.execute');
+  const canDispatch=usePermission('shipment.dispatch');
   const canLoad=canShipmentLoad&&canLoadingExecute;
 
   const list=async()=>{
@@ -112,8 +119,8 @@ export default function Shipments(){
   return <UiPage>
     <UiPageHeader
       eyebrow="Outbound"
-      title="Staging & Loading"
-      description="Shipment READY → STAGING → LOADING → LOADED. Staging/Loading chỉ xác nhận physical custody của HU; không trừ OnHand."
+      title="Staging, Loading & Dispatch"
+      description="Shipment READY → STAGING → LOADING → LOADED → DISPATCHED. Chỉ Dispatch là posting boundary trừ OnHand, consume Reservation/Allocation và ghi SHIP ledger."
     />
     {error&&<div role="alert">{error}</div>}
     <div className="ui-stack">
@@ -141,8 +148,8 @@ export default function Shipments(){
           {selected.stagingLocationCode&&<span>Staging: <strong>{selected.stagingLocationCode}</strong></span>}
         </div>
         <p className="ui-muted-text">
-          Foundation hiện quản lý Shipment READY/STAGING/LOADING/LOADED, staging lane, root-HU ownership, dock appointment và vehicle/seal context.
-          Dispatch/SHIP ledger, load optimization/capacity và carrier/POD vẫn chưa thuộc phần này.
+          Foundation hiện quản lý Shipment READY/STAGING/LOADING/LOADED/DISPATCHED, staging lane, root-HU ownership, dock/vehicle/seal context và canonical Dispatch.
+          Dispatch consume Reservation/Allocation, trừ OnHand đúng một lần, ghi SHIP ledger + outbox. Backorder, load optimization/capacity và carrier/POD vẫn chưa hoàn tất.
         </p>
 
         <UiTableScroll>
@@ -222,9 +229,21 @@ export default function Shipments(){
           </div>
         </fieldset>}
 
-        {selected.status==='Loaded'&&<div role="status">
-          <strong>Shipment đã LOADED.</strong> Chưa có Dispatch trong OUT-07; OnHand vẫn chưa bị trừ.
-          {selected.sealNumber&&<> Seal: {selected.sealNumber}.</>}
+        {selected.status==='Loaded'&&<fieldset>
+          <legend>Dispatch Shipment</legend>
+          <div className="ui-inline-wrap">
+            <span><strong>Shipment đã LOADED.</strong> OnHand vẫn chưa bị trừ cho tới khi Dispatch.</span>
+            {selected.sealNumber&&<span>Seal: <strong>{selected.sealNumber}</strong></span>}
+          </div>
+          {canDispatch?<button type="button" disabled={!!busy} onClick={()=>void mutate(
+            'shipment-dispatch-'+selected.id,'/api/shipments/'+selected.id+'/dispatch',
+            {rowVersion:selected.rowVersion}
+          )}>Xác nhận Dispatch</button>:<span className="ui-muted-text">Cần quyền shipment.dispatch để xác nhận xuất kho.</span>}
+        </fieldset>}
+
+        {selected.status==='Dispatched'&&<div role="status">
+          <strong>Shipment đã DISPATCHED.</strong> SHIP ledger đã được ghi và inventory đã được consume.
+          {selected.dispatchedAt&&<> Thời điểm: {new Date(selected.dispatchedAt).toLocaleString('vi-VN')}.</>}
         </div>}
       </UiCard>}
     </div>
