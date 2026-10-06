@@ -129,7 +129,7 @@ public sealed class PickingTaskIntegration(ErpKhoDbContext context) : IPickingTa
             var additions = allocations.Where(x => !existingAllocationIds.Contains(x.Id)).ToList();
             if (additions.Count == 0) return;
 
-            var sequence = existingTask.Lines.Count == 0 ? 0 : existingTask.Lines.Max(x => x.Sequence);
+            var nextSequence = existingTask.Lines.Count == 0 ? 0 : existingTask.Lines.Max(x => x.Sequence);
             foreach (var allocation in additions)
             {
                 existingTask.Lines.Add(new PickingTaskLine
@@ -139,7 +139,7 @@ public sealed class PickingTaskIntegration(ErpKhoDbContext context) : IPickingTa
                     SourceLocationId = allocation.LocationId,
                     RequestedQuantity = allocation.Quantity,
                     PickedQuantity = 0,
-                    Sequence = ++sequence,
+                    Sequence = ++nextSequence,
                     Status = PickingTaskLineStatus.Open
                 });
             }
