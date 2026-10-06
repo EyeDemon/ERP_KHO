@@ -30,13 +30,14 @@ namespace ERP.Application.Tests
             context.Products.AddRange(product1, product2, product3);
             context.Warehouses.AddRange(warehouse1, warehouse2);
 
-            // Case 1: matches: Import 10 + AdjInc 5 + TransferIn 4 - Export 2 - TransferOut 4 = 13.
-            context.InventoryStocks.Add(new InventoryStock { ProductId = 1, WarehouseId = 1, Quantity = 13 });
+            // Case 1: matches: Import 10 + AdjInc 5 + TransferIn 4 - Export 2 - Ship 3 - TransferOut 4 = 10.
+            context.InventoryStocks.Add(new InventoryStock { ProductId = 1, WarehouseId = 1, Quantity = 10 });
             context.InventoryTransactions.AddRange(
                 new InventoryTransaction { ProductId = 1, WarehouseId = 1, TransactionType = TransactionType.Import, Quantity = 10, TransactionDate = DateTime.Now },
                 new InventoryTransaction { ProductId = 1, WarehouseId = 1, TransactionType = TransactionType.AdjustmentIncrease, Quantity = 5, TransactionDate = DateTime.Now },
                 new InventoryTransaction { ProductId = 1, WarehouseId = 1, TransactionType = TransactionType.TransferIn, Quantity = 4, TransactionDate = DateTime.Now },
                 new InventoryTransaction { ProductId = 1, WarehouseId = 1, TransactionType = TransactionType.Export, Quantity = 2, TransactionDate = DateTime.Now },
+                new InventoryTransaction { ProductId = 1, WarehouseId = 1, TransactionType = TransactionType.Ship, Quantity = 3, TransactionDate = DateTime.Now },
                 new InventoryTransaction { ProductId = 1, WarehouseId = 1, TransactionType = TransactionType.TransferOut, Quantity = 4, TransactionDate = DateTime.Now }
             );
 
@@ -75,15 +76,15 @@ namespace ERP.Application.Tests
             result.TotalRecords.Should().Be(5); // 5 distinct pairs
 
             var matchP1W1 = result.Items.Single(x => x.ProductId == 1 && x.WarehouseId == 1);
-            matchP1W1.CurrentQuantity.Should().Be(13);
-            matchP1W1.ExpectedQuantity.Should().Be(13);
+            matchP1W1.CurrentQuantity.Should().Be(10);
+            matchP1W1.ExpectedQuantity.Should().Be(10);
             matchP1W1.Difference.Should().Be(0);
             matchP1W1.Status.Should().Be("Match");
             matchP1W1.ImportQuantity.Should().Be(10);
             matchP1W1.TransferInQuantity.Should().Be(4);
             matchP1W1.TransferOutQuantity.Should().Be(4);
             matchP1W1.AdjustmentIncreaseQuantity.Should().Be(5);
-            matchP1W1.ExportQuantity.Should().Be(2);
+            matchP1W1.ExportQuantity.Should().Be(5);
 
             var mismatchP2W1 = result.Items.Single(x => x.ProductId == 2 && x.WarehouseId == 1);
             mismatchP2W1.CurrentQuantity.Should().Be(20);
