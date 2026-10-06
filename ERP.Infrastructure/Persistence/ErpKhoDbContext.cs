@@ -69,6 +69,9 @@ public class ErpKhoDbContext : DbContext
     public DbSet<HandlingUnitContent> HandlingUnitContents => Set<HandlingUnitContent>();
     public DbSet<Shipment> Shipments => Set<Shipment>();
     public DbSet<ShipmentHandlingUnit> ShipmentHandlingUnits => Set<ShipmentHandlingUnit>();
+    public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
+    public DbSet<SalesOrderLine> SalesOrderLines => Set<SalesOrderLine>();
+    public DbSet<Backorder> Backorders => Set<Backorder>();
 
     public override int SaveChanges()
     {
