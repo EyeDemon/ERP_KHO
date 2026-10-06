@@ -126,9 +126,11 @@ public sealed class SqlServerShipmentLoadingTests
                 await CreatePackingService(readiness, fixture.UserId).EnsureSourceReadyAsync(
                     "ExportReceipt",
                     fixture.ExportReceiptId);
-                await CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
-                    "ExportReceipt",
-                    fixture.ExportReceiptId);
+                await FluentActions.Awaiting(() => CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
+                        "ExportReceipt",
+                        fixture.ExportReceiptId))
+                    .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
+                    .WithMessage("*canonical Shipment workflow*");
             }
 
             await using var verify = CreateContext();
@@ -170,7 +172,100 @@ public sealed class SqlServerShipmentLoadingTests
                     "ExportReceipt",
                     fixture.ExportReceiptId))
                 .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
-                .WithMessage("*chưa ở trạng thái LOADED*");
+                .WithMessage("*canonical Shipment workflow*");
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task DispatchBeforeLoaded_IsRejectedWithoutInventoryMutation()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var prepared = await PreparePackedNestedShipmentAsync(fixture);
+            await using var db = CreateContext();
+            var service = CreateShipmentService(db, fixture.UserId);
+            var current = await service.GetAsync(prepared.ShipmentId);
+
+            await FluentActions.Awaiting(() => service.DispatchAsync(
+                    prepared.ShipmentId,
+                    new ShipmentStateCommandDto { RowVersion = current.RowVersion! }))
+                .Should().ThrowAsync<BusinessRuleException>();
+
+            var stock = await db.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+            stock.Quantity.Should().Be(10);
+            stock.ReservedQuantity.Should().Be(10);
+            (await db.InventoryTransactions.AsNoTracking().CountAsync(x => x.ReferenceType == "Shipment")).Should().Be(0);
+            (await db.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task LoadedShipment_Dispatch_ConsumesInventoryOnce_WritesShipLedgerAndOutbox()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var (prepared, loaded) = await PrepareLoadedShipmentAsync(fixture);
+
+            ShipmentDto dispatched;
+            await using (var dispatch = CreateContext())
+            {
+                dispatched = await CreateShipmentService(dispatch, fixture.UserId).DispatchAsync(
+                    prepared.ShipmentId,
+                    new ShipmentStateCommandDto { RowVersion = loaded.RowVersion! });
+                dispatched.Status.Should().Be(nameof(ShipmentStatus.Dispatched));
+                dispatched.DispatchedAt.Should().NotBeNull();
+                dispatched.DispatchedBy.Should().Be(fixture.UserId);
+            }
+
+            await using (var retry = CreateContext())
+            {
+                var service = CreateShipmentService(retry, fixture.UserId);
+                var current = await service.GetAsync(prepared.ShipmentId);
+                await FluentActions.Awaiting(() => service.DispatchAsync(
+                        prepared.ShipmentId,
+                        new ShipmentStateCommandDto { RowVersion = current.RowVersion! }))
+                    .Should().ThrowAsync<BusinessRuleException>();
+            }
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+            stock.Quantity.Should().Be(0);
+            stock.ReservedQuantity.Should().Be(0);
+
+            var reservation = await verify.StockReservations.AsNoTracking().SingleAsync();
+            reservation.Status.Should().Be(StockReservationStatus.Consumed);
+            reservation.ConsumedQuantity.Should().Be(10);
+            reservation.AllocatedQuantity.Should().Be(0);
+
+            (await verify.StockAllocations.AsNoTracking().SingleAsync()).Status.Should().Be(StockAllocationStatus.Consumed);
+            (await verify.HandlingUnits.AsNoTracking().AllAsync(x => x.Status == HandlingUnitStatus.Shipped)).Should().BeTrue();
+
+            var ledger = await verify.InventoryTransactions.AsNoTracking()
+                .Where(x => x.ReferenceType == "Shipment" && x.ReferenceId == prepared.ShipmentId)
+                .ToListAsync();
+            ledger.Should().ContainSingle();
+            ledger.Single().TransactionType.Should().Be(TransactionType.Ship);
+            ledger.Single().Quantity.Should().Be(10);
+            ledger.Single().LocationId.Should().Be(fixture.LocationId);
+
+            var outbox = await verify.OutboxMessages.AsNoTracking().SingleAsync();
+            outbox.EventKey.Should().Be($"ShipmentDispatched:{prepared.ShipmentId}");
+            outbox.EventType.Should().Be("ShipmentDispatched");
+
+            var receipt = await verify.ExportReceipts.AsNoTracking().SingleAsync(x => x.Id == fixture.ExportReceiptId);
+            receipt.Status.Should().Be(ReceiptStatus.Dispatched);
+            receipt.DispatchedBy.Should().Be(fixture.UserId);
+
+            (await verify.InventoryTransactions.AsNoTracking().CountAsync(
+                x => x.ReferenceType == "Shipment" && x.ReferenceId == prepared.ShipmentId)).Should().Be(1);
+            (await verify.OutboxMessages.AsNoTracking().CountAsync(
+                x => x.EventKey == $"ShipmentDispatched:{prepared.ShipmentId}")).Should().Be(1);
         }
         finally { await CleanupAsync(fixture); }
     }
@@ -419,6 +514,57 @@ public sealed class SqlServerShipmentLoadingTests
         var packing = CreatePackingService(read, fixture.UserId);
         var createdSession = (await packing.ListAsync(fixture.WarehouseId)).Single();
         return await packing.GetAsync(createdSession.Id);
+    }
+
+    private static async Task<(Prepared Prepared, ShipmentDto Loaded)> PrepareLoadedShipmentAsync(Fixture fixture)
+    {
+        var prepared = await PreparePackedNestedShipmentAsync(fixture);
+
+        ShipmentDto staged;
+        await using (var stage = CreateContext())
+        {
+            var service = CreateShipmentService(stage, fixture.UserId);
+            var current = await service.GetAsync(prepared.ShipmentId);
+            staged = await service.StageAsync(prepared.ShipmentId, new StageShipmentDto
+            {
+                StagingLocationCode = fixture.StagingLocationCode,
+                RowVersion = current.RowVersion!
+            });
+        }
+
+        int appointmentId;
+        await using (var dock = CreateContext())
+            appointmentId = await CreateOutboundAppointmentAsync(dock, fixture, DockAppointmentStatus.InService);
+
+        ShipmentDto loading;
+        await using (var start = CreateContext())
+        {
+            loading = await CreateShipmentService(start, fixture.UserId).StartLoadingAsync(
+                prepared.ShipmentId,
+                new StartShipmentLoadingDto { DockAppointmentId = appointmentId, RowVersion = staged.RowVersion! });
+        }
+
+        ShipmentDto huLoaded;
+        await using (var load = CreateContext())
+        {
+            huLoaded = await CreateShipmentService(load, fixture.UserId).LoadHandlingUnitAsync(
+                prepared.ShipmentId,
+                new LoadShipmentHandlingUnitDto
+                {
+                    HandlingUnitBarcode = prepared.ParentHuBarcode,
+                    RowVersion = loading.RowVersion!
+                });
+        }
+
+        await using var complete = CreateContext();
+        var loaded = await CreateShipmentService(complete, fixture.UserId).CompleteLoadingAsync(
+            prepared.ShipmentId,
+            new CompleteShipmentLoadingDto
+            {
+                SealNumber = "SHIP-SEAL-01",
+                RowVersion = huLoaded.RowVersion!
+            });
+        return (prepared, loaded);
     }
 
     private static async Task<int> CreateOutboundAppointmentAsync(
