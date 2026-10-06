@@ -63,4 +63,13 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
         CompleteShipmentLoadingDto request,
         CancellationToken cancellationToken) =>
         Ok(await service.CompleteLoadingAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/dispatch")]
+    [PermissionAuthorize(AppPermissions.ShipmentDispatch)]
+    [IdempotentCommand("Shipment.Dispatch")]
+    public async Task<ActionResult<ShipmentDto>> Dispatch(
+        int id,
+        ShipmentStateCommandDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.DispatchAsync(id, request, cancellationToken));
 }
