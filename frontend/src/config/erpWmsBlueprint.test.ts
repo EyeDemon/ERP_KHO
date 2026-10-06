@@ -129,7 +129,10 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('OUT-05')?.goal).toMatch(/scan location.*Short Pick.*không trừ OnHand.*Lot\/Serial.*chưa/i);
     expect(byId.get('OUT-06')?.status).toBe('foundation');
     expect(byId.get('OUT-06')?.route).toBe('/packing-sessions');
-    expect(byId.get('OUT-06')?.goal).toMatch(/PickedQuantity.*nested HU.*không trừ OnHand.*split\/merge\/repack.*chưa/i);
+    expect(byId.get('OUT-06')?.goal).toMatch(/PickedQuantity.*nested HU.*không trừ OnHand.*OUT-07 foundation.*split\/merge\/repack.*chưa/i);
+    expect(byId.get('OUT-07')?.status).toBe('foundation');
+    expect(byId.get('OUT-07')?.route).toBe('/shipments');
+    expect(byId.get('OUT-07')?.goal).toMatch(/Shipment READY.*staging location.*HU hierarchy.*IN_SERVICE.*LOADED.*không trừ OnHand.*Dispatch\/SHIP ledger.*chưa/i);
     expect(byId.get('OUT-08')?.status).toBe('planned');
     expect(byId.get('OUT-08')?.goal).toMatch(/Shipment state machine riêng/i);
 

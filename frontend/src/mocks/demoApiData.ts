@@ -365,26 +365,26 @@ export const demoPackingSessions = [
   {
     id: 9901, sessionCode: 'PACK-2026-9901', pickingTaskId: 8802, pickingTaskCode: 'PICK-2026-8802',
     sourceType: 'Reservation', sourceId: 9040, sourceCode: 'RSV-PACK-0040',
-    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 'InProgress',
-    requiredQuantity: 40, packedQuantity: 20, remainingQuantity: 20, handlingUnitCount: 1,
-    createdAt: '2026-10-06T01:51:00Z', startedAt: '2026-10-06T01:52:00Z', packedAt: null, closedAt: null,
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 'Packed',
+    requiredQuantity: 40, packedQuantity: 40, remainingQuantity: 0, handlingUnitCount: 1,
+    createdAt: '2026-10-06T01:51:00Z', startedAt: '2026-10-06T01:52:00Z', packedAt: '2026-10-06T02:05:00Z', closedAt: null,
     rowVersion: 'AAAAAAAAPACK1',
     lines: [
       {
         pickingTaskLineId: 8821, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g',
-        pickedQuantity: 40, packedQuantity: 20, remainingQuantity: 20,
+        pickedQuantity: 40, packedQuantity: 40, remainingQuantity: 0,
       },
     ],
     handlingUnits: [
       {
         id: 9911, huCode: 'CARTON-9901-01', barcode: 'CARTON-9901-01', sscc: null,
         warehouseId: 1, packingSessionId: 9901, parentHandlingUnitId: null, parentHandlingUnitCode: null,
-        type: 'Carton', status: 'InUse', grossWeightKg: 6.4, netWeightKg: 6.0, volumeM3: 0.04,
-        sealedAt: null, createdAt: '2026-10-06T01:52:00Z', closedAt: null, rowVersion: 'AAAAAAAAHU01',
+        type: 'Carton', status: 'Staged', grossWeightKg: 6.4, netWeightKg: 6.0, volumeM3: 0.04,
+        sealedAt: '2026-10-06T02:04:00Z', createdAt: '2026-10-06T01:52:00Z', closedAt: '2026-10-06T02:04:00Z', rowVersion: 'AAAAAAAAHU01',
         contents: [
           {
             id: 9921, pickingTaskLineId: 8821, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g',
-            quantity: 20, packedAt: '2026-10-06T01:54:00Z',
+            quantity: 40, packedAt: '2026-10-06T02:03:00Z',
           },
         ],
       },
@@ -393,6 +393,27 @@ export const demoPackingSessions = [
 ];
 
 export const demoHandlingUnits = demoPackingSessions.flatMap(session => session.handlingUnits);
+
+
+export const demoShipments = [
+  {
+    id: 7701, shipmentCode: 'SHIP-2026-7701', packingSessionId: 9901, packingSessionCode: 'PACK-2026-9901',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', sourceType: 'Reservation', sourceId: 9040, sourceCode: 'RSV-PACK-0040',
+    status: 'Staging', stagingLocationId: 1701, stagingLocationCode: 'STG-OUT-01', handlingUnitCount: 1, loadedHandlingUnitCount: 0,
+    dockAppointmentId: null, dockAppointmentCode: null, dockId: null, dockCode: null,
+    vehiclePlate: null, trailerPlate: null, sealNumber: null,
+    createdAt: '2026-10-06T02:06:00Z', stagedAt: '2026-10-06T02:08:00Z', loadingStartedAt: null, loadedAt: null,
+    rowVersion: 'AAAAAAAASHIP1',
+    handlingUnits: [
+      {
+        id: 7711, handlingUnitId: 9911, huCode: 'CARTON-9901-01', barcode: 'CARTON-9901-01', sscc: null,
+        type: 'Carton', status: 'Staged', sequence: 1, contentQuantity: 40,
+        assignedAt: '2026-10-06T02:06:00Z', stagedAt: '2026-10-06T02:08:00Z', loadedAt: null,
+      },
+    ],
+  },
+];
+
 
 export const demoStocktakes = [
   { id: 142, code: 'CC-2026-0142', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 0, note: 'Cycle count khu A', createdBy: 101, createdByName: 'Trần Quốc Bảo', createdAt: '2026-10-03T08:00:00Z', detailCount: 1, details: [{ id: 1, stocktakeId: 142, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', unitName: 'Gói', systemQuantity: 1250, actualQuantity: 1248, differenceQuantity: -2, note: 'Recount accepted' }] },
@@ -508,4 +529,9 @@ export const demoPermissionCatalog = [
   { code: 'handling_unit.split', description: 'Tách Handling Unit' },
   { code: 'handling_unit.merge', description: 'Gộp Handling Unit' },
   { code: 'handling_unit.repack', description: 'Đóng gói lại Handling Unit' },
+  { code: 'shipment.read', description: 'Xem Shipment' },
+  { code: 'shipment.update', description: 'Cập nhật Shipment' },
+  { code: 'shipment.stage', description: 'Đưa Shipment vào staging' },
+  { code: 'shipment.load', description: 'Thực hiện Shipment loading' },
+  { code: 'loading.execute', description: 'Thực hiện loading tại dock' },
 ];

@@ -15,7 +15,8 @@ public sealed class PackingService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
     ICurrentUser currentUser,
-    IPackingSessionIntegration packingSessionIntegration) : IPackingService, IPackingDispatchReadiness
+    IPackingSessionIntegration packingSessionIntegration,
+    IShipmentIntegration? shipmentIntegration = null) : IPackingService, IPackingDispatchReadiness
 {
     public async Task<IReadOnlyList<PackingSessionListDto>> ListAsync(
         int? warehouseId = null,
@@ -282,7 +283,8 @@ public sealed class PackingService(
             session.Status = PackingSessionStatus.Packed;
             session.PackedAt = DateTime.UtcNow;
             AddAudit("PackingSession.Packed", session, $"PackedQuantity: {allContents.Sum(x => x.Quantity)}; HandlingUnits: {activeHus.Count}");
-            await Task.CompletedTask;
+            if (shipmentIntegration is not null)
+                await shipmentIntegration.EnsureForPackingSessionAsync(session.Id, currentUser.UserId, token);
         }, cancellationToken);
 
     public Task<PackingSessionDto> CloseAsync(
@@ -336,7 +338,9 @@ public sealed class PackingService(
             if (packed != line.PickedQuantity)
                 throw new ConcurrencyException("Packing content không còn khớp số lượng đã Picking.");
         }
-        if (session.HandlingUnits
+        var shipmentExists = await context.Shipments.AsNoTracking()
+            .AnyAsync(x => x.PackingSessionId == session.Id, cancellationToken);
+        if (!shipmentExists && session.HandlingUnits
             .Where(x => x.Status != HandlingUnitStatus.Cancelled)
             .Any(x => x.Status != HandlingUnitStatus.Closed))
             throw new ConcurrencyException("Handling Unit chưa được đóng đầy đủ.");

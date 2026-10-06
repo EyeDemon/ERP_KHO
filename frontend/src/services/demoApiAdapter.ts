@@ -18,6 +18,7 @@ import {
   demoPickingTasks,
   demoPackingSessions,
   demoHandlingUnits,
+  demoShipments,
   demoAllocatableReservations,
   demoAllocationCandidates,
   demoStocktakes,
@@ -91,7 +92,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         userId: 1,
         username: 'Blueprint Demo',
         role: 'Viewer',
-        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
+        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'shipment.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
     }
 
@@ -421,6 +422,18 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     if (/^\/api\/handling-units\/\d+$/.test(path)) {
       const item = demoHandlingUnits.find(hu => hu.id === findNumericId(path));
       return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy Handling Unit demo.');
+    }
+
+    if (path === '/api/shipments') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const status = params.get('status');
+      return ok(config, demoShipments
+        .filter(item => (!warehouseId || item.warehouseId === warehouseId) && (!status || item.status === status))
+        .map(({ handlingUnits: _handlingUnits, rowVersion: _rowVersion, ...item }) => item));
+    }
+    if (/^\/api\/shipments\/\d+$/.test(path)) {
+      const item = demoShipments.find(shipment => shipment.id === findNumericId(path));
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy Shipment demo.');
     }
 
     if (path === '/api/stocktakes') return ok(config, demoStocktakes.map(item => ({
