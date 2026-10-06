@@ -36,6 +36,7 @@ public sealed class ApprovalRequestSafetyTests
         IdempotentCommandFilter.RequiresSerializableIsolation("HandlingUnit.Nest").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.Stage").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.LoadHu").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.Dispatch").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Export.Dispatch").Should().BeFalse();
     }
 
@@ -122,6 +123,7 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "StartLoading")]
     [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "LoadHandlingUnit")]
     [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "CompleteLoading")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "Dispatch")]
     public void InventoryMutationEndpoints_RequireIdempotency(Type controller, string method)
     {
         controller.GetMethod(method)!.GetCustomAttribute<IdempotentCommandAttribute>().Should().NotBeNull();
