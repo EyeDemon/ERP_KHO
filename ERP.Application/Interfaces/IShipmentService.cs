@@ -34,3 +34,11 @@ public interface IShipmentIntegration
         int actorId,
         CancellationToken cancellationToken = default);
 }
+
+public interface IShipmentDispatchReadiness
+{
+    Task EnsureSourceReadyAsync(
+        string sourceType,
+        int sourceId,
+        CancellationToken cancellationToken = default);
+}
