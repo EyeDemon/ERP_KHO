@@ -251,7 +251,7 @@ public sealed class ShipmentService(
             if (reservations.Count != reservationIds.Length)
                 throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Reservation của Shipment không còn đầy đủ.");
 
-            var ledgerRows = 0;
+            var ledgerBuckets = new Dictionary<(int ProductId, int LocationId, InventoryStatus InventoryStatus), decimal>();
             foreach (var reservation in reservations)
             {
                 if (reservation.WarehouseId != shipment.WarehouseId)
@@ -285,32 +285,46 @@ public sealed class ShipmentService(
 
                 foreach (var consumption in consumptions.OrderBy(x => x.LocationId))
                 {
-                    context.InventoryTransactions.Add(new InventoryTransaction
-                    {
-                        ProductId = reservation.ProductId,
-                        WarehouseId = shipment.WarehouseId,
-                        LocationId = consumption.LocationId,
-                        InventoryStatus = lines.First(x => x.Allocation.LocationId == consumption.LocationId).Allocation.InventoryStatus,
-                        TransactionType = TransactionType.Ship,
-                        Quantity = consumption.Quantity,
-                        ReferenceId = shipment.Id,
-                        ReferenceType = "Shipment",
-                        TransactionDate = DateTime.UtcNow,
-                        CreatedBy = currentUser.UserId,
-                        Note = $"Shipment dispatch {shipment.ShipmentCode}"
-                    });
-                    ledgerRows++;
+                    var statuses = lines
+                        .Where(x => x.Allocation.LocationId == consumption.LocationId)
+                        .Select(x => x.Allocation.InventoryStatus)
+                        .Distinct()
+                        .ToArray();
+                    if (statuses.Length != 1)
+                        throw Conflict("SHIPMENT_INVENTORY_MISMATCH", "Allocation cùng Location có nhiều InventoryStatus, không thể tạo SHIP ledger chuẩn.");
+
+                    var key = (reservation.ProductId, consumption.LocationId, statuses[0]);
+                    ledgerBuckets[key] = ledgerBuckets.GetValueOrDefault(key) + consumption.Quantity;
                 }
+            }
+
+            var dispatchedAt = DateTime.UtcNow;
+            foreach (var bucket in ledgerBuckets.OrderBy(x => x.Key.ProductId).ThenBy(x => x.Key.LocationId).ThenBy(x => x.Key.InventoryStatus))
+            {
+                context.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = bucket.Key.ProductId,
+                    WarehouseId = shipment.WarehouseId,
+                    LocationId = bucket.Key.LocationId,
+                    InventoryStatus = bucket.Key.InventoryStatus,
+                    TransactionType = TransactionType.Ship,
+                    Quantity = bucket.Value,
+                    ReferenceId = shipment.Id,
+                    ReferenceType = "Shipment",
+                    TransactionDate = dispatchedAt,
+                    CreatedBy = currentUser.UserId,
+                    Note = $"Shipment dispatch {shipment.ShipmentCode}"
+                });
             }
 
             foreach (var hu in activeHus) hu.Status = HandlingUnitStatus.Shipped;
             shipment.Status = ShipmentStatus.Dispatched;
-            shipment.DispatchedAt = DateTime.UtcNow;
+            shipment.DispatchedAt = dispatchedAt;
             shipment.DispatchedBy = currentUser.UserId;
             AddAudit(
                 "Shipment.Dispatched",
                 shipment,
-                $"Reservations: {reservations.Count}; LedgerRows: {ledgerRows}");
+                $"Reservations: {reservations.Count}; LedgerRows: {ledgerBuckets.Count}; Quantity: {ledgerBuckets.Values.Sum()}");
         }, cancellationToken);
 
     public async Task EnsureSourceReadyAsync(
