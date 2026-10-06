@@ -412,7 +412,6 @@ export const demoShipments = [
       },
     ],
   },
-,
   {
     id: 7702, shipmentCode: 'SHIP-2026-7702', packingSessionId: 9902, packingSessionCode: 'PACK-2026-9902',
     warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', sourceType: 'ExportReceipt', sourceId: 5109, sourceCode: 'EX-2026-5109',
