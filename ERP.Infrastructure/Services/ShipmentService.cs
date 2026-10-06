@@ -14,7 +14,7 @@ namespace ERP.Infrastructure.Services;
 public sealed class ShipmentService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
-    ICurrentUser currentUser) : IShipmentService
+    ICurrentUser currentUser) : IShipmentService, IShipmentDispatchReadiness
 {
     public async Task<IReadOnlyList<ShipmentListDto>> ListAsync(
         int? warehouseId = null,
@@ -207,6 +207,36 @@ public sealed class ShipmentService(
                 $"HandlingUnits: {shipment.HandlingUnits.Count}; DockId: {shipment.DockId}; Vehicle: {shipment.VehiclePlate}; Seal: {shipment.SealNumber}");
             await Task.CompletedTask;
         }, cancellationToken);
+
+    public async Task EnsureSourceReadyAsync(
+        string sourceType,
+        int sourceId,
+        CancellationToken cancellationToken = default)
+    {
+        var shipment = await Query().AsNoTracking().SingleOrDefaultAsync(
+            x => x.SourceType == sourceType && x.SourceId == sourceId,
+            cancellationToken);
+        if (shipment is null) return;
+
+        if (shipment.Status != ShipmentStatus.Loaded)
+            throw new ConcurrencyException("Shipment của chứng từ chưa ở trạng thái LOADED.");
+
+        if (shipment.HandlingUnits.Count == 0 || shipment.HandlingUnits.Any(x => !x.LoadedAt.HasValue))
+            throw new ConcurrencyException("Shipment chưa load đủ Handling Unit.");
+
+        var active = ActivePackingHus(shipment);
+        try
+        {
+            ValidateAssignedRoots(shipment, active);
+        }
+        catch (BusinessRuleException ex)
+        {
+            throw new ConcurrencyException("Shipment Handling Unit không còn khớp Packing session.", ex);
+        }
+
+        if (active.Any(x => x.Status != HandlingUnitStatus.Loaded))
+            throw new ConcurrencyException("Shipment Handling Unit hierarchy chưa ở trạng thái LOADED.");
+    }
 
     private async Task<ShipmentDto> MutateAsync(
         int id,
