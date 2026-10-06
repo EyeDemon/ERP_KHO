@@ -167,7 +167,8 @@ namespace ERP.Application.Tests
                 // P1 / W1
                 new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 10m, TransactionType = TransactionType.Import, TransactionDate = new DateTime(2026, 7, 1) },
                 new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 5m, TransactionType = TransactionType.AdjustmentIncrease, TransactionDate = new DateTime(2026, 7, 5) },
-                new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 3m, TransactionType = TransactionType.Export, TransactionDate = new DateTime(2026, 7, 8) },
+                new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 2m, TransactionType = TransactionType.Export, TransactionDate = new DateTime(2026, 7, 8) },
+                new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 1m, TransactionType = TransactionType.Ship, TransactionDate = new DateTime(2026, 7, 9) },
                 new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 2m, TransactionType = TransactionType.AdjustmentDecrease, TransactionDate = new DateTime(2026, 7, 10) },
 
                 // P1 / W2 (Net 0 -> Excluded)
@@ -211,6 +212,7 @@ namespace ERP.Application.Tests
         [InlineData(TransactionType.AdjustmentIncrease, 1)]
         [InlineData(TransactionType.TransferIn, 1)]
         [InlineData(TransactionType.Export, -1)]
+        [InlineData(TransactionType.Ship, -1)]
         [InlineData(TransactionType.AdjustmentDecrease, -1)]
         [InlineData(TransactionType.TransferOut, -1)]
         public void InventoryTransactionTypeMapping_RecognizedType_ReturnsExpectedSign(TransactionType type, int sign)
