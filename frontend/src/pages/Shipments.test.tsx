@@ -18,6 +18,7 @@ vi.mock('../services/idempotency',()=>({
 const hu={id:1,handlingUnitId:9911,huCode:'PALLET-01',barcode:'PALLET-01',type:'Pallet',status:'Closed',sequence:1,contentQuantity:40,assignedAt:'2026-10-06T03:00:00Z'};
 const summary={id:7701,shipmentCode:'SHIP-2026-7701',packingSessionId:9901,packingSessionCode:'PACK-2026-9901',warehouseId:1,warehouseName:'DC Hồ Chí Minh',sourceType:'Reservation',sourceId:9040,sourceCode:'RSV-PACK-0040',status:'Ready',stagingLocationId:undefined,stagingLocationCode:undefined,handlingUnitCount:1,loadedHandlingUnitCount:0,createdAt:'2026-10-06T03:00:00Z'};
 const detail={...summary,rowVersion:'AQ==',handlingUnits:[hu]};
+const loaded={...detail,status:'Loaded',loadedHandlingUnitCount:1,dockCode:'D-02',vehiclePlate:'50H-220.18',sealNumber:'SEAL-01',loadedAt:'2026-10-06T03:30:00Z',handlingUnits:[{...hu,status:'Loaded',loadedAt:'2026-10-06T03:25:00Z'}]};
 const appointment={id:1043,code:'APT-2026-1043',warehouseId:1,direction:1,status:5,dockId:102,dockCode:'D-02',vehiclePlate:'50H-220.18'};
 const grant=(...permissions:string[])=>{permissionState.granted.clear();permissions.forEach(p=>permissionState.granted.add(p));};
 const reads=(shipment:Record<string,unknown>=detail)=>vi.mocked(apiClient.get).mockImplementation(async (url)=>{
@@ -70,6 +71,33 @@ describe('Shipment staging & loading workbench',()=>{
     await second.findByText('SHIP-2026-7701');
     fireEvent.click(second.getByText('SHIP-2026-7701'));
     expect(await second.findByLabelText('Outbound appointment loading')).toBeTruthy();
+  });
+
+  it('hides dispatch without shipment.dispatch permission',async()=>{
+    reads(loaded);
+    const view=render(<Shipments/>);
+    await view.findByText('SHIP-2026-7701');
+    fireEvent.click(view.getByText('SHIP-2026-7701'));
+    expect(await view.findByText(/Cần quyền shipment.dispatch/)).toBeTruthy();
+    expect(view.queryByText('Xác nhận Dispatch')).toBeNull();
+  });
+
+  it('dispatches a loaded shipment once with idempotency',async()=>{
+    grant('shipment.read','shipment.dispatch');
+    reads(loaded);
+    vi.mocked(apiClient.post).mockResolvedValue({data:{...loaded,status:'Dispatched',dispatchedAt:'2026-10-06T03:40:00Z',dispatchedBy:7,handlingUnits:[{...hu,status:'Shipped'}]}} as never);
+    const view=render(<Shipments/>);
+    await view.findByText('SHIP-2026-7701');
+    fireEvent.click(view.getByText('SHIP-2026-7701'));
+    const button=await view.findByText('Xác nhận Dispatch');
+    fireEvent.click(button);fireEvent.click(button);
+    await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/shipments/7701/dispatch',
+      {rowVersion:'AQ=='},
+      {headers:{'Idempotency-Key':'key:shipment-dispatch-7701'}}
+    );
+    expect(completeIdempotentAction).toHaveBeenCalledWith('shipment-dispatch-7701');
   });
 
   it('maps wrong-HU loading conflict to actionable Vietnamese copy',async()=>{
