@@ -61,7 +61,7 @@ describe('Outbound demand and backorder workbench',()=>{
   it('shows canonical demand metrics read-only without mutation permissions',async()=>{
     const view=render(<OutboundDemand/>);
     expect(await view.findByText('SO-0088')).toBeTruthy();
-    expect(view.getByText('BO-0009')).toBeTruthy();
+    expect(await view.findByText(/BO-0009\s+—\s+SKU-1001/)).toBeTruthy();
     expect(view.queryByText('Release demand')).toBeNull();
     expect(view.queryByText('Reallocate')).toBeNull();
     expect(view.queryByText('Tạo Sales Order')).toBeNull();
@@ -89,7 +89,7 @@ describe('Outbound demand and backorder workbench',()=>{
       response:{status:409,data:{code:'BACKORDER_EXECUTION_STARTED',message:'blocked'}}
     });
     const view=render(<OutboundDemand/>);
-    await view.findByText('BO-0009');
+    await view.findByText(/BO-0009\s+—\s+SKU-1001/);
     fireEvent.change(view.getByLabelText('Recover quantity BO-0009'),{target:{value:'4'}});
     fireEvent.click(view.getByText('Reallocate'));
     await waitFor(()=>expect(view.getByRole('alert').textContent).toContain('Picking đã bắt đầu'));
