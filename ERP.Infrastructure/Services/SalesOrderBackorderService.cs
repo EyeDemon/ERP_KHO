@@ -459,9 +459,7 @@ public sealed class SalesOrderBackorderService(
             .Include(x => x.Warehouse)
             .Include(x => x.SalesOrderLine).ThenInclude(x => x.Product)
             .Include(x => x.SalesOrderLine).ThenInclude(x => x.SalesOrder).ThenInclude(x => x.Customer)
-            .Include(x => x.SalesOrderLine).ThenInclude(x => x.SalesOrder).ThenInclude(x => x.Warehouse)
-            .Include(x => x.SalesOrderLine).ThenInclude(x => x.SalesOrder).ThenInclude(x => x.Lines).ThenInclude(x => x.Product)
-            .Include(x => x.SalesOrderLine).ThenInclude(x => x.SalesOrder).ThenInclude(x => x.Lines).ThenInclude(x => x.Backorder);
+            .Include(x => x.SalesOrderLine).ThenInclude(x => x.SalesOrder).ThenInclude(x => x.Warehouse);
 
     private async Task<SalesOrderListDto> BuildOrderDtoAsync(
         SalesOrder order,
@@ -533,6 +531,11 @@ public sealed class SalesOrderBackorderService(
         SalesOrder order,
         CancellationToken token)
     {
+        var demandLines = await context.SalesOrderLines.AsNoTracking()
+            .Include(x => x.Backorder)
+            .Where(x => x.SalesOrderId == order.Id)
+            .ToListAsync(token);
+
         var reservations = await context.StockReservations.AsNoTracking()
             .Where(x => x.SourceType == "SalesOrder" && x.SourceId == order.Id)
             .ToListAsync(token);
@@ -570,7 +573,7 @@ public sealed class SalesOrderBackorderService(
                 .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, token);
 
         var result = new Dictionary<int, LineProgress>();
-        foreach (var line in order.Lines)
+        foreach (var line in demandLines)
         {
             var reservation = reservations.SingleOrDefault(x => x.ProductId == line.ProductId);
             var backorder = line.Backorder;
