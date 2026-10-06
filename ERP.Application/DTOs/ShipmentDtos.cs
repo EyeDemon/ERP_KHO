@@ -52,7 +52,7 @@ public sealed class ShipmentHandlingUnitDto
     public DateTime? LoadedAt { get; set; }
 }
 
-public sealed class ShipmentStateCommandDto
+public class ShipmentStateCommandDto
 {
     public string RowVersion { get; set; } = string.Empty;
 }
