@@ -72,6 +72,35 @@ describe('Shipment staging & loading workbench',()=>{
     expect(await second.findByLabelText('Outbound appointment loading')).toBeTruthy();
   });
 
+  it('shows dispatch only with shipment.dispatch and submits once with idempotency',async()=>{
+    const loaded={...detail,status:'Loaded',loadedHandlingUnitCount:1,sealNumber:'SEAL-01',handlingUnits:[{...hu,status:'Loaded',loadedAt:'2026-10-06T03:30:00Z'}]};
+    reads(loaded);
+    grant('shipment.read');
+    const readOnly=render(<Shipments/>);
+    await readOnly.findByText('SHIP-2026-7701');
+    fireEvent.click(readOnly.getByText('SHIP-2026-7701'));
+    expect(await readOnly.findByText(/Shipment đã LOADED/)).toBeTruthy();
+    expect(readOnly.queryByRole('button',{name:'Dispatch Shipment'})).toBeNull();
+    cleanup();
+
+    grant('shipment.read','shipment.dispatch');
+    reads(loaded);
+    vi.mocked(apiClient.post).mockResolvedValue({data:{...loaded,status:'Dispatched',dispatchedAt:'2026-10-06T03:40:00Z',dispatchedBy:7,dispatchedByName:'Shipping Manager',handlingUnits:[{...hu,status:'Shipped',loadedAt:'2026-10-06T03:30:00Z'}]}} as never);
+    const view=render(<Shipments/>);
+    await view.findByText('SHIP-2026-7701');
+    fireEvent.click(view.getByText('SHIP-2026-7701'));
+    const button=await view.findByRole('button',{name:'Dispatch Shipment'});
+    fireEvent.click(button);fireEvent.click(button);
+    await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/shipments/7701/dispatch',
+      {rowVersion:'AQ=='},
+      {headers:{'Idempotency-Key':'key:shipment-dispatch-7701'}}
+    );
+    expect(completeIdempotentAction).toHaveBeenCalledWith('shipment-dispatch-7701');
+    expect(await view.findByText(/Shipment đã DISPATCHED/)).toBeTruthy();
+  });
+
   it('maps wrong-HU loading conflict to actionable Vietnamese copy',async()=>{
     grant('shipment.read','shipment.load','loading.execute');
     reads({...detail,status:'Loading',dockCode:'D-02',vehiclePlate:'50H-220.18',handlingUnits:[{...hu,status:'Staged'}]});
