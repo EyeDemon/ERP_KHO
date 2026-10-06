@@ -424,6 +424,7 @@ public sealed class ShipmentService(
             .Include(x => x.StagingLocation)
             .Include(x => x.DockAppointment)
             .Include(x => x.Dock)
+            .Include(x => x.DispatchedByUser)
             .Include(x => x.HandlingUnits).ThenInclude(x => x.HandlingUnit);
 
     private static List<HandlingUnit> ActivePackingHus(Shipment shipment) =>
@@ -524,7 +525,8 @@ public sealed class ShipmentService(
         LoadingStartedAt = shipment.LoadingStartedAt,
         LoadedAt = shipment.LoadedAt,
         DispatchedAt = shipment.DispatchedAt,
-        DispatchedBy = shipment.DispatchedBy
+        DispatchedBy = shipment.DispatchedBy,
+        DispatchedByName = shipment.DispatchedByUser?.FullName
     };
 
     private static ShipmentDto Map(Shipment shipment)
