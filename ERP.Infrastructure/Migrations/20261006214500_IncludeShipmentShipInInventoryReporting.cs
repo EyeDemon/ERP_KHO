@@ -1,9 +1,12 @@
+using ERP.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace ERP.Infrastructure.Migrations;
 
+[DbContext(typeof(ErpKhoDbContext))]
 [Migration("20261006214500_IncludeShipmentShipInInventoryReporting")]
 public sealed class IncludeShipmentShipInInventoryReporting : Migration
 {
