@@ -127,9 +127,11 @@ public sealed class SqlServerShipmentLoadingTests
                 await CreatePackingService(readiness, fixture.UserId).EnsureSourceReadyAsync(
                     canonicalSource.SourceType,
                     canonicalSource.SourceId);
-                await CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
-                    canonicalSource.SourceType,
-                    canonicalSource.SourceId);
+                await FluentActions.Awaiting(() => CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
+                        canonicalSource.SourceType,
+                        canonicalSource.SourceId))
+                    .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
+                    .WithMessage("*dispatch tại Shipment*");
             }
 
             await using var verify = CreateContext();
@@ -172,7 +174,7 @@ public sealed class SqlServerShipmentLoadingTests
                     canonicalSource.SourceType,
                     canonicalSource.SourceId))
                 .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
-                .WithMessage("*chưa ở trạng thái LOADED*");
+                .WithMessage("*dispatch tại Shipment*");
         }
         finally { await CleanupAsync(fixture); }
     }
@@ -813,6 +815,9 @@ public sealed class SqlServerShipmentLoadingTests
     {
         await using var db = CreateContext();
         await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
+        await db.InventoryTransactions
+            .Where(x => x.WarehouseId == fixture.WarehouseId && x.ProductId == fixture.ProductId)
+            .ExecuteDeleteAsync();
         await db.ShipmentHandlingUnits
             .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)
             .ExecuteDeleteAsync();
