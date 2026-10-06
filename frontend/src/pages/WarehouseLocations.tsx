@@ -44,7 +44,7 @@ type LocationForm = {
   id?: number;
   code: string;
   name: string;
-  locationType: 'Storage' | 'Damaged' | 'Rejected';
+  locationType: 'Storage' | 'Damaged' | 'Rejected' | 'Staging';
   zone: string;
   aisle: string;
   rack: string;
@@ -91,6 +91,7 @@ const locationTypeLabels: Record<string, string> = {
   Storage: 'Lưu trữ',
   Damaged: 'Hư hỏng',
   Rejected: 'Hàng bị từ chối',
+  Staging: 'Khu staging outbound',
   Receiving: 'Nhận hàng',
   Legacy: 'Tương thích hệ thống',
 };
@@ -118,7 +119,7 @@ const formFromLocation = (location: WarehouseLocation): LocationForm => {
     id: location.id,
     code: location.code,
     name: location.name,
-    locationType: (['Storage', 'Damaged', 'Rejected'].includes(location.locationType) ? location.locationType : 'Storage') as LocationForm['locationType'],
+    locationType: (['Storage', 'Damaged', 'Rejected', 'Staging'].includes(location.locationType) ? location.locationType : 'Storage') as LocationForm['locationType'],
     zone: parts[0],
     aisle: parts[1],
     rack: parts[2],
@@ -474,6 +475,7 @@ const WarehouseLocations = () => {
             <option value="Storage">Lưu trữ</option>
             <option value="Damaged">Hư hỏng</option>
             <option value="Rejected">Hàng bị từ chối</option>
+            <option value="Staging">Khu staging outbound</option>
             <option value="Receiving">Nhận hàng</option>
             <option value="Legacy">Tương thích hệ thống</option>
           </select>
@@ -599,7 +601,7 @@ const WarehouseLocations = () => {
             <div className="warehouse-location-form-grid">
               <label className="ui-stack"><span>Mã vị trí *</span><input aria-label="Mã vị trí" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} disabled={saving || editing} maxLength={64} /></label>
               <label className="ui-stack"><span>Tên vị trí *</span><input aria-label="Tên vị trí" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} disabled={saving} maxLength={200} /></label>
-              <label className="ui-stack"><span>Loại vị trí *</span><select aria-label="Loại vị trí form" value={form.locationType} onChange={(event) => setForm((current) => ({ ...current, locationType: event.target.value as LocationForm['locationType'] }))} disabled={saving || editing}><option value="Storage">Lưu trữ</option><option value="Damaged">Hư hỏng</option><option value="Rejected">Hàng bị từ chối</option></select></label>
+              <label className="ui-stack"><span>Loại vị trí *</span><select aria-label="Loại vị trí form" value={form.locationType} onChange={(event) => setForm((current) => ({ ...current, locationType: event.target.value as LocationForm['locationType'] }))} disabled={saving || editing}><option value="Storage">Lưu trữ</option><option value="Damaged">Hư hỏng</option><option value="Rejected">Hàng bị từ chối</option><option value="Staging">Khu staging outbound</option></select></label>
             </div>
 
             <fieldset disabled={saving}>
