@@ -21,7 +21,7 @@ public class InventoryTransactionConfiguration : IEntityTypeConfiguration<Invent
         builder.HasIndex(x => new { x.ReferenceType, x.ReferenceId, x.TransactionType, x.ProductId, x.WarehouseId })
                .IsUnique()
                .HasFilter("[ReferenceType] = 'StockTransfer'");
-        builder.HasIndex(x => new { x.ReferenceType, x.ReferenceId, x.TransactionType, x.ProductId, x.WarehouseId, x.LocationId })
+        builder.HasIndex(x => new { x.ReferenceType, x.ReferenceId, x.TransactionType, x.ProductId, x.WarehouseId, x.LocationId, x.InventoryStatus })
                .IsUnique()
                .HasDatabaseName("IX_InventoryTransactions_ShipmentReference")
                .HasFilter("[ReferenceType] = 'Shipment'");
