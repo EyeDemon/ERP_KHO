@@ -79,6 +79,30 @@ describe('WarehouseLocations production UI', () => {
     })));
   });
 
+  it('creates an outbound staging lane as non-pickable and non-receivable', async () => {
+    const view = render(<WarehouseLocations />);
+    expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
+    fireEvent.click(view.getByText('Thêm vị trí'));
+    fireEvent.change(view.getByLabelText('Mã vị trí'), { target: { value: 'STG-OUT-01' } });
+    fireEvent.change(view.getByLabelText('Tên vị trí'), { target: { value: 'Staging outbound 01' } });
+    fireEvent.change(view.getByLabelText('Loại vị trí form'), { target: { value: 'Staging' } });
+    fireEvent.change(view.getByLabelText('Zone'), { target: { value: 'OUTBOUND' } });
+    fireEvent.change(view.getByLabelText('Aisle'), { target: { value: 'STAGING' } });
+    fireEvent.change(view.getByLabelText('Rack'), { target: { value: 'LANE' } });
+    fireEvent.change(view.getByLabelText('Level'), { target: { value: 'GROUND' } });
+    fireEvent.change(view.getByLabelText('Bin'), { target: { value: '01' } });
+    fireEvent.submit(view.getByText('Lưu vị trí').closest('form')!);
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/putaway-tasks/locations', expect.objectContaining({
+      warehouseId: 1,
+      code: 'STG-OUT-01',
+      locationType: 'Staging',
+      structurePath: 'OUTBOUND/STAGING/LANE/GROUND/01',
+      isPickable: false,
+      isReceivable: false,
+    })));
+  });
+
   it('locks an assigned StructurePath and sends rowVersion on edit', async () => {
     const view = render(<WarehouseLocations />);
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
