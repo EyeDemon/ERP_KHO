@@ -271,6 +271,41 @@ public sealed class SqlServerShipmentLoadingTests
     }
 
     [SqlServerFact]
+    public async Task Dispatch_WhenSourceApproverIsSameUser_IsRejectedBeforeInventoryMutation()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var (prepared, loaded) = await PrepareLoadedShipmentAsync(fixture);
+            await using (var arrange = CreateContext())
+            {
+                await arrange.ExportReceipts
+                    .Where(x => x.Id == fixture.ExportReceiptId)
+                    .ExecuteUpdateAsync(update => update.SetProperty(x => x.ApprovedBy, fixture.UserId));
+            }
+
+            await using (var dispatch = CreateContext())
+            {
+                var service = CreateShipmentService(dispatch, fixture.UserId);
+                await FluentActions.Awaiting(() => service.DispatchAsync(
+                        prepared.ShipmentId,
+                        new ShipmentStateCommandDto { RowVersion = loaded.RowVersion! }))
+                    .Should().ThrowAsync<BusinessRuleException>()
+                    .WithMessage("*Người duyệt phải khác người xác nhận xuất*");
+            }
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+            stock.Quantity.Should().Be(10);
+            stock.ReservedQuantity.Should().Be(10);
+            (await verify.InventoryTransactions.AsNoTracking().CountAsync(x => x.ReferenceType == "Shipment")).Should().Be(0);
+            (await verify.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task StartLoading_RequiresOutboundInServiceAppointment()
     {
         var fixture = await CreateFixtureAsync();
@@ -673,10 +708,17 @@ public sealed class SqlServerShipmentLoadingTests
             FullName = "Shipment loading user",
             Role = role
         };
+        var approver = new User
+        {
+            Username = $"ShipApprover{suffix}",
+            PasswordHash = "not-used",
+            FullName = "Shipment source approver",
+            Role = role
+        };
         var unit = new Unit { Code = $"SHU{suffix}", Name = "Shipment unit", DecimalPlaces = 4 };
         var product = new Product { Code = $"SHP{suffix}", Name = "Shipment product", Unit = unit };
         var warehouse = new Warehouse { Code = $"SHW{suffix}", Name = "Shipment warehouse" };
-        db.AddRange(user, product, warehouse);
+        db.AddRange(user, approver, product, warehouse);
         await db.SaveChangesAsync();
 
         var exportReceipt = new ExportReceipt
@@ -685,7 +727,7 @@ public sealed class SqlServerShipmentLoadingTests
             WarehouseId = warehouse.Id,
             Status = ReceiptStatus.Approved,
             CreatedBy = user.Id,
-            ApprovedBy = user.Id,
+            ApprovedBy = approver.Id,
             DispatchMode = ExportDispatchMode.RequireSeparateDispatch,
             CreatedAt = DateTime.UtcNow.AddMinutes(-10),
             ApprovedAt = DateTime.UtcNow.AddMinutes(-5),
@@ -802,7 +844,7 @@ public sealed class SqlServerShipmentLoadingTests
         await db.Units.Where(x => x.Id == fixture.UnitId).ExecuteDeleteAsync();
         await db.WarehouseLocations.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.Warehouses.Where(x => x.Id == fixture.WarehouseId).ExecuteDeleteAsync();
-        await db.Users.Where(x => x.Id == fixture.UserId).ExecuteDeleteAsync();
+        await db.Users.Where(x => x.RoleId == fixture.RoleId).ExecuteDeleteAsync();
         await db.Roles.Where(x => x.Id == fixture.RoleId).ExecuteDeleteAsync();
     }
 
