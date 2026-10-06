@@ -927,6 +927,10 @@ namespace ERP.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[ReferenceType] = 'StockTransfer'");
 
+                    b.HasIndex("ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId")
+                        .IsUnique()
+                        .HasFilter("[ReferenceType] = 'Shipment'");
+
                     b.ToTable("InventoryTransactions", (string)null);
                 });
 
@@ -1278,6 +1282,61 @@ namespace ERP.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_HandlingUnitContents_Quantity", "[Quantity] > 0");
                         });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.OutboxMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AggregateId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AggregateType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EventKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ProcessedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventKey")
+                        .IsUnique();
+
+                    b.HasIndex("AggregateType", "AggregateId");
+
+                    b.HasIndex("ProcessedAtUtc", "OccurredAtUtc");
+
+                    b.ToTable("OutboxMessages", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PackingSession", b =>
@@ -2281,6 +2340,12 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("DockId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("DispatchedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DispatchedBy")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("LoadedAt")
                         .HasColumnType("datetime2");
 
@@ -2344,6 +2409,8 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("DockAppointmentId");
 
                     b.HasIndex("DockId");
+
+                    b.HasIndex("DispatchedBy");
 
                     b.HasIndex("PackingSessionId")
                         .IsUnique();
@@ -4431,6 +4498,11 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("DockId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("ERP.Domain.Entities.User", "DispatchedByUser")
+                        .WithMany()
+                        .HasForeignKey("DispatchedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.PackingSession", "PackingSession")
                         .WithOne()
                         .HasForeignKey("ERP.Domain.Entities.Shipment", "PackingSessionId")
@@ -4453,6 +4525,8 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Dock");
 
                     b.Navigation("DockAppointment");
+
+                    b.Navigation("DispatchedByUser");
 
                     b.Navigation("PackingSession");
 
