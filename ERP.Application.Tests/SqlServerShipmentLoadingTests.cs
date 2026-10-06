@@ -511,7 +511,8 @@ public sealed class SqlServerShipmentLoadingTests
         return new ShipmentService(
             db,
             new WarehouseAuthorizationService(db, current),
-            current);
+            current,
+            CreateReservationService(db, userId));
     }
 
     private static async Task<Fixture> CreateFixtureAsync()
@@ -619,6 +620,11 @@ public sealed class SqlServerShipmentLoadingTests
     {
         await using var db = CreateContext();
         await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
+        await db.OutboxMessages
+            .Where(x => x.AggregateType == "Shipment" &&
+                        db.Shipments.Where(s => s.WarehouseId == fixture.WarehouseId).Select(s => s.Id).Contains(x.AggregateId))
+            .ExecuteDeleteAsync();
+        await db.InventoryTransactions.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.ShipmentHandlingUnits
             .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)
             .ExecuteDeleteAsync();
@@ -644,6 +650,8 @@ public sealed class SqlServerShipmentLoadingTests
         await db.StockReservations.Where(x => x.CreatedBy == fixture.UserId).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.UserWarehouses.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
+        await db.ExportReceiptDetails.Where(x => x.ExportReceiptId == fixture.ExportReceiptId).ExecuteDeleteAsync();
+        await db.ExportReceipts.Where(x => x.Id == fixture.ExportReceiptId).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == fixture.ProductId).ExecuteDeleteAsync();
         await db.Units.Where(x => x.Id == fixture.UnitId).ExecuteDeleteAsync();
         await db.WarehouseLocations.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
