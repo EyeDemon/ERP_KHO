@@ -742,7 +742,7 @@ namespace ERP.Application.Tests
         {
             var readiness = new Mock<IShipmentDispatchReadiness>();
             readiness.Setup(x => x.EnsureSourceReadyAsync("ExportReceipt", 1, It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new ERP.Domain.Exceptions.ConcurrencyException("Shipment của chứng từ chưa ở trạng thái LOADED."));
+                .ThrowsAsync(new ERP.Domain.Exceptions.ConcurrencyException("Chứng từ đã đi vào canonical Shipment workflow. Hãy xác nhận xuất kho tại Shipment thay vì ExportReceipt."));
             var service = new ExportReceiptService(
                 _mockExportRepo.Object,
                 _mockStockRepo.Object,
@@ -769,7 +769,7 @@ namespace ERP.Application.Tests
             Func<Task> act = () => service.DispatchAsync(1, 99);
 
             await act.Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
-                .WithMessage("*chưa ở trạng thái LOADED*");
+                .WithMessage("*canonical Shipment workflow*");
             readiness.Verify(x => x.EnsureSourceReadyAsync("ExportReceipt", 1, It.IsAny<CancellationToken>()), Times.Once);
             _mockReservationService.Verify(x => x.GetExportReservationAsync(
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
