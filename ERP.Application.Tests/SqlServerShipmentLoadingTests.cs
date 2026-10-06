@@ -107,9 +107,10 @@ public sealed class SqlServerShipmentLoadingTests
                 statuses.Should().OnlyContain(x => x == HandlingUnitStatus.Loaded);
             }
 
+            ShipmentDto loaded;
             await using (var complete = CreateContext())
             {
-                var loaded = await CreateShipmentService(complete, fixture.UserId).CompleteLoadingAsync(
+                loaded = await CreateShipmentService(complete, fixture.UserId).CompleteLoadingAsync(
                     prepared.ShipmentId,
                     new CompleteShipmentLoadingDto
                     {
@@ -120,12 +121,39 @@ public sealed class SqlServerShipmentLoadingTests
                 loaded.SealNumber.Should().Be("SEAL-001");
             }
 
+            await using (var readiness = CreateContext())
+            {
+                await CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
+                    loaded.SourceType,
+                    loaded.SourceId!.Value);
+            }
+
             await using var verify = CreateContext();
             var stock = await verify.InventoryStocks.AsNoTracking()
                 .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
             stock.Quantity.Should().Be(10);
             stock.ReservedQuantity.Should().Be(10);
             (await verify.InventoryTransactions.CountAsync()).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task DispatchReadiness_RejectsCanonicalShipmentBeforeLoaded()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var prepared = await PreparePackedNestedShipmentAsync(fixture);
+            await using var db = CreateContext();
+            var shipment = await db.Shipments.AsNoTracking().SingleAsync(x => x.Id == prepared.ShipmentId);
+            var service = CreateShipmentService(db, fixture.UserId);
+
+            await FluentActions.Awaiting(() => service.EnsureSourceReadyAsync(
+                    shipment.SourceType,
+                    shipment.SourceId!.Value))
+                .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
+                .WithMessage("*chưa ở trạng thái LOADED*");
         }
         finally { await CleanupAsync(fixture); }
     }
