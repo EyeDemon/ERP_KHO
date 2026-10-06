@@ -354,12 +354,13 @@ public sealed class SqlServerShipmentLoadingTests
         int reservationId;
         await using (var reserve = CreateContext())
         {
-            reservationId = (await CreateReservationService(reserve, fixture.UserId).CreateAsync(new()
-            {
-                ProductId = fixture.ProductId,
-                WarehouseId = fixture.WarehouseId,
-                Quantity = 10
-            })).Id;
+            reservationId = (await CreateReservationService(reserve, fixture.UserId).ReserveForExportAsync(
+                exportReceiptId: fixture.UserId,
+                exportCode: $"EX-SHIP-{fixture.Suffix}",
+                warehouseId: fixture.WarehouseId,
+                productId: fixture.ProductId,
+                quantity: 10,
+                userId: fixture.UserId)).Id;
         }
 
         await using (var allocate = CreateContext())
