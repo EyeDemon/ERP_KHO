@@ -253,6 +253,7 @@ namespace ERP.Api.Tests
         [InlineData("List", AppPermissions.ShipmentRead)]
         [InlineData("Get", AppPermissions.ShipmentRead)]
         [InlineData("Stage", AppPermissions.ShipmentStage)]
+        [InlineData("Dispatch", AppPermissions.ShipmentDispatch)]
         public void ShipmentEndpoints_RequireExactCapability(string methodName, string permission)
         {
             typeof(ShipmentsController).GetMethod(methodName)!
