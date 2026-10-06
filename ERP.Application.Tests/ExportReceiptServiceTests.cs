@@ -738,6 +738,49 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
+        public async Task DispatchAsync_WhenCanonicalShipmentExistsButNotLoaded_RollsBackBeforeInventoryMutation()
+        {
+            var readiness = new Mock<IShipmentDispatchReadiness>();
+            readiness.Setup(x => x.EnsureSourceReadyAsync("ExportReceipt", 1, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new ERP.Domain.Exceptions.ConcurrencyException("Shipment của chứng từ chưa ở trạng thái LOADED."));
+            var service = new ExportReceiptService(
+                _mockExportRepo.Object,
+                _mockStockRepo.Object,
+                _mockTransactionRepo.Object,
+                _mockUnitOfWork.Object,
+                _mockAuditRepo.Object,
+                _mockWarehouseAuthorization.Object,
+                _mockCurrentUser.Object,
+                _mockReservationService.Object,
+                new ExportReceiptOptions { RequireDifferentDispatcher = true },
+                shipmentDispatchReadiness: readiness.Object);
+
+            _mockExportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(new ExportReceipt
+            {
+                Id = 1,
+                Code = "EX-1",
+                WarehouseId = 1,
+                Status = ReceiptStatus.Approved,
+                DispatchMode = ExportDispatchMode.RequireSeparateDispatch,
+                ApprovedBy = 88,
+                Details = new List<ExportReceiptDetail> { new() { ProductId = 1, Quantity = 10 } }
+            });
+
+            Func<Task> act = () => service.DispatchAsync(1, 99);
+
+            await act.Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
+                .WithMessage("*chưa ở trạng thái LOADED*");
+            readiness.Verify(x => x.EnsureSourceReadyAsync("ExportReceipt", 1, It.IsAny<CancellationToken>()), Times.Once);
+            _mockReservationService.Verify(x => x.GetExportReservationAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+            _mockReservationService.Verify(x => x.ConsumeAsync(
+                It.IsAny<StockReservation>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+            _mockTransactionRepo.Verify(x => x.AddAsync(
+                It.IsAny<InventoryTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
+            _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
+        }
+
+        [Fact]
         public async Task DispatchAsync_ConsumptionBreakdownDoesNotMatchLine_RollsBackWithoutLedger()
         {
             var reservation = new StockReservation { Id = 77, SourceType = "ExportReceipt" };
