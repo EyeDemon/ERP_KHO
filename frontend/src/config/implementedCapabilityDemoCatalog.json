@@ -1481,6 +1481,57 @@
     "exceptionTitle": "RESTORE_DRILL_FAILED",
     "exceptionDetail": "Backup không được coi là usable cho tới khi restore và integrity verification PASS."
   },
+  "OUT-08": {
+    "title": "Shipment Dispatch",
+    "subtitle": "Canonical outbound inventory boundary sau khi Shipment đã LOADED.",
+    "mode": "wizard",
+    "stages": [
+      "LOADED",
+      "VALIDATING",
+      "DISPATCHED",
+      "VERIFY_LEDGER"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "OUT-08"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Production route",
+        "value": "/shipments"
+      },
+      {
+        "label": "Spec",
+        "value": "29, 31, 38, 228"
+      },
+      {
+        "label": "Shipment",
+        "value": "SHP-2026-5108"
+      },
+      {
+        "label": "Inventory boundary",
+        "value": "SHIP ledger + OnHand -Q exactly once"
+      }
+    ],
+    "commands": [
+      "VALIDATE_DISPATCH",
+      "DISPATCH_SHIPMENT",
+      "VERIFY_SHIP_LEDGER"
+    ],
+    "exceptionTitle": "DISPATCH_INVENTORY_CONFLICT",
+    "exceptionDetail": "Stock/version/HU/allocation/reservation không còn khớp LOADED Shipment; dispatch phải fail closed và không double-deduct.",
+    "quantity": {
+      "label": "Dispatch quantity",
+      "operationUom": "Cái",
+      "baseUom": "Cái",
+      "factor": 1,
+      "initial": 22
+    }
+  },
   "INV-11": {
     "title": "Inventory Integrity & Reconciliation",
     "subtitle": "So sánh immutable ledger với balance projection và rebuild có kiểm soát.",
