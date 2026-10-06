@@ -23,6 +23,8 @@ public sealed class Shipment
     public DateTime? StagedAt { get; set; }
     public DateTime? LoadingStartedAt { get; set; }
     public DateTime? LoadedAt { get; set; }
+    public DateTime? DispatchedAt { get; set; }
+    public int? DispatchedBy { get; set; }
     public byte[] RowVersion { get; set; } = [];
 
     public PackingSession PackingSession { get; set; } = null!;
@@ -31,6 +33,7 @@ public sealed class Shipment
     public DockAppointment? DockAppointment { get; set; }
     public Dock? Dock { get; set; }
     public User CreatedByUser { get; set; } = null!;
+    public User? DispatchedByUser { get; set; }
     public ICollection<ShipmentHandlingUnit> HandlingUnits { get; set; } = [];
 }
 
