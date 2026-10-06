@@ -412,8 +412,40 @@ export const demoShipments = [
       },
     ],
   },
+,
+  {
+    id: 7702, shipmentCode: 'SHIP-2026-7702', packingSessionId: 9902, packingSessionCode: 'PACK-2026-9902',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', sourceType: 'ExportReceipt', sourceId: 5109, sourceCode: 'EX-2026-5109',
+    status: 'Loaded', stagingLocationId: 1701, stagingLocationCode: 'STG-OUT-01', handlingUnitCount: 1, loadedHandlingUnitCount: 1,
+    dockAppointmentId: 1043, dockAppointmentCode: 'APT-2026-1043', dockId: 102, dockCode: 'D-02',
+    vehiclePlate: '50H-220.18', trailerPlate: 'TR-220', sealNumber: 'SEAL-7702',
+    createdAt: '2026-10-06T03:00:00Z', stagedAt: '2026-10-06T03:05:00Z', loadingStartedAt: '2026-10-06T03:15:00Z', loadedAt: '2026-10-06T03:25:00Z',
+    dispatchedAt: null, dispatchedBy: null, dispatchedByName: null, rowVersion: 'AAAAAAAASHIP2',
+    handlingUnits: [
+      {
+        id: 7721, handlingUnitId: 9921, huCode: 'PALLET-7702-01', barcode: 'PALLET-7702-01', sscc: null,
+        type: 'Pallet', status: 'Loaded', sequence: 1, contentQuantity: 30,
+        assignedAt: '2026-10-06T03:00:00Z', stagedAt: '2026-10-06T03:05:00Z', loadedAt: '2026-10-06T03:24:00Z',
+      },
+    ],
+  },
+  {
+    id: 7703, shipmentCode: 'SHIP-2026-7703', packingSessionId: 9903, packingSessionCode: 'PACK-2026-9903',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', sourceType: 'ExportReceipt', sourceId: 5110, sourceCode: 'EX-2026-5110',
+    status: 'Dispatched', stagingLocationId: 1701, stagingLocationCode: 'STG-OUT-01', handlingUnitCount: 1, loadedHandlingUnitCount: 1,
+    dockAppointmentId: 1043, dockAppointmentCode: 'APT-2026-1043', dockId: 102, dockCode: 'D-02',
+    vehiclePlate: '50H-220.18', trailerPlate: 'TR-220', sealNumber: 'SEAL-7703',
+    createdAt: '2026-10-06T02:15:00Z', stagedAt: '2026-10-06T02:20:00Z', loadingStartedAt: '2026-10-06T02:30:00Z', loadedAt: '2026-10-06T02:40:00Z',
+    dispatchedAt: '2026-10-06T02:45:00Z', dispatchedBy: 101, dispatchedByName: 'Trần Quốc Bảo', rowVersion: 'AAAAAAAASHIP3',
+    handlingUnits: [
+      {
+        id: 7731, handlingUnitId: 9931, huCode: 'PALLET-7703-01', barcode: 'PALLET-7703-01', sscc: null,
+        type: 'Pallet', status: 'Shipped', sequence: 1, contentQuantity: 24,
+        assignedAt: '2026-10-06T02:15:00Z', stagedAt: '2026-10-06T02:20:00Z', loadedAt: '2026-10-06T02:39:00Z',
+      },
+    ],
+  },
 ];
-
 
 export const demoStocktakes = [
   { id: 142, code: 'CC-2026-0142', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 0, note: 'Cycle count khu A', createdBy: 101, createdByName: 'Trần Quốc Bảo', createdAt: '2026-10-03T08:00:00Z', detailCount: 1, details: [{ id: 1, stocktakeId: 142, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', unitName: 'Gói', systemQuantity: 1250, actualQuantity: 1248, differenceQuantity: -2, note: 'Recount accepted' }] },
@@ -533,5 +565,6 @@ export const demoPermissionCatalog = [
   { code: 'shipment.update', description: 'Cập nhật Shipment' },
   { code: 'shipment.stage', description: 'Đưa Shipment vào staging' },
   { code: 'shipment.load', description: 'Thực hiện Shipment loading' },
+  { code: 'shipment.dispatch', description: 'Dispatch Shipment và ghi SHIP ledger' },
   { code: 'loading.execute', description: 'Thực hiện loading tại dock' },
 ];
