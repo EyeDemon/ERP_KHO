@@ -3,6 +3,7 @@ using System.Text.Json;
 using ERP.Application.DTOs;
 using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
+using ERP.Application.Options;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
@@ -16,7 +17,8 @@ public sealed class ShipmentService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
     ICurrentUser currentUser,
-    IStockReservationService? stockReservationService = null) : IShipmentService, IShipmentDispatchReadiness
+    IStockReservationService? stockReservationService = null,
+    ExportReceiptOptions? exportReceiptOptions = null) : IShipmentService, IShipmentDispatchReadiness
 {
     public async Task<IReadOnlyList<ShipmentListDto>> ListAsync(
         int? warehouseId = null,
@@ -289,6 +291,9 @@ public sealed class ShipmentService(
                     ?? throw Conflict("SHIPMENT_SOURCE_INVALID", "Không tìm thấy phiếu xuất nguồn của Shipment.");
                 if (sourceReceipt.Status != ReceiptStatus.Approved)
                     throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Phiếu xuất nguồn không còn ở trạng thái APPROVED.");
+                var dispatchOptions = exportReceiptOptions ?? new ExportReceiptOptions();
+                if (dispatchOptions.RequireDifferentDispatcher && sourceReceipt.ApprovedBy == currentUser.UserId)
+                    throw new BusinessRuleException("Người duyệt phải khác người xác nhận xuất.");
             }
 
             var reservationIds = lines.Select(x => x.Allocation.ReservationId).Distinct().Order().ToArray();
