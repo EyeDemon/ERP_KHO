@@ -123,6 +123,9 @@ public sealed class SqlServerShipmentLoadingTests
 
             await using (var readiness = CreateContext())
             {
+                await CreatePackingService(readiness, fixture.UserId).EnsureSourceReadyAsync(
+                    loaded.SourceType,
+                    loaded.SourceId!.Value);
                 await CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
                     loaded.SourceType,
                     loaded.SourceId!.Value);
@@ -145,13 +148,27 @@ public sealed class SqlServerShipmentLoadingTests
         try
         {
             var prepared = await PreparePackedNestedShipmentAsync(fixture);
-            await using var db = CreateContext();
-            var shipment = await db.Shipments.AsNoTracking().SingleAsync(x => x.Id == prepared.ShipmentId);
-            var service = CreateShipmentService(db, fixture.UserId);
+            ShipmentDto staged;
+            await using (var stage = CreateContext())
+            {
+                var shipmentService = CreateShipmentService(stage, fixture.UserId);
+                var current = await shipmentService.GetAsync(prepared.ShipmentId);
+                staged = await shipmentService.StageAsync(prepared.ShipmentId, new StageShipmentDto
+                {
+                    StagingLocationCode = fixture.StagingLocationCode,
+                    RowVersion = current.RowVersion!
+                });
+            }
 
+            await using var db = CreateContext();
+            await CreatePackingService(db, fixture.UserId).EnsureSourceReadyAsync(
+                staged.SourceType,
+                staged.SourceId!.Value);
+
+            var service = CreateShipmentService(db, fixture.UserId);
             await FluentActions.Awaiting(() => service.EnsureSourceReadyAsync(
-                    shipment.SourceType,
-                    shipment.SourceId!.Value))
+                    staged.SourceType,
+                    staged.SourceId!.Value))
                 .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
                 .WithMessage("*chưa ở trạng thái LOADED*");
         }
