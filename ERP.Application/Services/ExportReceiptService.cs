@@ -20,6 +20,7 @@ namespace ERP.Application.Services
         private readonly IStockReservationService? _stockReservationService;
         private readonly IPickingDispatchReadiness? _pickingDispatchReadiness;
         private readonly IPackingDispatchReadiness? _packingDispatchReadiness;
+        private readonly IShipmentDispatchReadiness? _shipmentDispatchReadiness;
         private readonly ExportReceiptOptions _options;
 
         internal ExportReceiptService(IExportReceiptRepository exportReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, ExportReceiptOptions? options = null)
@@ -32,6 +33,7 @@ namespace ERP.Application.Services
             _stockReservationService = null;
             _pickingDispatchReadiness = null;
             _packingDispatchReadiness = null;
+            _shipmentDispatchReadiness = null;
             _options = options ?? new ExportReceiptOptions();
         }
 
@@ -46,7 +48,8 @@ namespace ERP.Application.Services
             IStockReservationService stockReservationService,
             ExportReceiptOptions? options = null,
             IPickingDispatchReadiness? pickingDispatchReadiness = null,
-            IPackingDispatchReadiness? packingDispatchReadiness = null)
+            IPackingDispatchReadiness? packingDispatchReadiness = null,
+            IShipmentDispatchReadiness? shipmentDispatchReadiness = null)
         {
             _exportReceiptRepository = exportReceiptRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -58,6 +61,7 @@ namespace ERP.Application.Services
             _stockReservationService = stockReservationService;
             _pickingDispatchReadiness = pickingDispatchReadiness;
             _packingDispatchReadiness = packingDispatchReadiness;
+            _shipmentDispatchReadiness = shipmentDispatchReadiness;
             _options = options ?? new ExportReceiptOptions();
         }
 
@@ -263,6 +267,8 @@ namespace ERP.Application.Services
                     await _pickingDispatchReadiness.EnsureSourceReadyAsync("ExportReceipt", receipt.Id);
                 if (_packingDispatchReadiness is not null)
                     await _packingDispatchReadiness.EnsureSourceReadyAsync("ExportReceipt", receipt.Id);
+                if (_shipmentDispatchReadiness is not null)
+                    await _shipmentDispatchReadiness.EnsureSourceReadyAsync("ExportReceipt", receipt.Id);
 
                 foreach (var detail in receipt.Details.OrderBy(x => x.ProductId))
                 {
