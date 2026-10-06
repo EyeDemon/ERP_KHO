@@ -50,7 +50,6 @@ public sealed class SqlServerShipmentLoadingTests
         try
         {
             var prepared = await PreparePackedNestedShipmentAsync(fixture);
-            var canonicalSource = await AssignCanonicalExportSourceAsync(prepared.ShipmentId, fixture);
             ShipmentDto staged;
             await using (var stage = CreateContext())
             {
@@ -125,11 +124,11 @@ public sealed class SqlServerShipmentLoadingTests
             await using (var readiness = CreateContext())
             {
                 await CreatePackingService(readiness, fixture.UserId).EnsureSourceReadyAsync(
-                    canonicalSource.SourceType,
-                    canonicalSource.SourceId);
+                    "ExportReceipt",
+                    fixture.ExportReceiptId);
                 await CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
-                    canonicalSource.SourceType,
-                    canonicalSource.SourceId);
+                    "ExportReceipt",
+                    fixture.ExportReceiptId);
             }
 
             await using var verify = CreateContext();
@@ -149,7 +148,6 @@ public sealed class SqlServerShipmentLoadingTests
         try
         {
             var prepared = await PreparePackedNestedShipmentAsync(fixture);
-            var canonicalSource = await AssignCanonicalExportSourceAsync(prepared.ShipmentId, fixture);
             ShipmentDto staged;
             await using (var stage = CreateContext())
             {
@@ -164,13 +162,13 @@ public sealed class SqlServerShipmentLoadingTests
 
             await using var db = CreateContext();
             await CreatePackingService(db, fixture.UserId).EnsureSourceReadyAsync(
-                canonicalSource.SourceType,
-                canonicalSource.SourceId);
+                "ExportReceipt",
+                fixture.ExportReceiptId);
 
             var service = CreateShipmentService(db, fixture.UserId);
             await FluentActions.Awaiting(() => service.EnsureSourceReadyAsync(
-                    canonicalSource.SourceType,
-                    canonicalSource.SourceId))
+                    "ExportReceipt",
+                    fixture.ExportReceiptId))
                 .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
                 .WithMessage("*chưa ở trạng thái LOADED*");
         }
@@ -261,28 +259,6 @@ public sealed class SqlServerShipmentLoadingTests
             }
         }
         finally { await CleanupAsync(fixture); }
-    }
-
-    private static async Task<(string SourceType, int SourceId)> AssignCanonicalExportSourceAsync(
-        int shipmentId,
-        Fixture fixture)
-    {
-        const string sourceType = "ExportReceipt";
-        var sourceId = shipmentId + 1_000_000;
-        await using var db = CreateContext();
-        var shipment = await db.Shipments
-            .Include(x => x.PackingSession)
-            .ThenInclude(x => x.PickingTask)
-            .SingleAsync(x => x.Id == shipmentId);
-        var sourceCode = $"EXP-{fixture.Suffix}";
-        shipment.SourceType = sourceType;
-        shipment.SourceId = sourceId;
-        shipment.SourceCode = sourceCode;
-        shipment.PackingSession.PickingTask.SourceType = sourceType;
-        shipment.PackingSession.PickingTask.SourceId = sourceId;
-        shipment.PackingSession.PickingTask.SourceCode = sourceCode;
-        await db.SaveChangesAsync();
-        return (sourceType, sourceId);
     }
 
     private static async Task<Prepared> PreparePackedNestedShipmentAsync(Fixture fixture)
@@ -379,8 +355,8 @@ public sealed class SqlServerShipmentLoadingTests
         await using (var reserve = CreateContext())
         {
             reservationId = (await CreateReservationService(reserve, fixture.UserId).ReserveForExportAsync(
-                exportReceiptId: fixture.UserId,
-                exportCode: $"EX-SHIP-{fixture.Suffix}",
+                exportReceiptId: fixture.ExportReceiptId,
+                exportCode: fixture.ExportReceiptCode,
                 warehouseId: fixture.WarehouseId,
                 productId: fixture.ProductId,
                 quantity: 10,
@@ -556,6 +532,33 @@ public sealed class SqlServerShipmentLoadingTests
         db.AddRange(user, product, warehouse);
         await db.SaveChangesAsync();
 
+        var exportReceipt = new ExportReceipt
+        {
+            Code = $"EX-SHIP-{suffix}",
+            WarehouseId = warehouse.Id,
+            Status = ReceiptStatus.Approved,
+            CreatedBy = user.Id,
+            ApprovedBy = user.Id,
+            DispatchMode = ExportDispatchMode.RequireSeparateDispatch,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+            ApprovedAt = DateTime.UtcNow.AddMinutes(-5),
+            Details =
+            [
+                new ExportReceiptDetail
+                {
+                    ProductId = product.Id,
+                    Quantity = 10,
+                    UnitPrice = 0,
+                    BaseUomIdSnapshot = unit.Id,
+                    BaseUomCodeSnapshot = unit.Code,
+                    BaseUomNameSnapshot = unit.Name,
+                    BaseUomDecimalPlacesSnapshot = unit.DecimalPlaces
+                }
+            ]
+        };
+        db.ExportReceipts.Add(exportReceipt);
+        await db.SaveChangesAsync();
+
         var location = new WarehouseLocation
         {
             WarehouseId = warehouse.Id,
@@ -603,6 +606,8 @@ public sealed class SqlServerShipmentLoadingTests
             unit.Id,
             product.Id,
             product.Code,
+            exportReceipt.Id,
+            exportReceipt.Code,
             warehouse.Id,
             location.Id,
             location.Code,
@@ -665,6 +670,8 @@ public sealed class SqlServerShipmentLoadingTests
         int UnitId,
         int ProductId,
         string ProductCode,
+        int ExportReceiptId,
+        string ExportReceiptCode,
         int WarehouseId,
         int LocationId,
         string LocationCode,
