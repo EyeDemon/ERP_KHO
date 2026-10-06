@@ -27,6 +27,7 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/picking-tasks', label: 'Picking', section: 'Outbound', description: 'Scan-first Picking theo Allocation, Short Pick và exception resolution.', permission: 'picking.read' },
   { path: '/packing-sessions', label: 'Packing & HU', section: 'Outbound', description: 'Đóng gói lượng đã Picking vào carton/tote/HU, quantity conservation và nested HU.', permission: 'packing.read' },
   { path: '/shipments', label: 'Shipment Execution', section: 'Outbound', description: 'Shipment READY → STAGING → LOADING → LOADED → DISPATCHED, HU/dock context và SHIP inventory boundary.', permission: 'shipment.read' },
+  { path: '/backorders', label: 'Sales Order & Backorder', section: 'Outbound', description: 'Demand lifecycle, partial reservation/allocation, Backorder recovery và cancellation.', permission: 'backorder.read' },
   { path: '/inventory', label: 'Tồn kho', section: 'Inventory Control', description: 'Tồn hiện tại, lịch sử movement và báo cáo xuất-nhập-tồn.', access: 'always' },
   { path: '/inventory-reconciliation', label: 'Đối chiếu tồn kho', section: 'Inventory Control', description: 'So sánh operational balance với immutable ledger để phát hiện lệch.', access: 'always' },
   { path: '/stocktakes', label: 'Kiểm kê kho', section: 'Inventory Control', description: 'Phiếu kiểm kê, variance và quy trình duyệt điều chỉnh.', access: 'stocktake' },
