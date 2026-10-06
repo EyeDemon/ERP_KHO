@@ -112,7 +112,7 @@ namespace ERP.Infrastructure.Queries
                     .Sum(t => t.TotalQuantity);
 
                 var importQuantity = Total(TransactionType.Import);
-                var exportQuantity = Total(TransactionType.Export);
+                var exportQuantity = Total(TransactionType.Export) + Total(TransactionType.Ship);
                 var transferInQuantity = Total(TransactionType.TransferIn);
                 var transferOutQuantity = Total(TransactionType.TransferOut);
                 var adjustmentIncreaseQuantity = Total(TransactionType.AdjustmentIncrease);
