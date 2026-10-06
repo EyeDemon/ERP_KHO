@@ -48,6 +48,7 @@ const messageFor=(e:unknown)=>{
   if(code==='SHIPMENT_SOURCE_INVALID'||code==='SHIPMENT_SOURCE_STATE_INVALID') return response?.data?.message??'Chứng từ nguồn không còn hợp lệ để dispatch.';
   if(code==='SHIPMENT_BACKORDER_NOT_SUPPORTED') return response?.data?.message??'Shipment còn Short Pick cần xử lý ở Backorder.';
   if(code==='SHIPMENT_LEDGER_EXISTS') return 'Shipment đã có SHIP ledger. Hãy đối soát trước khi retry.';
+  if(code==='SHIPMENT_LEDGER_INVALID') return response?.data?.message??'Không tạo được SHIP ledger từ inventory consumption.';
   if(code==='SHIPMENT_VERSION_CONFLICT'||response?.status===409) return response?.data?.message??'Shipment đã thay đổi. Vui lòng tải lại.';
   if(response?.status===403)return 'Bạn không có quyền thực hiện thao tác Shipment này.';
   if(response?.status===404)return 'Không tìm thấy Shipment trong phạm vi kho của bạn.';
