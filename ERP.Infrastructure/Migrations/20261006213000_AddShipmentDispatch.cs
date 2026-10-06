@@ -41,7 +41,7 @@ public sealed class AddShipmentDispatch : Migration
         migrationBuilder.CreateIndex(
             name: "IX_InventoryTransactions_ShipmentReference",
             table: "InventoryTransactions",
-            columns: new[] { "ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId" },
+            columns: new[] { "ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId", "InventoryStatus" },
             unique: true,
             filter: "[ReferenceType] = 'Shipment'");
 
