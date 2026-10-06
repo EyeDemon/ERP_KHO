@@ -589,6 +589,9 @@ public sealed class ShipmentService(
             StagedAt = summary.StagedAt,
             LoadingStartedAt = summary.LoadingStartedAt,
             LoadedAt = summary.LoadedAt,
+            DispatchedAt = summary.DispatchedAt,
+            DispatchedBy = summary.DispatchedBy,
+            DispatchedByName = summary.DispatchedByName,
             RowVersion = Convert.ToBase64String(shipment.RowVersion),
             HandlingUnits = shipment.HandlingUnits.OrderBy(x => x.Sequence).Select(link =>
             {
