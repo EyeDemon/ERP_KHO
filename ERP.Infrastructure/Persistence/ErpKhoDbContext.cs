@@ -69,6 +69,7 @@ public class ErpKhoDbContext : DbContext
     public DbSet<HandlingUnitContent> HandlingUnitContents => Set<HandlingUnitContent>();
     public DbSet<Shipment> Shipments => Set<Shipment>();
     public DbSet<ShipmentHandlingUnit> ShipmentHandlingUnits => Set<ShipmentHandlingUnit>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public override int SaveChanges()
     {
