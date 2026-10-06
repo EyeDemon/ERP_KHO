@@ -16,11 +16,11 @@ const renderPreview = (moduleKey: string, capabilityId: string) => render(
 describe('CapabilityPreview', () => {
   afterEach(cleanup);
 
-  it('renders a planned capability with spec, states and mock records', () => {
+  it('renders OUT-08 foundation with production navigation and read-only Blueprint evidence', () => {
     const view = renderPreview('outbound', 'OUT-08');
     expect(view.getAllByText('Shipment Dispatch').length).toBeGreaterThan(0);
-    expect(view.getByText('MOCK / SPEC PREVIEW')).toBeTruthy();
-    expect(view.getByText(/Shipment state machine riêng.*LOADED.*ExportReceipt dispatch/i)).toBeTruthy();
+    expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+    expect(view.getByText(/canonical Shipment LOADED dispatch/i)).toBeTruthy();
     expect(view.getAllByText('SHP-2026-5108').length).toBeGreaterThan(0);
     expect(view.getByText('Expected UX states')).toBeTruthy();
     expect(view.getByText('Technical contract')).toBeTruthy();
@@ -304,7 +304,7 @@ describe('CapabilityPreview', () => {
     const view = renderPreview('outbound', 'OUT-08');
     expect(view.getByTestId('interactive-capability-demo')).toBeTruthy();
     fireEvent.click(view.getByText('Thực hiện bước tiếp theo'));
-    expect(view.getByText('State → LOAD_READY')).toBeTruthy();
+    expect(view.getByText('State → VALIDATING')).toBeTruthy();
 
     fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
     expect(view.getByText('DISPATCH_INVENTORY_CONFLICT')).toBeTruthy();

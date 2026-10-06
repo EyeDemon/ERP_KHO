@@ -9,6 +9,7 @@ public static class InventoryTransactionTypeMapping
         TransactionType.TransferIn => 1,
 
         TransactionType.Export or
+        TransactionType.Ship or
         TransactionType.AdjustmentDecrease or
         TransactionType.TransferOut => -1,
 

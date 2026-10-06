@@ -27,6 +27,7 @@ public sealed class ShipmentConfiguration : IEntityTypeConfiguration<Shipment>
         b.HasOne(x => x.DockAppointment).WithMany().HasForeignKey(x => x.DockAppointmentId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Dock).WithMany().HasForeignKey(x => x.DockId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne(x => x.DispatchedByUser).WithMany().HasForeignKey(x => x.DispatchedBy).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

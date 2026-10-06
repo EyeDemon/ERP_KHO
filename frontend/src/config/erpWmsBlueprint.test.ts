@@ -132,9 +132,10 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('OUT-06')?.goal).toMatch(/PickedQuantity.*nested HU.*không trừ OnHand.*OUT-07 foundation.*split\/merge\/repack.*chưa/i);
     expect(byId.get('OUT-07')?.status).toBe('foundation');
     expect(byId.get('OUT-07')?.route).toBe('/shipments');
-    expect(byId.get('OUT-07')?.goal).toMatch(/Shipment READY.*staging location.*HU hierarchy.*IN_SERVICE.*LOADED.*không trừ OnHand.*Dispatch\/SHIP ledger.*chưa/i);
-    expect(byId.get('OUT-08')?.status).toBe('planned');
-    expect(byId.get('OUT-08')?.goal).toMatch(/Shipment state machine riêng/i);
+    expect(byId.get('OUT-07')?.goal).toMatch(/Shipment READY.*staging location.*HU hierarchy.*IN_SERVICE.*LOADED.*không trừ OnHand.*OUT-08 foundation/i);
+    expect(byId.get('OUT-08')?.status).toBe('foundation');
+    expect(byId.get('OUT-08')?.route).toBe('/shipments');
+    expect(byId.get('OUT-08')?.goal).toMatch(/Shipment LOADED.*root-HU.*Allocation.*Reservation.*SHIP ledger.*OnHand đúng một lần.*ExportReceipt legacy dispatch bị chặn.*TransactionType\.Ship.*POD.*chưa/i);
 
     for (const id of ['OUT-03', 'OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'OUT-09', 'OUT-10']) {
       expect(byId.get(id)?.status).not.toBe('live');

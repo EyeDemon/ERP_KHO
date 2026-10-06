@@ -25,6 +25,10 @@ public interface IShipmentService
         int id,
         CompleteShipmentLoadingDto request,
         CancellationToken cancellationToken = default);
+    Task<ShipmentDto> DispatchAsync(
+        int id,
+        ShipmentStateCommandDto request,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IShipmentIntegration

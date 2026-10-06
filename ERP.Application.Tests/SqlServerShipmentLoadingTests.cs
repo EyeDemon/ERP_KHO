@@ -127,9 +127,11 @@ public sealed class SqlServerShipmentLoadingTests
                 await CreatePackingService(readiness, fixture.UserId).EnsureSourceReadyAsync(
                     canonicalSource.SourceType,
                     canonicalSource.SourceId);
-                await CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
-                    canonicalSource.SourceType,
-                    canonicalSource.SourceId);
+                await FluentActions.Awaiting(() => CreateShipmentService(readiness, fixture.UserId).EnsureSourceReadyAsync(
+                        canonicalSource.SourceType,
+                        canonicalSource.SourceId))
+                    .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
+                    .WithMessage("*dispatch tại Shipment*");
             }
 
             await using var verify = CreateContext();
@@ -172,7 +174,7 @@ public sealed class SqlServerShipmentLoadingTests
                     canonicalSource.SourceType,
                     canonicalSource.SourceId))
                 .Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
-                .WithMessage("*chưa ở trạng thái LOADED*");
+                .WithMessage("*dispatch tại Shipment*");
         }
         finally { await CleanupAsync(fixture); }
     }
@@ -263,26 +265,224 @@ public sealed class SqlServerShipmentLoadingTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task ShipmentDispatch_RequiresLoadedState_WithoutInventoryMutation()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var prepared = await PreparePackedNestedShipmentAsync(fixture);
+            await AssignCanonicalExportSourceAsync(prepared.ShipmentId, fixture);
+
+            await using (var dispatch = CreateContext())
+            {
+                var service = CreateShipmentService(dispatch, fixture.UserId);
+                var current = await service.GetAsync(prepared.ShipmentId);
+                var act = () => service.DispatchAsync(
+                    prepared.ShipmentId,
+                    new ShipmentStateCommandDto { RowVersion = current.RowVersion! });
+
+                var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
+                thrown.Which.Data["ErrorCode"].Should().Be("SHIPMENT_STATE_INVALID");
+            }
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+            stock.Quantity.Should().Be(10);
+            stock.ReservedQuantity.Should().Be(10);
+            (await verify.InventoryTransactions.AsNoTracking()
+                .CountAsync(x => x.ReferenceType == "Shipment" && x.ReferenceId == prepared.ShipmentId))
+                .Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task LoadedShipment_DispatchesExactlyOnce_WithLocationShipLedger_AndSourceSync()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var prepared = await PreparePackedNestedShipmentAsync(fixture);
+            var canonicalSource = await AssignCanonicalExportSourceAsync(prepared.ShipmentId, fixture);
+            var loaded = await LoadShipmentAsync(prepared, fixture);
+
+            ShipmentDto dispatched;
+            await using (var dispatch = CreateContext())
+            {
+                dispatched = await CreateShipmentService(dispatch, fixture.UserId).DispatchAsync(
+                    prepared.ShipmentId,
+                    new ShipmentStateCommandDto { RowVersion = loaded.RowVersion! });
+                dispatched.Status.Should().Be(nameof(ShipmentStatus.Dispatched));
+                dispatched.DispatchedBy.Should().Be(fixture.UserId);
+                dispatched.DispatchedAt.Should().NotBeNull();
+            }
+
+            await using (var verify = CreateContext())
+            {
+                var stock = await verify.InventoryStocks.AsNoTracking()
+                    .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+                stock.Quantity.Should().Be(0);
+                stock.ReservedQuantity.Should().Be(0);
+
+                var reservation = await verify.StockReservations.AsNoTracking()
+                    .SingleAsync(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+                reservation.Status.Should().Be(StockReservationStatus.Consumed);
+                reservation.ConsumedQuantity.Should().Be(10);
+                reservation.AllocatedQuantity.Should().Be(0);
+
+                var allocation = await verify.StockAllocations.AsNoTracking()
+                    .SingleAsync(x => x.ReservationId == reservation.Id);
+                allocation.Status.Should().Be(StockAllocationStatus.Consumed);
+
+                var ledger = await verify.InventoryTransactions.AsNoTracking()
+                    .Where(x => x.ReferenceType == "Shipment" &&
+                                x.ReferenceId == prepared.ShipmentId &&
+                                x.TransactionType == TransactionType.Ship)
+                    .ToListAsync();
+                ledger.Should().ContainSingle();
+                ledger.Single().ProductId.Should().Be(fixture.ProductId);
+                ledger.Single().WarehouseId.Should().Be(fixture.WarehouseId);
+                ledger.Single().LocationId.Should().Be(fixture.LocationId);
+                ledger.Single().InventoryStatus.Should().Be(InventoryStatus.Available);
+                ledger.Single().Quantity.Should().Be(10);
+
+                (await verify.HandlingUnits.AsNoTracking()
+                    .Where(x => x.WarehouseId == fixture.WarehouseId)
+                    .AllAsync(x => x.Status == HandlingUnitStatus.Shipped))
+                    .Should().BeTrue();
+
+                var receipt = await verify.ExportReceipts.AsNoTracking()
+                    .SingleAsync(x => x.Id == canonicalSource.SourceId);
+                receipt.Status.Should().Be(ReceiptStatus.Dispatched);
+                receipt.DispatchedBy.Should().Be(fixture.UserId);
+                receipt.DispatchedAt.Should().NotBeNull();
+            }
+
+            await using (var retry = CreateContext())
+            {
+                var service = CreateShipmentService(retry, fixture.UserId);
+                var act = () => service.DispatchAsync(
+                    prepared.ShipmentId,
+                    new ShipmentStateCommandDto { RowVersion = dispatched.RowVersion! });
+                var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
+                thrown.Which.Data["ErrorCode"].Should().Be("SHIPMENT_STATE_INVALID");
+            }
+
+            await using (var verifyRetry = CreateContext())
+            {
+                (await verifyRetry.InventoryTransactions.AsNoTracking()
+                    .CountAsync(x => x.ReferenceType == "Shipment" &&
+                                     x.ReferenceId == prepared.ShipmentId &&
+                                     x.TransactionType == TransactionType.Ship))
+                    .Should().Be(1);
+                var stock = await verifyRetry.InventoryStocks.AsNoTracking()
+                    .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+                stock.Quantity.Should().Be(0);
+                stock.ReservedQuantity.Should().Be(0);
+            }
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    private static async Task<ShipmentDto> LoadShipmentAsync(Prepared prepared, Fixture fixture)
+    {
+        ShipmentDto staged;
+        await using (var stage = CreateContext())
+        {
+            var service = CreateShipmentService(stage, fixture.UserId);
+            var current = await service.GetAsync(prepared.ShipmentId);
+            staged = await service.StageAsync(prepared.ShipmentId, new StageShipmentDto
+            {
+                StagingLocationCode = fixture.StagingLocationCode,
+                RowVersion = current.RowVersion!
+            });
+        }
+
+        int appointmentId;
+        await using (var dock = CreateContext())
+        {
+            appointmentId = await CreateOutboundAppointmentAsync(
+                dock,
+                fixture,
+                DockAppointmentStatus.InService);
+        }
+
+        ShipmentDto loading;
+        await using (var start = CreateContext())
+        {
+            loading = await CreateShipmentService(start, fixture.UserId).StartLoadingAsync(
+                prepared.ShipmentId,
+                new StartShipmentLoadingDto
+                {
+                    DockAppointmentId = appointmentId,
+                    RowVersion = staged.RowVersion!
+                });
+        }
+
+        ShipmentDto huLoaded;
+        await using (var load = CreateContext())
+        {
+            huLoaded = await CreateShipmentService(load, fixture.UserId).LoadHandlingUnitAsync(
+                prepared.ShipmentId,
+                new LoadShipmentHandlingUnitDto
+                {
+                    HandlingUnitBarcode = prepared.ParentHuBarcode,
+                    RowVersion = loading.RowVersion!
+                });
+        }
+
+        await using var complete = CreateContext();
+        return await CreateShipmentService(complete, fixture.UserId).CompleteLoadingAsync(
+            prepared.ShipmentId,
+            new CompleteShipmentLoadingDto
+            {
+                SealNumber = "SHIP-SEAL-001",
+                RowVersion = huLoaded.RowVersion!
+            });
+    }
+
     private static async Task<(string SourceType, int SourceId)> AssignCanonicalExportSourceAsync(
         int shipmentId,
         Fixture fixture)
     {
         const string sourceType = "ExportReceipt";
-        var sourceId = shipmentId + 1_000_000;
         await using var db = CreateContext();
+        var receipt = new ExportReceipt
+        {
+            Code = $"EXP-{fixture.Suffix}",
+            WarehouseId = fixture.WarehouseId,
+            Status = ReceiptStatus.Approved,
+            DispatchMode = ExportDispatchMode.RequireSeparateDispatch,
+            CreatedBy = fixture.UserId,
+            ApprovedBy = fixture.UserId,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-30),
+            ApprovedAt = DateTime.UtcNow.AddMinutes(-20),
+            Details =
+            [
+                new ExportReceiptDetail
+                {
+                    ProductId = fixture.ProductId,
+                    Quantity = 10
+                }
+            ]
+        };
+        db.ExportReceipts.Add(receipt);
+        await db.SaveChangesAsync();
+
         var shipment = await db.Shipments
             .Include(x => x.PackingSession)
             .ThenInclude(x => x.PickingTask)
             .SingleAsync(x => x.Id == shipmentId);
-        var sourceCode = $"EXP-{fixture.Suffix}";
         shipment.SourceType = sourceType;
-        shipment.SourceId = sourceId;
-        shipment.SourceCode = sourceCode;
+        shipment.SourceId = receipt.Id;
+        shipment.SourceCode = receipt.Code;
         shipment.PackingSession.PickingTask.SourceType = sourceType;
-        shipment.PackingSession.PickingTask.SourceId = sourceId;
-        shipment.PackingSession.PickingTask.SourceCode = sourceCode;
+        shipment.PackingSession.PickingTask.SourceId = receipt.Id;
+        shipment.PackingSession.PickingTask.SourceCode = receipt.Code;
         await db.SaveChangesAsync();
-        return (sourceType, sourceId);
+        return (sourceType, receipt.Id);
     }
 
     private static async Task<Prepared> PreparePackedNestedShipmentAsync(Fixture fixture)
@@ -535,7 +735,8 @@ public sealed class SqlServerShipmentLoadingTests
         return new ShipmentService(
             db,
             new WarehouseAuthorizationService(db, current),
-            current);
+            current,
+            CreateReservationService(db, userId));
     }
 
     private static async Task<Fixture> CreateFixtureAsync()
@@ -614,6 +815,9 @@ public sealed class SqlServerShipmentLoadingTests
     {
         await using var db = CreateContext();
         await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
+        await db.InventoryTransactions
+            .Where(x => x.WarehouseId == fixture.WarehouseId && x.ProductId == fixture.ProductId)
+            .ExecuteDeleteAsync();
         await db.ShipmentHandlingUnits
             .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)
             .ExecuteDeleteAsync();
@@ -637,6 +841,10 @@ public sealed class SqlServerShipmentLoadingTests
         await db.PickingTasks.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.StockAllocations.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.StockReservations.Where(x => x.CreatedBy == fixture.UserId).ExecuteDeleteAsync();
+        await db.ExportReceiptDetails
+            .Where(x => x.ExportReceipt.WarehouseId == fixture.WarehouseId)
+            .ExecuteDeleteAsync();
+        await db.ExportReceipts.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.UserWarehouses.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == fixture.ProductId).ExecuteDeleteAsync();

@@ -14,7 +14,8 @@ namespace ERP.Infrastructure.Services;
 public sealed class ShipmentService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
-    ICurrentUser currentUser) : IShipmentService, IShipmentDispatchReadiness
+    ICurrentUser currentUser,
+    IStockReservationService stockReservationService) : IShipmentService, IShipmentDispatchReadiness
 {
     public async Task<IReadOnlyList<ShipmentListDto>> ListAsync(
         int? warehouseId = null,
@@ -208,34 +209,152 @@ public sealed class ShipmentService(
             await Task.CompletedTask;
         }, cancellationToken);
 
+    public Task<ShipmentDto> DispatchAsync(
+        int id,
+        ShipmentStateCommandDto request,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(id, request.RowVersion, async (shipment, token) =>
+        {
+            RequireStatus(shipment, ShipmentStatus.Loaded, "Chỉ Shipment LOADED mới có thể dispatch.");
+            if (shipment.HandlingUnits.Count == 0 || shipment.HandlingUnits.Any(x => !x.LoadedAt.HasValue))
+                throw Conflict("SHIPMENT_HU_NOT_LOADED", "Shipment chưa load đủ Handling Unit.");
+
+            var activeHus = ActivePackingHus(shipment);
+            ValidateAssignedRoots(shipment, activeHus);
+            if (activeHus.Any(x => x.Status != HandlingUnitStatus.Loaded))
+                throw Conflict("SHIPMENT_HU_NOT_LOADED", "Handling Unit hierarchy chưa ở trạng thái LOADED.");
+
+            var picking = shipment.PackingSession.PickingTask;
+            if (picking.Status != PickingTaskStatus.Completed)
+                throw Conflict("SHIPMENT_PICKING_NOT_READY", "Picking task chưa hoàn tất.");
+            if (picking.Lines.Any(x => x.Status is not PickingTaskLineStatus.Picked and not PickingTaskLineStatus.Resolved))
+                throw Conflict("SHIPMENT_PICKING_NOT_READY", "Picking line chưa hoàn tất.");
+            if (picking.Lines.SelectMany(x => x.ShortPicks).Any(x =>
+                    x.Status == ShortPickExceptionStatus.Resolved &&
+                    x.ResolutionType is ShortPickResolutionType.Backorder
+                        or ShortPickResolutionType.CancelRemainder
+                        or ShortPickResolutionType.SupervisorOverride))
+                throw Conflict("SHIPMENT_PICKING_NOT_READY", "Shipment còn thiếu hàng sau Picking.");
+
+            var reservationIds = picking.Lines
+                .Select(x => x.Allocation.ReservationId)
+                .Distinct()
+                .Order()
+                .ToArray();
+            if (reservationIds.Length == 0)
+                throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Shipment không có reservation/allocation để dispatch.");
+
+            var reservations = await context.StockReservations
+                .Where(x => reservationIds.Contains(x.Id))
+                .OrderBy(x => x.Id)
+                .ToListAsync(token);
+            if (reservations.Count != reservationIds.Length)
+                throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Reservation của Shipment không còn đầy đủ.");
+
+            var ledgerBuckets = new Dictionary<(int ProductId, int LocationId, InventoryStatus InventoryStatus), decimal>();
+            foreach (var reservation in reservations)
+            {
+                if (reservation.WarehouseId != shipment.WarehouseId)
+                    throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Reservation không cùng kho với Shipment.");
+
+                var lines = picking.Lines
+                    .Where(x => x.Allocation.ReservationId == reservation.Id)
+                    .OrderBy(x => x.Allocation.LocationId)
+                    .ThenBy(x => x.Id)
+                    .ToList();
+                var remaining = reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity;
+                if (remaining <= 0 ||
+                    lines.Sum(x => x.Allocation.Quantity) != remaining ||
+                    reservation.AllocatedQuantity != remaining ||
+                    lines.Any(x => x.Allocation.Status != StockAllocationStatus.Picked ||
+                                   x.PickedQuantity != x.Allocation.Quantity))
+                    throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Allocation/Picked quantity không còn khớp reservation.");
+
+                var expectedByLocation = lines
+                    .GroupBy(x => x.Allocation.LocationId)
+                    .ToDictionary(x => x.Key, x => x.Sum(y => y.Allocation.Quantity));
+
+                var consumptions = await stockReservationService.ConsumeAsync(
+                    reservation,
+                    currentUser.UserId,
+                    token);
+                if (consumptions.Sum(x => x.Quantity) != remaining ||
+                    consumptions.Count != expectedByLocation.Count ||
+                    consumptions.Any(x => !expectedByLocation.TryGetValue(x.LocationId, out var expected) || expected != x.Quantity))
+                    throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Inventory consumption không khớp Allocation location.");
+
+                foreach (var consumption in consumptions.OrderBy(x => x.LocationId))
+                {
+                    var statuses = lines
+                        .Where(x => x.Allocation.LocationId == consumption.LocationId)
+                        .Select(x => x.Allocation.InventoryStatus)
+                        .Distinct()
+                        .ToArray();
+                    if (statuses.Length != 1)
+                        throw Conflict("SHIPMENT_INVENTORY_MISMATCH", "Allocation cùng Location có nhiều InventoryStatus, không thể tạo SHIP ledger chuẩn.");
+
+                    var key = (reservation.ProductId, consumption.LocationId, statuses[0]);
+                    ledgerBuckets[key] = ledgerBuckets.GetValueOrDefault(key) + consumption.Quantity;
+                }
+            }
+
+            var dispatchedAt = DateTime.UtcNow;
+            foreach (var bucket in ledgerBuckets.OrderBy(x => x.Key.ProductId).ThenBy(x => x.Key.LocationId).ThenBy(x => x.Key.InventoryStatus))
+            {
+                context.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = bucket.Key.ProductId,
+                    WarehouseId = shipment.WarehouseId,
+                    LocationId = bucket.Key.LocationId,
+                    InventoryStatus = bucket.Key.InventoryStatus,
+                    TransactionType = TransactionType.Ship,
+                    Quantity = bucket.Value,
+                    ReferenceId = shipment.Id,
+                    ReferenceType = "Shipment",
+                    TransactionDate = dispatchedAt,
+                    CreatedBy = currentUser.UserId,
+                    Note = $"Shipment dispatch {shipment.ShipmentCode}"
+                });
+            }
+
+            foreach (var hu in activeHus) hu.Status = HandlingUnitStatus.Shipped;
+            shipment.Status = ShipmentStatus.Dispatched;
+            shipment.DispatchedAt = dispatchedAt;
+            shipment.DispatchedBy = currentUser.UserId;
+
+            if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
+            {
+                var receipt = await context.ExportReceipts.SingleOrDefaultAsync(
+                    x => x.Id == shipment.SourceId.Value,
+                    token);
+                if (receipt is null)
+                    throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Không tìm thấy phiếu xuất nguồn của Shipment.");
+                if (receipt.Status != ReceiptStatus.Approved)
+                    throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Phiếu xuất nguồn không còn ở trạng thái APPROVED.");
+
+                receipt.Status = ReceiptStatus.Dispatched;
+                receipt.DispatchedAt = dispatchedAt;
+                receipt.DispatchedBy = currentUser.UserId;
+            }
+
+            AddAudit(
+                "Shipment.Dispatched",
+                shipment,
+                $"Reservations: {reservations.Count}; LedgerRows: {ledgerBuckets.Count}; Quantity: {ledgerBuckets.Values.Sum()}");
+        }, cancellationToken);
+
     public async Task EnsureSourceReadyAsync(
         string sourceType,
         int sourceId,
         CancellationToken cancellationToken = default)
     {
-        var shipment = await Query().AsNoTracking().SingleOrDefaultAsync(
+        var shipmentExists = await context.Shipments.AsNoTracking().AnyAsync(
             x => x.SourceType == sourceType && x.SourceId == sourceId,
             cancellationToken);
-        if (shipment is null) return;
+        if (!shipmentExists) return;
 
-        if (shipment.Status != ShipmentStatus.Loaded)
-            throw new ConcurrencyException("Shipment của chứng từ chưa ở trạng thái LOADED.");
-
-        if (shipment.HandlingUnits.Count == 0 || shipment.HandlingUnits.Any(x => !x.LoadedAt.HasValue))
-            throw new ConcurrencyException("Shipment chưa load đủ Handling Unit.");
-
-        var active = ActivePackingHus(shipment);
-        try
-        {
-            ValidateAssignedRoots(shipment, active);
-        }
-        catch (BusinessRuleException ex)
-        {
-            throw new ConcurrencyException("Shipment Handling Unit không còn khớp Packing session.", ex);
-        }
-
-        if (active.Any(x => x.Status != HandlingUnitStatus.Loaded))
-            throw new ConcurrencyException("Shipment Handling Unit hierarchy chưa ở trạng thái LOADED.");
+        throw new ConcurrencyException(
+            "Chứng từ đã đi vào canonical Shipment workflow. Hãy dispatch tại Shipment để tránh double inventory movement.");
     }
 
     private async Task<ShipmentDto> MutateAsync(
@@ -261,6 +380,12 @@ public sealed class ShipmentService(
         {
             if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
             throw new ConcurrencyException("Dữ liệu Shipment đã thay đổi. Vui lòng tải lại và thử lại.", ex);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 } sql &&
+                                           sql.Message.Contains("IX_InventoryTransactions_ShipmentReference", StringComparison.OrdinalIgnoreCase))
+        {
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+            throw new ConcurrencyException("Shipment đã được dispatch bởi yêu cầu đồng thời khác.", ex);
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 })
         {
@@ -294,9 +419,12 @@ public sealed class ShipmentService(
             .AsSplitQuery()
             .Include(x => x.Warehouse)
             .Include(x => x.PackingSession).ThenInclude(x => x.HandlingUnits).ThenInclude(x => x.Contents)
+            .Include(x => x.PackingSession).ThenInclude(x => x.PickingTask).ThenInclude(x => x.Lines).ThenInclude(x => x.Allocation)
+            .Include(x => x.PackingSession).ThenInclude(x => x.PickingTask).ThenInclude(x => x.Lines).ThenInclude(x => x.ShortPicks)
             .Include(x => x.StagingLocation)
             .Include(x => x.DockAppointment)
             .Include(x => x.Dock)
+            .Include(x => x.DispatchedByUser)
             .Include(x => x.HandlingUnits).ThenInclude(x => x.HandlingUnit);
 
     private static List<HandlingUnit> ActivePackingHus(Shipment shipment) =>
@@ -395,7 +523,10 @@ public sealed class ShipmentService(
         CreatedAt = shipment.CreatedAt,
         StagedAt = shipment.StagedAt,
         LoadingStartedAt = shipment.LoadingStartedAt,
-        LoadedAt = shipment.LoadedAt
+        LoadedAt = shipment.LoadedAt,
+        DispatchedAt = shipment.DispatchedAt,
+        DispatchedBy = shipment.DispatchedBy,
+        DispatchedByName = shipment.DispatchedByUser?.FullName
     };
 
     private static ShipmentDto Map(Shipment shipment)
@@ -429,6 +560,8 @@ public sealed class ShipmentService(
             StagedAt = summary.StagedAt,
             LoadingStartedAt = summary.LoadingStartedAt,
             LoadedAt = summary.LoadedAt,
+            DispatchedAt = summary.DispatchedAt,
+            DispatchedBy = summary.DispatchedBy,
             RowVersion = Convert.ToBase64String(shipment.RowVersion),
             HandlingUnits = shipment.HandlingUnits.OrderBy(x => x.Sequence).Select(link =>
             {

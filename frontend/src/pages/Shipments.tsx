@@ -12,7 +12,8 @@ type Shipment = {
   id:number; shipmentCode:string; packingSessionId:number; packingSessionCode:string; warehouseId:number; warehouseName:string;
   sourceType:string; sourceId?:number; sourceCode?:string; status:string; stagingLocationId?:number; stagingLocationCode?:string;
   handlingUnitCount:number; loadedHandlingUnitCount:number; dockAppointmentId?:number; dockAppointmentCode?:string; dockId?:number; dockCode?:string; vehiclePlate?:string; trailerPlate?:string;
-  sealNumber?:string; createdAt:string; stagedAt?:string; loadingStartedAt?:string; loadedAt?:string; rowVersion?:string;
+  sealNumber?:string; createdAt:string; stagedAt?:string; loadingStartedAt?:string; loadedAt?:string;
+  dispatchedAt?:string; dispatchedBy?:number; dispatchedByName?:string; rowVersion?:string;
   handlingUnits?:ShipmentHu[];
 };
 type DockAppointment = {
@@ -40,6 +41,10 @@ const messageFor=(e:unknown)=>{
   if(code==='SHIPMENT_HU_NOT_STAGED') return 'Handling Unit chưa ở staging.';
   if(code==='SHIPMENT_STAGING_LOCATION_INVALID') return response?.data?.message??'Staging location không hợp lệ.';
   if(code==='SHIPMENT_HU_MISMATCH') return 'Handling Unit không thuộc Shipment này hoặc bạn đang quét HU con.';
+  if(code==='SHIPMENT_ALLOCATION_MISMATCH') return response?.data?.message??'Allocation/Reservation không còn khớp Shipment.';
+  if(code==='SHIPMENT_INVENTORY_MISMATCH') return response?.data?.message??'Inventory bucket không còn khớp Allocation.';
+  if(code==='SHIPMENT_PICKING_NOT_READY') return response?.data?.message??'Picking chưa đủ điều kiện dispatch.';
+  if(code==='SHIPMENT_SOURCE_STATE_INVALID') return response?.data?.message??'Chứng từ nguồn không còn ở trạng thái cho phép dispatch.';
   if(code==='HU_NOT_FOUND') return 'Không tìm thấy Handling Unit theo mã đã quét.';
   if(code==='HU_ALREADY_LOADED') return 'Handling Unit này đã được load.';
   if(code==='SHIPMENT_VERSION_CONFLICT'||response?.status===409) return response?.data?.message??'Shipment đã thay đổi. Vui lòng tải lại.';
@@ -63,6 +68,7 @@ export default function Shipments(){
   const canStage=usePermission('shipment.stage');
   const canShipmentLoad=usePermission('shipment.load');
   const canLoadingExecute=usePermission('loading.execute');
+  const canDispatch=usePermission('shipment.dispatch');
   const canLoad=canShipmentLoad&&canLoadingExecute;
 
   const list=async()=>{
@@ -112,8 +118,8 @@ export default function Shipments(){
   return <UiPage>
     <UiPageHeader
       eyebrow="Outbound"
-      title="Staging & Loading"
-      description="Shipment READY → STAGING → LOADING → LOADED. Staging/Loading chỉ xác nhận physical custody của HU; không trừ OnHand."
+      title="Shipment Execution"
+      description="Shipment READY → STAGING → LOADING → LOADED → DISPATCHED. Stage/Load không trừ OnHand; Dispatch là inventory boundary ghi SHIP ledger và giảm OnHand đúng một lần."
     />
     {error&&<div role="alert">{error}</div>}
     <div className="ui-stack">
@@ -141,8 +147,9 @@ export default function Shipments(){
           {selected.stagingLocationCode&&<span>Staging: <strong>{selected.stagingLocationCode}</strong></span>}
         </div>
         <p className="ui-muted-text">
-          Foundation hiện quản lý Shipment READY/STAGING/LOADING/LOADED, staging lane, root-HU ownership, dock appointment và vehicle/seal context.
-          Dispatch/SHIP ledger, load optimization/capacity và carrier/POD vẫn chưa thuộc phần này.
+          Foundation hiện quản lý Shipment READY/STAGING/LOADING/LOADED/DISPATCHED, staging lane, root-HU ownership, dock appointment,
+          vehicle/seal context và canonical Shipment Dispatch. Dispatch consume Reservation/Allocation, ghi SHIP ledger theo Location/Status và
+          giảm OnHand đúng một lần. Load optimization/capacity, carrier/POD và controlled reversal vẫn chưa hoàn tất.
         </p>
 
         <UiTableScroll>
@@ -222,9 +229,23 @@ export default function Shipments(){
           </div>
         </fieldset>}
 
-        {selected.status==='Loaded'&&<div role="status">
-          <strong>Shipment đã LOADED.</strong> Chưa có Dispatch trong OUT-07; OnHand vẫn chưa bị trừ.
-          {selected.sealNumber&&<> Seal: {selected.sealNumber}.</>}
+        {selected.status==='Loaded'&&<fieldset>
+          <legend>Dispatch Shipment</legend>
+          <p>
+            Shipment đã LOADED. Dispatch sẽ consume Reservation/Allocation, chuyển HU sang SHIPPED,
+            ghi SHIP ledger theo Location và giảm OnHand. Thao tác này là inventory boundary.
+            {selected.sealNumber&&<> Seal: {selected.sealNumber}.</>}
+          </p>
+          {canDispatch?<button type="button" disabled={!!busy} onClick={()=>void mutate(
+            'shipment-dispatch-'+selected.id,'/api/shipments/'+selected.id+'/dispatch',
+            {rowVersion:selected.rowVersion}
+          )}>Dispatch Shipment</button>:<p className="ui-muted-text">Bạn không có quyền shipment.dispatch.</p>}
+        </fieldset>}
+
+        {selected.status==='Dispatched'&&<div role="status">
+          <strong>Shipment đã DISPATCHED.</strong> SHIP ledger đã được ghi và OnHand đã giảm tại inventory boundary này.
+          {selected.dispatchedAt&&<> Thời điểm: {new Date(selected.dispatchedAt).toLocaleString('vi-VN')}.</>}
+          {selected.dispatchedByName&&<> Người dispatch: {selected.dispatchedByName}.</>}
         </div>}
       </UiCard>}
     </div>
