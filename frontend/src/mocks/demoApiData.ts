@@ -614,4 +614,13 @@ export const demoPermissionCatalog = [
   { code: 'shipment.load', description: 'Thực hiện Shipment loading' },
   { code: 'shipment.dispatch', description: 'Dispatch Shipment và ghi SHIP ledger' },
   { code: 'loading.execute', description: 'Thực hiện loading tại dock' },
+  { code: 'sales_order.read', description: 'Xem Sales Order' },
+  { code: 'sales_order.create', description: 'Tạo Sales Order' },
+  { code: 'sales_order.update', description: 'Cập nhật Sales Order' },
+  { code: 'sales_order.hold', description: 'Hold Sales Order' },
+  { code: 'sales_order.release', description: 'Release Sales Order' },
+  { code: 'sales_order.cancel', description: 'Hủy Sales Order' },
+  { code: 'sales_order.close', description: 'Đóng Sales Order' },
+  { code: 'backorder.read', description: 'Xem Backorder' },
+  { code: 'backorder.manage', description: 'Quản lý Backorder' },
 ];
