@@ -44,6 +44,7 @@ public sealed class SqlServerInventoryReportingTests
             await InsertTransactionAsync(connection, transaction, productId, warehouseId, 5, 20, from.AddHours(1), userId);
             await InsertTransactionAsync(connection, transaction, productId, warehouseId, 2, 5, from.AddHours(2), userId);
             await InsertTransactionAsync(connection, transaction, productId, warehouseId, 1, 30, from.AddHours(3), userId);
+            await InsertTransactionAsync(connection, transaction, productId, warehouseId, 7, 7, from.AddHours(3).AddMinutes(30), userId);
             await InsertTransactionAsync(connection, transaction, productId, warehouseId, 4, 25, from.AddHours(4), userId);
             await InsertTransactionAsync(connection, transaction, productId, warehouseId, 3, 10, from.AddHours(5), userId);
             await InsertTransactionAsync(connection, transaction, productId, warehouseId, 0, 999, toExclusive, userId);
@@ -65,11 +66,11 @@ public sealed class SqlServerInventoryReportingTests
             reader.GetDecimal(reader.GetOrdinal("TransferInQuantity")).Should().Be(20);
             reader.GetDecimal(reader.GetOrdinal("AdjustmentIncreaseQuantity")).Should().Be(5);
             reader.GetDecimal(reader.GetOrdinal("InQuantity")).Should().Be(75);
-            reader.GetDecimal(reader.GetOrdinal("ExportQuantity")).Should().Be(30);
+            reader.GetDecimal(reader.GetOrdinal("ExportQuantity")).Should().Be(37);
             reader.GetDecimal(reader.GetOrdinal("TransferOutQuantity")).Should().Be(25);
             reader.GetDecimal(reader.GetOrdinal("AdjustmentDecreaseQuantity")).Should().Be(10);
-            reader.GetDecimal(reader.GetOrdinal("OutQuantity")).Should().Be(65);
-            reader.GetDecimal(reader.GetOrdinal("ClosingQuantity")).Should().Be(110);
+            reader.GetDecimal(reader.GetOrdinal("OutQuantity")).Should().Be(72);
+            reader.GetDecimal(reader.GetOrdinal("ClosingQuantity")).Should().Be(103);
             (await reader.ReadAsync()).Should().BeFalse();
         }
         finally
