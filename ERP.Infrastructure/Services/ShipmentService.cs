@@ -278,12 +278,28 @@ public sealed class ShipmentService(
                     token))
                 throw Conflict("SHIPMENT_LEDGER_EXISTS", "Shipment đã có SHIP ledger và cần đối soát trước khi retry.");
 
+            ExportReceipt? sourceReceipt = null;
+            if (string.Equals(shipment.SourceType, "ExportReceipt", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!shipment.SourceId.HasValue)
+                    throw Conflict("SHIPMENT_SOURCE_INVALID", "Shipment ExportReceipt thiếu SourceId.");
+                sourceReceipt = await context.ExportReceipts.SingleOrDefaultAsync(
+                    x => x.Id == shipment.SourceId.Value,
+                    token)
+                    ?? throw Conflict("SHIPMENT_SOURCE_INVALID", "Không tìm thấy phiếu xuất nguồn của Shipment.");
+                if (sourceReceipt.Status != ReceiptStatus.Approved)
+                    throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Phiếu xuất nguồn không còn ở trạng thái APPROVED.");
+            }
+
             var reservationIds = lines.Select(x => x.Allocation.ReservationId).Distinct().Order().ToArray();
             var ledgerRows = new List<InventoryTransaction>();
             foreach (var reservationId in reservationIds)
             {
                 var reservation = await context.StockReservations.SingleOrDefaultAsync(x => x.Id == reservationId, token)
                     ?? throw Conflict("SHIPMENT_RESERVATION_INVALID", "Không tìm thấy reservation của Shipment.");
+                if (!string.Equals(reservation.SourceType, shipment.SourceType, StringComparison.OrdinalIgnoreCase) ||
+                    reservation.SourceId != shipment.SourceId)
+                    throw Conflict("SHIPMENT_RESERVATION_INVALID", "Reservation không thuộc source của Shipment.");
 
                 var taskAllocationIds = lines
                     .Where(x => x.Allocation.ReservationId == reservationId)
@@ -334,17 +350,11 @@ public sealed class ShipmentService(
             shipment.DispatchedAt = now;
             shipment.DispatchedBy = currentUser.UserId;
 
-            if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
+            if (sourceReceipt is not null)
             {
-                var receipt = await context.ExportReceipts.SingleOrDefaultAsync(x => x.Id == shipment.SourceId.Value, token);
-                if (receipt is not null)
-                {
-                    if (receipt.Status != ReceiptStatus.Approved)
-                        throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Phiếu xuất nguồn không còn ở trạng thái APPROVED.");
-                    receipt.Status = ReceiptStatus.Dispatched;
-                    receipt.DispatchedAt = now;
-                    receipt.DispatchedBy = currentUser.UserId;
-                }
+                sourceReceipt.Status = ReceiptStatus.Dispatched;
+                sourceReceipt.DispatchedAt = now;
+                sourceReceipt.DispatchedBy = currentUser.UserId;
             }
 
             context.OutboxMessages.Add(new OutboxMessage
