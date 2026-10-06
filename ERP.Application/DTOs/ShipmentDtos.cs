@@ -27,6 +27,8 @@ public class ShipmentListDto
     public DateTime? StagedAt { get; set; }
     public DateTime? LoadingStartedAt { get; set; }
     public DateTime? LoadedAt { get; set; }
+    public DateTime? DispatchedAt { get; set; }
+    public int? DispatchedBy { get; set; }
 }
 
 public sealed class ShipmentDto : ShipmentListDto
