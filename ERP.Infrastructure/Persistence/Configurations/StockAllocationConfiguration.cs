@@ -22,13 +22,15 @@ public sealed class StockAllocationConfiguration : IEntityTypeConfiguration<Stoc
         builder.Property(x => x.Version).IsConcurrencyToken();
         builder.HasIndex(x => x.AllocationCode).IsUnique();
         builder.HasIndex(x => x.ReservationId);
-        builder.HasIndex(x => new { x.WarehouseId, x.LocationId, x.ProductId, x.Status });
-        builder.HasIndex(x => new { x.ReservationId, x.LocationId, x.InventoryStatus, x.Status });
+        builder.HasIndex(x => new { x.WarehouseId, x.LocationId, x.ProductId, x.LotId, x.SerialId, x.Status });
+        builder.HasIndex(x => new { x.ReservationId, x.LocationId, x.InventoryStatus, x.LotId, x.SerialId, x.Status });
 
         builder.HasOne(x => x.Reservation).WithMany(x => x.Allocations).HasForeignKey(x => x.ReservationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Lot).WithMany().HasForeignKey(x => x.LotId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Serial).WithMany().HasForeignKey(x => x.SerialId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.AllocatedByUser).WithMany().HasForeignKey(x => x.AllocatedBy).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ReleasedByUser).WithMany().HasForeignKey(x => x.ReleasedBy).OnDelete(DeleteBehavior.Restrict);
     }
