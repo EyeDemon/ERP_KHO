@@ -34,22 +34,22 @@ The blueprint registry has now been corrected in the same feature branch:
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
-## Production truth refresh — 2026-10-07
+## Production truth refresh — 2026-10-08
 
 This is the current implementation-status checkpoint for the Blueprint.
 
 **Implementation source of truth**
 - Integration branch: `feature/erp-wms-complete-ui-blueprint`.
-- Verified production commit: `75e595a7b48e8c372056523a15bfa3c7b2a5ef5d`.
+- Verified production commit: `297b52865bac4fa785847d678280282a4663588b`.
 - Vercel production alias: `erp-wms-blueprint-demo.vercel.app`.
-- Vercel deployment: `dpl_2tHxj7nAZJw2JzyVncSbR3dhgyXg`, READY, target `production`, Git SHA exactly matches the integration commit above.
+- Vercel deployment: `dpl_ADqrgZByknUrgTovTxtDMiRBY2DJ`, READY, target `production`, Git SHA exactly matches the released INV-09/INV-10 foundation commit.
 - Notion remains the canonical business/architecture reference and is **read-only for this synchronization**. No Notion content is changed to make implementation look complete.
 
 **Registry snapshot**
 - 179 capabilities total.
 - 33 `live`.
-- 26 `foundation`.
-- 74 `planned`.
+- 28 `foundation`.
+- 72 `planned`.
 - 46 `optional`.
 
 Status meaning for production synchronization:
@@ -65,8 +65,9 @@ Status meaning for production synchronization:
 
 **Inventory production reality**
 - INV-01 through INV-08 are production foundations at the verified commit, including Inventory Status, Lot/Serial/Expiry, Inventory Locks/Freeze and Internal Location Move.
+- INV-09 Reversal is now `foundation`: production supports immutable corrective reversal for Internal Move and Inventory Status Change with structured Original/Corrective/Reversal links, DB uniqueness, audit, permission and warehouse scope. Aggregate-specific reversal for Receipt/Shipment/Transfer/Adjustment/Return/Scrap and complete downstream-dependency policy remain gaps.
+- INV-10 Traceability & Genealogy is now `foundation`: production traces by Product/Lot/Serial/Reference within authorized warehouses, returns current buckets + immutable ledger timeline, and exposes the structured reversal chain. Full cross-flow Receipt→QC→Move→Pick→Shipment/Return/Recall genealogy, recall orchestration and Owner/HU lineage remain gaps.
 - INV-11 Reconciliation remains `foundation`: mismatch detection exists, controlled repair/rebuild does not.
-- INV-09 Reversal and INV-10 Traceability & Genealogy remain `planned`. Draft PR/code is not sufficient for promotion; they require merge, deploy and release evidence before the Blueprint status changes.
 
 Therefore the 2026-10-05 refresh below is retained only as historical context and must not be used as the current implementation checkpoint.
 
