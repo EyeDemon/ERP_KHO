@@ -98,6 +98,6 @@ describe('InventoryBuckets',()=>{
     fireEvent.change(view.getByLabelText('Status đích'),{target:{value:'QUARANTINE'}});
     fireEvent.change(view.getByLabelText('Lý do đổi status'),{target:{value:'Quality hold'}});
     fireEvent.click(view.getByText('Xác nhận status change'));
-    expect(await view.findByRole('alert')).toHaveTextContent('reserved/allocation');
+    expect((await view.findByRole('alert')).textContent).toContain('reserved/allocation');
   });
 });
