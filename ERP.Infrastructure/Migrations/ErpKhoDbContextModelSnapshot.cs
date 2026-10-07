@@ -1139,7 +1139,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("ProductId", "WarehouseId", "Status", "CanonicalLocationId", "CanonicalLotId", "CanonicalSerialId")
                         .IsUnique()
-                        .HasDatabaseName("IX_InventoryStocks_CanonicalBucket");
+                        .HasDatabaseName("IX_InventoryStocks_CanonicalBucket")
+                        .HasFilter(null);
 
                     b.ToTable("InventoryStocks", null, t =>
                         {
