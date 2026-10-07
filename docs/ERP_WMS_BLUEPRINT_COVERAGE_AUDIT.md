@@ -34,39 +34,39 @@ The blueprint registry has now been corrected in the same feature branch:
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
-## Đồng bộ sự thật production — 2026-10-08
+## Đồng bộ sự thật hệ thống thật — 2026-10-08
 
-Đây là mốc kiểm chứng trạng thái triển khai hiện tại của System Blueprint.
+Đây là mốc kiểm chứng trạng thái triển khai hiện tại của bản thiết kế hệ thống.
 
 **Nguồn sự thật triển khai**
 - Nhánh tích hợp: `feature/erp-wms-complete-ui-blueprint`.
-- Commit production đã xác minh: `297b52865bac4fa785847d678280282a4663588b`.
-- Alias production trên Vercel: `erp-wms-blueprint-demo.vercel.app`.
-- Deployment Vercel: `dpl_ADqrgZByknUrgTovTxtDMiRBY2DJ`, trạng thái READY, target `production`; Git SHA khớp chính xác commit đã phát hành nền tảng INV-09/INV-10.
+- Commit hệ thống thật đã xác minh: `297b52865bac4fa785847d678280282a4663588b`.
+- Alias hệ thống thật trên Vercel: `erp-wms-blueprint-demo.vercel.app`.
+- Bản triển khai Vercel: `dpl_ADqrgZByknUrgTovTxtDMiRBY2DJ`, trạng thái READY, môi trường đích `production`; Git SHA khớp chính xác commit đã phát hành nền tảng INV-09/INV-10.
 - Notion tiếp tục là tài liệu nghiệp vụ/kiến trúc chuẩn và **chỉ đọc trong lần đồng bộ này**. Không chỉnh sửa Notion để làm cho mức triển khai có vẻ hoàn thiện hơn thực tế.
 
 **Ảnh chụp registry**
-- Tổng cộng 179 capability.
+- Tổng cộng 179 chức năng.
 - 33 `live`.
 - 28 `foundation`.
 - 72 `planned`.
 - 46 `optional`.
 
-Ý nghĩa trạng thái khi đồng bộ production:
-- `live`: capability đã merge, deploy, QA và hoàn thiện trong phạm vi production hiện được chấp nhận.
-- `foundation`: đã có mã production thật nhưng phạm vi chuẩn vẫn còn các khoảng trống được nêu rõ.
-- `planned`: có thể đã có mock/đặc tả nhưng chưa phát hành triển khai production.
-- `optional`: capability nâng cao/có điều kiện, không phải cam kết triển khai ngay.
+Ý nghĩa trạng thái khi đồng bộ hệ thống thật:
+- `live`: chức năng đã hợp nhất, triển khai, QA và hoàn thiện trong phạm vi hệ thống thật hiện được chấp nhận.
+- `foundation`: đã có mã hệ thống thật nhưng phạm vi chuẩn vẫn còn các khoảng trống được nêu rõ.
+- `planned`: có thể đã có mô phỏng/đặc tả nhưng chưa phát hành triển khai hệ thống thật.
+- `optional`: chức năng nâng cao/có điều kiện, không phải cam kết triển khai ngay.
 
-**Thực tế production của Xuất kho**
+**Thực tế hệ thống thật của Xuất kho**
 - OUT-01 ExportReceipt MVP và OUT-02 Reservation tiếp tục là `live`.
-- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder và OUT-10 Shipment Tracking / POD / Delivery Failure đã có nền tảng production thật và tiếp tục là `foundation` cho tới khi các khoảng trống chuẩn được liệt kê được đóng.
+- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder và OUT-10 Shipment Tracking / POD / Delivery Failure đã có nền tảng hệ thống thật thật và tiếp tục là `foundation` cho tới khi các khoảng trống chuẩn được liệt kê được đóng.
 - OUT-04 Wave / Batch / Cluster tiếp tục là `optional`.
 
-**Thực tế production của Kiểm soát tồn kho**
-- INV-01 đến INV-08 là các nền tảng production tại commit đã xác minh, bao gồm Trạng thái tồn kho, Lô/Sê-ri/Hạn dùng, Khóa/Đóng băng tồn kho và Di chuyển vị trí nội bộ.
-- INV-09 Đảo giao dịch hiện là `foundation`: production hỗ trợ đảo hiệu chỉnh bất biến cho Di chuyển vị trí nội bộ và Đổi trạng thái tồn kho, có liên kết cấu trúc Gốc/Hiệu chỉnh/Dấu đảo, ràng buộc duy nhất ở cơ sở dữ liệu, kiểm toán, quyền và phạm vi kho. Đảo giao dịch theo từng nghiệp vụ Receipt/Shipment/Transfer/Adjustment/Return/Scrap và chính sách phụ thuộc downstream đầy đủ vẫn còn thiếu.
-- INV-10 Truy vết & phả hệ tồn kho hiện là `foundation`: production hỗ trợ truy theo Sản phẩm/Lô/Sê-ri/Tham chiếu trong các kho được phép, trả về nhóm tồn hiện tại + dòng thời gian sổ cái bất biến và chuỗi đảo có cấu trúc. Phả hệ đầy đủ xuyên Receipt→QC→Move→Pick→Shipment/Return/Recall, điều phối thu hồi và phả hệ Owner/HU vẫn còn thiếu.
+**Thực tế hệ thống thật của Kiểm soát tồn kho**
+- INV-01 đến INV-08 là các nền tảng hệ thống thật tại commit đã xác minh, bao gồm Trạng thái tồn kho, Lô/Sê-ri/Hạn dùng, Khóa/Đóng băng tồn kho và Di chuyển vị trí nội bộ.
+- INV-09 Đảo giao dịch hiện là `foundation`: hệ thống thật hỗ trợ đảo hiệu chỉnh bất biến cho Di chuyển vị trí nội bộ và Đổi trạng thái tồn kho, có liên kết cấu trúc Gốc/Hiệu chỉnh/Dấu đảo, ràng buộc duy nhất ở cơ sở dữ liệu, kiểm toán, quyền và phạm vi kho. Đảo giao dịch theo từng nghiệp vụ Receipt/Shipment/Transfer/Adjustment/Return/Scrap và chính sách phụ thuộc hạ nguồn đầy đủ vẫn còn thiếu.
+- INV-10 Truy vết & phả hệ tồn kho hiện là `foundation`: hệ thống thật hỗ trợ truy theo Sản phẩm/Lô/Sê-ri/Tham chiếu trong các kho được phép, trả về nhóm tồn hiện tại + dòng thời gian sổ cái bất biến và chuỗi đảo có cấu trúc. Phả hệ đầy đủ xuyên Receipt→QC→Move→Pick→Shipment/Return/Recall, điều phối thu hồi và phả hệ Chủ sở hữu/HU vẫn còn thiếu.
 - INV-11 Đối chiếu tồn kho tiếp tục là `foundation`: đã có phát hiện khớp/lệch nhưng chưa có rebuild/remediation có kiểm soát.
 
 Phần cập nhật ngày 2026-10-05 bên dưới chỉ được giữ lại làm lịch sử và không được dùng làm mốc trạng thái triển khai hiện tại.
@@ -98,7 +98,7 @@ OUT-01 ExportReceipt MVP and OUT-02 Reservation remain live. OUT-01 now explicit
 
 Transfer maturity was also stale: TR-03 Transfer Dispatch and TR-04 Transfer Receive are now `live` because the production Stock Transfer flow implements Approved → InTransit → Received, source deduction/TransferOut, destination receipt/TransferIn, warehouse scope and receipt discrepancy quantities. TR-02 In-Transit Inventory is `foundation`: quantity is visible per transfer/source/destination, but a global owner-aware in-transit inventory browser is not complete.
 
-Inventory capabilities remain deliberately conservative. INV-01/02/03/04 stay `foundation`: production has OnHand/Reserved/Available, movement history, InventoryStock projection and eligible-location reservation logic, but not the full location/status/lot/serial/lock/allocation model from the canonical specs. INV-11 is read-only reconciliation today; controlled rebuild/remediation is not yet implemented and is no longer described as if it were production-ready.
+Inventory capabilities remain deliberately conservative. INV-01/02/03/04 stay `foundation`: production has OnHand/Reserved/Available, movement history, InventoryStock projection and eligible-location reservation logic, but not the full location/status/lot/serial/lock/allocation model from the canonical specs. INV-11 is chỉ đọc reconciliation today; tái tạo/khắc phục có kiểm soát is not yet implemented and is no longer described as if it were production-ready.
 
 ## Executive finding
 
@@ -255,7 +255,7 @@ Recommended capability metadata:
 - `permissionCodes`.
 - `commands/apis`.
 - `stateMachine`.
-- `inventoryEffect` — none / movement / status / projection/read-only.
+- `inventoryEffect` — none / movement / status / projection/chỉ đọc.
 - `eventsErrors`.
 - `testEvidence`.
 - `specRevision/freshness`.
