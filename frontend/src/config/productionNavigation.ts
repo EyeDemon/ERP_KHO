@@ -31,6 +31,8 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/inventory', label: 'Tồn kho', section: 'Inventory Control', description: 'OnHand/Reserved/Available theo bucket Status/Lot/Serial, ledger movement và báo cáo xuất-nhập-tồn.', permission: 'inventory.read' },
   { path: '/inventory-locks', label: 'Inventory Locks / Freeze', section: 'Inventory Control', description: 'Khóa bucket theo Warehouse/Location/Product/Status/Lot/Serial và release có audit.', permission: 'inventory_lock.read' },
   { path: '/inventory-movements', label: 'Internal Location Move', section: 'Inventory Control', description: 'Di chuyển unreserved inventory giữa location cùng kho, giữ Status/Lot/Serial và ghi MOVE ledger.', permission: 'inventory.read' },
+  { path: '/inventory-reversals', label: 'Inventory Reversal', section: 'Inventory Control', description: 'Corrective reversal cho Move/Status Change mà không sửa ledger lịch sử.', permission: 'inventory_ledger.read' },
+  { path: '/inventory-traceability', label: 'Traceability & Genealogy', section: 'Inventory Control', description: 'Truy current bucket và immutable ledger theo Product/Lot/Serial/reference.', permission: 'inventory_traceability.read' },
   { path: '/inventory-reconciliation', label: 'Đối chiếu tồn kho', section: 'Inventory Control', description: 'So sánh operational balance với immutable ledger để phát hiện lệch.', access: 'always' },
   { path: '/stocktakes', label: 'Kiểm kê kho', section: 'Inventory Control', description: 'Phiếu kiểm kê, variance và quy trình duyệt điều chỉnh.', access: 'stocktake' },
   { path: '/stock-transfers', label: 'Điều chuyển kho', section: 'Inventory Control', description: 'Luân chuyển tồn giữa các kho và theo dõi in-transit.', access: 'always' },
