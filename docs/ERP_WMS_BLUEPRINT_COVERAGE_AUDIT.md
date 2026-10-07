@@ -34,41 +34,42 @@ The blueprint registry has now been corrected in the same feature branch:
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
-## Production truth refresh — 2026-10-07
+## Đồng bộ sự thật production — 2026-10-08
 
-This is the current implementation-status checkpoint for the Blueprint.
+Đây là mốc kiểm chứng trạng thái triển khai hiện tại của System Blueprint.
 
-**Implementation source of truth**
-- Integration branch: `feature/erp-wms-complete-ui-blueprint`.
-- Verified production commit: `75e595a7b48e8c372056523a15bfa3c7b2a5ef5d`.
-- Vercel production alias: `erp-wms-blueprint-demo.vercel.app`.
-- Vercel deployment: `dpl_2tHxj7nAZJw2JzyVncSbR3dhgyXg`, READY, target `production`, Git SHA exactly matches the integration commit above.
-- Notion remains the canonical business/architecture reference and is **read-only for this synchronization**. No Notion content is changed to make implementation look complete.
+**Nguồn sự thật triển khai**
+- Nhánh tích hợp: `feature/erp-wms-complete-ui-blueprint`.
+- Commit production đã xác minh: `297b52865bac4fa785847d678280282a4663588b`.
+- Alias production trên Vercel: `erp-wms-blueprint-demo.vercel.app`.
+- Deployment Vercel: `dpl_ADqrgZByknUrgTovTxtDMiRBY2DJ`, trạng thái READY, target `production`; Git SHA khớp chính xác commit đã phát hành nền tảng INV-09/INV-10.
+- Notion tiếp tục là tài liệu nghiệp vụ/kiến trúc chuẩn và **chỉ đọc trong lần đồng bộ này**. Không chỉnh sửa Notion để làm cho mức triển khai có vẻ hoàn thiện hơn thực tế.
 
-**Registry snapshot**
-- 179 capabilities total.
+**Ảnh chụp registry**
+- Tổng cộng 179 capability.
 - 33 `live`.
-- 26 `foundation`.
-- 74 `planned`.
+- 28 `foundation`.
+- 72 `planned`.
 - 46 `optional`.
 
-Status meaning for production synchronization:
-- `live`: merged/deployed/QA-verified capability is complete for the currently accepted production scope.
-- `foundation`: real production code exists, but canonical scope still has named gaps.
-- `planned`: mock/spec may exist, but production implementation is not released.
-- `optional`: advanced/conditional capability; not an immediate implementation claim.
+Ý nghĩa trạng thái khi đồng bộ production:
+- `live`: capability đã merge, deploy, QA và hoàn thiện trong phạm vi production hiện được chấp nhận.
+- `foundation`: đã có mã production thật nhưng phạm vi chuẩn vẫn còn các khoảng trống được nêu rõ.
+- `planned`: có thể đã có mock/đặc tả nhưng chưa phát hành triển khai production.
+- `optional`: capability nâng cao/có điều kiện, không phải cam kết triển khai ngay.
 
-**Outbound production reality**
-- OUT-01 ExportReceipt MVP and OUT-02 Reservation remain `live`.
-- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder and OUT-10 Shipment Tracking / POD / Delivery Failure are now real production foundations and remain `foundation` until their explicitly listed canonical gaps are closed.
-- OUT-04 Wave / Batch / Cluster remains `optional`.
+**Thực tế production của Xuất kho**
+- OUT-01 ExportReceipt MVP và OUT-02 Reservation tiếp tục là `live`.
+- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder và OUT-10 Shipment Tracking / POD / Delivery Failure đã có nền tảng production thật và tiếp tục là `foundation` cho tới khi các khoảng trống chuẩn được liệt kê được đóng.
+- OUT-04 Wave / Batch / Cluster tiếp tục là `optional`.
 
-**Inventory production reality**
-- INV-01 through INV-08 are production foundations at the verified commit, including Inventory Status, Lot/Serial/Expiry, Inventory Locks/Freeze and Internal Location Move.
-- INV-11 Reconciliation remains `foundation`: mismatch detection exists, controlled repair/rebuild does not.
-- INV-09 Reversal and INV-10 Traceability & Genealogy remain `planned`. Draft PR/code is not sufficient for promotion; they require merge, deploy and release evidence before the Blueprint status changes.
+**Thực tế production của Kiểm soát tồn kho**
+- INV-01 đến INV-08 là các nền tảng production tại commit đã xác minh, bao gồm Trạng thái tồn kho, Lô/Sê-ri/Hạn dùng, Khóa/Đóng băng tồn kho và Di chuyển vị trí nội bộ.
+- INV-09 Đảo giao dịch hiện là `foundation`: production hỗ trợ đảo hiệu chỉnh bất biến cho Di chuyển vị trí nội bộ và Đổi trạng thái tồn kho, có liên kết cấu trúc Gốc/Hiệu chỉnh/Dấu đảo, ràng buộc duy nhất ở cơ sở dữ liệu, kiểm toán, quyền và phạm vi kho. Đảo giao dịch theo từng nghiệp vụ Receipt/Shipment/Transfer/Adjustment/Return/Scrap và chính sách phụ thuộc downstream đầy đủ vẫn còn thiếu.
+- INV-10 Truy vết & phả hệ tồn kho hiện là `foundation`: production hỗ trợ truy theo Sản phẩm/Lô/Sê-ri/Tham chiếu trong các kho được phép, trả về nhóm tồn hiện tại + dòng thời gian sổ cái bất biến và chuỗi đảo có cấu trúc. Phả hệ đầy đủ xuyên Receipt→QC→Move→Pick→Shipment/Return/Recall, điều phối thu hồi và phả hệ Owner/HU vẫn còn thiếu.
+- INV-11 Đối chiếu tồn kho tiếp tục là `foundation`: đã có phát hiện khớp/lệch nhưng chưa có rebuild/remediation có kiểm soát.
 
-Therefore the 2026-10-05 refresh below is retained only as historical context and must not be used as the current implementation checkpoint.
+Phần cập nhật ngày 2026-10-05 bên dưới chỉ được giữ lại làm lịch sử và không được dùng làm mốc trạng thái triển khai hiện tại.
 
 
 ## Historical implementation status refresh — 2026-10-05 (superseded)
