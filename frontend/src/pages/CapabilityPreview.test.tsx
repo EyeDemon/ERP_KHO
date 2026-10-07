@@ -158,7 +158,7 @@ describe('CapabilityPreview', () => {
     }
   });
 
-  it('does not shadow foundation or Screen Matrix inventory-control surfaces', () => {
+  it('does not shadow foundation or Ma trận màn hình inventory-control surfaces', () => {
     for (const capabilityId of ['INV-01', 'INV-02', 'INV-03', 'INV-04', 'INV-08', 'INV-11']) {
       const view = renderPreview('inventory-control', capabilityId);
       expect(view.queryByTestId('inventory-capability-mock-' + capabilityId)).toBeNull();
@@ -262,10 +262,10 @@ describe('CapabilityPreview', () => {
       </MemoryRouter>,
     );
     fireEvent.click(view.getByText('Use DN persona'));
-    const hiddenFixture = view.getByText('Sample record ẩn bởi simulated warehouse scope');
-    expect(hiddenFixture).toBeTruthy();
+    const hiddenBộ dữ liệu mẫu = view.getByText('Sample record ẩn bởi simulated warehouse scope');
+    expect(hiddenBộ dữ liệu mẫu).toBeTruthy();
     expect(view.getAllByText('GR-2026-1041').length).toBeGreaterThan(0);
-    expect(hiddenFixture.closest('.capability-fixture-trace')?.textContent).not.toContain('GR-2026-1045');
+    expect(hiddenBộ dữ liệu mẫu.closest('.capability-fixture-trace')?.textContent).not.toContain('GR-2026-1045');
   });
 
   it('shows the active shared scenario on linked capability previews', () => {
@@ -293,11 +293,11 @@ describe('CapabilityPreview', () => {
   it('renders canonical governance metadata and specialized review-required screen content', () => {
     const picking = renderPreview('outbound', 'OUT-05');
     expect(picking.getByText('Picking Workbench / Scan Flow')).toBeTruthy();
-    expect(picking.getByText('Screen Matrix • Đã đóng truy vết')).toBeTruthy();
+    expect(picking.getByText('Ma trận màn hình • Đã đóng truy vết')).toBeTruthy();
     expect(picking.getByText('Quản trị & mức hoàn thiện chức năng')).toBeTruthy();
     expect(picking.getAllByText('Đợt 2').length).toBeGreaterThan(0);
     expect(picking.getByText(/Picking không được giảm warehouse OnHand/)).toBeTruthy();
-    expect(picking.getByText(/Đã đóng truy vết — Screen Matrix 229/)).toBeTruthy();
+    expect(picking.getByText(/Đã đóng truy vết — Ma trận màn hình 229/)).toBeTruthy();
   });
 
   it('supports interactive core WMS state transitions and exception recovery', () => {
