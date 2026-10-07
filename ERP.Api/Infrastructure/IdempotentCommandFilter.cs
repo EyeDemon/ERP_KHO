@@ -193,6 +193,7 @@ public sealed class IdempotentCommandFilter(
         || scope.StartsWith("HandlingUnit.", StringComparison.Ordinal)
         || scope.StartsWith("Shipment.", StringComparison.Ordinal)
         || scope.StartsWith("SalesOrder.", StringComparison.Ordinal)
+        || scope.StartsWith("ExportReceipt.", StringComparison.Ordinal)
         || scope.StartsWith("Backorder.", StringComparison.Ordinal)
         || scope.StartsWith("ImportReceipt.InventoryIdentity.", StringComparison.Ordinal)
         || scope.StartsWith("InventoryStatus.", StringComparison.Ordinal)
