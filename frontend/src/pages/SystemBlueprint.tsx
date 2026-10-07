@@ -105,7 +105,7 @@ const SystemBlueprint = () => {
       <section className="blueprint-principles">
         <div><Workflow size={18} /><span>Lệnh → Phân quyền → Trạng thái → Quy tắc nghiệp vụ → Ghi sổ</span></div>
         <div><Boxes size={18} /><span>Sổ cái bất biến → Số dư dự phóng → Kiểm toán → Outbox</span></div>
-        <div><Network size={18} /><span>ERP Web + WMS di động + Tích hợp dùng chung ngữ nghĩa nghiệp vụ</span></div>
+        <div><Network size={18} /><span>ERP trên web + WMS di động + Tích hợp dùng chung ngữ nghĩa nghiệp vụ</span></div>
       </section>
 
       <section className="blueprint-toolbar">
@@ -114,7 +114,7 @@ const SystemBlueprint = () => {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tìm chức năng, mã chức năng, spec..."
+            placeholder="Tìm chức năng, mã chức năng, đặc tả..."
           />
         </label>
         <label className="blueprint-select">
