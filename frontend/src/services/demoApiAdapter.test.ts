@@ -110,6 +110,32 @@ describe('Blueprint demo API adapter', () => {
     expect(data.items.some(item => item.code === 'A01-R02-L03-B04' && item.activityLevel === 'High' && item.mapX === 6)).toBe(true);
   });
 
+  it('filters reversal candidates and serves reversal-aware inventory traceability', async () => {
+    const moveConfig = request('/api/InventoryTransactions?transactionType=Move&page=1&pageSize=100');
+    const moves = await createBlueprintDemoApiAdapter(moveConfig)(moveConfig);
+    const moveItems = (moves.data as { items: Array<{ transactionType: string; id: number }> }).items;
+    expect(moveItems.length).toBeGreaterThan(0);
+    expect(moveItems.every(item => item.transactionType === 'Move')).toBe(true);
+
+    const reversalConfig = request('/api/InventoryTransactions?transactionType=Reversal&page=1&pageSize=100');
+    const reversals = await createBlueprintDemoApiAdapter(reversalConfig)(reversalConfig);
+    expect((reversals.data as { items: Array<{ referenceType: string; referenceId: number }> }).items)
+      .toContainEqual(expect.objectContaining({ referenceType: 'InventoryReversal', referenceId: 4 }));
+
+    const traceConfig = request('/api/inventory/traceability?productId=1&lotNumber=LOT-ARABICA-2609&limit=200');
+    const trace = await createBlueprintDemoApiAdapter(traceConfig)(traceConfig);
+    const data = trace.data as {
+      currentBuckets: Array<{ productId: number; inventoryStatus: string }>;
+      events: Array<{ transactionId: number; transactionType: string; reversalOfTransactionId?: number | null; isReversed: boolean }>;
+    };
+    expect(data.currentBuckets.some(item => item.productId === 1 && item.inventoryStatus === 'AVAILABLE')).toBe(true);
+    expect(data.events.find(item => item.transactionId === 4)?.isReversed).toBe(true);
+    expect(data.events).toContainEqual(expect.objectContaining({
+      transactionType: 'Reversal',
+      reversalOfTransactionId: 4,
+    }));
+  });
+
   it('does not expose WH-02 pseudo-backend reads', async () => {
     for (const url of [
       '/api/warehouses/1/structure',
