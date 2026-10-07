@@ -252,8 +252,15 @@ namespace ERP.Api.Tests
         [Theory]
         [InlineData("List", AppPermissions.ShipmentRead)]
         [InlineData("Get", AppPermissions.ShipmentRead)]
+        [InlineData("Tracking", AppPermissions.ShipmentRead)]
         [InlineData("Stage", AppPermissions.ShipmentStage)]
         [InlineData("Dispatch", AppPermissions.ShipmentDispatch)]
+        [InlineData("MarkInTransit", AppPermissions.ShipmentUpdate)]
+        [InlineData("ConfirmDelivery", AppPermissions.ShipmentConfirmDelivery)]
+        [InlineData("DeliveryFailed", AppPermissions.ShipmentUpdate)]
+        [InlineData("RetryDelivery", AppPermissions.ShipmentUpdate)]
+        [InlineData("ReturnInitiate", AppPermissions.ShipmentUpdate)]
+        [InlineData("Complete", AppPermissions.ShipmentUpdate)]
         public void ShipmentEndpoints_RequireExactCapability(string methodName, string permission)
         {
             typeof(ShipmentsController).GetMethod(methodName)!
