@@ -15,7 +15,6 @@ public sealed class InventoryLockConfiguration : IEntityTypeConfiguration<Invent
         b.HasKey(x => x.Id);
         b.Property(x => x.LockType).HasConversion<int>();
         b.Property(x => x.Status).HasConversion<int>();
-        b.Property(x => x.InventoryStatus).HasConversion<int?>();
         b.Property(x => x.Reason).HasMaxLength(500).IsRequired();
         b.Property(x => x.ReleaseReason).HasMaxLength(500);
         b.Property(x => x.RowVersion).IsRowVersion();
