@@ -248,15 +248,23 @@ public class StockReservationService(
             var consumed = new List<InventoryStockConsumption>();
             foreach (var allocation in allocations)
             {
-                if (!await stockRepository.TryConsumeReservationAtLocationAsync(
+                if (!await stockRepository.TryConsumeReservationAtBucketAsync(
                         reservation.ProductId,
                         reservation.WarehouseId,
                         allocation.LocationId,
+                        allocation.LotId,
+                        allocation.SerialId,
+                        allocation.InventoryStatus,
                         allocation.Quantity,
                         cancellationToken))
-                    throw new ConcurrencyException("Bucket Allocation đã thay đổi trước khi tiêu thụ.");
+                    throw new ConcurrencyException("Bucket Allocation đã thay đổi hoặc không còn shippable trước khi tiêu thụ.");
 
-                consumed.Add(new InventoryStockConsumption(allocation.LocationId, allocation.Quantity));
+                consumed.Add(new InventoryStockConsumption(
+                    allocation.LocationId,
+                    allocation.Quantity,
+                    allocation.LotId,
+                    allocation.SerialId,
+                    allocation.InventoryStatus));
                 allocation.Status = StockAllocationStatus.Consumed;
                 allocation.Version++;
                 context.AuditLogs.Add(new AuditLog
@@ -267,7 +275,7 @@ public class StockReservationService(
                     EntityId = allocation.Id,
                     WarehouseId = reservation.WarehouseId,
                     Timestamp = now,
-                    NewValues = $"Allocation: {allocation.AllocationCode}; Quantity: {allocation.Quantity}",
+                    NewValues = $"Allocation: {allocation.AllocationCode}; LocationId: {allocation.LocationId}; LotId: {allocation.LotId}; SerialId: {allocation.SerialId}; Status: {allocation.InventoryStatus}; Quantity: {allocation.Quantity}",
                     Result = "Success",
                     Severity = "Information"
                 });
