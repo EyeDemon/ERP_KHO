@@ -358,7 +358,7 @@ public sealed class ReceiptInventoryIdentityService(
         if (product.TrackingType == ProductTrackingType.Serial)
         {
             if (serial is null) throw Conflict("SERIAL_REQUIRED", $"Sản phẩm {product.Code} yêu cầu serial.");
-            if (quantity != 1) throw Conflict("SERIAL_REQUIRED", "Mỗi serial phải có BaseQuantity = 1.");
+            if (quantity != 1) throw Conflict("SERIAL_QUANTITY_INVALID", "Mỗi serial phải có BaseQuantity = 1.");
         }
         if (product.ExpiryControl)
         {
@@ -366,7 +366,7 @@ public sealed class ReceiptInventoryIdentityService(
             if (!expiry.HasValue) throw Conflict("EXPIRY_REQUIRED", $"Sản phẩm {product.Code} yêu cầu expiry.");
         }
         if (manufacture.HasValue && expiry.HasValue && expiry.Value.Date < manufacture.Value.Date)
-            throw new BusinessRuleException("Expiry không được trước manufacture date.");
+            throw Conflict("EXPIRY_BEFORE_MANUFACTURE", "Expiry không được trước manufacture date.");
         if (expiry.HasValue && expiry.Value.Date < DateTime.UtcNow.Date)
             throw Conflict("LOT_EXPIRED", "Không thể nhận lot đã hết hạn.");
     }
