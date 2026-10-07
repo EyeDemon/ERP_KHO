@@ -344,9 +344,29 @@ export const demoPutawayTasks = [
 ];
 
 export const demoImportReceipts = [
-  { id: 1048, code: 'GR-2026-1048', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 'Received', note: 'PO-2026-4521', createdBy: 101, createdByName: 'Lê Thu Hà', createdAt: '2026-10-03T08:00:00Z', approvedBy: 0, approvedByName: '', approvedAt: '', supplierId: 1, supplierCode: 'SUP-001', supplierName: 'Công ty Nông Sản Cao Nguyên', requiresQc: false, details: [{ id: 1, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', operationUnitId: 1, operationUnitCode: 'GOI', baseUnitCode: 'GOI', conversionFactor: 1, conversionVersion: 1, expectedQuantity: 1200, receivedQuantity: 1200, acceptedQuantity: 1200, damagedQuantity: 0, rejectedQuantity: 0, postedQuantity: 0, baseExpectedQuantity: 1200, baseReceivedQuantity: 1200, baseAcceptedQuantity: 1200, basePostedQuantity: 0, note: '', requiresQc: false, qcState: 'NotRequired', observedQuantity: 1200, doorRejectedQuantity: 0, finalReceivedQuantity: 1200, baseFinalReceivedQuantity: 1200 }] },
-  { id: 1041, code: 'GR-2026-1041', warehouseId: 2, warehouseName: 'Kho Đà Nẵng', status: 'ReadyToPost', note: 'QC balanced', createdBy: 102, createdByName: 'Đỗ Minh Khang', createdAt: '2026-10-03T07:10:00Z', approvedBy: 201, approvedByName: 'Vũ Ngọc Lan', approvedAt: '2026-10-03T08:35:00Z', supplierId: 1, supplierCode: 'SUP-001', supplierName: 'Công ty Nông Sản Cao Nguyên', requiresQc: true, details: [{ id: 2, productId: 6, productCode: 'SKU-4001', productName: 'Nước khoáng 500ml', operationUnitId: 4, operationUnitCode: 'CHAI', baseUnitCode: 'CHAI', conversionFactor: 1, conversionVersion: 1, expectedQuantity: 2400, receivedQuantity: 2400, acceptedQuantity: 2400, damagedQuantity: 0, rejectedQuantity: 0, postedQuantity: 0, baseExpectedQuantity: 2400, baseReceivedQuantity: 2400, baseAcceptedQuantity: 2400, basePostedQuantity: 0, note: '', requiresQc: true, qcState: 'Completed', observedQuantity: 2400, doorRejectedQuantity: 0, finalReceivedQuantity: 2400, baseFinalReceivedQuantity: 2400 }] },
+  { id: 1048, code: 'GR-2026-1048', warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', status: 'Received', note: 'PO-2026-4521', createdBy: 101, createdByName: 'Lê Thu Hà', createdAt: '2026-10-03T08:00:00Z', approvedBy: 0, approvedByName: '', approvedAt: '', supplierId: 1, supplierCode: 'SUP-001', supplierName: 'Công ty Nông Sản Cao Nguyên', requiresQc: false, details: [{ id: 1, productId: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', operationUnitId: 1, operationUnitCode: 'GOI', baseUnitCode: 'GOI', conversionFactor: 1, conversionVersion: 1, expectedQuantity: 1200, receivedQuantity: 1200, acceptedQuantity: 1200, damagedQuantity: 0, rejectedQuantity: 0, postedQuantity: 0, baseExpectedQuantity: 1200, baseReceivedQuantity: 1200, baseAcceptedQuantity: 1200, baseDamagedQuantity: 0, baseRejectedQuantity: 0, basePostedQuantity: 0, trackingType: 'Lot', expiryControl: true, shelfLifeDays: 365, note: '', requiresQc: false, qcState: 'NotRequired', observedQuantity: 1200, doorRejectedQuantity: 0, finalReceivedQuantity: 1200, baseFinalReceivedQuantity: 1200 }] },
+  { id: 1041, code: 'GR-2026-1041', warehouseId: 2, warehouseName: 'Kho Đà Nẵng', status: 'ReadyToPost', note: 'QC balanced', createdBy: 102, createdByName: 'Đỗ Minh Khang', createdAt: '2026-10-03T07:10:00Z', approvedBy: 201, approvedByName: 'Vũ Ngọc Lan', approvedAt: '2026-10-03T08:35:00Z', supplierId: 1, supplierCode: 'SUP-001', supplierName: 'Công ty Nông Sản Cao Nguyên', requiresQc: true, details: [{ id: 2, productId: 6, productCode: 'SKU-4001', productName: 'Nước khoáng 500ml', operationUnitId: 4, operationUnitCode: 'CHAI', baseUnitCode: 'CHAI', conversionFactor: 1, conversionVersion: 1, expectedQuantity: 2400, receivedQuantity: 2400, acceptedQuantity: 2400, damagedQuantity: 0, rejectedQuantity: 0, postedQuantity: 0, baseExpectedQuantity: 2400, baseReceivedQuantity: 2400, baseAcceptedQuantity: 2400, baseDamagedQuantity: 0, baseRejectedQuantity: 0, basePostedQuantity: 0, trackingType: 'Lot', expiryControl: true, shelfLifeDays: 365, note: '', requiresQc: true, qcState: 'Completed', observedQuantity: 2400, doorRejectedQuantity: 0, finalReceivedQuantity: 2400, baseFinalReceivedQuantity: 2400 }] },
 ];
+
+export const demoImportReceiptInventoryIdentities: Record<number, Array<{
+  id:number; lineId:number; productId:number; targetStatus:string; baseQuantity:number;
+  lotNumber:string|null; manufactureDate:string|null; expiryDate:string|null; serialNumber:string|null;
+}>> = {
+  1048: [
+    {
+      id: 50101, lineId: 1, productId: 1, targetStatus: 'AVAILABLE', baseQuantity: 1200,
+      lotNumber: 'LOT-ARABICA-2609', manufactureDate: '2026-09-01T00:00:00Z',
+      expiryDate: '2027-09-01T00:00:00Z', serialNumber: null,
+    },
+  ],
+  1041: [
+    {
+      id: 50102, lineId: 2, productId: 6, targetStatus: 'AVAILABLE', baseQuantity: 2400,
+      lotNumber: 'LOT-WATER-2609', manufactureDate: '2026-09-15T00:00:00Z',
+      expiryDate: '2027-09-15T00:00:00Z', serialNumber: null,
+    },
+  ],
+};
 
 export const demoExportReceipts = [
   { id: 5108, code: 'EX-2026-5108', warehouseName: 'DC Hồ Chí Minh', status: 'Approved', note: 'Chờ dispatch', createdBy: 101, createdByName: 'Trần Quốc Bảo', createdAt: '2026-10-03T08:40:00Z', approvedByName: 'Nguyễn Minh Anh', approvedAt: '2026-10-03T09:00:00Z', dispatchMode: 'ReserveThenDispatch', reservationStatus: 'Active', allowPerReceiptDispatchMode: true, allowWarehouseStaffDirectDispatch: false, writeEnabled: false, customerId: 3, customerCode: 'CUS-001', customerName: 'Chuỗi bán lẻ Minh Phúc', details: [{ id: 1, productCode: 'SKU-1001', productName: 'Cà phê Arabica 500g', quantity: 120, unitPrice: 125000, note: '' }] },
