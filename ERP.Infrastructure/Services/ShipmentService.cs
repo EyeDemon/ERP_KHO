@@ -387,6 +387,10 @@ public sealed class ShipmentService(
                 throw Conflict("SHIPMENT_POD_EXISTS", "Shipment đã có Proof of Delivery.");
 
             var receiver = NormalizeRequired(request.ReceiverName, 200, "Tên người nhận");
+            var evidenceReference = NormalizeOptional(request.EvidenceReference, 500);
+            var carrierReference = NormalizeOptional(request.CarrierReference, 120);
+            if (evidenceReference is null && carrierReference is null)
+                throw new BusinessRuleException("POD cần EvidenceReference hoặc CarrierReference.");
             ValidateCoordinates(request.Latitude, request.Longitude);
             var deliveredAt = ResolveTrackingTime(shipment, request.DeliveredAt, "DELIVERED");
             var pod = new ShipmentProofOfDelivery
@@ -394,10 +398,10 @@ public sealed class ShipmentService(
                 ShipmentId = shipment.Id,
                 DeliveredAt = deliveredAt,
                 ReceiverName = receiver,
-                EvidenceReference = NormalizeOptional(request.EvidenceReference, 500),
+                EvidenceReference = evidenceReference,
                 Latitude = request.Latitude,
                 Longitude = request.Longitude,
-                CarrierReference = NormalizeOptional(request.CarrierReference, 120),
+                CarrierReference = carrierReference,
                 DeliveryNote = NormalizeOptional(request.DeliveryNote, 500),
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = currentUser.UserId
