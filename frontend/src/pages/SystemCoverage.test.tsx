@@ -26,7 +26,7 @@ describe('SystemCoverage', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
     fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: '5' } });
-    expect(table.getByText(/AX-09 • Kitting/)).toBeTruthy();
+    expect(table.getByText(/AX-09 • Đóng bộ \/ Gộp bộ \/ Lắp ráp \/ Tháo bộ/)).toBeTruthy();
     expect(table.queryByText(/INV-02 • Sổ cái tồn kho bất biến/)).toBeNull();
 
     fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: 'all' } });
@@ -38,8 +38,8 @@ describe('SystemCoverage', () => {
   it('shows advanced canonical capabilities without promoting them to core implementation', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
-    fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'Warehouse Safety' } });
-    expect(table.getByText(/AX-14 • Warehouse Safety/)).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'An toàn kho' } });
+    expect(table.getByText(/AX-14 • An toàn kho \/ Công thái học \/ Kiểm soát rủi ro/)).toBeTruthy();
     expect(table.getByText(/Tùy chọn theo ngành/)).toBeTruthy();
   });
 
