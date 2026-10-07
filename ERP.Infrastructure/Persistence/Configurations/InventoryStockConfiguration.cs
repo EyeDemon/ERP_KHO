@@ -14,11 +14,11 @@ public class InventoryStockConfiguration : IEntityTypeConfiguration<InventorySto
         builder.Property(x => x.ReservedQuantity).HasPrecision(18, 4);
         builder.ToTable(t => t.HasCheckConstraint("CK_InventoryStocks_Reservation", "[ReservedQuantity] >= 0 AND [Quantity] >= [ReservedQuantity]"));
         builder.Property<int>("CanonicalLocationId")
-               .HasComputedColumnSql("ISNULL([LocationId], 0)", stored: true);
+               .HasComputedColumnSql("COALESCE([LocationId], 0)", stored: true);
         builder.Property<int>("CanonicalLotId")
-               .HasComputedColumnSql("ISNULL([LotId], 0)", stored: true);
+               .HasComputedColumnSql("COALESCE([LotId], 0)", stored: true);
         builder.Property<int>("CanonicalSerialId")
-               .HasComputedColumnSql("ISNULL([SerialId], 0)", stored: true);
+               .HasComputedColumnSql("COALESCE([SerialId], 0)", stored: true);
         builder.HasIndex(
                 "ProductId",
                 "WarehouseId",
