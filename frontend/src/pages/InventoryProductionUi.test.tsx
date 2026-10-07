@@ -35,6 +35,35 @@ describe('Inventory shared production UI', () => {
           }],
         } as never;
       }
+      if (value === '/api/inventory/statuses') {
+        return { data: [{ code: 'AVAILABLE', name: 'Available', isAvailable: true, isReservable: true, isAllocatable: true, isPickable: true, isShippable: true }] } as never;
+      }
+      if (value.startsWith('/api/inventory/buckets?')) {
+        return { data: [{
+          inventoryStockId: 55,
+          productId: 10,
+          productCode: 'SKU-10',
+          productName: 'Sản phẩm 10',
+          warehouseId: 1,
+          warehouseName: 'DC Hồ Chí Minh',
+          locationId: 7,
+          locationCode: 'A01-R01-B01',
+          status: 'AVAILABLE',
+          isReservable: true,
+          isAllocatable: true,
+          isPickable: true,
+          isShippable: true,
+          lotId: 20,
+          lotNumber: 'LOT-PROD-10',
+          expiryDate: '2027-01-01T00:00:00Z',
+          serialId: null,
+          serialNumber: null,
+          onHandQuantity: 12,
+          reservedQuantity: 2,
+          availableQuantity: 10,
+          lastUpdated: '2026-10-03T08:00:00Z',
+        }] } as never;
+      }
       if (value.startsWith('/api/InventoryTransactions?')) {
         return {
           data: {
@@ -91,6 +120,10 @@ describe('Inventory shared production UI', () => {
     expect(view.getByRole('table', { name: 'Tồn kho hiện tại' })).toBeTruthy();
     expect(view.getByRole('tab', { name: 'Tồn kho hiện tại' }).getAttribute('aria-selected')).toBe('true');
     expect(view.getByRole('button', { name: 'Xuất Excel Tồn Kho' })).toBeTruthy();
+
+    fireEvent.click(view.getByRole('tab', { name: 'Bucket / Lot / Serial' }));
+    expect(await view.findByRole('table', { name: 'Inventory bucket' })).toBeTruthy();
+    expect(await view.findByText('LOT-PROD-10')).toBeTruthy();
 
     fireEvent.click(view.getByRole('tab', { name: 'Lịch sử giao dịch' }));
     expect(await view.findByRole('table', { name: 'Lịch sử giao dịch tồn kho' })).toBeTruthy();
