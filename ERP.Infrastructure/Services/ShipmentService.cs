@@ -251,7 +251,7 @@ public sealed class ShipmentService(
             if (reservations.Count != reservationIds.Length)
                 throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Reservation của Shipment không còn đầy đủ.");
 
-            var ledgerBuckets = new Dictionary<(int ProductId, int LocationId, InventoryStatus InventoryStatus), decimal>();
+            var ledgerBuckets = new Dictionary<(int ProductId, int LocationId, InventoryStatus InventoryStatus, int? LotId, int? SerialId), decimal>();
             foreach (var reservation in reservations)
             {
                 if (reservation.WarehouseId != shipment.WarehouseId)
@@ -270,42 +270,59 @@ public sealed class ShipmentService(
                                    x.PickedQuantity != x.Allocation.Quantity))
                     throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Allocation/Picked quantity không còn khớp reservation.");
 
-                var expectedByLocation = lines
-                    .GroupBy(x => x.Allocation.LocationId)
-                    .ToDictionary(x => x.Key, x => x.Sum(y => y.Allocation.Quantity));
+                var expectedByBucket = lines
+                    .GroupBy(x => new
+                    {
+                        x.Allocation.LocationId,
+                        x.Allocation.InventoryStatus,
+                        x.Allocation.LotId,
+                        x.Allocation.SerialId
+                    })
+                    .ToDictionary(
+                        x => (x.Key.LocationId, x.Key.InventoryStatus, x.Key.LotId, x.Key.SerialId),
+                        x => x.Sum(y => y.Allocation.Quantity));
 
                 var consumptions = await stockReservationService.ConsumeAsync(
                     reservation,
                     currentUser.UserId,
                     token);
+                var actualByBucket = consumptions
+                    .GroupBy(x => (x.LocationId, x.Status, x.LotId, x.SerialId))
+                    .ToDictionary(x => x.Key, x => x.Sum(y => y.Quantity));
                 if (consumptions.Sum(x => x.Quantity) != remaining ||
-                    consumptions.Count != expectedByLocation.Count ||
-                    consumptions.Any(x => !expectedByLocation.TryGetValue(x.LocationId, out var expected) || expected != x.Quantity))
-                    throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Inventory consumption không khớp Allocation location.");
+                    actualByBucket.Count != expectedByBucket.Count ||
+                    actualByBucket.Any(x => !expectedByBucket.TryGetValue(x.Key, out var expected) || expected != x.Value))
+                    throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Inventory consumption không khớp Allocation Location/Status/Lot/Serial.");
 
-                foreach (var consumption in consumptions.OrderBy(x => x.LocationId))
+                foreach (var bucket in actualByBucket.OrderBy(x => x.Key.LocationId)
+                             .ThenBy(x => x.Key.LotId)
+                             .ThenBy(x => x.Key.SerialId))
                 {
-                    var statuses = lines
-                        .Where(x => x.Allocation.LocationId == consumption.LocationId)
-                        .Select(x => x.Allocation.InventoryStatus)
-                        .Distinct()
-                        .ToArray();
-                    if (statuses.Length != 1)
-                        throw Conflict("SHIPMENT_INVENTORY_MISMATCH", "Allocation cùng Location có nhiều InventoryStatus, không thể tạo SHIP ledger chuẩn.");
-
-                    var key = (reservation.ProductId, consumption.LocationId, statuses[0]);
-                    ledgerBuckets[key] = ledgerBuckets.GetValueOrDefault(key) + consumption.Quantity;
+                    var key = (
+                        reservation.ProductId,
+                        bucket.Key.LocationId,
+                        bucket.Key.Status,
+                        bucket.Key.LotId,
+                        bucket.Key.SerialId);
+                    ledgerBuckets[key] = ledgerBuckets.GetValueOrDefault(key) + bucket.Value;
                 }
             }
 
             var dispatchedAt = DateTime.UtcNow;
-            foreach (var bucket in ledgerBuckets.OrderBy(x => x.Key.ProductId).ThenBy(x => x.Key.LocationId).ThenBy(x => x.Key.InventoryStatus))
+            foreach (var bucket in ledgerBuckets
+                         .OrderBy(x => x.Key.ProductId)
+                         .ThenBy(x => x.Key.LocationId)
+                         .ThenBy(x => x.Key.InventoryStatus)
+                         .ThenBy(x => x.Key.LotId)
+                         .ThenBy(x => x.Key.SerialId))
             {
                 context.InventoryTransactions.Add(new InventoryTransaction
                 {
                     ProductId = bucket.Key.ProductId,
                     WarehouseId = shipment.WarehouseId,
                     LocationId = bucket.Key.LocationId,
+                    LotId = bucket.Key.LotId,
+                    SerialId = bucket.Key.SerialId,
                     InventoryStatus = bucket.Key.InventoryStatus,
                     TransactionType = TransactionType.Ship,
                     Quantity = bucket.Value,
