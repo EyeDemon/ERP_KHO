@@ -6,6 +6,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Queries;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,7 +16,8 @@ public sealed class PickingService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
     ICurrentUser currentUser,
-    IPackingSessionIntegration? packingSessionIntegration = null) : IPickingService, IPickingDispatchReadiness
+    IPackingSessionIntegration? packingSessionIntegration = null,
+    IInventoryLockEvaluator? inventoryLocks = null) : IPickingService, IPickingDispatchReadiness
 {
     private static readonly StockAllocationStatus[] CapacityStatuses =
     [
@@ -91,6 +93,15 @@ public sealed class PickingService(
             task.StartedAt ??= DateTime.UtcNow;
             foreach (var line in task.Lines)
             {
+                if (inventoryLocks is not null)
+                    await inventoryLocks.EnsureBucketUnlockedAsync(
+                        task.WarehouseId,
+                        line.SourceLocationId,
+                        line.ProductId,
+                        line.Allocation.InventoryStatus,
+                        line.Allocation.LotId,
+                        line.Allocation.SerialId,
+                        token);
                 if (line.Status == PickingTaskLineStatus.Open)
                     line.Status = PickingTaskLineStatus.InProgress;
                 if (line.Allocation.Status != StockAllocationStatus.Active)
@@ -125,6 +136,16 @@ public sealed class PickingService(
 
             if (request.Quantity > line.RemainingQuantity)
                 throw Conflict("PICK_QUANTITY_EXCEEDS_REMAINING", "Số lượng Picking vượt quá số lượng còn lại.");
+
+            if (inventoryLocks is not null)
+                await inventoryLocks.EnsureBucketUnlockedAsync(
+                    task.WarehouseId,
+                    line.SourceLocationId,
+                    line.ProductId,
+                    line.Allocation.InventoryStatus,
+                    line.Allocation.LotId,
+                    line.Allocation.SerialId,
+                    token);
 
             var today = DateTime.UtcNow.Date;
             var stockOk = await context.InventoryStocks.AsNoTracking().AnyAsync(
@@ -329,6 +350,7 @@ public sealed class PickingService(
 
         var reservation = await context.StockReservations.SingleAsync(x => x.Id == allocation.ReservationId, token);
         var candidates = await context.InventoryStocks.AsNoTracking()
+            .UnlockedAt(context, DateTime.UtcNow)
             .Where(x => x.ProductId == allocation.ProductId &&
                         x.WarehouseId == allocation.WarehouseId &&
                         x.Status == InventoryStatus.Available &&
