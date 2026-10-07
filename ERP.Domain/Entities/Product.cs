@@ -1,3 +1,5 @@
+using ERP.Domain.Enums;
+
 namespace ERP.Domain.Entities;
 
 public class Product
@@ -13,6 +15,10 @@ public class Product
     public decimal? UnitVolumeM3 { get; set; }
     public decimal? UnitPalletEquivalent { get; set; }
     public bool IsActive { get; set; } = true;
+    public ProductTrackingType TrackingType { get; set; } = ProductTrackingType.None;
+    public bool RequiresExpiryDate { get; set; }
+    public int MinimumRemainingShelfLifeDaysAtReceipt { get; set; }
+    public int MinimumRemainingShelfLifeDaysAtAllocation { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 
@@ -23,4 +29,6 @@ public class Product
     public ICollection<ProductUom> Uoms { get; set; } = new List<ProductUom>();
     public ICollection<InventoryStock> InventoryStocks { get; set; } = new List<InventoryStock>();
     public ICollection<QcPolicy> QcPolicies { get; set; } = new List<QcPolicy>();
+    public ICollection<InventoryLot> Lots { get; set; } = new List<InventoryLot>();
+    public ICollection<InventorySerial> Serials { get; set; } = new List<InventorySerial>();
 }
