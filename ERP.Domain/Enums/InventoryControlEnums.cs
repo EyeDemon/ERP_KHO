@@ -23,3 +23,11 @@ public enum InventoryLockStatus
     Released = 1,
     Expired = 2
 }
+
+public enum InventoryEligibilityOperation
+{
+    Reservation = 0,
+    Allocation = 1,
+    Picking = 2,
+    Shipping = 3
+}
