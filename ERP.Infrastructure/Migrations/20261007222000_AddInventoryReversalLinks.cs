@@ -24,6 +24,15 @@ public sealed class AddInventoryReversalLinks : Migration
             type: "int",
             nullable: true);
 
+        migrationBuilder.Sql("""
+UPDATE InventoryTransactions
+SET ReversalOfTransactionId = ReferenceId
+WHERE TransactionType = 10
+  AND ReferenceType = 'InventoryReversal'
+  AND ReferenceId IS NOT NULL
+  AND ReversalOfTransactionId IS NULL;
+""");
+
         migrationBuilder.CreateIndex(
             name: "UX_InventoryTransactions_CorrectiveTransaction",
             table: "InventoryTransactions",
