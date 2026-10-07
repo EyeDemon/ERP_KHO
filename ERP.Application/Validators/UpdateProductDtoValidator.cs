@@ -26,6 +26,16 @@ namespace ERP.Application.Validators
             RuleFor(x => x.UnitWeightKg).GreaterThan(0).When(x => x.UpdateStorageProfile && x.UnitWeightKg.HasValue);
             RuleFor(x => x.UnitVolumeM3).GreaterThan(0).When(x => x.UpdateStorageProfile && x.UnitVolumeM3.HasValue);
             RuleFor(x => x.UnitPalletEquivalent).GreaterThan(0).When(x => x.UpdateStorageProfile && x.UnitPalletEquivalent.HasValue);
+            RuleFor(x => x.TrackingType)
+                .Must(value => Enum.TryParse<ERP.Domain.Enums.ProductTrackingType>(value, true, out _))
+                .When(x => x.UpdateTrackingProfile)
+                .WithMessage("TrackingType phải là None, Lot hoặc Serial.");
+            RuleFor(x => x.MinimumRemainingShelfLifeDaysAtReceipt).GreaterThanOrEqualTo(0).When(x => x.UpdateTrackingProfile);
+            RuleFor(x => x.MinimumRemainingShelfLifeDaysAtAllocation).GreaterThanOrEqualTo(0).When(x => x.UpdateTrackingProfile);
+            RuleFor(x => x.RequiresExpiryDate)
+                .Equal(false)
+                .When(x => x.UpdateTrackingProfile && string.Equals(x.TrackingType, "None", StringComparison.OrdinalIgnoreCase))
+                .WithMessage("SKU không tracking Lot/Serial không thể bắt buộc ExpiryDate.");
         }
     }
 }
