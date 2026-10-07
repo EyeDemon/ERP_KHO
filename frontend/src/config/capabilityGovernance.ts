@@ -143,7 +143,7 @@ const permissionModelFor = (capability: BlueprintCapability) =>
 const commandApiModelFor = (capability: BlueprintCapability) => {
   if (!capability.surfaces.includes('API')) return 'No direct API surface required by this capability preview.';
   if (capability.status === 'live') return 'Existing API/route evidence in branch; command semantics remain governed by referenced canonical specs.';
-  if (capability.status === 'foundation') return 'Partial API foundation exists; command/state/error contract still requires completion evidence.';
+  if (capability.status === 'foundation') return 'Đã có nền tảng API một phần; hợp đồng lệnh/trạng thái/lỗi vẫn cần thêm bằng chứng hoàn thiện.';
   return 'Canonical spec defines required command/API behavior; implementation mapping is intentionally not claimed by the blueprint.';
 };
 
