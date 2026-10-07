@@ -9,17 +9,17 @@ describe('SystemCoverage', () => {
 
   it('renders all traced capabilities and the four closed Screen Matrix mappings', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
-    expect(view.getByText('Coverage & Readiness')).toBeTruthy();
-    expect(view.getByText('capabilities traced').parentElement?.textContent).toContain('179');
-    expect(view.getByText('Screen Matrix 229 • Traceability Closed')).toBeTruthy();
-    expect(view.getAllByText('Traceability Closed').length).toBeGreaterThanOrEqual(4);
+    expect(view.getByText('Độ phủ & mức sẵn sàng')).toBeTruthy();
+    expect(view.getByText('chức năng đã truy vết').parentElement?.textContent).toContain('179');
+    expect(view.getByText('Screen Matrix 229 • Đã đóng truy vết')).toBeTruthy();
+    expect(view.getAllByText('Đã đóng truy vết').length).toBeGreaterThanOrEqual(4);
     expect(view.getByText(/inventory-control.*INV-08/)).toBeTruthy();
     expect(view.getByText(/outbound.*OUT-05/)).toBeTruthy();
     expect(view.getByText(/outbound.*OUT-06/)).toBeTruthy();
     expect(view.getByText(/transfer-replenishment.*TR-01/)).toBeTruthy();
     expect(view.queryByText(/UNMAPPED/)).toBeNull();
     expect(view.getAllByText('282').length).toBeGreaterThan(0);
-    expect(view.getByText('Canonical Documentation Register • Specs 1–282')).toBeTruthy();
+    expect(view.getByText('Sổ đăng ký tài liệu chuẩn • Đặc tả 1–282')).toBeTruthy();
   });
 
   it('filters by release wave and implementation status', () => {
