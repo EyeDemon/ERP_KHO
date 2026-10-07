@@ -82,20 +82,20 @@ const implementationSpecificModules = new Set(['operations-resilience']);
 
 const screenTraceability: Record<string, { screenReference: string; finding: string }> = {
   'INV-08': {
-    screenReference: 'BLUEPRINT • /system-blueprint/inventory-control/INV-08 • Internal Location Transfer Workbench',
-    finding: 'PASS content / Traceability Closed — Screen Matrix 229 + Spec 282 mapped to concrete Blueprint route • 2026-10-03',
+    screenReference: 'BẢN THIẾT KẾ • /system-blueprint/inventory-control/INV-08 • Bàn làm việc di chuyển vị trí nội bộ',
+    finding: 'ĐẠT nội dung / Đã đóng truy vết — Screen Matrix 229 + Spec 282 đã ánh xạ tới route Blueprint cụ thể • 2026-10-03',
   },
   'OUT-05': {
-    screenReference: 'BLUEPRINT • /system-blueprint/outbound/OUT-05 • Picking Workbench / Scan Flow',
-    finding: 'PASS content / Traceability Closed — Screen Matrix 229 + Spec 282 mapped to concrete Blueprint route • 2026-10-03',
+    screenReference: 'BẢN THIẾT KẾ • /system-blueprint/outbound/OUT-05 • Bàn làm việc lấy hàng / Luồng quét',
+    finding: 'ĐẠT nội dung / Đã đóng truy vết — Screen Matrix 229 + Spec 282 đã ánh xạ tới route Blueprint cụ thể • 2026-10-03',
   },
   'OUT-06': {
-    screenReference: 'BLUEPRINT • /system-blueprint/outbound/OUT-06 • Packing Station',
-    finding: 'PASS content / Traceability Closed — Screen Matrix 229 + Spec 282 mapped to concrete Blueprint route • 2026-10-03',
+    screenReference: 'BẢN THIẾT KẾ • /system-blueprint/outbound/OUT-06 • Trạm đóng gói',
+    finding: 'ĐẠT nội dung / Đã đóng truy vết — Screen Matrix 229 + Spec 282 đã ánh xạ tới route Blueprint cụ thể • 2026-10-03',
   },
   'TR-01': {
-    screenReference: 'BLUEPRINT • /system-blueprint/transfer-replenishment/TR-01 • Create Warehouse Transfer',
-    finding: 'PASS content / Traceability Closed — Screen Matrix 229 + Spec 282 mapped to concrete Blueprint route • 2026-10-03',
+    screenReference: 'BẢN THIẾT KẾ • /system-blueprint/transfer-replenishment/TR-01 • Tạo điều chuyển kho',
+    finding: 'ĐẠT nội dung / Đã đóng truy vết — Screen Matrix 229 + Spec 282 đã ánh xạ tới route Blueprint cụ thể • 2026-10-03',
   },
 };
 
@@ -218,8 +218,8 @@ export const platformStandards: PlatformStandard[] = platformStandardCatalog.spl
 });
 
 export const evidenceStatusLabels: Record<EvidenceStatus, string> = {
-  covered: 'Covered',
-  partial: 'Partial',
-  'spec-only': 'Spec only',
-  missing: 'Missing',
+  covered: 'Đã có bằng chứng',
+  partial: 'Một phần',
+  'spec-only': 'Chỉ có đặc tả',
+  missing: 'Thiếu',
 };
