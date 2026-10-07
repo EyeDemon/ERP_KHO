@@ -31,7 +31,7 @@ const renderAt = (path: string) => render(
     <MockDemoProvider>
       <Routes>
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<div>Trang chủ production</div>} />
+          <Route index element={<div>Trang chủ hệ thống thật</div>} />
           <Route path="system-blueprint/*" element={<div>Nội dung bản thiết kế</div>} />
         </Route>
       </Routes>
@@ -85,7 +85,7 @@ describe('MainLayout blueprint navigation mode', () => {
   it('keeps production navigation separate from blueprint-only module menu', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/');
-    await view.findByText('Trang chủ production');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByText('Bản đồ hệ thống')).toBeTruthy();
     expect(view.queryByText('17 nhóm phân hệ')).toBeNull();
     expect(view.queryByText('MÔ PHỎNG • CHỈ ĐỌC')).toBeNull();
@@ -96,7 +96,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'location.read');
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['location.read'] } });
     const view = renderAt('/');
-    await view.findByText('Trang chủ production');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByRole('link', { name: 'Cấu trúc vị trí' }).getAttribute('href')).toBe('/warehouse-structure');
     expect(view.getByRole('link', { name: 'Bản đồ kho' }).getAttribute('href')).toBe('/warehouse-map');
   });
@@ -106,7 +106,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'warehouse.read');
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['warehouse.read'] } });
     const view = renderAt('/');
-    await view.findByText('Trang chủ production');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByRole('link', { name: 'Lịch & ca kho' }).getAttribute('href')).toBe('/warehouse-calendar');
   });
 
@@ -115,7 +115,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(authorization.hasPermission).mockImplementation(code => ['purchase_order.read', 'asn.read'].includes(code));
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['purchase_order.read', 'asn.read'] } });
     const view = renderAt('/');
-    await view.findByText('Trang chủ production');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByRole('link', { name: 'Đơn mua (PO)' }).getAttribute('href')).toBe('/purchase-orders');
     expect(view.getByRole('link', { name: 'ASN dự kiến' }).getAttribute('href')).toBe('/asns');
     expect(view.queryByRole('link', { name: 'Phiếu nhập kho' })).toBeNull();
@@ -126,7 +126,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'dock_appointment.read');
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['dock_appointment.read'] } });
     const view = renderAt('/');
-    await view.findByText('Trang chủ production');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByRole('link', { name: 'Cổng, sân bãi & cửa kho' }).getAttribute('href')).toBe('/dock-yard');
   });
 
@@ -135,17 +135,17 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(apiClient.get).mockRejectedValue(new Error('backend unavailable'));
     const view = renderAt('/');
 
-    await view.findByText('Trang chủ production');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(apiClient.get).not.toHaveBeenCalled();
     expect(view.queryByRole('alert')).toBeNull();
     expect(view.getByText('MÔI TRƯỜNG DEMO • BACKEND MÔ PHỎNG')).toBeTruthy();
-    expect(view.getByText('Giao diện production')).toBeTruthy();
+    expect(view.getByText('Giao diện hệ thống thật')).toBeTruthy();
   });
 
   it('exposes accessible navigation, current location and skip-to-content behavior', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/');
-    await view.findByText('Trang chủ production');
+    await view.findByText('Trang chủ hệ thống thật');
 
     expect(view.getByText('Bỏ qua điều hướng').getAttribute('href')).toBe('#main-content');
     expect(view.getByRole('navigation', { name: 'Điều hướng nghiệp vụ' })).toBeTruthy();
@@ -161,6 +161,6 @@ describe('MainLayout blueprint navigation mode', () => {
     const view = renderAt('/');
     await waitFor(() => expect(view.getByRole('alert')).toBeTruthy());
     expect(view.getByRole('alert').textContent).toContain('Không thể xác minh quyền truy cập');
-    expect(view.queryByText('Trang chủ production')).toBeNull();
+    expect(view.queryByText('Trang chủ hệ thống thật')).toBeNull();
   });
 });
