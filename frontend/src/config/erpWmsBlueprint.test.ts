@@ -142,6 +142,12 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('OUT-07')?.route).toBe('/shipments');
     expect(byId.get('OUT-07')?.goal).toMatch(/Shipment READY.*staging location.*HU hierarchy.*IN_SERVICE.*LOADED.*không trừ OnHand.*OUT-08 foundation/i);
     expect(byId.get('OUT-08')?.status).toBe('foundation');
+    expect(byId.get('INV-07')?.status).toBe('foundation');
+    expect(byId.get('INV-07')?.route).toBe('/inventory-locks');
+    expect(byId.get('INV-07')?.goal).toMatch(/overlapping lock.*Owner\/HU\/partial-quantity/i);
+    expect(byId.get('INV-08')?.status).toBe('foundation');
+    expect(byId.get('INV-08')?.route).toBe('/inventory-movements');
+    expect(byId.get('INV-08')?.goal).toMatch(/unreserved inventory.*MOVE ledger.*Cross-warehouse/i);
     expect(byId.get('OUT-08')?.route).toBe('/shipments');
     expect(byId.get('OUT-08')?.goal).toMatch(/Shipment LOADED.*root-HU.*Allocation.*Reservation.*SHIP ledger.*OnHand đúng một lần.*ExportReceipt legacy dispatch bị chặn.*TransactionType\.Ship.*POD.*chưa/i);
     expect(byId.get('OUT-09')?.status).toBe('foundation');
