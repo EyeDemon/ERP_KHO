@@ -142,6 +142,7 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.SalesOrdersController), "Cancel")]
     [InlineData(typeof(ERP.Api.Controllers.BackordersController), "Reallocate")]
     [InlineData(typeof(ERP.Api.Controllers.BackordersController), "Cancel")]
+    [InlineData(typeof(ERP.Api.Controllers.InventoryStatusController), "Change")]
     public void InventoryMutationEndpoints_RequireIdempotency(Type controller, string method)
     {
         controller.GetMethod(method)!.GetCustomAttribute<IdempotentCommandAttribute>().Should().NotBeNull();
