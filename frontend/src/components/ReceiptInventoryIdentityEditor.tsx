@@ -63,11 +63,10 @@ export default function ReceiptInventoryIdentityEditor({
       .catch(e=>{if(active){setRows([]);setError(messageOf(e))}})
       .finally(()=>{if(active)setLoading(false)});
     return()=>{active=false};
-  },[receiptId]); // tracked line definitions are immutable for an opened receipt
+  },[receiptId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if(tracked.length===0)return null;
 
-  const lineFor=(lineId:number)=>tracked.find(x=>x.id===lineId)!;
   const allocated=(lineId:number,targetStatus:IdentityRow['targetStatus'])=>rows
     .filter(x=>x.lineId===lineId&&x.targetStatus===targetStatus)
     .reduce((sum,x)=>sum+Number(x.baseQuantity||0),0);
