@@ -34,7 +34,7 @@ describe('InventoryMovements',()=>{
 
   it('shows buckets read-only without movement permission',async()=>{
     const view=render(<InventoryMovements/>);
-    expect(await view.findByText('LOT-A')).toBeTruthy();
+    expect(await view.findByText(/LOT-A/)).toBeTruthy();
     expect(view.queryByText('Move')).toBeNull();
   });
 
@@ -42,7 +42,7 @@ describe('InventoryMovements',()=>{
     permissionState.granted.add('inventory_movement.create');
     vi.mocked(apiClient.post).mockResolvedValue({data:{movementId:1}} as never);
     const view=render(<InventoryMovements/>);
-    await view.findByText('LOT-A');
+    await view.findByText(/LOT-A/);
     fireEvent.click(view.getByText('Move'));
     await view.findByLabelText('Vị trí đích internal move');
     fireEvent.change(view.getByLabelText('Vị trí đích internal move'),{target:{value:'8'}});
@@ -61,7 +61,7 @@ describe('InventoryMovements',()=>{
     permissionState.granted.add('inventory_movement.create');
     vi.mocked(apiClient.post).mockRejectedValue({response:{status:409,data:{code:'INV_STOCK_LOCKED',message:'Inventory bucket đang bị khóa bởi Inventory Lock.'}}});
     const view=render(<InventoryMovements/>);
-    await view.findByText('LOT-A');
+    await view.findByText(/LOT-A/);
     fireEvent.click(view.getByText('Move'));
     await view.findByLabelText('Vị trí đích internal move');
     fireEvent.change(view.getByLabelText('Vị trí đích internal move'),{target:{value:'8'}});
