@@ -287,7 +287,7 @@ const CapabilityPreview = () => {
 
           <div className="capability-contract-note">
             <strong>Ý nghĩa bản xem trước:</strong> trang này minh họa UX/hợp đồng của chức năng dựa trên đặc tả.
-            Nếu trạng thái là “Theo đặc tả” hoặc “Nâng cao”, nó chưa được coi là backend sẵn sàng trên hệ thống thật.
+            Nếu trạng thái là “Theo đặc tả” hoặc “Nâng cao”, phía máy chủ chưa được coi là sẵn sàng trên hệ thống thật.
           </div>
         </aside>
       </section>
