@@ -233,7 +233,7 @@ const ModuleBlueprint = () => {
             <div><FileCheck2 size={17} /><span><strong>Kiểm toán / Outbox</strong><small>Bằng chứng và sự kiện tích hợp</small></span></div>
           </div>
           <div className="trace-note">
-            Bản ghi mô phỏng chỉ phục vụ demo/test. Capability chưa có backend vẫn giữ đúng nhãn “Theo đặc tả” hoặc
+            Bản ghi mô phỏng chỉ phục vụ mô phỏng/kiểm thử. Chức năng chưa có phía máy chủ vẫn giữ đúng nhãn “Theo đặc tả” hoặc
             “Nâng cao”, không giả lập mức sẵn sàng của hệ thống thật.
           </div>
         </aside>
@@ -249,7 +249,7 @@ const ModuleBlueprint = () => {
                 <th>Mục tiêu vận hành</th>
                 <th>Bề mặt sử dụng</th>
                 <th>Trạng thái</th>
-                <th>Spec</th>
+                <th>Đặc tả</th>
                 <th></th>
               </tr>
             </thead>
@@ -289,7 +289,7 @@ const ModuleBlueprint = () => {
       </section>
 
       <section className="module-panel">
-        <div className="module-panel-title"><ShieldCheck size={18} /><h2>Nguyên tắc triển khai module</h2></div>
+        <div className="module-panel-title"><ShieldCheck size={18} /><h2>Nguyên tắc triển khai phân hệ</h2></div>
         <div className="module-rule-grid">
           <div><strong>01</strong><span>Không dùng trạng thái UI thay cho phân quyền phía máy chủ.</span></div>
           <div><strong>02</strong><span>Không cập nhật số dư trực tiếp từ chứng từ nghiệp vụ.</span></div>
