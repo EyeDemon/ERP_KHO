@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { ArrowRightLeft, RefreshCw } from 'lucide-react';
-import './Điều chuyểnCapabilityMock.css';
+import './TransferCapabilityMock.css';
 
 type Props = { capabilityId?: string };
 type Tone = 'success' | 'warning' | 'danger' | 'neutral';
@@ -84,10 +84,10 @@ const ReplenishmentMock = () => {
   );
 };
 
-const Điều chuyểnCapabilityMock = ({ capabilityId }: Props) => {
+const TransferCapabilityMock = ({ capabilityId }: Props) => {
   if (capabilityId === 'TR-02') return <TransitMock />;
   if (capabilityId === 'TR-05') return <ReplenishmentMock />;
   return null;
 };
 
-export default Điều chuyểnCapabilityMock;
+export default TransferCapabilityMock;
