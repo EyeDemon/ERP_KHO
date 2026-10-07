@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
 
@@ -19,8 +19,9 @@ type Result={currentBuckets:Bucket[];events:Event[]};
 
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string}}})?.response;
-  if(r?.status===403)return 'Bạn không có quyền truy vết inventory.';
-  return r?.data?.message??'Không thể tải traceability.';
+  if(r?.status===403)return 'Bạn không có quyền truy vết inventory. Liên hệ quản trị nếu cần quyền truy cập.';
+  if(r?.data?.message)return r.data.message+' Hãy điều chỉnh điều kiện hoặc thử lại.';
+  return 'Không thể tải traceability. Hãy thử lại; nếu lỗi tiếp diễn, liên hệ quản trị.';
 };
 const tone=(x:Event):'neutral'|'success'|'warning'|'danger'=>
   x.transactionType==='Reversal'?'warning':x.isReversed?'neutral':'success';
@@ -31,6 +32,9 @@ export default function InventoryTraceability(){
   const [loading,setLoading]=useState(false);
   const [validationError,setValidationError]=useState('');
   const [requestError,setRequestError]=useState('');
+  const productIdRef=useRef<HTMLInputElement>(null);
+  const referenceTypeRef=useRef<HTMLInputElement>(null);
+  const referenceIdRef=useRef<HTMLInputElement>(null);
 
   const referencePairInvalid=Boolean(
     (form.referenceType.trim()&&!form.referenceId)||(!form.referenceType.trim()&&form.referenceId)
@@ -47,10 +51,15 @@ export default function InventoryTraceability(){
     const hasIdentity=form.productId||form.lotNumber.trim()||form.serialNumber.trim();
     const hasReference=form.referenceType.trim()&&form.referenceId;
     if(referencePairInvalid){
-      setValidationError('Reference Type và Reference ID phải được nhập cùng nhau.');return;
+      setValidationError('Reference Type và Reference ID phải được nhập cùng nhau.');
+      if(!form.referenceType.trim())referenceTypeRef.current?.focus();
+      else referenceIdRef.current?.focus();
+      return;
     }
     if(!hasIdentity&&!hasReference){
-      setValidationError('Nhập ít nhất Product, Lot, Serial hoặc Reference.');return;
+      setValidationError('Nhập ít nhất Product, Lot, Serial hoặc Reference.');
+      productIdRef.current?.focus();
+      return;
     }
     setResult(null);
     setLoading(true);
@@ -68,6 +77,7 @@ export default function InventoryTraceability(){
     finally{setLoading(false)}
   };
 
+  const referencePairErrorActive=Boolean(validationError&&referencePairInvalid);
   const resultStatus=loading
     ? 'Đang truy vết inventory.'
     : result
@@ -84,7 +94,7 @@ export default function InventoryTraceability(){
           <input type="number" min="1" value={form.warehouseId} onChange={e=>updateField('warehouseId',e.target.value)} inputMode="numeric"/>
         </UiToolbarField>
         <UiToolbarField label="Product ID">
-          <input type="number" min="1" value={form.productId} onChange={e=>updateField('productId',e.target.value)} inputMode="numeric"/>
+          <input ref={productIdRef} type="number" min="1" value={form.productId} onChange={e=>updateField('productId',e.target.value)} inputMode="numeric"/>
         </UiToolbarField>
         <UiToolbarField label="Lot number">
           <input value={form.lotNumber} onChange={e=>updateField('lotNumber',e.target.value)} autoComplete="off"/>
@@ -94,21 +104,23 @@ export default function InventoryTraceability(){
         </UiToolbarField>
         <UiToolbarField label="Reference Type">
           <input
+            ref={referenceTypeRef}
             value={form.referenceType}
             onChange={e=>updateField('referenceType',e.target.value)}
-            aria-invalid={referencePairInvalid||undefined}
-            aria-describedby={referencePairInvalid?'traceability-reference-help traceability-validation-error':'traceability-reference-help'}
+            aria-invalid={referencePairErrorActive||undefined}
+            aria-describedby={referencePairErrorActive?'traceability-reference-help traceability-validation-error':'traceability-reference-help'}
             autoComplete="off"
           />
         </UiToolbarField>
         <UiToolbarField label="Reference ID">
           <input
+            ref={referenceIdRef}
             type="number"
             min="1"
             value={form.referenceId}
             onChange={e=>updateField('referenceId',e.target.value)}
-            aria-invalid={referencePairInvalid||undefined}
-            aria-describedby={referencePairInvalid?'traceability-reference-help traceability-validation-error':'traceability-reference-help'}
+            aria-invalid={referencePairErrorActive||undefined}
+            aria-describedby={referencePairErrorActive?'traceability-reference-help traceability-validation-error':'traceability-reference-help'}
             inputMode="numeric"
           />
         </UiToolbarField>
