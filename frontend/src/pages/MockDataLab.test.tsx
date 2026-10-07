@@ -18,21 +18,21 @@ describe('MockDataLab', () => {
     expect(view.getByText('WH-HCM-01')).toBeTruthy();
     expect(view.getByText('DC Hồ Chí Minh')).toBeTruthy();
 
-    fireEvent.click(view.getByRole('tab', { name: 'Products & Barcode' }));
+    fireEvent.click(view.getByRole('tab', { name: 'Sản phẩm & mã vạch' }));
     expect(view.getByText('SKU-1001')).toBeTruthy();
     expect(view.getByText('8938501000011, 8938501000012')).toBeTruthy();
 
-    fireEvent.click(view.getByRole('tab', { name: '179 Capability Fixtures' }));
+    fireEvent.click(view.getByRole('tab', { name: '179 bộ dữ liệu chức năng' }));
     expect(view.getByText('FX-OUT-08')).toBeTruthy();
-    expect(view.getByText(/OUT-08 — Shipment Dispatch/)).toBeTruthy();
+    expect(view.getByText(/OUT-08 — Xác nhận giao hàng/)).toBeTruthy();
 
-    fireEvent.click(view.getByRole('tab', { name: 'Inventory Buckets' }));
+    fireEvent.click(view.getByRole('tab', { name: 'Nhóm tồn kho' }));
     expect(view.getByText('1250')).toBeTruthy();
 
-    fireEvent.click(view.getByRole('tab', { name: 'Transfer Conservation' }));
-    expect(view.getAllByText('PASS').length).toBeGreaterThanOrEqual(3);
+    fireEvent.click(view.getByRole('tab', { name: 'Bảo toàn điều chuyển' }));
+    expect(view.getAllByText('ĐẠT').length).toBeGreaterThanOrEqual(3);
 
-    fireEvent.click(view.getByRole('tab', { name: 'Recount Attempts' }));
+    fireEvent.click(view.getByRole('tab', { name: 'Các lần kiểm đếm lại' }));
     expect(view.getByText(/#1: 1242/)).toBeTruthy();
     expect(view.getByText(/#3: 1248 ✓/)).toBeTruthy();
   });
@@ -49,11 +49,11 @@ describe('MockDataLab', () => {
 
     fireEvent.click(view.getByText('Run shared GS01'));
     fireEvent.click(view.getByText('Run shared GS01'));
-    fireEvent.click(view.getByRole('tab', { name: 'Shared Scenario Runtime' }));
+    fireEvent.click(view.getByRole('tab', { name: 'Phiên kịch bản dùng chung' }));
 
     expect(view.getByText(/GS-01 • Inbound Receipt → Post → Putaway/)).toBeTruthy();
     expect(view.getByText('RECV-01')).toBeTruthy();
     expect(view.getAllByText('100').length).toBeGreaterThan(0);
-    expect(view.getByText('Post Receipt')).toBeTruthy();
+    expect(view.getByText('Ghi sổ phiếu nhập')).toBeTruthy();
   });
 });
