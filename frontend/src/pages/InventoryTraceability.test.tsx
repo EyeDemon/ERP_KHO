@@ -78,7 +78,7 @@ describe('InventoryTraceability',()=>{
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'));
     expect(await view.findByText('A01-R01-B01')).toBeTruthy();
     expect(view.getByText('Đảo giao dịch')).toBeTruthy();
-    expect(view.getByText(/đã đảo/)).toBeTruthy();
+    expect(view.getAllByText(/đã đảo/).length).toBeGreaterThan(0);
     expect(view.getByText(/đảo #41/)).toBeTruthy();
     expect(view.getAllByText(/Hiệu chỉnh #42/).length).toBeGreaterThan(0);
     expect(view.getAllByText(/Dấu đảo #43/).length).toBeGreaterThan(0);
