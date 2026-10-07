@@ -28,9 +28,9 @@ public sealed class InventoryTraceabilityQueryService(
         var refType = string.IsNullOrWhiteSpace(referenceType) ? null : referenceType.Trim();
         var hasReference = refType is not null || referenceId.HasValue;
         if (hasReference && (refType is null || !referenceId.HasValue))
-            throw new BusinessRuleException("ReferenceType và ReferenceId phải được nhập cùng nhau.");
+            throw new BusinessRuleException("Loại tham chiếu và ID tham chiếu phải được nhập cùng nhau.");
         if (!productId.HasValue && lot is null && serial is null && !hasReference)
-            throw new BusinessRuleException("Cần ít nhất Product, Lot, Serial hoặc Reference để truy vết.");
+            throw new BusinessRuleException("Cần ít nhất Sản phẩm, Lô, Sê-ri hoặc Tham chiếu để truy vết.");
         limit = limit is < 1 or > 500 ? 200 : limit;
 
         var allowedWarehouseIds = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
