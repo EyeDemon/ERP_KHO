@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../services/apiClient';
 import { UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import InventoryBuckets from './InventoryBuckets';
 import './Inventory.css';
 
 interface InventoryStockDto {
@@ -26,6 +27,14 @@ interface InventoryTransactionHistoryDto {
   warehouseId: number;
   warehouseName: string;
   transactionType: string;
+  inventoryStatus?: string;
+  fromInventoryStatus?: string | null;
+  toInventoryStatus?: string | null;
+  lotId?: number | null;
+  lotNumber?: string | null;
+  expiryDate?: string | null;
+  serialId?: number | null;
+  serialNumber?: string | null;
   quantity: number;
   referenceId: number | null;
   referenceType: string | null;
@@ -63,7 +72,7 @@ interface WarehouseOption {
 }
 
 const Inventory = () => {
-  const [activeTab, setActiveTab] = useState<'stock' | 'history' | 'inout'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'buckets' | 'history' | 'inout'>('stock');
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
 
   // Stock State
@@ -404,6 +413,8 @@ const Inventory = () => {
                   <th>Loại GD</th>
                   <th>Kho</th>
                   <th>Sản phẩm</th>
+                  <th>Status</th>
+                  <th>Lot / Serial</th>
                   <th className="inventory-numeric">SL</th>
                   <th>Tham chiếu</th>
                   <th>Ghi chú</th>
@@ -411,7 +422,7 @@ const Inventory = () => {
               </thead>
               <tbody>
                 {(!history || history.items.length === 0) ? (
-                  <tr><td colSpan={7} className="ui-empty-cell">Không có lịch sử giao dịch</td></tr>
+                  <tr><td colSpan={9} className="ui-empty-cell">Không có lịch sử giao dịch</td></tr>
                 ) : (
                   history.items.map(item => {
                     const increase = item.transactionType === 'Import' || item.transactionType === 'AdjustmentIncrease';
@@ -421,6 +432,12 @@ const Inventory = () => {
                         <td>{item.transactionType}</td>
                         <td>{item.warehouseName}</td>
                         <td>{item.productCode} - {item.productName}</td>
+                        <td>
+                          {item.fromInventoryStatus && item.toInventoryStatus
+                            ? `${item.fromInventoryStatus} → ${item.toInventoryStatus}`
+                            : item.inventoryStatus || '—'}
+                        </td>
+                        <td>{item.lotNumber || '—'}{item.serialNumber ? ` / ${item.serialNumber}` : ''}</td>
                         <td className={'inventory-numeric ' + (increase ? 'inventory-qty-increase' : 'inventory-qty-decrease')}>
                           {item.quantity} {item.unitName}
                         </td>
@@ -540,7 +557,7 @@ const Inventory = () => {
         <UiPageHeader
           eyebrow="Inventory"
           title="Báo Cáo Tồn Kho"
-          description="Theo dõi tồn thực tế, lượng đã giữ, lịch sử biến động và báo cáo xuất nhập tồn theo phạm vi kho được phép."
+          description="Theo dõi tồn thực tế, bucket theo Status/Lot/Serial, eligibility, ledger movement và báo cáo xuất nhập tồn theo phạm vi kho được phép."
         />
 
         <div className="inventory-tabs" role="tablist" aria-label="Chế độ báo cáo tồn kho">
@@ -553,6 +570,16 @@ const Inventory = () => {
             onClick={() => setActiveTab('stock')}
           >
             Tồn kho hiện tại
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className="inventory-tab"
+            aria-selected={activeTab === 'buckets'}
+            aria-controls="inventory-buckets-panel"
+            onClick={() => setActiveTab('buckets')}
+          >
+            Bucket / Lot / Serial
           </button>
           <button
             type="button"
@@ -577,6 +604,7 @@ const Inventory = () => {
         </div>
 
         {activeTab === 'stock' && <section id="inventory-stock-panel" role="tabpanel">{renderStockTab()}</section>}
+        {activeTab === 'buckets' && <section id="inventory-buckets-panel" role="tabpanel"><InventoryBuckets warehouses={warehouses} /></section>}
         {activeTab === 'history' && <section id="inventory-history-panel" role="tabpanel">{renderHistoryTab()}</section>}
         {activeTab === 'inout' && <section id="inventory-inout-panel" role="tabpanel">{renderInOutTab()}</section>}
       </div>
