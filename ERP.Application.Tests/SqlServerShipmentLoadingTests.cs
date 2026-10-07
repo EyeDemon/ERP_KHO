@@ -407,6 +407,20 @@ public sealed class SqlServerShipmentLoadingTests
                 inTransit.Status.Should().Be(nameof(ShipmentStatus.InTransit));
             }
 
+            await using (var invalidPod = CreateContext())
+            {
+                var service = CreateShipmentService(invalidPod, fixture.UserId);
+                await FluentActions.Awaiting(() => service.ConfirmDeliveryAsync(
+                        result.Prepared.ShipmentId,
+                        new ConfirmShipmentDeliveryDto
+                        {
+                            ReceiverName = "Nguyen Van A",
+                            RowVersion = inTransit.RowVersion!
+                        }))
+                    .Should().ThrowAsync<BusinessRuleException>()
+                    .WithMessage("*EvidenceReference hoặc CarrierReference*");
+            }
+
             ShipmentDto delivered;
             await using (var delivery = CreateContext())
             {
