@@ -301,6 +301,25 @@ namespace ERP.Api.Tests
                 .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
         }
 
+        [Theory]
+        [InlineData("GetStatuses", AppPermissions.InventoryRead)]
+        [InlineData("GetBuckets", AppPermissions.InventoryRead)]
+        [InlineData("Change", AppPermissions.InventoryStatusChangeCreate)]
+        public void InventoryStatusEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(InventoryStatusController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Fact]
+        public void InventoryReadControllers_UseCanonicalCapabilities()
+        {
+            typeof(InventoryStocksController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.InventoryRead);
+            typeof(InventoryTransactionsController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.InventoryLedgerRead);
+        }
+
         [Fact]
         public void ReportsController_Get_RequiresAdminManagerOrViewer()
         {
