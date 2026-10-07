@@ -775,6 +775,7 @@ export const demoPermissionCatalog = [
   { code: 'inventory_lock.read', description: 'Xem Inventory Lock / Freeze' },
   { code: 'inventory_lock.manage', description: 'Tạo và release Inventory Lock / Freeze' },
   { code: 'inventory_movement.create', description: 'Tạo internal inventory location move' },
+  { code: 'inventory_reversal.create', description: 'Tạo controlled inventory reversal' },
   { code: 'packing.read', description: 'Xem Packing session' },
   { code: 'packing.execute', description: 'Thực hiện Packing' },
   { code: 'packing.reopen', description: 'Mở lại Packing theo kiểm soát' },
