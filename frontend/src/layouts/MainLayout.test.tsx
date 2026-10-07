@@ -138,7 +138,7 @@ describe('MainLayout blueprint navigation mode', () => {
     await view.findByText('Trang chủ hệ thống thật');
     expect(apiClient.get).not.toHaveBeenCalled();
     expect(view.queryByRole('alert')).toBeNull();
-    expect(view.getByText('MÔI TRƯỜNG DEMO • BACKEND MÔ PHỎNG')).toBeTruthy();
+    expect(view.getByText('MÔI TRƯỜNG MÔ PHỎNG • PHÍA MÁY CHỦ MÔ PHỎNG')).toBeTruthy();
     expect(view.getByText('Giao diện hệ thống thật')).toBeTruthy();
   });
 
