@@ -13,7 +13,8 @@ namespace ERP.Infrastructure.Services;
 public sealed class InventoryStatusService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
-    ICurrentUser currentUser) : IInventoryStatusService
+    ICurrentUser currentUser,
+    IInventoryLockEvaluator? inventoryLocks = null) : IInventoryStatusService
 {
     public async Task<IReadOnlyList<InventoryStatusDefinitionDto>> GetStatusesAsync(
         CancellationToken cancellationToken = default) =>
@@ -140,6 +141,14 @@ public sealed class InventoryStatusService(
                 throw Conflict("INV_STATUS_CHANGE_NOT_ALLOWED", "Không thể đổi status phần tồn đang reserved/allocation.");
             if (!await context.InventoryStatusDefinitions.AnyAsync(x => x.Id == toStatus, cancellationToken))
                 throw new BusinessRuleException("Inventory status đích chưa được cấu hình.");
+
+            if (inventoryLocks is not null)
+            {
+                await inventoryLocks.EnsureBucketUnlockedAsync(
+                    source.WarehouseId, source.LocationId, source.ProductId, source.Status, source.LotId, source.SerialId, cancellationToken);
+                await inventoryLocks.EnsureBucketUnlockedAsync(
+                    source.WarehouseId, source.LocationId, source.ProductId, toStatus, source.LotId, source.SerialId, cancellationToken);
+            }
 
             var destination = await context.InventoryStocks.SingleOrDefaultAsync(
                 x => x.ProductId == source.ProductId &&

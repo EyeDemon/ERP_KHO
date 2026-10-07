@@ -1577,5 +1577,70 @@
     ],
     "exceptionTitle": "RECONCILIATION_NOT_GREEN",
     "exceptionDetail": "Projection rebuild vẫn không khớp ledger; warehouse/release gate phải giữ blocked."
+  },
+  "INV-08": {
+    "title": "Internal Location Move",
+    "subtitle": "Same-warehouse production foundation: move unreserved stock source → destination while preserving Status / Lot / Serial and total On Hand.",
+    "mode": "scan",
+    "stages": [
+      "Scan source",
+      "Scan product/lot",
+      "Enter quantity",
+      "Scan destination",
+      "POSTED"
+    ],
+    "fields": [
+      {
+        "label": "Capability",
+        "value": "INV-08"
+      },
+      {
+        "label": "Production maturity",
+        "value": "FOUNDATION"
+      },
+      {
+        "label": "Production route",
+        "value": "/inventory-movements"
+      },
+      {
+        "label": "Spec",
+        "value": "29, 222, 282"
+      },
+      {
+        "label": "Warehouse",
+        "value": "WH-HCM-01"
+      },
+      {
+        "label": "Source",
+        "value": "A01-R02-L03-B04"
+      },
+      {
+        "label": "Destination",
+        "value": "B02-R01-L02-B03"
+      },
+      {
+        "label": "SKU / Lot",
+        "value": "SKU-1001 / LOT-1001-260930"
+      },
+      {
+        "label": "Reason",
+        "value": "REBALANCE_PICK_FACE"
+      }
+    ],
+    "commands": [
+      "VALIDATE_SOURCE",
+      "VALIDATE_DESTINATION",
+      "POST_MOVE",
+      "VERIFY_MOVE_LEDGER"
+    ],
+    "exceptionTitle": "MOVE_DESTINATION_INELIGIBLE",
+    "exceptionDetail": "Destination vi phạm lock/capacity/storage/status, source có reserved quantity, hoặc source quantity không còn đủ; move phải fail closed.",
+    "quantity": {
+      "label": "Move quantity",
+      "operationUom": "Thùng",
+      "baseUom": "Cái",
+      "factor": 12,
+      "initial": 5
+    }
   }
 }

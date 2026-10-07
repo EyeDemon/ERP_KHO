@@ -901,19 +901,32 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("InventoryStatus")
                         .HasColumnType("int");
 
+                    b.Property<int?>("LotId")
+                        .HasColumnType("int");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
-                    b.Property<int>("PutawayTaskId")
+                    b.Property<int?>("PutawayTaskId")
                         .HasColumnType("int");
 
-                    b.Property<int>("PutawayTaskItemId")
+                    b.Property<int?>("PutawayTaskItemId")
                         .HasColumnType("int");
 
-                    b.Property<int>("ReceiptId")
+                    b.Property<int?>("ReceiptId")
                         .HasColumnType("int");
 
-                    b.Property<int>("ReceiptLineId")
+                    b.Property<int?>("ReceiptLineId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ReferenceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("SerialId")
                         .HasColumnType("int");
 
                     b.Property<int>("ToLocationId")
@@ -926,6 +939,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("FromLocationId");
 
+                    b.HasIndex("LotId");
+
                     b.HasIndex("ProductId");
 
                     b.HasIndex("PutawayTaskId");
@@ -934,17 +949,107 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("ReceiptLineId");
 
+                    b.HasIndex("SerialId");
+
                     b.HasIndex("ToLocationId");
 
                     b.HasIndex("WarehouseId");
 
                     b.HasIndex("PutawayTaskItemId", "CreatedAt");
 
+                    b.HasIndex("ReferenceType", "ReferenceId");
+
                     b.ToTable("InventoryLocationMovements", null, t =>
                         {
                             t.HasCheckConstraint("CK_InventoryLocationMovements_Locations", "[FromLocationId] <> [ToLocationId]");
 
                             t.HasCheckConstraint("CK_InventoryLocationMovements_Quantity", "[BaseQuantity] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.InventoryLock", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("InventoryStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LockType")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LotId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReleasedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int?>("SerialId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ReleasedBy");
+
+                    b.HasIndex("InventoryStatus", "Status");
+
+                    b.HasIndex("LocationId", "Status");
+
+                    b.HasIndex("LotId", "Status");
+
+                    b.HasIndex("ProductId", "Status");
+
+                    b.HasIndex("SerialId", "Status");
+
+                    b.HasIndex("WarehouseId", "Status");
+
+                    b.ToTable("InventoryLocks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InventoryLocks_Expiry", "[ExpiresAt] IS NULL OR [ExpiresAt] > [CreatedAt]");
                         });
                 });
 
@@ -1162,6 +1267,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("FromInventoryStatus")
                         .HasColumnType("int");
 
+                    b.Property<int?>("FromLocationId")
+                        .HasColumnType("int");
+
                     b.Property<int>("InventoryStatus")
                         .HasColumnType("int");
 
@@ -1195,6 +1303,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("ToInventoryStatus")
                         .HasColumnType("int");
 
+                    b.Property<int?>("ToLocationId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("TransactionDate")
                         .HasColumnType("datetime2");
 
@@ -1208,6 +1319,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("CreatedBy");
 
+                    b.HasIndex("FromLocationId");
+
                     b.HasIndex("InventoryStatus");
 
                     b.HasIndex("LocationId");
@@ -1217,6 +1330,8 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("ProductId");
 
                     b.HasIndex("SerialId");
+
+                    b.HasIndex("ToLocationId");
 
                     b.HasIndex("TransactionDate");
 
@@ -4545,6 +4660,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.InventoryLot", null)
+                        .WithMany()
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Product", null)
                         .WithMany()
                         .HasForeignKey("ProductId")
@@ -4554,26 +4674,27 @@ namespace ERP.Infrastructure.Migrations
                     b.HasOne("ERP.Domain.Entities.PutawayTask", null)
                         .WithMany()
                         .HasForeignKey("PutawayTaskId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Entities.PutawayTaskItem", null)
                         .WithMany()
                         .HasForeignKey("PutawayTaskItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Entities.ImportReceipt", null)
                         .WithMany()
                         .HasForeignKey("ReceiptId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Entities.ImportReceiptDetail", null)
                         .WithMany()
                         .HasForeignKey("ReceiptLineId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.InventorySerial", null)
+                        .WithMany()
+                        .HasForeignKey("SerialId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
                         .WithMany()
@@ -4586,6 +4707,60 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("WarehouseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.InventoryLock", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.InventoryLot", "Lot")
+                        .WithMany()
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.User", "ReleasedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReleasedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.InventorySerial", "Serial")
+                        .WithMany()
+                        .HasForeignKey("SerialId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("Lot");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("ReleasedByUser");
+
+                    b.Navigation("Serial");
+
+                    b.Navigation("Warehouse");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.InventoryLot", b =>
@@ -4674,6 +4849,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "FromLocation")
+                        .WithMany()
+                        .HasForeignKey("FromLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
                         .WithMany()
                         .HasForeignKey("LocationId")
@@ -4695,6 +4875,11 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("SerialId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "ToLocation")
+                        .WithMany()
+                        .HasForeignKey("ToLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.InventoryStatusDefinition", "StatusDefinition")
                         .WithMany()
                         .HasForeignKey("InventoryStatus")
@@ -4709,6 +4894,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("CreatedByUser");
 
+                    b.Navigation("FromLocation");
+
                     b.Navigation("Location");
 
                     b.Navigation("Lot");
@@ -4718,6 +4905,8 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Serial");
 
                     b.Navigation("StatusDefinition");
+
+                    b.Navigation("ToLocation");
 
                     b.Navigation("Warehouse");
                 });

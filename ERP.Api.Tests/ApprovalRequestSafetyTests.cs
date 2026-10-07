@@ -43,7 +43,12 @@ public sealed class ApprovalRequestSafetyTests
         IdempotentCommandFilter.RequiresSerializableIsolation("SalesOrder.Cancel").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Backorder.Reallocate").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Backorder.Cancel").Should().BeTrue();
-        IdempotentCommandFilter.RequiresSerializableIsolation("Export.Dispatch").Should().BeFalse();
+        IdempotentCommandFilter.RequiresSerializableIsolation("InventoryLock.Create").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("InventoryLock.Release").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("InventoryMovement.Create").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("InventoryReservation.Create").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Putaway.Move").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("ExportReceipt.ApproveAndReserve").Should().BeTrue();
     }
 
     [Fact]
@@ -143,6 +148,10 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.BackordersController), "Reallocate")]
     [InlineData(typeof(ERP.Api.Controllers.BackordersController), "Cancel")]
     [InlineData(typeof(ERP.Api.Controllers.InventoryStatusController), "Change")]
+    [InlineData(typeof(ERP.Api.Controllers.InventoryControlController), "CreateLock")]
+    [InlineData(typeof(ERP.Api.Controllers.InventoryControlController), "ReleaseLock")]
+    [InlineData(typeof(ERP.Api.Controllers.InventoryControlController), "Move")]
+    [InlineData(typeof(ERP.Api.Controllers.StockReservationsController), "Create")]
     [InlineData(typeof(ERP.Api.Controllers.ImportReceiptsController), "SetInventoryIdentities")]
     public void InventoryMutationEndpoints_RequireIdempotency(Type controller, string method)
     {

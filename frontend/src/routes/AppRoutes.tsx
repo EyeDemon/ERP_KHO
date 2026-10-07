@@ -17,6 +17,8 @@ import ImportReceipts from '../pages/ImportReceipts';
 import PurchaseOrders from '../pages/PurchaseOrders';
 import Asns from '../pages/Asns';
 import Inventory from '../pages/Inventory';
+import InventoryLocks from '../pages/InventoryLocks';
+import InventoryMovements from '../pages/InventoryMovements';
 import InventoryReconciliation from '../pages/InventoryReconciliation';
 import Stocktakes from '../pages/Stocktakes';
 import StockTransfers from '../pages/StockTransfers';
@@ -91,6 +93,8 @@ const AppRoutes = () => {
         <Route path="asns" element={<PermissionRoute permission="asn.read"><Asns /></PermissionRoute>} />
         <Route path="import-receipts" element={<PermissionRoute permission="receipt.read"><ImportReceipts /></PermissionRoute>} />
         <Route path="inventory" element={<PermissionRoute permission="inventory.read"><Inventory /></PermissionRoute>} />
+        <Route path="inventory-locks" element={<PermissionRoute permission="inventory_lock.read"><InventoryLocks /></PermissionRoute>} />
+        <Route path="inventory-movements" element={<PermissionRoute permission="inventory.read"><InventoryMovements /></PermissionRoute>} />
         <Route path="inventory-reconciliation" element={<InventoryReconciliation />} />
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
