@@ -76,7 +76,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/system-blueprint/inbound');
     await view.findByText('Nội dung bản thiết kế');
-    const selector = view.getByLabelText('Persona mô phỏng');
+    const selector = view.getByLabelText('Vai trò mô phỏng');
     fireEvent.change(selector, { target: { value: 'U-DN-MGR' } });
     expect((selector as HTMLSelectElement).value).toBe('U-DN-MGR');
     expect(view.getByText('1 kho trong phạm vi')).toBeTruthy();
