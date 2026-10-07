@@ -20,7 +20,7 @@ describe('ModuleBlueprint mock work center', () => {
     expect(view.getByText('GR-2026-1048')).toBeTruthy();
     expect(view.getAllByText('ASN-2026-0812').length).toBeGreaterThan(0);
     expect(view.getByText('PUT-2026-3321')).toBeTruthy();
-    expect(view.getByText('Goods Receipt Work Center')).toBeTruthy();
+    expect(view.getByText('Trung tâm công việc phiếu nhập')).toBeTruthy();
     expect(view.getByText('TRUNG TÂM CÔNG VIỆC • DỮ LIỆU MÔ PHỎNG')).toBeTruthy();
   });
 
