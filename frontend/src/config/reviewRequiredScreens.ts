@@ -36,7 +36,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
     validations: [
       'Vị trí nguồn ≠ vị trí đích và cùng kho.',
       'Số lượng không vượt lượng đủ điều kiện tại vị trí nguồn.',
-      'Lô/serial/status/owner phải hợp lệ và không bị lock.',
+      'Lô/sê-ri/trạng thái/chủ sở hữu phải hợp lệ và không bị khóa.',
       'Vị trí đích phải tương thích sản phẩm/trạng thái/sức chứa.',
       'Trường số lượng luôn hiển thị UOM thao tác + UOM cơ sở.',
     ],
@@ -82,7 +82,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
       { label: 'Mặt hàng', value: '22 Cái' },
       { label: 'Khối lượng', value: '8.4 kg' },
       { label: 'Kích thước', value: '400 × 300 × 250 mm' },
-      { label: 'Nhãn', value: 'SSCC / Shipping Nhãn • pending print' },
+      { label: 'Nhãn', value: 'SSCC / Nhãn giao hàng • chờ in' },
     ],
     steps: ['Quét lô giao hàng/đơn hàng', 'Mở/tạo HU', 'Quét mặt hàng đã đóng gói', 'Kiểm tra đủ số lượng', 'Ghi nhận khối lượng/kích thước', 'In nhãn', 'Đóng HU'],
     validations: [
@@ -92,7 +92,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
       'In lại nhãn phải có kiểm toán/lý do.',
       'Đóng gói không được tự làm giảm OnHand toàn kho.',
     ],
-    inventoryBoundary: 'Packing/consolidation là HU/execution state; physical deduction vẫn chỉ xảy ra tại Lô giao hàng Dispatch.',
+    inventoryBoundary: 'Đóng gói/hợp nhất là trạng thái HU/thực hiện; khấu trừ vật lý vẫn chỉ xảy ra khi xác nhận giao hàng.',
     permissionNote: 'Đóng gói/đóng HU/in lại phải tách quyền theo Sổ đăng ký quyền chuẩn khi đưa lên hệ thống thật.',
   },
   {
@@ -116,7 +116,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
       'Sản phẩm/UOM phải đang hoạt động và chuyển đổi được về UOM cơ sở.',
       'Tạo/phê duyệt chưa được thay đổi tồn kho.',
       'Xuất/Nhận phải idempotent và an toàn đồng thời.',
-      'Source + Transit + Điểm đến luôn bảo toàn transfer quantity.',
+      'Nguồn + Đang vận chuyển + Đích luôn bảo toàn số lượng điều chuyển.',
     ],
     inventoryBoundary: 'Tạo/phê duyệt không tác động sổ cái; Xuất chuyển nguồn→đang vận chuyển; Nhận chuyển đang vận chuyển→đích.',
     permissionNote: 'Tạo/phê duyệt/xuất/nhận là các lệnh khác nhau và phải kiểm tra phạm vi ở phía máy chủ.',
