@@ -308,32 +308,48 @@ public sealed class StockAllocationService(
         int? excludedLocationId,
         CancellationToken cancellationToken)
     {
+        var today = DateTime.UtcNow.Date;
         var query = context.InventoryStocks.AsNoTracking()
             .Where(x => x.ProductId == reservation.ProductId &&
                         x.WarehouseId == reservation.WarehouseId &&
-                        x.Status == InventoryStatus.Available &&
+                        x.StatusDefinition.IsAllocatable &&
                         x.LocationId.HasValue &&
                         x.Location != null &&
                         x.Location.IsActive &&
                         !x.Location.IsBlocked &&
                         x.Location.IsPickable &&
-                        x.ReservedQuantity > 0);
+                        x.ReservedQuantity > 0 &&
+                        (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today));
 
         if (fixedLocationId.HasValue) query = query.Where(x => x.LocationId == fixedLocationId.Value);
         if (excludedLocationId.HasValue) query = query.Where(x => x.LocationId != excludedLocationId.Value);
 
         var raw = await query
-            .OrderBy(x => x.LocationId)
+            .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
+            .ThenBy(x => x.Lot == null ? null : x.Lot.ExpiryDate)
+            .ThenBy(x => x.Lot == null ? DateTime.MaxValue : x.Lot.ReceivedAt)
+            .ThenBy(x => x.LocationId)
+            .ThenBy(x => x.Id)
             .Select(x => new
             {
+                InventoryStockId = x.Id,
                 LocationId = x.LocationId!.Value,
                 LocationCode = x.Location!.Code,
                 LocationName = x.Location.Name,
+                x.Status,
+                x.LotId,
+                LotNumber = x.Lot == null ? null : x.Lot.LotNumber,
+                ExpiryDate = x.Lot == null ? null : x.Lot.ExpiryDate,
+                x.SerialId,
+                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
                 x.ReservedQuantity,
                 AllocatedQuantity = context.StockAllocations
                     .Where(a => a.WarehouseId == x.WarehouseId &&
                                 a.ProductId == x.ProductId &&
                                 a.LocationId == x.LocationId &&
+                                a.InventoryStatus == x.Status &&
+                                a.LotId == x.LotId &&
+                                a.SerialId == x.SerialId &&
                                 CapacityStatuses.Contains(a.Status))
                     .Sum(a => (decimal?)a.Quantity) ?? 0m
             })
@@ -343,16 +359,27 @@ public sealed class StockAllocationService(
         return raw
             .Select((x, index) => new StockAllocationCandidateDto
             {
+                InventoryStockId = x.InventoryStockId,
                 LocationId = x.LocationId,
                 LocationCode = x.LocationCode,
                 LocationName = x.LocationName,
+                InventoryStatus = x.Status.ToString(),
+                LotId = x.LotId,
+                LotNumber = x.LotNumber,
+                ExpiryDate = x.ExpiryDate,
+                SerialId = x.SerialId,
+                SerialNumber = x.SerialNumber,
                 ReservedQuantity = x.ReservedQuantity,
                 AllocatedQuantity = x.AllocatedQuantity,
                 AllocatableQuantity = Math.Max(0, x.ReservedQuantity - x.AllocatedQuantity),
                 Rank = index + 1,
                 Reason = fixedLocationId.HasValue
-                    ? "Vị trí cố định do người dùng chọn."
-                    : "Tự động theo thứ tự vị trí ổn định (LocationId tăng dần). FEFO/FIFO chưa bật vì chưa có Lot/Expiry/ReceiptDate canonical."
+                    ? "Vị trí cố định; bucket vẫn tuân status/Lot/Serial eligibility."
+                    : x.ExpiryDate.HasValue
+                        ? $"FEFO: expiry {x.ExpiryDate:yyyy-MM-dd}, sau đó receipt time/location/id."
+                        : x.LotId.HasValue
+                            ? "FIFO theo lot receipt time, sau đó location/id."
+                            : "FIFO ổn định theo location/id cho inventory không theo lot."
             })
             .Where(x => x.AllocatableQuantity > 0)
             .ToList();
@@ -377,7 +404,9 @@ public sealed class StockAllocationService(
                 WarehouseId = reservation.WarehouseId,
                 ProductId = reservation.ProductId,
                 LocationId = candidate.LocationId,
-                InventoryStatus = InventoryStatus.Available,
+                LotId = candidate.LotId,
+                SerialId = candidate.SerialId,
+                InventoryStatus = Enum.Parse<InventoryStatus>(candidate.InventoryStatus),
                 Quantity = take,
                 Status = StockAllocationStatus.Active,
                 Strategy = strategy,
@@ -493,7 +522,9 @@ public sealed class StockAllocationService(
             .Include(x => x.Reservation)
             .Include(x => x.Warehouse)
             .Include(x => x.Product)
-            .Include(x => x.Location);
+            .Include(x => x.Location)
+            .Include(x => x.Lot)
+            .Include(x => x.Serial);
 
     private static StockAllocationDto Map(StockAllocation x) => new()
     {
@@ -513,6 +544,11 @@ public sealed class StockAllocationService(
         LocationCode = x.Location.Code,
         LocationName = x.Location.Name,
         InventoryStatus = x.InventoryStatus.ToString(),
+        LotId = x.LotId,
+        LotNumber = x.Lot?.LotNumber,
+        ExpiryDate = x.Lot?.ExpiryDate,
+        SerialId = x.SerialId,
+        SerialNumber = x.Serial?.SerialNumber,
         Quantity = x.Quantity,
         Status = x.Status.ToString(),
         Strategy = x.Strategy.ToString(),
