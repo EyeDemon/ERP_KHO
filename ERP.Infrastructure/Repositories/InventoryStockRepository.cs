@@ -2,6 +2,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Queries;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -60,6 +61,7 @@ namespace ERP.Infrastructure.Repositories
         {
             var today = DateTime.UtcNow.Date;
             return _dbSet.AsNoTracking()
+                .UnlockedAt(_context, DateTime.UtcNow)
                 .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
                     x.StatusDefinition.IsReservable &&
                     x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable &&
@@ -101,6 +103,7 @@ namespace ERP.Infrastructure.Repositories
             {
                 var today = DateTime.UtcNow.Date;
                 var rows = await _dbSet.AsNoTracking()
+                    .UnlockedAt(_context, DateTime.UtcNow)
                     .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
                         x.StatusDefinition.IsShippable && x.LocationId.HasValue &&
                         x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable &&
@@ -146,6 +149,7 @@ namespace ERP.Infrastructure.Repositories
                     if (take <= 0) continue;
 
                     var affected = await _dbSet
+                        .UnlockedAt(_context, now)
                         .Where(x => x.Id == row.Id &&
                                     x.Quantity >= take &&
                                     x.ReservedQuantity -
@@ -191,6 +195,7 @@ namespace ERP.Infrastructure.Repositories
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             var today = DateTime.UtcNow.Date;
             var candidates = await _dbSet.AsNoTracking()
+                .UnlockedAt(_context, DateTime.UtcNow)
                 .Where(x => x.ProductId == productId &&
                             x.WarehouseId == warehouseId &&
                             x.LocationId == locationId &&
@@ -224,6 +229,7 @@ namespace ERP.Infrastructure.Repositories
                 var today = DateTime.UtcNow.Date;
                 var now = DateTime.UtcNow;
                 var affected = await _dbSet
+                    .UnlockedAt(_context, now)
                     .Where(x => x.ProductId == productId &&
                                 x.WarehouseId == warehouseId &&
                                 x.LocationId == locationId &&
@@ -299,6 +305,13 @@ namespace ERP.Infrastructure.Repositories
 
             if (releaseOnly)
                 eligible = eligible.Where(x => x.ReservedQuantity > 0);
+            else
+                eligible = eligible.UnlockedAt(_context, DateTime.UtcNow);
+
+            if (releaseOnly)
+            {
+                // Releasing a commitment is allowed even while stock is locked.
+            }
             else if (reserve)
                 eligible = eligible.Where(x => x.StatusDefinition.IsReservable &&
                     (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today));
@@ -352,6 +365,8 @@ namespace ERP.Infrastructure.Repositories
                 if (take <= 0) continue;
 
                 var query = _dbSet.Where(x => x.Id == row.Id);
+                if (!releaseOnly)
+                    query = query.UnlockedAt(_context, DateTime.UtcNow);
                 if (useReserved)
                 {
                     query = query.Where(x =>
