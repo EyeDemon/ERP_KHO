@@ -20,6 +20,7 @@ public class InventoryStockConfiguration : IEntityTypeConfiguration<InventorySto
                .HasForeignKey(x => x.ProductId)
                .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.StatusDefinition).WithMany().HasForeignKey(x => x.Status).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.Warehouse)
                .WithMany(w => w.InventoryStocks)
