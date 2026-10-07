@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import {
   blueprintStatusLabels,
-  findBlueprintPhân hệ,
+  findBlueprintModule,
   type BlueprintStatus,
 } from '../config/erpWmsBlueprint';
 import { getMockCapabilityFixture, getMockWorkCenter } from '../mocks/erpWmsMockData';
@@ -48,7 +48,7 @@ const surfaceLabel = (value: string) => ({
 const CapabilityPreview = () => {
   const { moduleKey, capabilityId } = useParams();
   const demo = useMockDemo();
-  const module = findBlueprintPhân hệ(moduleKey);
+  const module = findBlueprintModule(moduleKey);
   const capability = module?.capabilities.find((item) => item.id === capabilityId);
   const workCenter = getMockWorkCenter(moduleKey);
   const fixture = getMockCapabilityFixture(capabilityId);
@@ -137,7 +137,7 @@ const CapabilityPreview = () => {
           </div>
           <div className="specialized-boundary"><strong>Ranh giới tồn kho</strong><span>{specializedPreview.inventoryBoundary}</span></div>
           <div className="specialized-boundary"><strong>Phân quyền</strong><span>{specializedPreview.permissionNote}</span></div>
-          <div className="specialized-screen-ref">{specializedPreview.screenTham chiếu}</div>
+          <div className="specialized-screen-ref">{specializedPreview.screenReference}</div>
         </section>
       )}
 
@@ -145,7 +145,7 @@ const CapabilityPreview = () => {
         capability={capability}
         moduleName={module.name}
         moduleFlow={module.flow}
-        sampleTham chiếu={fixtureVisible ? fixture?.sampleTham chiếu : records[0]?.reference}
+        sampleReference={fixtureVisible ? fixture?.sampleReference : records[0]?.reference}
         sampleWarehouse={fixtureVisible ? fixture?.sampleWarehouse : records[0]?.warehouse}
         recordCount={records.length}
       />
@@ -173,7 +173,7 @@ const CapabilityPreview = () => {
                 <span>{fixture.fixtureId}</span>
                 {fixtureVisible ? (
                   <>
-                    <span>{fixture.sampleTham chiếu}</span>
+                    <span>{fixture.sampleReference}</span>
                     <span>{fixture.sampleWarehouse}</span>
                     <span>{fixture.sampleStatus}</span>
                   </>
@@ -214,7 +214,7 @@ const CapabilityPreview = () => {
                   <div className="mobile-scan-box">▣ Quét mã vạch / vị trí / sê-ri</div>
                   <div className="mobile-record-card">
                     <small>Tham chiếu</small>
-                    <strong>{fixtureVisible ? fixture?.sampleTham chiếu : (records[0]?.reference ?? '—')}</strong>
+                    <strong>{fixtureVisible ? fixture?.sampleReference : (records[0]?.reference ?? '—')}</strong>
                     <span>{records[0]?.subject ?? capability.goal}</span>
                   </div>
                   <div className="mobile-quantity-row">
@@ -231,12 +231,12 @@ const CapabilityPreview = () => {
             <section className="capability-panel">
               <div className="capability-panel-title"><Gauge size={18} /><h2>Quản trị & mức hoàn thiện chức năng</h2></div>
               <div className="governance-summary">
-                <div><span>Phân hệ sở hữu</span><strong>{governance.ownerPhân hệ}</strong></div>
+                <div><span>Phân hệ sở hữu</span><strong>{governance.ownerModule}</strong></div>
                 <div><span>Đợt phát hành</span><strong>Đợt {governance.releaseWave}</strong></div>
                 <div><span>Phạm vi áp dụng</span><strong>{applicabilityLabel(governance.applicability)}</strong></div>
                 <div><span>Mức trưởng thành</span><strong>{governance.maturity}</strong></div>
                 <div><span>Screen Matrix</span><strong>{reviewStatusLabel(governance.reviewStatus)}</strong></div>
-                <div><span>Đặc tả</span><strong>{governance.referencedĐặc tả.join(', ')}</strong></div>
+                <div><span>Đặc tả</span><strong>{governance.referencedSpecs.join(', ')}</strong></div>
               </div>
               <div className="governance-evidence">
                 {governance.evidence.map((item) => (
