@@ -45,15 +45,6 @@ public sealed class InventoryReversalService(
                     "INV_REVERSAL_UNSUPPORTED",
                     "Foundation reversal chỉ hỗ trợ Internal Move và Inventory Status Change; document-bound transaction phải đảo tại workflow chuyên biệt.");
 
-            var alreadyReversed = await context.InventoryTransactions.AsNoTracking().AnyAsync(
-                x => x.ReversalOfTransactionId == original.Id ||
-                     (x.TransactionType == TransactionType.Reversal &&
-                      x.ReferenceType == "InventoryReversal" &&
-                      x.ReferenceId == original.Id),
-                cancellationToken);
-            if (alreadyReversed)
-                throw Conflict("INV_ALREADY_REVERSED", "Inventory transaction đã được reversal trước đó.");
-
             var reason = request.Reason.Trim();
             int? fromLocationId = null;
             int? toLocationId = null;
