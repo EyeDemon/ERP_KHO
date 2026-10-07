@@ -2,6 +2,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Queries;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,7 +20,14 @@ namespace ERP.Infrastructure.Repositories
                 .Include(s => s.Location)
                 .Include(s => s.Product)
                     .ThenInclude(p => p.Unit)
-                .FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == InventoryStatus.Available && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
+                .Where(s => s.ProductId == productId && s.WarehouseId == warehouseId)
+                .EligibleFor(_context, InventoryEligibilityOperation.Reservation, DateTime.UtcNow)
+                .OrderBy(s => s.Lot != null && s.Lot.ExpiryDate.HasValue ? 0 : 1)
+                .ThenBy(s => s.Lot!.ExpiryDate)
+                .ThenBy(s => s.Lot!.ReceivedAt)
+                .ThenBy(s => s.LocationId)
+                .ThenBy(s => s.Id)
+                .FirstOrDefaultAsync();
         }
 
         public Task<InventoryStock?> GetByProductWarehouseAndStatusAsync(int productId, int warehouseId, InventoryStatus status) =>
@@ -58,9 +66,8 @@ namespace ERP.Infrastructure.Repositories
 
         public Task<decimal> GetAvailableQuantityAsync(int productId, int warehouseId, CancellationToken cancellationToken = default) =>
             _dbSet.AsNoTracking()
-                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
-                    x.Status == InventoryStatus.Available && x.Location != null &&
-                    x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
+                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId)
+                .EligibleFor(_context, InventoryEligibilityOperation.Reservation, DateTime.UtcNow)
                 .SumAsync(x => x.Quantity - x.ReservedQuantity, cancellationToken);
 
         public async Task<bool> TryReserveAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
@@ -96,14 +103,20 @@ namespace ERP.Infrastructure.Repositories
             try
             {
                 var rows = await _dbSet.AsNoTracking()
-                    .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
-                        x.Status == InventoryStatus.Available && x.LocationId.HasValue &&
-                        x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
-                    .OrderBy(x => x.LocationId)
+                    .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId)
+                    .EligibleFor(_context, InventoryEligibilityOperation.Shipping, DateTime.UtcNow)
+                    .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
+                    .ThenBy(x => x.Lot!.ExpiryDate)
+                    .ThenBy(x => x.Lot!.ReceivedAt)
+                    .ThenBy(x => x.LocationId)
+                    .ThenBy(x => x.Id)
                     .Select(x => new
                     {
                         x.Id,
                         x.LocationId,
+                        x.LotId,
+                        x.SerialId,
+                        x.Status,
                         x.Quantity,
                         x.ReservedQuantity,
                         CommittedAllocationQuantity = _context.StockAllocations
@@ -148,7 +161,12 @@ namespace ERP.Infrastructure.Repositories
                     if (affected != 1)
                         throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu giữ hàng chưa Allocation đã thay đổi trong lúc tiêu thụ reservation.");
 
-                    consumed.Add(new InventoryStockConsumption(row.LocationId!.Value, take));
+                    consumed.Add(new InventoryStockConsumption(
+                        row.LocationId!.Value,
+                        take,
+                        row.LotId,
+                        row.SerialId,
+                        row.Status));
                     remaining -= take;
                     if (remaining == 0) return consumed;
                 }
@@ -161,10 +179,29 @@ namespace ERP.Infrastructure.Repositories
             }
         }
 
-        public async Task<bool> TryConsumeReservationAtLocationAsync(
+        public Task<bool> TryConsumeReservationAtLocationAsync(
             int productId,
             int warehouseId,
             int locationId,
+            decimal quantity,
+            CancellationToken cancellationToken = default) =>
+            TryConsumeReservationAtBucketAsync(
+                productId,
+                warehouseId,
+                locationId,
+                null,
+                null,
+                InventoryStatus.Available,
+                quantity,
+                cancellationToken);
+
+        public async Task<bool> TryConsumeReservationAtBucketAsync(
+            int productId,
+            int warehouseId,
+            int locationId,
+            int? lotId,
+            int? serialId,
+            InventoryStatus inventoryStatus,
             decimal quantity,
             CancellationToken cancellationToken = default)
         {
@@ -172,27 +209,27 @@ namespace ERP.Infrastructure.Repositories
             try
             {
                 var now = DateTime.UtcNow;
-                var affected = await _dbSet
-                    .Where(x => x.ProductId == productId &&
-                                x.WarehouseId == warehouseId &&
-                                x.LocationId == locationId &&
-                                x.Status == InventoryStatus.Available &&
-                                x.Location != null &&
-                                x.Location.IsActive &&
-                                !x.Location.IsBlocked &&
-                                x.Location.IsPickable &&
-                                x.ReservedQuantity >= quantity &&
-                                x.Quantity >= quantity)
-                    .ExecuteUpdateAsync(update => update
-                        .SetProperty(x => x.Quantity, x => x.Quantity - quantity)
-                        .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - quantity)
-                        .SetProperty(x => x.LastUpdated, now), cancellationToken);
+                var query = _dbSet
+                    .Where(x =>
+                        x.ProductId == productId &&
+                        x.WarehouseId == warehouseId &&
+                        x.LocationId == locationId &&
+                        x.LotId == lotId &&
+                        x.SerialId == serialId &&
+                        x.Status == inventoryStatus)
+                    .EligibleFor(_context, InventoryEligibilityOperation.Shipping, now)
+                    .Where(x => x.ReservedQuantity >= quantity && x.Quantity >= quantity);
+
+                var affected = await query.ExecuteUpdateAsync(update => update
+                    .SetProperty(x => x.Quantity, x => x.Quantity - quantity)
+                    .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - quantity)
+                    .SetProperty(x => x.LastUpdated, now), cancellationToken);
                 return affected == 1;
             }
             catch (SqlException exception) when (exception.Number == 1205)
             {
                 throw new ERP.Domain.Exceptions.DeadlockException(
-                    "Giao dịch tiêu thụ giữ hàng tại vị trí bị deadlock.",
+                    "Giao dịch tiêu thụ giữ hàng tại bucket bị deadlock.",
                     exception);
             }
         }
@@ -233,18 +270,29 @@ namespace ERP.Infrastructure.Repositories
             bool releaseOnly = false,
             int? excludedReservationId = null)
         {
-            var rows = await _dbSet.AsNoTracking()
-                .Where(x => x.ProductId == productId &&
-                            x.WarehouseId == warehouseId &&
-                            x.Status == InventoryStatus.Available &&
-                            x.Location != null &&
-                            x.Location.IsActive &&
-                            !x.Location.IsBlocked &&
-                            x.Location.IsPickable)
-                .OrderBy(x => x.LocationId)
+            IQueryable<InventoryStock> stockQuery = _dbSet.AsNoTracking()
+                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId);
+
+            if (!releaseOnly)
+            {
+                var operation = reserve
+                    ? InventoryEligibilityOperation.Reservation
+                    : InventoryEligibilityOperation.Shipping;
+                stockQuery = stockQuery.EligibleFor(_context, operation, DateTime.UtcNow);
+            }
+
+            var rows = await stockQuery
+                .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
+                .ThenBy(x => x.Lot!.ExpiryDate)
+                .ThenBy(x => x.Lot!.ReceivedAt)
+                .ThenBy(x => x.LocationId)
+                .ThenBy(x => x.Id)
                 .Select(x => new
                 {
                     x.Id,
+                    x.LotId,
+                    x.SerialId,
+                    x.Status,
                     x.Quantity,
                     x.ReservedQuantity,
                     CommittedAllocationQuantity = useReserved
