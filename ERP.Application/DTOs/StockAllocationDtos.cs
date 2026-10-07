@@ -5,11 +5,15 @@ public sealed class CreateStockAllocationDto
     public int ReservationId { get; set; }
     public decimal Quantity { get; set; }
     public int? LocationId { get; set; }
+    public int? LotId { get; set; }
+    public int? SerialId { get; set; }
 }
 
 public sealed class ReallocateStockAllocationDto
 {
     public int? LocationId { get; set; }
+    public int? LotId { get; set; }
+    public int? SerialId { get; set; }
     public string Reason { get; set; } = string.Empty;
 }
 
@@ -35,6 +39,11 @@ public sealed class StockAllocationDto
     public int LocationId { get; set; }
     public string LocationCode { get; set; } = string.Empty;
     public string LocationName { get; set; } = string.Empty;
+    public int? LotId { get; set; }
+    public string? LotNumber { get; set; }
+    public DateTime? ExpiryDate { get; set; }
+    public int? SerialId { get; set; }
+    public string? SerialNumber { get; set; }
     public string InventoryStatus { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -58,6 +67,13 @@ public sealed class StockAllocationCandidateDto
     public int LocationId { get; set; }
     public string LocationCode { get; set; } = string.Empty;
     public string LocationName { get; set; } = string.Empty;
+    public int? LotId { get; set; }
+    public string? LotNumber { get; set; }
+    public DateTime? ExpiryDate { get; set; }
+    public DateTime? ReceivedAt { get; set; }
+    public int? SerialId { get; set; }
+    public string? SerialNumber { get; set; }
+    public string InventoryStatus { get; set; } = string.Empty;
     public decimal ReservedQuantity { get; set; }
     public decimal AllocatedQuantity { get; set; }
     public decimal AllocatableQuantity { get; set; }
