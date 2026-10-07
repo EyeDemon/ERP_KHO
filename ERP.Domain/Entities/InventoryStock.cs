@@ -21,4 +21,5 @@ public class InventoryStock
     public Product Product { get; set; } = null!;
     public Warehouse Warehouse { get; set; } = null!;
     public WarehouseLocation? Location { get; set; }
+    public InventoryStatusDefinition StatusDefinition { get; set; } = null!;
 }
