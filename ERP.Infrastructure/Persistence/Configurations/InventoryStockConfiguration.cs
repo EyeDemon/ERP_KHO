@@ -13,9 +13,21 @@ public class InventoryStockConfiguration : IEntityTypeConfiguration<InventorySto
         builder.Property(x => x.Quantity).HasPrecision(18, 4);
         builder.Property(x => x.ReservedQuantity).HasPrecision(18, 4);
         builder.ToTable(t => t.HasCheckConstraint("CK_InventoryStocks_Reservation", "[ReservedQuantity] >= 0 AND [Quantity] >= [ReservedQuantity]"));
-        builder.HasIndex(x => new { x.ProductId, x.WarehouseId, x.Status, x.LocationId, x.LotId, x.SerialId })
+        builder.Property<int>("CanonicalLocationId")
+               .HasComputedColumnSql("ISNULL([LocationId], 0)", stored: true);
+        builder.Property<int>("CanonicalLotId")
+               .HasComputedColumnSql("ISNULL([LotId], 0)", stored: true);
+        builder.Property<int>("CanonicalSerialId")
+               .HasComputedColumnSql("ISNULL([SerialId], 0)", stored: true);
+        builder.HasIndex(
+                "ProductId",
+                "WarehouseId",
+                "Status",
+                "CanonicalLocationId",
+                "CanonicalLotId",
+                "CanonicalSerialId")
                .IsUnique()
-               .HasFilter(null);
+               .HasDatabaseName("IX_InventoryStocks_CanonicalBucket");
 
         builder.HasOne(x => x.Product)
                .WithMany(p => p.InventoryStocks)
