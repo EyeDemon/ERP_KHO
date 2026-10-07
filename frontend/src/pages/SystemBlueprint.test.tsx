@@ -27,7 +27,7 @@ describe('SystemBlueprint', () => {
 
   it('filters capability cards by text and implementation status', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
-    const search = view.getByPlaceholderText('Tìm chức năng, mã chức năng, spec...');
+    const search = view.getByPlaceholderText('Tìm chức năng, mã chức năng, đặc tả...');
     fireEvent.change(search, { target: { value: 'Receipt Posting' } });
     expect(view.getByText('Receipt Posting')).toBeTruthy();
     expect(view.queryByText('Shipment Dispatch')).toBeNull();
