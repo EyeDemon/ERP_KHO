@@ -25,12 +25,12 @@ describe('SystemCoverage', () => {
   it('filters by release wave and implementation status', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
-    fireEvent.change(view.getByLabelText('Lọc release wave'), { target: { value: '5' } });
+    fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: '5' } });
     expect(table.getByText(/AX-09 • Kitting/)).toBeTruthy();
     expect(table.queryByText(/INV-02 • Immutable/)).toBeNull();
 
-    fireEvent.change(view.getByLabelText('Lọc release wave'), { target: { value: 'all' } });
-    fireEvent.change(view.getByLabelText('Lọc implementation status'), { target: { value: 'live' } });
+    fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: 'all' } });
+    fireEvent.change(view.getByLabelText('Lọc trạng thái triển khai'), { target: { value: 'live' } });
     expect(table.getByText(/TR-01 • Warehouse Transfer/)).toBeTruthy();
     expect(table.queryByText(/OUT-05 • Picking/)).toBeNull();
   });
@@ -38,20 +38,20 @@ describe('SystemCoverage', () => {
   it('shows advanced canonical capabilities without promoting them to core implementation', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
-    fireEvent.change(view.getByLabelText('Tìm coverage'), { target: { value: 'Warehouse Safety' } });
+    fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'Warehouse Safety' } });
     expect(table.getByText(/AX-14 • Warehouse Safety/)).toBeTruthy();
-    expect(table.getByText(/Industry optional/)).toBeTruthy();
+    expect(table.getByText(/Tùy chọn theo ngành/)).toBeTruthy();
   });
 
   it('indexes the complete canonical documentation set separately from capability readiness', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
-    expect(view.getByText(/Xem toàn bộ 282 tài liệu canonical/)).toBeTruthy();
+    expect(view.getByText(/Xem toàn bộ 282 tài liệu chuẩn/)).toBeTruthy();
   });
 
   it('supports capability text search', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
-    fireEvent.change(view.getByLabelText('Tìm coverage'), { target: { value: 'Inventory Integrity' } });
+    fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'Inventory Integrity' } });
     expect(table.getByText(/INV-11 • Inventory Integrity/)).toBeTruthy();
     expect(table.queryByText(/OUT-05 • Picking/)).toBeNull();
   });
