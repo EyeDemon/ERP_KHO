@@ -139,6 +139,8 @@ builder.Services.AddScoped<ERP.Domain.Interfaces.IStocktakeRepository, ERP.Infra
 builder.Services.AddScoped<ERP.Application.Interfaces.IStocktakeService, ERP.Application.Services.StocktakeService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IImportReceiptRepository, ERP.Infrastructure.Repositories.ImportReceiptRepository>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.ReceiptInventoryIdentityService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptInventoryIdentityService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ReceiptInventoryIdentityService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IImportReceiptService, ERP.Application.Services.ImportReceiptService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IUnitOfWork, ERP.Infrastructure.Repositories.UnitOfWork>();
