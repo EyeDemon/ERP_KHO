@@ -48,6 +48,12 @@ public sealed class SqlServerInventoryStatusLotSerialTests
             stocks.Single(x => x.Status == InventoryStatus.Available).Quantity.Should().Be(6);
             stocks.Single(x => x.Status == InventoryStatus.Quarantine).Quantity.Should().Be(4);
 
+            var buckets = await CreateStatusService(verify, fixture.UserId).GetBucketsAsync(
+                fixture.WarehouseId,
+                fixture.ProductId);
+            buckets.Single(x => x.Status == "AVAILABLE").AvailableQuantity.Should().Be(6);
+            buckets.Single(x => x.Status == "QUARANTINE").AvailableQuantity.Should().Be(0);
+
             var ledger = await verify.InventoryTransactions.AsNoTracking()
                 .SingleAsync(x => x.ProductId == fixture.ProductId && x.TransactionType == TransactionType.StatusChange);
             ledger.Quantity.Should().Be(4);
@@ -173,6 +179,16 @@ public sealed class SqlServerInventoryStatusLotSerialTests
                     new InventoryStock { ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId, LocationId = fixture.LocationId, Status = InventoryStatus.Available, LotId = expired.Id, Quantity = 5 },
                     new InventoryStock { ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId, LocationId = fixture.LocationId, Status = InventoryStatus.Available, LotId = early.Id, Quantity = 5 });
                 await setup.SaveChangesAsync();
+            }
+
+            await using (var availableView = CreateContext())
+            {
+                var current = (await new ERP.Infrastructure.Queries.InventoryQueryService(
+                    availableView,
+                    new WarehouseAuthorizationService(availableView, new CurrentUser(fixture.UserId)))
+                    .GetCurrentStockAsync(fixture.WarehouseId, fixture.ProductId, null, null)).Single();
+                current.OnHandQuantity.Should().Be(10);
+                current.AvailableQuantity.Should().Be(10);
             }
 
             int reservationId;
