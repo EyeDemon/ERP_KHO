@@ -55,27 +55,66 @@ public sealed class InventoryTraceabilityQueryService(
             .ToListAsync(cancellationToken);
 
         var seedIds = events.Select(x => x.TransactionId).ToArray();
+        var reversalMarkers = new List<InventoryTraceabilityEventDto>();
+        var chainIds = new HashSet<int>(seedIds);
         if (seedIds.Length > 0)
         {
-            var reversalMarkers = await ProjectEvents(context.InventoryTransactions.AsNoTracking()
+            reversalMarkers = await ProjectEvents(context.InventoryTransactions.AsNoTracking()
                     .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) &&
                                 x.TransactionType == TransactionType.Reversal &&
-                                x.ReferenceType == "InventoryReversal" &&
-                                x.ReferenceId.HasValue &&
-                                seedIds.Contains(x.ReferenceId.Value)))
+                                (seedIds.Contains(x.Id) ||
+                                 (x.ReversalOfTransactionId.HasValue && seedIds.Contains(x.ReversalOfTransactionId.Value)) ||
+                                 (x.CorrectiveTransactionId.HasValue && seedIds.Contains(x.CorrectiveTransactionId.Value)) ||
+                                 (x.ReversalOfTransactionId == null &&
+                                  x.ReferenceType == "InventoryReversal" &&
+                                  x.ReferenceId.HasValue &&
+                                  seedIds.Contains(x.ReferenceId.Value)))))
                 .ToListAsync(cancellationToken);
+
             foreach (var marker in reversalMarkers)
-                if (events.All(x => x.TransactionId != marker.TransactionId))
-                    events.Add(marker);
+            {
+                chainIds.Add(marker.TransactionId);
+                if (marker.ReversalOfTransactionId.HasValue)
+                    chainIds.Add(marker.ReversalOfTransactionId.Value);
+                if (marker.CorrectiveTransactionId.HasValue)
+                    chainIds.Add(marker.CorrectiveTransactionId.Value);
+            }
+
+            if (chainIds.Count > seedIds.Length)
+            {
+                var relatedEvents = await ProjectEvents(context.InventoryTransactions.AsNoTracking()
+                        .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) && chainIds.Contains(x.Id)))
+                    .ToListAsync(cancellationToken);
+                foreach (var related in relatedEvents)
+                    if (events.All(x => x.TransactionId != related.TransactionId))
+                        events.Add(related);
+            }
         }
 
-        var reversedIds = events
-            .Where(x => x.ReversalOfTransactionId.HasValue)
-            .Select(x => x.ReversalOfTransactionId!.Value)
-            .ToHashSet();
-        foreach (var item in events)
-            item.IsReversed = reversedIds.Contains(item.TransactionId);
-        events = events.OrderBy(x => x.TransactionDate).ThenBy(x => x.TransactionId).Take(limit).ToList();
+        foreach (var marker in reversalMarkers)
+        {
+            var original = marker.ReversalOfTransactionId.HasValue
+                ? events.FirstOrDefault(x => x.TransactionId == marker.ReversalOfTransactionId.Value)
+                : null;
+            if (original is not null)
+            {
+                original.IsReversed = true;
+                original.ReversalTransactionId = marker.TransactionId;
+                original.CorrectiveTransactionId = marker.CorrectiveTransactionId;
+            }
+
+            if (marker.CorrectiveTransactionId.HasValue)
+            {
+                var corrective = events.FirstOrDefault(x => x.TransactionId == marker.CorrectiveTransactionId.Value);
+                if (corrective is not null)
+                    corrective.ReversalTransactionId = marker.TransactionId;
+            }
+
+            marker.ReversalTransactionId = marker.TransactionId;
+        }
+
+        var effectiveLimit = Math.Max(limit, chainIds.Count);
+        events = events.OrderBy(x => x.TransactionDate).ThenBy(x => x.TransactionId).Take(effectiveLimit).ToList();
 
         var stockQuery = context.InventoryStocks.AsNoTracking()
             .Where(x => allowedWarehouseIds.Contains(x.WarehouseId));
@@ -166,8 +205,10 @@ public sealed class InventoryTraceabilityQueryService(
             CreatedBy = x.CreatedBy,
             CreatedByName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username,
             Note = x.Note,
-            ReversalOfTransactionId = x.TransactionType == TransactionType.Reversal && x.ReferenceType == "InventoryReversal"
-                ? x.ReferenceId
-                : null
+            ReversalOfTransactionId = x.ReversalOfTransactionId ??
+                (x.TransactionType == TransactionType.Reversal && x.ReferenceType == "InventoryReversal"
+                    ? x.ReferenceId
+                    : null),
+            CorrectiveTransactionId = x.CorrectiveTransactionId
         });
 }

@@ -80,5 +80,7 @@ public sealed class InventoryTraceabilityEventDto
     public string CreatedByName { get; set; } = string.Empty;
     public string? Note { get; set; }
     public int? ReversalOfTransactionId { get; set; }
+    public int? CorrectiveTransactionId { get; set; }
+    public int? ReversalTransactionId { get; set; }
     public bool IsReversed { get; set; }
 }
