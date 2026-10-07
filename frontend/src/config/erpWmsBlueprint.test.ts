@@ -139,6 +139,9 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('OUT-09')?.status).toBe('foundation');
     expect(byId.get('OUT-09')?.route).toBe('/backorders');
     expect(byId.get('OUT-09')?.goal).toMatch(/Sales Order demand.*release không đổi OnHand.*reserve.*auto-allocate.*Backorder.*recover trước khi Picking.*Ordered\/Reserved\/Allocated\/Picked\/Shipped\/Backorder\/Cancelled.*multi-shipment.*chưa/i);
+    expect(byId.get('OUT-10')?.status).toBe('foundation');
+    expect(byId.get('OUT-10')?.route).toBe('/shipments');
+    expect(byId.get('OUT-10')?.goal).toMatch(/IN_TRANSIT.*DELIVERY_FAILED.*POD metadata.*COMPLETED.*RETURN_TO_WAREHOUSE.*không tạo thêm SHIP ledger.*OnHand lần hai.*webhook.*chưa hoàn tất/i);
 
     for (const id of ['OUT-03', 'OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'OUT-09', 'OUT-10']) {
       expect(byId.get(id)?.status).not.toBe('live');
