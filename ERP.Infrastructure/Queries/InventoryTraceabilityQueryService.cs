@@ -1,4 +1,5 @@
 using ERP.Application.DTOs;
+using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
