@@ -6,7 +6,7 @@ import apiClient from '../services/apiClient';
 
 vi.mock('../services/apiClient', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 
-const product = { id: 1, code: 'P001', name: 'Sản phẩm', storageClass: 'AMBIENT', unitWeightKg: 0.5, unitVolumeM3: 0.002, unitPalletEquivalent: 0.02, unitId: 1, unitName: 'Cái', categoryId: null, barcodes: [{ id: 2, productId: 1, value: '001Ab' }], isActive: true };
+const product = { id: 1, code: 'P001', name: 'Sản phẩm', storageClass: 'AMBIENT', unitWeightKg: 0.5, unitVolumeM3: 0.002, unitPalletEquivalent: 0.02, trackingType: 'Lot', expiryControl: true, shelfLifeDays: 180, unitId: 1, unitName: 'Cái', categoryId: null, barcodes: [{ id: 2, productId: 1, value: '001Ab' }], isActive: true };
 
 describe('Products category and barcode UI (mocked API)', () => {
   afterEach(cleanup);
@@ -86,6 +86,42 @@ describe('Products category and barcode UI (mocked API)', () => {
       unitWeightKg: 1.25,
       unitVolumeM3: 0.002,
       unitPalletEquivalent: 0.02,
+    })));
+  });
+
+  it('submits canonical lot serial expiry tracking policy on product update', async () => {
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} } as never);
+    const view = render(<Products />); await view.findByText('P001');
+    fireEvent.click(view.getByText('Sửa'));
+    expect((view.getByLabelText('Tracking Type sản phẩm') as HTMLSelectElement).value).toBe('Lot');
+    expect((view.getByLabelText('Kiểm soát hạn dùng') as HTMLInputElement).checked).toBe(true);
+    expect((view.getByLabelText('Shelf Life Days') as HTMLInputElement).value).toBe('180');
+
+    fireEvent.change(view.getByLabelText('Tracking Type sản phẩm'), { target: { value: 'Serial' } });
+    fireEvent.change(view.getByLabelText('Shelf Life Days'), { target: { value: '365' } });
+    fireEvent.submit(view.getByText('Lưu').closest('form')!);
+
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/products/1', expect.objectContaining({
+      updateTrackingPolicy: true,
+      trackingType: 'Serial',
+      expiryControl: true,
+      shelfLifeDays: 365,
+    })));
+  });
+
+  it('clears expiry policy when tracking is disabled', async () => {
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} } as never);
+    const view = render(<Products />); await view.findByText('P001');
+    fireEvent.click(view.getByText('Sửa'));
+    fireEvent.change(view.getByLabelText('Tracking Type sản phẩm'), { target: { value: 'None' } });
+    expect((view.getByLabelText('Kiểm soát hạn dùng') as HTMLInputElement).checked).toBe(false);
+    expect((view.getByLabelText('Shelf Life Days') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.submit(view.getByText('Lưu').closest('form')!);
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/products/1', expect.objectContaining({
+      updateTrackingPolicy: true,
+      trackingType: 'None',
+      expiryControl: false,
+      shelfLifeDays: null,
     })));
   });
 
