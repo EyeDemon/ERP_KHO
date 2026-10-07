@@ -13,6 +13,22 @@ import {
 import { getCanonicalDocumentationRegister } from '../config/documentationRegister';
 import './SystemCoverage.css';
 
+const representationLabel = (value: string) => ({
+  'Capability-linked': 'Liên kết chức năng',
+  'Capability-backed': 'Được hỗ trợ bởi chức năng',
+  'Platform guardrail': 'Rào chắn nền tảng',
+  'Runbook-backed': 'Có sổ tay vận hành',
+  'Platform / Governance': 'Nền tảng / Quản trị',
+}[value] ?? value);
+
+const categoryLabel = (value: string) => ({
+  'Data Platform': 'Nền tảng dữ liệu',
+  Engineering: 'Kỹ thuật',
+  'UX / Product': 'UX / Sản phẩm',
+  'Security / Compliance': 'Bảo mật / Tuân thủ',
+  'Operations / Governance': 'Vận hành / Quản trị',
+}[value] ?? value);
+
 const applicabilityLabels: Record<Applicability, string> = {
   REQUIRED_CORE: 'Bắt buộc cốt lõi',
   REQUIRED_WHEN_FEATURE_ENABLED: 'Bắt buộc khi bật chức năng',
@@ -79,8 +95,8 @@ const SystemCoverage = () => {
         <article><strong>{implemented}</strong><span>Hệ thống thật hoàn thiện phạm vi hiện tại</span></article>
         <article><strong>{foundation}</strong><span>Hệ thống thật đã triển khai một phần</span></article>
         <article><strong>{specOnly}</strong><span>Chưa triển khai / tùy chọn</span></article>
-        <article><strong>{rows.length}</strong><span>Bản demo hệ thống tương tác</span></article>
-        <article className="traceability-kpi" title={rows.length + ' capability có contextual interactive preview'}><strong>{traceabilityClosed.length}</strong><span>Truy vết màn hình đã đóng</span></article>
+        <article><strong>{rows.length}</strong><span>Bản mô phỏng hệ thống tương tác</span></article>
+        <article className="traceability-kpi" title={rows.length + ' chức năng có bản xem trước tương tác theo ngữ cảnh'}><strong>{traceabilityClosed.length}</strong><span>Truy vết màn hình đã đóng</span></article>
         <article><strong>{documentation.length}</strong><span>Đặc tả chuẩn đã lập chỉ mục</span></article>
         <article><strong>{platformDocs.length}</strong><span>Tài liệu nền tảng / quản trị</span></article>
       </section>
@@ -112,7 +128,7 @@ const SystemCoverage = () => {
 
       {traceabilityClosed.length > 0 && (
         <section className="traceability-closed-panel">
-          <div className="traceability-title"><CheckCircle2 size={17} /><div><strong>Screen Matrix 229 • Đã đóng truy vết</strong><span>4 khoảng trống màn hình lịch sử đã được ánh xạ tới route bản thiết kế cụ thể. Trạng thái hệ thống thật/backend vẫn được theo dõi riêng.</span></div></div>
+          <div className="traceability-title"><CheckCircle2 size={17} /><div><strong>Ma trận màn hình 229 • Đã đóng truy vết</strong><span>4 khoảng trống màn hình lịch sử đã được ánh xạ tới route bản thiết kế cụ thể. Trạng thái hệ thống thật/phía máy chủ vẫn được theo dõi riêng.</span></div></div>
           <div className="traceability-grid">
             {traceabilityClosed.map(({ module, capability, profile }) => (
               <Link key={capability.id} to={'/system-blueprint/' + module.key + '/' + capability.id}>
@@ -156,7 +172,7 @@ const SystemCoverage = () => {
                     <td>{item.spec}</td>
                     <td>{item.title}</td>
                     <td>{item.category}</td>
-                    <td><span className={'doc-representation ' + (item.representation === 'Capability-linked' ? 'doc-linked' : 'doc-standard')}>{item.representation}</span></td>
+                    <td><span className={'doc-representation ' + (item.representation === 'Capability-linked' ? 'doc-linked' : 'doc-standard')}>{representationLabel(item.representation)}</span></td>
                     <td>{item.capabilityIds.length ? item.capabilityIds.join(', ') : '—'}</td>
                   </tr>
                 ))}
@@ -167,9 +183,9 @@ const SystemCoverage = () => {
         <div className="platform-standards-grid">
           {platformStandards.map((item) => (
             <article key={item.spec}>
-              <span>Spec {item.spec} • {item.category}</span>
+              <span>Đặc tả {item.spec} • {categoryLabel(item.category)}</span>
               <strong>{item.title}</strong>
-              <small>{item.representation}</small>
+              <small>{representationLabel(item.representation)}</small>
               {item.mappedCapabilityIds?.length ? <p>Đã ánh xạ: {item.mappedCapabilityIds.join(', ')}</p> : null}
             </article>
           ))}
