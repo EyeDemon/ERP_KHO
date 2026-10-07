@@ -146,6 +146,14 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('INV-07')?.route).toBe('/inventory-locks');
     expect(byId.get('INV-07')?.goal).toMatch(/overlapping lock.*Owner\/HU\/partial-quantity/i);
     expect(byId.get('INV-08')?.status).toBe('foundation');
+    expect(byId.get('INV-09')?.name).toBe('Đảo giao dịch');
+    expect(byId.get('INV-09')?.status).toBe('foundation');
+    expect(byId.get('INV-09')?.route).toBe('/inventory-reversals');
+    expect(byId.get('INV-09')?.goal).toMatch(/Di chuyển vị trí nội bộ.*Đổi trạng thái tồn kho.*cấu trúc.*đảo lặp.*Receipt\/Shipment\/Transfer/i);
+    expect(byId.get('INV-10')?.name).toBe('Truy vết & phả hệ tồn kho');
+    expect(byId.get('INV-10')?.status).toBe('foundation');
+    expect(byId.get('INV-10')?.route).toBe('/inventory-traceability');
+    expect(byId.get('INV-10')?.goal).toMatch(/Sản phẩm.*Lô.*Sê-ri.*Tham chiếu.*chuỗi đảo.*Return\/Recall/i);
     expect(byId.get('INV-08')?.route).toBe('/inventory-movements');
     expect(byId.get('INV-08')?.goal).toMatch(/unreserved inventory.*MOVE ledger.*Cross-warehouse/i);
     expect(byId.get('OUT-08')?.route).toBe('/shipments');
