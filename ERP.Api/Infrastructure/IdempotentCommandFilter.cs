@@ -199,6 +199,7 @@ public sealed class IdempotentCommandFilter(
         || scope.StartsWith("InventoryStatus.", StringComparison.Ordinal)
         || scope.StartsWith("InventoryLock.", StringComparison.Ordinal)
         || scope.StartsWith("InventoryMovement.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryReversal.", StringComparison.Ordinal)
         || scope.StartsWith("InventoryReservation.", StringComparison.Ordinal)
         || scope.StartsWith("Putaway.Move", StringComparison.Ordinal);
     private static bool IsUniqueViolation(DbUpdateException ex)
