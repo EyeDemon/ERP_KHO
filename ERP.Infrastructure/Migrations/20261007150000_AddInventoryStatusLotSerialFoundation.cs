@@ -195,10 +195,6 @@ public sealed class AddInventoryStatusLotSerialFoundation : Migration
             table: "ImportReceiptInventoryIdentities",
             columns: new[] { "ImportReceiptDetailId", "TargetStatus" });
         migrationBuilder.CreateIndex(
-            name: "IX_ImportReceiptInventoryIdentities_ProductId",
-            table: "ImportReceiptInventoryIdentities",
-            column: "ProductId");
-        migrationBuilder.CreateIndex(
             name: "IX_ImportReceiptInventoryIdentities_ProductId_SerialNumber",
             table: "ImportReceiptInventoryIdentities",
             columns: new[] { "ProductId", "SerialNumber" },
@@ -217,7 +213,8 @@ public sealed class AddInventoryStatusLotSerialFoundation : Migration
             name: "IX_InventoryStocks_ProductId_WarehouseId_Status_LocationId_LotId_SerialId",
             table: "InventoryStocks",
             columns: new[] { "ProductId", "WarehouseId", "Status", "LocationId", "LotId", "SerialId" },
-            unique: true);
+            unique: true,
+            filter: "[LocationId] IS NOT NULL AND [LotId] IS NOT NULL AND [SerialId] IS NOT NULL");
         migrationBuilder.AddForeignKey(
             name: "FK_InventoryStocks_InventoryLots_LotId",
             table: "InventoryStocks",
