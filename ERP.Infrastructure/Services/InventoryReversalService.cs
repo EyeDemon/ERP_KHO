@@ -176,7 +176,7 @@ public sealed class InventoryReversalService(
                 SerialId = original.SerialId
             };
         }
-        catch (DbUpdateException ex) when (IsDuplicateKey(ex))
+        catch (DbUpdateException ex) when (IsReversalClaimDuplicate(ex))
         {
             if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
             throw Conflict("INV_ALREADY_REVERSED", "Inventory transaction đã được reversal trước đó.");
@@ -188,11 +188,20 @@ public sealed class InventoryReversalService(
         }
     }
 
-    private static bool IsDuplicateKey(DbUpdateException exception)
+    private static bool IsReversalClaimDuplicate(DbUpdateException exception)
     {
+        const string reversalClaimIndex = "UX_InventoryTransactions_ReversalOfTransaction";
         for (Exception? current = exception; current is not null; current = current.InnerException)
-            if (current is SqlException sqlException && sqlException.Number is 2601 or 2627)
-                return true;
+        {
+            if (current is not SqlException sqlException)
+                continue;
+
+            foreach (SqlError error in sqlException.Errors)
+                if (error.Number is 2601 or 2627 &&
+                    error.Message.Contains(reversalClaimIndex, StringComparison.OrdinalIgnoreCase))
+                    return true;
+        }
+
         return false;
     }
 
