@@ -47,7 +47,7 @@ const TransitMock = () => {
       </div>
       <div className="transfer-mock-callout warning">
         <strong>Quy tắc bảo toàn</strong>
-        <span>Điều chuyển quantity phải bảo toàn giữa source, transit và destination. Mismatch không được “fix” bằng sửa balance trực tiếp; phải reconcile qua canonical transfer/inventory commands.</span>
+        <span>Số lượng điều chuyển phải được bảo toàn giữa nguồn, đang vận chuyển và đích. Chênh lệch không được “sửa” bằng cách chỉnh số dư trực tiếp; phải đối chiếu qua các lệnh điều chuyển/tồn kho chuẩn.</span>
       </div>
     </section>
   );
