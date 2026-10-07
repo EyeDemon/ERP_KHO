@@ -36,7 +36,7 @@ const Header = ({
   </header>
 );
 
-const Trạng tháiControlMock = () => {
+const StatusControlMock = () => {
   const statuses = [
     { name: 'AVAILABLE', qty: '1.240', eligible: 'Giữ / Phân bổ / Lấy', tone: 'success' as const },
     { name: 'QC_HOLD', qty: '96', eligible: 'Không giữ / không lấy', tone: 'warning' as const },
@@ -76,7 +76,7 @@ const Trạng tháiControlMock = () => {
   );
 };
 
-const LôSê-riMock = () => {
+const LotSerialMock = () => {
   const identities = [
     { id: 'LOT-1001-260930', type: 'Lô', expiry: '30/09/2027', status: 'AVAILABLE', location: '3 ô', tone: 'success' as const },
     { id: 'SN-1001-884201', type: 'Sê-ri', expiry: '—', status: 'AVAILABLE', location: 'A01-R02-L03-B04', tone: 'success' as const },
@@ -151,7 +151,7 @@ const LockFreezeMock = () => {
   );
 };
 
-const Đảo giao dịchMock = () => {
+const ReversalMock = () => {
   const chain = [
     { ref: 'LED-2026-882177', label: 'MOVE gốc', delta: 'SRC -40 / DST +40', tone: 'neutral' as const, state: 'POSTED' },
     { ref: 'REV-2026-0108', label: 'Đảo giao dịch', delta: 'SRC +40 / DST -40', tone: 'warning' as const, state: 'PROPOSED' },
@@ -229,10 +229,10 @@ const TraceabilityMock = () => {
 };
 
 const InventoryCapabilityMock = ({ capabilityId }: InventoryMockProps) => {
-  if (capabilityId === 'INV-05') return <Trạng tháiControlMock />;
-  if (capabilityId === 'INV-06') return <LôSê-riMock />;
+  if (capabilityId === 'INV-05') return <StatusControlMock />;
+  if (capabilityId === 'INV-06') return <LotSerialMock />;
   if (capabilityId === 'INV-07') return <LockFreezeMock />;
-  if (capabilityId === 'INV-09') return <Đảo giao dịchMock />;
+  if (capabilityId === 'INV-09') return <ReversalMock />;
   if (capabilityId === 'INV-10') return <TraceabilityMock />;
   return null;
 };
