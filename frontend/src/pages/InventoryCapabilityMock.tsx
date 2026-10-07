@@ -108,7 +108,7 @@ const LotSerialMock = () => {
       </div>
       <div className="inventory-mock-callout danger">
         <strong>Rào chắn định danh trùng</strong>
-        <span>Sê-ri đã tồn tại không được tạo lại; lot/expiry phải tuân tracking policy và không được dùng identity lookup để bypass status eligibility.</span>
+        <span>Sê-ri đã tồn tại không được tạo lại; lô/hạn dùng phải tuân chính sách theo dõi và không được dùng tra cứu định danh để bỏ qua điều kiện trạng thái.</span>
       </div>
     </section>
   );
@@ -161,7 +161,7 @@ const ReversalMock = () => {
     <section className="inventory-capability-mock" data-testid="inventory-capability-mock-INV-09" aria-labelledby="inventory-inv-09-title">
       <Header
         id="INV-09"
-        title="Inventory Đảo giao dịch / Corrective Chain"
+        title="Chuỗi đảo / hiệu chỉnh tồn kho"
         description="Mô phỏng sửa sai bằng giao dịch đảo và giao dịch hiệu chỉnh; sổ cái gốc luôn bất biến và giữ nguyên nguồn/tương quan."
         icon={<History size={20} />}
       />
