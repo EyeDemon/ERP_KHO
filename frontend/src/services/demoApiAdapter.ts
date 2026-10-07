@@ -4,6 +4,7 @@ import {
   demoCategories,
   demoExportReceipts,
   demoImportReceipts,
+  demoImportReceiptInventoryIdentities,
   demoPurchaseOrders,
   demoAsns,
   demoInOut,
@@ -367,6 +368,10 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     if (/^\/api\/importreceipts\/\d+$/.test(path)) {
       const item = demoImportReceipts.find(receipt => receipt.id === findNumericId(path));
       return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy phiếu nhập demo.');
+    }
+    if (/^\/api\/importreceipts\/\d+\/inventory-identities$/.test(path)) {
+      const id = findNumericId(path);
+      return ok(config, demoImportReceiptInventoryIdentities[id] ?? []);
     }
     if (/^\/api\/importreceipts\/\d+\/discrepancies$/.test(path)) return ok(config, []);
     if (path === '/api/importreceipts/discrepancy-reasons') {
