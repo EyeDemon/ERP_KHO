@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryBuckets from './InventoryBuckets';
 import apiClient from '../services/apiClient';
@@ -50,7 +50,7 @@ describe('InventoryBuckets',()=>{
   it('renders canonical status lot serial dimensions read-only without mutation permission',async()=>{
     const view=render(<InventoryBuckets warehouses={warehouses}/>);
     expect(await view.findByText('LOT-A')).toBeTruthy();
-    expect(view.getByText('AVAILABLE')).toBeTruthy();
+    expect(within(view.getByRole('table',{name:'Inventory bucket'})).getByText('AVAILABLE')).toBeTruthy();
     expect(view.getByText(/R:✓/)).toBeTruthy();
     expect(view.queryByText('Đổi status')).toBeNull();
   });
