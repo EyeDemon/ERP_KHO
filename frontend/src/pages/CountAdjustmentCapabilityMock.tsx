@@ -39,7 +39,7 @@ const BlindCountMock = () => (
       <div><span>Định danh tồn kho</span><strong>SKU-1001 • LOT-261004-A</strong><small>UOM thao tác: Thùng • hệ số 12</small></div>
       <div><span>Phiếu kiểm kêer instruction</span><strong>Đếm thực tế, không suy đoán theo hệ thống</strong><small>Quét vị trí → quét SKU/lô → nhập số lượng thực đếm</small></div>
     </div>
-    <div className="count-mock-callout warning"><strong>Rào chắn thiên lệch</strong><span>Số lượng hệ thống không được lộ qua helper text, placeholder, tooltip hay error message khi blind-count policy đang bật.</span></div>
+    <div className="count-mock-callout warning"><strong>Rào chắn thiên lệch</strong><span>Số lượng hệ thống không được lộ qua chữ hỗ trợ, ô gợi ý, tooltip hay thông báo lỗi khi chính sách kiểm kê mù đang bật.</span></div>
   </section>
 );
 
@@ -51,7 +51,7 @@ const FreezeStrategyMock = () => {
   ];
   return (
     <section className="count-capability-mock" data-testid="count-capability-mock-CT-04" aria-labelledby="count-ct-04-title">
-      <Header id="CT-04" title="Phiếu kiểm kê Freeze Chiến lược" description="So sánh Đóng băng cứng, Đóng băng mềm và Chỉ ảnh chụp trước khi mở phạm vi kiểm kê." icon={<LockKeyhole size={20} />} />
+      <Header id="CT-04" title="Chiến lược đóng băng kiểm kê" description="So sánh Đóng băng cứng, Đóng băng mềm và Chỉ ảnh chụp trước khi mở phạm vi kiểm kê." icon={<LockKeyhole size={20} />} />
       <div className="count-mock-metrics">
         <div><span>Phiếu kiểm kê</span><strong>CNT-2026-0098</strong><small>Khu PICK-A</small></div>
         <div><span>Nhiệm vụ đang mở</span><strong>7</strong><small>2 đang thực hiện</small></div>
@@ -88,7 +88,7 @@ const VarianceMock = () => (
     <Header id="CT-06" title="Bàn làm việc xử lý chênh lệch" description="Rà soát ảnh chụp so với kết quả đếm cuối, bằng chứng và ngưỡng để chuyển sang kiểm đếm lại, phê duyệt hoặc điều chỉnh." icon={<Scale size={20} />} />
     <div className="count-mock-metrics">
       <div><span>Ảnh chụp</span><strong>48 Cái</strong><small>Mốc cơ sở đóng băng</small></div>
-      <div><span>Cuối cùng count</span><strong>43 Cái</strong><small>Đã chấp nhận recount</small></div>
+      <div><span>Kết quả đếm cuối</span><strong>43 Cái</strong><small>Kiểm đếm lại đã chấp nhận</small></div>
       <div><span>Chênh lệch</span><strong>-5 Cái</strong><small>-10,42%</small></div>
       <div><span>Ngưỡng</span><strong>±5%</strong><small>Cần phê duyệt</small></div>
     </div>
@@ -103,7 +103,7 @@ const VarianceMock = () => (
 
 const AdjustmentMock = () => (
   <section className="count-capability-mock" data-testid="count-capability-mock-CT-07" aria-labelledby="count-ct-07-title">
-    <Header id="CT-07" title="Inventory Điều chỉnh Phê duyệt & Posting" description="Mô phỏng phân tách nhiệm vụ, chênh lệch có dấu và ranh giới ghi sổ cho điều chỉnh do chênh lệch kiểm kê." icon={<ShieldCheck size={20} />} />
+    <Header id="CT-07" title="Phê duyệt & ghi sổ điều chỉnh tồn kho" description="Mô phỏng phân tách nhiệm vụ, chênh lệch có dấu và ranh giới ghi sổ cho điều chỉnh do chênh lệch kiểm kê." icon={<ShieldCheck size={20} />} />
     <div className="count-mock-metrics">
       <div><span>Điều chỉnh</span><strong>ADJ-2026-0077</strong><small>COUNT_VARIANCE</small></div>
       <div><span>Chênh lệch có dấu</span><strong>-5 Cái</strong><small>SKU-1001 • B04</small></div>
@@ -112,7 +112,7 @@ const AdjustmentMock = () => (
     </div>
     <div className="count-adjustment-chain" aria-label="Chuỗi trạng thái điều chỉnh tồn kho mô phỏng">
       <div><Badge tone="neutral">DRAFT</Badge><span>Đã đính kèm lý do + bằng chứng</span></div>
-      <div><Badge tone="warning">SUBMITTED</Badge><span>SoD / threshold validation</span></div>
+      <div><Badge tone="warning">SUBMITTED</Badge><span>Kiểm tra SoD / ngưỡng</span></div>
       <div><Badge tone="success">APPROVED</Badge><span>Chỉ người phê duyệt được ủy quyền</span></div>
       <div><Badge tone="danger">POST</Badge><span>Ranh giới duy nhất thay đổi tồn kho</span></div>
     </div>
