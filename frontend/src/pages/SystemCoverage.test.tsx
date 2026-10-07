@@ -27,7 +27,7 @@ describe('SystemCoverage', () => {
     const table = within(view.getByTestId('coverage-table'));
     fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: '5' } });
     expect(table.getByText(/AX-09 • Kitting/)).toBeTruthy();
-    expect(table.queryByText(/INV-02 • Immutable/)).toBeNull();
+    expect(table.queryByText(/INV-02 • Sổ cái tồn kho bất biến/)).toBeNull();
 
     fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: 'all' } });
     fireEvent.change(view.getByLabelText('Lọc trạng thái triển khai'), { target: { value: 'live' } });
@@ -51,8 +51,8 @@ describe('SystemCoverage', () => {
   it('supports capability text search', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
-    fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'Inventory Integrity' } });
-    expect(table.getByText(/INV-11 • Inventory Integrity/)).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'toàn vẹn' } });
+    expect(table.getByText(/INV-11 • Bộ máy toàn vẹn/)).toBeTruthy();
     expect(table.queryByText(/OUT-05 • Picking/)).toBeNull();
   });
 });
