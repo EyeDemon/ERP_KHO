@@ -65,7 +65,7 @@ const messageFor=(e:unknown)=>{
   if(code==='SHIPMENT_VERSION_CONFLICT'||response?.status===409) return response?.data?.message??'Shipment đã thay đổi. Vui lòng tải lại.';
   if(response?.status===403)return 'Bạn không có quyền thực hiện thao tác Shipment này.';
   if(response?.status===404)return 'Không tìm thấy Shipment trong phạm vi kho của bạn.';
-  return response?.data?.message??'Không thể xử lý Staging & Loading.';
+  return response?.data?.message??'Không thể xử lý Shipment.';
 };
 
 export default function Shipments(){
