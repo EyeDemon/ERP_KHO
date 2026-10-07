@@ -58,6 +58,8 @@ namespace ERP.Application.Services
             if (exists) throw new BusinessRuleException($"Mã sản phẩm {dto.Code} đã tồn tại");
             var storageClass = NormalizeStorageClass(dto.StorageClass);
             ValidateStorageProfile(dto.UnitWeightKg, dto.UnitVolumeM3, dto.UnitPalletEquivalent);
+            var trackingType = ParseTrackingType(dto.TrackingType);
+            ValidateTrackingPolicy(trackingType, dto.ExpiryControl, dto.ShelfLifeDays);
             var product = new Product
             {
                 Code = dto.Code,
@@ -67,6 +69,9 @@ namespace ERP.Application.Services
                 UnitWeightKg = dto.UnitWeightKg,
                 UnitVolumeM3 = dto.UnitVolumeM3,
                 UnitPalletEquivalent = dto.UnitPalletEquivalent,
+                TrackingType = trackingType,
+                ExpiryControl = dto.ExpiryControl,
+                ShelfLifeDays = dto.ShelfLifeDays,
                 UnitId = dto.UnitId,
                 CategoryId = dto.CategoryId,
                 IsActive = true,
@@ -82,6 +87,7 @@ namespace ERP.Application.Services
         {
             Id = p.Id, Code = p.Code, Name = p.Name, Description = p.Description,
             StorageClass = p.StorageClass, UnitWeightKg = p.UnitWeightKg, UnitVolumeM3 = p.UnitVolumeM3, UnitPalletEquivalent = p.UnitPalletEquivalent,
+            TrackingType = p.TrackingType.ToString(), ExpiryControl = p.ExpiryControl, ShelfLifeDays = p.ShelfLifeDays,
             UnitId = p.UnitId, UnitName = p.Unit?.Name, UnitCode = p.Unit?.Code, UnitDecimalPlaces = p.Unit?.DecimalPlaces ?? 4,
             Uoms = new[] { new ProductUomDto { UnitId = p.UnitId, UnitCode = p.Unit?.Code ?? string.Empty, UnitName = p.Unit?.Name ?? string.Empty, DecimalPlaces = p.Unit?.DecimalPlaces ?? 4, ConversionFactor = 1, Version = 1 } }
                 .Concat(p.Uoms.Where(x => x.IsActive && x.EffectiveFromUtc <= DateTime.UtcNow && x.UnitId != p.UnitId)
@@ -102,6 +108,19 @@ namespace ERP.Application.Services
             product.Description = dto.Description;
             product.UnitId = dto.UnitId;
             product.IsActive = dto.IsActive;
+            if (dto.UpdateTrackingPolicy)
+            {
+                var trackingType = ParseTrackingType(dto.TrackingType);
+                ValidateTrackingPolicy(trackingType, dto.ExpiryControl, dto.ShelfLifeDays);
+                var changed = trackingType != product.TrackingType ||
+                              dto.ExpiryControl != product.ExpiryControl ||
+                              dto.ShelfLifeDays != product.ShelfLifeDays;
+                if (changed && await _productRepository.HasTransactionsAsync(id, cancellationToken))
+                    throw new BusinessRuleException("Không thể đổi Lot/Serial/Expiry policy khi sản phẩm đã có tồn hoặc giao dịch kho.");
+                product.TrackingType = trackingType;
+                product.ExpiryControl = dto.ExpiryControl;
+                product.ShelfLifeDays = dto.ShelfLifeDays;
+            }
             if (dto.UpdateStorageProfile)
             {
                 product.StorageClass = NormalizeStorageClass(dto.StorageClass);
@@ -113,6 +132,28 @@ namespace ERP.Application.Services
             product.UpdatedAt = DateTime.UtcNow;
 
             await _productRepository.UpdateAsync(product, cancellationToken);
+        }
+
+        private static ERP.Domain.Enums.ProductTrackingType ParseTrackingType(string? value)
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? "None" : value.Trim();
+            if (!Enum.TryParse<ERP.Domain.Enums.ProductTrackingType>(normalized, true, out var parsed) ||
+                !Enum.IsDefined(parsed))
+                throw new BusinessRuleException("Tracking Type chỉ hỗ trợ None, Lot hoặc Serial.");
+            return parsed;
+        }
+
+        private static void ValidateTrackingPolicy(
+            ERP.Domain.Enums.ProductTrackingType trackingType,
+            bool expiryControl,
+            int? shelfLifeDays)
+        {
+            if (expiryControl && trackingType == ERP.Domain.Enums.ProductTrackingType.None)
+                throw new BusinessRuleException("Expiry Control yêu cầu sản phẩm theo dõi Lot hoặc Serial.");
+            if (shelfLifeDays.HasValue && shelfLifeDays <= 0)
+                throw new BusinessRuleException("Shelf Life Days phải lớn hơn 0.");
+            if (!expiryControl && shelfLifeDays.HasValue)
+                throw new BusinessRuleException("Shelf Life Days chỉ được cấu hình khi bật Expiry Control.");
         }
 
         private static string? NormalizeStorageClass(string? value)
