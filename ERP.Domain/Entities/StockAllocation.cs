@@ -10,6 +10,8 @@ public class StockAllocation
     public int WarehouseId { get; set; }
     public int ProductId { get; set; }
     public int LocationId { get; set; }
+    public int? LotId { get; set; }
+    public int? SerialId { get; set; }
     public InventoryStatus InventoryStatus { get; set; } = InventoryStatus.Available;
     public decimal Quantity { get; set; }
     public StockAllocationStatus Status { get; set; } = StockAllocationStatus.Active;
@@ -26,6 +28,8 @@ public class StockAllocation
     public Warehouse Warehouse { get; set; } = null!;
     public Product Product { get; set; } = null!;
     public WarehouseLocation Location { get; set; } = null!;
+    public InventoryLot? Lot { get; set; }
+    public InventorySerial? Serial { get; set; }
     public User AllocatedByUser { get; set; } = null!;
     public User? ReleasedByUser { get; set; }
 }
