@@ -101,7 +101,10 @@ public sealed class InventoryStatusService(
                 SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
                 OnHandQuantity = x.Quantity,
                 ReservedQuantity = x.ReservedQuantity,
-                AvailableQuantity = x.Quantity - x.ReservedQuantity,
+                AvailableQuantity = x.StatusDefinition.IsAvailable &&
+                                    (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today)
+                    ? x.Quantity - x.ReservedQuantity
+                    : 0,
                 LastUpdated = x.LastUpdated
             })
             .ToListAsync(cancellationToken);
