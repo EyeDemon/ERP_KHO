@@ -153,6 +153,10 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IReportService, ERP.Applic
 
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryQueryService, ERP.Infrastructure.Queries.InventoryQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryStatusService, ERP.Infrastructure.Services.InventoryStatusService>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.InventoryLockService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryLockService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.InventoryLockService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryLockEvaluator>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.InventoryLockService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryMovementService, ERP.Infrastructure.Services.InventoryMovementService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryTransactionQueryService, ERP.Infrastructure.Queries.InventoryTransactionQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryReconciliationQueryService, ERP.Infrastructure.Queries.InventoryReconciliationQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStocktakeQueryService, ERP.Infrastructure.Queries.StocktakeQueryService>();
