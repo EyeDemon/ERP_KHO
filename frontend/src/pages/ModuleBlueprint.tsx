@@ -99,9 +99,9 @@ const ModuleBlueprint = () => {
         </div>
         <div className="module-stat-grid">
           <div><strong>{module.capabilities.length}</strong><span>Mock preview</span></div>
-          <div><strong>{liveCount}</strong><span>Production live</span></div>
-          <div><strong>{foundationCount}</strong><span>Prod. foundation</span></div>
-          <div><strong>{plannedCount + optionalCount}</strong><span>Prod. pending/optional</span></div>
+          <div><strong>{liveCount}</strong><span>Prod. hoàn thiện</span></div>
+          <div><strong>{foundationCount}</strong><span>Prod. một phần</span></div>
+          <div><strong>{plannedCount + optionalCount}</strong><span>Chưa triển khai / optional</span></div>
         </div>
       </section>
 
