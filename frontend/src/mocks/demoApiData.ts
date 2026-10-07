@@ -403,6 +403,8 @@ export const demoShipments = [
     dockAppointmentId: null, dockAppointmentCode: null, dockId: null, dockCode: null,
     vehiclePlate: null, trailerPlate: null, sealNumber: null,
     createdAt: '2026-10-06T02:06:00Z', stagedAt: '2026-10-06T02:08:00Z', loadingStartedAt: null, loadedAt: null,
+    dispatchedAt: null, dispatchedBy: null, dispatchedByName: null, inTransitAt: null, deliveryFailedAt: null,
+    returnInitiatedAt: null, deliveredAt: null, completedAt: null, proofOfDelivery: null, trackingEvents: [],
     rowVersion: 'AAAAAAAASHIP1',
     handlingUnits: [
       {
@@ -419,7 +421,9 @@ export const demoShipments = [
     dockAppointmentId: 1043, dockAppointmentCode: 'APT-2026-1043', dockId: 102, dockCode: 'D-02',
     vehiclePlate: '50H-220.18', trailerPlate: 'TR-220', sealNumber: 'SEAL-7702',
     createdAt: '2026-10-06T03:00:00Z', stagedAt: '2026-10-06T03:05:00Z', loadingStartedAt: '2026-10-06T03:15:00Z', loadedAt: '2026-10-06T03:25:00Z',
-    dispatchedAt: null, dispatchedBy: null, dispatchedByName: null, rowVersion: 'AAAAAAAASHIP2',
+    dispatchedAt: null, dispatchedBy: null, dispatchedByName: null, inTransitAt: null, deliveryFailedAt: null,
+    returnInitiatedAt: null, deliveredAt: null, completedAt: null, proofOfDelivery: null, trackingEvents: [],
+    rowVersion: 'AAAAAAAASHIP2',
     handlingUnits: [
       {
         id: 7721, handlingUnitId: 9921, huCode: 'PALLET-7702-01', barcode: 'PALLET-7702-01', sscc: null,
@@ -435,7 +439,9 @@ export const demoShipments = [
     dockAppointmentId: 1043, dockAppointmentCode: 'APT-2026-1043', dockId: 102, dockCode: 'D-02',
     vehiclePlate: '50H-220.18', trailerPlate: 'TR-220', sealNumber: 'SEAL-7703',
     createdAt: '2026-10-06T02:15:00Z', stagedAt: '2026-10-06T02:20:00Z', loadingStartedAt: '2026-10-06T02:30:00Z', loadedAt: '2026-10-06T02:40:00Z',
-    dispatchedAt: '2026-10-06T02:45:00Z', dispatchedBy: 101, dispatchedByName: 'Trần Quốc Bảo', rowVersion: 'AAAAAAAASHIP3',
+    dispatchedAt: '2026-10-06T02:45:00Z', dispatchedBy: 101, dispatchedByName: 'Trần Quốc Bảo',
+    inTransitAt: null, deliveryFailedAt: null, returnInitiatedAt: null, deliveredAt: null, completedAt: null,
+    proofOfDelivery: null, trackingEvents: [], rowVersion: 'AAAAAAAASHIP3',
     handlingUnits: [
       {
         id: 7731, handlingUnitId: 9931, huCode: 'PALLET-7703-01', barcode: 'PALLET-7703-01', sscc: null,
