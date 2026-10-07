@@ -132,6 +132,7 @@ public sealed class InventoryStatusService(
 
             if (source.Status == toStatus)
                 throw new BusinessRuleException("Status đích phải khác status nguồn.");
+            ValidateTransition(source.Status, toStatus);
             if (source.Quantity - source.ReservedQuantity < request.Quantity)
                 throw Conflict("INV_STATUS_CHANGE_NOT_ALLOWED", "Không thể đổi status phần tồn đang reserved/allocation.");
             if (!await context.InventoryStatusDefinitions.AnyAsync(x => x.Id == toStatus, cancellationToken))
@@ -232,6 +233,16 @@ public sealed class InventoryStatusService(
             if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
             throw;
         }
+    }
+
+    private static void ValidateTransition(InventoryStatus fromStatus, InventoryStatus toStatus)
+    {
+        if (fromStatus is InventoryStatus.Expired or InventoryStatus.RecallBlocked)
+            throw Conflict("INV_STATUS_CHANGE_NOT_ALLOWED", $"Status {fromStatus} chỉ được release qua disposition/recall workflow chuyên biệt.");
+
+        if (toStatus == InventoryStatus.Available &&
+            fromStatus is InventoryStatus.Quarantine or InventoryStatus.Damaged or InventoryStatus.Rejected)
+            throw Conflict("INV_STATUS_CHANGE_NOT_ALLOWED", $"Không thể generic-release {fromStatus} về AVAILABLE; cần disposition/release workflow chuyên biệt.");
     }
 
     private static bool TryParseStatus(string value, out InventoryStatus status)
