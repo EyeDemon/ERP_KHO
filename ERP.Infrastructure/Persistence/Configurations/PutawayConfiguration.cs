@@ -47,12 +47,15 @@ public sealed class InventoryLocationMovementConfiguration : IEntityTypeConfigur
     public void Configure(EntityTypeBuilder<InventoryLocationMovement> b)
     {
         b.ToTable("InventoryLocationMovements");
-        b.HasKey(x => x.Id); b.Property(x => x.BaseQuantity).HasPrecision(18,4); b.Property(x => x.EnteredQuantity).HasPrecision(18,4); b.Property(x => x.EnteredUnitCode).HasMaxLength(32);
+        b.HasKey(x => x.Id); b.Property(x => x.BaseQuantity).HasPrecision(18,4); b.Property(x => x.EnteredQuantity).HasPrecision(18,4); b.Property(x => x.EnteredUnitCode).HasMaxLength(32); b.Property(x => x.ReferenceType).HasMaxLength(50);
         b.HasIndex(x => new { x.PutawayTaskItemId, x.CreatedAt });
+        b.HasIndex(x => new { x.ReferenceType, x.ReferenceId });
         b.HasOne<WarehouseLocation>().WithMany().HasForeignKey(x => x.FromLocationId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<WarehouseLocation>().WithMany().HasForeignKey(x => x.ToLocationId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Warehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<InventoryLot>().WithMany().HasForeignKey(x => x.LotId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<InventorySerial>().WithMany().HasForeignKey(x => x.SerialId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<PutawayTask>().WithMany().HasForeignKey(x => x.PutawayTaskId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<PutawayTaskItem>().WithMany().HasForeignKey(x => x.PutawayTaskItemId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<ImportReceipt>().WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);
