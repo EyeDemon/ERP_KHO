@@ -443,7 +443,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         inTransitAt: item.inTransitAt ?? null,
         deliveryFailedAt: item.deliveryFailedAt ?? null,
         returnInitiatedAt: item.returnInitiatedAt ?? null,
-        deliveredAt: item.deliveredAt ?? item.proofOfDelivery?.deliveredAt ?? null,
+        deliveredAt: item.deliveredAt ?? null,
         completedAt: item.completedAt ?? null,
         proofOfDelivery: item.proofOfDelivery ?? null,
         events: item.trackingEvents ?? [],
