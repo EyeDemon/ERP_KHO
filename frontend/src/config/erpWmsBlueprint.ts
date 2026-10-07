@@ -32,15 +32,15 @@ export const blueprintProductionSnapshot = {
 export const blueprintStatusLabels: Record<BlueprintStatus, string> = {
   live: 'Đã triển khai hoàn thiện phạm vi hiện tại',
   foundation: 'Đã triển khai một phần / còn thiếu phạm vi',
-  planned: 'Chưa triển khai production',
+  planned: 'Chưa triển khai hệ thống thật',
   optional: 'Nâng cao / bật theo nhu cầu',
 };
 
 export const blueprintDemoStatusLabels: Record<BlueprintStatus, string> = {
-  live: 'Có mock + production đã hoàn thiện phạm vi hiện tại',
-  foundation: 'Có mock + production đã triển khai một phần',
-  planned: 'Có mock tương tác • production chưa triển khai',
-  optional: 'Có mock nâng cao • bật khi cần',
+  live: 'Có mô phỏng + hệ thống thật đã hoàn thiện phạm vi hiện tại',
+  foundation: 'Có mô phỏng + hệ thống thật đã triển khai một phần',
+  planned: 'Có mô phỏng tương tác • hệ thống thật chưa triển khai',
+  optional: 'Có mô phỏng nâng cao • bật khi cần',
 };
 
 export const erpWmsBlueprint: BlueprintModule[] = [
