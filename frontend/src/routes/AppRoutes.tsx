@@ -90,7 +90,7 @@ const AppRoutes = () => {
         <Route path="purchase-orders" element={<PermissionRoute permission="purchase_order.read"><PurchaseOrders /></PermissionRoute>} />
         <Route path="asns" element={<PermissionRoute permission="asn.read"><Asns /></PermissionRoute>} />
         <Route path="import-receipts" element={<PermissionRoute permission="receipt.read"><ImportReceipts /></PermissionRoute>} />
-        <Route path="inventory" element={<Inventory />} />
+        <Route path="inventory" element={<PermissionRoute permission="inventory.read"><Inventory /></PermissionRoute>} />
         <Route path="inventory-reconciliation" element={<InventoryReconciliation />} />
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
