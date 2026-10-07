@@ -11,7 +11,7 @@ describe('SystemCoverage', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     expect(view.getByText('Độ phủ & mức sẵn sàng')).toBeTruthy();
     expect(view.getByText('chức năng đã truy vết').parentElement?.textContent).toContain('179');
-    expect(view.getByText('Screen Matrix 229 • Đã đóng truy vết')).toBeTruthy();
+    expect(view.getByText('Ma trận màn hình 229 • Đã đóng truy vết')).toBeTruthy();
     expect(view.getAllByText('Đã đóng truy vết').length).toBeGreaterThanOrEqual(4);
     expect(view.getByText(/inventory-control.*INV-08/)).toBeTruthy();
     expect(view.getByText(/outbound.*OUT-05/)).toBeTruthy();
