@@ -248,15 +248,23 @@ public class StockReservationService(
             var consumed = new List<InventoryStockConsumption>();
             foreach (var allocation in allocations)
             {
-                if (!await stockRepository.TryConsumeReservationAtLocationAsync(
+                if (!await stockRepository.TryConsumeReservationAtBucketAsync(
                         reservation.ProductId,
                         reservation.WarehouseId,
                         allocation.LocationId,
+                        allocation.InventoryStatus,
+                        allocation.LotId,
+                        allocation.SerialId,
                         allocation.Quantity,
                         cancellationToken))
-                    throw new ConcurrencyException("Bucket Allocation đã thay đổi trước khi tiêu thụ.");
+                    throw new ConcurrencyException("Bucket Allocation Lot/Serial/Status đã thay đổi trước khi tiêu thụ.");
 
-                consumed.Add(new InventoryStockConsumption(allocation.LocationId, allocation.Quantity));
+                consumed.Add(new InventoryStockConsumption(
+                    allocation.LocationId,
+                    allocation.Quantity,
+                    allocation.InventoryStatus,
+                    allocation.LotId,
+                    allocation.SerialId));
                 allocation.Status = StockAllocationStatus.Consumed;
                 allocation.Version++;
                 context.AuditLogs.Add(new AuditLog
