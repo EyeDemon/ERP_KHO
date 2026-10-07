@@ -32,10 +32,9 @@ public sealed class ReceiptInventoryIdentityService(
                 throw Conflict("INVALID_STATE_TRANSITION", "Lot/Serial chỉ được cấu hình sau Receive/QC và trước READY_TO_POST.");
 
             var normalized = NormalizeAndValidate(receipt, request.Lines);
-            var existing = await context.ImportReceiptInventoryIdentities
+            await context.ImportReceiptInventoryIdentities
                 .Where(x => x.ImportReceiptDetail.ImportReceiptId == receiptId)
-                .ToListAsync(cancellationToken);
-            context.ImportReceiptInventoryIdentities.RemoveRange(existing);
+                .ExecuteDeleteAsync(cancellationToken);
 
             foreach (var line in normalized)
             {
@@ -224,9 +223,11 @@ public sealed class ReceiptInventoryIdentityService(
         CancellationToken cancellationToken)
     {
         var number = NormalizeIdentifier(identity.LotNumber!);
-        var lot = await context.InventoryLots.SingleOrDefaultAsync(
-            x => x.ProductId == product.Id && x.LotNumber == number,
-            cancellationToken);
+        var lot = context.InventoryLots.Local.SingleOrDefault(
+                      x => x.ProductId == product.Id && x.LotNumber == number)
+                  ?? await context.InventoryLots.SingleOrDefaultAsync(
+                      x => x.ProductId == product.Id && x.LotNumber == number,
+                      cancellationToken);
         if (lot is null)
         {
             lot = new InventoryLot
