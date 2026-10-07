@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Boxes, Layers3, PackageCheck, Route, Truck, Đợts } from 'lucide-react';
+import { Boxes, Layers3, PackageCheck, Route, Truck, Waves } from 'lucide-react';
 import './OutboundCapabilityMock.css';
 
 type OutboundMockProps = { capabilityId?: string };
@@ -78,11 +78,11 @@ const AllocationMock = () => {
   );
 };
 
-const ĐợtMock = () => {
+const WaveMock = () => {
   const buckets = [
-    { label: 'Ưu tiên nhanh', đơn: 8, lines: 26, tasks: 14, tone: 'warning' as const },
-    { label: 'Trong ngày', đơn: 14, lines: 51, tasks: 22, tone: 'success' as const },
-    { label: 'Tiêu chuẩn', đơn: 21, lines: 74, tasks: 31, tone: 'neutral' as const },
+    { label: 'Ưu tiên nhanh', orders: 8, lines: 26, tasks: 14, tone: 'warning' as const },
+    { label: 'Trong ngày', orders: 14, lines: 51, tasks: 22, tone: 'success' as const },
+    { label: 'Tiêu chuẩn', orders: 21, lines: 74, tasks: 31, tone: 'neutral' as const },
   ];
   return (
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-04" aria-labelledby="outbound-out-04-title">
@@ -90,7 +90,7 @@ const ĐợtMock = () => {
         id="OUT-04"
         title="Lập kế hoạch đợt / lô / cụm"
         description="Mô phỏng gom đơn thành lô thực hiện theo ưu tiên, giờ chốt, khu và khối lượng công việc; mở đợt không tự làm thay đổi tồn kho."
-        icon={<Đợts size={20} />}
+        icon={<Waves size={20} />}
       />
       <div className="outbound-mock-metrics">
         <div><span>Đợt</span><strong>WV-2026-301</strong><small>Giờ chốt 14:30</small></div>
@@ -196,7 +196,7 @@ const DispatchMock = () => {
   );
 };
 
-const Đơn thiếu hàngMock = () => {
+const BackorderMock = () => {
   const rows = [
     { label: 'Đã đặt', value: 300, tone: 'neutral' as const },
     { label: 'Đã giữ', value: 220, tone: 'success' as const },
@@ -276,10 +276,10 @@ const TrackingMock = () => {
 
 const OutboundCapabilityMock = ({ capabilityId }: OutboundMockProps) => {
   if (capabilityId === 'OUT-03') return <AllocationMock />;
-  if (capabilityId === 'OUT-04') return <ĐợtMock />;
+  if (capabilityId === 'OUT-04') return <WaveMock />;
   if (capabilityId === 'OUT-07') return <StagingLoadingMock />;
   if (capabilityId === 'OUT-08') return <DispatchMock />;
-  if (capabilityId === 'OUT-09') return <Đơn thiếu hàngMock />;
+  if (capabilityId === 'OUT-09') return <BackorderMock />;
   if (capabilityId === 'OUT-10') return <TrackingMock />;
   return null;
 };
