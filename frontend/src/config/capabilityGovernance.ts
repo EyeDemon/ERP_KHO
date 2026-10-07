@@ -83,19 +83,19 @@ const implementationSpecificModules = new Set(['operations-resilience']);
 const screenTraceability: Record<string, { screenReference: string; finding: string }> = {
   'INV-08': {
     screenReference: 'BẢN THIẾT KẾ • /system-blueprint/inventory-control/INV-08 • Bàn làm việc di chuyển vị trí nội bộ',
-    finding: 'ĐẠT nội dung / Đã đóng truy vết — Screen Matrix 229 + Spec 282 đã ánh xạ tới route Blueprint cụ thể • 2026-10-03',
+    finding: 'ĐẠT nội dung / Đã đóng truy vết — Ma trận màn hình 229 + Đặc tả 282 đã ánh xạ tới route bản thiết kế cụ thể • 2026-10-03',
   },
   'OUT-05': {
     screenReference: 'BẢN THIẾT KẾ • /system-blueprint/outbound/OUT-05 • Bàn làm việc lấy hàng / Luồng quét',
-    finding: 'ĐẠT nội dung / Đã đóng truy vết — Screen Matrix 229 + Spec 282 đã ánh xạ tới route Blueprint cụ thể • 2026-10-03',
+    finding: 'ĐẠT nội dung / Đã đóng truy vết — Ma trận màn hình 229 + Đặc tả 282 đã ánh xạ tới route bản thiết kế cụ thể • 2026-10-03',
   },
   'OUT-06': {
     screenReference: 'BẢN THIẾT KẾ • /system-blueprint/outbound/OUT-06 • Trạm đóng gói',
-    finding: 'ĐẠT nội dung / Đã đóng truy vết — Screen Matrix 229 + Spec 282 đã ánh xạ tới route Blueprint cụ thể • 2026-10-03',
+    finding: 'ĐẠT nội dung / Đã đóng truy vết — Ma trận màn hình 229 + Đặc tả 282 đã ánh xạ tới route bản thiết kế cụ thể • 2026-10-03',
   },
   'TR-01': {
     screenReference: 'BẢN THIẾT KẾ • /system-blueprint/transfer-replenishment/TR-01 • Tạo điều chuyển kho',
-    finding: 'ĐẠT nội dung / Đã đóng truy vết — Screen Matrix 229 + Spec 282 đã ánh xạ tới route Blueprint cụ thể • 2026-10-03',
+    finding: 'ĐẠT nội dung / Đã đóng truy vết — Ma trận màn hình 229 + Đặc tả 282 đã ánh xạ tới route bản thiết kế cụ thể • 2026-10-03',
   },
 };
 
@@ -112,7 +112,85 @@ const implementationEvidence = (status: BlueprintStatus): EvidenceStatus => {
   return 'spec-only';
 };
 
-const inventoryEffectCatalog = `IN-04	Ledger-neutral receiving capture; no warehouse OnHand change before Receipt POST.\nIN-06	QC/disposition is ledger-neutral before Receipt POST; determines posting bucket.\nIN-07	Inventory posting boundary: accepted/damaged quantities enter canonical inventory exactly once.\nIN-08	Internal location movement after Receipt POST; warehouse total remains unchanged.\nOUT-02	Reservation projection only: Available decreases; warehouse OnHand unchanged.\nOUT-03	Allocation projection only: binds reserved quantity to eligible stock/location; OnHand unchanged.\nOUT-05	Physical pick execution; warehouse OnHand remains until shipment dispatch.\nOUT-06	Pack/consolidate inventory into HU/carton; no warehouse-level OnHand deduction.\nOUT-08	Shipment dispatch is the outbound physical deduction boundary; OnHand decreases exactly once.\nOUT-10	Tracking/POD is ledger-neutral; failed-delivery return requires explicit return/receive posting.\nINV-02	Immutable signed ledger is transactional truth for inventory movements.\nINV-03	Read/projection layer rebuilt from immutable ledger; never owns transactional truth.\nINV-04	Read/projection calculation over eligible status, locks, reservations and allocations.\nINV-05	Status transition controls eligibility; any quantity movement remains ledger-driven.\nINV-08	Same-warehouse location transfer; source decreases, destination increases, warehouse total conserved.\nINV-09	Reversal/corrective transaction; original posted ledger row remains immutable.\nINV-11	Integrity/reconciliation reads ledger and projection; rebuild does not rewrite historical ledger.\nTR-02	Read model for in-transit quantity and source/destination/reference dimensions.\nTR-03	Transfer dispatch moves quantity source → transit exactly once.\nTR-04	Transfer receive moves quantity transit → destination exactly once.\nTR-05	Internal replenish movement between reserve/pick locations; warehouse total conserved.\nCT-07	Adjustment posting boundary after review/approval; creates explicit signed ledger delta.\nQR-02	Status transition to/from QC_HOLD/QUARANTINE controls eligibility.\nQR-03	Damage finding records status/disposition; stock effect occurs only through approved canonical posting.\nQR-04	Customer return adds stock only at Return Receipt POST after inspection/disposition.\nQR-05	Recall blocks eligible stock by status/policy; does not silently rewrite ledger.\nQR-06	Scrap posting reduces inventory through approved explicit ledger transaction.\nHU-01	HU containment/location state changes must preserve underlying inventory truth.\nDY-04	Cross-dock may bypass storage, but receipt/dispatch posting boundaries remain canonical.\nRP-06	Read-only reconciliation/reporting over ledger-derived vs operational balances.\nAX-09	Kitting/de-kitting uses explicit transformation posting; components/output remain traceable.\nRP-09	Read-only analytical KPI derived from governed reporting semantics; no transactional inventory mutation.\nRP-10	Analytical export is read-only and must preserve lineage back to OLTP/ledger truth.\nAD-12	Presentation-only localization; canonical codes/quantities remain unchanged.\nAD-13	Legal hold preserves evidence/retention and must not rewrite inventory or audit history.\nAD-14	Privacy handling may redact/export allowed personal data but must not corrupt business/audit/legal truth.\nOP-08	Telemetry observes workflow friction/latency only; it is never a business inventory KPI source of truth.\nOP-09	Offboarding is ledger-neutral until canonical inventory/transfer workflows bring balances to zero before closure.\nAX-11	Cartonization is a recommendation/packing optimization; it cannot post inventory or mark shipment dispatched.\nAX-12	Load planning is operational optimization; loading/dispatch inventory boundaries remain canonical.\nAX-13	Disposition execution uses explicit return/status/reclassification/scrap postings; no silent balance rewrite.\nAX-14	Safety policy gates task eligibility/execution; it does not directly mutate inventory quantity.\nAX-15	Automation/device jobs never own inventory truth; resulting WMS commands use canonical posting contracts.\nAX-16	RFID/IoT capture is observational until validated WMS commands apply canonical state/inventory changes.\nAX-17	Voice/light assistance guides task execution but does not bypass canonical command/idempotency rules.\nAX-18	Hazmat policy constrains storage/eligibility; any movement/status change remains canonical and auditable.\nAX-19	Temperature excursions create evidence/hold/disposition; quantity changes require explicit canonical posting.\nAX-20	Dual-UOM quantities are persisted with canonical conversion/tolerance and immutable ledger traceability.\nAX-21	Owner changes are explicit inventory reclassification transactions; physical quantity is conserved.\nAX-22	Rating/billing consumes operational evidence as read models and does not own inventory truth.\nAX-23	ATP/CTP/promise calculation is read-only planning output; reservation requires an explicit canonical command.\nAX-24	Balancing produces transfer proposals only; inventory moves through canonical Transfer Dispatch/Receive.\nAX-25	Inter-warehouse replenishment planning is recommendation-only; execution uses canonical transfer/replenishment commands.\nAX-26	Routing selects fulfillment nodes but does not mutate stock; downstream reservation/allocation remains authoritative.\nAX-27	Forecast/demand signals are planning inputs only and never inventory truth.\nAX-28	Safety-stock/reorder policies affect planning thresholds and projections, not physical quantity directly.\nAX-29	ABC/XYZ classification is analytical metadata and does not mutate inventory.\nAX-30	Optimization policy generates recommendations; accepted execution still uses canonical business commands.\nAX-31	Simulation runs on immutable snapshots and cannot mutate production master, documents or ledger.\nAX-32	Forecast accuracy/bias is analytical measurement only.\nAX-33	Replenishment exceptions are workflow/read-model state; resolution routes through canonical replenish/transfer actions.\nAX-34	Procurement suggestion does not create inventory or PO truth until approved integration to ERP/Procurement.\nAX-35	Risk score is explainable/read-only decision support and cannot create hidden business mutation.\nAX-36	Lead-time intelligence is analytical and does not mutate PO/receipt/inventory truth.\nAX-37	Expedite/defer is a recommendation; ERP/Procurement remains commercial supply truth.\nAX-38	Demand anomaly detection is advisory and must not auto-mutate replenishment/inventory without governed policy.\nAX-39	Fairness policy produces deterministic allocation proposals; actual allocation uses canonical atomic allocation command.\nAX-40	Service-level segmentation is governed policy metadata and does not directly mutate inventory.\nAX-41	What-if scenarios are isolated from production transaction/master/ledger data.\nAX-42	Decision policy registry governs/version-controls recommendations; execution remains human/contract gated where required.\nMD-09	SLA contract is policy/semantic metadata; it does not mutate documents or inventory directly.\nWH-07	Calendar exception controls execution eligibility/time semantics and has no direct inventory quantity effect.\nIG-09	WMS exports quantity/movement/valuation events but does not calculate accounting cost/tax/multi-currency truth.\nIG-10	Reconciliation dashboard is read/control plane; retries must remain idempotent and cannot invent business mutations.\nOP-10	Posted business errors require reversal + corrected transaction; controlled repair must never rewrite immutable ledger history.\nOP-11	Support tools call Application Layer contracts and preserve permission/audit/inventory safeguards; no routine direct DB mutation.\nOV-08	Activity feed is a read model over governed events/audit/notifications and cannot become transactional truth.\nMO-11	Product lookup is read-only exact search within security scope.\nMO-12	Exception handling changes exception/task workflow only; any inventory effect must route through the owning canonical command.`;
+const inventoryEffectCatalog = `IN-04\tGhi nhận tiếp nhận chưa tác động sổ cái; OnHand của kho không đổi trước Receipt POST.
+IN-06\tQC/disposition chưa tác động sổ cái trước Receipt POST; quyết định nhóm tồn khi ghi sổ.
+IN-07\tRanh giới ghi sổ tồn kho: số lượng chấp nhận/hư hỏng đi vào tồn kho chuẩn đúng một lần.
+IN-08\tDi chuyển vị trí nội bộ sau Receipt POST; tổng số lượng toàn kho không đổi.
+OUT-02\tChỉ là dự phóng giữ hàng: Available giảm; OnHand toàn kho không đổi.
+OUT-03\tChỉ là dự phóng phân bổ: gắn lượng đã giữ vào tồn/vị trí đủ điều kiện; OnHand không đổi.
+OUT-05\tThực hiện lấy hàng vật lý; OnHand toàn kho giữ nguyên cho tới khi xác nhận giao hàng.
+OUT-06\tĐóng gói/hợp nhất tồn vào HU/thùng; không khấu trừ OnHand ở cấp kho.
+OUT-08\tXác nhận giao hàng là ranh giới khấu trừ vật lý của xuất kho; OnHand giảm đúng một lần.
+OUT-10\tTheo dõi/POD không tác động sổ cái; hàng giao thất bại quay về cần ghi nhận trả/nhận rõ ràng.
+INV-02\tSổ cái có dấu và bất biến là nguồn sự thật giao dịch cho mọi biến động tồn kho.
+INV-03\tLớp đọc/dự phóng được tái tạo từ sổ cái bất biến; không sở hữu sự thật giao dịch.
+INV-04\tPhép tính đọc/dự phóng trên trạng thái đủ điều kiện, khóa, lượng giữ và phân bổ.
+INV-05\tChuyển trạng thái kiểm soát điều kiện hợp lệ; mọi dịch chuyển số lượng vẫn do sổ cái chi phối.
+INV-08\tDi chuyển vị trí trong cùng kho; nguồn giảm, đích tăng, tổng kho được bảo toàn.
+INV-09\tGiao dịch đảo/hiệu chỉnh; dòng sổ cái gốc đã ghi vẫn bất biến.
+INV-11\tToàn vẹn/đối chiếu đọc sổ cái và dự phóng; tái tạo không viết lại lịch sử sổ cái.
+TR-02\tMô hình đọc cho lượng đang vận chuyển và các chiều nguồn/đích/tham chiếu.
+TR-03\tXuất điều chuyển dịch chuyển số lượng nguồn → đang vận chuyển đúng một lần.
+TR-04\tNhận điều chuyển dịch chuyển số lượng đang vận chuyển → đích đúng một lần.
+TR-05\tBổ sung nội bộ giữa vị trí dự trữ/lấy hàng; tổng kho được bảo toàn.
+CT-07\tRanh giới ghi sổ điều chỉnh sau rà soát/phê duyệt; tạo chênh lệch sổ cái có dấu rõ ràng.
+QR-02\tChuyển trạng thái tới/từ QC_HOLD/QUARANTINE kiểm soát điều kiện sử dụng tồn.
+QR-03\tPhát hiện hư hỏng ghi trạng thái/disposition; ảnh hưởng tồn chỉ xảy ra qua ghi sổ chuẩn đã phê duyệt.
+QR-04\tHàng khách trả chỉ tăng tồn tại Return Receipt POST sau kiểm tra/disposition.
+QR-05\tThu hồi chặn tồn đủ điều kiện theo trạng thái/chính sách; không âm thầm viết lại sổ cái.
+QR-06\tGhi sổ tiêu hủy làm giảm tồn thông qua giao dịch sổ cái rõ ràng đã phê duyệt.
+HU-01\tThay đổi trạng thái chứa/vị trí HU phải bảo toàn sự thật tồn kho bên dưới.
+DY-04\tCross-dock có thể bỏ qua lưu trữ nhưng ranh giới ghi sổ nhận/xuất vẫn phải chuẩn.
+RP-06\tĐối chiếu/báo cáo chỉ đọc giữa số dư từ sổ cái và số dư vận hành.
+AX-09\tKitting/de-kitting dùng ghi sổ chuyển đổi rõ ràng; linh kiện/thành phẩm vẫn truy vết được.
+RP-09\tKPI phân tích chỉ đọc từ ngữ nghĩa báo cáo được quản trị; không thay đổi giao dịch tồn kho.
+RP-10\tXuất dữ liệu phân tích là chỉ đọc và phải giữ phả hệ về dữ liệu OLTP/sổ cái.
+AD-12\tBản địa hóa chỉ ở lớp trình bày; mã/số lượng chuẩn không đổi.
+AD-13\tGiữ pháp lý bảo toàn bằng chứng/lưu trữ và không được viết lại tồn kho hay lịch sử kiểm toán.
+AD-14\tXử lý quyền riêng tư có thể che/xuất dữ liệu cá nhân được phép nhưng không làm sai sự thật nghiệp vụ/kiểm toán/pháp lý.
+OP-08\tTelemetry chỉ quan sát ma sát/độ trễ quy trình; không bao giờ là nguồn KPI tồn kho nghiệp vụ.
+OP-09\tOffboarding không tác động sổ cái cho tới khi các quy trình tồn kho/điều chuyển chuẩn đưa số dư về 0 trước khi đóng.
+AX-11\tCartonization là khuyến nghị/tối ưu đóng gói; không được ghi sổ tồn hay đánh dấu giao hàng đã xuất.
+AX-12\tLập kế hoạch tải là tối ưu vận hành; ranh giới tồn kho khi xếp/giao vẫn phải chuẩn.
+AX-13\tThực hiện disposition dùng giao dịch trả/đổi trạng thái/tái phân loại/tiêu hủy rõ ràng; không viết lại số dư âm thầm.
+AX-14\tChính sách an toàn kiểm soát điều kiện nhiệm vụ/thực hiện; không trực tiếp thay đổi số lượng tồn.
+AX-15\tTự động hóa/thiết bị không sở hữu sự thật tồn kho; lệnh WMS phát sinh vẫn dùng hợp đồng ghi sổ chuẩn.
+AX-16\tDữ liệu RFID/IoT chỉ quan sát cho tới khi lệnh WMS đã xác thực áp dụng thay đổi trạng thái/tồn kho chuẩn.
+AX-17\tHỗ trợ giọng nói/đèn hướng dẫn nhiệm vụ nhưng không bỏ qua quy tắc lệnh/idempotency chuẩn.
+AX-18\tChính sách Hazmat giới hạn lưu trữ/điều kiện sử dụng; mọi di chuyển/đổi trạng thái vẫn chuẩn và có kiểm toán.
+AX-19\tSai lệch nhiệt độ tạo bằng chứng/giữ/disposition; thay đổi số lượng cần ghi sổ chuẩn rõ ràng.
+AX-20\tSố lượng hai UOM được lưu với chuyển đổi/dung sai chuẩn và truy vết sổ cái bất biến.
+AX-21\tĐổi chủ sở hữu là giao dịch tái phân loại tồn kho rõ ràng; số lượng vật lý được bảo toàn.
+AX-22\tTính giá/lập hóa đơn dùng bằng chứng vận hành như mô hình đọc và không sở hữu sự thật tồn kho.
+AX-23\tTính ATP/CTP/cam kết là kết quả lập kế hoạch chỉ đọc; giữ hàng cần lệnh chuẩn riêng.
+AX-24\tCân bằng chỉ tạo đề xuất điều chuyển; tồn kho di chuyển qua Xuất/Nhận điều chuyển chuẩn.
+AX-25\tLập kế hoạch bổ sung liên kho chỉ là khuyến nghị; thực hiện dùng lệnh điều chuyển/bổ sung chuẩn.
+AX-26\tĐịnh tuyến chọn điểm hoàn tất đơn nhưng không thay đổi tồn; giữ/phân bổ phía sau vẫn là nguồn quyết định.
+AX-27\tTín hiệu dự báo/nhu cầu chỉ là đầu vào lập kế hoạch và không bao giờ là sự thật tồn kho.
+AX-28\tChính sách tồn an toàn/điểm đặt lại ảnh hưởng ngưỡng và dự phóng, không trực tiếp đổi số lượng vật lý.
+AX-29\tPhân loại ABC/XYZ là metadata phân tích và không thay đổi tồn kho.
+AX-30\tChính sách tối ưu tạo khuyến nghị; thực hiện được chấp nhận vẫn dùng lệnh nghiệp vụ chuẩn.
+AX-31\tMô phỏng chạy trên ảnh chụp bất biến và không thể thay đổi dữ liệu chủ/chứng từ/sổ cái hệ thống thật.
+AX-32\tĐộ chính xác/độ lệch dự báo chỉ là đo lường phân tích.
+AX-33\tNgoại lệ bổ sung là trạng thái quy trình/mô hình đọc; xử lý đi qua hành động bổ sung/điều chuyển chuẩn.
+AX-34\tĐề xuất mua hàng không tạo tồn hay sự thật PO cho tới khi tích hợp ERP/Mua hàng được phê duyệt.
+AX-35\tĐiểm rủi ro là hỗ trợ quyết định có thể giải thích/chỉ đọc và không được tạo thay đổi nghiệp vụ ẩn.
+AX-36\tPhân tích lead-time chỉ mang tính phân tích và không thay đổi sự thật PO/phiếu nhập/tồn kho.
+AX-37\tTăng tốc/trì hoãn chỉ là khuyến nghị; ERP/Mua hàng vẫn là nguồn sự thật cung ứng thương mại.
+AX-38\tPhát hiện bất thường nhu cầu chỉ tư vấn và không tự thay đổi bổ sung/tồn kho nếu chưa có chính sách quản trị.
+AX-39\tChính sách công bằng tạo đề xuất phân bổ xác định; phân bổ thực tế dùng lệnh phân bổ nguyên tử chuẩn.
+AX-40\tPhân khúc mức dịch vụ là metadata chính sách được quản trị và không trực tiếp thay đổi tồn kho.
+AX-41\tKịch bản giả định được cô lập khỏi dữ liệu giao dịch/dữ liệu chủ/sổ cái hệ thống thật.
+AX-42\tSổ đăng ký chính sách quyết định quản trị/phiên bản hóa khuyến nghị; thực hiện vẫn qua người/hợp đồng khi bắt buộc.
+MD-09\tHợp đồng SLA là metadata chính sách/ngữ nghĩa; không trực tiếp thay đổi chứng từ hay tồn kho.
+WH-07\tNgoại lệ lịch kiểm soát điều kiện/thời gian thực hiện và không trực tiếp đổi số lượng tồn.
+IG-09\tWMS xuất sự kiện số lượng/biến động/định giá nhưng không tính sự thật kế toán về giá vốn/thuế/đa tiền tệ.
+IG-10\tBảng điều khiển đối chiếu là lớp đọc/kiểm soát; thử lại phải idempotent và không được bịa thay đổi nghiệp vụ.
+OP-10\tLỗi nghiệp vụ đã ghi sổ cần đảo + giao dịch hiệu chỉnh; sửa chữa có kiểm soát không được viết lại lịch sử sổ cái bất biến.
+OP-11\tCông cụ hỗ trợ gọi hợp đồng Lớp ứng dụng và giữ quyền/kiểm toán/rào chắn tồn kho; không truy cập DB trực tiếp thường lệ.
+OV-08\tDòng hoạt động là mô hình đọc trên sự kiện/kiểm toán/thông báo được quản trị và không thể trở thành sự thật giao dịch.
+MO-11\tTra cứu sản phẩm là tìm kiếm chính xác chỉ đọc trong phạm vi bảo mật.
+MO-12\tXử lý ngoại lệ chỉ đổi quy trình ngoại lệ/nhiệm vụ; mọi ảnh hưởng tồn kho phải đi qua lệnh chuẩn của nghiệp vụ sở hữu.`
 
 const inventoryEffects: Record<string, string> = Object.fromEntries(
   inventoryEffectCatalog.split('\n').map((row) => {
@@ -137,28 +215,28 @@ const applicabilityFor = (moduleKey: string, capability: BlueprintCapability): A
 
 const permissionModelFor = (capability: BlueprintCapability) =>
   capability.status === 'live'
-    ? 'Permission Registry 17 + warehouse scope; production route exists and server remains authoritative.'
-    : 'Permission Registry 17 + warehouse scope required; exact implementation code must be mapped before production enablement.';
+    ? 'Sổ đăng ký quyền 17 + phạm vi kho; route hệ thống thật đã tồn tại và phía máy chủ vẫn là nguồn quyết định cuối.'
+    : 'Bắt buộc Sổ đăng ký quyền 17 + phạm vi kho; phải ánh xạ chính xác mã triển khai trước khi bật trên hệ thống thật.';
 
 const commandApiModelFor = (capability: BlueprintCapability) => {
-  if (!capability.surfaces.includes('API')) return 'No direct API surface required by this capability preview.';
-  if (capability.status === 'live') return 'Existing API/route evidence in branch; command semantics remain governed by referenced canonical specs.';
+  if (!capability.surfaces.includes('API')) return 'Bản xem trước chức năng này không yêu cầu bề mặt API trực tiếp.';
+  if (capability.status === 'live') return 'Đã có bằng chứng API/route trong nhánh; ngữ nghĩa lệnh tiếp tục tuân theo các đặc tả chuẩn được tham chiếu.';
   if (capability.status === 'foundation') return 'Đã có nền tảng API một phần; hợp đồng lệnh/trạng thái/lỗi vẫn cần thêm bằng chứng hoàn thiện.';
-  return 'Canonical spec defines required command/API behavior; implementation mapping is intentionally not claimed by the blueprint.';
+  return 'Đặc tả chuẩn quy định hành vi lệnh/API bắt buộc; bản thiết kế chủ động không tuyên bố ánh xạ triển khai khi chưa có bằng chứng.';
 };
 
 const evidenceFor = (capability: BlueprintCapability, inventoryEffect: string): CapabilityEvidenceItem[] => {
   const implementation = implementationEvidence(capability.status);
   return [
-    { key: 'business', label: 'Business Rule', status: 'covered', note: 'Referenced canonical specification exists.' },
-    { key: 'data', label: 'Data Model', status: capability.status === 'live' ? 'covered' : implementation, note: 'Production evidence follows implementation maturity; blueprint does not fabricate tables.' },
-    { key: 'api', label: 'Command / API', status: implementation, note: commandApiModelFor(capability) },
-    { key: 'permission', label: 'Permission', status: capability.status === 'live' ? 'partial' : 'spec-only', note: permissionModelFor(capability) },
-    { key: 'ux', label: 'UX / Screen', status: 'covered', note: 'Interactive capability simulator + module work center exists; production implementation remains tracked separately.' },
-    { key: 'inventory', label: 'Inventory Effect', status: 'covered', note: inventoryEffect },
-    { key: 'event', label: 'Event / Error', status: capability.status === 'live' ? 'partial' : 'spec-only', note: 'Must remain aligned with canonical event/error contracts and idempotency policy.' },
-    { key: 'test', label: 'Test Evidence', status: capability.status === 'live' ? 'partial' : 'spec-only', note: 'Blueprint/mock tests exist; production successor/integration evidence is separate.' },
-    { key: 'operations', label: 'Operational Ownership', status: 'covered', note: 'Owning module is explicit; runbook/release evidence follows implementation maturity.' },
+    { key: 'business', label: 'Quy tắc nghiệp vụ', status: 'covered', note: 'Đã có đặc tả chuẩn được tham chiếu.' },
+    { key: 'data', label: 'Mô hình dữ liệu', status: capability.status === 'live' ? 'covered' : implementation, note: 'Bằng chứng hệ thống thật đi theo mức trưởng thành triển khai; bản thiết kế không giả lập bảng dữ liệu.' },
+    { key: 'api', label: 'Lệnh / API', status: implementation, note: commandApiModelFor(capability) },
+    { key: 'permission', label: 'Quyền', status: capability.status === 'live' ? 'partial' : 'spec-only', note: permissionModelFor(capability) },
+    { key: 'ux', label: 'UX / Màn hình', status: 'covered', note: 'Đã có mô phỏng chức năng tương tác + trung tâm công việc của phân hệ; triển khai hệ thống thật vẫn được theo dõi riêng.' },
+    { key: 'inventory', label: 'Ảnh hưởng tồn kho', status: 'covered', note: inventoryEffect },
+    { key: 'event', label: 'Sự kiện / Lỗi', status: capability.status === 'live' ? 'partial' : 'spec-only', note: 'Phải tiếp tục phù hợp hợp đồng sự kiện/lỗi chuẩn và chính sách idempotency.' },
+    { key: 'test', label: 'Bằng chứng kiểm thử', status: capability.status === 'live' ? 'partial' : 'spec-only', note: 'Đã có kiểm thử bản thiết kế/mô phỏng; bằng chứng hệ thống thật và tích hợp được theo dõi riêng.' },
+    { key: 'operations', label: 'Đơn vị sở hữu vận hành', status: 'covered', note: 'Phân hệ sở hữu đã rõ; bằng chứng sổ tay vận hành/phát hành đi theo mức trưởng thành triển khai.' },
   ];
 };
 
@@ -167,7 +245,7 @@ export const getCapabilityGovernanceProfile = (
   capability: BlueprintCapability,
 ): CapabilityGovernanceProfile => {
   const inventoryEffect = inventoryEffects[capability.id]
-    ?? 'No ad-hoc balance mutation. Follow the referenced canonical spec; reporting/read-model capabilities remain ledger-neutral.';
+    ?? 'Không thay đổi số dư tùy tiện. Tuân theo đặc tả chuẩn được tham chiếu; chức năng báo cáo/mô hình đọc không làm thay đổi sổ cái.';
   const traceability = screenTraceability[capability.id];
 
   return {
@@ -178,7 +256,7 @@ export const getCapabilityGovernanceProfile = (
     referencedSpecs: parseSpecNumbers(capability.spec),
     permissionModel: permissionModelFor(capability),
     commandApiModel: commandApiModelFor(capability),
-    stateModel: module.flow?.join(' → ') ?? 'State transition contract is defined by the capability specification.',
+    stateModel: module.flow?.join(' → ') ?? 'Hợp đồng chuyển trạng thái được quy định bởi đặc tả của chức năng.',
     inventoryEffect,
     operationalOwner: module.name,
     reviewStatus: traceability ? 'Traceability Closed' : 'Designed',
