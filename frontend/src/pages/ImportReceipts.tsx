@@ -3,6 +3,7 @@ import apiClient from '../services/apiClient';
 import { usePermission, currentUserId, hasPermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
+import ReceiptInventoryIdentityEditor from '../components/ReceiptInventoryIdentityEditor';
 import { permissionError } from '../services/permissionPresentation';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import './ImportReceipts.css';
@@ -14,7 +15,8 @@ interface ImportReceiptDetail {
   productName: string;
   operationUnitId: number; operationUnitCode: string; baseUnitCode: string; conversionFactor: number; conversionVersion: number;
   expectedQuantity: number; receivedQuantity: number; acceptedQuantity: number; damagedQuantity: number; rejectedQuantity: number;
-  postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; basePostedQuantity: number;
+  postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; baseDamagedQuantity: number; baseRejectedQuantity: number; basePostedQuantity: number;
+  trackingType: 'None' | 'Lot' | 'Serial'; expiryControl: boolean; shelfLifeDays?: number | null;
   unitPrice?: number;
   note: string;
   requiresQc: boolean; qcState: string; qcPolicyId?: number; qcPolicyVersion?: number; qcPolicySource?: string;
@@ -716,6 +718,27 @@ const ImportReceipts = () => {
                 </tbody>
               </table>
             </UiTableScroll>
+
+            {selectedReceipt.status !== 'Draft' && (
+              <ReceiptInventoryIdentityEditor
+                receiptId={selectedReceipt.id}
+                status={selectedReceipt.status}
+                canUpdate={canUpdate}
+                lines={selectedReceipt.details.map(d => ({
+                  id: d.id,
+                  productId: d.productId,
+                  productCode: d.productCode,
+                  productName: d.productName,
+                  trackingType: d.trackingType || 'None',
+                  expiryControl: d.expiryControl || false,
+                  shelfLifeDays: d.shelfLifeDays,
+                  baseAcceptedQuantity: d.baseAcceptedQuantity || 0,
+                  baseDamagedQuantity: d.baseDamagedQuantity || 0,
+                  baseRejectedQuantity: d.baseRejectedQuantity || 0,
+                  baseUnitCode: d.baseUnitCode,
+                }))}
+              />
+            )}
 
             {selectedReceipt.status === 'Draft' && canObserve && (
               <div className="import-section-actions">
