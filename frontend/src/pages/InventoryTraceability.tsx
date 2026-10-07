@@ -12,7 +12,8 @@ type Event={
   transactionType:string;inventoryStatus:string;fromInventoryStatus?:string|null;toInventoryStatus?:string|null;
   locationCode?:string|null;fromLocationCode?:string|null;toLocationCode?:string|null;lotNumber?:string|null;
   expiryDate?:string|null;serialNumber?:string|null;quantity:number;referenceType?:string|null;referenceId?:number|null;
-  transactionDate:string;createdByName:string;note?:string|null;reversalOfTransactionId?:number|null;isReversed:boolean;
+  transactionDate:string;createdBy:number;createdByName:string;note?:string|null;reversalOfTransactionId?:number|null;
+  correctiveTransactionId?:number|null;reversalTransactionId?:number|null;isReversed:boolean;
 };
 type Result={currentBuckets:Bucket[];events:Event[]};
 
@@ -88,8 +89,8 @@ export default function InventoryTraceability(){
       <UiCard title="Immutable ledger timeline">
         <p className="ui-muted-text">Event Reversal là marker corrective, không xóa transaction gốc. Transaction gốc đã đảo được đánh dấu riêng.</p>
         <UiTableScroll><table aria-label="Traceability ledger timeline">
-          <thead><tr><th>Thời gian</th><th>Event</th><th>Sản phẩm</th><th>Location / Status</th><th>Lot / Serial</th><th>Qty</th><th>Reference</th><th>Actor / Note</th></tr></thead>
-          <tbody>{result.events.length===0?<tr><td colSpan={8} className="ui-empty-cell">Không có ledger event khớp điều kiện.</td></tr>:
+          <thead><tr><th>Thời gian</th><th>Event</th><th>Sản phẩm</th><th>Location / Status</th><th>Lot / Serial</th><th>Qty</th><th>Reference</th><th>Reversal chain</th><th>Actor / Note</th></tr></thead>
+          <tbody>{result.events.length===0?<tr><td colSpan={9} className="ui-empty-cell">Không có ledger event khớp điều kiện.</td></tr>:
             result.events.map(x=><tr key={x.transactionId}>
               <td>{new Date(x.transactionDate).toLocaleString('vi-VN')}</td>
               <td><UiBadge tone={tone(x)}>{x.transactionType}</UiBadge><br/><small>#{x.transactionId}{x.isReversed?' • đã reversal':''}{x.reversalOfTransactionId?(' • đảo #'+x.reversalOfTransactionId):''}</small></td>
@@ -98,7 +99,13 @@ export default function InventoryTraceability(){
               <td>{x.lotNumber??'—'} / {x.serialNumber??'—'}</td>
               <td>{x.quantity}</td>
               <td>{x.referenceType?(x.referenceType+' #'+(x.referenceId??'—')):'—'}</td>
-              <td>{x.createdByName||('User #'+x.transactionId)}<br/><small>{x.note??''}</small></td>
+              <td>
+                {x.reversalOfTransactionId?<>Original #{x.reversalOfTransactionId}<br/></>:null}
+                {x.correctiveTransactionId?<>Corrective #{x.correctiveTransactionId}<br/></>:null}
+                {x.reversalTransactionId?<>Marker #{x.reversalTransactionId}</>:null}
+                {!x.reversalOfTransactionId&&!x.correctiveTransactionId&&!x.reversalTransactionId?'—':null}
+              </td>
+              <td>{x.createdByName||('User #'+x.createdBy)}<br/><small>{x.note??''}</small></td>
             </tr>)}
           </tbody>
         </table></UiTableScroll>

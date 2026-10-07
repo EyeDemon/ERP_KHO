@@ -17,13 +17,15 @@ const result={
       transactionId:41,productId:10,productCode:'SKU-10',productName:'Product 10',warehouseId:1,warehouseName:'DC HCM',
       transactionType:'Move',inventoryStatus:'Available',fromLocationCode:'A01-R01-B01',toLocationCode:'A01-R01-B02',
       lotNumber:'LOT-A',serialNumber:null,quantity:4,referenceType:'InventoryMove',referenceId:7,
-      transactionDate:'2026-10-07T10:00:00Z',createdByName:'Manager',note:'slotting',reversalOfTransactionId:null,isReversed:true
+      transactionDate:'2026-10-07T10:00:00Z',createdBy:5,createdByName:'Manager',note:'slotting',
+      reversalOfTransactionId:null,correctiveTransactionId:42,reversalTransactionId:43,isReversed:true
     },
     {
       transactionId:43,productId:10,productCode:'SKU-10',productName:'Product 10',warehouseId:1,warehouseName:'DC HCM',
       transactionType:'Reversal',inventoryStatus:'Available',fromLocationCode:'A01-R01-B02',toLocationCode:'A01-R01-B01',
       lotNumber:'LOT-A',serialNumber:null,quantity:4,referenceType:'InventoryReversal',referenceId:41,
-      transactionDate:'2026-10-07T11:00:00Z',createdByName:'Manager',note:'corrective',reversalOfTransactionId:41,isReversed:false
+      transactionDate:'2026-10-07T11:00:00Z',createdBy:5,createdByName:'Manager',note:'corrective',
+      reversalOfTransactionId:41,correctiveTransactionId:42,reversalTransactionId:43,isReversed:false
     }
   ]
 };
@@ -58,5 +60,8 @@ describe('InventoryTraceability',()=>{
     expect(view.getByText('Reversal')).toBeTruthy();
     expect(view.getByText(/đã reversal/)).toBeTruthy();
     expect(view.getByText(/đảo #41/)).toBeTruthy();
+    expect(view.getAllByText(/Corrective #42/).length).toBeGreaterThan(0);
+    expect(view.getAllByText(/Marker #43/).length).toBeGreaterThan(0);
+    expect(view.getByText(/Original #41/)).toBeTruthy();
   });
 });
