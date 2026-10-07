@@ -38,9 +38,9 @@ const Header = ({
 
 const PurchaseOrderAsnMock = () => {
   const lines = [
-    { sku: 'SKU-1001', po: '80 Thùng', asn: '80 Thùng', delta: '0', trạng thái: 'Khớp', tone: 'success' as const },
-    { sku: 'SKU-1002', po: '24 Thùng', asn: '22 Thùng', delta: '-2', trạng thái: 'Thiếu dự kiến', tone: 'warning' as const },
-    { sku: 'SKU-2001', po: '16 Thùng', asn: '18 Thùng', delta: '+2', trạng thái: 'Vượt PO', tone: 'danger' as const },
+    { sku: 'SKU-1001', po: '80 Thùng', asn: '80 Thùng', delta: '0', status: 'Khớp', tone: 'success' as const },
+    { sku: 'SKU-1002', po: '24 Thùng', asn: '22 Thùng', delta: '-2', status: 'Thiếu dự kiến', tone: 'warning' as const },
+    { sku: 'SKU-2001', po: '16 Thùng', asn: '18 Thùng', delta: '+2', status: 'Vượt PO', tone: 'danger' as const },
   ];
 
   return (
@@ -64,7 +64,7 @@ const PurchaseOrderAsnMock = () => {
             {lines.map((line) => (
               <tr key={line.sku}>
                 <td><strong>{line.sku}</strong></td><td>{line.po}</td><td>{line.asn}</td><td>{line.delta}</td>
-                <td><Badge tone={line.tone}>{line.trạng thái}</Badge></td>
+                <td><Badge tone={line.tone}>{line.status}</Badge></td>
               </tr>
             ))}
           </tbody>
@@ -80,10 +80,10 @@ const PurchaseOrderAsnMock = () => {
 
 const AppointmentMock = () => {
   const appointments = [
-    { time: '08:30–09:00', ref: 'APT-1048', vehicle: '51D-482.16', dock: 'D01', trạng thái: 'Đã nhận xe', tone: 'success' as const },
-    { time: '09:10–09:40', ref: 'APT-1052', vehicle: '43C-218.08', dock: 'D02', trạng thái: 'Đã đến', tone: 'warning' as const },
-    { time: '09:40–10:10', ref: 'APT-1058', vehicle: '51C-778.21', dock: 'D03', trạng thái: 'Đã xác nhận', tone: 'neutral' as const },
-    { time: '10:00–10:30', ref: 'APT-1060', vehicle: '60C-113.84', dock: 'D03', trạng thái: 'Xung đột cửa kho', tone: 'danger' as const },
+    { time: '08:30–09:00', ref: 'APT-1048', vehicle: '51D-482.16', dock: 'D01', status: 'Đã nhận xe', tone: 'success' as const },
+    { time: '09:10–09:40', ref: 'APT-1052', vehicle: '43C-218.08', dock: 'D02', status: 'Đã đến', tone: 'warning' as const },
+    { time: '09:40–10:10', ref: 'APT-1058', vehicle: '51C-778.21', dock: 'D03', status: 'Đã xác nhận', tone: 'neutral' as const },
+    { time: '10:00–10:30', ref: 'APT-1060', vehicle: '60C-113.84', dock: 'D03', status: 'Xung đột cửa kho', tone: 'danger' as const },
   ];
 
   return (
@@ -105,7 +105,7 @@ const AppointmentMock = () => {
           <article key={item.ref}>
             <time>{item.time}</time>
             <div><strong>{item.ref}</strong><span>{item.vehicle} • Cửa {item.dock}</span></div>
-            <Badge tone={item.tone}>{item.trạng thái}</Badge>
+            <Badge tone={item.tone}>{item.status}</Badge>
           </article>
         ))}
       </div>
@@ -202,9 +202,9 @@ const QcMock = () => {
 
 const PutawayRuleMock = () => {
   const candidates = [
-    { code: 'A01-R02-L03-B04', compatibility: 'Đạt', sức chứa: 'Sát giới hạn', distance: '18 m', score: '92', result: 'Khuyến nghị', tone: 'success' as const },
-    { code: 'A02-R01-L01-B02', compatibility: 'Đạt', sức chứa: 'Đạt', distance: '32 m', score: '78', result: 'Đủ điều kiện', tone: 'neutral' as const },
-    { code: 'B01-R03-L02-B07', compatibility: 'Không đạt', sức chứa: 'Đạt', distance: '21 m', score: '—', result: 'Từ chối', tone: 'danger' as const },
+    { code: 'A01-R02-L03-B04', compatibility: 'Đạt', capacity: 'Sát giới hạn', distance: '18 m', score: '92', result: 'Khuyến nghị', tone: 'success' as const },
+    { code: 'A02-R01-L01-B02', compatibility: 'Đạt', capacity: 'Đạt', distance: '32 m', score: '78', result: 'Đủ điều kiện', tone: 'neutral' as const },
+    { code: 'B01-R03-L02-B07', compatibility: 'Không đạt', capacity: 'Đạt', distance: '21 m', score: '—', result: 'Từ chối', tone: 'danger' as const },
   ];
 
   return (
@@ -227,7 +227,7 @@ const PutawayRuleMock = () => {
           <tbody>
             {candidates.map((item) => (
               <tr key={item.code}>
-                <td><strong>{item.code}</strong></td><td>{item.compatibility}</td><td>{item.sức chứa}</td><td>{item.distance}</td><td>{item.score}</td>
+                <td><strong>{item.code}</strong></td><td>{item.compatibility}</td><td>{item.capacity}</td><td>{item.distance}</td><td>{item.score}</td>
                 <td><Badge tone={item.tone}>{item.result}</Badge></td>
               </tr>
             ))}
