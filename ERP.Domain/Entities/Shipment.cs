@@ -25,6 +25,10 @@ public sealed class Shipment
     public DateTime? LoadedAt { get; set; }
     public DateTime? DispatchedAt { get; set; }
     public int? DispatchedBy { get; set; }
+    public DateTime? InTransitAt { get; set; }
+    public DateTime? DeliveryFailedAt { get; set; }
+    public DateTime? ReturnInitiatedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public byte[] RowVersion { get; set; } = [];
 
     public PackingSession PackingSession { get; set; } = null!;
@@ -35,6 +39,8 @@ public sealed class Shipment
     public User CreatedByUser { get; set; } = null!;
     public User? DispatchedByUser { get; set; }
     public ICollection<ShipmentHandlingUnit> HandlingUnits { get; set; } = [];
+    public ICollection<ShipmentTrackingEvent> TrackingEvents { get; set; } = [];
+    public ShipmentProofOfDelivery? ProofOfDelivery { get; set; }
 }
 
 public sealed class ShipmentHandlingUnit

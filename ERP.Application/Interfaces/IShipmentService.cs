@@ -29,6 +29,13 @@ public interface IShipmentService
         int id,
         ShipmentStateCommandDto request,
         CancellationToken cancellationToken = default);
+    Task<ShipmentTrackingDto> GetTrackingAsync(int id, CancellationToken cancellationToken = default);
+    Task<ShipmentDto> MarkInTransitAsync(int id, MarkShipmentInTransitDto request, CancellationToken cancellationToken = default);
+    Task<ShipmentDto> ConfirmDeliveryAsync(int id, ConfirmShipmentDeliveryDto request, CancellationToken cancellationToken = default);
+    Task<ShipmentDto> FailDeliveryAsync(int id, FailShipmentDeliveryDto request, CancellationToken cancellationToken = default);
+    Task<ShipmentDto> RetryDeliveryAsync(int id, RetryShipmentDeliveryDto request, CancellationToken cancellationToken = default);
+    Task<ShipmentDto> InitiateReturnAsync(int id, InitiateShipmentReturnDto request, CancellationToken cancellationToken = default);
+    Task<ShipmentDto> CompleteAsync(int id, ShipmentStateCommandDto request, CancellationToken cancellationToken = default);
 }
 
 public interface IShipmentIntegration

@@ -30,6 +30,11 @@ public class ShipmentListDto
     public DateTime? DispatchedAt { get; set; }
     public int? DispatchedBy { get; set; }
     public string? DispatchedByName { get; set; }
+    public DateTime? InTransitAt { get; set; }
+    public DateTime? DeliveryFailedAt { get; set; }
+    public DateTime? ReturnInitiatedAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }
 
 public sealed class ShipmentDto : ShipmentListDto
@@ -37,6 +42,8 @@ public sealed class ShipmentDto : ShipmentListDto
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? RowVersion { get; set; }
     public IReadOnlyList<ShipmentHandlingUnitDto> HandlingUnits { get; set; } = [];
+    public ShipmentProofOfDeliveryDto? ProofOfDelivery { get; set; }
+    public IReadOnlyList<ShipmentTrackingEventDto> TrackingEvents { get; set; } = [];
 }
 
 public sealed class ShipmentHandlingUnitDto
@@ -78,4 +85,83 @@ public sealed class LoadShipmentHandlingUnitDto : ShipmentStateCommandDto
 public sealed class CompleteShipmentLoadingDto : ShipmentStateCommandDto
 {
     public string? SealNumber { get; set; }
+}
+
+
+public sealed class ShipmentTrackingEventDto
+{
+    public int Id { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string FromStatus { get; set; } = string.Empty;
+    public string ToStatus { get; set; } = string.Empty;
+    public DateTime OccurredAt { get; set; }
+    public DateTime RecordedAt { get; set; }
+    public string Source { get; set; } = string.Empty;
+    public string? SourceEventId { get; set; }
+    public string? ReasonCode { get; set; }
+    public string? Note { get; set; }
+}
+
+public sealed class ShipmentProofOfDeliveryDto
+{
+    public DateTime DeliveredAt { get; set; }
+    public string ReceiverName { get; set; } = string.Empty;
+    public string? EvidenceReference { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+    public string? CarrierReference { get; set; }
+    public string? DeliveryNote { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public sealed class ShipmentTrackingDto
+{
+    public int ShipmentId { get; set; }
+    public string ShipmentCode { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime? DispatchedAt { get; set; }
+    public DateTime? InTransitAt { get; set; }
+    public DateTime? DeliveryFailedAt { get; set; }
+    public DateTime? ReturnInitiatedAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public ShipmentProofOfDeliveryDto? ProofOfDelivery { get; set; }
+    public IReadOnlyList<ShipmentTrackingEventDto> Events { get; set; } = [];
+}
+
+public sealed class MarkShipmentInTransitDto : ShipmentStateCommandDto
+{
+    public DateTime? OccurredAt { get; set; }
+    public string? Note { get; set; }
+}
+
+public sealed class ConfirmShipmentDeliveryDto : ShipmentStateCommandDto
+{
+    public DateTime? DeliveredAt { get; set; }
+    public string ReceiverName { get; set; } = string.Empty;
+    public string? EvidenceReference { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+    public string? CarrierReference { get; set; }
+    public string? DeliveryNote { get; set; }
+}
+
+public sealed class FailShipmentDeliveryDto : ShipmentStateCommandDto
+{
+    public string ReasonCode { get; set; } = string.Empty;
+    public string? Note { get; set; }
+    public DateTime? OccurredAt { get; set; }
+}
+
+public sealed class RetryShipmentDeliveryDto : ShipmentStateCommandDto
+{
+    public string? Note { get; set; }
+    public DateTime? OccurredAt { get; set; }
+}
+
+public sealed class InitiateShipmentReturnDto : ShipmentStateCommandDto
+{
+    public string ReasonCode { get; set; } = string.Empty;
+    public string? Note { get; set; }
+    public DateTime? OccurredAt { get; set; }
 }

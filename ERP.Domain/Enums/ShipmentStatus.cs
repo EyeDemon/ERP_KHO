@@ -11,5 +11,7 @@ public enum ShipmentStatus
     InTransit = 6,
     Delivered = 7,
     DeliveryFailed = 8,
-    Cancelled = 9
+    Cancelled = 9,
+    ReturnToWarehouse = 10,
+    Completed = 11
 }
