@@ -31,8 +31,8 @@ describe('SystemCoverage', () => {
 
     fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: 'all' } });
     fireEvent.change(view.getByLabelText('Lọc trạng thái triển khai'), { target: { value: 'live' } });
-    expect(table.getByText(/TR-01 • Warehouse Transfer/)).toBeTruthy();
-    expect(table.queryByText(/OUT-05 • Picking/)).toBeNull();
+    expect(table.getByText(/TR-01 • Điều chuyển kho/)).toBeTruthy();
+    expect(table.queryByText(/OUT-05 • Lấy hàng/)).toBeNull();
   });
 
   it('shows advanced canonical capabilities without promoting them to core implementation', () => {
@@ -53,6 +53,6 @@ describe('SystemCoverage', () => {
     const table = within(view.getByTestId('coverage-table'));
     fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'toàn vẹn' } });
     expect(table.getByText(/INV-11 • Bộ máy toàn vẹn/)).toBeTruthy();
-    expect(table.queryByText(/OUT-05 • Picking/)).toBeNull();
+    expect(table.queryByText(/OUT-05 • Lấy hàng/)).toBeNull();
   });
 });
