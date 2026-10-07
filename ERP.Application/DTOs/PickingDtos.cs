@@ -41,6 +41,12 @@ public sealed class PickingTaskLineDto
     public int SourceLocationId { get; set; }
     public string SourceLocationCode { get; set; } = string.Empty;
     public string SourceLocationName { get; set; } = string.Empty;
+    public string InventoryStatus { get; set; } = string.Empty;
+    public int? LotId { get; set; }
+    public string? LotNumber { get; set; }
+    public DateTime? ExpiryDate { get; set; }
+    public int? SerialId { get; set; }
+    public string? SerialNumber { get; set; }
     public decimal RequestedQuantity { get; set; }
     public decimal PickedQuantity { get; set; }
     public decimal RemainingQuantity { get; set; }
