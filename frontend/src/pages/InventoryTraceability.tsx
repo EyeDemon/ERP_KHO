@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import apiClient from '../services/apiClient';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
 
 type Bucket={
   inventoryStockId:number;productId:number;productCode:string;productName:string;warehouseId:number;warehouseName:string;
@@ -29,16 +29,23 @@ export default function InventoryTraceability(){
   const [form,setForm]=useState({warehouseId:'',productId:'',lotNumber:'',serialNumber:'',referenceType:'',referenceId:''});
   const [result,setResult]=useState<Result|null>(null);
   const [loading,setLoading]=useState(false);
-  const [error,setError]=useState('');
+  const [validationError,setValidationError]=useState('');
+  const [requestError,setRequestError]=useState('');
+
+  const referencePairInvalid=Boolean(
+    (form.referenceType.trim()&&!form.referenceId)||(!form.referenceType.trim()&&form.referenceId)
+  );
 
   const search=async(e:FormEvent)=>{
-    e.preventDefault();setError('');
+    e.preventDefault();setValidationError('');setRequestError('');
     const hasIdentity=form.productId||form.lotNumber.trim()||form.serialNumber.trim();
     const hasReference=form.referenceType.trim()&&form.referenceId;
-    if((form.referenceType.trim()&&!form.referenceId)||(!form.referenceType.trim()&&form.referenceId)){
-      setError('Reference Type và Reference ID phải được nhập cùng nhau.');return;
+    if(referencePairInvalid){
+      setValidationError('Reference Type và Reference ID phải được nhập cùng nhau.');return;
     }
-    if(!hasIdentity&&!hasReference){setError('Nhập ít nhất Product, Lot, Serial hoặc Reference.');return}
+    if(!hasIdentity&&!hasReference){
+      setValidationError('Nhập ít nhất Product, Lot, Serial hoặc Reference.');return;
+    }
     setLoading(true);
     try{
       const params=new URLSearchParams();
@@ -50,23 +57,60 @@ export default function InventoryTraceability(){
       if(form.referenceId)params.set('referenceId',form.referenceId);
       params.set('limit','200');
       setResult((await apiClient.get('/api/inventory/traceability?'+params.toString())).data);
-    }catch(e){setResult(null);setError(errorMessage(e))}
+    }catch(e){setResult(null);setRequestError(errorMessage(e))}
     finally{setLoading(false)}
   };
+
+  const resultStatus=loading
+    ? 'Đang truy vết inventory.'
+    : result
+      ? `Đã tải ${result.currentBuckets.length} bucket hiện tại và ${result.events.length} ledger event.`
+      : '';
 
   return <UiPage>
     <UiPageHeader eyebrow="Inventory Control" title="Traceability & Genealogy"
       description="Truy current bucket và immutable ledger timeline theo Product, Lot, Serial hoặc document/reference trong warehouse scope được phép."/>
-    {error&&<p role="alert">{error}</p>}
+    {requestError&&<p role="alert">{requestError}</p>}
     <UiCard title="Điều kiện truy vết">
-      <form onSubmit={search} className="ui-form-grid">
-        <input aria-label="Warehouse ID traceability" type="number" min="1" value={form.warehouseId} onChange={e=>setForm(x=>({...x,warehouseId:e.target.value}))} placeholder="Warehouse ID (tùy chọn)"/>
-        <input aria-label="Product ID traceability" type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} placeholder="Product ID"/>
-        <input aria-label="Lot traceability" value={form.lotNumber} onChange={e=>setForm(x=>({...x,lotNumber:e.target.value}))} placeholder="Lot number"/>
-        <input aria-label="Serial traceability" value={form.serialNumber} onChange={e=>setForm(x=>({...x,serialNumber:e.target.value}))} placeholder="Serial number"/>
-        <input aria-label="Reference Type traceability" value={form.referenceType} onChange={e=>setForm(x=>({...x,referenceType:e.target.value}))} placeholder="Reference Type"/>
-        <input aria-label="Reference ID traceability" type="number" min="1" value={form.referenceId} onChange={e=>setForm(x=>({...x,referenceId:e.target.value}))} placeholder="Reference ID"/>
+      <form onSubmit={search} className="ui-form-grid" aria-busy={loading}>
+        <UiToolbarField label="Warehouse ID (tùy chọn)">
+          <input type="number" min="1" value={form.warehouseId} onChange={e=>setForm(x=>({...x,warehouseId:e.target.value}))} inputMode="numeric"/>
+        </UiToolbarField>
+        <UiToolbarField label="Product ID">
+          <input type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
+        </UiToolbarField>
+        <UiToolbarField label="Lot number">
+          <input value={form.lotNumber} onChange={e=>setForm(x=>({...x,lotNumber:e.target.value}))} autoComplete="off"/>
+        </UiToolbarField>
+        <UiToolbarField label="Serial number">
+          <input value={form.serialNumber} onChange={e=>setForm(x=>({...x,serialNumber:e.target.value}))} autoComplete="off"/>
+        </UiToolbarField>
+        <UiToolbarField label="Reference Type">
+          <input
+            value={form.referenceType}
+            onChange={e=>setForm(x=>({...x,referenceType:e.target.value}))}
+            aria-invalid={referencePairInvalid||undefined}
+            aria-describedby={referencePairInvalid?'traceability-reference-help traceability-validation-error':'traceability-reference-help'}
+            autoComplete="off"
+          />
+        </UiToolbarField>
+        <UiToolbarField label="Reference ID">
+          <input
+            type="number"
+            min="1"
+            value={form.referenceId}
+            onChange={e=>setForm(x=>({...x,referenceId:e.target.value}))}
+            aria-invalid={referencePairInvalid||undefined}
+            aria-describedby={referencePairInvalid?'traceability-reference-help traceability-validation-error':'traceability-reference-help'}
+            inputMode="numeric"
+          />
+        </UiToolbarField>
+        <p id="traceability-reference-help" className="ui-muted-text">
+          Reference Type và Reference ID là một cặp; nhập cả hai khi truy theo chứng từ.
+        </p>
+        {validationError&&<p id="traceability-validation-error" role="alert">{validationError}</p>}
         <button type="submit" disabled={loading}>{loading?'Đang truy vết...':'Truy vết'}</button>
+        {resultStatus&&<p role="status" aria-live="polite" className="ui-muted-text">{resultStatus}</p>}
       </form>
     </UiCard>
 
