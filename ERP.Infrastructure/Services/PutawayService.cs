@@ -5,11 +5,16 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Queries;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Services;
 
-public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizationService warehouses, ICurrentUser currentUser)
+public sealed class PutawayService(
+    ErpKhoDbContext context,
+    IWarehouseAuthorizationService warehouses,
+    ICurrentUser currentUser,
+    IInventoryLockEvaluator? inventoryLocks = null)
     : IPutawayService, IReceiptPutawayIntegration
 {
     public async Task<IReadOnlyList<WarehouseDto>> ListLocationWarehousesAsync(CancellationToken token = default)
@@ -326,6 +331,27 @@ public sealed class PutawayService(ErpKhoDbContext context, IWarehouseAuthorizat
             await EnsurePutawayCapacityAsync(destination, product, baseQty, token);
             var source=await context.InventoryStocks.SingleOrDefaultAsync(x=>x.ProductId==item.ProductId&&x.WarehouseId==task.WarehouseId&&x.Status==item.InventoryStatus&&x.LocationId==item.SourceLocationId,token);
             if(source is null||source.Quantity-source.ReservedQuantity<baseQty) throw Conflict("Tồn tại vị trí nguồn đã thay đổi. Vui lòng tải lại.");
+            if (inventoryLocks is not null)
+            {
+                var now = DateTime.UtcNow;
+                var sourceLocked = await context.InventoryLocks.EffectiveAt(now).AnyAsync(l =>
+                    l.WarehouseId == task.WarehouseId &&
+                    (!l.LocationId.HasValue || l.LocationId == item.SourceLocationId) &&
+                    (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
+                    (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus), token);
+                var destinationLocked = await context.InventoryLocks.EffectiveAt(now).AnyAsync(l =>
+                    l.WarehouseId == task.WarehouseId &&
+                    (!l.LocationId.HasValue || l.LocationId == destination.Id) &&
+                    (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
+                    (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus), token);
+                if (sourceLocked || destinationLocked)
+                {
+                    var locked = new BusinessRuleException("Inventory bucket đang bị khóa bởi Inventory Lock.");
+                    locked.Data["HttpStatusCode"] = 409;
+                    locked.Data["ErrorCode"] = "INV_STOCK_LOCKED";
+                    throw locked;
+                }
+            }
             var dest=await context.InventoryStocks.SingleOrDefaultAsync(x=>x.ProductId==item.ProductId&&x.WarehouseId==task.WarehouseId&&x.Status==item.InventoryStatus&&x.LocationId==destination.Id,token);
             source.Quantity-=baseQty; source.LastUpdated=DateTime.UtcNow;
             if(dest is null) context.InventoryStocks.Add(new InventoryStock{ProductId=item.ProductId,WarehouseId=task.WarehouseId,Status=item.InventoryStatus,LocationId=destination.Id,Quantity=baseQty,LastUpdated=DateTime.UtcNow}); else {dest.Quantity+=baseQty;dest.LastUpdated=DateTime.UtcNow;}
