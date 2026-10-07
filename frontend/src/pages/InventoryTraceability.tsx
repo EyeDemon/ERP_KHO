@@ -36,6 +36,12 @@ export default function InventoryTraceability(){
     (form.referenceType.trim()&&!form.referenceId)||(!form.referenceType.trim()&&form.referenceId)
   );
 
+  const updateField=(field:keyof typeof form,value:string)=>{
+    setForm(x=>({...x,[field]:value}));
+    if(validationError)setValidationError('');
+    if(requestError)setRequestError('');
+  };
+
   const search=async(e:FormEvent)=>{
     e.preventDefault();setValidationError('');setRequestError('');
     const hasIdentity=form.productId||form.lotNumber.trim()||form.serialNumber.trim();
@@ -46,6 +52,7 @@ export default function InventoryTraceability(){
     if(!hasIdentity&&!hasReference){
       setValidationError('Nhập ít nhất Product, Lot, Serial hoặc Reference.');return;
     }
+    setResult(null);
     setLoading(true);
     try{
       const params=new URLSearchParams();
@@ -74,21 +81,21 @@ export default function InventoryTraceability(){
     <UiCard title="Điều kiện truy vết">
       <form onSubmit={search} className="ui-form-grid" aria-busy={loading}>
         <UiToolbarField label="Warehouse ID (tùy chọn)">
-          <input type="number" min="1" value={form.warehouseId} onChange={e=>setForm(x=>({...x,warehouseId:e.target.value}))} inputMode="numeric"/>
+          <input type="number" min="1" value={form.warehouseId} onChange={e=>updateField('warehouseId',e.target.value)} inputMode="numeric"/>
         </UiToolbarField>
         <UiToolbarField label="Product ID">
-          <input type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
+          <input type="number" min="1" value={form.productId} onChange={e=>updateField('productId',e.target.value)} inputMode="numeric"/>
         </UiToolbarField>
         <UiToolbarField label="Lot number">
-          <input value={form.lotNumber} onChange={e=>setForm(x=>({...x,lotNumber:e.target.value}))} autoComplete="off"/>
+          <input value={form.lotNumber} onChange={e=>updateField('lotNumber',e.target.value)} autoComplete="off"/>
         </UiToolbarField>
         <UiToolbarField label="Serial number">
-          <input value={form.serialNumber} onChange={e=>setForm(x=>({...x,serialNumber:e.target.value}))} autoComplete="off"/>
+          <input value={form.serialNumber} onChange={e=>updateField('serialNumber',e.target.value)} autoComplete="off"/>
         </UiToolbarField>
         <UiToolbarField label="Reference Type">
           <input
             value={form.referenceType}
-            onChange={e=>setForm(x=>({...x,referenceType:e.target.value}))}
+            onChange={e=>updateField('referenceType',e.target.value)}
             aria-invalid={referencePairInvalid||undefined}
             aria-describedby={referencePairInvalid?'traceability-reference-help traceability-validation-error':'traceability-reference-help'}
             autoComplete="off"
@@ -99,7 +106,7 @@ export default function InventoryTraceability(){
             type="number"
             min="1"
             value={form.referenceId}
-            onChange={e=>setForm(x=>({...x,referenceId:e.target.value}))}
+            onChange={e=>updateField('referenceId',e.target.value)}
             aria-invalid={referencePairInvalid||undefined}
             aria-describedby={referencePairInvalid?'traceability-reference-help traceability-validation-error':'traceability-reference-help'}
             inputMode="numeric"
