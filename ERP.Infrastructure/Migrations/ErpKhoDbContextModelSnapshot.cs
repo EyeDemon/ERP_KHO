@@ -1083,17 +1083,17 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("CanonicalLocationId")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("int")
-                        .HasComputedColumnSql("ISNULL([LocationId], 0)", true);
+                        .HasComputedColumnSql("COALESCE([LocationId], 0)", true);
 
                     b.Property<int>("CanonicalLotId")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("int")
-                        .HasComputedColumnSql("ISNULL([LotId], 0)", true);
+                        .HasComputedColumnSql("COALESCE([LotId], 0)", true);
 
                     b.Property<int>("CanonicalSerialId")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("int")
-                        .HasComputedColumnSql("ISNULL([SerialId], 0)", true);
+                        .HasComputedColumnSql("COALESCE([SerialId], 0)", true);
 
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("datetime2");
