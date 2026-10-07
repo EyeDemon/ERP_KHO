@@ -449,7 +449,7 @@ export const demoShipments = [
         assignedAt: '2026-10-06T02:15:00Z', stagedAt: '2026-10-06T02:20:00Z', loadedAt: '2026-10-06T02:39:00Z',
       },
     ],
-  },,
+  },
   {
     id: 7704, shipmentCode: 'SHIP-2026-7704', packingSessionId: 9904, packingSessionCode: 'PACK-2026-9904',
     warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', sourceType: 'ExportReceipt', sourceId: 5111, sourceCode: 'EX-2026-5111',
