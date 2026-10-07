@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { EyeOff, LockKeyhole, History, Scale, ShieldCheck } from 'lucide-react';
-import './Phiếu kiểm kêĐiều chỉnhCapabilityMock.css';
+import './CountAdjustmentCapabilityMock.css';
 
 type Props = { capabilityId?: string };
 type Tone = 'success' | 'warning' | 'danger' | 'neutral';
@@ -26,7 +26,7 @@ const Header = ({ id, title, description, icon }: { id: string; title: string; d
   </header>
 );
 
-const BlindPhiếu kiểm kêMock = () => (
+const BlindCountMock = () => (
   <section className="count-capability-mock" data-testid="count-capability-mock-CT-03" aria-labelledby="count-ct-03-title">
     <Header id="CT-03" title="Thực hiện kiểm kê mù" description="Người kiểm đếm chỉ thấy phạm vi và định danh tồn cần đếm; số lượng hệ thống được ẩn để giảm thiên lệch." icon={<EyeOff size={20} />} />
     <div className="count-mock-metrics">
@@ -43,7 +43,7 @@ const BlindPhiếu kiểm kêMock = () => (
   </section>
 );
 
-const FreezeChiến lượcMock = () => {
+const FreezeStrategyMock = () => {
   const rows = [
     { strategy:'HARD_FREEZE', movement:'Chặn', picking:'Chặn', snapshot:'Có', status:'Nghiêm ngặt', tone:'danger' as const },
     { strategy:'SOFT_FREEZE', movement:'Có kiểm soát', picking:'Có điều kiện', snapshot:'Có', status:'Khuyến nghị', tone:'success' as const },
@@ -83,7 +83,7 @@ const RecountMock = () => {
   );
 };
 
-const Chênh lệchMock = () => (
+const VarianceMock = () => (
   <section className="count-capability-mock" data-testid="count-capability-mock-CT-06" aria-labelledby="count-ct-06-title">
     <Header id="CT-06" title="Bàn làm việc xử lý chênh lệch" description="Rà soát ảnh chụp so với kết quả đếm cuối, bằng chứng và ngưỡng để chuyển sang kiểm đếm lại, phê duyệt hoặc điều chỉnh." icon={<Scale size={20} />} />
     <div className="count-mock-metrics">
@@ -101,7 +101,7 @@ const Chênh lệchMock = () => (
   </section>
 );
 
-const Điều chỉnhMock = () => (
+const AdjustmentMock = () => (
   <section className="count-capability-mock" data-testid="count-capability-mock-CT-07" aria-labelledby="count-ct-07-title">
     <Header id="CT-07" title="Inventory Điều chỉnh Phê duyệt & Posting" description="Mô phỏng phân tách nhiệm vụ, chênh lệch có dấu và ranh giới ghi sổ cho điều chỉnh do chênh lệch kiểm kê." icon={<ShieldCheck size={20} />} />
     <div className="count-mock-metrics">
@@ -120,13 +120,13 @@ const Điều chỉnhMock = () => (
   </section>
 );
 
-const Phiếu kiểm kêĐiều chỉnhCapabilityMock = ({ capabilityId }: Props) => {
-  if (capabilityId === 'CT-03') return <BlindPhiếu kiểm kêMock />;
-  if (capabilityId === 'CT-04') return <FreezeChiến lượcMock />;
+const CountAdjustmentCapabilityMock = ({ capabilityId }: Props) => {
+  if (capabilityId === 'CT-03') return <BlindCountMock />;
+  if (capabilityId === 'CT-04') return <FreezeStrategyMock />;
   if (capabilityId === 'CT-05') return <RecountMock />;
-  if (capabilityId === 'CT-06') return <Chênh lệchMock />;
-  if (capabilityId === 'CT-07') return <Điều chỉnhMock />;
+  if (capabilityId === 'CT-06') return <VarianceMock />;
+  if (capabilityId === 'CT-07') return <AdjustmentMock />;
   return null;
 };
 
-export default Phiếu kiểm kêĐiều chỉnhCapabilityMock;
+export default CountAdjustmentCapabilityMock;
