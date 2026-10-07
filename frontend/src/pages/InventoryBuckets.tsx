@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -72,7 +72,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
     setError('');
   };
 
-  const submit=async(e:React.FormEvent)=>{
+  const submit=async(e:FormEvent)=>{
     e.preventDefault();
     if(!selected||!canChange||lock.current)return;
     const quantity=Number(change.quantity);
