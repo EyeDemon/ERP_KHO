@@ -124,7 +124,7 @@ const CapabilityPreview = () => {
 
       {specializedPreview && (
         <section className="capability-panel specialized-preview">
-          <div className="capability-panel-title"><CheckCircle2 size={18} /><h2>{specializedPreview.title}</h2><span className="traceability-closed-badge">Screen Matrix • Đã đóng truy vết</span></div>
+          <div className="capability-panel-title"><CheckCircle2 size={18} /><h2>{specializedPreview.title}</h2><span className="traceability-closed-badge">Ma trận màn hình • Đã đóng truy vết</span></div>
           <p className="specialized-subtitle">{specializedPreview.subtitle}</p>
           <div className="specialized-fields">
             {specializedPreview.fields.map((field) => (
@@ -164,7 +164,7 @@ const CapabilityPreview = () => {
               <div><span>Bản ghi mẫu</span><strong>{records.length}</strong></div>
               <div><span>Phân hệ</span><strong>{module.name}</strong></div>
               <div><span>Kênh sử dụng</span><strong>{capability.surfaces.map(surfaceLabel).join(' / ')}</strong></div>
-              <div><span>Fixture</span><strong>{fixture?.fixtureId ?? '—'}</strong></div>
+              <div><span>Bộ dữ liệu mẫu</span><strong>{fixture?.fixtureId ?? '—'}</strong></div>
             </div>
 
             {fixture && (
@@ -235,7 +235,7 @@ const CapabilityPreview = () => {
                 <div><span>Đợt phát hành</span><strong>Đợt {governance.releaseWave}</strong></div>
                 <div><span>Phạm vi áp dụng</span><strong>{applicabilityLabel(governance.applicability)}</strong></div>
                 <div><span>Mức trưởng thành</span><strong>{governance.maturity}</strong></div>
-                <div><span>Screen Matrix</span><strong>{reviewStatusLabel(governance.reviewStatus)}</strong></div>
+                <div><span>Ma trận màn hình</span><strong>{reviewStatusLabel(governance.reviewStatus)}</strong></div>
                 <div><span>Đặc tả</span><strong>{governance.referencedSpecs.join(', ')}</strong></div>
               </div>
               <div className="governance-evidence">
@@ -279,7 +279,7 @@ const CapabilityPreview = () => {
           {governance && (
             <div className="technical-trace">
               <div><strong>Quyền</strong><span>{governance.permissionModel}</span></div>
-              <div><strong>Command / API</strong><span>{governance.commandApiModel}</span></div>
+              <div><strong>Lệnh / API</strong><span>{governance.commandApiModel}</span></div>
               <div><strong>Mô hình trạng thái</strong><span>{governance.stateModel}</span></div>
               <div><strong>Ảnh hưởng tồn kho</strong><span>{governance.inventoryEffect}</span></div>
             </div>
