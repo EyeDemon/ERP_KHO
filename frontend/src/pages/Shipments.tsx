@@ -299,7 +299,7 @@ export default function Shipments(){
               <label>Ghi chú giao hàng
                 <input aria-label="POD delivery note" value={deliveryNote} onChange={e=>setDeliveryNote(e.target.value)}/>
               </label>
-              <button type="button" disabled={!!busy||!receiverName.trim()} onClick={()=>void mutate(
+              <button type="button" disabled={!!busy||!receiverName.trim()||(!evidenceReference.trim()&&!carrierReference.trim())} onClick={()=>void mutate(
                 'shipment-delivery-confirm-'+selected.id,'/api/shipments/'+selected.id+'/delivery-confirm',
                 {
                   receiverName:receiverName.trim(),
