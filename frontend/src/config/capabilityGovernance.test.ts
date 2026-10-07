@@ -32,7 +32,7 @@ describe('capability governance metadata', () => {
       expect(profile.reviewStatus).toBe('Traceability Closed');
       expect(profile.screenReference).toContain('/system-blueprint/');
       expect(profile.screenReference).not.toContain('UNMAPPED');
-      expect(profile.reviewFinding).toContain('Traceability Closed');
+      expect(profile.reviewFinding).toContain('Đã đóng truy vết');
       if (capability.status === 'planned') {
         expect(profile.evidence.find((item) => item.key === 'api')?.status).toBe('spec-only');
       }
