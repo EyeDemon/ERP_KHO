@@ -52,15 +52,19 @@ public class InventoryLocationMovement
     public int WarehouseId { get; set; }
     public int ProductId { get; set; }
     public InventoryStatus InventoryStatus { get; set; }
+    public int? LotId { get; set; }
+    public int? SerialId { get; set; }
     public int FromLocationId { get; set; }
     public int ToLocationId { get; set; }
     public decimal BaseQuantity { get; set; }
     public decimal EnteredQuantity { get; set; }
     public string EnteredUnitCode { get; set; } = string.Empty;
-    public int PutawayTaskId { get; set; }
-    public int PutawayTaskItemId { get; set; }
-    public int ReceiptId { get; set; }
-    public int ReceiptLineId { get; set; }
+    public string? ReferenceType { get; set; }
+    public int? ReferenceId { get; set; }
+    public int? PutawayTaskId { get; set; }
+    public int? PutawayTaskItemId { get; set; }
+    public int? ReceiptId { get; set; }
+    public int? ReceiptLineId { get; set; }
     public int CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
