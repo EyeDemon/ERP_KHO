@@ -45,7 +45,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
   },
   {
     capabilityIds: ['OUT-05', 'MO-04'],
-    screenReference: 'BLUEPRINT • OUT-05 /system-blueprint/outbound/OUT-05 • MO-04 /system-blueprint/mobile/MO-04',
+    screenReference: 'BẢN THIẾT KẾ • OUT-05 /system-blueprint/outbound/OUT-05 • MO-04 /system-blueprint/mobile/MO-04',
     title: 'Bàn làm việc lấy hàng / Luồng quét',
     subtitle: 'Thực hiện nhiệm vụ ưu tiên quét trên tồn đã phân bổ, kiểm tra lô/sê-ri và xử lý ngoại lệ lấy thiếu.',
     fields: [
@@ -71,7 +71,7 @@ export const specializedScreenPreviews: SpecializedScreenPreview[] = [
   },
   {
     capabilityIds: ['OUT-06', 'MO-05'],
-    screenReference: 'BLUEPRINT • OUT-06 /system-blueprint/outbound/OUT-06 • MO-05 /system-blueprint/mobile/MO-05',
+    screenReference: 'BẢN THIẾT KẾ • OUT-06 /system-blueprint/outbound/OUT-06 • MO-05 /system-blueprint/mobile/MO-05',
     title: 'Trạm đóng gói',
     subtitle: 'Đóng gói vào thùng/khay/HU, xác nhận số lượng, khối lượng/kích thước và tạo nhãn có lưu vết kiểm toán.',
     fields: [
