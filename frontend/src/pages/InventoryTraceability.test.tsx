@@ -39,9 +39,11 @@ describe('InventoryTraceability',()=>{
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it('requires reference type and id together',()=>{
+  it('requires reference type and id together',async()=>{
     const view=render(<InventoryTraceability/>);
-    fireEvent.change(view.getByLabelText('Reference Type traceability'),{target:{value:'Shipment'}});
+    const referenceType=view.getByLabelText('Reference Type traceability') as HTMLInputElement;
+    fireEvent.change(referenceType,{target:{value:'Shipment'}});
+    await waitFor(()=>expect(referenceType.value).toBe('Shipment'));
     fireEvent.click(view.getByText('Truy vết'));
     expect(view.getByRole('alert').textContent).toContain('cùng nhau');
     expect(apiClient.get).not.toHaveBeenCalled();
