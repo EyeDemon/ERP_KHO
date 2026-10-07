@@ -28,6 +28,7 @@ export const blueprintDemoReadPermissions = [
   'inventory_availability.read',
   'inventory_ledger.read',
   'inventory_traceability.read',
+  'inventory_lock.read',
   'receiving_discrepancy.read',
   'reason_code.read',
   'putaway.read',
