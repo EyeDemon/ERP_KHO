@@ -27,7 +27,8 @@ public class InventoryStockConfiguration : IEntityTypeConfiguration<InventorySto
                 "CanonicalLotId",
                 "CanonicalSerialId")
                .IsUnique()
-               .HasDatabaseName("IX_InventoryStocks_CanonicalBucket");
+               .HasDatabaseName("IX_InventoryStocks_CanonicalBucket")
+               .HasFilter(null);
 
         builder.HasOne(x => x.Product)
                .WithMany(p => p.InventoryStocks)
