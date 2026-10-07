@@ -84,7 +84,7 @@ const ModuleBlueprint = () => {
   const plannedCount = module.capabilities.filter((item) => item.status === 'planned').length;
   const optionalCount = module.capabilities.filter((item) => item.status === 'optional').length;
   const attentionCount = filteredRecords.filter((item) => item.tone === 'orange' || item.tone === 'red').length;
-  const criticalCount = filteredRecords.filter((item) => item.priority === 'Khẩn cấp').length;
+  const criticalCount = filteredRecords.filter((item) => item.priority === 'Critical').length;
   const activeCount = filteredRecords.filter((item) => item.tone === 'blue').length;
 
   return (
