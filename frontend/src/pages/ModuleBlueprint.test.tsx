@@ -76,7 +76,7 @@ describe('ModuleBlueprint mock work center', () => {
 
     const warehouse = renderModule('warehouse-structure');
     expect(warehouse.queryByText('Mở thật')).toBeNull();
-    expect(warehouse.getByText('Mock chuyên biệt').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
+    expect(warehouse.getByText('Mô phỏng chuyên biệt').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
   });
 
   it('shows a safe not-found state for an unknown module', () => {
