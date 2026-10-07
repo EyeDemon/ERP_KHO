@@ -63,7 +63,7 @@ describe('CapabilityPreview', () => {
     expect(view.getByTestId('inbound-capability-mock-IN-09')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Putaway Recommendation Explainability' })).toBeTruthy();
     expect(view.getByText(/Không gọi API production/)).toBeTruthy();
-    expect(view.getAllByText('Chưa triển khai production').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Chưa triển khai hệ thống thật').length).toBeGreaterThan(0);
   });
 
   it('reflects merged inbound execution capabilities as live while keeping Blueprint mocks read-only', () => {
@@ -79,7 +79,7 @@ describe('CapabilityPreview', () => {
       expect(view.getByTestId('inbound-capability-mock-' + capabilityId)).toBeTruthy();
       expect(view.getByRole('heading', { name: title })).toBeTruthy();
       expect(view.getByText(/Không gọi API production/)).toBeTruthy();
-      expect(view.queryByText('Chưa triển khai production')).toBeNull();
+      expect(view.queryByText('Chưa triển khai hệ thống thật')).toBeNull();
       view.unmount();
     }
   });
@@ -100,7 +100,7 @@ describe('CapabilityPreview', () => {
     expect(view.getByTestId('inbound-capability-mock-IN-01')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Purchase Order / ASN Reconciliation' })).toBeTruthy();
     expect(view.getByText(/Không gọi API production/)).toBeTruthy();
-    expect(view.queryByText('Chưa triển khai production')).toBeNull();
+    expect(view.queryByText('Chưa triển khai hệ thống thật')).toBeNull();
   });
 
   it('does not shadow live inbound work centers that already have production surfaces', () => {
@@ -233,7 +233,7 @@ describe('CapabilityPreview', () => {
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
       expect(panel.textContent).toContain('Không gọi API production');
-      expect(view.getAllByText('Chưa triển khai production').length).toBeGreaterThan(0);
+      expect(view.getAllByText('Chưa triển khai hệ thống thật').length).toBeGreaterThan(0);
       view.unmount();
     }
   });
@@ -297,7 +297,7 @@ describe('CapabilityPreview', () => {
     expect(picking.getByText('Capability governance & completeness')).toBeTruthy();
     expect(picking.getAllByText('Wave 2').length).toBeGreaterThan(0);
     expect(picking.getByText(/Picking không được giảm warehouse OnHand/)).toBeTruthy();
-    expect(picking.getByText(/Traceability Closed — Screen Matrix 229/)).toBeTruthy();
+    expect(picking.getByText(/Đã đóng truy vết — Screen Matrix 229/)).toBeTruthy();
   });
 
   it('supports interactive core WMS state transitions and exception recovery', () => {
