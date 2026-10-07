@@ -320,10 +320,20 @@ WHERE ReferenceType = 'InventoryMove';
         migrationBuilder.DropForeignKey(name: "FK_InventoryLocationMovements_PutawayTaskItems_PutawayTaskItemId", table: "InventoryLocationMovements");
         migrationBuilder.DropForeignKey(name: "FK_InventoryLocationMovements_PutawayTasks_PutawayTaskId", table: "InventoryLocationMovements");
 
+        migrationBuilder.DropIndex(name: "IX_InventoryLocationMovements_ReceiptLineId", table: "InventoryLocationMovements");
+        migrationBuilder.DropIndex(name: "IX_InventoryLocationMovements_ReceiptId", table: "InventoryLocationMovements");
+        migrationBuilder.DropIndex(name: "IX_InventoryLocationMovements_PutawayTaskId", table: "InventoryLocationMovements");
+        migrationBuilder.DropIndex(name: "IX_InventoryLocationMovements_PutawayTaskItemId_CreatedAt", table: "InventoryLocationMovements");
+
         migrationBuilder.AlterColumn<int>(name: "ReceiptLineId", table: "InventoryLocationMovements", type: "int", nullable: false, defaultValue: 0, oldClrType: typeof(int), oldType: "int", oldNullable: true);
         migrationBuilder.AlterColumn<int>(name: "ReceiptId", table: "InventoryLocationMovements", type: "int", nullable: false, defaultValue: 0, oldClrType: typeof(int), oldType: "int", oldNullable: true);
         migrationBuilder.AlterColumn<int>(name: "PutawayTaskItemId", table: "InventoryLocationMovements", type: "int", nullable: false, defaultValue: 0, oldClrType: typeof(int), oldType: "int", oldNullable: true);
         migrationBuilder.AlterColumn<int>(name: "PutawayTaskId", table: "InventoryLocationMovements", type: "int", nullable: false, defaultValue: 0, oldClrType: typeof(int), oldType: "int", oldNullable: true);
+
+        migrationBuilder.CreateIndex(name: "IX_InventoryLocationMovements_ReceiptLineId", table: "InventoryLocationMovements", column: "ReceiptLineId");
+        migrationBuilder.CreateIndex(name: "IX_InventoryLocationMovements_ReceiptId", table: "InventoryLocationMovements", column: "ReceiptId");
+        migrationBuilder.CreateIndex(name: "IX_InventoryLocationMovements_PutawayTaskId", table: "InventoryLocationMovements", column: "PutawayTaskId");
+        migrationBuilder.CreateIndex(name: "IX_InventoryLocationMovements_PutawayTaskItemId_CreatedAt", table: "InventoryLocationMovements", columns: new[] { "PutawayTaskItemId", "CreatedAt" });
 
         migrationBuilder.AddForeignKey(name: "FK_InventoryLocationMovements_ImportReceiptDetails_ReceiptLineId", table: "InventoryLocationMovements", column: "ReceiptLineId", principalTable: "ImportReceiptDetails", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
         migrationBuilder.AddForeignKey(name: "FK_InventoryLocationMovements_ImportReceipts_ReceiptId", table: "InventoryLocationMovements", column: "ReceiptId", principalTable: "ImportReceipts", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
