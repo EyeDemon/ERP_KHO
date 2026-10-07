@@ -166,7 +166,7 @@ const CalendarPreview = () => {
         <div><span>Múi giờ</span><strong>Asia/Ho_Chi_Minh</strong><small>UTC+07:00</small></div>
         <div><span>Ngày vận hành</span><strong>04/10/2026</strong><small>Chủ nhật</small></div>
         <div><span>Giờ chốt nhận hàng</span><strong>20:30</strong><small>Nhận xe theo lịch</small></div>
-        <div><span>Dispatch giờ chốt</span><strong>21:15</strong><small>Bàn giao đơn vị vận chuyển</small></div>
+        <div><span>Giờ chốt xuất hàng</span><strong>21:15</strong><small>Bàn giao đơn vị vận chuyển</small></div>
       </div>
 
       <div className="warehouse-shift-grid">
