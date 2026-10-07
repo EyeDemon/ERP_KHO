@@ -24,7 +24,11 @@ namespace ERP.Infrastructure.Queries
 
         public async Task<IEnumerable<InventoryStockDto>> GetCurrentStockAsync(int? warehouseId, int? productId, string? keyword, decimal? lowStockThreshold)
         {
-            var query = _context.InventoryStocks.AsNoTracking().Where(s => s.Status == InventoryStatus.Available && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
+            var today = DateTime.UtcNow.Date;
+            var query = _context.InventoryStocks.AsNoTracking().Where(s =>
+                s.Status == InventoryStatus.Available &&
+                (s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value >= today) &&
+                (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
             if (_warehouseAuthorization is not null)
             {
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
