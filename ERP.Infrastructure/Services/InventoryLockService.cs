@@ -99,7 +99,7 @@ public sealed class InventoryLockService(
                 ExpiresAt = request.ExpiresAt
             };
             context.InventoryLocks.Add(entity);
-            context.AuditLogs.Add(new AuditLog
+            var audit = new AuditLog
             {
                 UserId = currentUser.UserId,
                 Action = "InventoryLock.Created",
@@ -110,9 +110,10 @@ public sealed class InventoryLockService(
                 Reason = entity.Reason,
                 Result = "Success",
                 Severity = "Warning"
-            });
+            };
+            context.AuditLogs.Add(audit);
             await context.SaveChangesAsync(cancellationToken);
-            if (context.AuditLogs.Local.LastOrDefault() is { } audit) audit.EntityId = entity.Id;
+            audit.EntityId = entity.Id;
             await context.SaveChangesAsync(cancellationToken);
             if (tx is not null) await tx.CommitAsync(cancellationToken);
             return await GetAsync(entity.Id, cancellationToken);
