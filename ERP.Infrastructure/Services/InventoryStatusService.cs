@@ -31,6 +31,82 @@ public sealed class InventoryStatusService(
             })
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<InventoryBucketDto>> GetBucketsAsync(
+        int? warehouseId = null,
+        int? productId = null,
+        string? status = null,
+        string? lotNumber = null,
+        string? serialNumber = null,
+        CancellationToken cancellationToken = default)
+    {
+        var accessible = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        if (warehouseId.HasValue)
+        {
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            accessible = [warehouseId.Value];
+        }
+
+        var query = context.InventoryStocks.AsNoTracking()
+            .Where(x => accessible.Contains(x.WarehouseId));
+        if (productId.HasValue) query = query.Where(x => x.ProductId == productId.Value);
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (!TryParseStatus(status, out var parsed))
+                throw new BusinessRuleException("Inventory status filter không hợp lệ.");
+            query = query.Where(x => x.Status == parsed);
+        }
+        if (!string.IsNullOrWhiteSpace(lotNumber))
+        {
+            var lot = lotNumber.Trim();
+            query = query.Where(x => x.Lot != null && x.Lot.LotNumber == lot);
+        }
+        if (!string.IsNullOrWhiteSpace(serialNumber))
+        {
+            var serial = serialNumber.Trim();
+            query = query.Where(x => x.Serial != null && x.Serial.SerialNumber == serial);
+        }
+
+        var today = DateTime.UtcNow.Date;
+        return await query
+            .OrderBy(x => x.Product.Code)
+            .ThenBy(x => x.Status)
+            .ThenBy(x => x.Lot == null ? null : x.Lot.ExpiryDate)
+            .ThenBy(x => x.LocationId)
+            .ThenBy(x => x.Id)
+            .Take(1000)
+            .Select(x => new InventoryBucketDto
+            {
+                InventoryStockId = x.Id,
+                ProductId = x.ProductId,
+                ProductCode = x.Product.Code,
+                ProductName = x.Product.Name,
+                WarehouseId = x.WarehouseId,
+                WarehouseName = x.Warehouse.Name,
+                LocationId = x.LocationId ?? 0,
+                LocationCode = x.Location == null ? string.Empty : x.Location.Code,
+                Status = x.StatusDefinition.Code,
+                IsReservable = x.StatusDefinition.IsReservable &&
+                               (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
+                IsAllocatable = x.StatusDefinition.IsAllocatable &&
+                                (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
+                IsPickable = x.StatusDefinition.IsPickable &&
+                             (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
+                IsShippable = x.StatusDefinition.IsShippable &&
+                              (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
+                LotId = x.LotId,
+                LotNumber = x.Lot == null ? null : x.Lot.LotNumber,
+                ManufactureDate = x.Lot == null ? null : x.Lot.ManufactureDate,
+                ExpiryDate = x.Lot == null ? null : x.Lot.ExpiryDate,
+                SerialId = x.SerialId,
+                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
+                OnHandQuantity = x.Quantity,
+                ReservedQuantity = x.ReservedQuantity,
+                AvailableQuantity = x.Quantity - x.ReservedQuantity,
+                LastUpdated = x.LastUpdated
+            })
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<InventoryStatusChangeResultDto> ChangeAsync(
         CreateInventoryStatusChangeDto request,
         CancellationToken cancellationToken = default)
