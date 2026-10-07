@@ -58,4 +58,5 @@ public class ImportReceiptDetail
     public PurchaseOrderLine? PurchaseOrderLine { get; set; }
     public AsnLine? AsnLine { get; set; }
     public ICollection<ReceivingDiscrepancy> ReceivingDiscrepancies { get; set; } = [];
+    public ICollection<ImportReceiptInventoryIdentity> InventoryIdentities { get; set; } = [];
 }
