@@ -72,7 +72,7 @@ describe('capability governance metadata', () => {
   });
 
   it('reports outbound execution foundations as partial implementation without claiming production completeness', () => {
-    for (const id of ['OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'OUT-09']) {
+    for (const id of ['OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'OUT-09', 'OUT-10']) {
       const item = findCapability(id);
       const profile = getCapabilityGovernanceProfile(item.module, item.capability);
       expect(item.capability.status).toBe('foundation');
