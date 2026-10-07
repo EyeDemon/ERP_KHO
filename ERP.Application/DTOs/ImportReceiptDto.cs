@@ -108,6 +108,35 @@ namespace ERP.Application.DTOs
         public decimal RejectedQuantity { get; set; }
     }
 
+    public sealed class SetImportReceiptInventoryIdentitiesDto
+    {
+        public List<SetImportReceiptInventoryIdentityLineDto> Lines { get; set; } = [];
+    }
+
+    public sealed class SetImportReceiptInventoryIdentityLineDto
+    {
+        public int LineId { get; set; }
+        public string TargetStatus { get; set; } = string.Empty;
+        public decimal BaseQuantity { get; set; }
+        public string? LotNumber { get; set; }
+        public DateTime? ManufactureDate { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public string? SerialNumber { get; set; }
+    }
+
+    public sealed class ImportReceiptInventoryIdentityDto
+    {
+        public int Id { get; set; }
+        public int LineId { get; set; }
+        public int ProductId { get; set; }
+        public string TargetStatus { get; set; } = string.Empty;
+        public decimal BaseQuantity { get; set; }
+        public string? LotNumber { get; set; }
+        public DateTime? ManufactureDate { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public string? SerialNumber { get; set; }
+    }
+
     public class RecordQcDispositionDto
     {
         public List<RecordQcDispositionLineDto> Lines { get; set; } = new();
