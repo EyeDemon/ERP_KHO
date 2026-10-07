@@ -1080,6 +1080,21 @@ namespace ERP.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("CanonicalLocationId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasComputedColumnSql("ISNULL([LocationId], 0)", true);
+
+                    b.Property<int>("CanonicalLotId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasComputedColumnSql("ISNULL([LotId], 0)", true);
+
+                    b.Property<int>("CanonicalSerialId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasComputedColumnSql("ISNULL([SerialId], 0)", true);
+
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("datetime2");
 
@@ -1122,8 +1137,9 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("WarehouseId");
 
-                    b.HasIndex("ProductId", "WarehouseId", "Status", "LocationId", "LotId", "SerialId")
-                        .IsUnique();
+                    b.HasIndex("ProductId", "WarehouseId", "Status", "CanonicalLocationId", "CanonicalLotId", "CanonicalSerialId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InventoryStocks_CanonicalBucket");
 
                     b.ToTable("InventoryStocks", null, t =>
                         {
