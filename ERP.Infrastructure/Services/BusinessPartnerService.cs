@@ -54,16 +54,22 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
     }
 
     public Task SetImportSupplierAsync(int receiptId,int? partnerId,CancellationToken ct=default)=>SetReceiptPartner(receiptId,partnerId,true,ct);
-    public Task SetExportCustomerAsync(int receiptId,int? partnerId,CancellationToken ct=default)=>SetReceiptPartner(receiptId,partnerId,false,ct);
+    public Task SetExportCustomerAsync(int receiptId,int? partnerId,CancellationToken ct=default,string? rowVersion=null)=>SetReceiptPartner(receiptId,partnerId,false,ct,rowVersion);
 
-    private async Task SetReceiptPartner(int receiptId,int? partnerId,bool supplier,CancellationToken ct)
+    private async Task SetReceiptPartner(int receiptId,int? partnerId,bool supplier,CancellationToken ct,string? rowVersion=null)
     {
-        await using var tx=await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,ct);
+        if (!supplier && !await context.Users.AnyAsync(u=>u.Id==currentUser.UserId && u.IsActive && (u.LockoutEnd==null || u.LockoutEnd<=DateTime.UtcNow) && u.Role.Permissions.Any(g=>g.Permission.Code=="export_receipt.update"),ct))
+            throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+        await using var tx=context.Database.CurrentTransaction is null?await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,ct):null;
+        if (!supplier && context.Database.IsSqlServer())
+            await context.Database.SqlQuery<int>($"SELECT Id AS Value FROM ExportReceipts WITH (UPDLOCK,HOLDLOCK) WHERE Id={receiptId}").ToListAsync(ct);
         var import = supplier ? await context.ImportReceipts.SingleOrDefaultAsync(x=>x.Id==receiptId,ct) : null;
         var export = supplier ? null : await context.ExportReceipts.SingleOrDefaultAsync(x=>x.Id==receiptId,ct);
         var warehouseId = import?.WarehouseId ?? export?.WarehouseId
             ?? throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
         await warehouses.EnsureWarehouseAccessAsync(warehouseId,ct);
+        if (!supplier && !RequiredRowVersion(rowVersion).SequenceEqual(export!.RowVersion))
+            throw Conflict("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
         if ((import?.Status ?? export!.Status) != ReceiptStatus.Draft)
             throw Conflict(supplier ? "Chỉ được đổi nhà cung cấp khi phiếu nhập ở trạng thái nháp." : "Chỉ được đổi khách hàng khi phiếu xuất ở trạng thái nháp.");
         BusinessPartner? partner=null;
@@ -71,7 +77,7 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
         if(supplier) import!.SupplierId=partnerId;
         else export!.CustomerId=partnerId;
         context.AuditLogs.Add(new AuditLog{UserId=currentUser.UserId,Action=supplier?"ImportReceipt.SupplierChanged":"ExportReceipt.CustomerChanged",EntityName=supplier?"ImportReceipt":"ExportReceipt",EntityId=receiptId,WarehouseId=warehouseId,NewValues=partnerId.HasValue?$"PartnerId: {partnerId}":"PartnerId: null",Result="Success",Severity="Information",Timestamp=DateTime.UtcNow});
-        await Save("Liên kết đối tác không còn khả dụng hoặc chứng từ đã thay đổi.",ct);await tx.CommitAsync(ct);
+        await Save("Liên kết đối tác không còn khả dụng hoặc chứng từ đã thay đổi.",ct);if(tx is not null)await tx.CommitAsync(ct);
     }
 
     private async Task Save(string message,CancellationToken ct){try{await context.SaveChangesAsync(ct);}catch(DbUpdateConcurrencyException ex){throw Conflict(message,ex);}catch(DbUpdateException ex)when(ex.InnerException is SqlException{Number:2601 or 2627 or 547}){throw Conflict(message,ex);}}

@@ -10,6 +10,22 @@ namespace ERP.Api.Tests;
 
 public class GlobalExceptionHandlingMiddlewareTests
 {
+    [Fact]
+    public async Task Unexpected_failure_does_not_expose_infrastructure_details()
+    {
+        var middleware = new GlobalExceptionHandlingMiddleware(
+            _ => throw new InvalidOperationException("SQL provider database private path"),
+            NullLogger<GlobalExceptionHandlingMiddleware>.Instance);
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        await middleware.InvokeAsync(context);
+        context.Response.StatusCode.Should().Be(500);
+        context.Response.Body.Position = 0;
+        var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
+        using var document = JsonDocument.Parse(body);
+        document.RootElement.GetProperty("message").GetString().Should().Be("Không thể xử lý yêu cầu. Vui lòng thử lại.");
+        body.Should().NotContain("SQL").And.NotContain("private path");
+    }
     [Theory]
     [InlineData(1205, true)]
     [InlineData(2627, false)]

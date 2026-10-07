@@ -10,5 +10,5 @@ public interface IBusinessPartnerService
     Task UpdateAsync(int id, SaveBusinessPartnerDto dto, CancellationToken ct = default);
     Task DeleteAsync(int id, CancellationToken ct = default);
     Task SetImportSupplierAsync(int receiptId, int? partnerId, CancellationToken ct = default);
-    Task SetExportCustomerAsync(int receiptId, int? partnerId, CancellationToken ct = default);
+    Task SetExportCustomerAsync(int receiptId, int? partnerId, CancellationToken ct = default, string? rowVersion = null);
 }

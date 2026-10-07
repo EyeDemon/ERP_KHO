@@ -75,18 +75,20 @@ public class StockReservationService(
         return reservation;
     }
 
-    public async Task ConsumeAsync(StockReservation reservation, int userId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<(int LocationId, decimal Quantity)>> ConsumeAsync(StockReservation reservation, int userId, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
         if (reservation.ExpiresAt <= now || reservation.Status is not StockReservationStatus.Active and not StockReservationStatus.PartiallyConsumed)
             throw new ConcurrencyException("Reservation đã hết hạn hoặc không còn hiệu lực.");
         var remaining = reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity;
-        if (remaining <= 0 || !await stockRepository.TryConsumeReservationAsync(reservation.ProductId, reservation.WarehouseId, remaining, cancellationToken))
+        if (remaining <= 0)
             throw new ConcurrencyException("Reservation không thể được tiêu thụ do dữ liệu tồn kho đã thay đổi.");
+        var consumed = await stockRepository.ConsumeReservedLocationsAsync(reservation.ProductId, reservation.WarehouseId, remaining, cancellationToken);
         reservation.ConsumedQuantity += remaining;
         reservation.ConsumedAt = now;
         reservation.Status = StockReservationStatus.Consumed;
         context.AuditLogs.Add(Audit(userId, "StockReservation.Consumed", reservation, $"Quantity: {remaining}"));
+        return consumed;
     }
 
     public async Task ReleaseSourceAsync(string sourceType, int sourceId, int userId, string reason, CancellationToken cancellationToken = default)

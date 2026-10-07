@@ -69,7 +69,11 @@ Later transitions do not overwrite the snapshot. Draft DTOs show current partner
 
 Migration `AddBusinessPartnersAndReceiptAssociations` only adds the partner table, nullable receipt columns, indexes, checks, and restrictive foreign keys. It does not update inventory, reservation, ledger, document status, or historical migrations.
 
-## Verification record
+## Outbound reconciliation successor — 2026-10-07
+
+Approval Center ExportReceipt rejection now captures Customer Code/Name in the same conditional UPDATE/transaction as Draft → Cancelled, using the current persisted relationship. Permission, warehouse, maker/checker, state, replay and exactly-once audit remain independent; no inventory/ledger effect or model change. SQL-backed regression first proved the missing snapshot (null customerCode), then verifies the saved name/code survive master rename after rejection. Fresh source, full-suite and focused browser evidence are recorded in [outbound reconciliation](OUTBOUND_DISPATCH_MVP.md#integrated-successor-evidence--2026-10-07). Prior partner evidence below remains historical/source-specific; inbound source/evidence is preserved.
+
+## Historical verification record
 
 The feature checkpoint and follow-up at revision `7a7a1359558c0bfc060c7affbe8c38131b297025` supplied these inherited results; they were not rerun for the controlled-delay UI change:
 

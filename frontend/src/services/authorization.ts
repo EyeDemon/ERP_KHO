@@ -19,8 +19,8 @@ export const usePermission = (code: string) => {
   usePermissionSet();
   return hasPermission(code);
 };
-export const currentPermissions = (): string[] => {
-  try { const value=JSON.parse(localStorage.getItem(storageKey) || '[]'); return Array.isArray(value) ? value.filter(x=>typeof x==='string') : []; }
+export const currentPermissions = (snapshot = localStorage.getItem(storageKey) || '[]'): string[] => {
+  try { const value=JSON.parse(snapshot); return Array.isArray(value) ? value.filter(x=>typeof x==='string') : []; }
   catch { return []; }
 };
 export const hasPermission = (code: string) => currentPermissions().includes(code);

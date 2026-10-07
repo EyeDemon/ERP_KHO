@@ -67,64 +67,64 @@ namespace ERP.Api.Controllers
         [HttpPost("{id}/cancel")]
         [IdempotentCommand("ExportReceipt.Cancel")]
         [PermissionAuthorize(AppPermissions.ExportReceiptCancel)]
-        public async Task<IActionResult> Cancel(int id)
+        public async Task<IActionResult> Cancel(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId))
             {
                 return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
             }
 
-            await _exportReceiptService.CancelAsync(id, userId);
+            await _exportReceiptService.CancelAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Hủy phiếu xuất thành công" });
         }
 
         [HttpPost("{id}/approve-and-reserve")]
         [IdempotentCommand("ExportReceipt.ApproveAndReserve")]
         [PermissionAuthorize(AppPermissions.ExportReceiptApprove)]
-        public async Task<IActionResult> ApproveAndReserve(int id)
+        public async Task<IActionResult> ApproveAndReserve(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized();
-            await _exportReceiptService.ApproveAndReserveAsync(id, userId);
+            await _exportReceiptService.ApproveAndReserveAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Đã duyệt và giữ hàng." });
         }
 
         [HttpPost("{id}/approve-and-dispatch")]
         [IdempotentCommand("ExportReceipt.ApproveAndDispatch")]
-        [PermissionAuthorize(AppPermissions.ExportReceiptApprove)]
-        [PermissionAuthorize(AppPermissions.ExportReceiptDispatch)]
-        public async Task<IActionResult> ApproveAndDispatch(int id)
+        [PermissionAuthorize(AppPermissions.ExportReceiptApprove), PermissionAuthorize(AppPermissions.ExportReceiptDispatch)]
+        public async Task<IActionResult> ApproveAndDispatch(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
-            if (!TryGetUserId(out _)) return Unauthorized();
-            return Conflict(new { message = "Luồng duyệt và xuất ngay đã ngừng sử dụng. Hãy duyệt giữ hàng trước, sau đó xác nhận xuất kho." });
+            if (!TryGetUserId(out var userId)) return Unauthorized();
+            await _exportReceiptService.ApproveAndDispatchAsync(id, userId, command?.RowVersion);
+            return Ok(new { message = "Đã duyệt và xuất kho." });
         }
 
         [HttpPost("{id}/dispatch")]
         [IdempotentCommand("ExportReceipt.Dispatch")]
         [PermissionAuthorize(AppPermissions.ExportReceiptDispatch)]
-        public async Task<IActionResult> Dispatch(int id)
+        public async Task<IActionResult> Dispatch(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized();
-            await _exportReceiptService.DispatchAsync(id, userId);
+            await _exportReceiptService.DispatchAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Đã xác nhận xuất kho." });
         }
 
         [HttpPost("{id}/approve")]
         [IdempotentCommand("ExportReceipt.Approve")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
         [PermissionAuthorize(AppPermissions.ExportReceiptApprove)]
-        public async Task<IActionResult> Approve(int id)
+        public async Task<IActionResult> Approve(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId))
             {
                 return Unauthorized();
             }
 
-            await _exportReceiptService.ApproveAsync(id, userId);
+            await _exportReceiptService.ApproveAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Duyệt phiếu xuất thành công" });
         }
 
-        [HttpPut("{id:int}/customer"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate), PermissionAuthorize(AppPermissions.PartnerRead)]
+        [HttpPut("{id:int}/customer"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate)]
+        [IdempotentCommand("ExportReceipt.CustomerChanged")]
         public async Task<IActionResult> SetCustomer(int id, [FromBody] ERP.Application.DTOs.SetReceiptPartnerDto dto, [FromServices] IBusinessPartnerService partners, CancellationToken ct)
-        { await partners.SetExportCustomerAsync(id, dto.PartnerId, ct); return NoContent(); }
+        { await partners.SetExportCustomerAsync(id, dto.PartnerId, ct, dto.RowVersion); return NoContent(); }
     }
 }

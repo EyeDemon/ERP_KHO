@@ -158,7 +158,7 @@ public sealed class SqlServerStockReservationTests
             }
 
             await using (var db = CreateContext())
-                await CreateExportService(db, fixture.UserId).DispatchAsync(holdReceiptId, fixture.UserId);
+                await CreateExportService(db, fixture.CreatorId).DispatchAsync(holdReceiptId, fixture.CreatorId);
 
             await using (var dispatched = CreateContext())
             {
@@ -195,7 +195,7 @@ public sealed class SqlServerStockReservationTests
             async Task<bool> Dispatch(int receiptId)
             {
                 await using var db = CreateContext();
-                try { await CreateExportService(db, fixture.UserId).DispatchAsync(receiptId, fixture.UserId); return true; }
+                try { await CreateExportService(db, fixture.CreatorId).DispatchAsync(receiptId, fixture.CreatorId); return true; }
                 catch (Exception ex) when (ex is ConcurrencyException or DbUpdateConcurrencyException) { return false; }
             }
 

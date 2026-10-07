@@ -64,6 +64,15 @@ namespace ERP.Infrastructure.Repositories
             return await query.FirstOrDefaultAsync(e => e.Id == id);
         }
 
+        public async Task<ExportReceipt?> GetForMutationAsync(int id)
+        {
+            if (_context.Database.IsSqlServer())
+                await _context.Database.SqlQuery<int>($"SELECT Id AS Value FROM ExportReceipts WITH (UPDLOCK,HOLDLOCK) WHERE Id={id}").ToListAsync();
+            foreach (var entry in _context.ChangeTracker.Entries<ExportReceipt>().Where(e => e.Entity.Id == id))
+                await entry.ReloadAsync();
+            return await GetByIdWithDetailsAsync(id);
+        }
+
         public async Task<IEnumerable<ExportReceipt>> GetListAsync()
         {
             var query = _dbSet.AsQueryable();

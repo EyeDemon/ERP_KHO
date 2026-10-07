@@ -129,29 +129,28 @@ namespace ERP.Api.Tests
         }
 
         [Theory]
-        [InlineData("GetAll", AppPermissions.ExportReceiptRead)]
-        [InlineData("GetById", AppPermissions.ExportReceiptRead)]
-        [InlineData("Create", AppPermissions.ExportReceiptCreate)]
-        [InlineData("Cancel", AppPermissions.ExportReceiptCancel)]
-        [InlineData("Approve", AppPermissions.ExportReceiptApprove)]
-        [InlineData("ApproveAndReserve", AppPermissions.ExportReceiptApprove)]
-        [InlineData("Dispatch", AppPermissions.ExportReceiptDispatch)]
-        public void ExportReceiptsController_UsesOutboundPermissions(string methodName, string expectedPermission)
+        [InlineData("GetAll", "export_receipt.read")]
+        [InlineData("GetById", "export_receipt.read")]
+        [InlineData("Create", "export_receipt.create")]
+        [InlineData("SetCustomer", "export_receipt.update")]
+        [InlineData("Cancel", "export_receipt.cancel")]
+        [InlineData("Approve", "export_receipt.approve")]
+        [InlineData("ApproveAndReserve", "export_receipt.approve")]
+        [InlineData("ApproveAndDispatch", "export_receipt.approve,export_receipt.dispatch")]
+        [InlineData("Dispatch", "export_receipt.dispatch")]
+        public void ExportReceiptAction_HasExactIndependentPermissions(string action, string codes)
         {
-            var permissions = typeof(ExportReceiptsController).GetMethod(methodName)!
-                .GetCustomAttributes<PermissionAuthorizeAttribute>().Select(x => x.Permission);
-            permissions.Should().Contain(expectedPermission);
+            typeof(ExportReceiptsController).GetMethod(action)!.GetCustomAttributes<PermissionAuthorizeAttribute>()
+                .Select(x=>x.Permission).Should().BeEquivalentTo(codes.Split(','));
         }
 
         [Fact]
-        public void ExportReceiptsController_ApproveAndDispatch_IsPermissionProtectedButNoLongerRoleGated()
+        public void ExportReceiptActions_DoNotRetainRoleBackedPolicies()
         {
-            var method = typeof(ExportReceiptsController).GetMethod("ApproveAndDispatch")!;
-            method.GetCustomAttributes<PermissionAuthorizeAttribute>().Select(x => x.Permission)
-                .Should().BeEquivalentTo(AppPermissions.ExportReceiptApprove, AppPermissions.ExportReceiptDispatch);
-            method.GetCustomAttributes<AuthorizeAttribute>()
-                .Should().OnlyContain(a => string.IsNullOrEmpty(a.Roles) && string.IsNullOrEmpty(a.Policy));
+            foreach (var method in typeof(ExportReceiptsController).GetMethods().Where(m => m.GetCustomAttributes<PermissionAuthorizeAttribute>().Any()))
+                method.GetCustomAttributes<AuthorizeAttribute>().Should().OnlyContain(a => string.IsNullOrEmpty(a.Roles) && string.IsNullOrEmpty(a.Policy));
         }
+
 
         [Theory]
         [InlineData(typeof(StocktakesController), "Approve")]

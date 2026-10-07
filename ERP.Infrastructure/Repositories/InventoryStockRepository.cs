@@ -13,6 +13,18 @@ namespace ERP.Infrastructure.Repositories
         {
         }
 
+        public Task<decimal> GetEligibleAvailableAsync(int productId, int warehouseId, CancellationToken cancellationToken = default) =>
+            _dbSet.Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.Status == InventoryStatus.Available && x.Location != null && x.Location.LocationType != WarehouseLocationType.Receiving && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
+                .SumAsync(x => x.Quantity - x.ReservedQuantity, cancellationToken);
+
+        public async Task<IReadOnlyList<(int LocationId, decimal Quantity)>> ConsumeReservedLocationsAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
+        {
+            var consumed = new List<(int LocationId, decimal Quantity)>();
+            if (quantity <= 0 || !await AllocateAsync(productId, warehouseId, quantity, false, true, cancellationToken, consumed: consumed))
+                throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+            return consumed;
+        }
+
         public async Task<InventoryStock?> GetByProductAndWarehouseAsync(int productId, int warehouseId)
         {
             return await _dbSet
@@ -87,11 +99,14 @@ namespace ERP.Infrastructure.Repositories
             catch (SqlException exception) when (exception.Number == 1205) { throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch giải phóng giữ hàng bị deadlock.", exception); }
         }
 
-        private async Task<bool> AllocateAsync(int productId, int warehouseId, decimal quantity, bool reserve, bool useReserved, CancellationToken token, bool releaseOnly = false)
+        private async Task<bool> AllocateAsync(int productId, int warehouseId, decimal quantity, bool reserve, bool useReserved, CancellationToken token, bool releaseOnly = false, List<(int LocationId, decimal Quantity)>? consumed = null)
         {
+            // ponytail: serialize location eligibility per warehouse; narrow these locks only if measured contention requires it.
+            if (_context.Database.IsSqlServer())
+                await _context.WarehouseLocations.FromSqlInterpolated($"SELECT * FROM WarehouseLocations WITH (UPDLOCK,HOLDLOCK) WHERE WarehouseId={warehouseId} ORDER BY Id").AsNoTracking().ToListAsync(token);
             var rows = await _dbSet.AsNoTracking()
-                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.Status == InventoryStatus.Available && x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
-                .OrderBy(x => x.LocationId).Select(x => new { x.Id, x.Quantity, x.ReservedQuantity }).ToListAsync(token);
+                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId && x.Status == InventoryStatus.Available && x.Location != null && (releaseOnly || (x.Location.LocationType != WarehouseLocationType.Receiving && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)))
+                .OrderBy(x => x.LocationId).Select(x => new { x.Id, x.LocationId, x.Quantity, x.ReservedQuantity }).ToListAsync(token);
             var capacity = rows.Sum(x => useReserved ? x.ReservedQuantity : x.Quantity - x.ReservedQuantity);
             if (capacity < quantity) return false;
             var remaining = quantity;
@@ -112,6 +127,7 @@ namespace ERP.Infrastructure.Repositories
                             : await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.Quantity, x => x.Quantity - take).SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take).SetProperty(x => x.LastUpdated, now), token)
                         : await query.ExecuteUpdateAsync(s => s.SetProperty(x => x.Quantity, x => x.Quantity - take).SetProperty(x => x.LastUpdated, now), token);
                 if (affected != 1) return false;
+                consumed?.Add((row.LocationId!.Value, take));
                 remaining -= take;
                 if (remaining == 0) return true;
             }

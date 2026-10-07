@@ -85,7 +85,7 @@ public sealed partial class InboundHttpIntegrationTests
         foreach (var path in new[] { $"/api/importreceipts/{import.Id}/supplier", $"/api/exportreceipts/{export.Id}/customer" })
             foreach (var partnerId in new int?[] { null, int.MaxValue })
             {
-                using var denied = await Send(client, HttpMethod.Put, path, manager.Id, "Manager", body:JsonSerializer.Serialize(new { partnerId }));
+                using var denied = await Send(client, HttpMethod.Put, path, manager.Id, "Manager", key:Guid.NewGuid().ToString("N"), body:JsonSerializer.Serialize(new { partnerId }));
                 Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
                 var raw = await denied.Content.ReadAsStringAsync();
                 Assert.DoesNotContain("QA-PARTNER-PRIVATE", raw);

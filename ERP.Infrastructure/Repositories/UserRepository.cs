@@ -12,6 +12,9 @@ namespace ERP.Infrastructure.Repositories
         {
         }
 
+        public override Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
+            _dbSet.Include(u => u.Role).SingleOrDefaultAsync(u => u.Id == id, cancellationToken);
+
         public async Task<User?> GetByUsernameWithRoleAsync(string username, CancellationToken cancellationToken = default)
         {
             return await _dbSet

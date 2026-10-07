@@ -27,4 +27,4 @@ public sealed class SaveBusinessPartnerDto
     public string? RowVersion { get; set; }
 }
 
-public sealed class SetReceiptPartnerDto { public int? PartnerId { get; set; } }
+public sealed class SetReceiptPartnerDto { public int? PartnerId { get; set; } public string? RowVersion { get; set; } }

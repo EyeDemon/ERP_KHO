@@ -13,6 +13,7 @@ public class ExportReceiptConfiguration : IEntityTypeConfiguration<ExportReceipt
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
         builder.HasIndex(x => x.Code).IsUnique();
         builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Property(x => x.DispatchMode);
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.CustomerCodeSnapshot).HasMaxLength(50);
