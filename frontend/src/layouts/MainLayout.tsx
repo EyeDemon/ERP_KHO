@@ -199,7 +199,7 @@ const MainLayout = () => {
           </button>
         </div>
         <div className="app-brand-context">
-          {blueprintMode ? 'System Blueprint / Demo' : 'Warehouse Management System'}
+          {blueprintMode ? 'Bản thiết kế hệ thống / Mô phỏng' : 'Hệ thống quản lý kho'}
         </div>
 
         {blueprintMode ? (
@@ -209,19 +209,19 @@ const MainLayout = () => {
               <span>Quay lại hệ thống thật</span>
             </Link>
 
-            <div className="sidebar-section-label">Blueprint tools</div>
-            <nav aria-label="Công cụ Blueprint">
+            <div className="sidebar-section-label">Công cụ bản thiết kế</div>
+            <nav aria-label="Công cụ bản thiết kế">
               <ul className="sidebar-nav">
                 {navLink('/system-blueprint', 'Bản đồ tổng thể', { accent: true, icon: blueprintIcons['/system-blueprint'] })}
-                {navLink('/system-blueprint/search', 'Global Search', { icon: blueprintIcons['/system-blueprint/search'] })}
-                {navLink('/system-blueprint/coverage', 'Coverage & Readiness', { icon: blueprintIcons['/system-blueprint/coverage'] })}
-                {navLink('/system-blueprint/mock-data', 'Mock Data Lab', { icon: blueprintIcons['/system-blueprint/mock-data'] })}
-                {navLink('/system-blueprint/scenarios', 'Golden Scenario Lab', { icon: blueprintIcons['/system-blueprint/scenarios'] })}
+                {navLink('/system-blueprint/search', 'Tìm kiếm toàn hệ thống', { icon: blueprintIcons['/system-blueprint/search'] })}
+                {navLink('/system-blueprint/coverage', 'Độ phủ & mức sẵn sàng', { icon: blueprintIcons['/system-blueprint/coverage'] })}
+                {navLink('/system-blueprint/mock-data', 'Phòng dữ liệu mô phỏng', { icon: blueprintIcons['/system-blueprint/mock-data'] })}
+                {navLink('/system-blueprint/scenarios', 'Phòng kịch bản chuẩn', { icon: blueprintIcons['/system-blueprint/scenarios'] })}
               </ul>
             </nav>
 
-            <div className="sidebar-section-label">17 module groups</div>
-            <nav aria-label="Module Blueprint">
+            <div className="sidebar-section-label">17 nhóm phân hệ</div>
+            <nav aria-label="Bản thiết kế theo phân hệ">
               <ul className="sidebar-nav">
                 {erpWmsBlueprint.map((module) => navLink('/system-blueprint/' + module.key, module.name, { icon: Circle }))}
               </ul>
@@ -276,11 +276,11 @@ const MainLayout = () => {
 
             {blueprintMode && (
               <>
-                <span className="blueprint-badge">DEMO / MOCK • READ ONLY</span>
+                <span className="blueprint-badge">MÔ PHỎNG • CHỈ ĐỌC</span>
                 <label className="persona-control">
-                  <span>Persona mô phỏng</span>
+                  <span>Vai trò mô phỏng</span>
                   <select
-                    aria-label="Persona mô phỏng"
+                    aria-label="Vai trò mô phỏng"
                     value={mockDemo.selectedUserCode}
                     onChange={(event) => mockDemo.setSelectedUserCode(event.target.value)}
                   >
@@ -288,7 +288,7 @@ const MainLayout = () => {
                       <option key={user.code} value={user.code}>{user.name} • {user.role}</option>
                     ))}
                   </select>
-                  <span>{mockDemo.allowedWarehouses.length} kho scope</span>
+                  <span>{mockDemo.allowedWarehouses.length} kho trong phạm vi</span>
                 </label>
               </>
             )}
@@ -296,11 +296,11 @@ const MainLayout = () => {
 
           <div className="topbar-actions">
             {blueprintMode ? (
-              <span className="topbar-context-text">Blueprint runtime</span>
+              <span className="topbar-context-text">Môi trường bản thiết kế</span>
             ) : demoRuntime ? (
               <>
-                <span className="runtime-badge">DEMO RUNTIME • MOCK BACKEND</span>
-                <span className="topbar-context-text">Frontend production UI</span>
+                <span className="runtime-badge">MÔI TRƯỜNG DEMO • BACKEND MÔ PHỎNG</span>
+                <span className="topbar-context-text">Giao diện production</span>
               </>
             ) : (
               <>
@@ -328,15 +328,15 @@ const MainLayout = () => {
           {demoRuntime && !blueprintMode && (
             <section role="note" className="demo-runtime-banner" aria-label="Thông tin môi trường demo">
               <div className="demo-runtime-copy">
-                <div className="demo-runtime-kicker">Vercel Blueprint Demo • Read only</div>
-                <div className="demo-runtime-title">Production UI đang chạy với demo API adapter, chưa phải backend staging.</div>
+                <div className="demo-runtime-kicker">Bản demo Vercel • Chỉ đọc</div>
+                <div className="demo-runtime-title">Giao diện production đang chạy với bộ chuyển đổi API mô phỏng, chưa phải backend staging.</div>
                 <div className="demo-runtime-detail">
-                  GET được phục vụ bằng dữ liệu mock có kiểm soát; POST/PUT/DELETE bị chặn 405 và dữ liệu không được lưu sau phiên test.
+                  GET dùng dữ liệu mô phỏng có kiểm soát; POST/PUT/DELETE bị chặn với mã 405 và dữ liệu không được lưu sau phiên kiểm thử.
                 </div>
               </div>
               <div className="demo-runtime-actions">
                 <Link to="/system-blueprint">Mở bản đồ hệ thống</Link>
-                <Link to="/system-blueprint/coverage">Coverage & Readiness</Link>
+                <Link to="/system-blueprint/coverage">Độ phủ & mức sẵn sàng</Link>
               </div>
             </section>
           )}
