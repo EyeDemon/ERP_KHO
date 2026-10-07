@@ -10,10 +10,10 @@ import {
   type BlueprintStatus,
 } from '../config/erpWmsBlueprint';
 import {
-  getMô phỏngWorkCenter,
-  type Mô phỏngOperationalRecord,
-} from '../mô phỏngs/erpWmsMô phỏngData';
-import { useMô phỏngDemo } from '../context/Mô phỏngDemoContext';
+  getMockWorkCenter,
+  type MockOperationalRecord,
+} from '../mocks/erpWmsMockData';
+import { useMockDemo } from '../context/MockDemoContext';
 import './SystemBlueprint.css';
 import './ModuleBlueprint.css';
 
@@ -22,7 +22,7 @@ const statusIcon = (status: BlueprintStatus) => {
   return <CircleDashed size={15} />;
 };
 
-const qtyText = (record: Mô phỏngOperationalRecord) =>
+const qtyText = (record: MockOperationalRecord) =>
   record.quantity == null ? '—' : `${record.quantity.toLocaleString('vi-VN')} ${record.uom ?? ''}`.trim();
 
 const localTime = (iso: string) => new Date(iso).toLocaleString('vi-VN');
@@ -30,14 +30,14 @@ const localTime = (iso: string) => new Date(iso).toLocaleString('vi-VN');
 const ModuleBlueprint = () => {
   const { moduleKey } = useParams();
   const module = findBlueprintModule(moduleKey);
-  const mô phỏngDemo = useMô phỏngDemo();
-  const workCenter = getMô phỏngWorkCenter(moduleKey);
+  const mockDemo = useMockDemo();
+  const workCenter = getMockWorkCenter(moduleKey);
   const [selectedId, setSelectedId] = useState<string | null>(workCenter?.records[0]?.id ?? null);
   const [search, setSearch] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  const records = (workCenter?.records ?? []).filter((record) => mô phỏngDemo.canSeeWarehouse(record.warehouse));
+  const records = (workCenter?.records ?? []).filter((record) => mockDemo.canSeeWarehouse(record.warehouse));
   const warehouses = useMemo(
     () => Array.from(new Set(records.map((item) => item.warehouse))).sort((a, b) => a.localeCompare(b)),
     [records],
@@ -127,7 +127,7 @@ const ModuleBlueprint = () => {
               <span className="workbench-kicker">TRUNG TÂM CÔNG VIỆC • DỮ LIỆU MÔ PHỎNG</span>
               <h2>{module.name}</h2>
               <p>
-                Bộ dữ liệu mô phỏng tại {workCenter ? localTime(workCenter.snapshotAt) : '—'} • Vai trò {mô phỏngDemo.selectedUser.name} • {mô phỏngDemo.allowedWarehouses.length} kho trong phạm vi.
+                Bộ dữ liệu mô phỏng tại {workCenter ? localTime(workCenter.snapshotAt) : '—'} • Vai trò {mockDemo.selectedUser.name} • {mockDemo.allowedWarehouses.length} kho trong phạm vi.
                 Không gọi API thật và không thay đổi dữ liệu nghiệp vụ.
               </p>
             </div>
@@ -160,7 +160,7 @@ const ModuleBlueprint = () => {
           </div>
 
           <div className="demo-table-wrap">
-            <table className="demo-table mô phỏng-data-table">
+            <table className="demo-table mock-data-table">
               <thead>
                 <tr>
                   <th>Tham chiếu</th>
@@ -182,13 +182,13 @@ const ModuleBlueprint = () => {
                     <td>{qtyText(record)}</td>
                     <td><strong>{record.owner}</strong><span>{localTime(record.updatedAt)}</span></td>
                     <td><span className={'priority-chip priority-' + record.priority.toLowerCase()}>{record.priority}</span></td>
-                    <td><span className={'mô phỏng-status tone-' + record.tone}>{record.status}</span></td>
+                    <td><span className={'mock-status tone-' + record.tone}>{record.status}</span></td>
                     <td><button type="button" className="table-detail-button" onClick={() => setSelectedId(record.id)}>Chi tiết</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {filteredRecords.length === 0 && <div className="mô phỏng-empty">Không có bản ghi mô phỏng phù hợp bộ lọc.</div>}
+            {filteredRecords.length === 0 && <div className="mock-empty">Không có bản ghi mô phỏng phù hợp bộ lọc.</div>}
           </div>
         </div>
 
@@ -200,7 +200,7 @@ const ModuleBlueprint = () => {
               <p>{selected.subject}</p>
               <dl>
                 <div><dt>Loại</dt><dd>{selected.type}</dd></div>
-                <div><dt>Trạng thái</dt><dd><span className={'mô phỏng-status tone-' + selected.tone}>{selected.status}</span></dd></div>
+                <div><dt>Trạng thái</dt><dd><span className={'mock-status tone-' + selected.tone}>{selected.status}</span></dd></div>
                 <div><dt>Kho</dt><dd>{selected.warehouse}</dd></div>
                 <div><dt>Vị trí</dt><dd>{selected.location ?? '—'}</dd></div>
                 <div><dt>Sản phẩm</dt><dd>{selected.productCode ?? '—'}</dd></div>
@@ -226,7 +226,7 @@ const ModuleBlueprint = () => {
             <div><FileCheck2 size={17} /><span><strong>Kiểm toán / Outbox</strong><small>Bằng chứng và sự kiện tích hợp</small></span></div>
           </div>
           <div className="trace-note">
-            Bản ghi mô phỏng chỉ phục vụ demo/test. Chức năng chưa có backend vẫn giữ đúng nhãn “Theo đặc tả” hoặc
+            Bản ghi mô phỏng chỉ phục vụ demo/test. Capability chưa có backend vẫn giữ đúng nhãn “Theo đặc tả” hoặc
             “Nâng cao”, không giả lập mức sẵn sàng của hệ thống thật.
           </div>
         </aside>
@@ -247,13 +247,13 @@ const ModuleBlueprint = () => {
               </tr>
             </thead>
             <tbody>
-              {module.capabilities.map((chức năng) => (
-                <tr key={chức năng.id}>
-                  <td><strong>{chức năng.id}</strong><span>{chức năng.name}</span></td>
-                  <td>{chức năng.goal}</td>
+              {module.capabilities.map((capability) => (
+                <tr key={capability.id}>
+                  <td><strong>{capability.id}</strong><span>{capability.name}</span></td>
+                  <td>{capability.goal}</td>
                   <td>
                     <div className="surface-row compact-surfaces">
-                      {chức năng.surfaces.map((surface) => (
+                      {capability.surfaces.map((surface) => (
                         <span key={surface}>
                           {surface === 'Mobile' ? <Smartphone size={12} /> : <MonitorSmartphone size={12} />}
                           {surface}
@@ -262,16 +262,16 @@ const ModuleBlueprint = () => {
                     </div>
                   </td>
                   <td>
-                    <span className={'status-pill compact ' + chức năng.status}>
-                      {statusIcon(chức năng.status)} {blueprintDemoStatusLabels[chức năng.status]}
+                    <span className={'status-pill compact ' + capability.status}>
+                      {statusIcon(capability.status)} {blueprintDemoStatusLabels[capability.status]}
                     </span>
                   </td>
-                  <td>{chức năng.spec}</td>
+                  <td>{capability.spec}</td>
                   <td>
-                    <div className="table-chức năng-links">
-                      <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + chức năng.id}>Xem trước</Link>
-                      {chức năng.mô phỏngRoute ? <Link className="table-open-link" to={chức năng.mô phỏngRoute}>Mô phỏng chuyên biệt</Link> : null}
-                      {chức năng.route ? <span className="table-hệ thống thật-note">Có trong hệ thống thật</span> : null}
+                    <div className="table-capability-links">
+                      <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + capability.id}>Xem trước</Link>
+                      {capability.mockRoute ? <Link className="table-open-link" to={capability.mockRoute}>Mô phỏng chuyên biệt</Link> : null}
+                      {capability.route ? <span className="table-production-note">Có trong hệ thống thật</span> : null}
                     </div>
                   </td>
                 </tr>
