@@ -852,8 +852,6 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("CreatedBy");
 
-                    b.HasIndex("ProductId");
-
                     b.HasIndex("ImportReceiptDetailId", "TargetStatus");
 
                     b.HasIndex("ProductId", "SerialNumber")
@@ -1125,7 +1123,8 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("WarehouseId");
 
                     b.HasIndex("ProductId", "WarehouseId", "Status", "LocationId", "LotId", "SerialId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[LocationId] IS NOT NULL AND [LotId] IS NOT NULL AND [SerialId] IS NOT NULL");
 
                     b.ToTable("InventoryStocks", null, t =>
                         {
