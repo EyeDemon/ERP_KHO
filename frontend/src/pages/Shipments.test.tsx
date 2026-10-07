@@ -185,6 +185,8 @@ describe('Shipment staging & loading workbench',()=>{
     await view.findByText('SHIP-2026-7701');
     fireEvent.click(view.getByText('SHIP-2026-7701'));
     expect(await view.findByText(/Shipment đã COMPLETED/)).toBeTruthy();
+    expect(view.getByText('Nguyễn Văn A')).toBeTruthy();
+    expect(view.getByText(/pod:\/\/proof-1/)).toBeTruthy();
     expect(view.getByRole('table',{name:'Shipment tracking timeline'})).toBeTruthy();
     expect(view.getByText('DeliveryConfirmed')).toBeTruthy();
   });
