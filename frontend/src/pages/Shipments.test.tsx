@@ -34,7 +34,7 @@ describe('Shipment staging & loading workbench',()=>{
     const view=render(<Shipments/>);
     await view.findByText('SHIP-2026-7701');
     fireEvent.click(view.getByText('SHIP-2026-7701'));
-    expect(await view.findByText(/Foundation hiện quản lý Shipment READY/)).toBeTruthy();
+    expect(await view.findByText(/Foundation hiện quản lý Shipment từ READY/)).toBeTruthy();
     expect(view.queryByText('Đưa vào Staging')).toBeNull();
     expect(view.queryByText('Bắt đầu Loading')).toBeNull();
   });
@@ -60,7 +60,7 @@ describe('Shipment staging & loading workbench',()=>{
     const first=render(<Shipments/>);
     await first.findByText('SHIP-2026-7701');
     fireEvent.click(first.getByText('SHIP-2026-7701'));
-    expect(await first.findByText(/Foundation hiện quản lý Shipment READY/)).toBeTruthy();
+    expect(await first.findByText(/Foundation hiện quản lý Shipment từ READY/)).toBeTruthy();
     expect(first.queryByText('Bắt đầu Loading')).toBeNull();
     cleanup();
 
