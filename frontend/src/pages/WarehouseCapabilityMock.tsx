@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { CalendarDays, Gauge, MapPinned, ShieldAlert, Truck } from 'lucide-react';
-import './WarehouseCapabilityMock.css';
+import './KhoCapabilityMock.css';
 
-type WarehouseMockProps = {
+type KhoMockProps = {
   capabilityId?: string;
 };
 
@@ -27,61 +27,61 @@ const MockHeader = ({
     <div className="warehouse-mock-title-row">
       <span className="warehouse-mock-icon" aria-hidden="true">{icon}</span>
       <div>
-        <span className="warehouse-mock-kicker">KHO & VỊ TRÍ • {id} • FRONTEND MOCK</span>
+        <span className="warehouse-mock-kicker">KHO & VỊ TRÍ • {id} • MÔ PHỎNG GIAO DIỆN</span>
         <h2 id={'warehouse-' + id.toLowerCase() + '-title'}>{title}</h2>
       </div>
     </div>
     <p>{description}</p>
     <div className="warehouse-mock-scope">
-      <StatusBadge tone="neutral">Read-only</StatusBadge>
-      <span>Không gọi API production • Không ghi database • Không thay đổi inventory</span>
+      <StatusBadge tone="neutral">Chỉ đọc</StatusBadge>
+      <span>Không gọi API hệ thống thật • Không ghi cơ sở dữ liệu • Không thay đổi tồn kho</span>
     </div>
   </header>
 );
 
 const CapacityPreview = () => {
   const locations = [
-    { code: 'A01-R02-L03-B04', weight: '1.260 / 1.500 kg', volume: '8,2 / 10 m³', pallet: '4 / 5', rule: 'Ambient • Food-safe', tone: 'warning' as const, status: 'Gần đầy' },
-    { code: 'A01-R02-L03-B05', weight: '620 / 1.500 kg', volume: '4,1 / 10 m³', pallet: '2 / 5', rule: 'Ambient • Food-safe', tone: 'success' as const, status: 'Có thể cất' },
-    { code: 'A01-R02-L03-B08', weight: '0 / 800 kg', volume: '0 / 6 m³', pallet: '0 / 3', rule: 'Damaged only', tone: 'danger' as const, status: 'Không tương thích' },
+    { code: 'A01-R02-L03-B04', weight: '1.260 / 1.500 kg', volume: '8,2 / 10 m³', pallet: '4 / 5', rule: 'Nhiệt độ thường • An toàn thực phẩm', tone: 'warning' as const, status: 'Gần đầy' },
+    { code: 'A01-R02-L03-B05', weight: '620 / 1.500 kg', volume: '4,1 / 10 m³', pallet: '2 / 5', rule: 'Nhiệt độ thường • An toàn thực phẩm', tone: 'success' as const, status: 'Có thể cất' },
+    { code: 'A01-R02-L03-B08', weight: '0 / 800 kg', volume: '0 / 6 m³', pallet: '0 / 3', rule: 'Chỉ hàng hư hỏng', tone: 'danger' as const, status: 'Không tương thích' },
   ];
 
   return (
     <section className="warehouse-capability-mock" data-testid="warehouse-capability-mock-WH-03" aria-labelledby="warehouse-wh-03-title">
       <MockHeader
         id="WH-03"
-        title="Sức chứa vị trí & Storage Constraints"
-        description="Mô phỏng cách WMS kiểm tra weight, volume, pallet capacity và compatibility trước putaway hoặc internal move."
+        title="Sức chứa vị trí & Ràng buộc lưu trữ"
+        description="Mô phỏng cách WMS kiểm tra khối lượng, thể tích, sức chứa pallet và độ tương thích trước khi cất hàng hoặc di chuyển nội bộ."
         icon={<Gauge size={20} />}
       />
 
       <div className="warehouse-mock-metrics">
-        <div><span>Incoming load</span><strong>240 kg</strong><small>1 pallet • 1,6 m³</small></div>
-        <div><span>Candidate locations</span><strong>3</strong><small>2 eligible • 1 rejected</small></div>
-        <div><span>Best candidate</span><strong>B05</strong><small>41% volume used</small></div>
-        <div><span>Constraint profile</span><strong>FOOD-AMBIENT</strong><small>Version 4 • mock</small></div>
+        <div><span>Tải hàng sắp vào</span><strong>240 kg</strong><small>1 pallet • 1,6 m³</small></div>
+        <div><span>Vị trí ứng viên</span><strong>3</strong><small>2 phù hợp • 1 bị loại</small></div>
+        <div><span>Ứng viên tốt nhất</span><strong>B05</strong><small>Đã dùng 41% thể tích</small></div>
+        <div><span>Hồ sơ ràng buộc</span><strong>FOOD-AMBIENT</strong><small>Phiên bản 4 • mô phỏng</small></div>
       </div>
 
-      <div className="warehouse-capacity-summary">
+      <div className="warehouse-sức chứa-summary">
         <div>
-          <div className="warehouse-capacity-label"><span>B04 projected weight</span><strong>100%</strong></div>
-          <div className="warehouse-capacity-track" role="progressbar" aria-label="B04 projected weight usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={100}>
+          <div className="warehouse-sức chứa-label"><span>Khối lượng dự kiến B04</span><strong>100%</strong></div>
+          <div className="warehouse-sức chứa-track" role="progressbar" aria-label="Khối lượng dự kiến B04 usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={100}>
             <span className="danger" style={{ width: '100%' }} />
           </div>
           <small>1.260 + 240 = 1.500 kg • chạm giới hạn</small>
         </div>
         <div>
-          <div className="warehouse-capacity-label"><span>B05 projected weight</span><strong>57%</strong></div>
-          <div className="warehouse-capacity-track" role="progressbar" aria-label="B05 projected weight usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={57}>
+          <div className="warehouse-sức chứa-label"><span>Khối lượng dự kiến B05</span><strong>57%</strong></div>
+          <div className="warehouse-sức chứa-track" role="progressbar" aria-label="Khối lượng dự kiến B05 usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={57}>
             <span className="success" style={{ width: '57%' }} />
           </div>
-          <small>620 + 240 = 860 / 1.500 kg • còn headroom</small>
+          <small>620 + 240 = 860 / 1.500 kg • còn dư địa</small>
         </div>
       </div>
 
       <div className="warehouse-mock-table-scroll">
-        <table aria-label="Mock location capacity candidates">
-          <thead><tr><th>Vị trí</th><th>Weight</th><th>Volume</th><th>Pallet</th><th>Storage rule</th><th>Kết quả</th></tr></thead>
+        <table aria-label="Các vị trí ứng viên về sức chứa mô phỏng">
+          <thead><tr><th>Vị trí</th><th>Khối lượng</th><th>Thể tích</th><th>Pallet</th><th>Quy tắc lưu trữ</th><th>Kết quả</th></tr></thead>
           <tbody>
             {locations.map((location) => (
               <tr key={location.code}>
@@ -102,33 +102,33 @@ const CapacityPreview = () => {
 
 const HeatmapPreview = () => {
   const cells = [
-    { code: 'A01', utilization: 92, status: 'Critical', tone: 'danger' as const, detail: 'Congestion • 14 tasks' },
-    { code: 'A02', utilization: 78, status: 'Busy', tone: 'warning' as const, detail: '8 tasks' },
-    { code: 'A03', utilization: 54, status: 'Normal', tone: 'success' as const, detail: '4 tasks' },
-    { code: 'B01', utilization: 68, status: 'Normal', tone: 'success' as const, detail: '5 tasks' },
-    { code: 'B02', utilization: 84, status: 'Busy', tone: 'warning' as const, detail: '9 tasks' },
-    { code: 'B03', utilization: 37, status: 'Normal', tone: 'success' as const, detail: '2 tasks' },
-    { code: 'QC', utilization: 61, status: 'Attention', tone: 'warning' as const, detail: '6 HU waiting' },
-    { code: 'STAGE', utilization: 88, status: 'Critical', tone: 'danger' as const, detail: 'Dock cutoff 45m' },
+    { code: 'A01', utilization: 92, status: 'Khẩn cấp', tone: 'danger' as const, detail: 'Ùn tắc • 14 nhiệm vụ' },
+    { code: 'A02', utilization: 78, status: 'Bận', tone: 'warning' as const, detail: '8 nhiệm vụ' },
+    { code: 'A03', utilization: 54, status: 'Bình thường', tone: 'success' as const, detail: '4 nhiệm vụ' },
+    { code: 'B01', utilization: 68, status: 'Bình thường', tone: 'success' as const, detail: '5 nhiệm vụ' },
+    { code: 'B02', utilization: 84, status: 'Bận', tone: 'warning' as const, detail: '9 nhiệm vụ' },
+    { code: 'B03', utilization: 37, status: 'Bình thường', tone: 'success' as const, detail: '2 nhiệm vụ' },
+    { code: 'QC', utilization: 61, status: 'Cần chú ý', tone: 'warning' as const, detail: '6 HU đang chờ' },
+    { code: 'STAGE', utilization: 88, status: 'Khẩn cấp', tone: 'danger' as const, detail: 'Còn 45 phút tới giờ chốt cửa kho' },
   ];
 
   return (
     <section className="warehouse-capability-mock" data-testid="warehouse-capability-mock-WH-04" aria-labelledby="warehouse-wh-04-title">
       <MockHeader
         id="WH-04"
-        title="Bản đồ kho & Heatmap"
-        description="Mock spatial overview để xem utilization, congestion và operational pressure theo zone/aisle mà không biến snapshot thành inventory truth."
+        title="Bản đồ kho & Bản đồ nhiệt"
+        description="Tổng quan không gian mô phỏng để xem mức sử dụng, ùn tắc và áp lực vận hành theo khu/dãy mà không biến ảnh chụp thành sự thật tồn kho."
         icon={<MapPinned size={20} />}
       />
 
       <div className="warehouse-mock-metrics">
-        <div><span>Warehouse</span><strong>WH-HCM-01</strong><small>DC Hồ Chí Minh</small></div>
-        <div><span>Snapshot age</span><strong>2 phút</strong><small>Mock freshness indicator</small></div>
-        <div><span>Critical areas</span><strong>2</strong><small>A01 • STAGE</small></div>
-        <div><span>Average utilization</span><strong>70%</strong><small>8 operational areas</small></div>
+        <div><span>Kho</span><strong>WH-HCM-01</strong><small>DC Hồ Chí Minh</small></div>
+        <div><span>Tuổi dữ liệu chụp</span><strong>2 phút</strong><small>Chỉ báo độ mới mô phỏng</small></div>
+        <div><span>Khẩn cấp areas</span><strong>2</strong><small>A01 • STAGE</small></div>
+        <div><span>Mức sử dụng trung bình</span><strong>70%</strong><small>8 khu vực vận hành</small></div>
       </div>
 
-      <div className="warehouse-heatmap" aria-label="Mock warehouse utilization heatmap">
+      <div className="warehouse-heatmap" aria-label="Bản đồ nhiệt mức sử dụng kho mô phỏng">
         {cells.map((cell) => (
           <article key={cell.code} className={'warehouse-heatmap-cell ' + cell.tone}>
             <div><strong>{cell.code}</strong><span>{cell.utilization}% sử dụng</span></div>
@@ -139,8 +139,8 @@ const HeatmapPreview = () => {
       </div>
 
       <div className="warehouse-mock-callout warning">
-        <strong>Stale-data guard</strong>
-        <span>Heatmap quá tuổi freshness phải yêu cầu refresh trước khi dùng để điều phối task hoặc đánh giá capacity.</span>
+        <strong>Rào chắn dữ liệu cũ</strong>
+        <span>Bản đồ nhiệt quá ngưỡng độ mới phải yêu cầu làm mới trước khi dùng để điều phối nhiệm vụ hoặc đánh giá sức chứa.</span>
       </div>
     </section>
   );
@@ -148,9 +148,9 @@ const HeatmapPreview = () => {
 
 const CalendarPreview = () => {
   const shifts = [
-    { name: 'Ca sáng', time: '06:00–14:00', labor: '38 / 42 người', dock: '18 / 24 dock-hours', status: 'Đang chạy', tone: 'success' as const },
-    { name: 'Ca chiều', time: '14:00–22:00', labor: '31 / 40 người', dock: '21 / 24 dock-hours', status: 'Sắp đầy', tone: 'warning' as const },
-    { name: 'Ca đêm', time: '22:00–06:00', labor: '18 / 24 người', dock: '10 / 16 dock-hours', status: 'Đã lập kế hoạch', tone: 'neutral' as const },
+    { name: 'Ca sáng', time: '06:00–14:00', labor: '38 / 42 người', dock: '18 / 24 giờ cửa kho', status: 'Đang chạy', tone: 'success' as const },
+    { name: 'Ca chiều', time: '14:00–22:00', labor: '31 / 40 người', dock: '21 / 24 giờ cửa kho', status: 'Sắp đầy', tone: 'warning' as const },
+    { name: 'Ca đêm', time: '22:00–06:00', labor: '18 / 24 người', dock: '10 / 16 giờ cửa kho', status: 'Đã lập kế hoạch', tone: 'neutral' as const },
   ];
 
   return (
@@ -158,15 +158,15 @@ const CalendarPreview = () => {
       <MockHeader
         id="WH-05"
         title="Lịch vận hành & Ca làm việc"
-        description="Mô phỏng warehouse timezone, giờ mở cửa, ca, cutoff và capacity theo ngày vận hành."
+        description="Mô phỏng múi giờ kho, giờ mở cửa, ca, giờ chốt và sức chứa theo ngày vận hành."
         icon={<CalendarDays size={20} />}
       />
 
       <div className="warehouse-mock-metrics">
-        <div><span>Timezone</span><strong>Asia/Ho_Chi_Minh</strong><small>UTC+07:00</small></div>
+        <div><span>Múi giờ</span><strong>Asia/Ho_Chi_Minh</strong><small>UTC+07:00</small></div>
         <div><span>Ngày vận hành</span><strong>04/10/2026</strong><small>Chủ nhật</small></div>
-        <div><span>Receiving cutoff</span><strong>20:30</strong><small>Appointment check-in</small></div>
-        <div><span>Dispatch cutoff</span><strong>21:15</strong><small>Carrier handoff</small></div>
+        <div><span>Receiving giờ chốt</span><strong>20:30</strong><small>Nhận xe theo lịch</small></div>
+        <div><span>Dispatch giờ chốt</span><strong>21:15</strong><small>Bàn giao đơn vị vận chuyển</small></div>
       </div>
 
       <div className="warehouse-shift-grid">
@@ -174,20 +174,20 @@ const CalendarPreview = () => {
           <article key={shift.name}>
             <div className="warehouse-shift-heading"><div><strong>{shift.name}</strong><span>{shift.time}</span></div><StatusBadge tone={shift.tone}>{shift.status}</StatusBadge></div>
             <dl>
-              <div><dt>Labor</dt><dd>{shift.labor}</dd></div>
-              <div><dt>Dock capacity</dt><dd>{shift.dock}</dd></div>
+              <div><dt>Nhân lực</dt><dd>{shift.labor}</dd></div>
+              <div><dt>Dock sức chứa</dt><dd>{shift.dock}</dd></div>
             </dl>
           </article>
         ))}
       </div>
 
       <div className="warehouse-mock-table-scroll">
-        <table aria-label="Mock operational cutoffs">
-          <thead><tr><th>Boundary</th><th>Giờ</th><th>Rule</th><th>Recovery</th></tr></thead>
+        <table aria-label="Mock operational giờ chốts">
+          <thead><tr><th>Ranh giới</th><th>Giờ</th><th>Quy tắc</th><th>Cách xử lý</th></tr></thead>
           <tbody>
-            <tr><td>Receiving appointment</td><td>20:30</td><td>Không check-in mới sau cutoff</td><td>Supervisor override có audit</td></tr>
-            <tr><td>Outbound release</td><td>20:45</td><td>Wave mới phải fit remaining shift</td><td>Defer sang ca sau</td></tr>
-            <tr><td>Carrier dispatch</td><td>21:15</td><td>Load phải READY trước cutoff</td><td>Exception + reschedule</td></tr>
+            <tr><td>Lịch nhận hàng</td><td>20:30</td><td>Không nhận xe mới sau giờ chốt</td><td>Quản lý có thể ghi đè với kiểm toán</td></tr>
+            <tr><td>Mở lệnh xuất kho</td><td>20:45</td><td>Đợt mới phải phù hợp phần ca còn lại</td><td>Dời sang ca sau</td></tr>
+            <tr><td>Bàn giao vận chuyển</td><td>21:15</td><td>Tải hàng phải READY trước giờ chốt</td><td>Ngoại lệ + xếp lịch lại</td></tr>
           </tbody>
         </table>
       </div>
@@ -207,16 +207,16 @@ const DockYardPreview = () => {
     <section className="warehouse-capability-mock" data-testid="warehouse-capability-mock-WH-06" aria-labelledby="warehouse-wh-06-title">
       <MockHeader
         id="WH-06"
-        title="Dock & Yard Control Board"
-        description="Mock điều phối vehicle từ gate arrival → check-in → yard queue → dock assignment → service completion."
+        title="Bảng điều hành cửa kho & sân bãi"
+        description="Mô phỏng điều phối phương tiện từ đến cổng → nhận xe → hàng đợi sân bãi → gán cửa kho → hoàn tất phục vụ."
         icon={<Truck size={20} />}
       />
 
       <div className="warehouse-mock-metrics">
-        <div><span>Vehicles in yard</span><strong>7</strong><small>3 waiting • 4 at dock</small></div>
-        <div><span>Dock occupancy</span><strong>75%</strong><small>3 / 4 dock doors</small></div>
-        <div><span>Waiting &gt; 45m</span><strong>2</strong><small>Needs supervisor attention</small></div>
-        <div><span>Next appointment</span><strong>09:40</strong><small>APT-1058 • inbound</small></div>
+        <div><span>Phương tiện trong sân</span><strong>7</strong><small>3 đang chờ • 4 tại cửa kho</small></div>
+        <div><span>Mức sử dụng cửa kho</span><strong>75%</strong><small>3 / 4 cửa kho</small></div>
+        <div><span>Waiting &gt; 45m</span><strong>2</strong><small>Cần quản lý xử lý</small></div>
+        <div><span>Lịch tiếp theo</span><strong>09:40</strong><small>APT-1058 • nhập kho</small></div>
       </div>
 
       <div className="warehouse-dock-grid">
@@ -224,17 +224,17 @@ const DockYardPreview = () => {
           <article key={dock.dock}>
             <div className="warehouse-dock-id"><strong>{dock.dock}</strong><StatusBadge tone={dock.tone}>{dock.status}</StatusBadge></div>
             <dl>
-              <div><dt>Vehicle</dt><dd>{dock.vehicle}</dd></div>
-              <div><dt>Appointment</dt><dd>{dock.appointment}</dd></div>
-              <div><dt>Dwell</dt><dd>{dock.dwell}</dd></div>
+              <div><dt>Phương tiện</dt><dd>{dock.vehicle}</dd></div>
+              <div><dt>Lịch hẹn</dt><dd>{dock.appointment}</dd></div>
+              <div><dt>Thời gian lưu</dt><dd>{dock.dwell}</dd></div>
             </dl>
           </article>
         ))}
       </div>
 
       <div className="warehouse-mock-callout danger">
-        <strong>Double-assignment guard</strong>
-        <span>Dock đã có appointment active không được assign cho vehicle khác; conflict phải giữ nguyên context và yêu cầu refresh/re-plan.</span>
+        <strong>Rào chắn gán trùng</strong>
+        <span>Cửa kho đã có lịch đang hoạt động không được gán cho phương tiện khác; xung đột phải giữ nguyên ngữ cảnh và yêu cầu làm mới/lập kế hoạch lại.</span>
       </div>
     </section>
   );
@@ -242,49 +242,49 @@ const DockYardPreview = () => {
 
 const CalendarExceptionPreview = () => {
   const rules = [
-    { level: 'Company calendar', value: 'Chủ nhật: đóng cửa', priority: '1', tone: 'neutral' as const },
-    { level: 'Warehouse override', value: 'WH-HCM-01 mở 06:00–22:00', priority: '2', tone: 'success' as const },
-    { level: 'Shift exception', value: 'Ca chiều giảm 25% dock capacity', priority: '3', tone: 'warning' as const },
-    { level: 'Emergency override', value: 'Dock D04 đóng đến 12:00', priority: '4', tone: 'danger' as const },
+    { level: 'Lịch công ty', value: 'Chủ nhật: đóng cửa', priority: '1', tone: 'neutral' as const },
+    { level: 'Kho override', value: 'WH-HCM-01 mở 06:00–22:00', priority: '2', tone: 'success' as const },
+    { level: 'Ngoại lệ ca', value: 'Ca chiều giảm 25% dock sức chứa', priority: '3', tone: 'warning' as const },
+    { level: 'Ghi đè khẩn cấp', value: 'Dock D04 đóng đến 12:00', priority: '4', tone: 'danger' as const },
   ];
 
   return (
     <section className="warehouse-capability-mock" data-testid="warehouse-capability-mock-WH-07" aria-labelledby="warehouse-wh-07-title">
       <MockHeader
         id="WH-07"
-        title="Operational Calendar Exception Precedence"
-        description="Mô phỏng cách exception theo company, warehouse, shift và emergency override được resolve theo precedence rõ ràng."
+        title="Thứ tự ưu tiên ngoại lệ lịch vận hành"
+        description="Mô phỏng cách ngoại lệ theo công ty, kho, ca và ghi đè khẩn cấp được giải quyết theo thứ tự ưu tiên rõ ràng."
         icon={<ShieldAlert size={20} />}
       />
 
-      <div className="warehouse-exception-flow" aria-label="Mock calendar exception precedence">
+      <div className="warehouse-exception-flow" aria-label="Thứ tự ưu tiên ngoại lệ lịch mô phỏng">
         {rules.map((rule) => (
           <article key={rule.level}>
             <span className="warehouse-precedence-index">{rule.priority}</span>
             <div><strong>{rule.level}</strong><span>{rule.value}</span></div>
-            <StatusBadge tone={rule.tone}>{rule.priority === '4' ? 'Ưu tiên cao nhất' : 'Rule layer'}</StatusBadge>
+            <StatusBadge tone={rule.tone}>{rule.priority === '4' ? 'Ưu tiên cao nhất' : 'Lớp quy tắc'}</StatusBadge>
           </article>
         ))}
       </div>
 
       <div className="warehouse-effective-result">
         <div>
-          <span>Effective result • 04/10/2026 10:15</span>
-          <strong>Kho mở • Dock D01–D03 hoạt động • D04 tạm đóng</strong>
-          <p>Emergency override chỉ thay đổi phạm vi D04; các dock khác vẫn theo warehouse override và shift capacity.</p>
+          <span>Kết quả hiệu lực • 04/10/2026 10:15</span>
+          <strong>Kho mở • Cửa D01–D03 hoạt động • D04 tạm đóng</strong>
+          <p>Ghi đè khẩn cấp chỉ thay đổi phạm vi D04; các dock khác vẫn theo warehouse override và shift sức chứa.</p>
         </div>
-        <StatusBadge tone="warning">Partial capacity</StatusBadge>
+        <StatusBadge tone="warning">Partial sức chứa</StatusBadge>
       </div>
 
       <div className="warehouse-mock-callout warning">
-        <strong>Audit requirement</strong>
-        <span>Mỗi override cần reason, actor, effective window và audit trail; mock này không ghi cấu hình production.</span>
+        <strong>Yêu cầu kiểm toán</strong>
+        <span>Mỗi lần ghi đè cần lý do, người thực hiện, thời gian hiệu lực và dấu vết kiểm toán; mô phỏng này không ghi cấu hình hệ thống thật.</span>
       </div>
     </section>
   );
 };
 
-const WarehouseCapabilityMock = ({ capabilityId }: WarehouseMockProps) => {
+const KhoCapabilityMock = ({ capabilityId }: KhoMockProps) => {
   if (capabilityId === 'WH-03') return <CapacityPreview />;
   if (capabilityId === 'WH-04') return <HeatmapPreview />;
   if (capabilityId === 'WH-05') return <CalendarPreview />;
@@ -293,4 +293,4 @@ const WarehouseCapabilityMock = ({ capabilityId }: WarehouseMockProps) => {
   return null;
 };
 
-export default WarehouseCapabilityMock;
+export default KhoCapabilityMock;
