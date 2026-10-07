@@ -342,6 +342,156 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [Fact]
+    public void InternalLedgerEvents_AreWarehouseNeutralForAsOfReporting()
+    {
+        TransactionType.Move.ApplySign(7m).Should().Be(0);
+        TransactionType.StatusChange.ApplySign(7m).Should().Be(0);
+        TransactionType.Reversal.ApplySign(7m).Should().Be(0);
+    }
+
+    [SqlServerFact]
+    public async Task InternalMove_ReversalCreatesCorrectiveMoveAndMarker_WithoutChangingWarehouseTotal()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            InventoryMoveResultDto moved;
+            await using (var moveDb = CreateContext())
+            {
+                moved = await CreateMovementService(moveDb, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 4,
+                    Reason = "reversal fixture move"
+                });
+            }
+
+            InventoryReversalResultDto reversed;
+            await using (var reversalDb = CreateContext())
+            {
+                reversed = await CreateReversalService(reversalDb, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = moved.TransactionId,
+                    Reason = "operator correction"
+                });
+            }
+
+            await using var verify = CreateContext();
+            var stocks = await verify.InventoryStocks.AsNoTracking()
+                .Where(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId)
+                .ToListAsync();
+            stocks.Sum(x => x.Quantity).Should().Be(10);
+            stocks.Single(x => x.LocationId == fixture.SourceLocationId).Quantity.Should().Be(10);
+            stocks.Single(x => x.LocationId == fixture.DestinationLocationId).Quantity.Should().Be(0);
+
+            var correction = await verify.InventoryTransactions.AsNoTracking()
+                .SingleAsync(x => x.Id == reversed.CorrectiveTransactionId);
+            correction.TransactionType.Should().Be(TransactionType.Move);
+            correction.FromLocationId.Should().Be(fixture.DestinationLocationId);
+            correction.ToLocationId.Should().Be(fixture.SourceLocationId);
+            correction.Quantity.Should().Be(4);
+
+            var marker = await verify.InventoryTransactions.AsNoTracking()
+                .SingleAsync(x => x.Id == reversed.ReversalTransactionId);
+            marker.TransactionType.Should().Be(TransactionType.Reversal);
+            marker.ReferenceType.Should().Be("InventoryReversal");
+            marker.ReferenceId.Should().Be(moved.TransactionId);
+            marker.Quantity.Should().Be(4);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task InventoryReversal_RejectsSecondReversalOfSameOriginalTransaction()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            InventoryMoveResultDto moved;
+            await using (var moveDb = CreateContext())
+            {
+                moved = await CreateMovementService(moveDb, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 2,
+                    Reason = "double reversal fixture"
+                });
+            }
+
+            await using (var firstDb = CreateContext())
+                await CreateReversalService(firstDb, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = moved.TransactionId,
+                    Reason = "first correction"
+                });
+
+            await using (var secondDb = CreateContext())
+            {
+                var act = () => CreateReversalService(secondDb, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = moved.TransactionId,
+                    Reason = "must be blocked"
+                });
+                var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
+                thrown.Which.Data["ErrorCode"].Should().Be("INV_ALREADY_REVERSED");
+            }
+
+            await using var verify = CreateContext();
+            (await verify.InventoryTransactions.CountAsync(x =>
+                x.TransactionType == TransactionType.Reversal &&
+                x.ReferenceType == "InventoryReversal" &&
+                x.ReferenceId == moved.TransactionId)).Should().Be(1);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task Traceability_ReturnsCurrentBucketsTimelineAndReversalLinks()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            InventoryMoveResultDto moved;
+            await using (var moveDb = CreateContext())
+            {
+                moved = await CreateMovementService(moveDb, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 3,
+                    Reason = "trace fixture"
+                });
+            }
+
+            await using (var reversalDb = CreateContext())
+                await CreateReversalService(reversalDb, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = moved.TransactionId,
+                    Reason = "trace reversal"
+                });
+
+            await using var traceDb = CreateContext();
+            var current = new CurrentUser(fixture.UserId);
+            var result = await new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                traceDb,
+                new WarehouseAuthorizationService(traceDb, current))
+                .TraceAsync(productId: fixture.ProductId, limit: 50);
+
+            result.CurrentBuckets.Sum(x => x.OnHandQuantity).Should().Be(10);
+            var original = result.Events.Single(x => x.TransactionId == moved.TransactionId);
+            original.TransactionType.Should().Be(nameof(TransactionType.Move));
+            original.IsReversed.Should().BeTrue();
+            result.Events.Should().Contain(x =>
+                x.TransactionType == nameof(TransactionType.Reversal) &&
+                x.ReversalOfTransactionId == moved.TransactionId);
+            result.Events.Count(x => x.TransactionType == nameof(TransactionType.Move)).Should().Be(2);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     private static InventoryLockService CreateLockService(ErpKhoDbContext db, int userId)
     {
         var current = new CurrentUser(userId);
@@ -357,6 +507,16 @@ public sealed class SqlServerInventoryLockMoveTests
             new WarehouseAuthorizationService(db, current),
             current,
             locks);
+    }
+
+    private static InventoryReversalService CreateReversalService(ErpKhoDbContext db, int userId)
+    {
+        var current = new CurrentUser(userId);
+        var authorization = new WarehouseAuthorizationService(db, current);
+        var locks = new InventoryLockService(db, authorization, current);
+        var movement = new InventoryMovementService(db, authorization, current, locks);
+        var status = new InventoryStatusService(db, authorization, current, locks);
+        return new InventoryReversalService(db, authorization, current, movement, status);
     }
 
     private static async Task<Fixture> CreateFixtureAsync()
