@@ -10,6 +10,9 @@ namespace ERP.Application.DTOs
         public decimal? UnitWeightKg { get; set; }
         public decimal? UnitVolumeM3 { get; set; }
         public decimal? UnitPalletEquivalent { get; set; }
+        public string TrackingType { get; set; } = "None";
+        public bool ExpiryControl { get; set; }
+        public int? ShelfLifeDays { get; set; }
         public int UnitId { get; set; }
         public string? UnitName { get; set; }
         public string? UnitCode { get; set; }
