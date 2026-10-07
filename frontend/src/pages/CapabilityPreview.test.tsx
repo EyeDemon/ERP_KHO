@@ -249,7 +249,7 @@ describe('CapabilityPreview', () => {
   it('hides out-of-scope fixture samples after persona warehouse scope changes', () => {
     const PersonaSwitch = () => {
       const demo = useMockDemo();
-      return <button type="button" onClick={() => demo.setSelectedUserCode('U-DN-MGR')}>Use DN persona</button>;
+      return <button type="button" onClick={() => demo.setSelectedUserCode('U-DN-MGR')}>Dùng vai trò Đà Nẵng</button>;
     };
     const view = render(
       <MemoryRouter initialEntries={['/system-blueprint/inbound/IN-03']}>
@@ -261,17 +261,17 @@ describe('CapabilityPreview', () => {
         </MockDemoProvider>
       </MemoryRouter>,
     );
-    fireEvent.click(view.getByText('Use DN persona'));
-    const hiddenBộ dữ liệu mẫu = view.getByText('Sample record ẩn bởi simulated warehouse scope');
-    expect(hiddenBộ dữ liệu mẫu).toBeTruthy();
+    fireEvent.click(view.getByText('Dùng vai trò Đà Nẵng'));
+    const hiddenFixture = view.getByText('Bản ghi mẫu bị ẩn bởi phạm vi kho mô phỏng');
+    expect(hiddenFixture).toBeTruthy();
     expect(view.getAllByText('GR-2026-1041').length).toBeGreaterThan(0);
-    expect(hiddenBộ dữ liệu mẫu.closest('.capability-fixture-trace')?.textContent).not.toContain('GR-2026-1045');
+    expect(hiddenFixture.closest('.capability-fixture-trace')?.textContent).not.toContain('GR-2026-1045');
   });
 
   it('shows the active shared scenario on linked capability previews', () => {
     const ScenarioStarter = () => {
       const demo = useMockDemo();
-      return <button type="button" onClick={() => demo.runScenarioStep('GS-01')}>Run GS01 shared</button>;
+      return <button type="button" onClick={() => demo.runScenarioStep('GS-01')}>Chạy GS01 dùng chung</button>;
     };
     const view = render(
       <MemoryRouter initialEntries={['/system-blueprint/inbound/IN-07']}>
@@ -284,7 +284,7 @@ describe('CapabilityPreview', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(view.getByText('Run GS01 shared'));
+    fireEvent.click(view.getByText('Chạy GS01 dùng chung'));
     expect(view.getByTestId('shared-scenario-banner')).toBeTruthy();
     expect(view.getByText(/GS-01 • Inbound Receipt → Post → Putaway/)).toBeTruthy();
     expect(view.getByText(/Step 1 • trạng thái này dùng chung/)).toBeTruthy();
