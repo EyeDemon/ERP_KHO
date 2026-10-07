@@ -77,9 +77,9 @@ const SystemBlueprint = () => {
       </section>
 
       <section className="mock-dataset-summary">
-        <strong>Production truth:</strong>
+        <strong>Verified implementation baseline:</strong>
         <span>Branch: {blueprintProductionSnapshot.branch}</span>
-        <span>Commit: {blueprintProductionSnapshot.commit.slice(0, 12)}</span>
+        <span>Baseline commit: {blueprintProductionSnapshot.commit.slice(0, 12)}</span>
         <span>Deploy: {blueprintProductionSnapshot.deployment}</span>
         <span>Verified: {blueprintProductionSnapshot.verifiedAt}</span>
         <span>Notion: canonical reference • read-only</span>
