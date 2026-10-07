@@ -6,6 +6,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Queries;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -120,7 +121,7 @@ public sealed class StockAllocationService(
     {
         var reservation = await GetReservationAsync(reservationId, false, cancellationToken);
         ValidateAllocatableReservation(reservation);
-        return await BuildCandidatesAsync(reservation, null, null, cancellationToken);
+        return await BuildCandidatesAsync(reservation, null, null, null, null, cancellationToken);
     }
 
     public Task<IReadOnlyList<StockAllocationDto>> CreateAsync(
@@ -201,8 +202,10 @@ public sealed class StockAllocationService(
                 throw new ConcurrencyException("Chỉ Allocation đang hoạt động mới có thể phân bổ lại.");
             if (await context.PickingTaskLines.AnyAsync(x => x.AllocationId == original.Id, token))
                 throw new ConcurrencyException("Allocation đã được đưa vào nhiệm vụ Picking và không thể phân bổ lại trực tiếp.");
-            if (request.LocationId == original.LocationId)
-                throw new BusinessRuleException("Vị trí mới phải khác vị trí Allocation hiện tại.");
+            if (request.LocationId == original.LocationId &&
+                request.LotId == original.LotId &&
+                request.SerialId == original.SerialId)
+                throw new BusinessRuleException("Bucket mới phải khác bucket Allocation hiện tại.");
 
             original.Status = StockAllocationStatus.Reallocated;
             original.ReleasedAt = DateTime.UtcNow;
@@ -215,6 +218,8 @@ public sealed class StockAllocationService(
             var candidates = await BuildCandidatesAsync(
                 original.Reservation,
                 request.LocationId,
+                request.LotId,
+                request.SerialId,
                 request.LocationId.HasValue ? null : original.LocationId,
                 token);
             var created = CreateRows(original.Reservation, original.Quantity, strategy, candidates);
@@ -256,7 +261,13 @@ public sealed class StockAllocationService(
             if (request.Quantity > allocatable)
                 throw new BusinessRuleException("Số lượng Allocation vượt quá phần reservation còn có thể phân bổ.");
 
-            var candidates = await BuildCandidatesAsync(reservation, fixedLocationId, excludedLocationId, token);
+            var candidates = await BuildCandidatesAsync(
+                reservation,
+                fixedLocationId,
+                request.LotId,
+                request.SerialId,
+                excludedLocationId,
+                token);
             if (candidates.Sum(x => x.AllocatableQuantity) < request.Quantity)
                 throw new ConcurrencyException("Không đủ bucket đã giữ hàng để tạo Allocation.");
 
@@ -305,36 +316,51 @@ public sealed class StockAllocationService(
     private async Task<List<StockAllocationCandidateDto>> BuildCandidatesAsync(
         StockReservation reservation,
         int? fixedLocationId,
+        int? fixedLotId,
+        int? fixedSerialId,
         int? excludedLocationId,
         CancellationToken cancellationToken)
     {
         var query = context.InventoryStocks.AsNoTracking()
-            .Where(x => x.ProductId == reservation.ProductId &&
-                        x.WarehouseId == reservation.WarehouseId &&
-                        x.Status == InventoryStatus.Available &&
-                        x.LocationId.HasValue &&
-                        x.Location != null &&
-                        x.Location.IsActive &&
-                        !x.Location.IsBlocked &&
-                        x.Location.IsPickable &&
-                        x.ReservedQuantity > 0);
+            .Where(x =>
+                x.ProductId == reservation.ProductId &&
+                x.WarehouseId == reservation.WarehouseId &&
+                x.ReservedQuantity > 0)
+            .EligibleFor(context, InventoryEligibilityOperation.Allocation, DateTime.UtcNow);
 
         if (fixedLocationId.HasValue) query = query.Where(x => x.LocationId == fixedLocationId.Value);
+        if (fixedLotId.HasValue) query = query.Where(x => x.LotId == fixedLotId.Value);
+        if (fixedSerialId.HasValue) query = query.Where(x => x.SerialId == fixedSerialId.Value);
         if (excludedLocationId.HasValue) query = query.Where(x => x.LocationId != excludedLocationId.Value);
 
         var raw = await query
-            .OrderBy(x => x.LocationId)
+            .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
+            .ThenBy(x => x.Lot!.ExpiryDate)
+            .ThenBy(x => x.Lot!.ReceivedAt)
+            .ThenBy(x => x.LocationId)
+            .ThenBy(x => x.Id)
             .Select(x => new
             {
                 LocationId = x.LocationId!.Value,
                 LocationCode = x.Location!.Code,
                 LocationName = x.Location.Name,
+                x.LotId,
+                LotNumber = x.Lot != null ? x.Lot.LotNumber : null,
+                ExpiryDate = x.Lot != null ? x.Lot.ExpiryDate : null,
+                ReceivedAt = x.Lot != null ? x.Lot.ReceivedAt : null,
+                x.SerialId,
+                SerialNumber = x.Serial != null ? x.Serial.SerialNumber : null,
+                x.Status,
                 x.ReservedQuantity,
                 AllocatedQuantity = context.StockAllocations
-                    .Where(a => a.WarehouseId == x.WarehouseId &&
-                                a.ProductId == x.ProductId &&
-                                a.LocationId == x.LocationId &&
-                                CapacityStatuses.Contains(a.Status))
+                    .Where(a =>
+                        a.WarehouseId == x.WarehouseId &&
+                        a.ProductId == x.ProductId &&
+                        a.LocationId == x.LocationId &&
+                        a.LotId == x.LotId &&
+                        a.SerialId == x.SerialId &&
+                        a.InventoryStatus == x.Status &&
+                        CapacityStatuses.Contains(a.Status))
                     .Sum(a => (decimal?)a.Quantity) ?? 0m
             })
             .Take(500)
@@ -346,13 +372,22 @@ public sealed class StockAllocationService(
                 LocationId = x.LocationId,
                 LocationCode = x.LocationCode,
                 LocationName = x.LocationName,
+                LotId = x.LotId,
+                LotNumber = x.LotNumber,
+                ExpiryDate = x.ExpiryDate,
+                ReceivedAt = x.ReceivedAt,
+                SerialId = x.SerialId,
+                SerialNumber = x.SerialNumber,
+                InventoryStatus = x.Status.ToString(),
                 ReservedQuantity = x.ReservedQuantity,
                 AllocatedQuantity = x.AllocatedQuantity,
                 AllocatableQuantity = Math.Max(0, x.ReservedQuantity - x.AllocatedQuantity),
                 Rank = index + 1,
-                Reason = fixedLocationId.HasValue
-                    ? "Vị trí cố định do người dùng chọn."
-                    : "Tự động theo thứ tự vị trí ổn định (LocationId tăng dần). FEFO/FIFO chưa bật vì chưa có Lot/Expiry/ReceiptDate canonical."
+                Reason = fixedLocationId.HasValue || fixedLotId.HasValue || fixedSerialId.HasValue
+                    ? "Bucket cố định theo lựa chọn người dùng; vẫn áp dụng status/lock/expiry eligibility."
+                    : x.ExpiryDate.HasValue
+                        ? $"FEFO: expiry {x.ExpiryDate:yyyy-MM-dd}, sau đó receipt/location/id deterministic."
+                        : "FIFO deterministic theo receipt/location/id cho bucket không có expiry."
             })
             .Where(x => x.AllocatableQuantity > 0)
             .ToList();
@@ -377,7 +412,9 @@ public sealed class StockAllocationService(
                 WarehouseId = reservation.WarehouseId,
                 ProductId = reservation.ProductId,
                 LocationId = candidate.LocationId,
-                InventoryStatus = InventoryStatus.Available,
+                LotId = candidate.LotId,
+                SerialId = candidate.SerialId,
+                InventoryStatus = Enum.Parse<InventoryStatus>(candidate.InventoryStatus),
                 Quantity = take,
                 Status = StockAllocationStatus.Active,
                 Strategy = strategy,
@@ -402,7 +439,7 @@ public sealed class StockAllocationService(
                 action,
                 row.Id,
                 row.WarehouseId,
-                $"Allocation: {row.AllocationCode}; ReservationId: {row.ReservationId}; LocationId: {row.LocationId}; Quantity: {row.Quantity}; Strategy: {row.Strategy}; {extra}"));
+                $"Allocation: {row.AllocationCode}; ReservationId: {row.ReservationId}; LocationId: {row.LocationId}; LotId: {row.LotId}; SerialId: {row.SerialId}; Quantity: {row.Quantity}; Strategy: {row.Strategy}; {extra}"));
         }
     }
 
@@ -493,7 +530,9 @@ public sealed class StockAllocationService(
             .Include(x => x.Reservation)
             .Include(x => x.Warehouse)
             .Include(x => x.Product)
-            .Include(x => x.Location);
+            .Include(x => x.Location)
+            .Include(x => x.Lot)
+            .Include(x => x.Serial);
 
     private static StockAllocationDto Map(StockAllocation x) => new()
     {
@@ -512,6 +551,11 @@ public sealed class StockAllocationService(
         LocationId = x.LocationId,
         LocationCode = x.Location.Code,
         LocationName = x.Location.Name,
+        LotId = x.LotId,
+        LotNumber = x.Lot?.LotNumber,
+        ExpiryDate = x.Lot?.ExpiryDate,
+        SerialId = x.SerialId,
+        SerialNumber = x.Serial?.SerialNumber,
         InventoryStatus = x.InventoryStatus.ToString(),
         Quantity = x.Quantity,
         Status = x.Status.ToString(),
