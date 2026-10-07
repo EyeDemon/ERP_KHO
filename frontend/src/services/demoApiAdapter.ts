@@ -4,10 +4,13 @@ import {
   demoCategories,
   demoExportReceipts,
   demoImportReceipts,
+  demoImportReceiptInventoryIdentities,
   demoPurchaseOrders,
   demoAsns,
   demoInOut,
   demoInventoryStocks,
+  demoInventoryStatuses,
+  demoInventoryBuckets,
   demoInventoryTransactions,
   demoPartners,
   demoPermissionCatalog,
@@ -94,7 +97,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         userId: 1,
         username: 'Blueprint Demo',
         role: 'Viewer',
-        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'shipment.read', 'sales_order.read', 'backorder.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
+        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'shipment.read', 'sales_order.read', 'backorder.read', 'inventory.read', 'inventory_availability.read', 'inventory_ledger.read', 'inventory_traceability.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
     }
 
@@ -308,6 +311,22 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       ]);
     }
 
+    if (path === '/api/inventory/statuses') return ok(config, demoInventoryStatuses);
+    if (path === '/api/inventory/buckets') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const productId = Number(params.get('productId') ?? 0);
+      const status = (params.get('status') ?? '').toUpperCase();
+      const lotNumber = (params.get('lotNumber') ?? '').toLowerCase();
+      const serialNumber = (params.get('serialNumber') ?? '').toLowerCase();
+      return ok(config, demoInventoryBuckets.filter(item =>
+        (!warehouseId || item.warehouseId === warehouseId)
+        && (!productId || item.productId === productId)
+        && (!status || item.status === status)
+        && (!lotNumber || (item.lotNumber ?? '').toLowerCase().includes(lotNumber))
+        && (!serialNumber || (item.serialNumber ?? '').toLowerCase().includes(serialNumber))
+      ));
+    }
+
     if (path === '/api/inventorystocks/current') {
       const warehouseId = Number(params.get('warehouseId') ?? 0);
       const productId = Number(params.get('productId') ?? 0);
@@ -349,6 +368,10 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     if (/^\/api\/importreceipts\/\d+$/.test(path)) {
       const item = demoImportReceipts.find(receipt => receipt.id === findNumericId(path));
       return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy phiếu nhập demo.');
+    }
+    if (/^\/api\/importreceipts\/\d+\/inventory-identities$/.test(path)) {
+      const id = findNumericId(path);
+      return ok(config, demoImportReceiptInventoryIdentities[id] ?? []);
     }
     if (/^\/api\/importreceipts\/\d+\/discrepancies$/.test(path)) return ok(config, []);
     if (path === '/api/importreceipts/discrepancy-reasons') {

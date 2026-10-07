@@ -118,6 +118,14 @@ describe('ERP WMS blueprint registry', () => {
       expect(byId.get(id)?.route).toBe('/stock-transfers');
     }
 
+    expect(byId.get('INV-05')?.status).toBe('foundation');
+    expect(byId.get('INV-05')?.route).toBe('/inventory');
+    expect(byId.get('INV-05')?.goal).toMatch(/eligibility.*status-change.*bảo toàn tổng OnHand.*STATUS_CHANGE ledger.*reserved\/allocation.*chặn.*controlled disposition\/recall release.*chưa/i);
+
+    expect(byId.get('INV-06')?.status).toBe('foundation');
+    expect(byId.get('INV-06')?.route).toBe('/inventory');
+    expect(byId.get('INV-06')?.goal).toMatch(/Product Tracking.*receipt disposition.*duplicate serial.*serial = 1 Base UOM.*FEFO.*Picking scan.*Shipment\/ledger.*Full genealogy\/recall.*chưa/i);
+
     expect(byId.get('INV-11')?.status).toBe('foundation');
     expect(byId.get('INV-11')?.goal).toMatch(/read-only reconciliation.*controlled rebuild\/remediation.*chưa/i);
     expect(byId.get('OUT-01')?.goal).toMatch(/không đồng nghĩa Shipment LOADED\/DISPATCHED/i);

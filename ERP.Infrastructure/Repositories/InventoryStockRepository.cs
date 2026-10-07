@@ -56,12 +56,16 @@ namespace ERP.Infrastructure.Repositories
 
         }
 
-        public Task<decimal> GetAvailableQuantityAsync(int productId, int warehouseId, CancellationToken cancellationToken = default) =>
-            _dbSet.AsNoTracking()
+        public Task<decimal> GetAvailableQuantityAsync(int productId, int warehouseId, CancellationToken cancellationToken = default)
+        {
+            var today = DateTime.UtcNow.Date;
+            return _dbSet.AsNoTracking()
                 .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
-                    x.Status == InventoryStatus.Available && x.Location != null &&
-                    x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
+                    x.StatusDefinition.IsReservable &&
+                    x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable &&
+                    (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today))
                 .SumAsync(x => x.Quantity - x.ReservedQuantity, cancellationToken);
+        }
 
         public async Task<bool> TryReserveAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
         {
@@ -95,21 +99,33 @@ namespace ERP.Infrastructure.Repositories
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             try
             {
+                var today = DateTime.UtcNow.Date;
                 var rows = await _dbSet.AsNoTracking()
                     .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
-                        x.Status == InventoryStatus.Available && x.LocationId.HasValue &&
-                        x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable)
-                    .OrderBy(x => x.LocationId)
+                        x.StatusDefinition.IsShippable && x.LocationId.HasValue &&
+                        x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable &&
+                        (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today))
+                    .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
+                    .ThenBy(x => x.Lot == null ? null : x.Lot.ExpiryDate)
+                    .ThenBy(x => x.Lot == null ? DateTime.MaxValue : x.Lot.ReceivedAt)
+                    .ThenBy(x => x.LocationId)
+                    .ThenBy(x => x.Id)
                     .Select(x => new
                     {
                         x.Id,
                         x.LocationId,
+                        x.Status,
+                        x.LotId,
+                        x.SerialId,
                         x.Quantity,
                         x.ReservedQuantity,
                         CommittedAllocationQuantity = _context.StockAllocations
                             .Where(a => a.WarehouseId == x.WarehouseId &&
                                         a.ProductId == x.ProductId &&
                                         a.LocationId == x.LocationId &&
+                                        a.InventoryStatus == x.Status &&
+                                        a.LotId == x.LotId &&
+                                        a.SerialId == x.SerialId &&
                                         (a.Status == StockAllocationStatus.Active ||
                                          a.Status == StockAllocationStatus.Picking ||
                                          a.Status == StockAllocationStatus.Picked))
@@ -137,6 +153,9 @@ namespace ERP.Infrastructure.Repositories
                                         .Where(a => a.WarehouseId == x.WarehouseId &&
                                                     a.ProductId == x.ProductId &&
                                                     a.LocationId == x.LocationId &&
+                                                    a.InventoryStatus == x.Status &&
+                                                    a.LotId == x.LotId &&
+                                                    a.SerialId == x.SerialId &&
                                                     (a.Status == StockAllocationStatus.Active ||
                                                      a.Status == StockAllocationStatus.Picking ||
                                                      a.Status == StockAllocationStatus.Picked))
@@ -148,12 +167,13 @@ namespace ERP.Infrastructure.Repositories
                     if (affected != 1)
                         throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu giữ hàng chưa Allocation đã thay đổi trong lúc tiêu thụ reservation.");
 
-                    consumed.Add(new InventoryStockConsumption(row.LocationId!.Value, take));
+                    consumed.Add(new InventoryStockConsumption(
+                        row.LocationId!.Value, take, row.Status, row.LotId, row.SerialId));
                     remaining -= take;
                     if (remaining == 0) return consumed;
                 }
 
-                throw new ERP.Domain.Exceptions.ConcurrencyException("Không thể xác định đầy đủ vị trí tồn kho chưa Allocation để tiêu thụ.");
+                throw new ERP.Domain.Exceptions.ConcurrencyException("Không thể xác định đầy đủ bucket tồn kho chưa Allocation để tiêu thụ.");
             }
             catch (SqlException exception) when (exception.Number == 1205)
             {
@@ -169,18 +189,53 @@ namespace ERP.Infrastructure.Repositories
             CancellationToken cancellationToken = default)
         {
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
+            var today = DateTime.UtcNow.Date;
+            var candidates = await _dbSet.AsNoTracking()
+                .Where(x => x.ProductId == productId &&
+                            x.WarehouseId == warehouseId &&
+                            x.LocationId == locationId &&
+                            x.StatusDefinition.IsShippable &&
+                            x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable &&
+                            (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today) &&
+                            x.ReservedQuantity >= quantity &&
+                            x.Quantity >= quantity)
+                .Select(x => new { x.Status, x.LotId, x.SerialId })
+                .Take(2)
+                .ToListAsync(cancellationToken);
+            if (candidates.Count != 1) return false;
+            var bucket = candidates[0];
+            return await TryConsumeReservationAtBucketAsync(
+                productId, warehouseId, locationId, bucket.Status, bucket.LotId, bucket.SerialId, quantity, cancellationToken);
+        }
+
+        public async Task<bool> TryConsumeReservationAtBucketAsync(
+            int productId,
+            int warehouseId,
+            int locationId,
+            InventoryStatus status,
+            int? lotId,
+            int? serialId,
+            decimal quantity,
+            CancellationToken cancellationToken = default)
+        {
+            if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             try
             {
+                var today = DateTime.UtcNow.Date;
                 var now = DateTime.UtcNow;
                 var affected = await _dbSet
                     .Where(x => x.ProductId == productId &&
                                 x.WarehouseId == warehouseId &&
                                 x.LocationId == locationId &&
-                                x.Status == InventoryStatus.Available &&
+                                x.Status == status &&
+                                x.LotId == lotId &&
+                                x.SerialId == serialId &&
+                                x.StatusDefinition.IsShippable &&
                                 x.Location != null &&
                                 x.Location.IsActive &&
                                 !x.Location.IsBlocked &&
                                 x.Location.IsPickable &&
+                                (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today) &&
                                 x.ReservedQuantity >= quantity &&
                                 x.Quantity >= quantity)
                     .ExecuteUpdateAsync(update => update
@@ -192,7 +247,7 @@ namespace ERP.Infrastructure.Repositories
             catch (SqlException exception) when (exception.Number == 1205)
             {
                 throw new ERP.Domain.Exceptions.DeadlockException(
-                    "Giao dịch tiêu thụ giữ hàng tại vị trí bị deadlock.",
+                    "Giao dịch tiêu thụ giữ hàng tại bucket bị deadlock.",
                     exception);
             }
         }
@@ -233,15 +288,33 @@ namespace ERP.Infrastructure.Repositories
             bool releaseOnly = false,
             int? excludedReservationId = null)
         {
-            var rows = await _dbSet.AsNoTracking()
+            var today = DateTime.UtcNow.Date;
+            var eligible = _dbSet.AsNoTracking()
                 .Where(x => x.ProductId == productId &&
                             x.WarehouseId == warehouseId &&
-                            x.Status == InventoryStatus.Available &&
                             x.Location != null &&
                             x.Location.IsActive &&
                             !x.Location.IsBlocked &&
-                            x.Location.IsPickable)
-                .OrderBy(x => x.LocationId)
+                            x.Location.IsPickable);
+
+            if (releaseOnly)
+                eligible = eligible.Where(x => x.ReservedQuantity > 0);
+            else if (reserve)
+                eligible = eligible.Where(x => x.StatusDefinition.IsReservable &&
+                    (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today));
+            else if (useReserved)
+                eligible = eligible.Where(x => x.StatusDefinition.IsShippable &&
+                    (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today));
+            else
+                eligible = eligible.Where(x => x.StatusDefinition.IsAvailable &&
+                    (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today));
+
+            var rows = await eligible
+                .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
+                .ThenBy(x => x.Lot == null ? null : x.Lot.ExpiryDate)
+                .ThenBy(x => x.Lot == null ? DateTime.MaxValue : x.Lot.ReceivedAt)
+                .ThenBy(x => x.LocationId)
+                .ThenBy(x => x.Id)
                 .Select(x => new
                 {
                     x.Id,
@@ -252,6 +325,9 @@ namespace ERP.Infrastructure.Repositories
                             .Where(a => a.WarehouseId == x.WarehouseId &&
                                         a.ProductId == x.ProductId &&
                                         a.LocationId == x.LocationId &&
+                                        a.InventoryStatus == x.Status &&
+                                        a.LotId == x.LotId &&
+                                        a.SerialId == x.SerialId &&
                                         (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
                                         (a.Status == StockAllocationStatus.Active ||
                                          a.Status == StockAllocationStatus.Picking ||
@@ -284,6 +360,9 @@ namespace ERP.Infrastructure.Repositories
                             .Where(a => a.WarehouseId == x.WarehouseId &&
                                         a.ProductId == x.ProductId &&
                                         a.LocationId == x.LocationId &&
+                                        a.InventoryStatus == x.Status &&
+                                        a.LotId == x.LotId &&
+                                        a.SerialId == x.SerialId &&
                                         (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
                                         (a.Status == StockAllocationStatus.Active ||
                                          a.Status == StockAllocationStatus.Picking ||

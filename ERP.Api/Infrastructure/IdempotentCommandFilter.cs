@@ -193,7 +193,9 @@ public sealed class IdempotentCommandFilter(
         || scope.StartsWith("HandlingUnit.", StringComparison.Ordinal)
         || scope.StartsWith("Shipment.", StringComparison.Ordinal)
         || scope.StartsWith("SalesOrder.", StringComparison.Ordinal)
-        || scope.StartsWith("Backorder.", StringComparison.Ordinal);
+        || scope.StartsWith("Backorder.", StringComparison.Ordinal)
+        || scope.StartsWith("ImportReceipt.InventoryIdentity.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryStatus.", StringComparison.Ordinal);
     private static bool IsUniqueViolation(DbUpdateException ex)
     {
         if (ex.InnerException is SqlException { Number: 2601 or 2627 }) return true;

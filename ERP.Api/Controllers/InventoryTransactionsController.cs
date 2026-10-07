@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ERP.Api.Controllers
 {
     [Authorize(Roles = AppRoles.AllRoles)]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
     [ApiController]
     [Route("api/[controller]")]
     public class InventoryTransactionsController : ControllerBase

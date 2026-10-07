@@ -807,6 +807,67 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("ImportReceiptDetails", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ImportReceiptInventoryIdentity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BaseQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ExpiryDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ImportReceiptDetailId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LotNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("ManufactureDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SerialNumber")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("TargetStatus")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ImportReceiptDetailId", "TargetStatus");
+
+                    b.HasIndex("ProductId", "SerialNumber")
+                        .IsUnique()
+                        .HasFilter("[SerialNumber] IS NOT NULL");
+
+                    b.ToTable("ImportReceiptInventoryIdentities", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ImportReceiptInventoryIdentities_Dates", "[ExpiryDate] IS NULL OR [ManufactureDate] IS NULL OR [ExpiryDate] >= [ManufactureDate]");
+
+                            t.HasCheckConstraint("CK_ImportReceiptInventoryIdentities_Quantity", "[BaseQuantity] > 0");
+
+                            t.HasCheckConstraint("CK_ImportReceiptInventoryIdentities_SerialQuantity", "[SerialNumber] IS NULL OR [BaseQuantity] = 1");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.InventoryLocationMovement", b =>
                 {
                     b.Property<int>("Id")
@@ -887,6 +948,130 @@ namespace ERP.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.InventoryLot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ExpiryDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LotNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("ManufactureDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiryDate");
+
+                    b.HasIndex("ProductId", "LotNumber")
+                        .IsUnique();
+
+                    b.ToTable("InventoryLots", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InventoryLots_Dates", "[ExpiryDate] IS NULL OR [ManufactureDate] IS NULL OR [ExpiryDate] >= [ManufactureDate]");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.InventorySerial", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("LotId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SerialNumber")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LotId");
+
+                    b.HasIndex("ProductId", "SerialNumber")
+                        .IsUnique();
+
+                    b.ToTable("InventorySerials", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.InventoryStatusDefinition", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<bool>("IsAllocatable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPickable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsReservable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsShippable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("InventoryStatusDefinitions", (string)null);
+
+                    b.HasData(
+                        new { Id = 0, Code = "AVAILABLE", IsAllocatable = true, IsAvailable = true, IsPickable = true, IsReservable = true, IsShippable = true, IsSystem = true, Name = "Available" },
+                        new { Id = 1, Code = "QC_HOLD", IsAllocatable = false, IsAvailable = false, IsPickable = false, IsReservable = false, IsShippable = false, IsSystem = true, Name = "QC Hold" },
+                        new { Id = 2, Code = "QUARANTINE", IsAllocatable = false, IsAvailable = false, IsPickable = false, IsReservable = false, IsShippable = false, IsSystem = true, Name = "Quarantine" },
+                        new { Id = 3, Code = "DAMAGED", IsAllocatable = false, IsAvailable = false, IsPickable = false, IsReservable = false, IsShippable = false, IsSystem = true, Name = "Damaged" },
+                        new { Id = 4, Code = "REJECTED", IsAllocatable = false, IsAvailable = false, IsPickable = false, IsReservable = false, IsShippable = false, IsSystem = true, Name = "Rejected" },
+                        new { Id = 5, Code = "BLOCKED", IsAllocatable = false, IsAvailable = false, IsPickable = false, IsReservable = false, IsShippable = false, IsSystem = true, Name = "Blocked" },
+                        new { Id = 6, Code = "EXPIRED", IsAllocatable = false, IsAvailable = false, IsPickable = false, IsReservable = false, IsShippable = false, IsSystem = true, Name = "Expired" },
+                        new { Id = 7, Code = "RECALL_BLOCKED", IsAllocatable = false, IsAvailable = false, IsPickable = false, IsReservable = false, IsShippable = false, IsSystem = true, Name = "Recall Blocked" });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.InventoryStock", b =>
                 {
                     b.Property<int>("Id")
@@ -895,10 +1080,28 @@ namespace ERP.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("CanonicalLocationId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasComputedColumnSql("COALESCE([LocationId], 0)", true);
+
+                    b.Property<int>("CanonicalLotId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasComputedColumnSql("COALESCE([LotId], 0)", true);
+
+                    b.Property<int>("CanonicalSerialId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasComputedColumnSql("COALESCE([SerialId], 0)", true);
+
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("LocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LotId")
                         .HasColumnType("int");
 
                     b.Property<int>("ProductId")
@@ -913,6 +1116,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
+                    b.Property<int?>("SerialId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -923,10 +1129,18 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("LocationId");
 
+                    b.HasIndex("LotId");
+
+                    b.HasIndex("SerialId");
+
+                    b.HasIndex("Status");
+
                     b.HasIndex("WarehouseId");
 
-                    b.HasIndex("ProductId", "WarehouseId", "Status", "LocationId")
-                        .IsUnique();
+                    b.HasIndex("ProductId", "WarehouseId", "Status", "CanonicalLocationId", "CanonicalLotId", "CanonicalSerialId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InventoryStocks_CanonicalBucket")
+                        .HasFilter(null);
 
                     b.ToTable("InventoryStocks", null, t =>
                         {
@@ -945,10 +1159,16 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("CreatedBy")
                         .HasColumnType("int");
 
+                    b.Property<int?>("FromInventoryStatus")
+                        .HasColumnType("int");
+
                     b.Property<int>("InventoryStatus")
                         .HasColumnType("int");
 
                     b.Property<int?>("LocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LotId")
                         .HasColumnType("int");
 
                     b.Property<string>("Note")
@@ -969,6 +1189,12 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("SerialId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ToInventoryStatus")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("TransactionDate")
                         .HasColumnType("datetime2");
 
@@ -982,9 +1208,15 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("CreatedBy");
 
+                    b.HasIndex("InventoryStatus");
+
                     b.HasIndex("LocationId");
 
+                    b.HasIndex("LotId");
+
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("SerialId");
 
                     b.HasIndex("TransactionDate");
 
@@ -996,7 +1228,7 @@ namespace ERP.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[ReferenceType] = 'StockTransfer'");
 
-                    b.HasIndex("ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId", "InventoryStatus")
+                    b.HasIndex("ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId", "InventoryStatus", "LotId", "SerialId")
                         .IsUnique()
                         .HasDatabaseName("IX_InventoryTransactions_ShipmentReference")
                         .HasFilter("[ReferenceType] = 'Shipment'");
@@ -1061,6 +1293,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<bool>("ExpiryControl")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -1069,9 +1304,15 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int?>("ShelfLifeDays")
+                        .HasColumnType("int");
+
                     b.Property<string>("StorageClass")
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TrackingType")
+                        .HasColumnType("int");
 
                     b.Property<decimal?>("UnitPalletEquivalent")
                         .HasPrecision(18, 8)
@@ -1108,6 +1349,8 @@ namespace ERP.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_Products_StorageClass", "[StorageClass] IS NULL OR ([StorageClass] = UPPER(LTRIM(RTRIM([StorageClass]))) AND LEN([StorageClass]) > 0)");
 
                             t.HasCheckConstraint("CK_Products_StorageMetrics", "([UnitWeightKg] IS NULL OR [UnitWeightKg] > 0) AND ([UnitVolumeM3] IS NULL OR [UnitVolumeM3] > 0) AND ([UnitPalletEquivalent] IS NULL OR [UnitPalletEquivalent] > 0)");
+
+                            t.HasCheckConstraint("CK_Products_TrackingPolicy", "([ExpiryControl] = 0 OR [TrackingType] <> 0) AND ([ShelfLifeDays] IS NULL OR [ShelfLifeDays] > 0) AND ([ExpiryControl] = 1 OR [ShelfLifeDays] IS NULL)");
                         });
                 });
 
@@ -2833,6 +3076,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("LocationId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("LotId")
+                        .HasColumnType("int");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
@@ -2851,6 +3097,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("ReservationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SerialId")
                         .HasColumnType("int");
 
                     b.Property<string>("SelectionReason")
@@ -2880,15 +3129,19 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("LocationId");
 
+                    b.HasIndex("LotId");
+
                     b.HasIndex("ProductId");
 
                     b.HasIndex("ReleasedBy");
 
                     b.HasIndex("ReservationId");
 
-                    b.HasIndex("ReservationId", "LocationId", "InventoryStatus", "Status");
+                    b.HasIndex("SerialId");
 
-                    b.HasIndex("WarehouseId", "LocationId", "ProductId", "Status");
+                    b.HasIndex("ReservationId", "LocationId", "InventoryStatus", "LotId", "SerialId", "Status");
+
+                    b.HasIndex("WarehouseId", "LocationId", "ProductId", "LotId", "SerialId", "Status");
 
                     b.ToTable("StockAllocations", null, t =>
                         {
@@ -4257,6 +4510,33 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("PurchaseOrderLine");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ImportReceiptInventoryIdentity", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.ImportReceiptDetail", "ImportReceiptDetail")
+                        .WithMany("InventoryIdentities")
+                        .HasForeignKey("ImportReceiptDetailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("ImportReceiptDetail");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.InventoryLocationMovement", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
@@ -4308,6 +4588,35 @@ namespace ERP.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.InventoryLot", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany("InventoryLots")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.InventorySerial", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.InventoryLot", "Lot")
+                        .WithMany("Serials")
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany("InventorySerials")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Lot");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.InventoryStock", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
@@ -4316,9 +4625,25 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.InventoryLot", "Lot")
+                        .WithMany()
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Product", "Product")
                         .WithMany("InventoryStocks")
                         .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.InventorySerial", "Serial")
+                        .WithMany()
+                        .HasForeignKey("SerialId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.InventoryStatusDefinition", "StatusDefinition")
+                        .WithMany()
+                        .HasForeignKey("Status")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -4330,7 +4655,13 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("Location");
 
+                    b.Navigation("Lot");
+
                     b.Navigation("Product");
+
+                    b.Navigation("Serial");
+
+                    b.Navigation("StatusDefinition");
 
                     b.Navigation("Warehouse");
                 });
@@ -4348,9 +4679,25 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("LocationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("ERP.Domain.Entities.InventoryLot", "Lot")
+                        .WithMany()
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.InventorySerial", "Serial")
+                        .WithMany()
+                        .HasForeignKey("SerialId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.InventoryStatusDefinition", "StatusDefinition")
+                        .WithMany()
+                        .HasForeignKey("InventoryStatus")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -4364,7 +4711,13 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("Location");
 
+                    b.Navigation("Lot");
+
                     b.Navigation("Product");
+
+                    b.Navigation("Serial");
+
+                    b.Navigation("StatusDefinition");
 
                     b.Navigation("Warehouse");
                 });
@@ -4978,6 +5331,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.InventoryLot", "Lot")
+                        .WithMany()
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
@@ -4995,6 +5353,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.InventorySerial", "Serial")
+                        .WithMany()
+                        .HasForeignKey("SerialId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
                         .WithMany()
                         .HasForeignKey("WarehouseId")
@@ -5005,11 +5368,15 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("Location");
 
+                    b.Navigation("Lot");
+
                     b.Navigation("Product");
 
                     b.Navigation("ReleasedByUser");
 
                     b.Navigation("Reservation");
+
+                    b.Navigation("Serial");
 
                     b.Navigation("Warehouse");
                 });
@@ -5275,7 +5642,14 @@ namespace ERP.Infrastructure.Migrations
 
             modelBuilder.Entity("ERP.Domain.Entities.ImportReceiptDetail", b =>
                 {
+                    b.Navigation("InventoryIdentities");
+
                     b.Navigation("ReceivingDiscrepancies");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.InventoryLot", b =>
+                {
+                    b.Navigation("Serials");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Permission", b =>
@@ -5286,6 +5660,10 @@ namespace ERP.Infrastructure.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.Product", b =>
                 {
                     b.Navigation("Barcodes");
+
+                    b.Navigation("InventoryLots");
+
+                    b.Navigation("InventorySerials");
 
                     b.Navigation("InventoryStocks");
 

@@ -21,6 +21,7 @@ namespace ERP.Application.Services
         private readonly ICurrentUser? _currentUser;
         private readonly IReceiptPutawayIntegration? _putaway;
         private readonly IReceiptInboundPlanningIntegration? _inboundPlanning;
+        private readonly IReceiptInventoryIdentityService? _inventoryIdentity;
         private readonly IUserRepository? _permissionUsers;
 
         internal ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository)
@@ -63,6 +64,23 @@ namespace ERP.Application.Services
 
         public ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, IWarehouseAuthorizationService warehouseAuthorization, ICurrentUser currentUser, IUserRepository permissionUsers, IReceiptPutawayIntegration putaway, IReceiptInboundPlanningIntegration inboundPlanning)
             : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers, putaway) => _inboundPlanning = inboundPlanning;
+
+        public ImportReceiptService(
+            IImportReceiptRepository importReceiptRepository,
+            IInventoryStockRepository inventoryStockRepository,
+            IInventoryTransactionRepository inventoryTransactionRepository,
+            IWarehouseRepository warehouseRepository,
+            IProductRepository productRepository,
+            IUnitOfWork unitOfWork,
+            IAuditLogRepository auditLogRepository,
+            IWarehouseAuthorizationService warehouseAuthorization,
+            ICurrentUser currentUser,
+            IUserRepository permissionUsers,
+            IReceiptPutawayIntegration putaway,
+            IReceiptInboundPlanningIntegration inboundPlanning,
+            IReceiptInventoryIdentityService inventoryIdentity)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers, putaway, inboundPlanning)
+            => _inventoryIdentity = inventoryIdentity;
 
         public async Task<ImportReceiptDto> CreateAsync(CreateImportReceiptDto dto, int userId)
         {
@@ -244,7 +262,12 @@ namespace ERP.Application.Services
                     BaseExpectedQuantity = d.BaseExpectedQuantity > 0 ? d.BaseExpectedQuantity : d.Quantity,
                     BaseReceivedQuantity = d.BaseReceivedQuantity,
                     BaseAcceptedQuantity = d.BaseAcceptedQuantity,
+                    BaseDamagedQuantity = d.BaseDamagedQuantity,
+                    BaseRejectedQuantity = d.BaseRejectedQuantity,
                     BasePostedQuantity = d.BasePostedQuantity,
+                    TrackingType = d.Product?.TrackingType.ToString() ?? "None",
+                    ExpiryControl = d.Product?.ExpiryControl == true,
+                    ShelfLifeDays = d.Product?.ShelfLifeDays,
                     ObservedQuantity = d.ObservedQuantity,
                     DoorRejectedQuantity = d.DoorRejectedQuantity,
                     FinalReceivedQuantity = d.FinalReceivedQuantity > 0 ? d.FinalReceivedQuantity : d.ReceivedQuantity,
@@ -282,6 +305,8 @@ namespace ERP.Application.Services
                 var previousStatus = receipt.Status;
                 if (previousStatus == ReceiptStatus.QcCompleted)
                     await EnsurePermissionAsync(approvedByUserId, "quality_disposition.approve");
+                if (_inventoryIdentity is not null)
+                    await _inventoryIdentity.ValidateReadyToPostAsync(receipt.Id);
                 receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
                 receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
 
@@ -423,6 +448,27 @@ namespace ERP.Application.Services
             catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
         }
 
+        public async Task<IReadOnlyList<ImportReceiptInventoryIdentityDto>> SetInventoryIdentitiesAsync(
+            int id,
+            SetImportReceiptInventoryIdentitiesDto dto,
+            int updatedByUserId,
+            CancellationToken cancellationToken = default)
+        {
+            if (_inventoryIdentity is null)
+                throw new InvalidOperationException("Receipt inventory identity service is not configured.");
+            if (_currentUser is not null) updatedByUserId = _currentUser.UserId;
+            return await _inventoryIdentity.SetAsync(id, dto, updatedByUserId, cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<ImportReceiptInventoryIdentityDto>> GetInventoryIdentitiesAsync(
+            int id,
+            CancellationToken cancellationToken = default)
+        {
+            if (_inventoryIdentity is null)
+                return Array.Empty<ImportReceiptInventoryIdentityDto>();
+            return await _inventoryIdentity.GetAsync(id, cancellationToken);
+        }
+
         public async Task PostAsync(int id, int postedByUserId)
         {
             if (_currentUser is not null) postedByUserId = _currentUser.UserId;
@@ -436,6 +482,7 @@ namespace ERP.Application.Services
                 if (receipt.Status != ReceiptStatus.ReadyToPost)
                     throw Conflict("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
                 if (_inboundPlanning is not null) await _inboundPlanning.ValidatePostAsync(receipt);
+                if (_inventoryIdentity is not null) await _inventoryIdentity.ValidateReadyToPostAsync(receipt.Id);
                 int? receivingLocationId = _putaway is null ? null : await _putaway.GetReceivingLocationIdAsync(receipt.WarehouseId);
                 foreach (var detail in receipt.Details)
                 {
@@ -462,6 +509,9 @@ namespace ERP.Application.Services
         private async Task PostBucketAsync(ImportReceipt receipt, ImportReceiptDetail detail, InventoryStatus status, decimal quantity, int userId, int? locationId)
         {
             if (quantity <= 0) return;
+            if (_inventoryIdentity is not null &&
+                await _inventoryIdentity.TryPostTrackedBucketAsync(receipt, detail, status, quantity, userId, locationId))
+                return;
             var stock = locationId.HasValue ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, receipt.WarehouseId, status, locationId.Value) : status == InventoryStatus.Available
                 ? await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId)
                 : await _inventoryStockRepository.GetByProductWarehouseAndStatusAsync(detail.ProductId, receipt.WarehouseId, status);

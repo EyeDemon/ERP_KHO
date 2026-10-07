@@ -9,7 +9,7 @@ import { UiBadge, UiCard, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from
 interface Barcode { id: number; productId: number; value: string }
 interface Category { id: number; code: string; name: string; isActive: boolean }
 interface Unit { id: number; code: string; name: string; isActive: boolean }
-interface Product { id: number; code: string; name: string; description?: string; storageClass?: string | null; unitWeightKg?: number | null; unitVolumeM3?: number | null; unitPalletEquivalent?: number | null; unitId: number; unitName?: string; categoryId?: number | null; categoryName?: string | null; barcodes: Barcode[]; isActive: boolean }
+interface Product { id: number; code: string; name: string; description?: string; storageClass?: string | null; unitWeightKg?: number | null; unitVolumeM3?: number | null; unitPalletEquivalent?: number | null; trackingType?: 'None' | 'Lot' | 'Serial'; expiryControl?: boolean; shelfLifeDays?: number | null; unitId: number; unitName?: string; categoryId?: number | null; categoryName?: string | null; barcodes: Barcode[]; isActive: boolean }
 const messageOf = permissionError;
 const PAGE_SIZE = 10;
 
@@ -32,7 +32,7 @@ const Products = () => {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', unitId: 0, categoryId: '' as number | '', isActive: true });
+  const [form, setForm] = useState({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', trackingType: 'None' as 'None' | 'Lot' | 'Serial', expiryControl: false, shelfLifeDays: '', unitId: 0, categoryId: '' as number | '', isActive: true });
   const [categoryForm, setCategoryForm] = useState({ code: '', name: '' });
   const [categorySearch, setCategorySearch] = useState('');
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -64,8 +64,8 @@ const Products = () => {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visibleProducts = useMemo(() => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [filtered, currentPage]);
   useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
-  const createMode = () => { setEditing(null); setForm({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', unitId: units[0]?.id || 0, categoryId: '', isActive: true }); };
-  const editMode = (p: Product) => { setEditing(p); setForm({ code: p.code, name: p.name, description: p.description || '', storageClass: p.storageClass || '', unitWeightKg: p.unitWeightKg?.toString() || '', unitVolumeM3: p.unitVolumeM3?.toString() || '', unitPalletEquivalent: p.unitPalletEquivalent?.toString() || '', unitId: p.unitId, categoryId: p.categoryId || '', isActive: p.isActive }); setBarcode(''); };
+  const createMode = () => { setEditing(null); setForm({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', trackingType: 'None', expiryControl: false, shelfLifeDays: '', unitId: units[0]?.id || 0, categoryId: '', isActive: true }); };
+  const editMode = (p: Product) => { setEditing(p); setForm({ code: p.code, name: p.name, description: p.description || '', storageClass: p.storageClass || '', unitWeightKg: p.unitWeightKg?.toString() || '', unitVolumeM3: p.unitVolumeM3?.toString() || '', unitPalletEquivalent: p.unitPalletEquivalent?.toString() || '', trackingType: p.trackingType || 'None', expiryControl: p.expiryControl || false, shelfLifeDays: p.shelfLifeDays?.toString() || '', unitId: p.unitId, categoryId: p.categoryId || '', isActive: p.isActive }); setBarcode(''); };
   const nullableNumber = (value: string) => value.trim() === '' ? null : Number(value);
   const storageProfile = () => ({
     storageClass: form.storageClass.trim() || null,
@@ -73,14 +73,19 @@ const Products = () => {
     unitVolumeM3: nullableNumber(form.unitVolumeM3),
     unitPalletEquivalent: nullableNumber(form.unitPalletEquivalent),
   });
+  const trackingPolicy = () => ({
+    trackingType: form.trackingType,
+    expiryControl: form.expiryControl,
+    shelfLifeDays: form.expiryControl ? nullableNumber(form.shelfLifeDays) : null,
+  });
 
   const saveProduct = async (e: React.FormEvent) => {
     e.preventDefault(); if (editing ? !canManage : !canCreate) return; await mutate(async () => {
       try {
       if (editing) {
-        await apiClient.put(`/api/products/${editing.id}`, { name: form.name, description: form.description || null, unitId: form.unitId, isActive: form.isActive, updateStorageProfile: true, ...storageProfile() });
+        await apiClient.put(`/api/products/${editing.id}`, { name: form.name, description: form.description || null, unitId: form.unitId, isActive: form.isActive, updateStorageProfile: true, updateTrackingPolicy: true, ...storageProfile(), ...trackingPolicy() });
         if (categoryChanged(editing.categoryId, form.categoryId)) await apiClient.put(`/api/products/${editing.id}/category`, categoryRequest(form.categoryId));
-      } else await apiClient.post('/api/products', { code: form.code, name: form.name, description: form.description || null, unitId: form.unitId, ...storageProfile(), ...categoryRequest(form.categoryId) });
+      } else await apiClient.post('/api/products', { code: form.code, name: form.name, description: form.description || null, unitId: form.unitId, ...storageProfile(), ...trackingPolicy(), ...categoryRequest(form.categoryId) });
       setNotice('Đã lưu sản phẩm.'); createMode(); await load();
       } catch (e) { setError(messageOf(e, 'Không thể lưu sản phẩm.')); }
     });
@@ -167,6 +172,22 @@ const Products = () => {
         <input aria-label="Trọng lượng đơn vị kg" type="number" min="0.000001" step="0.000001" value={form.unitWeightKg} onChange={e => setForm(x => ({ ...x, unitWeightKg: e.target.value }))} placeholder="kg / base unit" />
         <input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="m³ / base unit" />
         <input aria-label="Pallet-equivalent đơn vị" type="number" min="0.00000001" step="0.00000001" value={form.unitPalletEquivalent} onChange={e => setForm(x => ({ ...x, unitPalletEquivalent: e.target.value }))} placeholder="Pallet-equivalent / base unit" />
+        <label>
+          Tracking Type
+          <select aria-label="Tracking Type sản phẩm" value={form.trackingType} onChange={e => {
+            const trackingType = e.target.value as 'None' | 'Lot' | 'Serial';
+            setForm(x => ({ ...x, trackingType, expiryControl: trackingType === 'None' ? false : x.expiryControl, shelfLifeDays: trackingType === 'None' ? '' : x.shelfLifeDays }));
+          }}>
+            <option value="None">Không theo Lot/Serial</option>
+            <option value="Lot">Theo Lot</option>
+            <option value="Serial">Theo Serial</option>
+          </select>
+        </label>
+        <label className="ui-checkbox-label">
+          <input aria-label="Kiểm soát hạn dùng" type="checkbox" checked={form.expiryControl} disabled={form.trackingType === 'None'} onChange={e => setForm(x => ({ ...x, expiryControl: e.target.checked, shelfLifeDays: e.target.checked ? x.shelfLifeDays : '' }))} />
+          Kiểm soát hạn dùng
+        </label>
+        <input aria-label="Shelf Life Days" type="number" min="1" step="1" disabled={!form.expiryControl} value={form.shelfLifeDays} onChange={e => setForm(x => ({ ...x, shelfLifeDays: e.target.value }))} placeholder="Shelf life (ngày), tùy chọn" />
         <select aria-label="Đơn vị tính" value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required>
           <option value={0}>Chọn đơn vị</option>
           {units.filter(item => item.isActive).map(item => <option key={item.id} value={item.id}>{item.code} – {item.name}</option>)}
@@ -195,16 +216,17 @@ const Products = () => {
 
     <UiCard title="Danh sách sản phẩm">
       {loading ? <p role="status">Đang tải sản phẩm...</p> : <table>
-        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Storage profile</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th>Thao tác</th>}</tr></thead>
+        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Storage profile</th><th>Tracking</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th>Thao tác</th>}</tr></thead>
         <tbody>
           {visibleProducts.length === 0
-            ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 8 : 7} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
+            ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 9 : 8} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
             : visibleProducts.map(product => <tr key={product.id}>
                 <td><strong>{product.code}</strong></td>
                 <td>{product.name}</td>
                 <td>{product.categoryName || '—'}</td>
                 <td>{product.unitName || product.unitId}</td>
                 <td><strong>{product.storageClass || '—'}</strong><br /><small>{product.unitWeightKg != null ? product.unitWeightKg + ' kg' : '—'} • {product.unitVolumeM3 != null ? product.unitVolumeM3 + ' m³' : '—'} • {product.unitPalletEquivalent != null ? product.unitPalletEquivalent + ' pallet-eq' : '—'}</small></td>
+                <td><strong>{product.trackingType || 'None'}</strong><br /><small>{product.expiryControl ? `Expiry${product.shelfLifeDays ? ` • ${product.shelfLifeDays} ngày` : ''}` : 'Không kiểm soát hạn dùng'}</small></td>
                 <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>
                 <td><UiBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Hoạt động' : 'Khóa'}</UiBadge></td>
                 {(canManage || canManageBarcodes || canDeactivate) && <td>
