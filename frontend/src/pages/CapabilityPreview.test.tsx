@@ -63,7 +63,7 @@ describe('CapabilityPreview', () => {
     expect(view.getByTestId('inbound-capability-mock-IN-09')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Putaway Recommendation Explainability' })).toBeTruthy();
     expect(view.getByText(/Không gọi API production/)).toBeTruthy();
-    expect(view.getAllByText('Theo đặc tả — chưa triển khai').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Chưa triển khai production').length).toBeGreaterThan(0);
   });
 
   it('reflects merged inbound execution capabilities as live while keeping Blueprint mocks read-only', () => {
@@ -74,19 +74,19 @@ describe('CapabilityPreview', () => {
 
     for (const [capabilityId, title] of cases) {
       const view = renderPreview('inbound', capabilityId);
-      expect(view.getByText('Đã có chức năng')).toBeTruthy();
+      expect(view.getByText('Đã triển khai hoàn thiện phạm vi hiện tại')).toBeTruthy();
       expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
       expect(view.getByTestId('inbound-capability-mock-' + capabilityId)).toBeTruthy();
       expect(view.getByRole('heading', { name: title })).toBeTruthy();
       expect(view.getByText(/Không gọi API production/)).toBeTruthy();
-      expect(view.queryByText('Theo đặc tả — chưa triển khai')).toBeNull();
+      expect(view.queryByText('Chưa triển khai production')).toBeNull();
       view.unmount();
     }
   });
 
   it('shows IN-02 as foundation because Dock/Yard appointments are not yet linked canonically to inbound documents', () => {
     const view = renderPreview('inbound', 'IN-02');
-    expect(view.getByText('Đã có nền / đang hoàn thiện')).toBeTruthy();
+    expect(view.getByText('Đã triển khai một phần / còn thiếu phạm vi')).toBeTruthy();
     expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByTestId('inbound-capability-mock-IN-02')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Receiving Appointment Board' })).toBeTruthy();
@@ -95,12 +95,12 @@ describe('CapabilityPreview', () => {
 
   it('shows IN-01 as live while keeping its Blueprint mock read-only and separate', () => {
     const view = renderPreview('inbound', 'IN-01');
-    expect(view.getByText('Đã có chức năng')).toBeTruthy();
+    expect(view.getByText('Đã triển khai hoàn thiện phạm vi hiện tại')).toBeTruthy();
     expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByTestId('inbound-capability-mock-IN-01')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Purchase Order / ASN Reconciliation' })).toBeTruthy();
     expect(view.getByText(/Không gọi API production/)).toBeTruthy();
-    expect(view.queryByText('Theo đặc tả — chưa triển khai')).toBeNull();
+    expect(view.queryByText('Chưa triển khai production')).toBeNull();
   });
 
   it('does not shadow live inbound work centers that already have production surfaces', () => {
@@ -233,7 +233,7 @@ describe('CapabilityPreview', () => {
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
       expect(panel.textContent).toContain('Không gọi API production');
-      expect(view.getAllByText('Theo đặc tả — chưa triển khai').length).toBeGreaterThan(0);
+      expect(view.getAllByText('Chưa triển khai production').length).toBeGreaterThan(0);
       view.unmount();
     }
   });

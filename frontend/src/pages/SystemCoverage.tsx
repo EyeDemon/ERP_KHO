@@ -76,9 +76,9 @@ const SystemCoverage = () => {
       </section>
 
       <section className="coverage-kpis">
-        <article><strong>{implemented}</strong><span>Live / implemented</span></article>
-        <article><strong>{foundation}</strong><span>Foundation</span></article>
-        <article><strong>{specOnly}</strong><span>Production spec-only / optional</span></article>
+        <article><strong>{implemented}</strong><span>Production hoàn thiện phạm vi hiện tại</span></article>
+        <article><strong>{foundation}</strong><span>Production đã triển khai một phần</span></article>
+        <article><strong>{specOnly}</strong><span>Chưa triển khai / optional</span></article>
         <article><strong>{rows.length}</strong><span>Interactive Blueprint demos</span></article>
         <article className="traceability-kpi" title={rows.length + ' capability có contextual interactive preview'}><strong>{traceabilityClosed.length}</strong><span>Screen traceability closed</span></article>
         <article><strong>{documentation.length}</strong><span>Canonical specs indexed</span></article>
@@ -95,9 +95,9 @@ const SystemCoverage = () => {
         <label><Search size={15} /><input aria-label="Tìm coverage" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Capability, module, spec, screen..." /></label>
         <label><Filter size={15} /><select aria-label="Lọc implementation status" value={status} onChange={(e) => setStatus(e.target.value as BlueprintStatus | 'all')}>
           <option value="all">Tất cả implementation</option>
-          <option value="live">Live</option>
-          <option value="foundation">Foundation</option>
-          <option value="planned">Spec only</option>
+          <option value="live">Production hoàn thiện phạm vi hiện tại</option>
+          <option value="foundation">Production đã triển khai một phần</option>
+          <option value="planned">Chưa triển khai production</option>
           <option value="optional">Optional</option>
         </select></label>
         <label><select aria-label="Lọc release wave" value={wave} onChange={(e) => setWave(e.target.value === 'all' ? 'all' : Number(e.target.value) as ReleaseWave)}>

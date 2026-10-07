@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import {
   blueprintDemoStatusLabels,
+  blueprintProductionSnapshot,
   blueprintTotals,
   erpWmsBlueprint,
   type BlueprintStatus,
@@ -55,8 +56,8 @@ const SystemBlueprint = () => {
           <div className="eyebrow"><Layers3 size={16} /> ERP WMS • Complete System Blueprint</div>
           <h1>Bản đồ chức năng ERP/WMS hoàn chỉnh</h1>
           <p>
-            Blueprint này là môi trường minh họa tương tác từ bộ đặc tả Notion. Mọi capability đều có preview mock;
-            badge bên dưới chỉ mô tả mức độ production/backend thực tế, không phải mức độ hoàn thiện của mock.
+            Blueprint dùng Notion canonical ở chế độ chỉ đọc để đối chiếu nghiệp vụ. Trạng thái capability bên dưới
+            phản ánh hệ thống production thật đã merge, deploy và QA; mock preview không được dùng để tự nâng maturity.
           </p>
         </div>
         <div className="hero-badge">
@@ -68,11 +69,20 @@ const SystemBlueprint = () => {
       <section className="blueprint-kpis">
         <article><strong>{blueprintTotals.modules}</strong><span>Nhóm hệ thống</span></article>
         <article><strong>{blueprintTotals.capabilities}</strong><span>Capability có mock preview</span></article>
-        <article className="kpi-live"><strong>{blueprintTotals.live}</strong><span>Đã có chức năng</span></article>
-        <article className="kpi-foundation"><strong>{blueprintTotals.foundation}</strong><span>Đã có nền</span></article>
-        <article><strong>{blueprintTotals.planned}</strong><span>Production chưa có</span></article>
+        <article className="kpi-live"><strong>{blueprintTotals.live}</strong><span>Production hoàn thiện phạm vi hiện tại</span></article>
+        <article className="kpi-foundation"><strong>{blueprintTotals.foundation}</strong><span>Production đã có một phần</span></article>
+        <article><strong>{blueprintTotals.planned}</strong><span>Chưa triển khai production</span></article>
         <article><strong>{blueprintTotals.optional}</strong><span>Optional / advanced</span></article>
         <article className="kpi-mock"><strong>{mockRecordCount}</strong><span>Mock records</span></article>
+      </section>
+
+      <section className="mock-dataset-summary">
+        <strong>Verified implementation baseline:</strong>
+        <span>Branch: {blueprintProductionSnapshot.branch}</span>
+        <span>Baseline commit: {blueprintProductionSnapshot.commit.slice(0, 12)}</span>
+        <span>Deploy: {blueprintProductionSnapshot.deployment}</span>
+        <span>Verified: {blueprintProductionSnapshot.verifiedAt}</span>
+        <span>Notion: canonical reference • read-only</span>
       </section>
 
       <section className="mock-dataset-summary">
@@ -111,9 +121,9 @@ const SystemBlueprint = () => {
           <Filter size={16} />
           <select value={status} onChange={(event) => setStatus(event.target.value as BlueprintStatus | 'all')}>
             <option value="all">Tất cả trạng thái</option>
-            <option value="live">Đã có chức năng</option>
-            <option value="foundation">Đã có nền / đang hoàn thiện</option>
-            <option value="planned">Có mock • production chưa triển khai</option>
+            <option value="live">Production hoàn thiện phạm vi hiện tại</option>
+            <option value="foundation">Production đã có một phần</option>
+            <option value="planned">Chưa triển khai production</option>
             <option value="optional">Có mock nâng cao • bật khi cần</option>
           </select>
         </label>

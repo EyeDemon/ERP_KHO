@@ -21,7 +21,7 @@ describe('SystemBlueprint', () => {
   it('separates mock coverage from production maturity in the visible labels', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     expect(view.getByText('Capability có mock preview')).toBeTruthy();
-    expect(view.getAllByText('Có mock tương tác • production chưa có').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Có mock tương tác • production chưa triển khai').length).toBeGreaterThan(0);
     expect(view.getAllByText('Có mock nâng cao • bật khi cần').length).toBeGreaterThan(0);
   });
 
