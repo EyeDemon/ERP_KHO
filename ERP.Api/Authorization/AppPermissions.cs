@@ -10,6 +10,9 @@ public static class AppPermissions
     public const string ShipmentRead = "shipment.read", ShipmentUpdate = "shipment.update", ShipmentStage = "shipment.stage", ShipmentLoad = "shipment.load", ShipmentDispatch = "shipment.dispatch", ShipmentConfirmDelivery = "shipment.confirm_delivery", LoadingExecute = "loading.execute";
     public const string SalesOrderRead = "sales_order.read", SalesOrderCreate = "sales_order.create", SalesOrderUpdate = "sales_order.update", SalesOrderHold = "sales_order.hold", SalesOrderRelease = "sales_order.release", SalesOrderCancel = "sales_order.cancel", SalesOrderClose = "sales_order.close";
     public const string BackorderRead = "backorder.read", BackorderManage = "backorder.manage";
+    public const string InventoryStatusRead = "inventory_status.read", InventoryStatusChange = "inventory_status.change";
+    public const string InventoryLotSerialRead = "inventory_lot_serial.read", InventoryLotSerialManage = "inventory_lot_serial.manage";
+    public const string InventoryLockRead = "inventory_lock.read", InventoryLockManage = "inventory_lock.manage";
     public const string ExportReceiptRead = "export_receipt.read", ExportReceiptCreate = "export_receipt.create", ExportReceiptUpdate = "export_receipt.update", ExportReceiptApprove = "export_receipt.approve", ExportReceiptDispatch = "export_receipt.dispatch", ExportReceiptCancel = "export_receipt.cancel";
     public const string DockRead="dock.read", DockManage="dock.manage", DockAppointmentRead="dock_appointment.read", DockAppointmentManage="dock_appointment.manage", YardRead="yard.read", YardCheckIn="yard.checkin", YardAssignDock="yard.assign_dock", YardCheckout="yard.checkout";
     public const string CategoryRead="product_category.read", CategoryManage="product_category.manage", BarcodeManage="product_barcode.manage", WarehouseRead="warehouse.read", WarehouseManage="warehouse.manage", WarehouseCalendarManage="warehouse_calendar.manage";
