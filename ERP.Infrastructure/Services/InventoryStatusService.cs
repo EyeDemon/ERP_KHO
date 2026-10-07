@@ -133,7 +133,7 @@ public sealed class InventoryStatusService(
             if (source.Status == toStatus)
                 throw new BusinessRuleException("Status đích phải khác status nguồn.");
             if (source.Quantity - source.ReservedQuantity < request.Quantity)
-                throw Conflict("INV_STATUS_HAS_ACTIVE_RESERVATION", "Không thể đổi status phần tồn đang reserved/allocation.");
+                throw Conflict("INV_STATUS_CHANGE_NOT_ALLOWED", "Không thể đổi status phần tồn đang reserved/allocation.");
             if (!await context.InventoryStatusDefinitions.AnyAsync(x => x.Id == toStatus, cancellationToken))
                 throw new BusinessRuleException("Inventory status đích chưa được cấu hình.");
 
@@ -225,7 +225,7 @@ public sealed class InventoryStatusService(
         catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
         {
             if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
-            throw Conflict("INV_STATUS_CONCURRENCY", "Inventory bucket đích đã thay đổi đồng thời.");
+            throw Conflict("CONCURRENCY_CONFLICT", "Inventory bucket đích đã thay đổi đồng thời.");
         }
         catch
         {
