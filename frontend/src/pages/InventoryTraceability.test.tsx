@@ -34,10 +34,12 @@ describe('InventoryTraceability',()=>{
   beforeEach(()=>vi.resetAllMocks());
   afterEach(cleanup);
 
-  it('requires at least identity or reference before calling API',()=>{
+  it('requires at least identity or reference and focuses the primary identity field',()=>{
     const view=render(<InventoryTraceability/>);
+    const productId=view.getByLabelText('Product ID');
     fireEvent.click(view.getByText('Truy vết'));
     expect(view.getByRole('alert').textContent).toContain('ít nhất');
+    expect(document.activeElement).toBe(productId);
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
@@ -52,10 +54,13 @@ describe('InventoryTraceability',()=>{
     expect(referenceId.getAttribute('aria-invalid')).toBe('true');
     expect(referenceType.getAttribute('aria-describedby')).toContain('traceability-reference-help');
     expect(referenceType.getAttribute('aria-describedby')).toContain('traceability-validation-error');
+    expect(document.activeElement).toBe(referenceId);
     expect(apiClient.get).not.toHaveBeenCalled();
 
     fireEvent.change(referenceId,{target:{value:'99'}});
     expect(view.queryByRole('alert')).toBeNull();
+    expect(referenceType.getAttribute('aria-invalid')).toBeNull();
+    expect(referenceId.getAttribute('aria-invalid')).toBeNull();
   });
 
   it('renders visible labels, current buckets and reversal-aware immutable timeline',async()=>{
@@ -79,6 +84,16 @@ describe('InventoryTraceability',()=>{
     expect(view.getAllByText(/Marker #43/).length).toBeGreaterThan(0);
     expect(view.getByText(/Original #41/)).toBeTruthy();
     expect(view.getByRole('status').textContent).toContain('Đã tải 1 bucket hiện tại và 2 ledger event');
+  });
+
+  it('surfaces request errors with a recovery path',async()=>{
+    vi.mocked(apiClient.get).mockRejectedValue({response:{status:500,data:{message:'Máy chủ bận.'}}});
+    const view=render(<InventoryTraceability/>);
+    fireEvent.change(view.getByLabelText('Product ID'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    const alert=await view.findByRole('alert');
+    expect(alert.textContent).toContain('Máy chủ bận.');
+    expect(alert.textContent).toContain('thử lại');
   });
 
   it('announces loading state for asynchronous trace queries',async()=>{
