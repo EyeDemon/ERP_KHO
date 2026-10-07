@@ -353,7 +353,60 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       return ok(config, items);
     }
     if (path === '/api/inventorytransactions') {
-      return ok(config, paged(demoInventoryTransactions, Number(params.get('page') ?? 1), Number(params.get('pageSize') ?? 20)));
+      const transactionType = params.get('transactionType');
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const productId = Number(params.get('productId') ?? 0);
+      const keyword = (params.get('keyword') ?? '').toLowerCase();
+      const items = demoInventoryTransactions.filter(item =>
+        (!transactionType || item.transactionType.toLowerCase() === transactionType.toLowerCase())
+        && (!warehouseId || item.warehouseId === warehouseId)
+        && (!productId || item.productId === productId)
+        && (!keyword || item.productCode.toLowerCase().includes(keyword) || item.productName.toLowerCase().includes(keyword))
+      );
+      return ok(config, paged(items, Number(params.get('page') ?? 1), Number(params.get('pageSize') ?? 20)));
+    }
+
+    if (path === '/api/inventory/traceability') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const productId = Number(params.get('productId') ?? 0);
+      const lotNumber = (params.get('lotNumber') ?? '').toLowerCase();
+      const serialNumber = (params.get('serialNumber') ?? '').toLowerCase();
+      const referenceType = params.get('referenceType');
+      const referenceId = Number(params.get('referenceId') ?? 0);
+      const limit = Math.min(500, Math.max(1, Number(params.get('limit') ?? 200)));
+      const hasReference = Boolean(referenceType && referenceId);
+      const events = demoInventoryTransactions.filter(item =>
+        (!warehouseId || item.warehouseId === warehouseId)
+        && (!productId || item.productId === productId)
+        && (!lotNumber || (item.lotNumber ?? '').toLowerCase() === lotNumber)
+        && (!serialNumber || (item.serialNumber ?? '').toLowerCase() === serialNumber)
+        && (!hasReference || (item.referenceType === referenceType && item.referenceId === referenceId))
+      ).slice(0, limit);
+      const reversed = new Set(events
+        .filter(item => item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal' && typeof item.referenceId === 'number')
+        .map(item => item.referenceId as number));
+      const productIds = new Set(events.map(item => item.productId));
+      const currentBuckets = demoInventoryBuckets.filter(item =>
+        (!warehouseId || item.warehouseId === warehouseId)
+        && (!productId || item.productId === productId)
+        && (!lotNumber || (item.lotNumber ?? '').toLowerCase() === lotNumber)
+        && (!serialNumber || (item.serialNumber ?? '').toLowerCase() === serialNumber)
+        && (productId || lotNumber || serialNumber || productIds.has(item.productId))
+      ).map(item => ({
+        ...item,
+        inventoryStatus: item.status,
+      }));
+      return ok(config, {
+        currentBuckets,
+        events: events.map(item => ({
+          ...item,
+          transactionId: item.id,
+          reversalOfTransactionId: item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal'
+            ? item.referenceId
+            : null,
+          isReversed: reversed.has(item.id),
+        })),
+      });
     }
     if (path === '/api/reports/inventory-in-out-stock') return ok(config, demoInOut);
     if (path === '/api/reports/inventory/export' || path === '/api/reports/inventory-in-out-stock/export') {

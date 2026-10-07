@@ -20,6 +20,14 @@ public class InventoryTransactionConfiguration : IEntityTypeConfiguration<Invent
         builder.HasIndex(x => x.WarehouseId);
         builder.HasIndex(x => x.TransactionDate);
         builder.HasIndex(x => new { x.ProductId, x.WarehouseId, x.TransactionDate });
+        builder.HasIndex(x => x.ReversalOfTransactionId)
+               .IsUnique()
+               .HasDatabaseName("UX_InventoryTransactions_ReversalOfTransaction")
+               .HasFilter("[ReversalOfTransactionId] IS NOT NULL");
+        builder.HasIndex(x => x.CorrectiveTransactionId)
+               .IsUnique()
+               .HasDatabaseName("UX_InventoryTransactions_CorrectiveTransaction")
+               .HasFilter("[CorrectiveTransactionId] IS NOT NULL");
         builder.HasIndex(x => new { x.ReferenceType, x.ReferenceId, x.TransactionType, x.ProductId, x.WarehouseId })
                .IsUnique()
                .HasFilter("[ReferenceType] = 'StockTransfer'");
@@ -43,6 +51,8 @@ public class InventoryTransactionConfiguration : IEntityTypeConfiguration<Invent
         builder.HasOne(x => x.Lot).WithMany().HasForeignKey(x => x.LotId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Serial).WithMany().HasForeignKey(x => x.SerialId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.StatusDefinition).WithMany().HasForeignKey(x => x.InventoryStatus).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ReversalOfTransaction).WithMany().HasForeignKey(x => x.ReversalOfTransactionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.CorrectiveTransaction).WithMany().HasForeignKey(x => x.CorrectiveTransactionId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.CreatedByUser)
                .WithMany()

@@ -46,6 +46,7 @@ public sealed class ApprovalRequestSafetyTests
         IdempotentCommandFilter.RequiresSerializableIsolation("InventoryLock.Create").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("InventoryLock.Release").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("InventoryMovement.Create").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("InventoryReversal.Create").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("InventoryReservation.Create").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Putaway.Move").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("ExportReceipt.ApproveAndReserve").Should().BeTrue();
@@ -151,6 +152,7 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.InventoryControlController), "CreateLock")]
     [InlineData(typeof(ERP.Api.Controllers.InventoryControlController), "ReleaseLock")]
     [InlineData(typeof(ERP.Api.Controllers.InventoryControlController), "Move")]
+    [InlineData(typeof(ERP.Api.Controllers.InventoryReversalTraceabilityController), "Reverse")]
     [InlineData(typeof(ERP.Api.Controllers.StockReservationsController), "Create")]
     [InlineData(typeof(ERP.Api.Controllers.ImportReceiptsController), "SetInventoryIdentities")]
     public void InventoryMutationEndpoints_RequireIdempotency(Type controller, string method)

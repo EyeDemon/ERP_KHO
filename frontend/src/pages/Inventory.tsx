@@ -380,6 +380,9 @@ const Inventory = () => {
               <option value="Export">Xuất kho (Export)</option>
               <option value="AdjustmentIncrease">Điều chỉnh Tăng</option>
               <option value="AdjustmentDecrease">Điều chỉnh Giảm</option>
+              <option value="StatusChange">Đổi trạng thái</option>
+              <option value="Move">Internal Move</option>
+              <option value="Reversal">Reversal marker</option>
             </select>
           </UiToolbarField>
 
@@ -425,7 +428,9 @@ const Inventory = () => {
                   <tr><td colSpan={9} className="ui-empty-cell">Không có lịch sử giao dịch</td></tr>
                 ) : (
                   history.items.map(item => {
-                    const increase = item.transactionType === 'Import' || item.transactionType === 'AdjustmentIncrease';
+                    const increase = item.transactionType === 'Import' || item.transactionType === 'AdjustmentIncrease' || item.transactionType === 'TransferIn';
+                    const neutral = item.transactionType === 'Move' || item.transactionType === 'StatusChange' || item.transactionType === 'Reversal';
+                    const quantityClass = increase ? 'inventory-qty-increase' : neutral ? '' : 'inventory-qty-decrease';
                     return (
                       <tr key={item.id}>
                         <td>{new Date(item.transactionDate).toLocaleString('vi-VN')}</td>
@@ -438,7 +443,7 @@ const Inventory = () => {
                             : item.inventoryStatus || '—'}
                         </td>
                         <td>{item.lotNumber || '—'}{item.serialNumber ? ` / ${item.serialNumber}` : ''}</td>
-                        <td className={'inventory-numeric ' + (increase ? 'inventory-qty-increase' : 'inventory-qty-decrease')}>
+                        <td className={'inventory-numeric ' + quantityClass}>
                           {item.quantity} {item.unitName}
                         </td>
                         <td>{item.referenceType ? '[' + item.referenceType + '] #' + item.referenceId : ''}</td>

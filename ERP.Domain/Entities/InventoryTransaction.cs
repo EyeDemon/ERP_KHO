@@ -19,6 +19,8 @@ public class InventoryTransaction
     public decimal Quantity { get; set; }
     public int? ReferenceId { get; set; }
     public string? ReferenceType { get; set; }
+    public int? ReversalOfTransactionId { get; set; }
+    public int? CorrectiveTransactionId { get; set; }
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
     public int CreatedBy { get; set; }
     public string? Note { get; set; }
@@ -32,5 +34,7 @@ public class InventoryTransaction
     public InventoryLot? Lot { get; set; }
     public InventorySerial? Serial { get; set; }
     public InventoryStatusDefinition StatusDefinition { get; set; } = null!;
+    public InventoryTransaction? ReversalOfTransaction { get; set; }
+    public InventoryTransaction? CorrectiveTransaction { get; set; }
     public User CreatedByUser { get; set; } = null!;
 }

@@ -13,6 +13,10 @@ public static class InventoryTransactionTypeMapping
         TransactionType.AdjustmentDecrease or
         TransactionType.TransferOut => -1,
 
+        TransactionType.Move or
+        TransactionType.StatusChange or
+        TransactionType.Reversal => 0,
+
         _ => throw new ArgumentOutOfRangeException(
             nameof(transactionType),
             transactionType,

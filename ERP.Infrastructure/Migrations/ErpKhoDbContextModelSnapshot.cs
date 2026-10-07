@@ -1261,6 +1261,9 @@ namespace ERP.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CorrectiveTransactionId")
+                        .HasColumnType("int");
+
                     b.Property<int>("CreatedBy")
                         .HasColumnType("int");
 
@@ -1297,6 +1300,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("ReversalOfTransactionId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("SerialId")
                         .HasColumnType("int");
 
@@ -1317,6 +1323,11 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CorrectiveTransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_InventoryTransactions_CorrectiveTransaction")
+                        .HasFilter("[CorrectiveTransactionId] IS NOT NULL");
+
                     b.HasIndex("CreatedBy");
 
                     b.HasIndex("FromLocationId");
@@ -1328,6 +1339,11 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("LotId");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("ReversalOfTransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_InventoryTransactions_ReversalOfTransaction")
+                        .HasFilter("[ReversalOfTransactionId] IS NOT NULL");
 
                     b.HasIndex("SerialId");
 
@@ -4843,6 +4859,11 @@ namespace ERP.Infrastructure.Migrations
 
             modelBuilder.Entity("ERP.Domain.Entities.InventoryTransaction", b =>
                 {
+                    b.HasOne("ERP.Domain.Entities.InventoryTransaction", "CorrectiveTransaction")
+                        .WithMany()
+                        .HasForeignKey("CorrectiveTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
                         .WithMany()
                         .HasForeignKey("CreatedBy")
@@ -4870,6 +4891,11 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ERP.Domain.Entities.InventoryTransaction", "ReversalOfTransaction")
+                        .WithMany()
+                        .HasForeignKey("ReversalOfTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.InventorySerial", "Serial")
                         .WithMany()
                         .HasForeignKey("SerialId")
@@ -4892,6 +4918,8 @@ namespace ERP.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("CorrectiveTransaction");
+
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("FromLocation");
@@ -4901,6 +4929,8 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Lot");
 
                     b.Navigation("Product");
+
+                    b.Navigation("ReversalOfTransaction");
 
                     b.Navigation("Serial");
 
