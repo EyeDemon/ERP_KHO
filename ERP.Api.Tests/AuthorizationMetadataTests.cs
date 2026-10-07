@@ -17,7 +17,7 @@ namespace ERP.Api.Tests
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
                 typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
-                typeof(PermissionsController) };
+                typeof(PermissionsController), typeof(ExportReceiptsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
             foreach (var controller in controllers)
@@ -128,27 +128,23 @@ namespace ERP.Api.Tests
                 .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(AppPermissions.ReceiptComplete);
         }
 
-        [Fact]
-        public void ExportReceiptsController_Get_RequiresAllRoles()
+        [Theory]
+        [InlineData("GetAll", "export_receipt.read")]
+        [InlineData("GetById", "export_receipt.read")]
+        [InlineData("Create", "export_receipt.create")]
+        [InlineData("SetCustomer", "export_receipt.update")]
+        [InlineData("Cancel", "export_receipt.cancel")]
+        [InlineData("Approve", "export_receipt.approve")]
+        [InlineData("ApproveAndReserve", "export_receipt.approve")]
+        [InlineData("ApproveAndDispatch", "export_receipt.approve,export_receipt.dispatch")]
+        [InlineData("Dispatch", "export_receipt.dispatch")]
+        public void ExportReceiptAction_HasExactIndependentPermissions(string action, string codes)
         {
-            var classAttr = typeof(ExportReceiptsController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
-        }
-
-        [Fact]
-        public void ExportReceiptsController_CreateCancel_RequiresAdminManagerOrStaff()
-        {
-            var createMethod = typeof(ExportReceiptsController).GetMethod("Create");
-            var cancelMethod = typeof(ExportReceiptsController).GetMethod("Cancel");
-
-            createMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
-            cancelMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
+            typeof(ExportReceiptsController).GetMethod(action)!.GetCustomAttributes<PermissionAuthorizeAttribute>()
+                .Select(x=>x.Permission).Should().BeEquivalentTo(codes.Split(','));
         }
 
         [Theory]
-        [InlineData(typeof(ExportReceiptsController), "Approve")]
-        [InlineData(typeof(ExportReceiptsController), "ApproveAndReserve")]
-        [InlineData(typeof(ExportReceiptsController), "ApproveAndDispatch")]
         [InlineData(typeof(StocktakesController), "Approve")]
         [InlineData(typeof(StockTransfersController), "Approve")]
         public void ApprovalEndpoints_RequireCheckerPolicy(Type controllerType, string methodName)

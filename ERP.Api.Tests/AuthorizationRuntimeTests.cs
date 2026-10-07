@@ -80,6 +80,15 @@ namespace ERP.Api.Tests
                         databaseRole.Permissions.Add(new RolePermission { Role = databaseRole, Permission = permission });
                     }
                 }
+                // Outbound capabilities are explicit database grants, not a role-name fallback.
+                if (role is AppRoles.Admin or AppRoles.Manager or AppRoles.WarehouseStaff)
+                {
+                    var codes = role == AppRoles.WarehouseStaff
+                        ? new[] { AppPermissions.ExportRead, AppPermissions.ExportCreate, AppPermissions.ExportUpdate, AppPermissions.ExportDispatch }
+                        : new[] { AppPermissions.ExportRead, AppPermissions.ExportCreate, AppPermissions.ExportUpdate, AppPermissions.ExportApprove, AppPermissions.ExportDispatch, AppPermissions.ExportCancel };
+                    foreach (var code in codes)
+                        databaseRole.Permissions.Add(new RolePermission { Role = databaseRole, Permission = new Permission(code) });
+                }
                 db.Users.Add(user);
                 db.SaveChanges();
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(MockAuthenticationHandler.DefaultScheme);

@@ -55,7 +55,9 @@ public class GlobalExceptionHandlingMiddleware
             _logger.LogWarning(exception, "Handled exception: {Message}", exception.Message);
         }
 
-        var publicMessage = PublicMessage(exception.Message, isSqlServerConcurrencyError);
+        var publicMessage = statusCode == (int)HttpStatusCode.InternalServerError
+            ? "Không thể xử lý yêu cầu. Vui lòng thử lại."
+            : PublicMessage(exception.Message, isSqlServerConcurrencyError);
         var response = new ErrorResponse
         {
             Success = false,

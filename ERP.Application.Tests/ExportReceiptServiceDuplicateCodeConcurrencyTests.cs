@@ -117,6 +117,7 @@ namespace ERP.Application.Tests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 base.OnModelCreating(modelBuilder);
+                modelBuilder.Entity<ExportReceipt>().Property(x => x.RowVersion).HasDefaultValueSql("randomblob(8)");
                 foreach (var entityType in modelBuilder.Model.GetEntityTypes())
                 {
                     foreach (var property in entityType.GetProperties())
@@ -328,6 +329,7 @@ namespace ERP.Application.Tests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 base.OnModelCreating(modelBuilder);
+                modelBuilder.Entity<ExportReceipt>().Property(x => x.RowVersion).HasDefaultValueSql("randomblob(8)");
                 foreach (var entityType in modelBuilder.Model.GetEntityTypes())
                 {
                     foreach (var property in entityType.GetProperties())

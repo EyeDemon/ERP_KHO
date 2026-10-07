@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$ManifestPath, [ValidateSet('Sql','Credential','HoldLock','Processes')][string]$Mode='Sql')
+param([Parameter(Mandatory)][string]$ManifestPath, [ValidateSet('Sql','Credential','HoldLock','HoldExportLocations','HoldExportReceipt','Processes')][string]$Mode='Sql')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'BrowserQaConnection.ps1')
 $manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json
@@ -30,12 +30,18 @@ try {
         $pointer=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
         try {[Console]::Out.Write([Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer))}
         finally {[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)}
-    } elseif($Mode -eq 'HoldLock') {
+    } elseif($Mode -in @('HoldLock','HoldExportLocations','HoldExportReceipt')) {
         $stage='lock'
         $transaction=$connection.BeginTransaction()
         try {
             $command=$connection.CreateCommand();$command.Transaction=$transaction
             $command.CommandText="DECLARE @result int; EXEC @result=sys.sp_getapplock @Resource=N'ERP.PermissionAdministration',@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=10000; IF @result<0 THROW 51009,'QA lock unavailable.',1;"
+            if($Mode -ne 'HoldLock') {
+                $request=[Console]::In.ReadToEnd()|ConvertFrom-Json
+                if(($request.id -isnot [int] -and $request.id -isnot [long]) -or $request.id -le 0 -or $request.id -gt [int]::MaxValue) { throw 'Positive fixture ID required.' }
+                $command.CommandText=if($Mode -eq 'HoldExportReceipt') {'SELECT Id FROM ExportReceipts WITH(UPDLOCK,HOLDLOCK) WHERE Id=@id'} else {'SELECT * FROM WarehouseLocations WITH(UPDLOCK,HOLDLOCK) WHERE WarehouseId=@id ORDER BY Id'}
+                [void]$command.Parameters.AddWithValue('@id',$request.id)
+            }
             [void]$command.ExecuteNonQuery()
             [Console]::Out.WriteLine('LOCK_READY');[Console]::Out.Flush()
             Start-Sleep -Milliseconds 2000

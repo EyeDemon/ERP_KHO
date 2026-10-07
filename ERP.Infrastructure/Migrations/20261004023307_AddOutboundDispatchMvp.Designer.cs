@@ -4,6 +4,7 @@ using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ERP.Infrastructure.Migrations
 {
     [DbContext(typeof(ErpKhoDbContext))]
-    partial class ErpKhoDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261004023307_AddOutboundDispatchMvp")]
+    partial class AddOutboundDispatchMvp
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -797,11 +800,6 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId")
                         .IsUnique()
                         .HasFilter("[ReferenceType] = 'StockTransfer'");
-
-                    b.HasIndex("ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_InventoryTransactions_ExportReceiptLocationReference")
-                        .HasFilter("[ReferenceType] = 'ExportReceipt'");
 
                     b.ToTable("InventoryTransactions", (string)null);
                 });

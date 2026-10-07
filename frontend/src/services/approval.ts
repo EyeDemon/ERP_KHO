@@ -8,6 +8,15 @@ export const validRejectReason = (value: string): boolean => {
 };
 
 export const approvalDisplayAction = (action: string): string => {
+  const exportActions: Record<string, string> = {
+    'ExportReceipt.Created': 'Đã tạo phiếu xuất',
+    'ExportReceipt.CustomerChanged': 'Đã cập nhật khách hàng',
+    'ExportReceipt.ApprovedAndReserved': 'Đã duyệt và giữ hàng',
+    'ExportReceipt.ApprovedAndDispatched': 'Đã duyệt và xuất ngay',
+    'ExportReceipt.Dispatched': 'Đã xuất kho',
+    'ExportReceipt.CancelledAndReleased': 'Đã hủy và giải phóng hàng giữ',
+  };
+  if (exportActions[action]) return exportActions[action];
   if (['Bị từ chối', 'Đã hủy', 'Đã duyệt'].includes(action)) return action;
   if (action === 'ApprovalRejected') return 'Bị từ chối';
   if (action.endsWith('.Cancelled')) return 'Đã hủy';

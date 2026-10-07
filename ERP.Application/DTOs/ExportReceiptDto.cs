@@ -2,6 +2,7 @@ using ERP.Domain.Enums;
 
 namespace ERP.Application.DTOs
 {
+    public sealed class ExportReceiptCommandDto { public string? RowVersion { get; set; } }
     public class ExportReceiptDto
     {
         public int Id { get; set; }
@@ -10,6 +11,8 @@ namespace ERP.Application.DTOs
         public string? WarehouseName { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? Note { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? RowVersion { get; set; }
         public int CreatedBy { get; set; }
         public string? CreatedByName { get; set; }
         public int? ApprovedBy { get; set; }
@@ -37,8 +40,13 @@ namespace ERP.Application.DTOs
         public string? ProductCode { get; set; }
         public string? ProductName { get; set; }
         public string? UnitName { get; set; }
+        public int? BaseUomIdSnapshot { get; set; }
+        public string? BaseUomCodeSnapshot { get; set; }
+        public string? BaseUomNameSnapshot { get; set; }
+        public int? BaseUomPrecisionSnapshot { get; set; }
         public decimal Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? UnitPrice { get; set; }
         public string? Note { get; set; }
         public decimal? AvailableQuantity { get; set; }
     }

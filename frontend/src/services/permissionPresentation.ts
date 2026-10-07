@@ -1,14 +1,14 @@
 import axios from 'axios';
 
 const resources: Record<string, string> = {
-  approval: 'phê duyệt phiếu nhập', receipt: 'phiếu nhập', quality_inspection: 'kiểm tra chất lượng', quality_disposition: 'kết quả kiểm tra chất lượng',
+  approval: 'phê duyệt chứng từ', export_receipt: 'phiếu xuất kho', receipt: 'phiếu nhập', quality_inspection: 'kiểm tra chất lượng', quality_disposition: 'kết quả kiểm tra chất lượng',
   receiving_discrepancy: 'sai lệch nhận hàng', putaway: 'cất hàng', location: 'vị trí kho', warehouse: 'kho hàng',
   product: 'sản phẩm', product_category: 'danh mục sản phẩm', product_barcode: 'mã vạch sản phẩm', product_uom: 'đơn vị quy đổi sản phẩm',
   uom: 'đơn vị tính', partner: 'đối tác', reason_code: 'mã lý do', quality_policy: 'chính sách chất lượng',
   receiving_tolerance_policy: 'chính sách dung sai nhận hàng', permission: 'quyền truy cập', role: 'vai trò', user: 'người dùng', user_warehouse: 'phạm vi kho của người dùng',
 };
 const actions: Record<string, string> = { read: 'Xem', create: 'Tạo', update: 'Cập nhật', deactivate: 'Ngừng sử dụng', manage: 'Quản lý',
-  cancel: 'Hủy', receive: 'Nhận hàng trên', complete: 'Hoàn tất', post: 'Ghi nhận tồn kho từ', execute: 'Thực hiện',
+  dispatch: 'Xác nhận xuất kho cho', cancel: 'Hủy', receive: 'Nhận hàng trên', complete: 'Hoàn tất', post: 'Ghi nhận tồn kho từ', execute: 'Thực hiện',
   approve: 'Phê duyệt', reject: 'Từ chối', submit: 'Gửi xử lý', resolve: 'Xử lý', assign: 'Phân công' };
 export const permissionLabel = (code: string) => {
   if (code === 'permission.assign') return 'Cấp và thu hồi quyền truy cập';

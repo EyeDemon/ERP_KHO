@@ -6,6 +6,11 @@ public class ExportReceiptDetail
     public int ExportReceiptId { get; set; }
     public int ProductId { get; set; }
     public decimal Quantity { get; set; }
+    // Null for legacy lines: current master cannot establish their historical UOM.
+    public int? BaseUomIdSnapshot { get; set; }
+    public string? BaseUomCodeSnapshot { get; set; }
+    public string? BaseUomNameSnapshot { get; set; }
+    public int? BaseUomPrecisionSnapshot { get; set; }
     public decimal UnitPrice { get; set; }
     public string? Note { get; set; }
 

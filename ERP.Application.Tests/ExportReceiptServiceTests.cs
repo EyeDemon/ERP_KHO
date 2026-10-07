@@ -269,7 +269,7 @@ namespace ERP.Application.Tests
             _mockExportRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync((ExportReceipt?)null);
             
             Func<Task> act = async () => await _service.ApproveAsync(1, 99);
-            await act.Should().ThrowAsync<NotFoundException>().WithMessage("Không tìm thấy phiếu xuất id 1");
+            await act.Should().ThrowAsync<NotFoundException>().WithMessage("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
             _mockAuditRepo.Verify(x => x.AddAsync(It.IsAny<AuditLog>()), Times.Never);
             _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
             _mockUnitOfWork.Verify(x => x.CommitTransactionAsync(), Times.Never);
@@ -593,7 +593,7 @@ namespace ERP.Application.Tests
         {
             _mockExportRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync((ExportReceipt?)null);
             Func<Task> act = async () => await _service.CancelAsync(1, 99);
-            await act.Should().ThrowAsync<NotFoundException>().WithMessage("Không tìm thấy phiếu xuất id 1");
+            await act.Should().ThrowAsync<NotFoundException>().WithMessage("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
         }
 
         [Fact]

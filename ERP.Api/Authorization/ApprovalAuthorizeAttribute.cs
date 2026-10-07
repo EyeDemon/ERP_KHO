@@ -32,7 +32,10 @@ public sealed class ApprovalAuthorizationFilter(ErpKhoDbContext db) : IAsyncAuth
             var legacy = user.Role is "Admin" or "Manager";
             var required = HttpMethods.IsPost(context.HttpContext.Request.Method) ? AppPermissions.ApprovalReject : AppPermissions.ReceiptRead;
             var allowed = type == "ImportReceipt" ? user.Permissions.Contains(required)
-                : type is null ? legacy || user.Permissions.Contains(AppPermissions.ReceiptRead) : legacy;
+                : type == "ExportReceipt" ? HttpMethods.IsPost(context.HttpContext.Request.Method)
+                    ? user.Permissions.Contains(AppPermissions.ApprovalReject) && user.Permissions.Contains(AppPermissions.ExportCancel)
+                    : user.Permissions.Contains(AppPermissions.ExportRead)
+                : type is null ? legacy || user.Permissions.Contains(AppPermissions.ReceiptRead) || user.Permissions.Contains(AppPermissions.ExportRead) : legacy;
             if (!allowed) context.Result = new ObjectResult(new { message = "Bạn không có quyền thực hiện thao tác này." }) { StatusCode = 403 };
         }
         catch

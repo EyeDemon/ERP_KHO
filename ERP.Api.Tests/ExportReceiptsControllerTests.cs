@@ -52,7 +52,7 @@ namespace ERP.Api.Tests
 
             // Assert
             result.Should().BeOfType<UnauthorizedResult>();
-            _mockService.Verify(s => s.ApproveAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            _mockService.Verify(s => s.ApproveAsync(It.IsAny<int>(), It.IsAny<int>(), null), Times.Never);
         }
 
         [Fact]
@@ -66,7 +66,7 @@ namespace ERP.Api.Tests
 
             // Assert
             result.Should().BeOfType<UnauthorizedResult>();
-            _mockService.Verify(s => s.ApproveAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            _mockService.Verify(s => s.ApproveAsync(It.IsAny<int>(), It.IsAny<int>(), null), Times.Never);
         }
 
         [Fact]
@@ -74,7 +74,7 @@ namespace ERP.Api.Tests
         {
             // Arrange
             SetupUserClaims("99");
-            _mockService.Setup(s => s.ApproveAsync(1, 99)).Returns(Task.CompletedTask);
+            _mockService.Setup(s => s.ApproveAsync(1, 99, null)).Returns(Task.CompletedTask);
 
             // Act
             var result = await _controller.Approve(1) as OkObjectResult;
@@ -82,7 +82,7 @@ namespace ERP.Api.Tests
             // Assert
             result.Should().NotBeNull();
             result!.StatusCode.Should().Be(200);
-            _mockService.Verify(s => s.ApproveAsync(1, 99), Times.Once);
+            _mockService.Verify(s => s.ApproveAsync(1, 99, null), Times.Once);
         }
 
         [Fact]
@@ -186,7 +186,7 @@ namespace ERP.Api.Tests
             var unauthorizedResult = result as UnauthorizedObjectResult;
             unauthorizedResult.Should().NotBeNull();
             unauthorizedResult!.Value.Should().BeEquivalentTo(new { message = "Không xác định được danh tính người dùng" });
-            _mockService.Verify(s => s.CancelAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            _mockService.Verify(s => s.CancelAsync(It.IsAny<int>(), It.IsAny<int>(), null), Times.Never);
         }
 
         [Fact]
@@ -197,18 +197,18 @@ namespace ERP.Api.Tests
             var unauthorizedResult = result as UnauthorizedObjectResult;
             unauthorizedResult.Should().NotBeNull();
             unauthorizedResult!.Value.Should().BeEquivalentTo(new { message = "Không xác định được danh tính người dùng" });
-            _mockService.Verify(s => s.CancelAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            _mockService.Verify(s => s.CancelAsync(It.IsAny<int>(), It.IsAny<int>(), null), Times.Never);
         }
 
         [Fact]
         public async Task Cancel_ValidUserIdClaim_CallsServiceAndReturnsOk()
         {
             SetupUserClaims("99");
-            _mockService.Setup(s => s.CancelAsync(1, 99)).Returns(Task.CompletedTask);
+            _mockService.Setup(s => s.CancelAsync(1, 99, null)).Returns(Task.CompletedTask);
             var result = await _controller.Cancel(1) as OkObjectResult;
             result.Should().NotBeNull();
             result!.StatusCode.Should().Be(200);
-            _mockService.Verify(s => s.CancelAsync(1, 99), Times.Once);
+            _mockService.Verify(s => s.CancelAsync(1, 99, null), Times.Once);
         }
     }
 }

@@ -14,7 +14,7 @@ const pending = () => { let finish!: () => void; const promise = new Promise(res
 
 describe('receipt mutation locks (mocked API)', () => {
   afterEach(cleanup);
-  beforeEach(() => { vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin'); localStorage.setItem('userId', '1'); localStorage.setItem('permissions', JSON.stringify(['receipt.read', 'receipt.create', 'receipt.update', 'receipt.complete', 'receipt.post', 'product.update', 'warehouse.read', 'product.read', 'partner.read', 'receiving_discrepancy.read', 'receiving_discrepancy.create', 'receiving_discrepancy.submit', 'reason_code.read'])); });
+  beforeEach(() => { vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin'); localStorage.setItem('userId', '1'); localStorage.setItem('permissions', JSON.stringify(['export_receipt.read', 'export_receipt.create', 'export_receipt.update', 'receipt.read', 'receipt.create', 'receipt.update', 'receipt.complete', 'receipt.post', 'product.update', 'warehouse.read', 'product.read', 'partner.read', 'receiving_discrepancy.read', 'receiving_discrepancy.create', 'receiving_discrepancy.submit', 'reason_code.read'])); });
 
   it('locks import create synchronously while the first request is pending', async () => {
     get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : [] }) as never);
@@ -85,9 +85,9 @@ describe('receipt mutation locks (mocked API)', () => {
   });
 
   it('locks customer assignment while its request is pending', async () => {
-    const receipt = { id: 4, code: 'E4', status: 'Draft', customerId: null, details: [], writeEnabled: true };
-    get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url === '/api/exportreceipts/4' ? receipt : [] }) as never);
-    get.mockImplementationOnce(async () => ({ data: [warehouse] }) as never).mockImplementationOnce(async () => ({ data: [product] }) as never).mockImplementationOnce(async () => ({ data: { items: [partner] } }) as never).mockImplementationOnce(async () => ({ data: [receipt] }) as never).mockImplementation(async url => ({ data: url === '/api/exportreceipts/4' ? receipt : [receipt] }) as never);
+    const receipt = { id: 4, code: 'E4', status: 'Draft', customerId: null, details: [], rowVersion: 'AAAAAAAAAAE=', writeEnabled: true };
+    get.mockImplementation(async url => ({ data: url === '/api/warehouses' ? [warehouse] : url === '/api/products' ? [product] : url === '/api/business-partners' ? { items: [partner] } : url === '/api/exportreceipts/4' ? receipt : url === '/api/exportreceipts' ? [receipt] : [] }) as never);
+
     const request = pending(); put.mockReturnValue(request.promise as never); const view = render(<ExportReceipts />); await view.findByText('E4'); fireEvent.click(view.getByText('Chi tiết')); const select = await view.findByLabelText('Đổi khách hàng'); fireEvent.change(select, { target: { value: '9' } }); fireEvent.change(select, { target: { value: '' } }); expect(put).toHaveBeenCalledTimes(1); expect((select as HTMLSelectElement).disabled).toBe(true); request.finish(); await waitFor(() => expect((view.getByLabelText('Đổi khách hàng') as HTMLSelectElement).disabled).toBe(false));
   });
 });
