@@ -561,7 +561,8 @@ public sealed class SqlServerShipmentLoadingTests
                                  x.TransactionType == TransactionType.Ship))
                 .Should().Be(1);
             (await verify.InventoryTransactions.AsNoTracking()
-                .CountAsync(x => x.ReferenceId == result.Prepared.ShipmentId &&
+                .CountAsync(x => x.ReferenceType == "Shipment" &&
+                                 x.ReferenceId == result.Prepared.ShipmentId &&
                                  x.TransactionType != TransactionType.Ship))
                 .Should().Be(0);
         }
