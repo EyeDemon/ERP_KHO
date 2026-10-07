@@ -146,6 +146,12 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('INV-07')?.route).toBe('/inventory-locks');
     expect(byId.get('INV-07')?.goal).toMatch(/overlapping lock.*Owner\/HU\/partial-quantity/i);
     expect(byId.get('INV-08')?.status).toBe('foundation');
+    expect(byId.get('INV-09')?.status).toBe('foundation');
+    expect(byId.get('INV-09')?.route).toBe('/inventory-reversals');
+    expect(byId.get('INV-09')?.goal).toMatch(/Internal Move.*Inventory Status Change.*structured.*double reversal.*Receipt\/Shipment\/Transfer/i);
+    expect(byId.get('INV-10')?.status).toBe('foundation');
+    expect(byId.get('INV-10')?.route).toBe('/inventory-traceability');
+    expect(byId.get('INV-10')?.goal).toMatch(/Product.*Lot.*Serial.*Reference.*structured reversal chain.*Return\/Recall/i);
     expect(byId.get('INV-08')?.route).toBe('/inventory-movements');
     expect(byId.get('INV-08')?.goal).toMatch(/unreserved inventory.*MOVE ledger.*Cross-warehouse/i);
     expect(byId.get('OUT-08')?.route).toBe('/shipments');
