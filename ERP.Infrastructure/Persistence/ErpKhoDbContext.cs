@@ -36,6 +36,7 @@ public class ErpKhoDbContext : DbContext
     public DbSet<Asn> Asns => Set<Asn>();
     public DbSet<AsnLine> AsnLines => Set<AsnLine>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
+    public DbSet<InventoryStatusDefinition> InventoryStatusDefinitions => Set<InventoryStatusDefinition>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<ImportReceipt> ImportReceipts => Set<ImportReceipt>();
     public DbSet<ImportReceiptDetail> ImportReceiptDetails => Set<ImportReceiptDetail>();
