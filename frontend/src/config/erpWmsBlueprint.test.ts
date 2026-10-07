@@ -91,6 +91,10 @@ describe('ERP WMS blueprint registry', () => {
   it('keeps merged production capabilities synchronized with the main integration branch', () => {
     const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
     const byId = new Map(capabilities.map((capability) => [capability.id, capability]));
+    expect(erpWmsBlueprint.find((module) => module.key === 'overview')?.name).toBe('Tổng quan & Trung tâm công việc');
+    expect(erpWmsBlueprint.find((module) => module.key === 'inventory-control')?.name).toBe('Tồn kho & Kiểm soát tồn kho');
+    expect(byId.get('OV-07')?.name).toBe('Tìm kiếm toàn doanh nghiệp');
+
 
     for (const id of [
       'MD-02', 'MD-03', 'MD-05',
@@ -120,14 +124,17 @@ describe('ERP WMS blueprint registry', () => {
 
     expect(byId.get('INV-05')?.status).toBe('foundation');
     expect(byId.get('INV-05')?.route).toBe('/inventory');
-    expect(byId.get('INV-05')?.goal).toMatch(/eligibility.*status-change.*bảo toàn tổng OnHand.*STATUS_CHANGE ledger.*reserved\/allocation.*chặn.*controlled disposition\/recall release.*chưa/i);
+    expect(byId.get('INV-05')?.name).toBe('Trạng thái tồn kho');
+    expect(byId.get('INV-05')?.goal).toMatch(/bộ trạng thái chuẩn.*đổi trạng thái.*bảo toàn tổng Tồn thực tế.*STATUS_CHANGE.*đã giữ\/phân bổ.*giải phóng thu hồi.*chưa/i);
 
     expect(byId.get('INV-06')?.status).toBe('foundation');
     expect(byId.get('INV-06')?.route).toBe('/inventory');
-    expect(byId.get('INV-06')?.goal).toMatch(/Product Tracking.*receipt disposition.*duplicate serial.*serial = 1 Base UOM.*FEFO.*Picking scan.*Shipment\/ledger.*Full genealogy\/recall.*chưa/i);
+    expect(byId.get('INV-06')?.name).toBe('Lô / Sê-ri / Hạn dùng');
+    expect(byId.get('INV-06')?.goal).toMatch(/Product Tracking.*disposition phiếu nhập.*chống trùng sê-ri.*mỗi sê-ri = 1 Base UOM.*FEFO.*Quét lấy hàng.*Shipment\/sổ cái.*Phả hệ\/điều phối thu hồi.*chưa/i);
 
     expect(byId.get('INV-11')?.status).toBe('foundation');
-    expect(byId.get('INV-11')?.goal).toMatch(/read-only reconciliation.*controlled rebuild\/remediation.*chưa/i);
+    expect(byId.get('INV-11')?.name).toBe('Bộ máy toàn vẹn & đối chiếu tồn kho');
+    expect(byId.get('INV-11')?.goal).toMatch(/đối chiếu chỉ đọc.*rebuild\/remediation có kiểm soát.*chưa/i);
     expect(byId.get('OUT-01')?.goal).toMatch(/không đồng nghĩa Shipment LOADED\/DISPATCHED/i);
     expect(byId.get('OUT-03')?.status).toBe('foundation');
     expect(byId.get('OUT-03')?.route).toBe('/stock-allocations');
@@ -144,7 +151,8 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('OUT-08')?.status).toBe('foundation');
     expect(byId.get('INV-07')?.status).toBe('foundation');
     expect(byId.get('INV-07')?.route).toBe('/inventory-locks');
-    expect(byId.get('INV-07')?.goal).toMatch(/overlapping lock.*Owner\/HU\/partial-quantity/i);
+    expect(byId.get('INV-07')?.name).toBe('Khóa / đóng băng tồn kho');
+    expect(byId.get('INV-07')?.goal).toMatch(/khóa chồng lấp.*chủ sở hữu\/HU\/một phần số lượng/i);
     expect(byId.get('INV-08')?.status).toBe('foundation');
     expect(byId.get('INV-09')?.name).toBe('Đảo giao dịch');
     expect(byId.get('INV-09')?.status).toBe('foundation');
@@ -155,7 +163,8 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('INV-10')?.route).toBe('/inventory-traceability');
     expect(byId.get('INV-10')?.goal).toMatch(/Sản phẩm.*Lô.*Sê-ri.*Tham chiếu.*chuỗi đảo.*Return\/Recall/i);
     expect(byId.get('INV-08')?.route).toBe('/inventory-movements');
-    expect(byId.get('INV-08')?.goal).toMatch(/unreserved inventory.*MOVE ledger.*Cross-warehouse/i);
+    expect(byId.get('INV-08')?.name).toBe('Di chuyển vị trí nội bộ');
+    expect(byId.get('INV-08')?.goal).toMatch(/tồn chưa được giữ.*sổ cái MOVE.*Di chuyển xuyên kho/i);
     expect(byId.get('OUT-08')?.route).toBe('/shipments');
     expect(byId.get('OUT-08')?.goal).toMatch(/Shipment LOADED.*root-HU.*Allocation.*Reservation.*SHIP ledger.*OnHand đúng một lần.*ExportReceipt legacy dispatch bị chặn.*TransactionType\.Ship.*POD.*chưa/i);
     expect(byId.get('OUT-09')?.status).toBe('foundation');
