@@ -213,8 +213,7 @@ public sealed class AddInventoryStatusLotSerialFoundation : Migration
             name: "IX_InventoryStocks_ProductId_WarehouseId_Status_LocationId_LotId_SerialId",
             table: "InventoryStocks",
             columns: new[] { "ProductId", "WarehouseId", "Status", "LocationId", "LotId", "SerialId" },
-            unique: true,
-            filter: "[LocationId] IS NOT NULL AND [LotId] IS NOT NULL AND [SerialId] IS NOT NULL");
+            unique: true);
         migrationBuilder.AddForeignKey(
             name: "FK_InventoryStocks_InventoryLots_LotId",
             table: "InventoryStocks",
