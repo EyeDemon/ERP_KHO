@@ -11,6 +11,7 @@ import {
   demoInventoryStocks,
   demoInventoryStatuses,
   demoInventoryBuckets,
+  demoInventoryLocks,
   demoInventoryTransactions,
   demoPartners,
   demoPermissionCatalog,
@@ -97,7 +98,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         userId: 1,
         username: 'Blueprint Demo',
         role: 'Viewer',
-        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'shipment.read', 'sales_order.read', 'backorder.read', 'inventory.read', 'inventory_availability.read', 'inventory_ledger.read', 'inventory_traceability.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
+        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'shipment.read', 'sales_order.read', 'backorder.read', 'inventory.read', 'inventory_availability.read', 'inventory_ledger.read', 'inventory_traceability.read', 'inventory_lock.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
     }
 
@@ -312,6 +313,19 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     }
 
     if (path === '/api/inventory/statuses') return ok(config, demoInventoryStatuses);
+    if (path === '/api/inventory/locks') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const status = (params.get('status') ?? '').toLowerCase();
+      return ok(config, demoInventoryLocks.filter(item =>
+        (!warehouseId || item.warehouseId === warehouseId)
+        && (!status || item.status.toLowerCase() === status)
+      ));
+    }
+    if (/^\/api\/inventory\/locks\/\d+$/.test(path)) {
+      const item = demoInventoryLocks.find(lock => lock.id === findNumericId(path));
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy Inventory Lock demo.');
+    }
+
     if (path === '/api/inventory/buckets') {
       const warehouseId = Number(params.get('warehouseId') ?? 0);
       const productId = Number(params.get('productId') ?? 0);
