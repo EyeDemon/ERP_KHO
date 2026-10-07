@@ -15,7 +15,8 @@ public sealed class PickingService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
     ICurrentUser currentUser,
-    IPackingSessionIntegration? packingSessionIntegration = null) : IPickingService, IPickingDispatchReadiness
+    IPackingSessionIntegration? packingSessionIntegration = null,
+    IInventoryEligibilityService? inventoryEligibility = null) : IPickingService, IPickingDispatchReadiness
 {
     private static readonly StockAllocationStatus[] CapacityStatuses =
     [
@@ -120,8 +121,18 @@ public sealed class PickingService(
 
             ValidateLocationScan(line, request.LocationBarcode);
             await ValidateProductScanAsync(line, request.ProductBarcode, token);
-            ValidateUnsupportedTracking(request);
+            ValidateTrackingScan(line, request);
             ValidateQuantityPrecision(line, request.Quantity);
+
+            if (inventoryEligibility is not null)
+                await inventoryEligibility.EnsureBucketEligibleAsync(
+                    line.ProductId,
+                    task.WarehouseId,
+                    line.SourceLocationId,
+                    line.Allocation.LotId,
+                    line.Allocation.SerialId,
+                    InventoryEligibilityOperation.Picking,
+                    token);
 
             if (request.Quantity > line.RemainingQuantity)
                 throw Conflict("PICK_QUANTITY_EXCEEDS_REMAINING", "Số lượng Picking vượt quá số lượng còn lại.");
@@ -130,11 +141,9 @@ public sealed class PickingService(
                 x => x.ProductId == line.ProductId &&
                      x.WarehouseId == task.WarehouseId &&
                      x.LocationId == line.SourceLocationId &&
-                     x.Status == InventoryStatus.Available &&
-                     x.Location != null &&
-                     x.Location.IsActive &&
-                     !x.Location.IsBlocked &&
-                     x.Location.IsPickable &&
+                     x.LotId == line.Allocation.LotId &&
+                     x.SerialId == line.Allocation.SerialId &&
+                     x.Status == line.Allocation.InventoryStatus &&
                      x.Quantity >= line.Allocation.Quantity &&
                      x.ReservedQuantity >= line.Allocation.Quantity,
                 token);
@@ -537,14 +546,37 @@ public sealed class PickingService(
             throw Conflict("PICK_WRONG_PRODUCT", "Barcode không khớp sản phẩm được phân công.");
     }
 
-    private static void ValidateUnsupportedTracking(PickScanDto request)
+    private static void ValidateTrackingScan(PickingTaskLine line, PickScanDto request)
     {
-        if (!string.IsNullOrWhiteSpace(request.LotNumber))
-            throw Conflict("PICK_WRONG_LOT", "Lot validation chưa khả dụng vì Lot/Expiry canonical chưa được triển khai.");
-        if (!string.IsNullOrWhiteSpace(request.SerialNumber))
-            throw Conflict("PICK_WRONG_SERIAL", "Serial validation chưa khả dụng vì Serial canonical chưa được triển khai.");
+        var expectedLot = line.Allocation.Lot?.LotNumber;
+        var expectedSerial = line.Allocation.Serial?.SerialNumber;
+
+        if (line.Product.TrackingType == ProductTrackingType.Lot)
+        {
+            if (string.IsNullOrWhiteSpace(request.LotNumber) ||
+                !string.Equals(request.LotNumber.Trim(), expectedLot, StringComparison.OrdinalIgnoreCase))
+                throw Conflict("PICK_WRONG_LOT", "Lot quét không khớp Lot đã Allocation.");
+        }
+        else if (!string.IsNullOrWhiteSpace(request.LotNumber) && expectedLot is null)
+        {
+            throw Conflict("PICK_WRONG_LOT", "Dòng Picking không yêu cầu Lot.");
+        }
+
+        if (line.Product.TrackingType == ProductTrackingType.Serial)
+        {
+            if (string.IsNullOrWhiteSpace(request.SerialNumber) ||
+                !string.Equals(request.SerialNumber.Trim(), expectedSerial, StringComparison.OrdinalIgnoreCase))
+                throw Conflict("PICK_WRONG_SERIAL", "Serial quét không khớp Serial đã Allocation.");
+            if (request.Quantity != 1m)
+                throw Conflict("PICK_WRONG_SERIAL", "Sản phẩm Serial chỉ được xác nhận 1 base unit mỗi serial.");
+        }
+        else if (!string.IsNullOrWhiteSpace(request.SerialNumber) && expectedSerial is null)
+        {
+            throw Conflict("PICK_WRONG_SERIAL", "Dòng Picking không yêu cầu Serial.");
+        }
+
         if (!string.IsNullOrWhiteSpace(request.DestinationToteBarcode))
-            throw Conflict("PICK_DESTINATION_HU_NOT_AVAILABLE", "Destination Tote/HU sẽ được bật cùng OUT-06 Packing/HU.");
+            throw Conflict("PICK_DESTINATION_HU_NOT_AVAILABLE", "Destination Tote/HU chưa là inventory bucket canonical trong phần hiện tại.");
     }
 
     private static void ValidateQuantityPrecision(PickingTaskLine line, decimal quantity)
@@ -618,6 +650,8 @@ public sealed class PickingService(
             .Include(x => x.Lines).ThenInclude(x => x.Product).ThenInclude(x => x.Unit)
             .Include(x => x.Lines).ThenInclude(x => x.SourceLocation)
             .Include(x => x.Lines).ThenInclude(x => x.Allocation).ThenInclude(x => x.Reservation)
+            .Include(x => x.Lines).ThenInclude(x => x.Allocation).ThenInclude(x => x.Lot)
+            .Include(x => x.Lines).ThenInclude(x => x.Allocation).ThenInclude(x => x.Serial)
             .Include(x => x.Lines).ThenInclude(x => x.ShortPicks);
 
     private void ApplyVersion(PickingTask task, string encoded)
@@ -706,6 +740,11 @@ public sealed class PickingService(
                 SourceLocationId = x.SourceLocationId,
                 SourceLocationCode = x.SourceLocation.Code,
                 SourceLocationName = x.SourceLocation.Name,
+                LotId = x.Allocation.LotId,
+                LotNumber = x.Allocation.Lot?.LotNumber,
+                ExpiryDate = x.Allocation.Lot?.ExpiryDate,
+                SerialId = x.Allocation.SerialId,
+                SerialNumber = x.Allocation.Serial?.SerialNumber,
                 RequestedQuantity = x.RequestedQuantity,
                 PickedQuantity = x.PickedQuantity,
                 RemainingQuantity = x.RemainingQuantity,
