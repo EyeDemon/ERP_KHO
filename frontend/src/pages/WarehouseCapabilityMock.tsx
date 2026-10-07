@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { CalendarDays, Gauge, MapPinned, ShieldAlert, Truck } from 'lucide-react';
-import './KhoCapabilityMock.css';
+import './WarehouseCapabilityMock.css';
 
-type KhoMockProps = {
+type WarehouseMockProps = {
   capabilityId?: string;
 };
 
@@ -124,7 +124,7 @@ const HeatmapPreview = () => {
       <div className="warehouse-mock-metrics">
         <div><span>Kho</span><strong>WH-HCM-01</strong><small>DC Hồ Chí Minh</small></div>
         <div><span>Tuổi dữ liệu chụp</span><strong>2 phút</strong><small>Chỉ báo độ mới mô phỏng</small></div>
-        <div><span>Khẩn cấp areas</span><strong>2</strong><small>A01 • STAGE</small></div>
+        <div><span>Khu vực khẩn cấp</span><strong>2</strong><small>A01 • STAGE</small></div>
         <div><span>Mức sử dụng trung bình</span><strong>70%</strong><small>8 khu vực vận hành</small></div>
       </div>
 
@@ -215,7 +215,7 @@ const DockYardPreview = () => {
       <div className="warehouse-mock-metrics">
         <div><span>Phương tiện trong sân</span><strong>7</strong><small>3 đang chờ • 4 tại cửa kho</small></div>
         <div><span>Mức sử dụng cửa kho</span><strong>75%</strong><small>3 / 4 cửa kho</small></div>
-        <div><span>Waiting &gt; 45m</span><strong>2</strong><small>Cần quản lý xử lý</small></div>
+        <div><span>Chờ &gt; 45 phút</span><strong>2</strong><small>Cần quản lý xử lý</small></div>
         <div><span>Lịch tiếp theo</span><strong>09:40</strong><small>APT-1058 • nhập kho</small></div>
       </div>
 
@@ -273,7 +273,7 @@ const CalendarExceptionPreview = () => {
           <strong>Kho mở • Cửa D01–D03 hoạt động • D04 tạm đóng</strong>
           <p>Ghi đè khẩn cấp chỉ thay đổi phạm vi D04; các cửa khác vẫn theo ghi đè cấp kho và sức chứa ca.</p>
         </div>
-        <StatusBadge tone="warning">Partial sức chứa</StatusBadge>
+        <StatusBadge tone="warning">Sức chứa một phần</StatusBadge>
       </div>
 
       <div className="warehouse-mock-callout warning">
@@ -284,7 +284,7 @@ const CalendarExceptionPreview = () => {
   );
 };
 
-const KhoCapabilityMock = ({ capabilityId }: KhoMockProps) => {
+const WarehouseCapabilityMock = ({ capabilityId }: WarehouseMockProps) => {
   if (capabilityId === 'WH-03') return <CapacityPreview />;
   if (capabilityId === 'WH-04') return <HeatmapPreview />;
   if (capabilityId === 'WH-05') return <CalendarPreview />;
@@ -293,4 +293,4 @@ const KhoCapabilityMock = ({ capabilityId }: KhoMockProps) => {
   return null;
 };
 
-export default KhoCapabilityMock;
+export default WarehouseCapabilityMock;
