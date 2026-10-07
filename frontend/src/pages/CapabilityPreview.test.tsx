@@ -296,7 +296,7 @@ describe('CapabilityPreview', () => {
     expect(picking.getByText('Ma trận màn hình • Đã đóng truy vết')).toBeTruthy();
     expect(picking.getByText('Quản trị & mức hoàn thiện chức năng')).toBeTruthy();
     expect(picking.getAllByText('Đợt 2').length).toBeGreaterThan(0);
-    expect(picking.getByText(/Picking không được giảm warehouse OnHand/)).toBeTruthy();
+    expect(picking.getByText(/Lấy hàng không được làm giảm OnHand toàn kho/)).toBeTruthy();
     expect(picking.getByText(/Đã đóng truy vết — Ma trận màn hình 229/)).toBeTruthy();
   });
 
