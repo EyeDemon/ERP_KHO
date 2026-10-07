@@ -37,6 +37,9 @@ public class ErpKhoDbContext : DbContext
     public DbSet<AsnLine> AsnLines => Set<AsnLine>();
     public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
+    public DbSet<InventoryLot> InventoryLots => Set<InventoryLot>();
+    public DbSet<InventorySerial> InventorySerials => Set<InventorySerial>();
+    public DbSet<InventoryLock> InventoryLocks => Set<InventoryLock>();
     public DbSet<ImportReceipt> ImportReceipts => Set<ImportReceipt>();
     public DbSet<ImportReceiptDetail> ImportReceiptDetails => Set<ImportReceiptDetail>();
     public DbSet<ExportReceipt> ExportReceipts => Set<ExportReceipt>();
@@ -129,6 +132,9 @@ public class ErpKhoDbContext : DbContext
                 t.HasCheckConstraint(
                     "CK_Products_StorageMetrics",
                     "([UnitWeightKg] IS NULL OR [UnitWeightKg] > 0) AND ([UnitVolumeM3] IS NULL OR [UnitVolumeM3] > 0) AND ([UnitPalletEquivalent] IS NULL OR [UnitPalletEquivalent] > 0)");
+                t.HasCheckConstraint(
+                    "CK_Products_ShelfLife",
+                    "[MinimumRemainingShelfLifeDaysAtReceipt] >= 0 AND [MinimumRemainingShelfLifeDaysAtAllocation] >= 0");
             });
             modelBuilder.Entity<WarehouseLocation>().ToTable("WarehouseLocations", t =>
             {
