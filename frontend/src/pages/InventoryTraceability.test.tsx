@@ -41,19 +41,34 @@ describe('InventoryTraceability',()=>{
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it('requires reference type and id together',()=>{
+  it('requires reference type and id together and exposes inline field state',()=>{
     const view=render(<InventoryTraceability/>);
-    fireEvent.change(view.getByLabelText('Reference Type traceability'),{target:{value:'Shipment'}});
+    const referenceType=view.getByLabelText('Reference Type');
+    const referenceId=view.getByLabelText('Reference ID');
+    fireEvent.change(referenceType,{target:{value:'Shipment'}});
     fireEvent.click(view.getByText('Truy vết'));
     expect(view.getByRole('alert').textContent).toContain('cùng nhau');
+    expect(referenceType.getAttribute('aria-invalid')).toBe('true');
+    expect(referenceId.getAttribute('aria-invalid')).toBe('true');
+    expect(referenceType.getAttribute('aria-describedby')).toContain('traceability-reference-help');
+    expect(referenceType.getAttribute('aria-describedby')).toContain('traceability-validation-error');
     expect(apiClient.get).not.toHaveBeenCalled();
+
+    fireEvent.change(referenceId,{target:{value:'99'}});
+    expect(view.queryByRole('alert')).toBeNull();
   });
 
-  it('renders current buckets and reversal-aware immutable timeline',async()=>{
+  it('renders visible labels, current buckets and reversal-aware immutable timeline',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=render(<InventoryTraceability/>);
-    fireEvent.change(view.getByLabelText('Product ID traceability'),{target:{value:'10'}});
-    fireEvent.change(view.getByLabelText('Lot traceability'),{target:{value:'LOT-A'}});
+    expect(view.getByLabelText('Warehouse ID (tùy chọn)')).toBeTruthy();
+    expect(view.getByLabelText('Product ID')).toBeTruthy();
+    expect(view.getByLabelText('Lot number')).toBeTruthy();
+    expect(view.getByLabelText('Serial number')).toBeTruthy();
+    expect(view.getByLabelText('Reference Type')).toBeTruthy();
+    expect(view.getByLabelText('Reference ID')).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Product ID'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Lot number'),{target:{value:'LOT-A'}});
     fireEvent.click(view.getByText('Truy vết'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'));
     expect(await view.findByText('A01-R01-B01')).toBeTruthy();
@@ -63,5 +78,15 @@ describe('InventoryTraceability',()=>{
     expect(view.getAllByText(/Corrective #42/).length).toBeGreaterThan(0);
     expect(view.getAllByText(/Marker #43/).length).toBeGreaterThan(0);
     expect(view.getByText(/Original #41/)).toBeTruthy();
+    expect(view.getByRole('status').textContent).toContain('Đã tải 1 bucket hiện tại và 2 ledger event');
+  });
+
+  it('announces loading state for asynchronous trace queries',async()=>{
+    vi.mocked(apiClient.get).mockImplementation(()=>new Promise(()=>{}) as never);
+    const view=render(<InventoryTraceability/>);
+    fireEvent.change(view.getByLabelText('Product ID'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    expect(view.getByRole('status').textContent).toContain('Đang truy vết inventory');
+    expect(view.getByText('Đang truy vết...')).toBeTruthy();
   });
 });
