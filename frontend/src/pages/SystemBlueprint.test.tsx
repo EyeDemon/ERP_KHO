@@ -27,7 +27,7 @@ describe('SystemBlueprint', () => {
 
   it('filters capability cards by text and implementation status', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
-    const search = view.getByPlaceholderText('Tìm chức năng, mã capability, spec...');
+    const search = view.getByPlaceholderText('Tìm chức năng, mã chức năng, spec...');
     fireEvent.change(search, { target: { value: 'Receipt Posting' } });
     expect(view.getByText('Receipt Posting')).toBeTruthy();
     expect(view.queryByText('Shipment Dispatch')).toBeNull();
@@ -47,7 +47,7 @@ describe('SystemBlueprint', () => {
 
   it('links every visible module to its mock work center preview', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
-    const links = view.getAllByText('Xem work center →');
+    const links = view.getAllByText('Xem trung tâm công việc →');
     expect(links.length).toBeGreaterThanOrEqual(10);
     expect(links[0].getAttribute('href')).toContain('/system-blueprint/');
   });
