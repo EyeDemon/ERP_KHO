@@ -177,6 +177,85 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
     [SqlServerFact]
+    public async Task InternalMove_DestinationScopedLock_BlocksWithoutMutation()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var lockDb = CreateContext())
+            {
+                await CreateLockService(lockDb, fixture.UserId).CreateAsync(new()
+                {
+                    LockType = nameof(InventoryLockType.ManualOperationalLock),
+                    WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.DestinationLocationId,
+                    ProductId = fixture.ProductId,
+                    Reason = "destination freeze"
+                });
+            }
+
+            await using (var moveDb = CreateContext())
+            {
+                var service = CreateMovementService(moveDb, fixture.UserId);
+                var act = () => service.MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 1,
+                    Reason = "must respect destination lock"
+                });
+                var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
+                thrown.Which.Data["ErrorCode"].Should().Be("INV_STOCK_LOCKED");
+            }
+
+            await using var verify = CreateContext();
+            (await verify.InventoryStocks.AsNoTracking().SingleAsync(x => x.Id == fixture.SourceStockId))
+                .Quantity.Should().Be(10);
+            (await verify.InventoryLocationMovements.CountAsync(x => x.ReferenceType == "InventoryMove")).Should().Be(0);
+            (await verify.InventoryTransactions.CountAsync(x => x.ReferenceType == "InventoryMove")).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task InternalMove_DestinationCapacityExceeded_BlocksWithoutMutation()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var setup = CreateContext())
+            {
+                await setup.Products.Where(x => x.Id == fixture.ProductId)
+                    .ExecuteUpdateAsync(update => update.SetProperty(x => x.UnitWeightKg, 2m));
+                await setup.WarehouseLocations.Where(x => x.Id == fixture.DestinationLocationId)
+                    .ExecuteUpdateAsync(update => update.SetProperty(x => x.MaxWeightKg, 5m));
+            }
+
+            await using (var moveDb = CreateContext())
+            {
+                var service = CreateMovementService(moveDb, fixture.UserId);
+                var act = () => service.MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 3,
+                    Reason = "would exceed destination capacity"
+                });
+                var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
+                thrown.Which.Data["ErrorCode"].Should().Be("INV_BUCKET_CONFLICT");
+                thrown.Which.Message.Should().Contain("capacity");
+            }
+
+            await using var verify = CreateContext();
+            (await verify.InventoryStocks.AsNoTracking().SingleAsync(x => x.Id == fixture.SourceStockId))
+                .Quantity.Should().Be(10);
+            (await verify.InventoryLocationMovements.CountAsync(x => x.ReferenceType == "InventoryMove")).Should().Be(0);
+            (await verify.InventoryTransactions.CountAsync(x => x.ReferenceType == "InventoryMove")).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task InternalMove_PreservesWarehouseOnHandStatusAndLot_AndWritesTraceableLedger()
     {
         var fixture = await CreateFixtureAsync();
