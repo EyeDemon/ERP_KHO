@@ -299,7 +299,7 @@ const MainLayout = () => {
               <span className="topbar-context-text">Môi trường bản thiết kế</span>
             ) : demoRuntime ? (
               <>
-                <span className="runtime-badge">MÔI TRƯỜNG DEMO • BACKEND MÔ PHỎNG</span>
+                <span className="runtime-badge">MÔI TRƯỜNG MÔ PHỎNG • PHÍA MÁY CHỦ MÔ PHỎNG</span>
                 <span className="topbar-context-text">Giao diện hệ thống thật</span>
               </>
             ) : (
@@ -328,8 +328,8 @@ const MainLayout = () => {
           {demoRuntime && !blueprintMode && (
             <section role="note" className="demo-runtime-banner" aria-label="Thông tin môi trường demo">
               <div className="demo-runtime-copy">
-                <div className="demo-runtime-kicker">Bản demo Vercel • Chỉ đọc</div>
-                <div className="demo-runtime-title">Giao diện hệ thống thật đang chạy với bộ chuyển đổi API mô phỏng, chưa phải backend staging.</div>
+                <div className="demo-runtime-kicker">Bản mô phỏng Vercel • Chỉ đọc</div>
+                <div className="demo-runtime-title">Giao diện hệ thống thật đang chạy với bộ chuyển đổi API mô phỏng, chưa phải môi trường máy chủ thử nghiệm.</div>
                 <div className="demo-runtime-detail">
                   GET dùng dữ liệu mô phỏng có kiểm soát; POST/PUT/DELETE bị chặn với mã 405 và dữ liệu không được lưu sau phiên kiểm thử.
                 </div>
