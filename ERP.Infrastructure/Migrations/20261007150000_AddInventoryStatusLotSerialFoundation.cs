@@ -229,11 +229,10 @@ VALUES
         migrationBuilder.CreateIndex(name: "IX_InventoryStocks_LotId", table: "InventoryStocks", column: "LotId");
         migrationBuilder.CreateIndex(name: "IX_InventoryStocks_SerialId", table: "InventoryStocks", column: "SerialId");
         migrationBuilder.CreateIndex(name: "IX_InventoryStocks_Status", table: "InventoryStocks", column: "Status");
-        migrationBuilder.CreateIndex(
-            name: "IX_InventoryStocks_CanonicalBucket",
-            table: "InventoryStocks",
-            columns: new[] { "ProductId", "WarehouseId", "Status", "CanonicalLocationId", "CanonicalLotId", "CanonicalSerialId" },
-            unique: true);
+        migrationBuilder.Sql("""
+CREATE UNIQUE INDEX IX_InventoryStocks_CanonicalBucket
+ON InventoryStocks(ProductId, WarehouseId, Status, CanonicalLocationId, CanonicalLotId, CanonicalSerialId);
+""");
         migrationBuilder.AddForeignKey(
             name: "FK_InventoryStocks_InventoryLots_LotId",
             table: "InventoryStocks",
