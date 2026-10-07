@@ -34,10 +34,10 @@ export default function InventoryTraceability(){
     e.preventDefault();setError('');
     const hasIdentity=form.productId||form.lotNumber.trim()||form.serialNumber.trim();
     const hasReference=form.referenceType.trim()&&form.referenceId;
-    if(!hasIdentity&&!hasReference){setError('Nhập ít nhất Product, Lot, Serial hoặc Reference.');return}
     if((form.referenceType.trim()&&!form.referenceId)||(!form.referenceType.trim()&&form.referenceId)){
       setError('Reference Type và Reference ID phải được nhập cùng nhau.');return;
     }
+    if(!hasIdentity&&!hasReference){setError('Nhập ít nhất Product, Lot, Serial hoặc Reference.');return}
     setLoading(true);
     try{
       const params=new URLSearchParams();
