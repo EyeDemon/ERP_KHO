@@ -6,6 +6,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Queries;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -310,6 +311,7 @@ public sealed class StockAllocationService(
     {
         var today = DateTime.UtcNow.Date;
         var query = context.InventoryStocks.AsNoTracking()
+            .UnlockedAt(context, DateTime.UtcNow)
             .Where(x => x.ProductId == reservation.ProductId &&
                         x.WarehouseId == reservation.WarehouseId &&
                         x.StatusDefinition.IsAllocatable &&
