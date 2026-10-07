@@ -148,6 +148,12 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('INV-08')?.status).toBe('foundation');
     expect(byId.get('INV-08')?.route).toBe('/inventory-movements');
     expect(byId.get('INV-08')?.goal).toMatch(/unreserved inventory.*MOVE ledger.*Cross-warehouse/i);
+    expect(byId.get('INV-09')?.status).toBe('foundation');
+    expect(byId.get('INV-09')?.route).toBe('/inventory-reversals');
+    expect(byId.get('INV-09')?.goal).toMatch(/Internal Move.*Inventory Status Change.*ReversalOfTransactionId.*CorrectiveTransactionId.*unique filtered index.*409 INV_ALREADY_REVERSED.*Receipt\/Shipment\/Transfer.*chưa hoàn tất/i);
+    expect(byId.get('INV-10')?.status).toBe('foundation');
+    expect(byId.get('INV-10')?.route).toBe('/inventory-traceability');
+    expect(byId.get('INV-10')?.goal).toMatch(/Product.*Lot.*Serial.*Reference.*structured reversal chain.*Original.*Corrective.*Reversal Marker.*Receipt.*QC.*Move.*Pick.*Shipment.*Return.*Recall.*chưa hoàn tất/i);
     expect(byId.get('OUT-08')?.route).toBe('/shipments');
     expect(byId.get('OUT-08')?.goal).toMatch(/Shipment LOADED.*root-HU.*Allocation.*Reservation.*SHIP ledger.*OnHand đúng một lần.*ExportReceipt legacy dispatch bị chặn.*TransactionType\.Ship.*POD.*chưa/i);
     expect(byId.get('OUT-09')?.status).toBe('foundation');

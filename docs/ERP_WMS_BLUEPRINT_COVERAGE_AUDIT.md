@@ -40,16 +40,18 @@ This is the current implementation-status checkpoint for the Blueprint.
 
 **Implementation source of truth**
 - Integration branch: `feature/erp-wms-complete-ui-blueprint`.
-- Verified production commit: `75e595a7b48e8c372056523a15bfa3c7b2a5ef5d`.
+- Verified production commit for this maturity checkpoint: `297b52865bac4fa785847d678280282a4663588b`.
 - Vercel production alias: `erp-wms-blueprint-demo.vercel.app`.
-- Vercel deployment: `dpl_2tHxj7nAZJw2JzyVncSbR3dhgyXg`, READY, target `production`, Git SHA exactly matches the integration commit above.
+- Vercel production deployment: `dpl_ADqrgZByknUrgTovTxtDMiRBY2DJ`, READY, target `production`, Git SHA exactly `297b52865bac4fa785847d678280282a4663588b`.
+- Post-merge CI #458 for `297b5286...`: PASS all repository gates.
+- The integration branch may contain later UI polish commits; maturity promotion here is based only on capability behavior already present in the verified production commit above.
 - Notion remains the canonical business/architecture reference and is **read-only for this synchronization**. No Notion content is changed to make implementation look complete.
 
 **Registry snapshot**
 - 179 capabilities total.
 - 33 `live`.
-- 26 `foundation`.
-- 74 `planned`.
+- 28 `foundation`.
+- 72 `planned`.
 - 46 `optional`.
 
 Status meaning for production synchronization:
@@ -60,16 +62,16 @@ Status meaning for production synchronization:
 
 **Outbound production reality**
 - OUT-01 ExportReceipt MVP and OUT-02 Reservation remain `live`.
-- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder and OUT-10 Shipment Tracking / POD / Delivery Failure are now real production foundations and remain `foundation` until their explicitly listed canonical gaps are closed.
+- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder and OUT-10 Shipment Tracking / POD / Delivery Failure remain real production foundations until their explicitly listed canonical gaps are closed.
 - OUT-04 Wave / Batch / Cluster remains `optional`.
 
 **Inventory production reality**
-- INV-01 through INV-08 are production foundations at the verified commit, including Inventory Status, Lot/Serial/Expiry, Inventory Locks/Freeze and Internal Location Move.
+- INV-01 through INV-11 are now represented as production `foundation` capabilities.
+- INV-09 Reversal is a foundation, not a complete generic reversal engine. Production supports immutable corrective reversal for Internal Move and Inventory Status Change, with structured `ReversalOfTransactionId` / `CorrectiveTransactionId`, a database-authoritative unique reversal guard, self-FK restrictions, reason/audit/warehouse scope and duplicate-key conflict mapping. Receipt/Shipment/Transfer/Adjustment/Return/Scrap reversal, partial reversal, downstream-dependency policy and aggregate-specific approvals remain canonical gaps.
+- INV-10 Traceability & Genealogy is a foundation. Production supports current inventory buckets plus immutable ledger timeline queries by Product / Lot / Serial / Reference under warehouse authorization and expands the structured Original → Corrective → Reversal Marker chain. Full cross-document genealogy across Receipt → QC → Move → Pick → Shipment / Return / Recall, recall orchestration/exposure, Owner/HU genealogy and advanced incomplete-chain evidence remain canonical gaps.
 - INV-11 Reconciliation remains `foundation`: mismatch detection exists, controlled repair/rebuild does not.
-- INV-09 Reversal and INV-10 Traceability & Genealogy remain `planned`. Draft PR/code is not sufficient for promotion; they require merge, deploy and release evidence before the Blueprint status changes.
 
-Therefore the 2026-10-05 refresh below is retained only as historical context and must not be used as the current implementation checkpoint.
-
+Therefore INV-09 and INV-10 are promoted from `planned` to `foundation` only. Their listed canonical gaps prevent a `live` claim.
 
 ## Historical implementation status refresh — 2026-10-05 (superseded)
 
