@@ -170,7 +170,7 @@ const DispatchMock = () => {
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-08" aria-labelledby="outbound-out-08-title">
       <Header
         id="OUT-08"
-        title="Lô giao hàng Dispatch Boundary"
+        title="Ranh giới xác nhận giao hàng"
         description="Mô phỏng kiểm tra trước khi ghi sổ xuất kho. Đây là ranh giới duy nhất trong luồng xuất kho làm giảm OnHand toàn kho."
         icon={<PackageCheck size={20} />}
       />
