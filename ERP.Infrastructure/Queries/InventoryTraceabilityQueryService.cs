@@ -94,6 +94,14 @@ public sealed class InventoryTraceabilityQueryService(
 
         foreach (var marker in reversalMarkers)
         {
+            var returnedMarker = events.FirstOrDefault(x => x.TransactionId == marker.TransactionId);
+            if (returnedMarker is not null)
+            {
+                returnedMarker.ReversalOfTransactionId = marker.ReversalOfTransactionId;
+                returnedMarker.CorrectiveTransactionId = marker.CorrectiveTransactionId;
+                returnedMarker.ReversalTransactionId = marker.TransactionId;
+            }
+
             var original = marker.ReversalOfTransactionId.HasValue
                 ? events.FirstOrDefault(x => x.TransactionId == marker.ReversalOfTransactionId.Value)
                 : null;
@@ -110,8 +118,6 @@ public sealed class InventoryTraceabilityQueryService(
                 if (corrective is not null)
                     corrective.ReversalTransactionId = marker.TransactionId;
             }
-
-            marker.ReversalTransactionId = marker.TransactionId;
         }
 
         var effectiveLimit = Math.Max(limit, chainIds.Count);
