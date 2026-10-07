@@ -27,6 +27,13 @@ const qtyText = (record: MockOperationalRecord) =>
 
 const localTime = (iso: string) => new Date(iso).toLocaleString('vi-VN');
 
+const priorityLabel = (priority: MockOperationalRecord['priority']) => ({
+  Low: 'Thấp',
+  Normal: 'Bình thường',
+  High: 'Cao',
+  Critical: 'Khẩn cấp',
+}[priority]);
+
 const ModuleBlueprint = () => {
   const { moduleKey } = useParams();
   const module = findBlueprintModule(moduleKey);
@@ -181,7 +188,7 @@ const ModuleBlueprint = () => {
                     <td><strong>{record.warehouse}</strong><span>{record.location ?? '—'}</span></td>
                     <td>{qtyText(record)}</td>
                     <td><strong>{record.owner}</strong><span>{localTime(record.updatedAt)}</span></td>
-                    <td><span className={'priority-chip priority-' + record.priority.toLowerCase()}>{record.priority}</span></td>
+                    <td><span className={'priority-chip priority-' + record.priority.toLowerCase()}>{priorityLabel(record.priority)}</span></td>
                     <td><span className={'mock-status tone-' + record.tone}>{record.status}</span></td>
                     <td><button type="button" className="table-detail-button" onClick={() => setSelectedId(record.id)}>Chi tiết</button></td>
                   </tr>
@@ -207,7 +214,7 @@ const ModuleBlueprint = () => {
                 <div><dt>Đối tác</dt><dd>{selected.partnerCode ?? '—'}</dd></div>
                 <div><dt>Số lượng</dt><dd>{qtyText(selected)}</dd></div>
                 <div><dt>Người phụ trách</dt><dd>{selected.owner}</dd></div>
-                <div><dt>Ưu tiên</dt><dd>{selected.priority}</dd></div>
+                <div><dt>Ưu tiên</dt><dd>{priorityLabel(selected.priority)}</dd></div>
                 <div><dt>Cập nhật</dt><dd>{localTime(selected.updatedAt)}</dd></div>
               </dl>
               {selected.note ? <div className="selected-note">{selected.note}</div> : null}
