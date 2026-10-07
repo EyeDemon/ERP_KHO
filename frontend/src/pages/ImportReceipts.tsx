@@ -15,8 +15,8 @@ interface ImportReceiptDetail {
   productName: string;
   operationUnitId: number; operationUnitCode: string; baseUnitCode: string; conversionFactor: number; conversionVersion: number;
   expectedQuantity: number; receivedQuantity: number; acceptedQuantity: number; damagedQuantity: number; rejectedQuantity: number;
-  postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; baseDamagedQuantity: number; baseRejectedQuantity: number; basePostedQuantity: number;
-  trackingType: 'None' | 'Lot' | 'Serial'; expiryControl: boolean; shelfLifeDays?: number | null;
+  postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; baseDamagedQuantity?: number; baseRejectedQuantity?: number; basePostedQuantity: number;
+  trackingType?: 'None' | 'Lot' | 'Serial'; expiryControl?: boolean; shelfLifeDays?: number | null;
   unitPrice?: number;
   note: string;
   requiresQc: boolean; qcState: string; qcPolicyId?: number; qcPolicyVersion?: number; qcPolicySource?: string;
