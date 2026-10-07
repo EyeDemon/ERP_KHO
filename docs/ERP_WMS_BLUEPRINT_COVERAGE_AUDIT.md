@@ -34,7 +34,44 @@ The blueprint registry has now been corrected in the same feature branch:
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
-## Implementation status refresh — 2026-10-05
+## Production truth refresh — 2026-10-07
+
+This is the current implementation-status checkpoint for the Blueprint.
+
+**Implementation source of truth**
+- Integration branch: `feature/erp-wms-complete-ui-blueprint`.
+- Verified production commit: `75e595a7b48e8c372056523a15bfa3c7b2a5ef5d`.
+- Vercel production alias: `erp-wms-blueprint-demo.vercel.app`.
+- Vercel deployment: `dpl_2tHxj7nAZJw2JzyVncSbR3dhgyXg`, READY, target `production`, Git SHA exactly matches the integration commit above.
+- Notion remains the canonical business/architecture reference and is **read-only for this synchronization**. No Notion content is changed to make implementation look complete.
+
+**Registry snapshot**
+- 179 capabilities total.
+- 33 `live`.
+- 26 `foundation`.
+- 74 `planned`.
+- 46 `optional`.
+
+Status meaning for production synchronization:
+- `live`: merged/deployed/QA-verified capability is complete for the currently accepted production scope.
+- `foundation`: real production code exists, but canonical scope still has named gaps.
+- `planned`: mock/spec may exist, but production implementation is not released.
+- `optional`: advanced/conditional capability; not an immediate implementation claim.
+
+**Outbound production reality**
+- OUT-01 ExportReceipt MVP and OUT-02 Reservation remain `live`.
+- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder and OUT-10 Shipment Tracking / POD / Delivery Failure are now real production foundations and remain `foundation` until their explicitly listed canonical gaps are closed.
+- OUT-04 Wave / Batch / Cluster remains `optional`.
+
+**Inventory production reality**
+- INV-01 through INV-08 are production foundations at the verified commit, including Inventory Status, Lot/Serial/Expiry, Inventory Locks/Freeze and Internal Location Move.
+- INV-11 Reconciliation remains `foundation`: mismatch detection exists, controlled repair/rebuild does not.
+- INV-09 Reversal and INV-10 Traceability & Genealogy remain `planned`. Draft PR/code is not sufficient for promotion; they require merge, deploy and release evidence before the Blueprint status changes.
+
+Therefore the 2026-10-05 refresh below is retained only as historical context and must not be used as the current implementation checkpoint.
+
+
+## Historical implementation status refresh — 2026-10-05 (superseded)
 
 A fresh comparison against the deployed main integration branch found that the registry had become stale after later production merges. This is a **status synchronization correction**, not a change to canonical business semantics.
 
