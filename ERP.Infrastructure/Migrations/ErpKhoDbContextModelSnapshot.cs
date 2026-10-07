@@ -1123,8 +1123,7 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("WarehouseId");
 
                     b.HasIndex("ProductId", "WarehouseId", "Status", "LocationId", "LotId", "SerialId")
-                        .IsUnique()
-                        .HasFilter("[LocationId] IS NOT NULL AND [LotId] IS NOT NULL AND [SerialId] IS NOT NULL");
+                        .IsUnique();
 
                     b.ToTable("InventoryStocks", null, t =>
                         {
