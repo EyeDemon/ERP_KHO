@@ -62,17 +62,17 @@ const CapacityPreview = () => {
         <div><span>Hồ sơ ràng buộc</span><strong>FOOD-AMBIENT</strong><small>Phiên bản 4 • mô phỏng</small></div>
       </div>
 
-      <div className="warehouse-sức chứa-summary">
+      <div className="warehouse-capacity-summary">
         <div>
-          <div className="warehouse-sức chứa-label"><span>Khối lượng dự kiến B04</span><strong>100%</strong></div>
-          <div className="warehouse-sức chứa-track" role="progressbar" aria-label="Khối lượng dự kiến B04 usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={100}>
+          <div className="warehouse-capacity-label"><span>Khối lượng dự kiến B04</span><strong>100%</strong></div>
+          <div className="warehouse-capacity-track" role="progressbar" aria-label="Mức sử dụng khối lượng dự kiến B04" aria-valuemin={0} aria-valuemax={100} aria-valuenow={100}>
             <span className="danger" style={{ width: '100%' }} />
           </div>
           <small>1.260 + 240 = 1.500 kg • chạm giới hạn</small>
         </div>
         <div>
-          <div className="warehouse-sức chứa-label"><span>Khối lượng dự kiến B05</span><strong>57%</strong></div>
-          <div className="warehouse-sức chứa-track" role="progressbar" aria-label="Khối lượng dự kiến B05 usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={57}>
+          <div className="warehouse-capacity-label"><span>Khối lượng dự kiến B05</span><strong>57%</strong></div>
+          <div className="warehouse-capacity-track" role="progressbar" aria-label="Mức sử dụng khối lượng dự kiến B05" aria-valuemin={0} aria-valuemax={100} aria-valuenow={57}>
             <span className="success" style={{ width: '57%' }} />
           </div>
           <small>620 + 240 = 860 / 1.500 kg • còn dư địa</small>
@@ -165,7 +165,7 @@ const CalendarPreview = () => {
       <div className="warehouse-mock-metrics">
         <div><span>Múi giờ</span><strong>Asia/Ho_Chi_Minh</strong><small>UTC+07:00</small></div>
         <div><span>Ngày vận hành</span><strong>04/10/2026</strong><small>Chủ nhật</small></div>
-        <div><span>Receiving giờ chốt</span><strong>20:30</strong><small>Nhận xe theo lịch</small></div>
+        <div><span>Giờ chốt nhận hàng</span><strong>20:30</strong><small>Nhận xe theo lịch</small></div>
         <div><span>Dispatch giờ chốt</span><strong>21:15</strong><small>Bàn giao đơn vị vận chuyển</small></div>
       </div>
 
@@ -175,14 +175,14 @@ const CalendarPreview = () => {
             <div className="warehouse-shift-heading"><div><strong>{shift.name}</strong><span>{shift.time}</span></div><StatusBadge tone={shift.tone}>{shift.status}</StatusBadge></div>
             <dl>
               <div><dt>Nhân lực</dt><dd>{shift.labor}</dd></div>
-              <div><dt>Dock sức chứa</dt><dd>{shift.dock}</dd></div>
+              <div><dt>Sức chứa cửa kho</dt><dd>{shift.dock}</dd></div>
             </dl>
           </article>
         ))}
       </div>
 
       <div className="warehouse-mock-table-scroll">
-        <table aria-label="Mock operational giờ chốts">
+        <table aria-label="Các giờ chốt vận hành mô phỏng">
           <thead><tr><th>Ranh giới</th><th>Giờ</th><th>Quy tắc</th><th>Cách xử lý</th></tr></thead>
           <tbody>
             <tr><td>Lịch nhận hàng</td><td>20:30</td><td>Không nhận xe mới sau giờ chốt</td><td>Quản lý có thể ghi đè với kiểm toán</td></tr>
@@ -243,9 +243,9 @@ const DockYardPreview = () => {
 const CalendarExceptionPreview = () => {
   const rules = [
     { level: 'Lịch công ty', value: 'Chủ nhật: đóng cửa', priority: '1', tone: 'neutral' as const },
-    { level: 'Kho override', value: 'WH-HCM-01 mở 06:00–22:00', priority: '2', tone: 'success' as const },
-    { level: 'Ngoại lệ ca', value: 'Ca chiều giảm 25% dock sức chứa', priority: '3', tone: 'warning' as const },
-    { level: 'Ghi đè khẩn cấp', value: 'Dock D04 đóng đến 12:00', priority: '4', tone: 'danger' as const },
+    { level: 'Ghi đè cấp kho', value: 'WH-HCM-01 mở 06:00–22:00', priority: '2', tone: 'success' as const },
+    { level: 'Ngoại lệ ca', value: 'Ca chiều giảm 25% sức chứa cửa kho', priority: '3', tone: 'warning' as const },
+    { level: 'Ghi đè khẩn cấp', value: 'Cửa D04 đóng đến 12:00', priority: '4', tone: 'danger' as const },
   ];
 
   return (
@@ -271,7 +271,7 @@ const CalendarExceptionPreview = () => {
         <div>
           <span>Kết quả hiệu lực • 04/10/2026 10:15</span>
           <strong>Kho mở • Cửa D01–D03 hoạt động • D04 tạm đóng</strong>
-          <p>Ghi đè khẩn cấp chỉ thay đổi phạm vi D04; các dock khác vẫn theo warehouse override và shift sức chứa.</p>
+          <p>Ghi đè khẩn cấp chỉ thay đổi phạm vi D04; các cửa khác vẫn theo ghi đè cấp kho và sức chứa ca.</p>
         </div>
         <StatusBadge tone="warning">Partial sức chứa</StatusBadge>
       </div>
