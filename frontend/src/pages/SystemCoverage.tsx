@@ -1,4 +1,4 @@
-import { useMemo, useTrạng thái } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, CircleAlert, Filter, Search, ShieldCheck } from 'lucide-react';
 import { blueprintStatusLabels, erpWmsBlueprint, type BlueprintStatus } from '../config/erpWmsBlueprint';
@@ -27,10 +27,10 @@ const SystemCoverage = () => {
   const documentation = useMemo(() => getCanonicalDocumentationRegister(erpWmsBlueprint), []);
   const capabilityLinkedDocs = documentation.filter((item) => item.representation === 'Capability-linked');
   const platformDocs = documentation.filter((item) => item.representation === 'Platform / Governance');
-  const [query, setQuery] = useTrạng thái('');
-  const [status, setStatus] = useTrạng thái<BlueprintStatus | 'all'>('all');
-  const [wave, setWave] = useTrạng thái<ReleaseWave | 'all'>('all');
-  const [applicability, setApplicability] = useTrạng thái<Applicability | 'all'>('all');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<BlueprintStatus | 'all'>('all');
+  const [wave, setWave] = useState<ReleaseWave | 'all'>('all');
+  const [applicability, setApplicability] = useState<Applicability | 'all'>('all');
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('vi');
@@ -65,7 +65,7 @@ const SystemCoverage = () => {
           <span className="coverage-eyebrow"><ShieldCheck size={16} /> Chuỗi hoàn thiện chuẩn</span>
           <h1>Độ phủ & mức sẵn sàng</h1>
           <p>
-            Tách rõ độ phủ tài liệu, độ phủ UI của bản thiết kế và bằng chứng triển khai production.
+            Tách rõ độ phủ tài liệu, độ phủ UI của bản thiết kế và bằng chứng triển khai hệ thống thật.
             Có đặc tả không đồng nghĩa chức năng đã sẵn sàng trên hệ thống thật.
           </p>
         </div>
@@ -112,7 +112,7 @@ const SystemCoverage = () => {
 
       {traceabilityClosed.length > 0 && (
         <section className="traceability-closed-panel">
-          <div className="traceability-title"><CheckCircle2 size={17} /><div><strong>Screen Matrix 229 • Đã đóng truy vết</strong><span>4 khoảng trống màn hình lịch sử đã được ánh xạ tới route Blueprint cụ thể. Trạng thái hệ thống thật/backend vẫn được theo dõi riêng.</span></div></div>
+          <div className="traceability-title"><CheckCircle2 size={17} /><div><strong>Screen Matrix 229 • Đã đóng truy vết</strong><span>4 khoảng trống màn hình lịch sử đã được ánh xạ tới route bản thiết kế cụ thể. Trạng thái hệ thống thật/backend vẫn được theo dõi riêng.</span></div></div>
           <div className="traceability-grid">
             {traceabilityClosed.map(({ module, capability, profile }) => (
               <Link key={capability.id} to={'/system-blueprint/' + module.key + '/' + capability.id}>
@@ -222,7 +222,7 @@ const SystemCoverage = () => {
 
       <section className="coverage-legend">
         <div><CheckCircle2 size={14} /><span><b>Đã có bằng chứng</b> = có bằng chứng phù hợp ở lớp bản thiết kế/triển khai hiện tại.</span></div>
-        <div><CircleAlert size={14} /><span><b>Một phần / Chỉ có đặc tả</b> = đã có tài liệu hoặc nền tảng nhưng chưa được phép hiểu là sẵn sàng production.</span></div>
+        <div><CircleAlert size={14} /><span><b>Một phần / Chỉ có đặc tả</b> = đã có tài liệu hoặc nền tảng nhưng chưa được phép hiểu là sẵn sàng trên hệ thống thật.</span></div>
       </section>
     </div>
   );
