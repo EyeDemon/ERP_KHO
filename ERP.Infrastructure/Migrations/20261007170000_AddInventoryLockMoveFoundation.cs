@@ -291,6 +291,13 @@ WHERE Code IN ('inventory_lock.read','inventory_lock.manage','inventory_movement
 
         migrationBuilder.DropTable(name: "InventoryLocks");
 
+        migrationBuilder.Sql("""
+DELETE FROM InventoryTransactions
+WHERE TransactionType = 9 AND ReferenceType = 'InventoryMove';
+DELETE FROM InventoryLocationMovements
+WHERE ReferenceType = 'InventoryMove';
+""");
+
         migrationBuilder.DropForeignKey(name: "FK_InventoryTransactions_WarehouseLocations_FromLocationId", table: "InventoryTransactions");
         migrationBuilder.DropForeignKey(name: "FK_InventoryTransactions_WarehouseLocations_ToLocationId", table: "InventoryTransactions");
         migrationBuilder.DropIndex(name: "IX_InventoryTransactions_FromLocationId", table: "InventoryTransactions");
