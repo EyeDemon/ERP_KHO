@@ -8,6 +8,8 @@ import {
   demoAsns,
   demoInOut,
   demoInventoryStocks,
+  demoInventoryStatuses,
+  demoInventoryBuckets,
   demoInventoryTransactions,
   demoPartners,
   demoPermissionCatalog,
@@ -94,7 +96,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         userId: 1,
         username: 'Blueprint Demo',
         role: 'Viewer',
-        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'shipment.read', 'sales_order.read', 'backorder.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
+        permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'shipment.read', 'sales_order.read', 'backorder.read', 'inventory.read', 'inventory_availability.read', 'inventory_ledger.read', 'inventory_traceability.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
     }
 
@@ -306,6 +308,22 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         { id: 101, code: 'A01-R02-L03-B04', name: 'Bin A01-R02-L03-B04', locationType: 'Bin', isPickable: true },
         { id: 102, code: 'A01-R02-L03-B05', name: 'Bin A01-R02-L03-B05', locationType: 'Bin', isPickable: true },
       ]);
+    }
+
+    if (path === '/api/inventory/statuses') return ok(config, demoInventoryStatuses);
+    if (path === '/api/inventory/buckets') {
+      const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const productId = Number(params.get('productId') ?? 0);
+      const status = (params.get('status') ?? '').toUpperCase();
+      const lotNumber = (params.get('lotNumber') ?? '').toLowerCase();
+      const serialNumber = (params.get('serialNumber') ?? '').toLowerCase();
+      return ok(config, demoInventoryBuckets.filter(item =>
+        (!warehouseId || item.warehouseId === warehouseId)
+        && (!productId || item.productId === productId)
+        && (!status || item.status === status)
+        && (!lotNumber || (item.lotNumber ?? '').toLowerCase().includes(lotNumber))
+        && (!serialNumber || (item.serialNumber ?? '').toLowerCase().includes(serialNumber))
+      ));
     }
 
     if (path === '/api/inventorystocks/current') {
