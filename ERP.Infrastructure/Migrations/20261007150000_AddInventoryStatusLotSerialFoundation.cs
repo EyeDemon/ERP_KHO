@@ -35,20 +35,19 @@ public sealed class AddInventoryStatusLotSerialFoundation : Migration
             column: "Code",
             unique: true);
 
-        migrationBuilder.InsertData(
-            table: "InventoryStatusDefinitions",
-            columns: new[] { "Id", "Code", "Name", "IsAvailable", "IsReservable", "IsAllocatable", "IsPickable", "IsShippable", "IsSystem" },
-            values: new object[,]
-            {
-                { 0, "AVAILABLE", "Available", true, true, true, true, true, true },
-                { 1, "QC_HOLD", "QC Hold", false, false, false, false, false, true },
-                { 2, "QUARANTINE", "Quarantine", false, false, false, false, false, true },
-                { 3, "DAMAGED", "Damaged", false, false, false, false, false, true },
-                { 4, "REJECTED", "Rejected", false, false, false, false, false, true },
-                { 5, "BLOCKED", "Blocked", false, false, false, false, false, true },
-                { 6, "EXPIRED", "Expired", false, false, false, false, false, true },
-                { 7, "RECALL_BLOCKED", "Recall Blocked", false, false, false, false, false, true }
-            });
+        migrationBuilder.Sql("""
+INSERT INTO InventoryStatusDefinitions
+    (Id, Code, Name, IsAvailable, IsReservable, IsAllocatable, IsPickable, IsShippable, IsSystem)
+VALUES
+    (0, 'AVAILABLE', N'Available', 1, 1, 1, 1, 1, 1),
+    (1, 'QC_HOLD', N'QC Hold', 0, 0, 0, 0, 0, 1),
+    (2, 'QUARANTINE', N'Quarantine', 0, 0, 0, 0, 0, 1),
+    (3, 'DAMAGED', N'Damaged', 0, 0, 0, 0, 0, 1),
+    (4, 'REJECTED', N'Rejected', 0, 0, 0, 0, 0, 1),
+    (5, 'BLOCKED', N'Blocked', 0, 0, 0, 0, 0, 1),
+    (6, 'EXPIRED', N'Expired', 0, 0, 0, 0, 0, 1),
+    (7, 'RECALL_BLOCKED', N'Recall Blocked', 0, 0, 0, 0, 0, 1);
+""");
 
         migrationBuilder.AddColumn<int>(
             name: "TrackingType",
