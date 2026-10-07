@@ -205,13 +205,34 @@ VALUES
             table: "InventoryStocks");
         migrationBuilder.AddColumn<int>(name: "LotId", table: "InventoryStocks", type: "int", nullable: true);
         migrationBuilder.AddColumn<int>(name: "SerialId", table: "InventoryStocks", type: "int", nullable: true);
+        migrationBuilder.AddColumn<int>(
+            name: "CanonicalLocationId",
+            table: "InventoryStocks",
+            type: "int",
+            nullable: false,
+            computedColumnSql: "ISNULL([LocationId], 0)",
+            stored: true);
+        migrationBuilder.AddColumn<int>(
+            name: "CanonicalLotId",
+            table: "InventoryStocks",
+            type: "int",
+            nullable: false,
+            computedColumnSql: "ISNULL([LotId], 0)",
+            stored: true);
+        migrationBuilder.AddColumn<int>(
+            name: "CanonicalSerialId",
+            table: "InventoryStocks",
+            type: "int",
+            nullable: false,
+            computedColumnSql: "ISNULL([SerialId], 0)",
+            stored: true);
         migrationBuilder.CreateIndex(name: "IX_InventoryStocks_LotId", table: "InventoryStocks", column: "LotId");
         migrationBuilder.CreateIndex(name: "IX_InventoryStocks_SerialId", table: "InventoryStocks", column: "SerialId");
         migrationBuilder.CreateIndex(name: "IX_InventoryStocks_Status", table: "InventoryStocks", column: "Status");
         migrationBuilder.CreateIndex(
-            name: "IX_InventoryStocks_ProductId_WarehouseId_Status_LocationId_LotId_SerialId",
+            name: "IX_InventoryStocks_CanonicalBucket",
             table: "InventoryStocks",
-            columns: new[] { "ProductId", "WarehouseId", "Status", "LocationId", "LotId", "SerialId" },
+            columns: new[] { "ProductId", "WarehouseId", "Status", "CanonicalLocationId", "CanonicalLotId", "CanonicalSerialId" },
             unique: true);
         migrationBuilder.AddForeignKey(
             name: "FK_InventoryStocks_InventoryLots_LotId",
@@ -386,7 +407,10 @@ WHERE Code IN ('inventory.read','inventory_availability.read','inventory_ledger.
         migrationBuilder.DropIndex(name: "IX_InventoryStocks_LotId", table: "InventoryStocks");
         migrationBuilder.DropIndex(name: "IX_InventoryStocks_SerialId", table: "InventoryStocks");
         migrationBuilder.DropIndex(name: "IX_InventoryStocks_Status", table: "InventoryStocks");
-        migrationBuilder.DropIndex(name: "IX_InventoryStocks_ProductId_WarehouseId_Status_LocationId_LotId_SerialId", table: "InventoryStocks");
+        migrationBuilder.DropIndex(name: "IX_InventoryStocks_CanonicalBucket", table: "InventoryStocks");
+        migrationBuilder.DropColumn(name: "CanonicalLocationId", table: "InventoryStocks");
+        migrationBuilder.DropColumn(name: "CanonicalLotId", table: "InventoryStocks");
+        migrationBuilder.DropColumn(name: "CanonicalSerialId", table: "InventoryStocks");
         migrationBuilder.DropColumn(name: "LotId", table: "InventoryStocks");
         migrationBuilder.DropColumn(name: "SerialId", table: "InventoryStocks");
         migrationBuilder.CreateIndex(
