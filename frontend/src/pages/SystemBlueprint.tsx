@@ -57,7 +57,7 @@ const SystemBlueprint = () => {
           <h1>Bản đồ chức năng ERP/WMS hoàn chỉnh</h1>
           <p>
             Bản thiết kế dùng Notion chuẩn ở chế độ chỉ đọc để đối chiếu nghiệp vụ. Trạng thái chức năng bên dưới
-            phản ánh hệ thống production thật đã merge, triển khai và QA; bản xem trước mô phỏng không được dùng để tự nâng mức trưởng thành.
+            phản ánh hệ thống thật đã merge, triển khai và QA; bản xem trước mô phỏng không được dùng để tự nâng mức trưởng thành.
           </p>
         </div>
         <div className="hero-badge">
@@ -69,9 +69,9 @@ const SystemBlueprint = () => {
       <section className="blueprint-kpis">
         <article><strong>{blueprintTotals.modules}</strong><span>Nhóm hệ thống</span></article>
         <article><strong>{blueprintTotals.capabilities}</strong><span>Chức năng có bản xem trước mô phỏng</span></article>
-        <article className="kpi-live"><strong>{blueprintTotals.live}</strong><span>Production hoàn thiện phạm vi hiện tại</span></article>
-        <article className="kpi-foundation"><strong>{blueprintTotals.foundation}</strong><span>Production đã có một phần</span></article>
-        <article><strong>{blueprintTotals.planned}</strong><span>Chưa triển khai production</span></article>
+        <article className="kpi-live"><strong>{blueprintTotals.live}</strong><span>Hệ thống thật hoàn thiện phạm vi hiện tại</span></article>
+        <article className="kpi-foundation"><strong>{blueprintTotals.foundation}</strong><span>Hệ thống thật đã có một phần</span></article>
+        <article><strong>{blueprintTotals.planned}</strong><span>Chưa triển khai hệ thống thật</span></article>
         <article><strong>{blueprintTotals.optional}</strong><span>Tùy chọn / nâng cao</span></article>
         <article className="kpi-mock"><strong>{mockRecordCount}</strong><span>Bản ghi mô phỏng</span></article>
       </section>
@@ -114,17 +114,17 @@ const SystemBlueprint = () => {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tìm chức năng, mã capability, spec..."
+            placeholder="Tìm chức năng, mã chức năng, spec..."
           />
         </label>
         <label className="blueprint-select">
           <Filter size={16} />
           <select value={status} onChange={(event) => setStatus(event.target.value as BlueprintStatus | 'all')}>
             <option value="all">Tất cả trạng thái</option>
-            <option value="live">Production hoàn thiện phạm vi hiện tại</option>
-            <option value="foundation">Production đã có một phần</option>
-            <option value="planned">Chưa triển khai production</option>
-            <option value="optional">Có mock nâng cao • bật khi cần</option>
+            <option value="live">Hệ thống thật hoàn thiện phạm vi hiện tại</option>
+            <option value="foundation">Hệ thống thật đã có một phần</option>
+            <option value="planned">Chưa triển khai hệ thống thật</option>
+            <option value="optional">Có mô phỏng nâng cao • bật khi cần</option>
           </select>
         </label>
         <label className="blueprint-select">
