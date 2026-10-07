@@ -210,21 +210,21 @@ VALUES
             table: "InventoryStocks",
             type: "int",
             nullable: false,
-            computedColumnSql: "ISNULL([LocationId], 0)",
+            computedColumnSql: "COALESCE([LocationId], 0)",
             stored: true);
         migrationBuilder.AddColumn<int>(
             name: "CanonicalLotId",
             table: "InventoryStocks",
             type: "int",
             nullable: false,
-            computedColumnSql: "ISNULL([LotId], 0)",
+            computedColumnSql: "COALESCE([LotId], 0)",
             stored: true);
         migrationBuilder.AddColumn<int>(
             name: "CanonicalSerialId",
             table: "InventoryStocks",
             type: "int",
             nullable: false,
-            computedColumnSql: "ISNULL([SerialId], 0)",
+            computedColumnSql: "COALESCE([SerialId], 0)",
             stored: true);
         migrationBuilder.CreateIndex(name: "IX_InventoryStocks_LotId", table: "InventoryStocks", column: "LotId");
         migrationBuilder.CreateIndex(name: "IX_InventoryStocks_SerialId", table: "InventoryStocks", column: "SerialId");
