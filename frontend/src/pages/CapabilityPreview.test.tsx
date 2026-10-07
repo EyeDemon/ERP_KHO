@@ -19,23 +19,23 @@ describe('CapabilityPreview', () => {
   it('renders OUT-08 foundation with production navigation and read-only Blueprint evidence', () => {
     const view = renderPreview('outbound', 'OUT-08');
     expect(view.getAllByText('Shipment Dispatch').length).toBeGreaterThan(0);
-    expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+    expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByText(/canonical Shipment LOADED dispatch/i)).toBeTruthy();
     expect(view.getAllByText('SHP-2026-5108').length).toBeGreaterThan(0);
-    expect(view.getByText('Expected UX states')).toBeTruthy();
-    expect(view.getByText('Technical contract')).toBeTruthy();
+    expect(view.getByText('Các trạng thái UX dự kiến')).toBeTruthy();
+    expect(view.getByText('Hợp đồng kỹ thuật')).toBeTruthy();
   }, 10_000);
 
   it('keeps live production navigation outside the Blueprint preview', () => {
     const view = renderPreview('master-data', 'MD-01');
     expect(view.getByText('Sản phẩm / SKU')).toBeTruthy();
-    expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+    expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.queryByText('Mở chức năng hiện có')).toBeNull();
   });
 
   it('keeps the WH-02 specialized mock separate after the production route goes live', () => {
     const view = renderPreview('warehouse-structure', 'WH-02');
-    const link = view.getByText('Mở mock chuyên biệt');
+    const link = view.getByText('Mở mô phỏng chuyên biệt');
     expect(link.getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
     expect(view.queryByText('Mở chức năng hiện có')).toBeNull();
   });
@@ -75,7 +75,7 @@ describe('CapabilityPreview', () => {
     for (const [capabilityId, title] of cases) {
       const view = renderPreview('inbound', capabilityId);
       expect(view.getByText('Đã triển khai hoàn thiện phạm vi hiện tại')).toBeTruthy();
-      expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+      expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
       expect(view.getByTestId('inbound-capability-mock-' + capabilityId)).toBeTruthy();
       expect(view.getByRole('heading', { name: title })).toBeTruthy();
       expect(view.getByText(/Không gọi API production/)).toBeTruthy();
@@ -87,7 +87,7 @@ describe('CapabilityPreview', () => {
   it('shows IN-02 as foundation because Dock/Yard appointments are not yet linked canonically to inbound documents', () => {
     const view = renderPreview('inbound', 'IN-02');
     expect(view.getByText('Đã triển khai một phần / còn thiếu phạm vi')).toBeTruthy();
-    expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+    expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByTestId('inbound-capability-mock-IN-02')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Receiving Appointment Board' })).toBeTruthy();
     expect(view.getAllByText(/liên kết canonical.*PO\/ASN\/Receipt.*hoàn thiện/i).length).toBeGreaterThan(0);
@@ -96,7 +96,7 @@ describe('CapabilityPreview', () => {
   it('shows IN-01 as live while keeping its Blueprint mock read-only and separate', () => {
     const view = renderPreview('inbound', 'IN-01');
     expect(view.getByText('Đã triển khai hoàn thiện phạm vi hiện tại')).toBeTruthy();
-    expect(view.getByText('PRODUCTION • XEM Ở HỆ THỐNG THẬT')).toBeTruthy();
+    expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByTestId('inbound-capability-mock-IN-01')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Purchase Order / ASN Reconciliation' })).toBeTruthy();
     expect(view.getByText(/Không gọi API production/)).toBeTruthy();
@@ -293,9 +293,9 @@ describe('CapabilityPreview', () => {
   it('renders canonical governance metadata and specialized review-required screen content', () => {
     const picking = renderPreview('outbound', 'OUT-05');
     expect(picking.getByText('Picking Workbench / Scan Flow')).toBeTruthy();
-    expect(picking.getByText('Screen Matrix • Traceability Closed')).toBeTruthy();
-    expect(picking.getByText('Capability governance & completeness')).toBeTruthy();
-    expect(picking.getAllByText('Wave 2').length).toBeGreaterThan(0);
+    expect(picking.getByText('Screen Matrix • Đã đóng truy vết')).toBeTruthy();
+    expect(picking.getByText('Quản trị & mức hoàn thiện chức năng')).toBeTruthy();
+    expect(picking.getAllByText('Đợt 2').length).toBeGreaterThan(0);
     expect(picking.getByText(/Picking không được giảm warehouse OnHand/)).toBeTruthy();
     expect(picking.getByText(/Đã đóng truy vết — Screen Matrix 229/)).toBeTruthy();
   });
@@ -338,6 +338,6 @@ describe('CapabilityPreview', () => {
 
   it('shows safe not-found UI for invalid capability', () => {
     const view = renderPreview('outbound', 'OUT-DOES-NOT-EXIST');
-    expect(view.getByText('Không tìm thấy capability')).toBeTruthy();
+    expect(view.getByText('Không tìm thấy chức năng')).toBeTruthy();
   });
 });
