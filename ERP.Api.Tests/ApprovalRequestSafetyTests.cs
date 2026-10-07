@@ -37,6 +37,8 @@ public sealed class ApprovalRequestSafetyTests
         IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.Stage").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.LoadHu").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.Dispatch").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.ConfirmDelivery").Should().BeTrue();
+        IdempotentCommandFilter.RequiresSerializableIsolation("Shipment.RetryDelivery").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("SalesOrder.Release").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("SalesOrder.Cancel").Should().BeTrue();
         IdempotentCommandFilter.RequiresSerializableIsolation("Backorder.Reallocate").Should().BeTrue();
@@ -128,6 +130,12 @@ public sealed class ApprovalRequestSafetyTests
     [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "LoadHandlingUnit")]
     [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "CompleteLoading")]
     [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "Dispatch")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "MarkInTransit")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "ConfirmDelivery")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "DeliveryFailed")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "RetryDelivery")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "ReturnInitiate")]
+    [InlineData(typeof(ERP.Api.Controllers.ShipmentsController), "Complete")]
     [InlineData(typeof(ERP.Api.Controllers.SalesOrdersController), "Create")]
     [InlineData(typeof(ERP.Api.Controllers.SalesOrdersController), "Hold")]
     [InlineData(typeof(ERP.Api.Controllers.SalesOrdersController), "Release")]

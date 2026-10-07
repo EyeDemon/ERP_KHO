@@ -386,6 +386,216 @@ public sealed class SqlServerShipmentLoadingTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task PostDispatchDeliveryLifecycle_DoesNotChangeInventoryOrCreateSecondShipLedger()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var result = await PrepareDispatchedShipmentAsync(fixture);
+
+            ShipmentDto inTransit;
+            await using (var transit = CreateContext())
+            {
+                inTransit = await CreateShipmentService(transit, fixture.UserId).MarkInTransitAsync(
+                    result.Prepared.ShipmentId,
+                    new MarkShipmentInTransitDto
+                    {
+                        Note = "Carrier picked up",
+                        RowVersion = result.Dispatched.RowVersion!
+                    });
+                inTransit.Status.Should().Be(nameof(ShipmentStatus.InTransit));
+            }
+
+            await using (var invalidPod = CreateContext())
+            {
+                var service = CreateShipmentService(invalidPod, fixture.UserId);
+                await FluentActions.Awaiting(() => service.ConfirmDeliveryAsync(
+                        result.Prepared.ShipmentId,
+                        new ConfirmShipmentDeliveryDto
+                        {
+                            ReceiverName = "Nguyen Van A",
+                            RowVersion = inTransit.RowVersion!
+                        }))
+                    .Should().ThrowAsync<BusinessRuleException>()
+                    .WithMessage("*EvidenceReference hoặc CarrierReference*");
+            }
+
+            ShipmentDto delivered;
+            await using (var delivery = CreateContext())
+            {
+                delivered = await CreateShipmentService(delivery, fixture.UserId).ConfirmDeliveryAsync(
+                    result.Prepared.ShipmentId,
+                    new ConfirmShipmentDeliveryDto
+                    {
+                        ReceiverName = "Nguyen Van A",
+                        EvidenceReference = "pod://shipment/test-proof",
+                        Latitude = 10.7769m,
+                        Longitude = 106.7009m,
+                        CarrierReference = "CARRIER-POD-001",
+                        DeliveryNote = "Delivered intact",
+                        RowVersion = inTransit.RowVersion!
+                    });
+                delivered.Status.Should().Be(nameof(ShipmentStatus.Delivered));
+                delivered.ProofOfDelivery.Should().NotBeNull();
+                delivered.ProofOfDelivery!.ReceiverName.Should().Be("Nguyen Van A");
+            }
+
+            await using (var complete = CreateContext())
+            {
+                var completed = await CreateShipmentService(complete, fixture.UserId).CompleteAsync(
+                    result.Prepared.ShipmentId,
+                    new ShipmentStateCommandDto { RowVersion = delivered.RowVersion! });
+                completed.Status.Should().Be(nameof(ShipmentStatus.Completed));
+                completed.TrackingEvents.Select(x => x.EventType)
+                    .Should().ContainInOrder("ShipmentInTransit", "DeliveryConfirmed", "ShipmentCompleted");
+            }
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+            stock.Quantity.Should().Be(0);
+            stock.ReservedQuantity.Should().Be(0);
+            (await verify.InventoryTransactions.AsNoTracking()
+                .CountAsync(x => x.ReferenceType == "Shipment" &&
+                                 x.ReferenceId == result.Prepared.ShipmentId &&
+                                 x.TransactionType == TransactionType.Ship))
+                .Should().Be(1);
+            (await verify.ShipmentProofOfDeliveries.AsNoTracking()
+                .CountAsync(x => x.ShipmentId == result.Prepared.ShipmentId))
+                .Should().Be(1);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task DeliveryFailureAndRetry_DoNotChangeInventoryOrCreateSecondShipLedger()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var result = await PrepareDispatchedShipmentAsync(fixture);
+
+            ShipmentDto inTransit;
+            await using (var transit = CreateContext())
+            {
+                inTransit = await CreateShipmentService(transit, fixture.UserId).MarkInTransitAsync(
+                    result.Prepared.ShipmentId,
+                    new MarkShipmentInTransitDto
+                    {
+                        Note = "Out for carrier handoff",
+                        RowVersion = result.Dispatched.RowVersion!
+                    });
+            }
+
+            ShipmentDto failed;
+            await using (var fail = CreateContext())
+            {
+                failed = await CreateShipmentService(fail, fixture.UserId).FailDeliveryAsync(
+                    result.Prepared.ShipmentId,
+                    new FailShipmentDeliveryDto
+                    {
+                        ReasonCode = "CUSTOMER_UNAVAILABLE",
+                        Note = "Customer not at address",
+                        RowVersion = inTransit.RowVersion!
+                    });
+                failed.Status.Should().Be(nameof(ShipmentStatus.DeliveryFailed));
+                failed.DeliveryFailedAt.Should().NotBeNull();
+            }
+
+            await using (var retry = CreateContext())
+            {
+                var retried = await CreateShipmentService(retry, fixture.UserId).RetryDeliveryAsync(
+                    result.Prepared.ShipmentId,
+                    new RetryShipmentDeliveryDto
+                    {
+                        Note = "Retry next route",
+                        RowVersion = failed.RowVersion!
+                    });
+                retried.Status.Should().Be(nameof(ShipmentStatus.InTransit));
+                retried.TrackingEvents.Select(x => x.EventType)
+                    .Should().ContainInOrder("ShipmentInTransit", "DeliveryFailed", "DeliveryRetryStarted");
+            }
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+            stock.Quantity.Should().Be(0);
+            stock.ReservedQuantity.Should().Be(0);
+            (await verify.InventoryTransactions.AsNoTracking()
+                .CountAsync(x => x.ReferenceType == "Shipment" &&
+                                 x.ReferenceId == result.Prepared.ShipmentId &&
+                                 x.TransactionType == TransactionType.Ship))
+                .Should().Be(1);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task ReturnToWarehouseInitiation_DoesNotIncreaseWarehouseInventory()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var result = await PrepareDispatchedShipmentAsync(fixture);
+
+            ShipmentDto inTransit;
+            await using (var transit = CreateContext())
+            {
+                inTransit = await CreateShipmentService(transit, fixture.UserId).MarkInTransitAsync(
+                    result.Prepared.ShipmentId,
+                    new MarkShipmentInTransitDto
+                    {
+                        RowVersion = result.Dispatched.RowVersion!
+                    });
+            }
+
+            await using (var returnFlow = CreateContext())
+            {
+                var returning = await CreateShipmentService(returnFlow, fixture.UserId).InitiateReturnAsync(
+                    result.Prepared.ShipmentId,
+                    new InitiateShipmentReturnDto
+                    {
+                        ReasonCode = "CUSTOMER_REFUSED",
+                        Note = "Return requires separate receiving workflow",
+                        RowVersion = inTransit.RowVersion!
+                    });
+                returning.Status.Should().Be(nameof(ShipmentStatus.ReturnToWarehouse));
+                returning.ReturnInitiatedAt.Should().NotBeNull();
+            }
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.LocationId == fixture.LocationId);
+            stock.Quantity.Should().Be(0);
+            stock.ReservedQuantity.Should().Be(0);
+            (await verify.InventoryTransactions.AsNoTracking()
+                .CountAsync(x => x.ReferenceType == "Shipment" &&
+                                 x.ReferenceId == result.Prepared.ShipmentId &&
+                                 x.TransactionType == TransactionType.Ship))
+                .Should().Be(1);
+            (await verify.InventoryTransactions.AsNoTracking()
+                .CountAsync(x => x.ReferenceType == "Shipment" &&
+                                 x.ReferenceId == result.Prepared.ShipmentId &&
+                                 x.TransactionType != TransactionType.Ship))
+                .Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    private static async Task<(Prepared Prepared, ShipmentDto Dispatched)> PrepareDispatchedShipmentAsync(Fixture fixture)
+    {
+        var prepared = await PreparePackedNestedShipmentAsync(fixture);
+        await AssignCanonicalExportSourceAsync(prepared.ShipmentId, fixture);
+        var loaded = await LoadShipmentAsync(prepared, fixture);
+
+        await using var dispatch = CreateContext();
+        var dispatched = await CreateShipmentService(dispatch, fixture.UserId).DispatchAsync(
+            prepared.ShipmentId,
+            new ShipmentStateCommandDto { RowVersion = loaded.RowVersion! });
+        return (prepared, dispatched);
+    }
+
     private static async Task<ShipmentDto> LoadShipmentAsync(Prepared prepared, Fixture fixture)
     {
         ShipmentDto staged;
@@ -817,6 +1027,12 @@ public sealed class SqlServerShipmentLoadingTests
         await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
         await db.InventoryTransactions
             .Where(x => x.WarehouseId == fixture.WarehouseId && x.ProductId == fixture.ProductId)
+            .ExecuteDeleteAsync();
+        await db.ShipmentProofOfDeliveries
+            .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)
+            .ExecuteDeleteAsync();
+        await db.ShipmentTrackingEvents
+            .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)
             .ExecuteDeleteAsync();
         await db.ShipmentHandlingUnits
             .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)

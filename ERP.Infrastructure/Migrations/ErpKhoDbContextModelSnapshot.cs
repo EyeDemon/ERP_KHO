@@ -2490,6 +2490,18 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("DispatchedBy")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeliveryFailedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("InTransitAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ReturnInitiatedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime?>("LoadedAt")
                         .HasColumnType("datetime2");
 
@@ -2569,6 +2581,125 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("WarehouseId", "Status", "CreatedAt");
 
                     b.ToTable("Shipments", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShipmentProofOfDelivery", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CarrierReference")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("DeliveredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeliveryNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("EvidenceReference")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal?>("Latitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<string>("ReceiverName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("ShipmentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ShipmentId")
+                        .IsUnique();
+
+                    b.ToTable("ShipmentProofOfDeliveries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ShipmentProofOfDeliveries_Coordinates", "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180)");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShipmentTrackingEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<int>("FromStatus")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RecordedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShipmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("SourceEventId")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("ToStatus")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecordedBy");
+
+                    b.HasIndex("ShipmentId", "OccurredAt", "Id");
+
+                    b.HasIndex("ShipmentId", "Source", "SourceEventId")
+                        .IsUnique()
+                        .HasFilter("[SourceEventId] IS NOT NULL");
+
+                    b.ToTable("ShipmentTrackingEvents", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.ShipmentHandlingUnit", b =>
@@ -4744,6 +4875,43 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ShipmentProofOfDelivery", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Shipment", "Shipment")
+                        .WithOne("ProofOfDelivery")
+                        .HasForeignKey("ERP.Domain.Entities.ShipmentProofOfDelivery", "ShipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Shipment");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShipmentTrackingEvent", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.User", "RecordedByUser")
+                        .WithMany()
+                        .HasForeignKey("RecordedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Shipment", "Shipment")
+                        .WithMany("TrackingEvents")
+                        .HasForeignKey("ShipmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RecordedByUser");
+
+                    b.Navigation("Shipment");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ShipmentHandlingUnit", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.HandlingUnit", "HandlingUnit")
@@ -5190,6 +5358,10 @@ namespace ERP.Infrastructure.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.Shipment", b =>
                 {
                     b.Navigation("HandlingUnits");
+
+                    b.Navigation("ProofOfDelivery");
+
+                    b.Navigation("TrackingEvents");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StockReservation", b =>

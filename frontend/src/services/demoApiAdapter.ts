@@ -431,7 +431,23 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       const status = params.get('status');
       return ok(config, demoShipments
         .filter(item => (!warehouseId || item.warehouseId === warehouseId) && (!status || item.status === status))
-        .map(({ handlingUnits: _handlingUnits, rowVersion: _rowVersion, ...item }) => item));
+        .map(({ handlingUnits: _handlingUnits, proofOfDelivery: _proof, trackingEvents: _events, rowVersion: _rowVersion, ...item }) => item));
+    }
+    if (/^\/api\/shipments\/\d+\/tracking$/.test(path)) {
+      const item = demoShipments.find(shipment => shipment.id === findNumericId(path));
+      return item ? ok(config, {
+        shipmentId: item.id,
+        shipmentCode: item.shipmentCode,
+        status: item.status,
+        dispatchedAt: item.dispatchedAt ?? null,
+        inTransitAt: item.inTransitAt ?? null,
+        deliveryFailedAt: item.deliveryFailedAt ?? null,
+        returnInitiatedAt: item.returnInitiatedAt ?? null,
+        deliveredAt: item.deliveredAt ?? null,
+        completedAt: item.completedAt ?? null,
+        proofOfDelivery: item.proofOfDelivery ?? null,
+        events: item.trackingEvents ?? [],
+      }) : fail(config, 404, 'Không tìm thấy tracking Shipment demo.');
     }
     if (/^\/api\/shipments\/\d+$/.test(path)) {
       const item = demoShipments.find(shipment => shipment.id === findNumericId(path));

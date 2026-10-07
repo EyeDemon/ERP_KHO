@@ -318,9 +318,18 @@ public sealed class ShipmentService(
             }
 
             foreach (var hu in activeHus) hu.Status = HandlingUnitStatus.Shipped;
+            var previousStatus = shipment.Status;
             shipment.Status = ShipmentStatus.Dispatched;
             shipment.DispatchedAt = dispatchedAt;
             shipment.DispatchedBy = currentUser.UserId;
+            AddTrackingEvent(
+                shipment,
+                "ShipmentDispatched",
+                previousStatus,
+                ShipmentStatus.Dispatched,
+                dispatchedAt,
+                null,
+                "Inventory SHIP boundary committed.");
 
             if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
             {
@@ -341,6 +350,149 @@ public sealed class ShipmentService(
                 "Shipment.Dispatched",
                 shipment,
                 $"Reservations: {reservations.Count}; LedgerRows: {ledgerBuckets.Count}; Quantity: {ledgerBuckets.Values.Sum()}");
+        }, cancellationToken);
+
+    public async Task<ShipmentTrackingDto> GetTrackingAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var shipment = await LoadAsync(id, false, cancellationToken);
+        return MapTracking(shipment);
+    }
+
+    public Task<ShipmentDto> MarkInTransitAsync(
+        int id,
+        MarkShipmentInTransitDto request,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(id, request.RowVersion, async (shipment, token) =>
+        {
+            RequireStatus(shipment, ShipmentStatus.Dispatched, "Chỉ Shipment DISPATCHED mới có thể chuyển IN_TRANSIT.");
+            var occurredAt = ResolveTrackingTime(shipment, request.OccurredAt, "IN_TRANSIT");
+            var from = shipment.Status;
+            shipment.Status = ShipmentStatus.InTransit;
+            shipment.InTransitAt = occurredAt;
+            AddTrackingEvent(shipment, "ShipmentInTransit", from, shipment.Status, occurredAt, null, NormalizeNote(request.Note));
+            AddAudit("Shipment.InTransit", shipment, $"OccurredAt: {occurredAt:O}; Note: {NormalizeNote(request.Note)}");
+            await Task.CompletedTask;
+        }, cancellationToken);
+
+    public Task<ShipmentDto> ConfirmDeliveryAsync(
+        int id,
+        ConfirmShipmentDeliveryDto request,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(id, request.RowVersion, async (shipment, token) =>
+        {
+            RequireStatus(shipment, ShipmentStatus.InTransit, "Chỉ Shipment IN_TRANSIT mới có thể xác nhận giao hàng.");
+            if (shipment.ProofOfDelivery is not null)
+                throw Conflict("SHIPMENT_POD_EXISTS", "Shipment đã có Proof of Delivery.");
+
+            var receiver = NormalizeRequired(request.ReceiverName, 200, "Tên người nhận");
+            var evidenceReference = NormalizeOptional(request.EvidenceReference, 500);
+            var carrierReference = NormalizeOptional(request.CarrierReference, 120);
+            if (evidenceReference is null && carrierReference is null)
+                throw new BusinessRuleException("POD cần EvidenceReference hoặc CarrierReference.");
+            ValidateCoordinates(request.Latitude, request.Longitude);
+            var deliveredAt = ResolveTrackingTime(shipment, request.DeliveredAt, "DELIVERED");
+            var pod = new ShipmentProofOfDelivery
+            {
+                ShipmentId = shipment.Id,
+                DeliveredAt = deliveredAt,
+                ReceiverName = receiver,
+                EvidenceReference = evidenceReference,
+                Latitude = request.Latitude,
+                Longitude = request.Longitude,
+                CarrierReference = carrierReference,
+                DeliveryNote = NormalizeOptional(request.DeliveryNote, 500),
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = currentUser.UserId
+            };
+            shipment.ProofOfDelivery = pod;
+            context.ShipmentProofOfDeliveries.Add(pod);
+
+            var from = shipment.Status;
+            shipment.Status = ShipmentStatus.Delivered;
+            AddTrackingEvent(
+                shipment,
+                "DeliveryConfirmed",
+                from,
+                shipment.Status,
+                deliveredAt,
+                null,
+                NormalizeOptional(request.DeliveryNote, 500));
+            AddAudit(
+                "Shipment.DeliveryConfirmed",
+                shipment,
+                $"DeliveredAt: {deliveredAt:O}; Receiver: {receiver}; Evidence: {pod.EvidenceReference}; CarrierReference: {pod.CarrierReference}");
+            await Task.CompletedTask;
+        }, cancellationToken);
+
+    public Task<ShipmentDto> FailDeliveryAsync(
+        int id,
+        FailShipmentDeliveryDto request,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(id, request.RowVersion, async (shipment, token) =>
+        {
+            RequireStatus(shipment, ShipmentStatus.InTransit, "Chỉ Shipment IN_TRANSIT mới có thể ghi nhận giao hàng thất bại.");
+            var reason = NormalizeRequired(request.ReasonCode, 80, "Mã lý do giao thất bại").ToUpperInvariant();
+            var occurredAt = ResolveTrackingTime(shipment, request.OccurredAt, "DELIVERY_FAILED");
+            var from = shipment.Status;
+            shipment.Status = ShipmentStatus.DeliveryFailed;
+            shipment.DeliveryFailedAt = occurredAt;
+            AddTrackingEvent(shipment, "DeliveryFailed", from, shipment.Status, occurredAt, reason, NormalizeNote(request.Note));
+            AddAudit("Shipment.DeliveryFailed", shipment, $"OccurredAt: {occurredAt:O}; Reason: {reason}; Note: {NormalizeNote(request.Note)}");
+            await Task.CompletedTask;
+        }, cancellationToken);
+
+    public Task<ShipmentDto> RetryDeliveryAsync(
+        int id,
+        RetryShipmentDeliveryDto request,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(id, request.RowVersion, async (shipment, token) =>
+        {
+            RequireStatus(shipment, ShipmentStatus.DeliveryFailed, "Chỉ Shipment DELIVERY_FAILED mới có thể retry delivery.");
+            var occurredAt = ResolveTrackingTime(shipment, request.OccurredAt, "RETRY_DELIVERY");
+            var from = shipment.Status;
+            shipment.Status = ShipmentStatus.InTransit;
+            shipment.InTransitAt = occurredAt;
+            AddTrackingEvent(shipment, "DeliveryRetryStarted", from, shipment.Status, occurredAt, null, NormalizeNote(request.Note));
+            AddAudit("Shipment.DeliveryRetryStarted", shipment, $"OccurredAt: {occurredAt:O}; Note: {NormalizeNote(request.Note)}");
+            await Task.CompletedTask;
+        }, cancellationToken);
+
+    public Task<ShipmentDto> InitiateReturnAsync(
+        int id,
+        InitiateShipmentReturnDto request,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(id, request.RowVersion, async (shipment, token) =>
+        {
+            if (shipment.Status is not ShipmentStatus.InTransit and not ShipmentStatus.DeliveryFailed)
+                throw Conflict("SHIPMENT_STATE_INVALID", "Chỉ Shipment IN_TRANSIT hoặc DELIVERY_FAILED mới có thể khởi tạo return-to-warehouse.");
+            var reason = NormalizeRequired(request.ReasonCode, 80, "Mã lý do return").ToUpperInvariant();
+            var occurredAt = ResolveTrackingTime(shipment, request.OccurredAt, "RETURN_TO_WAREHOUSE");
+            var from = shipment.Status;
+            shipment.Status = ShipmentStatus.ReturnToWarehouse;
+            shipment.ReturnInitiatedAt = occurredAt;
+            AddTrackingEvent(shipment, "ReturnToWarehouseInitiated", from, shipment.Status, occurredAt, reason, NormalizeNote(request.Note));
+            AddAudit("Shipment.ReturnInitiated", shipment, $"OccurredAt: {occurredAt:O}; Reason: {reason}; Note: {NormalizeNote(request.Note)}");
+            await Task.CompletedTask;
+        }, cancellationToken);
+
+    public Task<ShipmentDto> CompleteAsync(
+        int id,
+        ShipmentStateCommandDto request,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(id, request.RowVersion, async (shipment, token) =>
+        {
+            RequireStatus(shipment, ShipmentStatus.Delivered, "Chỉ Shipment DELIVERED mới có thể hoàn tất.");
+            if (shipment.ProofOfDelivery is null)
+                throw Conflict("SHIPMENT_POD_REQUIRED", "Shipment DELIVERED phải có Proof of Delivery trước khi hoàn tất.");
+            var occurredAt = ResolveTrackingTime(shipment, null, "COMPLETED");
+            var from = shipment.Status;
+            shipment.Status = ShipmentStatus.Completed;
+            shipment.CompletedAt = occurredAt;
+            AddTrackingEvent(shipment, "ShipmentCompleted", from, shipment.Status, occurredAt, null, null);
+            AddAudit("Shipment.Completed", shipment, $"CompletedAt: {occurredAt:O}");
+            await Task.CompletedTask;
         }, cancellationToken);
 
     public async Task EnsureSourceReadyAsync(
@@ -425,6 +577,8 @@ public sealed class ShipmentService(
             .Include(x => x.DockAppointment)
             .Include(x => x.Dock)
             .Include(x => x.DispatchedByUser)
+            .Include(x => x.ProofOfDelivery)
+            .Include(x => x.TrackingEvents)
             .Include(x => x.HandlingUnits).ThenInclude(x => x.HandlingUnit);
 
     private static List<HandlingUnit> ActivePackingHus(Shipment shipment) =>
@@ -488,6 +642,116 @@ public sealed class ShipmentService(
             Severity = "Information"
         });
 
+    private DateTime ResolveTrackingTime(Shipment shipment, DateTime? requested, string transition)
+    {
+        if (!shipment.DispatchedAt.HasValue)
+            throw Conflict("SHIPMENT_NOT_DISPATCHED", "Shipment chưa có inventory dispatch boundary.");
+        var occurredAt = requested?.ToUniversalTime() ?? DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        if (occurredAt > now.AddMinutes(5))
+            throw new BusinessRuleException($"Thời điểm {transition} không được ở tương lai.");
+        var latest = shipment.TrackingEvents.Count == 0
+            ? shipment.DispatchedAt.Value
+            : shipment.TrackingEvents.Max(x => x.OccurredAt);
+        if (occurredAt < shipment.DispatchedAt.Value || occurredAt < latest)
+            throw Conflict("SHIPMENT_TRACKING_TIME_INVALID", $"Thời điểm {transition} không được trước event tracking gần nhất.");
+        return occurredAt;
+    }
+
+    private void AddTrackingEvent(
+        Shipment shipment,
+        string eventType,
+        ShipmentStatus fromStatus,
+        ShipmentStatus toStatus,
+        DateTime occurredAt,
+        string? reasonCode,
+        string? note)
+    {
+        shipment.TrackingEvents.Add(new ShipmentTrackingEvent
+        {
+            EventType = eventType,
+            FromStatus = fromStatus,
+            ToStatus = toStatus,
+            OccurredAt = occurredAt,
+            RecordedAt = DateTime.UtcNow,
+            Source = "Internal",
+            ReasonCode = reasonCode,
+            Note = note,
+            RecordedBy = currentUser.UserId
+        });
+    }
+
+    private static string NormalizeRequired(string? value, int maxLength, string label)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw new BusinessRuleException($"{label} là bắt buộc.");
+        if (normalized.Length > maxLength)
+            throw new BusinessRuleException($"{label} không được vượt quá {maxLength} ký tự.");
+        return normalized;
+    }
+
+    private static string? NormalizeOptional(string? value, int maxLength)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized)) return null;
+        if (normalized.Length > maxLength)
+            throw new BusinessRuleException($"Giá trị không được vượt quá {maxLength} ký tự.");
+        return normalized;
+    }
+
+    private static string? NormalizeNote(string? value) => NormalizeOptional(value, 500);
+
+    private static void ValidateCoordinates(decimal? latitude, decimal? longitude)
+    {
+        if (latitude.HasValue != longitude.HasValue)
+            throw new BusinessRuleException("Latitude và Longitude phải được cung cấp cùng nhau.");
+        if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
+            throw new BusinessRuleException("Tọa độ POD không hợp lệ.");
+    }
+
+    private static ShipmentTrackingEventDto MapTrackingEvent(ShipmentTrackingEvent item) => new()
+    {
+        Id = item.Id,
+        EventType = item.EventType,
+        FromStatus = item.FromStatus.ToString(),
+        ToStatus = item.ToStatus.ToString(),
+        OccurredAt = item.OccurredAt,
+        RecordedAt = item.RecordedAt,
+        Source = item.Source,
+        SourceEventId = item.SourceEventId,
+        ReasonCode = item.ReasonCode,
+        Note = item.Note
+    };
+
+    private static ShipmentProofOfDeliveryDto? MapProofOfDelivery(ShipmentProofOfDelivery? pod) =>
+        pod is null ? null : new ShipmentProofOfDeliveryDto
+        {
+            DeliveredAt = pod.DeliveredAt,
+            ReceiverName = pod.ReceiverName,
+            EvidenceReference = pod.EvidenceReference,
+            Latitude = pod.Latitude,
+            Longitude = pod.Longitude,
+            CarrierReference = pod.CarrierReference,
+            DeliveryNote = pod.DeliveryNote,
+            CreatedAt = pod.CreatedAt
+        };
+
+    private static ShipmentTrackingDto MapTracking(Shipment shipment) => new()
+    {
+        ShipmentId = shipment.Id,
+        ShipmentCode = shipment.ShipmentCode,
+        Status = shipment.Status.ToString(),
+        DispatchedAt = shipment.DispatchedAt,
+        InTransitAt = shipment.InTransitAt,
+        DeliveryFailedAt = shipment.DeliveryFailedAt,
+        ReturnInitiatedAt = shipment.ReturnInitiatedAt,
+        DeliveredAt = shipment.ProofOfDelivery?.DeliveredAt,
+        CompletedAt = shipment.CompletedAt,
+        ProofOfDelivery = MapProofOfDelivery(shipment.ProofOfDelivery),
+        Events = shipment.TrackingEvents.OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).Select(MapTrackingEvent).ToList()
+    };
+
     private static string? NormalizeSeal(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
@@ -526,7 +790,12 @@ public sealed class ShipmentService(
         LoadedAt = shipment.LoadedAt,
         DispatchedAt = shipment.DispatchedAt,
         DispatchedBy = shipment.DispatchedBy,
-        DispatchedByName = shipment.DispatchedByUser?.FullName
+        DispatchedByName = shipment.DispatchedByUser?.FullName,
+        InTransitAt = shipment.InTransitAt,
+        DeliveryFailedAt = shipment.DeliveryFailedAt,
+        ReturnInitiatedAt = shipment.ReturnInitiatedAt,
+        DeliveredAt = shipment.ProofOfDelivery?.DeliveredAt,
+        CompletedAt = shipment.CompletedAt
     };
 
     private static ShipmentDto Map(Shipment shipment)
@@ -562,7 +831,15 @@ public sealed class ShipmentService(
             LoadedAt = summary.LoadedAt,
             DispatchedAt = summary.DispatchedAt,
             DispatchedBy = summary.DispatchedBy,
+            DispatchedByName = summary.DispatchedByName,
+            InTransitAt = summary.InTransitAt,
+            DeliveryFailedAt = summary.DeliveryFailedAt,
+            ReturnInitiatedAt = summary.ReturnInitiatedAt,
+            DeliveredAt = summary.DeliveredAt,
+            CompletedAt = summary.CompletedAt,
             RowVersion = Convert.ToBase64String(shipment.RowVersion),
+            ProofOfDelivery = MapProofOfDelivery(shipment.ProofOfDelivery),
+            TrackingEvents = shipment.TrackingEvents.OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).Select(MapTrackingEvent).ToList(),
             HandlingUnits = shipment.HandlingUnits.OrderBy(x => x.Sequence).Select(link =>
             {
                 var tree = Hierarchy(all, link.HandlingUnitId);

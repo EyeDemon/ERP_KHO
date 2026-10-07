@@ -403,6 +403,8 @@ export const demoShipments = [
     dockAppointmentId: null, dockAppointmentCode: null, dockId: null, dockCode: null,
     vehiclePlate: null, trailerPlate: null, sealNumber: null,
     createdAt: '2026-10-06T02:06:00Z', stagedAt: '2026-10-06T02:08:00Z', loadingStartedAt: null, loadedAt: null,
+    dispatchedAt: null, dispatchedBy: null, dispatchedByName: null, inTransitAt: null, deliveryFailedAt: null,
+    returnInitiatedAt: null, deliveredAt: null, completedAt: null, proofOfDelivery: null, trackingEvents: [],
     rowVersion: 'AAAAAAAASHIP1',
     handlingUnits: [
       {
@@ -419,7 +421,9 @@ export const demoShipments = [
     dockAppointmentId: 1043, dockAppointmentCode: 'APT-2026-1043', dockId: 102, dockCode: 'D-02',
     vehiclePlate: '50H-220.18', trailerPlate: 'TR-220', sealNumber: 'SEAL-7702',
     createdAt: '2026-10-06T03:00:00Z', stagedAt: '2026-10-06T03:05:00Z', loadingStartedAt: '2026-10-06T03:15:00Z', loadedAt: '2026-10-06T03:25:00Z',
-    dispatchedAt: null, dispatchedBy: null, dispatchedByName: null, rowVersion: 'AAAAAAAASHIP2',
+    dispatchedAt: null, dispatchedBy: null, dispatchedByName: null, inTransitAt: null, deliveryFailedAt: null,
+    returnInitiatedAt: null, deliveredAt: null, completedAt: null, proofOfDelivery: null, trackingEvents: [],
+    rowVersion: 'AAAAAAAASHIP2',
     handlingUnits: [
       {
         id: 7721, handlingUnitId: 9921, huCode: 'PALLET-7702-01', barcode: 'PALLET-7702-01', sscc: null,
@@ -435,7 +439,9 @@ export const demoShipments = [
     dockAppointmentId: 1043, dockAppointmentCode: 'APT-2026-1043', dockId: 102, dockCode: 'D-02',
     vehiclePlate: '50H-220.18', trailerPlate: 'TR-220', sealNumber: 'SEAL-7703',
     createdAt: '2026-10-06T02:15:00Z', stagedAt: '2026-10-06T02:20:00Z', loadingStartedAt: '2026-10-06T02:30:00Z', loadedAt: '2026-10-06T02:40:00Z',
-    dispatchedAt: '2026-10-06T02:45:00Z', dispatchedBy: 101, dispatchedByName: 'Trần Quốc Bảo', rowVersion: 'AAAAAAAASHIP3',
+    dispatchedAt: '2026-10-06T02:45:00Z', dispatchedBy: 101, dispatchedByName: 'Trần Quốc Bảo',
+    inTransitAt: null, deliveryFailedAt: null, returnInitiatedAt: null, deliveredAt: null, completedAt: null,
+    proofOfDelivery: null, trackingEvents: [], rowVersion: 'AAAAAAAASHIP3',
     handlingUnits: [
       {
         id: 7731, handlingUnitId: 9931, huCode: 'PALLET-7703-01', barcode: 'PALLET-7703-01', sscc: null,
@@ -444,6 +450,46 @@ export const demoShipments = [
       },
     ],
   },
+  {
+    id: 7704, shipmentCode: 'SHIP-2026-7704', packingSessionId: 9904, packingSessionCode: 'PACK-2026-9904',
+    warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', sourceType: 'ExportReceipt', sourceId: 5111, sourceCode: 'EX-2026-5111',
+    status: 'Completed', stagingLocationId: 1701, stagingLocationCode: 'STG-OUT-01', handlingUnitCount: 1, loadedHandlingUnitCount: 1,
+    dockAppointmentId: 1043, dockAppointmentCode: 'APT-2026-1043', dockId: 102, dockCode: 'D-02',
+    vehiclePlate: '50H-220.18', trailerPlate: 'TR-220', sealNumber: 'SEAL-7704',
+    createdAt: '2026-10-06T04:00:00Z', stagedAt: '2026-10-06T04:05:00Z', loadingStartedAt: '2026-10-06T04:15:00Z',
+    loadedAt: '2026-10-06T04:25:00Z', dispatchedAt: '2026-10-06T04:30:00Z', dispatchedBy: 101, dispatchedByName: 'Trần Quốc Bảo',
+    inTransitAt: '2026-10-06T04:45:00Z', deliveredAt: '2026-10-06T06:10:00Z', completedAt: '2026-10-06T06:15:00Z',
+    deliveryFailedAt: null, returnInitiatedAt: null, rowVersion: 'AAAAAAAASHIP4',
+    proofOfDelivery: {
+      deliveredAt: '2026-10-06T06:10:00Z', receiverName: 'Nguyễn Văn A', evidenceReference: 'pod://demo/ship-7704/photo-01',
+      latitude: 10.7769, longitude: 106.7009, carrierReference: 'POD-CARRIER-7704',
+      deliveryNote: 'Hàng nguyên vẹn', createdAt: '2026-10-06T06:10:05Z',
+    },
+    trackingEvents: [
+      {
+        id: 7741, eventType: 'ShipmentInTransit', fromStatus: 'Dispatched', toStatus: 'InTransit',
+        occurredAt: '2026-10-06T04:45:00Z', recordedAt: '2026-10-06T04:45:02Z',
+        source: 'Internal', sourceEventId: null, reasonCode: null, note: 'Carrier picked up',
+      },
+      {
+        id: 7742, eventType: 'DeliveryConfirmed', fromStatus: 'InTransit', toStatus: 'Delivered',
+        occurredAt: '2026-10-06T06:10:00Z', recordedAt: '2026-10-06T06:10:05Z',
+        source: 'Internal', sourceEventId: null, reasonCode: null, note: 'Hàng nguyên vẹn',
+      },
+      {
+        id: 7743, eventType: 'ShipmentCompleted', fromStatus: 'Delivered', toStatus: 'Completed',
+        occurredAt: '2026-10-06T06:15:00Z', recordedAt: '2026-10-06T06:15:01Z',
+        source: 'Internal', sourceEventId: null, reasonCode: null, note: null,
+      },
+    ],
+    handlingUnits: [
+      {
+        id: 7740, handlingUnitId: 9941, huCode: 'PALLET-7704-01', barcode: 'PALLET-7704-01', sscc: null,
+        type: 'Pallet', status: 'Shipped', sequence: 1, contentQuantity: 18,
+        assignedAt: '2026-10-06T04:00:00Z', stagedAt: '2026-10-06T04:05:00Z', loadedAt: '2026-10-06T04:24:00Z',
+      },
+    ],
+  }
 ];
 
 export const demoSalesOrders = [
@@ -613,6 +659,7 @@ export const demoPermissionCatalog = [
   { code: 'shipment.stage', description: 'Đưa Shipment vào staging' },
   { code: 'shipment.load', description: 'Thực hiện Shipment loading' },
   { code: 'shipment.dispatch', description: 'Dispatch Shipment và ghi SHIP ledger' },
+  { code: 'shipment.confirm_delivery', description: 'Xác nhận giao hàng và Proof of Delivery' },
   { code: 'loading.execute', description: 'Thực hiện loading tại dock' },
   { code: 'sales_order.read', description: 'Xem Sales Order' },
   { code: 'sales_order.create', description: 'Tạo Sales Order' },

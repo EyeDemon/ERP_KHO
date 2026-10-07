@@ -25,6 +25,11 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
     public async Task<ActionResult<ShipmentDto>> Get(int id, CancellationToken cancellationToken) =>
         Ok(await service.GetAsync(id, cancellationToken));
 
+    [HttpGet("{id:int}/tracking")]
+    [PermissionAuthorize(AppPermissions.ShipmentRead)]
+    public async Task<ActionResult<ShipmentTrackingDto>> Tracking(int id, CancellationToken cancellationToken) =>
+        Ok(await service.GetTrackingAsync(id, cancellationToken));
+
     [HttpPost("{id:int}/stage")]
     [PermissionAuthorize(AppPermissions.ShipmentStage)]
     [IdempotentCommand("Shipment.Stage")]
@@ -72,4 +77,58 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
         ShipmentStateCommandDto request,
         CancellationToken cancellationToken) =>
         Ok(await service.DispatchAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/mark-in-transit")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate)]
+    [IdempotentCommand("Shipment.MarkInTransit")]
+    public async Task<ActionResult<ShipmentDto>> MarkInTransit(
+        int id,
+        MarkShipmentInTransitDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.MarkInTransitAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/delivery-confirm")]
+    [PermissionAuthorize(AppPermissions.ShipmentConfirmDelivery)]
+    [IdempotentCommand("Shipment.ConfirmDelivery")]
+    public async Task<ActionResult<ShipmentDto>> ConfirmDelivery(
+        int id,
+        ConfirmShipmentDeliveryDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.ConfirmDeliveryAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/delivery-failed")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate)]
+    [IdempotentCommand("Shipment.DeliveryFailed")]
+    public async Task<ActionResult<ShipmentDto>> DeliveryFailed(
+        int id,
+        FailShipmentDeliveryDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.FailDeliveryAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/retry-delivery")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate)]
+    [IdempotentCommand("Shipment.RetryDelivery")]
+    public async Task<ActionResult<ShipmentDto>> RetryDelivery(
+        int id,
+        RetryShipmentDeliveryDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.RetryDeliveryAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/return-initiate")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate)]
+    [IdempotentCommand("Shipment.ReturnInitiate")]
+    public async Task<ActionResult<ShipmentDto>> ReturnInitiate(
+        int id,
+        InitiateShipmentReturnDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.InitiateReturnAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/complete")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate)]
+    [IdempotentCommand("Shipment.Complete")]
+    public async Task<ActionResult<ShipmentDto>> Complete(
+        int id,
+        ShipmentStateCommandDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.CompleteAsync(id, request, cancellationToken));
 }
