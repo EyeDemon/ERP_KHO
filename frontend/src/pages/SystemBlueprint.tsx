@@ -81,6 +81,7 @@ const SystemBlueprint = () => {
         <span>Branch: {blueprintProductionSnapshot.branch}</span>
         <span>Baseline commit: {blueprintProductionSnapshot.commit.slice(0, 12)}</span>
         <span>Deploy: {blueprintProductionSnapshot.deployment}</span>
+        <span>Deployment ID: {blueprintProductionSnapshot.deploymentId}</span>
         <span>Verified: {blueprintProductionSnapshot.verifiedAt}</span>
         <span>Notion: canonical reference • read-only</span>
       </section>
