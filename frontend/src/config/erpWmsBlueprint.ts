@@ -21,17 +21,25 @@ export interface BlueprintModule {
   capabilities: BlueprintCapability[];
 }
 
+export const blueprintProductionSnapshot = {
+  branch: 'feature/erp-wms-complete-ui-blueprint',
+  commit: '75e595a7b48e8c372056523a15bfa3c7b2a5ef5d',
+  deployment: 'erp-wms-blueprint-demo.vercel.app',
+  verifiedAt: '2026-10-07',
+  notionPolicy: 'canonical-read-only',
+} as const;
+
 export const blueprintStatusLabels: Record<BlueprintStatus, string> = {
-  live: 'Đã có chức năng',
-  foundation: 'Đã có nền / đang hoàn thiện',
-  planned: 'Theo đặc tả — chưa triển khai',
+  live: 'Đã triển khai hoàn thiện phạm vi hiện tại',
+  foundation: 'Đã triển khai một phần / còn thiếu phạm vi',
+  planned: 'Chưa triển khai production',
   optional: 'Nâng cao / bật theo nhu cầu',
 };
 
 export const blueprintDemoStatusLabels: Record<BlueprintStatus, string> = {
-  live: 'Có mock + chức năng thật',
-  foundation: 'Có mock + nền thật',
-  planned: 'Có mock tương tác • production chưa có',
+  live: 'Có mock + production đã hoàn thiện phạm vi hiện tại',
+  foundation: 'Có mock + production đã triển khai một phần',
+  planned: 'Có mock tương tác • production chưa triển khai',
   optional: 'Có mock nâng cao • bật khi cần',
 };
 
