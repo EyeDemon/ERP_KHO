@@ -34,21 +34,20 @@ The Inventory Control Blueprint includes domain-specific, read-only mock panels 
   - MOVE ledger and quantity preservation.
   - Production maturity: `foundation`.
 
-### Still planned in production
-
 - **INV-09 — Reversal**
   - immutable original ledger transaction;
-  - reversal transaction;
-  - corrected transaction;
-  - correlation and reversibility guards.
-  - Production maturity: `planned`.
+  - corrective transaction + reversal marker;
+  - structured Original / Corrective / Marker links;
+  - DB-authoritative double-reversal guard;
+  - production scope currently covers Internal Move and Inventory Status Change.
+  - Production maturity: `foundation`.
 
 - **INV-10 — Traceability & Genealogy**
-  - backward and forward lot/serial trace;
-  - shipment exposure;
-  - return/recall branches;
-  - explicit incomplete-chain state.
-  - Production maturity: `planned`.
+  - Product / Lot / Serial / Reference trace within warehouse scope;
+  - current inventory buckets + immutable ledger timeline;
+  - structured reversal-chain projection;
+  - full Return/Recall genealogy and orchestration remain incomplete.
+  - Production maturity: `foundation`.
 
 ## Other production foundations
 
@@ -77,7 +76,7 @@ The specialized panels themselves are Blueprint-only:
 - they must not display fake successful production commands;
 - they must not promote capability maturity merely because a mock exists.
 
-INV-05, INV-06, INV-07 and INV-08 now have real production foundations elsewhere in the application. INV-09 and INV-10 remain planned until their production implementations are merged, deployed and QA-verified.
+INV-05 through INV-10 now have real production foundations elsewhere in the application. INV-09 and INV-10 were promoted only after merge, green post-merge CI and READY production deployment evidence; their named canonical gaps keep them at `foundation`, not `live`.
 
 ## UI/UX
 
