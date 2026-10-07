@@ -40,16 +40,18 @@ This is the current implementation-status checkpoint for the Blueprint.
 
 **Implementation source of truth**
 - Integration branch: `feature/erp-wms-complete-ui-blueprint`.
-- Verified production commit: `75e595a7b48e8c372056523a15bfa3c7b2a5ef5d`.
+- Verified production capability baseline: `297b52865bac4fa785847d678280282a4663588b` (merged PR #20 — INV-09/INV-10 foundations).
 - Vercel production alias: `erp-wms-blueprint-demo.vercel.app`.
-- Vercel deployment: `dpl_2tHxj7nAZJw2JzyVncSbR3dhgyXg`, READY, target `production`, Git SHA exactly matches the integration commit above.
+- Vercel production deployment: `dpl_ADqrgZByknUrgTovTxtDMiRBY2DJ`, READY, target `production`, Git SHA exactly `297b52865bac4fa785847d678280282a4663588b`.
+- Post-merge CI for that capability release: #458 PASS.
+- The integration branch later advanced to `101a84f06e79b6607959e2e8f58992dd59e12025` through PR #21 with INV-10 chain-display polish. CI #460 PASS. That polish is **not** used to justify maturity; production maturity below is anchored to the deployed `297b5286...` baseline.
 - Notion remains the canonical business/architecture reference and is **read-only for this synchronization**. No Notion content is changed to make implementation look complete.
 
-**Registry snapshot**
+**Registry snapshot after this synchronization**
 - 179 capabilities total.
 - 33 `live`.
-- 26 `foundation`.
-- 74 `planned`.
+- 28 `foundation`.
+- 72 `planned`.
 - 46 `optional`.
 
 Status meaning for production synchronization:
@@ -60,13 +62,15 @@ Status meaning for production synchronization:
 
 **Outbound production reality**
 - OUT-01 ExportReceipt MVP and OUT-02 Reservation remain `live`.
-- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder and OUT-10 Shipment Tracking / POD / Delivery Failure are now real production foundations and remain `foundation` until their explicitly listed canonical gaps are closed.
+- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder and OUT-10 Shipment Tracking / POD / Delivery Failure remain real production foundations and stay `foundation` until their explicitly listed canonical gaps are closed.
 - OUT-04 Wave / Batch / Cluster remains `optional`.
 
 **Inventory production reality**
-- INV-01 through INV-08 are production foundations at the verified commit, including Inventory Status, Lot/Serial/Expiry, Inventory Locks/Freeze and Internal Location Move.
+- INV-01 through INV-08 remain production foundations, including Inventory Status, Lot/Serial/Expiry, Inventory Locks/Freeze and Internal Location Move.
+- INV-09 Reversal is now `foundation`: production performs immutable corrective reversal for Internal Location Move and Inventory Status Change, records structured Original/Reversal/Corrective links, enforces one reversal per original through a filtered SQL UNIQUE constraint, uses Restrict self-FKs, claims the marker before inventory mutation in a Serializable transaction, maps duplicate-key races to `409 INV_ALREADY_REVERSED`, and writes reason/audit evidence. Receipt/Shipment/Transfer/Adjustment/Return/Scrap reversal, partial reversal, downstream-dependency policy and corrected-document workflows remain incomplete.
+- INV-10 Traceability & Genealogy is now `foundation`: production provides warehouse-scoped current-bucket and immutable-ledger trace by Product/Lot/Serial/Reference and follows the structured Original ↔ Corrective ↔ Reversal marker chain from each member. Full cross-document genealogy across Receipt → QC → Move → Pick → Shipment / Return / Recall, recall blast-radius/orchestration and dedicated lineage evidence/export remain incomplete.
 - INV-11 Reconciliation remains `foundation`: mismatch detection exists, controlled repair/rebuild does not.
-- INV-09 Reversal and INV-10 Traceability & Genealogy remain `planned`. Draft PR/code is not sufficient for promotion; they require merge, deploy and release evidence before the Blueprint status changes.
+- Therefore INV-09 and INV-10 are promoted from `planned` to `foundation`, **not** to `live`.
 
 Therefore the 2026-10-05 refresh below is retained only as historical context and must not be used as the current implementation checkpoint.
 
