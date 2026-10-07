@@ -18,7 +18,7 @@ describe('CapabilityPreview', () => {
 
   it('renders OUT-08 foundation with production navigation and read-only Blueprint evidence', () => {
     const view = renderPreview('outbound', 'OUT-08');
-    expect(view.getAllByText('Shipment Dispatch').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Xác nhận giao hàng').length).toBeGreaterThan(0);
     expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByText(/canonical Shipment LOADED dispatch/i)).toBeTruthy();
     expect(view.getAllByText('SHP-2026-5108').length).toBeGreaterThan(0);
@@ -42,18 +42,18 @@ describe('CapabilityPreview', () => {
 
   it('renders domain-specific warehouse mock panels for WH-03 through WH-07', () => {
     const cases = [
-      ['WH-03', 'Sức chứa vị trí & Storage Constraints'],
-      ['WH-04', 'Bản đồ kho & Heatmap'],
+      ['WH-03', 'Sức chứa vị trí & Ràng buộc lưu trữ'],
+      ['WH-04', 'Bản đồ kho & Bản đồ nhiệt'],
       ['WH-05', 'Lịch vận hành & Ca làm việc'],
-      ['WH-06', 'Dock & Yard Control Board'],
-      ['WH-07', 'Operational Calendar Exception Precedence'],
+      ['WH-06', 'Bảng điều hành cửa kho & sân bãi'],
+      ['WH-07', 'Thứ tự ưu tiên ngoại lệ lịch vận hành'],
     ];
 
     for (const [capabilityId, title] of cases) {
       const view = renderPreview('warehouse-structure', capabilityId);
       expect(view.getByTestId('warehouse-capability-mock-' + capabilityId)).toBeTruthy();
       expect(view.getByText(title)).toBeTruthy();
-      expect(view.getAllByText(/Không gọi API production|Production effect/).length).toBeGreaterThan(0);
+      expect(view.getAllByText(/Không gọi API hệ thống thật|Production effect/).length).toBeGreaterThan(0);
       view.unmount();
     }
   });
@@ -61,15 +61,15 @@ describe('CapabilityPreview', () => {
   it('keeps the remaining planned inbound capability explicitly non-production', () => {
     const view = renderPreview('inbound', 'IN-09');
     expect(view.getByTestId('inbound-capability-mock-IN-09')).toBeTruthy();
-    expect(view.getByRole('heading', { name: 'Putaway Recommendation Explainability' })).toBeTruthy();
-    expect(view.getByText(/Không gọi API production/)).toBeTruthy();
+    expect(view.getByRole('heading', { name: 'Giải thích khuyến nghị cất hàng' })).toBeTruthy();
+    expect(view.getByText(/Không gọi API hệ thống thật/)).toBeTruthy();
     expect(view.getAllByText('Chưa triển khai hệ thống thật').length).toBeGreaterThan(0);
   });
 
   it('reflects merged inbound execution capabilities as live while keeping Blueprint mocks read-only', () => {
     const cases = [
-      ['IN-05', 'Over / Under Receipt Resolution'],
-      ['IN-06', 'Inbound QC Inspection'],
+      ['IN-05', 'Xử lý nhận thừa / thiếu'],
+      ['IN-06', 'Kiểm tra chất lượng hàng nhập'],
     ];
 
     for (const [capabilityId, title] of cases) {
@@ -78,7 +78,7 @@ describe('CapabilityPreview', () => {
       expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
       expect(view.getByTestId('inbound-capability-mock-' + capabilityId)).toBeTruthy();
       expect(view.getByRole('heading', { name: title })).toBeTruthy();
-      expect(view.getByText(/Không gọi API production/)).toBeTruthy();
+      expect(view.getByText(/Không gọi API hệ thống thật/)).toBeTruthy();
       expect(view.queryByText('Chưa triển khai hệ thống thật')).toBeNull();
       view.unmount();
     }
@@ -89,7 +89,7 @@ describe('CapabilityPreview', () => {
     expect(view.getByText('Đã triển khai một phần / còn thiếu phạm vi')).toBeTruthy();
     expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByTestId('inbound-capability-mock-IN-02')).toBeTruthy();
-    expect(view.getByRole('heading', { name: 'Receiving Appointment Board' })).toBeTruthy();
+    expect(view.getByRole('heading', { name: 'Bảng lịch nhận hàng' })).toBeTruthy();
     expect(view.getAllByText(/liên kết canonical.*PO\/ASN\/Receipt.*hoàn thiện/i).length).toBeGreaterThan(0);
   });
 
@@ -98,8 +98,8 @@ describe('CapabilityPreview', () => {
     expect(view.getByText('Đã triển khai hoàn thiện phạm vi hiện tại')).toBeTruthy();
     expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByTestId('inbound-capability-mock-IN-01')).toBeTruthy();
-    expect(view.getByRole('heading', { name: 'Purchase Order / ASN Reconciliation' })).toBeTruthy();
-    expect(view.getByText(/Không gọi API production/)).toBeTruthy();
+    expect(view.getByRole('heading', { name: 'Đối chiếu Đơn mua / ASN' })).toBeTruthy();
+    expect(view.getByText(/Không gọi API hệ thống thật/)).toBeTruthy();
     expect(view.queryByText('Chưa triển khai hệ thống thật')).toBeNull();
   });
 
@@ -113,12 +113,12 @@ describe('CapabilityPreview', () => {
 
   it('renders specialized outbound mocks only for capabilities that still need domain workbenches', () => {
     const cases = [
-      ['OUT-03', 'Allocation Candidate Workbench'],
-      ['OUT-04', 'Wave / Batch / Cluster Planning'],
-      ['OUT-07', 'Staging & Loading Control'],
-      ['OUT-08', 'Shipment Dispatch Boundary'],
-      ['OUT-09', 'Backorder & Promise Replanning'],
-      ['OUT-10', 'Shipment Tracking / POD Timeline'],
+      ['OUT-03', 'Bàn làm việc ứng viên phân bổ'],
+      ['OUT-04', 'Lập kế hoạch đợt / lô / cụm'],
+      ['OUT-07', 'Kiểm soát khu chờ & xếp hàng'],
+      ['OUT-08', 'Xác nhận giao hàng Boundary'],
+      ['OUT-09', 'Đơn thiếu hàng & lập lại cam kết'],
+      ['OUT-10', 'Dòng thời gian theo dõi giao hàng / POD'],
     ];
 
     for (const [capabilityId, title] of cases) {
@@ -126,7 +126,7 @@ describe('CapabilityPreview', () => {
       const panel = view.getByTestId('outbound-capability-mock-' + capabilityId);
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
-      expect(panel.textContent).toContain('Không gọi API production');
+      expect(panel.textContent).toContain('Không gọi API hệ thống thật');
       view.unmount();
     }
   });
@@ -141,11 +141,11 @@ describe('CapabilityPreview', () => {
 
   it('renders specialized inventory-control mocks for planned capabilities that still need domain panels', () => {
     const cases = [
-      ['INV-05', 'Inventory Status Eligibility Board'],
-      ['INV-06', 'Lot / Serial / Expiry Explorer'],
-      ['INV-07', 'Inventory Lock / Freeze Policy'],
-      ['INV-09', 'Inventory Reversal / Corrective Chain'],
-      ['INV-10', 'Traceability & Genealogy Graph'],
+      ['INV-05', 'Bảng điều kiện theo trạng thái tồn kho'],
+      ['INV-06', 'Trình khám phá Lô / Sê-ri / Hạn dùng'],
+      ['INV-07', 'Chính sách khóa / đóng băng tồn kho'],
+      ['INV-09', 'Chuỗi đảo / hiệu chỉnh tồn kho'],
+      ['INV-10', 'Đồ thị truy vết & phả hệ'],
     ];
 
     for (const [capabilityId, title] of cases) {
@@ -153,7 +153,7 @@ describe('CapabilityPreview', () => {
       const panel = view.getByTestId('inventory-capability-mock-' + capabilityId);
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
-      expect(panel.textContent).toContain('Không gọi API production');
+      expect(panel.textContent).toContain('Không gọi API hệ thống thật');
       view.unmount();
     }
   });
@@ -168,8 +168,8 @@ describe('CapabilityPreview', () => {
 
   it('renders specialized transfer-replenishment mocks for the remaining planned capabilities', () => {
     const cases = [
-      ['TR-02', 'In-Transit Inventory Reconciliation'],
-      ['TR-05', 'Replenishment Source & Pick-Face Plan'],
+      ['TR-02', 'Đối chiếu tồn kho đang vận chuyển'],
+      ['TR-05', 'Kế hoạch nguồn bổ sung & vị trí lấy hàng'],
     ];
 
     for (const [capabilityId, title] of cases) {
@@ -177,7 +177,7 @@ describe('CapabilityPreview', () => {
       const panel = view.getByTestId('transfer-capability-mock-' + capabilityId);
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
-      expect(panel.textContent).toContain('Không gọi API production');
+      expect(panel.textContent).toContain('Không gọi API hệ thống thật');
       view.unmount();
     }
   });
@@ -192,11 +192,11 @@ describe('CapabilityPreview', () => {
 
   it('renders specialized count-adjustment mocks only for planned capabilities', () => {
     const cases = [
-      ['CT-03', 'Blind Count Execution'],
-      ['CT-04', 'Count Freeze Strategy'],
-      ['CT-05', 'Recount & Immutable Attempt History'],
-      ['CT-06', 'Variance Resolution Workbench'],
-      ['CT-07', 'Inventory Adjustment Approval & Posting'],
+      ['CT-03', 'Thực hiện kiểm kê mù'],
+      ['CT-04', 'Chiến lược đóng băng kiểm kê'],
+      ['CT-05', 'Kiểm đếm lại & lịch sử lần đếm bất biến'],
+      ['CT-06', 'Bàn làm việc xử lý chênh lệch'],
+      ['CT-07', 'Phê duyệt & ghi sổ điều chỉnh tồn kho'],
     ];
 
     for (const [capabilityId, title] of cases) {
@@ -204,7 +204,7 @@ describe('CapabilityPreview', () => {
       const panel = view.getByTestId('count-capability-mock-' + capabilityId);
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
-      expect(panel.textContent).toContain('Không gọi API production');
+      expect(panel.textContent).toContain('Không gọi API hệ thống thật');
       view.unmount();
     }
   });
@@ -219,12 +219,12 @@ describe('CapabilityPreview', () => {
 
   it('renders specialized quality-return mocks for all planned QR capabilities', () => {
     const cases = [
-      ['QR-01', 'QC Inspection Work Center'],
-      ['QR-02', 'QC Hold / Quarantine Eligibility'],
-      ['QR-03', 'Damaged Inventory Triage'],
-      ['QR-04', 'Customer Return / RMA Workbench'],
-      ['QR-05', 'Recall Exposure & Control'],
-      ['QR-06', 'Scrap Approval & Inventory Posting'],
+      ['QR-01', 'Trung tâm công việc kiểm tra chất lượng'],
+      ['QR-02', 'Điều kiện giữ QC / Cách ly'],
+      ['QR-03', 'Phân loại xử lý tồn kho hư hỏng'],
+      ['QR-04', 'Bàn làm việc trả hàng khách / RMA'],
+      ['QR-05', 'Phạm vi ảnh hưởng & kiểm soát thu hồi'],
+      ['QR-06', 'Phê duyệt tiêu hủy & ghi sổ tồn kho'],
     ];
 
     for (const [capabilityId, title] of cases) {
@@ -232,7 +232,7 @@ describe('CapabilityPreview', () => {
       const panel = view.getByTestId('quality-capability-mock-' + capabilityId);
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
-      expect(panel.textContent).toContain('Không gọi API production');
+      expect(panel.textContent).toContain('Không gọi API hệ thống thật');
       expect(view.getAllByText('Chưa triển khai hệ thống thật').length).toBeGreaterThan(0);
       view.unmount();
     }
@@ -242,7 +242,7 @@ describe('CapabilityPreview', () => {
     const view = renderPreview('mobile', 'MO-04');
     expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
     expect(view.getByText('▣ Quét barcode / location / serial')).toBeTruthy();
-    expect(view.getByText('Xác nhận • Mock read-only')).toBeTruthy();
+    expect(view.getByText('Xác nhận • Mô phỏng chỉ đọc')).toBeTruthy();
     expect(view.getAllByText('FX-MO-04').length).toBeGreaterThan(0);
   });
 
@@ -292,7 +292,7 @@ describe('CapabilityPreview', () => {
 
   it('renders canonical governance metadata and specialized review-required screen content', () => {
     const picking = renderPreview('outbound', 'OUT-05');
-    expect(picking.getByText('Picking Workbench / Scan Flow')).toBeTruthy();
+    expect(picking.getByText('Bàn làm việc lấy hàng / Luồng quét')).toBeTruthy();
     expect(picking.getByText('Ma trận màn hình • Đã đóng truy vết')).toBeTruthy();
     expect(picking.getByText('Quản trị & mức hoàn thiện chức năng')).toBeTruthy();
     expect(picking.getAllByText('Đợt 2').length).toBeGreaterThan(0);
@@ -314,7 +314,7 @@ describe('CapabilityPreview', () => {
 
   it('shows domain-specific warehouse lifecycle instead of a spec-only card', () => {
     const view = renderPreview('warehouse-structure', 'WH-06');
-    expect(view.getAllByText(/Dock & Yard Control/).length).toBeGreaterThan(0);
+    expect(view.getAllByText(/Cổng, sân bãi & cửa kho/).length).toBeGreaterThan(0);
     expect(view.getAllByText('CHECKED_IN').length).toBeGreaterThan(0);
     expect(view.getByText('ASSIGN_DOCK')).toBeTruthy();
     fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
