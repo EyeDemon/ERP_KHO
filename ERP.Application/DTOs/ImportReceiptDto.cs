@@ -53,7 +53,12 @@ namespace ERP.Application.DTOs
         public decimal BaseExpectedQuantity { get; set; }
         public decimal BaseReceivedQuantity { get; set; }
         public decimal BaseAcceptedQuantity { get; set; }
+        public decimal BaseDamagedQuantity { get; set; }
+        public decimal BaseRejectedQuantity { get; set; }
         public decimal BasePostedQuantity { get; set; }
+        public string TrackingType { get; set; } = "None";
+        public bool ExpiryControl { get; set; }
+        public int? ShelfLifeDays { get; set; }
         public decimal ObservedQuantity { get; set; }
         public decimal DoorRejectedQuantity { get; set; }
         public decimal FinalReceivedQuantity { get; set; }
