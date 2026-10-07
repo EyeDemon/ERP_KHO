@@ -21,7 +21,7 @@ describe('ModuleBlueprint mock work center', () => {
     expect(view.getAllByText('ASN-2026-0812').length).toBeGreaterThan(0);
     expect(view.getByText('PUT-2026-3321')).toBeTruthy();
     expect(view.getByText('Goods Receipt Work Center')).toBeTruthy();
-    expect(view.getByText('WORK CENTER • MOCK DATA')).toBeTruthy();
+    expect(view.getByText('TRUNG TÂM CÔNG VIỆC • DỮ LIỆU MÔ PHỎNG')).toBeTruthy();
   });
 
   it('switches selected record detail without mutating the dataset', () => {
@@ -50,7 +50,7 @@ describe('ModuleBlueprint mock work center', () => {
 
   it('filters mock records by search, warehouse and status and can reset filters', () => {
     const view = renderModule('inbound');
-    const search = view.getByLabelText('Tìm trong work center');
+    const search = view.getByLabelText('Tìm trong trung tâm công việc');
     fireEvent.change(search, { target: { value: 'GR-2026-1045' } });
     expect(view.getAllByText('GR-2026-1045').length).toBeGreaterThan(0);
     expect(view.queryByText('ASN-2026-0812')).toBeNull();
@@ -81,6 +81,6 @@ describe('ModuleBlueprint mock work center', () => {
 
   it('shows a safe not-found state for an unknown module', () => {
     const view = renderModule('does-not-exist');
-    expect(view.getByText('Không tìm thấy module')).toBeTruthy();
+    expect(view.getByText('Không tìm thấy phân hệ')).toBeTruthy();
   });
 });
