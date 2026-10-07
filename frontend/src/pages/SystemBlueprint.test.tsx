@@ -21,8 +21,8 @@ describe('SystemBlueprint', () => {
   it('separates mock coverage from production maturity in the visible labels', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     expect(view.getByText('Chức năng có bản xem trước mô phỏng')).toBeTruthy();
-    expect(view.getAllByText('Có mock tương tác • production chưa triển khai').length).toBeGreaterThan(0);
-    expect(view.getAllByText('Có mock nâng cao • bật khi cần').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Có mô phỏng tương tác • hệ thống thật chưa triển khai').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Có mô phỏng nâng cao • bật khi cần').length).toBeGreaterThan(0);
   });
 
   it('filters capability cards by text and implementation status', () => {
@@ -42,7 +42,7 @@ describe('SystemBlueprint', () => {
   it('keeps real-system actions out of the Blueprint capability cards', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     expect(view.queryByText('Mở thật →')).toBeNull();
-    expect(view.getByText('Mở mock chuyên biệt →').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
+    expect(view.getByText('Mở mô phỏng chuyên biệt →').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
   });
 
   it('links every visible module to its mock work center preview', () => {
