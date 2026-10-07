@@ -19,6 +19,30 @@ public sealed class SqlServerInventoryStatusLotSerialTests
         Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!;
 
     [SqlServerFact]
+    public async Task CanonicalBucketUniqueness_BlocksDuplicateLogicalBucketWhenLotAndSerialAreNull()
+    {
+        var fixture = await CreateFixtureAsync(ProductTrackingType.None);
+        try
+        {
+            await using var db = CreateContext();
+            db.InventoryStocks.Add(new InventoryStock
+            {
+                ProductId = fixture.ProductId,
+                WarehouseId = fixture.WarehouseId,
+                LocationId = fixture.LocationId,
+                Status = InventoryStatus.Available,
+                LotId = null,
+                SerialId = null,
+                Quantity = 1
+            });
+
+            await FluentActions.Awaiting(() => db.SaveChangesAsync())
+                .Should().ThrowAsync<DbUpdateException>();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task StatusChange_PreservesPhysicalOnHand_AndWritesFromToLedger()
     {
         var fixture = await CreateFixtureAsync(ProductTrackingType.None);
