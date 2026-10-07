@@ -359,14 +359,14 @@ export default function Shipments(){
           </div>
         </fieldset>}
 
-        {selected.status==='Delivered'&&<fieldset>
+        {['Delivered','Completed'].includes(selected.status)&&<fieldset>
           <legend>Proof of Delivery</legend>
           {selected.proofOfDelivery&&<p>
             Đã giao cho <strong>{selected.proofOfDelivery.receiverName}</strong> lúc {new Date(selected.proofOfDelivery.deliveredAt).toLocaleString('vi-VN')}.
             {selected.proofOfDelivery.evidenceReference&&<> Evidence: {selected.proofOfDelivery.evidenceReference}.</>}
             {selected.proofOfDelivery.carrierReference&&<> Carrier ref: {selected.proofOfDelivery.carrierReference}.</>}
           </p>}
-          {canUpdate&&<button type="button" disabled={!!busy||!selected.proofOfDelivery} onClick={()=>void mutate(
+          {selected.status==='Delivered'&&canUpdate&&<button type="button" disabled={!!busy||!selected.proofOfDelivery} onClick={()=>void mutate(
             'shipment-complete-'+selected.id,'/api/shipments/'+selected.id+'/complete',
             {rowVersion:selected.rowVersion}
           )}>Hoàn tất Shipment</button>}
