@@ -34,21 +34,20 @@ The Inventory Control Blueprint includes domain-specific, read-only mock panels 
   - MOVE ledger and quantity preservation.
   - Production maturity: `foundation`.
 
-### Still planned in production
-
 - **INV-09 — Reversal**
-  - immutable original ledger transaction;
-  - reversal transaction;
-  - corrected transaction;
-  - correlation and reversibility guards.
-  - Production maturity: `planned`.
+  - immutable original ledger history;
+  - structured Original → Corrective → Reversal marker links;
+  - database-authoritative one-reversal-per-original guard;
+  - current production scope: Internal Move + Inventory Status Change;
+  - document/aggregate reversals, partial reversal and downstream-dependency policy remain incomplete.
+  - Production maturity: `foundation`.
 
 - **INV-10 — Traceability & Genealogy**
-  - backward and forward lot/serial trace;
-  - shipment exposure;
-  - return/recall branches;
-  - explicit incomplete-chain state.
-  - Production maturity: `planned`.
+  - current bucket + immutable ledger timeline;
+  - Product / Lot / Serial / Reference search under warehouse authorization;
+  - structured reversal-chain expansion from original/corrective/marker;
+  - full Receipt → QC → Move → Pick → Shipment / Return / Recall genealogy, Owner/HU and recall orchestration remain incomplete.
+  - Production maturity: `foundation`.
 
 ## Other production foundations
 
@@ -77,7 +76,7 @@ The specialized panels themselves are Blueprint-only:
 - they must not display fake successful production commands;
 - they must not promote capability maturity merely because a mock exists.
 
-INV-05, INV-06, INV-07 and INV-08 now have real production foundations elsewhere in the application. INV-09 and INV-10 remain planned until their production implementations are merged, deployed and QA-verified.
+INV-05 through INV-10 now have real production foundations elsewhere in the application. INV-09 and INV-10 remain deliberately non-live because their canonical aggregate/document reversal, full genealogy, return/recall, Owner/HU and related governance gaps are not complete.
 
 ## UI/UX
 
