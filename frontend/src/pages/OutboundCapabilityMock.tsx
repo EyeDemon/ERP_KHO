@@ -160,7 +160,7 @@ const StagingLoadingMock = () => {
 
 const DispatchMock = () => {
   const checks = [
-    { label: 'Lô giao hàng state', detail: 'LOADED', tone: 'success' as const, status: 'Đạt' },
+    { label: 'Trạng thái lô giao hàng', detail: 'LOADED', tone: 'success' as const, status: 'Đạt' },
     { label: 'HU đã xếp', detail: '8 / 8', tone: 'success' as const, status: 'Đạt' },
     { label: 'Phiên bản tồn kho', detail: 'v1842', tone: 'success' as const, status: 'Hiện hành' },
     { label: 'Khóa idempotency', detail: 'dispatch-SHP-5108-v3', tone: 'neutral' as const, status: 'Duy nhất' },
@@ -201,7 +201,7 @@ const BackorderMock = () => {
     { label: 'Đã đặt', value: 300, tone: 'neutral' as const },
     { label: 'Đã giữ', value: 220, tone: 'success' as const },
     { label: 'Đã phân bổ', value: 200, tone: 'success' as const },
-    { label: 'Picked', value: 180, tone: 'warning' as const },
+    { label: 'Đã lấy', value: 180, tone: 'warning' as const },
     { label: 'Đã giao', value: 160, tone: 'success' as const },
     { label: 'Đơn thiếu hàng', value: 80, tone: 'danger' as const },
   ];
@@ -246,7 +246,7 @@ const TrackingMock = () => {
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-10" aria-labelledby="outbound-out-10-title">
       <Header
         id="OUT-10"
-        title="Lô giao hàng Tracking / POD Timeline"
+        title="Dòng thời gian theo dõi giao hàng / POD"
         description="Mô phỏng theo dõi logistics sau khi xuất giao, POD và giao thất bại/thử lại mà không tạo thêm biến động tồn kho xuất."
         icon={<Route size={20} />}
       />
