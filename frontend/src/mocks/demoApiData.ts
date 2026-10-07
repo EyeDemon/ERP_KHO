@@ -246,7 +246,7 @@ export const demoInventoryBuckets = [
     warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', locationId: 1101, locationCode: 'A01-R02-L03-B04',
     status: 'QC_HOLD', isReservable: false, isAllocatable: false, isPickable: false, isShippable: false,
     lotId: 8102, lotNumber: 'LOT-ARABICA-QC', manufactureDate: '2026-10-01T00:00:00Z', expiryDate: '2027-10-01T00:00:00Z',
-    serialId: null, serialNumber: null, onHandQuantity: 40, reservedQuantity: 0, availableQuantity: 40, lastUpdated: '2026-10-07T08:11:00Z',
+    serialId: null, serialNumber: null, onHandQuantity: 40, reservedQuantity: 0, availableQuantity: 0, lastUpdated: '2026-10-07T08:11:00Z',
   },
   {
     inventoryStockId: 7003, productId: 3, productCode: 'SKU-2001', productName: 'Tai nghe Bluetooth TWS',
@@ -260,7 +260,7 @@ export const demoInventoryBuckets = [
     warehouseId: 1, warehouseName: 'DC Hồ Chí Minh', locationId: 1101, locationCode: 'A01-R02-L03-B04',
     status: 'QUARANTINE', isReservable: false, isAllocatable: false, isPickable: false, isShippable: false,
     lotId: 8103, lotNumber: 'LOT-TEA-Q-01', manufactureDate: '2026-08-01T00:00:00Z', expiryDate: '2027-08-01T00:00:00Z',
-    serialId: null, serialNumber: null, onHandQuantity: 20, reservedQuantity: 0, availableQuantity: 20, lastUpdated: '2026-10-07T08:13:00Z',
+    serialId: null, serialNumber: null, onHandQuantity: 20, reservedQuantity: 0, availableQuantity: 0, lastUpdated: '2026-10-07T08:13:00Z',
   },
 ];
 
