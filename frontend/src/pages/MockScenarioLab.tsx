@@ -69,7 +69,7 @@ const MockScenarioLab = () => {
 
             <section className="scenario-runner">
               <div>
-                <span>SHARED SCENARIO SESSION • CROSS-SCREEN</span>
+                <span>PHIÊN KỊCH BẢN DÙNG CHUNG • LIÊN MÀN HÌNH</span>
                 <strong>Step {executedSteps} / {selected.steps.length}</strong>
               </div>
               <div className="scenario-runner-actions">
@@ -122,7 +122,7 @@ const MockScenarioLab = () => {
                       <div key={item.warehouse + item.location + item.productCode}>
                         <small>{item.warehouse} • {item.location}</small>
                         <strong>{item.productCode}</strong>
-                        <span>OnHand {item.onHand} • Avail {item.available ?? '—'} • Transit {item.inTransit}</span>
+                        <span>Tồn thực tế {item.onHand} • Khả dụng {item.available ?? '—'} • Đang vận chuyển {item.inTransit}</span>
                       </div>
                     ))}
                   </div>
