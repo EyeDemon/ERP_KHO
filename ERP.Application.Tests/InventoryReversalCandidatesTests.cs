@@ -90,7 +90,7 @@ public sealed class InventoryReversalCandidatesTests
         last.Items[0].IsReversed.Should().BeTrue();
         var onlyReversed = await service.GetCandidatesAsync(null, 1, 20, null, true);
         onlyReversed.TotalRecords.Should().Be(2);
-        onlyReversed.Items.Select(x => x.Id).Should().BeEquivalentTo([1, 2]);
+        onlyReversed.Items.Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2 });
         var legacy = await service.GetCandidatesAsync(null, 1, 20, 2);
         legacy.Items.Should().ContainSingle().Which.IsReversed.Should().BeTrue();
         var crossWarehouse = await service.GetCandidatesAsync(null, 1, 20, 3);
