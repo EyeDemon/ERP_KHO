@@ -14,6 +14,7 @@ import {
   type MockOperationalRecord,
 } from '../mocks/erpWmsMockData';
 import { useMockDemo } from '../context/MockDemoContext';
+import { mockDisplayText, mockOwnerLabel, mockStatusLabel, mockTypeLabel } from '../utils/mockDisplayLabels';
 import './SystemBlueprint.css';
 import './ModuleBlueprint.css';
 
@@ -60,11 +61,14 @@ const ModuleBlueprint = () => {
         record.reference,
         record.id,
         record.type,
+        mockTypeLabel(record.type),
         record.subject,
+        mockDisplayText(record.subject),
         record.productCode,
         record.partnerCode,
         record.location,
         record.owner,
+        mockOwnerLabel(record.owner),
       ].filter(Boolean).join(' ').toLocaleLowerCase('vi').includes(q);
       const warehouseMatch = !warehouseFilter || record.warehouse === warehouseFilter;
       const statusMatch = !statusFilter || record.status === statusFilter;
@@ -161,7 +165,7 @@ const ModuleBlueprint = () => {
             </select>
             <select aria-label="Trạng thái" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <option value="">Tất cả trạng thái</option>
-              {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
+              {statuses.map((status) => <option key={status} value={status}>{mockStatusLabel(status)}</option>)}
             </select>
             <button type="button" onClick={() => { setSearch(''); setWarehouseFilter(''); setStatusFilter(''); }}>Xóa lọc</button>
           </div>
@@ -184,12 +188,12 @@ const ModuleBlueprint = () => {
                 {filteredRecords.map((record) => (
                   <tr key={record.id} className={selected?.id === record.id ? 'selected-row' : undefined}>
                     <td><strong>{record.reference}</strong><span>{record.id}</span></td>
-                    <td><strong>{record.type}</strong><span>{record.subject}</span></td>
+                    <td><strong>{mockTypeLabel(record.type)}</strong><span>{mockDisplayText(record.subject)}</span></td>
                     <td><strong>{record.warehouse}</strong><span>{record.location ?? '—'}</span></td>
                     <td>{qtyText(record)}</td>
-                    <td><strong>{record.owner}</strong><span>{localTime(record.updatedAt)}</span></td>
+                    <td><strong>{mockOwnerLabel(record.owner)}</strong><span>{localTime(record.updatedAt)}</span></td>
                     <td><span className={'priority-chip priority-' + record.priority.toLowerCase()}>{priorityLabel(record.priority)}</span></td>
-                    <td><span className={'mock-status tone-' + record.tone}>{record.status}</span></td>
+                    <td><span className={'mock-status tone-' + record.tone}>{mockStatusLabel(record.status)}</span></td>
                     <td><button type="button" className="table-detail-button" onClick={() => setSelectedId(record.id)}>Chi tiết</button></td>
                   </tr>
                 ))}
@@ -204,20 +208,20 @@ const ModuleBlueprint = () => {
             <div className="selected-record">
               <span className="workbench-kicker">BẢN GHI MÔ PHỎNG ĐANG CHỌN</span>
               <h3>{selected.reference}</h3>
-              <p>{selected.subject}</p>
+              <p>{mockDisplayText(selected.subject)}</p>
               <dl>
-                <div><dt>Loại</dt><dd>{selected.type}</dd></div>
-                <div><dt>Trạng thái</dt><dd><span className={'mock-status tone-' + selected.tone}>{selected.status}</span></dd></div>
+                <div><dt>Loại</dt><dd>{mockTypeLabel(selected.type)}</dd></div>
+                <div><dt>Trạng thái</dt><dd><span className={'mock-status tone-' + selected.tone}>{mockStatusLabel(selected.status)}</span></dd></div>
                 <div><dt>Kho</dt><dd>{selected.warehouse}</dd></div>
                 <div><dt>Vị trí</dt><dd>{selected.location ?? '—'}</dd></div>
                 <div><dt>Sản phẩm</dt><dd>{selected.productCode ?? '—'}</dd></div>
                 <div><dt>Đối tác</dt><dd>{selected.partnerCode ?? '—'}</dd></div>
                 <div><dt>Số lượng</dt><dd>{qtyText(selected)}</dd></div>
-                <div><dt>Người phụ trách</dt><dd>{selected.owner}</dd></div>
+                <div><dt>Người phụ trách</dt><dd>{mockOwnerLabel(selected.owner)}</dd></div>
                 <div><dt>Ưu tiên</dt><dd>{priorityLabel(selected.priority)}</dd></div>
                 <div><dt>Cập nhật</dt><dd>{localTime(selected.updatedAt)}</dd></div>
               </dl>
-              {selected.note ? <div className="selected-note">{selected.note}</div> : null}
+              {selected.note ? <div className="selected-note">{mockDisplayText(selected.note)}</div> : null}
             </div>
           )}
 
