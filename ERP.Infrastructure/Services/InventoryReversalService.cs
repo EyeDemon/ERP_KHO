@@ -34,7 +34,8 @@ public sealed class InventoryReversalService(
 
     public async Task<PagedResult<InventoryReversalCandidateDto>> GetCandidatesAsync(
         int? warehouseId = null, int page = 1, int pageSize = 20,
-        int? transactionId = null, CancellationToken cancellationToken = default)
+        int? transactionId = null, bool? isReversed = null,
+        CancellationToken cancellationToken = default)
     {
         if (transactionId.HasValue && transactionId.Value <= 0)
             throw new BusinessRuleException("ID giao dịch tìm kiếm không hợp lệ.");
@@ -57,6 +58,17 @@ public sealed class InventoryReversalService(
                 && (x.TransactionType == TransactionType.Move || x.TransactionType == TransactionType.StatusChange)
                 // A corrective leg already belongs to an immutable reversal chain.
                 && !context.InventoryTransactions.Any(marker => marker.CorrectiveTransactionId == x.Id));
+
+        // Filter on SQL, before counting and paging. Only the persisted reversal marker
+        // determines completion; this must not depend on the current frontend page.
+        if (isReversed.HasValue)
+        {
+            candidates = isReversed.Value
+                ? candidates.Where(x => context.InventoryTransactions.Any(marker =>
+                    marker.ReversalOfTransactionId == x.Id))
+                : candidates.Where(x => !context.InventoryTransactions.Any(marker =>
+                    marker.ReversalOfTransactionId == x.Id));
+        }
 
         var count = await candidates.CountAsync(cancellationToken);
         var items = await candidates.OrderByDescending(x => x.TransactionDate).ThenByDescending(x => x.Id)

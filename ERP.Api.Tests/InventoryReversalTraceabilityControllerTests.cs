@@ -21,12 +21,12 @@ public sealed class InventoryReversalTraceabilityControllerTests
             PageIndex = 3,
             PageSize = 10
         };
-        reversal.Setup(x => x.GetCandidatesAsync(2, 3, 10, 41, It.IsAny<CancellationToken>()))
+        reversal.Setup(x => x.GetCandidatesAsync(2, 3, 10, 41, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(page);
         var controller = new InventoryReversalTraceabilityController(
             reversal.Object, Mock.Of<IInventoryTraceabilityQueryService>());
 
-        var result = await controller.Candidates(2, 41, 3, 10);
+        var result = await controller.Candidates(2, 41, true, 3, 10);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(page, ok.Value);

@@ -73,6 +73,16 @@ public sealed class InventoryReversalCandidatesTests
         last.Items.Should().ContainSingle();
         last.Items[0].Id.Should().Be(1);
         last.Items[0].IsReversed.Should().BeTrue();
+        var onlyReversed = await service.GetCandidatesAsync(null, 1, 20, null, true);
+        onlyReversed.TotalRecords.Should().Be(1);
+        onlyReversed.Items.Should().ContainSingle().Which.Id.Should().Be(1);
+        var notReversed = await service.GetCandidatesAsync(null, 1, 20, null, false);
+        notReversed.TotalRecords.Should().Be(120);
+        notReversed.Items.Should().HaveCount(20);
+        notReversed.Items.Should().OnlyContain(x => !x.IsReversed && x.WarehouseId == 1);
+        var noLeak = await service.GetCandidatesAsync(null, 1, 20, 300, true);
+        noLeak.TotalRecords.Should().Be(0);
+        noLeak.Items.Should().BeEmpty();
         var located = await service.GetCandidatesAsync(null, 1, 20, 1);
         located.Items.Should().ContainSingle().Which.IsReversed.Should().BeTrue();
         var outsideScope = await service.GetCandidatesAsync(null, 1, 20, 300);

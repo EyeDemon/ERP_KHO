@@ -55,8 +55,8 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/reversals',{
       originalTransactionId:42,reason:'Đã kiểm tra theo chứng từ'
-    },{headers:{'Idempotency-Key':'key:inventory-reversal-42'}});
-    expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-reversal-42');
+    },{headers:{'Idempotency-Key':'key:inventory-reversal-42:Đã kiểm tra theo chứng từ'}});
+    expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-reversal-42:Đã kiểm tra theo chứng từ');
   });
 
   it('disables old reversed transaction even without the marker in this page',async()=>{
@@ -139,6 +139,45 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     fireEvent.change(filter,{target:{value:'2'}});
     await waitFor(()=>expect(apiClient.get)
       .toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=1&pageSize=20&warehouseId=2'));
+  });
+
+  it('filters persisted reversal state in SQL before paging',async()=>{
+    const view=render(<InventoryReversals/>);
+    await view.findByText('Di chuyển vị trí');
+    const select=view.getByLabelText('Lọc theo trạng thái đảo');
+    fireEvent.change(select,{target:{value:'pending'}});
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/reversal-candidates?page=1&pageSize=20&isReversed=false'
+    ));
+    fireEvent.change(select,{target:{value:'reversed'}});
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/reversal-candidates?page=1&pageSize=20&isReversed=true'
+    ));
+  });
+
+  it('changes the idempotency action when reason changes after a failed request',async()=>{
+    permissionState.granted.add('inventory_reversal.create');
+    vi.mocked(apiClient.post).mockRejectedValueOnce({
+      response:{status:409,data:{code:'INV_REVERSAL_INSUFFICIENT_STOCK',
+        message:'Không đủ tồn để đảo giao dịch.'}}
+    }).mockResolvedValueOnce({data:{reversalTransactionId:101}} as never);
+    const view=render(<InventoryReversals/>);
+    await view.findByText('Di chuyển vị trí');
+    fireEvent.click(view.getAllByText('Đảo giao dịch')[1]);
+    const input=view.getByLabelText('Lý do đảo giao dịch tồn kho');
+    fireEvent.change(input,{target:{value:'Lý do thứ nhất'}});
+    fireEvent.click(view.getByText('Xác nhận đảo giao dịch'));
+    await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
+    await view.findByRole('alert');
+    fireEvent.change(input,{target:{value:'Lý do đã sửa'}});
+    fireEvent.click(view.getByText('Xác nhận đảo giao dịch'));
+    await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(apiClient.post).mock.calls[0][2]?.headers).toEqual({
+      'Idempotency-Key':'key:inventory-reversal-41:Lý do thứ nhất'
+    });
+    expect(vi.mocked(apiClient.post).mock.calls[1][2]?.headers).toEqual({
+      'Idempotency-Key':'key:inventory-reversal-41:Lý do đã sửa'
+    });
   });
 
   it('looks up an old transaction by exact ID without revealing other records',async()=>{

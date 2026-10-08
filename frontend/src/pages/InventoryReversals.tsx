@@ -51,6 +51,7 @@ export default function InventoryReversals(){
   const [warehouses,setWarehouses]=useState<WarehouseOption[]>([]);
   const [transactionIdInput,setTransactionIdInput]=useState('');
   const [transactionId,setTransactionId]=useState<number|null>(null);
+  const [reversalState,setReversalState]=useState<'all'|'pending'|'reversed'>('all');
   const [warehouseError,setWarehouseError]=useState('');
   const [totalRecords,setTotalRecords]=useState(0);
   const [totalPages,setTotalPages]=useState(0);
@@ -77,7 +78,8 @@ export default function InventoryReversals(){
     try{
       const warehouseFilter=warehouseId===null?'':'&warehouseId='+warehouseId;
       const transactionFilter=transactionId===null?'':'&transactionId='+transactionId;
-      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+warehouseFilter+transactionFilter);
+      const reversalFilter=reversalState==='all'?'':'&isReversed='+(reversalState==='reversed');
+      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+warehouseFilter+transactionFilter+reversalFilter);
       if(sequence!==requestSequence.current)return;
       setRows(response.data.items);
       setTotalRecords(response.data.totalRecords);
@@ -86,13 +88,15 @@ export default function InventoryReversals(){
       if(sequence!==requestSequence.current)return;
       setRows([]);setTotalRecords(0);setTotalPages(0);setError(errorMessage(e));
     }finally{if(sequence===requestSequence.current)setLoading(false)}
-  },[warehouseId,transactionId]);
+  },[warehouseId,transactionId,reversalState]);
   useEffect(()=>{void load(page)},[load,page]);
 
   const submit=async(e:FormEvent)=>{
     e.preventDefault();
     if(!selected||selected.isReversed||!canReverse||guard.current||!reason.trim())return;
-    const key='inventory-reversal-'+selected.id;
+    // Bind retries to both the original transaction and its normalized reason.
+    // A changed reason is a different command and must not reuse its idempotency key.
+    const key='inventory-reversal-'+selected.id+':'+reason.trim();
     guard.current=true;setBusy(true);setError('');setSuccess('');
     try{
       await apiClient.post('/api/inventory/reversals',{
@@ -129,6 +133,17 @@ export default function InventoryReversals(){
             onChange={e=>{setSelected(null);setPage(1);setWarehouseId(e.target.value?Number(e.target.value):null)}}>
             <option value="">Tất cả kho được phân quyền</option>
             {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Trạng thái đảo">
+          <select aria-label="Lọc theo trạng thái đảo" value={reversalState}
+            onChange={e=>{
+              setSelected(null);setPage(1);
+              setReversalState(e.target.value as 'all'|'pending'|'reversed');
+            }}>
+            <option value="all">Tất cả</option>
+            <option value="pending">Chưa đảo</option>
+            <option value="reversed">Đã đảo</option>
           </select>
         </UiToolbarField>
         <form onSubmit={e=>{
