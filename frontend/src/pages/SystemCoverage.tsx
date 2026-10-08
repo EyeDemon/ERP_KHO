@@ -193,7 +193,7 @@ const SystemCoverage = () => {
           {platformStandards.map((item) => (
             <article key={item.spec}>
               <span>Đặc tả {item.spec} • {categoryLabel(item.category)}</span>
-              <strong>{item.title}</strong>
+              <strong>{item.displayTitle}</strong>
               <small>{representationLabel(item.representation)}</small>
               {item.mappedCapabilityIds?.length ? <p>Đã ánh xạ: {item.mappedCapabilityIds.join(', ')}</p> : null}
             </article>
