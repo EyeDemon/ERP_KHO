@@ -952,7 +952,10 @@ public sealed class SqlServerInventoryLockMoveTests
                     {
                         WarehouseId = fixture.WarehouseId,
                         Code = $"REFS{i:D4}{Guid.NewGuid():N}".Substring(0, 20),
-                        Name = $"Vị trí tham chiếu {i:D4}"
+                        Name = $"Vị trí tham chiếu {i:D4}",
+                        LocationType = WarehouseLocationType.Legacy,
+                        IsActive = true,
+                        CreatedBy = fixture.UserId
                     }).ToList();
                 seed.WarehouseLocations.AddRange(locations);
                 await seed.SaveChangesAsync();
