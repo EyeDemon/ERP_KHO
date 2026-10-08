@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Search } from 'lucide-react';
 import { useMockDemo } from '../context/MockDemoContext';
+import { mockDisplayText, mockStatusLabel, mockTypeLabel } from '../utils/mockDisplayLabels';
 import { searchMockSystem } from '../mocks/erpWmsMockSearch';
 import './MockGlobalSearch.css';
 
@@ -59,16 +60,16 @@ const MockGlobalSearch = () => {
 
         {results.map((result) => (
           <article key={result.id}>
-            <div className="global-search-kind">{result.kind}</div>
+            <div className="global-search-kind">{mockTypeLabel(result.kind)}</div>
             <div className="global-search-main">
               <strong>{result.reference}</strong>
-              <h3>{result.title}</h3>
-              <p>{result.detail}</p>
+              <h3>{mockDisplayText(result.title)}</h3>
+              <p>{mockDisplayText(result.detail)}</p>
             </div>
             <div className="global-search-meta">
               {result.exact && <span className="exact-badge">KHỚP CHÍNH XÁC</span>}
               {result.warehouse ? <span>{result.warehouse}</span> : null}
-              {result.status ? <span>{result.status}</span> : null}
+              {result.status ? <span>{mockStatusLabel(result.status)}</span> : null}
             </div>
           </article>
         ))}
