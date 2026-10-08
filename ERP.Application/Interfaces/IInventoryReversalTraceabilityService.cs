@@ -5,6 +5,9 @@ namespace ERP.Application.Interfaces;
 
 public interface IInventoryReversalService
 {
+    Task<IReadOnlyList<InventoryReversalReasonDto>> GetReversalReasonsAsync(
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<InventoryReversalWarehouseDto>> GetReversalWarehousesAsync(
         CancellationToken cancellationToken = default);
 

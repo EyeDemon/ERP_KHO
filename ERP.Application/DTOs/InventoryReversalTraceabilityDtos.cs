@@ -27,14 +27,24 @@ public sealed class InventoryReversalCandidateDto
 }
 
 
+public sealed class InventoryReversalReasonDto
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    // Null means allowed for both currently supported raw reversal sources.
+    public string? TransactionType { get; set; }
+}
+
 public sealed class CreateInventoryReversalDto
 {
     public int OriginalTransactionId { get; set; }
+    public string ReasonCode { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
 }
 
 public sealed class InventoryReversalResultDto
 {
+    public string ReasonCode { get; set; } = string.Empty;
     public int OriginalTransactionId { get; set; }
     public int CorrectiveTransactionId { get; set; }
     public int ReversalTransactionId { get; set; }
@@ -110,6 +120,7 @@ public sealed class InventoryTraceabilityEventDto
     public int CreatedBy { get; set; }
     public string CreatedByName { get; set; } = string.Empty;
     public string? Note { get; set; }
+    public string? ReasonCode { get; set; }
     public int? ReversalOfTransactionId { get; set; }
     public int? CorrectiveTransactionId { get; set; }
     public int? ReversalTransactionId { get; set; }

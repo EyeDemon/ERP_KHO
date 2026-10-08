@@ -3,6 +3,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Common;
 using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
+using ERP.Application.Inventory;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
@@ -19,6 +20,10 @@ public sealed class InventoryReversalService(
     IInventoryMovementService movementService,
     IInventoryStatusService statusService) : IInventoryReversalService
 {
+    public Task<IReadOnlyList<InventoryReversalReasonDto>> GetReversalReasonsAsync(
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(InventoryReversalReasonCatalog.All);
+
     public async Task<IReadOnlyList<InventoryReversalWarehouseDto>> GetReversalWarehousesAsync(
         CancellationToken cancellationToken = default)
     {
@@ -129,6 +134,9 @@ public sealed class InventoryReversalService(
             throw new BusinessRuleException("Lý do đảo giao dịch là bắt buộc.");
         if (request.Reason.Trim().Length > 400)
             throw new BusinessRuleException("Lý do đảo giao dịch không được quá 400 ký tự.");
+        var reasonCode = request.ReasonCode?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(reasonCode))
+            throw new BusinessRuleException("Mã lý do đảo giao dịch là bắt buộc.");
 
         var own = context.Database.CurrentTransaction is null;
         await using var tx = own
@@ -169,6 +177,9 @@ public sealed class InventoryReversalService(
                 throw Conflict(
                     "INV_REVERSAL_UNSUPPORTED",
                     "Phạm vi hiện tại chỉ hỗ trợ đảo giao dịch di chuyển vị trí nội bộ và đổi trạng thái tồn kho; giao dịch gắn với chứng từ phải được đảo tại quy trình nghiệp vụ chuyên biệt.");
+
+            if (!InventoryReversalReasonCatalog.IsAllowed(reasonCode, original.TransactionType))
+                throw new BusinessRuleException("Mã lý do đảo không hợp lệ với loại giao dịch gốc.");
 
             if (await context.InventoryTransactions.AsNoTracking().AnyAsync(
                     x => x.CorrectiveTransactionId == original.Id, cancellationToken))
@@ -220,7 +231,8 @@ public sealed class InventoryReversalService(
                 ReversalOfTransactionId = original.Id,
                 TransactionDate = DateTime.UtcNow,
                 CreatedBy = currentUser.UserId,
-                Note = reason
+                Note = reason,
+                ReasonCode = reasonCode
             };
             context.InventoryTransactions.Add(marker);
             await context.SaveChangesAsync(cancellationToken);
@@ -289,7 +301,7 @@ public sealed class InventoryReversalService(
                 WarehouseId = original.WarehouseId,
                 Timestamp = DateTime.UtcNow,
                 OldValues = $"OriginalTransactionId: {original.Id}; Type: {original.TransactionType}; Quantity: {original.Quantity}",
-                NewValues = $"ReversalTransactionId: {marker.Id}; CorrectiveTransactionId: {correctiveTransactionId}; ReversalType: {original.TransactionType}",
+                NewValues = $"ReversalTransactionId: {marker.Id}; CorrectiveTransactionId: {correctiveTransactionId}; ReversalType: {original.TransactionType}; ReasonCode: {reasonCode}",
                 Reason = reason,
                 Result = "Success",
                 Severity = "Warning"
@@ -300,6 +312,7 @@ public sealed class InventoryReversalService(
 
             return new InventoryReversalResultDto
             {
+                ReasonCode = reasonCode!,
                 OriginalTransactionId = original.Id,
                 CorrectiveTransactionId = correctiveTransactionId,
                 ReversalTransactionId = marker.Id,

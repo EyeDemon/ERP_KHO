@@ -234,6 +234,7 @@ public sealed class InventoryTraceabilityQueryService(
             CreatedBy = x.CreatedBy,
             CreatedByName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username,
             Note = x.Note,
+            ReasonCode = x.ReasonCode,
             ReversalOfTransactionId = x.ReversalOfTransactionId ??
                 (x.TransactionType == TransactionType.Reversal && x.ReferenceType == "InventoryReversal"
                     ? x.ReferenceId
