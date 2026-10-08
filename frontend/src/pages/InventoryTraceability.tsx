@@ -56,7 +56,7 @@ export default function InventoryTraceability(){
   const initialQuery = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
   const initialReferenceId = initialQuery.get('referenceId') ?? '';
   const linkedReversal = initialQuery.get('referenceType') === 'InventoryReversal'
-    && /^[1-9]\\d*$/.test(initialReferenceId) && Number.isSafeInteger(Number(initialReferenceId));
+    && /^[1-9]\d*$/.test(initialReferenceId) && Number.isSafeInteger(Number(initialReferenceId));
   const [form,setForm]=useState({
     warehouseId:'',productId:'',lotNumber:'',serialNumber:'',
     referenceType:linkedReversal?'InventoryReversal':'',
