@@ -176,7 +176,6 @@ const uiLabels: Record<string, string> = {
   'Support & Administrative Tooling': 'Công cụ hỗ trợ & quản trị',
   'Warehouse Location Hierarchy': 'Phân cấp vị trí kho',
   'Location': 'Vị trí',
-  'Capacity': 'Sức chứa',
   'Current usage': 'Mức sử dụng hiện tại',
   'Activity window': 'Khoảng thời gian hoạt động',
   'Exception layer': 'Lớp ngoại lệ',
