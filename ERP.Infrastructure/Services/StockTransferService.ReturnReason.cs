@@ -1,6 +1,6 @@
 using ERP.Application.DTOs;
 using ERP.Application.Inventory;
-using ERP.Domain.Exceptions;
+using ERP.Application.Exceptions;
 
 namespace ERP.Infrastructure.Services;
 
