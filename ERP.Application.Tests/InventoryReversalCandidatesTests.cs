@@ -3,7 +3,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Services;
-using ERP.Domain.Exceptions;
+using ERP.Application.Exceptions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
