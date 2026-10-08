@@ -265,7 +265,7 @@ export default function Asns(){
             {canUpdate&&selected.status==='Confirmed'&&<button disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/asns/'+selected.id+'/mark-in-transit','asn-transit:'+selected.id,'ASN đã chuyển sang trạng thái đang vận chuyển.')}>Đánh dấu đang vận chuyển</button>}
             {canReceive&&selected.status==='InTransit'&&<button disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/asns/'+selected.id+'/arrive','asn-arrive:'+selected.id,'Đã ghi nhận ASN đến kho.')}>Ghi nhận đến kho</button>}
             {canReceive&&selected.status==='Arrived'&&<button disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/asns/'+selected.id+'/start-receiving','asn-receiving:'+selected.id,'Đã bắt đầu tiếp nhận ASN.')}>Bắt đầu tiếp nhận</button>}
-            {canReceive&&selected.status==='Receiving'&&<button className="ui-primary-button" disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/asns/'+selected.id+'/complete','asn-complete:'+selected.id,'ASN đã hoàn tất. Tồn kho vẫn chưa thay đổi cho tới khi Receipt POST.')}>Hoàn tất ASN</button>}
+            {canReceive&&selected.status==='Receiving'&&<button className="ui-primary-button" disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/asns/'+selected.id+'/complete','asn-complete:'+selected.id,'ASN đã hoàn tất. Tồn kho vẫn chưa thay đổi cho tới khi ghi sổ phiếu nhập.')}>Hoàn tất ASN</button>}
             {canCancel&&['Draft','Confirmed'].includes(selected.status)&&<button disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/asns/'+selected.id+'/cancel','asn-cancel:'+selected.id,'ASN đã được hủy.')}>Hủy ASN</button>}
           </div>
           <UiTableScroll>
