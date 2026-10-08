@@ -27,6 +27,15 @@ const categoryLabel = (value: string) => ({
   'UX / Product': 'UX / Sản phẩm',
   'Security / Compliance': 'Bảo mật / Tuân thủ',
   'Operations / Governance': 'Vận hành / Quản trị',
+  'Foundation / Core Design': 'Nền tảng / Thiết kế cốt lõi',
+  'WMS Domain': 'Nghiệp vụ WMS',
+  'Platform Architecture': 'Kiến trúc nền tảng',
+  'Delivery / Operations / Finance': 'Bàn giao / Vận hành / Tài chính',
+  Integration: 'Tích hợp',
+  'Planning / Governance': 'Lập kế hoạch / Quản trị',
+  'Frontend / UX': 'Frontend / UX',
+  'Advanced WMS / Data': 'WMS nâng cao / Dữ liệu',
+  'Platform / Product Governance': 'Nền tảng / Quản trị sản phẩm',
 }[value] ?? value);
 
 const applicabilityLabels: Record<Applicability, string> = {
@@ -170,8 +179,8 @@ const SystemCoverage = () => {
                 {documentation.map((item) => (
                   <tr key={item.spec}>
                     <td>{item.spec}</td>
-                    <td>{item.title}</td>
-                    <td>{item.category}</td>
+                    <td>{item.displayTitle}</td>
+                    <td>{categoryLabel(item.category)}</td>
                     <td><span className={'doc-representation ' + (item.representation === 'Capability-linked' ? 'doc-linked' : 'doc-standard')}>{representationLabel(item.representation)}</span></td>
                     <td>{item.capabilityIds.length ? item.capabilityIds.join(', ') : '—'}</td>
                   </tr>
