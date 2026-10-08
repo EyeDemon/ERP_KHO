@@ -1,5 +1,5 @@
 using ERP.Application.Interfaces;
-using ERP.Domain.Exceptions;
+using ERP.Application.Exceptions;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Queries;
 using FluentAssertions;
