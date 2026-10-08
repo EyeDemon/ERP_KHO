@@ -637,6 +637,68 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
     [SqlServerFact]
+    public async Task CorrectiveLeg_CannotBeReversedAgainOrOfferedAsCandidate()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            int originalId;
+            await using (var firstMove = CreateContext())
+            {
+                var move = await CreateMovementService(firstMove, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 3,
+                    Reason = "Tạo giao dịch cần hiệu chỉnh"
+                });
+                originalId = move.TransactionId;
+            }
+
+            InventoryReversalResultDto reversed;
+            await using (var correction = CreateContext())
+                reversed = await CreateReversalService(correction, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = originalId,
+                    Reason = "Hiệu chỉnh chuyển vị trí"
+                });
+
+            await using (var inspect = CreateContext())
+            {
+                var candidates = await CreateReversalService(inspect, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20);
+                candidates.Items.Select(x => x.Id).Should().NotContain(reversed.CorrectiveTransactionId);
+                candidates.Items.Should().ContainSingle(x => x.Id == originalId)
+                    .Which.IsReversed.Should().BeTrue();
+            }
+
+            await using (var denied = CreateContext())
+            {
+                var action = () => CreateReversalService(denied, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = reversed.CorrectiveTransactionId,
+                    Reason = "Không được đảo độc lập nhánh hiệu chỉnh"
+                });
+                var thrown = await action.Should().ThrowAsync<BusinessRuleException>();
+                thrown.Which.Data["ErrorCode"].Should().Be("INV_REVERSAL_CORRECTIVE_NOT_ALLOWED");
+            }
+
+            await using var verified = CreateContext();
+            (await verified.InventoryTransactions.CountAsync(x =>
+                x.TransactionType == TransactionType.Reversal &&
+                x.ProductId == fixture.ProductId &&
+                x.WarehouseId == fixture.WarehouseId)).Should().Be(1);
+            var stocks = await verified.InventoryStocks.AsNoTracking()
+                .Where(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId)
+                .ToListAsync();
+            stocks.Sum(x => x.Quantity).Should().Be(10);
+            stocks.Single(x => x.LocationId == fixture.SourceLocationId)
+                .Quantity.Should().Be(10);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task ReversalCandidates_UseSqlServerAuthoritativeMarkerAfterCommittedReversal()
     {
         var fixture = await CreateFixtureAsync();

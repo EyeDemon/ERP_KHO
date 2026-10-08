@@ -37,7 +37,14 @@ public sealed class InventoryReversalCandidatesTests
         {
             Id = 200, ProductId = 1, WarehouseId = 1, CreatedBy = 1,
             TransactionType = TransactionType.Reversal,
-            ReversalOfTransactionId = 1, ReferenceId = 1, ReferenceType = "InventoryReversal", Quantity = 1
+            ReversalOfTransactionId = 1, CorrectiveTransactionId = 201,
+            ReferenceId = 1, ReferenceType = "InventoryReversal", Quantity = 1
+        });
+        context.InventoryTransactions.Add(new InventoryTransaction
+        {
+            Id = 201, ProductId = 1, WarehouseId = 1, CreatedBy = 1,
+            TransactionType = TransactionType.Move,
+            Quantity = 1, TransactionDate = start.AddMinutes(122)
         });
         context.InventoryTransactions.Add(new InventoryTransaction
         {
@@ -56,6 +63,9 @@ public sealed class InventoryReversalCandidatesTests
         first.Items.Should().HaveCount(20);
         first.Items.Should().OnlyContain(x => x.WarehouseId == 1);
         first.Items[0].Id.Should().Be(121);
+        first.Items.Select(x => x.Id).Should().NotContain(201);
+        (await service.GetCandidatesAsync(null, 1, 100))
+            .Items.Select(x => x.Id).Should().NotContain(201);
         var last = await service.GetCandidatesAsync(null, 7, 20);
         last.Items.Should().ContainSingle();
         last.Items[0].Id.Should().Be(1);

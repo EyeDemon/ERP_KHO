@@ -35,7 +35,9 @@ public sealed class InventoryReversalService(
         var candidates = context.InventoryTransactions.AsNoTracking()
             .Where(x => permittedWarehouseIds.Contains(x.WarehouseId)
                 && (!warehouseId.HasValue || x.WarehouseId == warehouseId.Value)
-                && (x.TransactionType == TransactionType.Move || x.TransactionType == TransactionType.StatusChange));
+                && (x.TransactionType == TransactionType.Move || x.TransactionType == TransactionType.StatusChange)
+                // A corrective leg already belongs to an immutable reversal chain.
+                && !context.InventoryTransactions.Any(marker => marker.CorrectiveTransactionId == x.Id));
 
         var count = await candidates.CountAsync(cancellationToken);
         var items = await candidates.OrderByDescending(x => x.TransactionDate).ThenByDescending(x => x.Id)
@@ -92,6 +94,12 @@ public sealed class InventoryReversalService(
                 throw Conflict(
                     "INV_REVERSAL_UNSUPPORTED",
                     "Phạm vi hiện tại chỉ hỗ trợ đảo giao dịch di chuyển vị trí nội bộ và đổi trạng thái tồn kho; giao dịch gắn với chứng từ phải được đảo tại quy trình nghiệp vụ chuyên biệt.");
+
+            if (await context.InventoryTransactions.AsNoTracking().AnyAsync(
+                    x => x.CorrectiveTransactionId == original.Id, cancellationToken))
+                throw Conflict(
+                    "INV_REVERSAL_CORRECTIVE_NOT_ALLOWED",
+                    "Giao dịch hiệu chỉnh thuộc một chuỗi đảo đã ghi sổ; không được đảo riêng lẻ. Hãy thực hiện quy trình hiệu chỉnh mới có kiểm soát.");
 
             var reason = request.Reason.Trim();
             int? fromLocationId = null;

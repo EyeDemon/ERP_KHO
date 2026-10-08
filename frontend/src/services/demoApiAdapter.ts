@@ -314,11 +314,13 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
 
     if (path === '/api/inventory/reversal-candidates') {
       const warehouseId = Number(params.get('warehouseId') ?? 0);
-      const reversedIds = new Set(demoInventoryTransactions
-        .filter(item => item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal')
-        .map(item => item.referenceId));
+      const reversalMarkers = demoInventoryTransactions
+        .filter(item => item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal');
+      const reversedIds = new Set(reversalMarkers.map(item => item.referenceId));
+      const correctionIds = new Set(reversalMarkers.map(item => item.correctiveTransactionId));
       const candidates = demoInventoryTransactions
         .filter(item => (item.transactionType === 'Move' || item.transactionType === 'StatusChange')
+          && !correctionIds.has(item.id)
           && (!warehouseId || item.warehouseId === warehouseId))
         .map(item => ({ ...item, isReversed: reversedIds.has(item.id) }))
         .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime() || b.id - a.id);
