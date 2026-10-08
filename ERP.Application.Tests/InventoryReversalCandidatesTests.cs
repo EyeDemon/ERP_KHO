@@ -155,6 +155,25 @@ public sealed class InventoryReversalCandidatesTests
     }
 
     [Fact]
+    public async Task OverlongReasonCode_IsRejectedBeforeDatabaseMutation()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var context = new ErpKhoDbContext(options);
+        var service = new InventoryReversalService(context, Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>(), Mock.Of<IInventoryMovementService>(),
+            Mock.Of<IInventoryStatusService>());
+        var act = () => service.ReverseAsync(new()
+        {
+            OriginalTransactionId = 1,
+            ReasonCode = new string('X', 41),
+            Reason = "Không cho phép mã quá dài"
+        });
+        await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("*40 ký tự*");
+        (await context.InventoryTransactions.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task ReversalReason_OverLimitIsRejectedBeforeDatabaseMutation()
     {
         var options = new DbContextOptionsBuilder<ErpKhoDbContext>()

@@ -137,6 +137,8 @@ public sealed class InventoryReversalService(
         var reasonCode = request.ReasonCode?.Trim().ToUpperInvariant();
         if (string.IsNullOrWhiteSpace(reasonCode))
             throw new BusinessRuleException("Mã lý do đảo giao dịch là bắt buộc.");
+        if (reasonCode.Length > 40)
+            throw new BusinessRuleException("Mã lý do đảo giao dịch không được quá 40 ký tự.");
 
         var own = context.Database.CurrentTransaction is null;
         await using var tx = own

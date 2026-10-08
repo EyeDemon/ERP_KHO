@@ -57,7 +57,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     fireEvent.click(view.getAllByText('Đảo giao dịch')[0]);
     const selector=view.getByLabelText('Mã lý do đảo giao dịch') as HTMLSelectElement;
     expect(selector.value).toBe('');
-    expect(view.getByRole('option',{name:/Sai trạng thái tồn kho/})).toBeTruthy();
+    expect(await view.findByRole('option',{name:/Sai trạng thái tồn kho/})).toBeTruthy();
     expect(view.queryByRole('option',{name:/Sai vị trí lưu kho/})).toBeNull();
     fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
       target:{value:'Đã kiểm tra'}
@@ -280,6 +280,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     let reversed=false;
     vi.mocked(apiClient.get).mockImplementation(async url=>{
       const path=String(url);
+      if(path.includes('reversal-reasons'))return {data:reasons} as never;
       if(path.includes('reversal-warehouses'))return {data:[]} as never;
       const second=path.includes('page=2');
       return {data:page(second

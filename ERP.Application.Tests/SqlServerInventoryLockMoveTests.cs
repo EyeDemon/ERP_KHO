@@ -1064,7 +1064,8 @@ public sealed class SqlServerInventoryLockMoveTests
             await using (var db = CreateContext())
                 reversed = await CreateReversalService(db, fixture.UserId).ReverseAsync(new()
                 {
-                    OriginalTransactionId = originalId, Reason = "recent reversal test"
+                    OriginalTransactionId = originalId, ReasonCode = "OPERATION_CORRECTION",
+                    Reason = "recent reversal test"
                 });
 
             await using var read = CreateContext();
