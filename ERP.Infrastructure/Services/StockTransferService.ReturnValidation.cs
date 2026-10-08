@@ -21,6 +21,11 @@ public sealed partial class StockTransferService
                 !originalOut.TryGetValue(line.ProductId, out var posted) ||
                 posted.Quantity != line.DispatchedQuantity))
             throw Conflict("Chứng từ xuất kho không khớp với sổ cái; không thể tự động hoàn trả.");
+        var originalIds = originalOut.Values.Select(x => x.Id).ToArray();
+        if (await context.InventoryTransactions.AsNoTracking().AnyAsync(x =>
+                x.ReversalOfTransactionId.HasValue &&
+                originalIds.Contains(x.ReversalOfTransactionId.Value), cancellationToken))
+            throw Conflict("Giao dịch xuất điều chuyển đã có liên kết đảo; không được hoàn trả lần nữa.");
         return originalOut;
     }
 }

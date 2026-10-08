@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { ArrowRight, Check, PackageCheck, Send, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
+import { usePermission } from '../services/authorization';
 import { UiBadge, UiTableScroll } from '../ui/ProductionUi';
 import './StockTransferReturnForm.css';
 
@@ -60,6 +62,9 @@ export default function StockTransferDetailsDialog({
   selected, status, statusNames, statusLabel, statusTone, canWrite, canReturn, canApprove, userId,
   actionInFlight, receive, setReceive, onClose, onAction, onReceive,
 }: Props) {
+  const canTrace = usePermission('inventory_traceability.read');
+  const inRouter = useInRouterContext();
+  const traceHref = '/inventory-traceability?referenceType=StockTransfer&referenceId=' + selected.id;
   const [returnReasons, setReturnReasons] = useState<Array<{ code: string; name: string }>>([]);
   const [returnCode, setReturnCode] = useState('');
   const [returnReason, setReturnReason] = useState('');
@@ -224,6 +229,12 @@ export default function StockTransferDetailsDialog({
                 <p role="status" className="transfer-return-result">
                   Đã hoàn trả về kho nguồn. {selected.returnReasonCode && <strong>Mã lý do: {selected.returnReasonCode}. </strong>}
                   {selected.returnReason}
+                </p>
+              )}
+              {status === 'Returned' && canTrace && (
+                <p className="transfer-return-result">
+                  {inRouter ? <Link to={traceHref} onClick={onClose}>Truy vết sổ cái hoàn trả</Link>
+                    : <a href={traceHref}>Truy vết sổ cái hoàn trả</a>}
                 </p>
               )}
               <div className="dialog-actions">

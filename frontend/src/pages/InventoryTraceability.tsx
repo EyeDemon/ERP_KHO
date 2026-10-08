@@ -64,12 +64,15 @@ export default function InventoryTraceability(){
   const location=useLocation();
   const initialQuery=new URLSearchParams(location.search);
   const initialReferenceId = initialQuery.get('referenceId') ?? '';
-  const linkedReversal = initialQuery.get('referenceType') === 'InventoryReversal'
+  const requestedReferenceType = initialQuery.get('referenceType');
+  const linkedReferenceType = requestedReferenceType === 'InventoryReversal' || requestedReferenceType === 'StockTransfer'
+    ? requestedReferenceType : null;
+  const linkedDocument = linkedReferenceType !== null
     && /^[1-9]\d*$/.test(initialReferenceId) && Number.isSafeInteger(Number(initialReferenceId));
   const [form,setForm]=useState({
     warehouseId:'',productId:'',lotNumber:'',serialNumber:'',
-    referenceType:linkedReversal?'InventoryReversal':'',
-    referenceId:linkedReversal?initialReferenceId:''
+    referenceType:linkedDocument?(linkedReferenceType??''):'',
+    referenceId:linkedDocument?initialReferenceId:''
   });
   const [result,setResult]=useState<Result|null>(null);
   const [loading,setLoading]=useState(false);
@@ -84,7 +87,7 @@ export default function InventoryTraceability(){
 
   useEffect(()=>{
     const sequence=++requestSequence.current;
-    if(!linkedReversal){
+    if(!linkedDocument){
       // A route transition back to an unfiltered trace view must not leave
       // the previous document or warehouse filters visible as current data.
       setForm({warehouseId:'',productId:'',lotNumber:'',serialNumber:'',referenceType:'',referenceId:''});
@@ -98,7 +101,7 @@ export default function InventoryTraceability(){
     let active=true;
     setForm({
       warehouseId:'',productId:'',lotNumber:'',serialNumber:'',
-      referenceType:'InventoryReversal',referenceId:initialReferenceId
+      referenceType:linkedReferenceType??'',referenceId:initialReferenceId
     });
     // Linked searches use the default 200-event window; keep the UI in sync.
     setEventLimit(200);
@@ -106,7 +109,7 @@ export default function InventoryTraceability(){
     setRequestError('');
     setResult(null);
     const params=new URLSearchParams({
-      referenceType:'InventoryReversal',referenceId:initialReferenceId,limit:'200'
+      referenceType:linkedReferenceType??'',referenceId:initialReferenceId,limit:'200'
     });
     setLoading(true);
     void apiClient.get<Result>('/api/inventory/traceability?'+params.toString())
@@ -114,7 +117,7 @@ export default function InventoryTraceability(){
       .catch(e=>{if(active&&sequence===requestSequence.current)setRequestError(errorMessage(e))})
       .finally(()=>{if(active&&sequence===requestSequence.current)setLoading(false)});
     return ()=>{active=false};
-  },[linkedReversal,initialReferenceId]);
+  },[linkedDocument,linkedReferenceType,initialReferenceId]);
 
   const referencePairInvalid=Boolean(
     (form.referenceType.trim()&&!form.referenceId)||(!form.referenceType.trim()&&form.referenceId)

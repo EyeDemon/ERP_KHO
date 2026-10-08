@@ -75,7 +75,7 @@ public sealed class InventoryTraceabilityQueryService(
         {
             reversalMarkers = await ProjectEvents(context.InventoryTransactions.AsNoTracking()
                     .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) &&
-                                x.TransactionType == TransactionType.Reversal &&
+                                (x.TransactionType == TransactionType.Reversal || x.ReversalOfTransactionId.HasValue) &&
                                 (seedIds.Contains(x.Id) ||
                                  (x.ReversalOfTransactionId.HasValue && seedIds.Contains(x.ReversalOfTransactionId.Value)) ||
                                  (x.CorrectiveTransactionId.HasValue && seedIds.Contains(x.CorrectiveTransactionId.Value)) ||
