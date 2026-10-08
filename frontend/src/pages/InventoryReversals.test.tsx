@@ -70,9 +70,9 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       return {data:page(second?[{...move,id:21}]:[move],second?2:1,130)} as never;
     });
     const view=render(<InventoryReversals/>);
-    await view.findByText('1 / 7');
+    await view.findByText(/Trang 1 \/ 7/);
     fireEvent.click(view.getByText('Trang sau'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=2&pageSize=20'));
-    expect(await view.findByText('2 / 7')).toBeTruthy();
+    expect(await view.findByText(/Trang 2 \/ 7/)).toBeTruthy();
   });
 });
