@@ -1005,6 +1005,13 @@ public sealed class SqlServerInventoryLockMoveTests
             trace.CurrentBuckets.Should().OnlyContain(x =>
                 x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId &&
                 x.LotId == fixture.LotId);
+            trace.BucketsTruncated.Should().BeFalse();
+
+            // Product-only browsing includes all 501 seeded locations. It must
+            // warn that more stock buckets exist beyond the 500-row response cap.
+            var allBuckets = await query.TraceAsync(productId: fixture.ProductId, limit: 20);
+            allBuckets.CurrentBuckets.Should().HaveCount(500);
+            allBuckets.BucketsTruncated.Should().BeTrue();
         }
         finally { await CleanupAsync(fixture); }
     }
@@ -1056,6 +1063,7 @@ public sealed class SqlServerInventoryLockMoveTests
             };
             var recent = await query.TraceAsync(productId: fixture.ProductId, limit: 20);
             recent.Events.Should().HaveCount(20);
+            recent.EventsTruncated.Should().BeTrue();
             recent.Events.Select(x => x.TransactionId).Should().Contain(expected);
             recent.Events.Select(x => x.TransactionDate).Should().BeInAscendingOrder();
 

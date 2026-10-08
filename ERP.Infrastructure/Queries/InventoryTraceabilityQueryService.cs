@@ -49,11 +49,15 @@ public sealed class InventoryTraceabilityQueryService(
         if (hasReference)
             eventQuery = eventQuery.Where(x => x.ReferenceType == refType && x.ReferenceId == referenceId);
 
-        var events = await ProjectEvents(eventQuery)
+        // Read one extra event so the operator can distinguish a complete
+        // history from a capped window without running a full COUNT query.
+        var eventWindow = await ProjectEvents(eventQuery)
             .OrderByDescending(x => x.TransactionDate)
             .ThenByDescending(x => x.TransactionId)
-            .Take(limit)
+            .Take(limit + 1)
             .ToListAsync(cancellationToken);
+        var eventsTruncated = eventWindow.Count > limit;
+        var events = eventWindow.Take(limit).ToList();
 
         var seedIds = events.Select(x => x.TransactionId).ToArray();
         var reversalMarkers = new List<InventoryTraceabilityEventDto>();
@@ -134,7 +138,10 @@ public sealed class InventoryTraceabilityQueryService(
         {
             var eventIds = events.Select(x => x.TransactionId).ToArray();
             if (eventIds.Length == 0)
-                return new InventoryTraceabilityResultDto { Events = events };
+                return new InventoryTraceabilityResultDto
+                {
+                    Events = events, EventsTruncated = eventsTruncated
+                };
 
             // A reference trace must resolve exact stock identities BEFORE the
             // 500-row response cap. Capping product-wide buckets first can hide
@@ -152,7 +159,8 @@ public sealed class InventoryTraceabilityQueryService(
             .OrderBy(x => x.Product.Code)
             .ThenBy(x => x.WarehouseId)
             .ThenBy(x => x.LocationId)
-            .Take(500)
+            // Include one sentinel bucket for accurate truncation feedback.
+            .Take(501)
             .Select(x => new InventoryTraceabilityBucketDto
             {
                 InventoryStockId = x.Id,
@@ -174,10 +182,15 @@ public sealed class InventoryTraceabilityQueryService(
             })
             .ToListAsync(cancellationToken);
 
+        var bucketsTruncated = buckets.Count > 500;
+        if (bucketsTruncated) buckets = buckets.Take(500).ToList();
+
         return new InventoryTraceabilityResultDto
         {
             CurrentBuckets = buckets,
-            Events = events
+            Events = events,
+            EventsTruncated = eventsTruncated,
+            BucketsTruncated = bucketsTruncated
         };
     }
 

@@ -16,7 +16,12 @@ type Event={
   transactionDate:string;createdBy:number;createdByName:string;note?:string|null;reversalOfTransactionId?:number|null;
   correctiveTransactionId?:number|null;reversalTransactionId?:number|null;isReversed:boolean;
 };
-type Result={currentBuckets:Bucket[];events:Event[]};
+type Result={
+  currentBuckets:Bucket[];
+  events:Event[];
+  eventsTruncated?:boolean;
+  bucketsTruncated?:boolean;
+};
 
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string}}})?.response;
@@ -209,6 +214,9 @@ export default function InventoryTraceability(){
 
     {result&&<div className="ui-stack">
       <UiCard title="Nhóm tồn kho hiện tại">
+        {result.bucketsTruncated&&<p role="status" className="ui-muted-text">
+          Chỉ hiển thị 500 nhóm tồn đầu tiên. Vẫn còn dữ liệu khác; hãy lọc theo kho, sản phẩm, lô hoặc sê-ri.
+        </p>}
         <UiTableScroll><table aria-label="Nhóm tồn kho hiện tại phục vụ truy vết">
           <thead><tr><th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Sê-ri</th><th>Tồn thực tế</th><th>Đã giữ</th></tr></thead>
           <tbody>{result.currentBuckets.length===0?<tr><td colSpan={6} className="ui-empty-cell">Không còn nhóm tồn kho hiện tại khớp điều kiện.</td></tr>:
@@ -225,6 +233,9 @@ export default function InventoryTraceability(){
 
       <UiCard title="Dòng thời gian sổ cái bất biến">
         <p className="ui-muted-text">Sự kiện đảo giao dịch là dấu mốc hiệu chỉnh, không xóa giao dịch gốc. Giao dịch gốc đã đảo được đánh dấu riêng.</p>
+        {result.eventsTruncated&&<p role="status" className="ui-muted-text">
+          Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; hãy thu hẹp điều kiện tìm kiếm.
+        </p>}
         <UiTableScroll><table aria-label="Dòng thời gian sổ cái phục vụ truy vết">
           <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Sản phẩm</th><th>Vị trí / Trạng thái</th><th>Lô / Sê-ri</th><th>Số lượng</th><th>Tham chiếu</th><th>Chuỗi đảo giao dịch</th><th>Người thực hiện / Ghi chú</th></tr></thead>
           <tbody>{result.events.length===0?<tr><td colSpan={9} className="ui-empty-cell">Không có sự kiện sổ cái khớp điều kiện.</td></tr>:

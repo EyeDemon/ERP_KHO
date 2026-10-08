@@ -183,6 +183,17 @@ describe('InventoryTraceability',()=>{
     expect(view.getByRole('status').textContent).toContain('Đã tải 1 nhóm tồn kho hiện tại và 2 sự kiện sổ cái');
   });
 
+  it('warns when SQL limits event history and current inventory buckets',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result, eventsTruncated:true, bucketsTruncated:true
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    expect(await view.findByText(/Chỉ hiển thị 500 nhóm tồn đầu tiên/)).toBeTruthy();
+    expect(view.getByText(/Lịch sử còn dữ liệu cũ hơn/)).toBeTruthy();
+  });
+
   it('surfaces request errors with a recovery path',async()=>{
     vi.mocked(apiClient.get).mockRejectedValue({response:{status:500,data:{message:'Máy chủ bận.'}}});
     const view=renderTrace();

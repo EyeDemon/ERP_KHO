@@ -54,6 +54,10 @@ public sealed class InventoryTraceabilityResultDto
 {
     public IReadOnlyList<InventoryTraceabilityBucketDto> CurrentBuckets { get; set; } = [];
     public IReadOnlyList<InventoryTraceabilityEventDto> Events { get; set; } = [];
+    // These flags describe whether the initial chronological event window or
+    // matching current-stock window was capped; reversal chain closure is retained.
+    public bool EventsTruncated { get; set; }
+    public bool BucketsTruncated { get; set; }
 }
 
 public sealed class InventoryTraceabilityBucketDto
