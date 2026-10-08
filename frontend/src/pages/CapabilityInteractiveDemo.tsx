@@ -50,7 +50,7 @@ const CapabilityInteractiveDemo = ({
     if (exceptionOpen || finalStage) return;
     const nextIndex = Math.min(stageIndex + 1, definition.stages.length - 1);
     setStageIndex(nextIndex);
-    pushActivity('State → ' + definition.stages[nextIndex]);
+    pushActivity('Trạng thái → ' + definition.stages[nextIndex]);
   };
 
   const reset = () => {
@@ -62,12 +62,12 @@ const CapabilityInteractiveDemo = ({
 
   const raiseException = () => {
     setExceptionOpen(true);
-    pushActivity('Exception → ' + definition.exceptionTitle);
+    pushActivity('Ngoại lệ → ' + definition.exceptionTitle);
   };
 
   const resolveException = () => {
     setExceptionOpen(false);
-    pushActivity('Exception resolved • quay lại execution flow.');
+    pushActivity('Đã xử lý ngoại lệ • quay lại luồng thực thi.');
   };
 
   return (
@@ -106,7 +106,7 @@ const CapabilityInteractiveDemo = ({
               onClick={() => {
                 setStageIndex(index);
                 setExceptionOpen(false);
-                pushActivity('Jump state → ' + item);
+                pushActivity('Chuyển nhanh trạng thái → ' + item);
               }}
             >
               <span>{index + 1}</span>
@@ -162,9 +162,9 @@ const CapabilityInteractiveDemo = ({
             </div>
           ) : (
             <div className="interactive-state-card">
-              <span>Current mock state</span>
+              <span>Trạng thái mô phỏng hiện tại</span>
               <strong>{stage}</strong>
-              <p>{finalStage ? 'Luồng minh họa đã tới trạng thái cuối.' : 'Có thể thực hiện command, tạo exception hoặc chuyển bước tiếp theo.'}</p>
+              <p>{finalStage ? 'Luồng minh họa đã tới trạng thái cuối.' : 'Có thể thực hiện lệnh, tạo ngoại lệ hoặc chuyển bước tiếp theo.'}</p>
             </div>
           )}
 
