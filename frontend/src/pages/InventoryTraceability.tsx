@@ -73,8 +73,11 @@ export default function InventoryTraceability(){
   const productIdRef=useRef<HTMLInputElement>(null);
   const referenceTypeRef=useRef<HTMLInputElement>(null);
   const referenceIdRef=useRef<HTMLInputElement>(null);
+  // One generation counter guards both automatic deep links and manual searches.
+  const requestSequence=useRef(0);
 
   useEffect(()=>{
+    const sequence=++requestSequence.current;
     if(!linkedReversal){
       // A route transition back to an unfiltered trace view must not leave
       // the previous document or warehouse filters visible as current data.
@@ -98,9 +101,9 @@ export default function InventoryTraceability(){
     });
     setLoading(true);
     void apiClient.get<Result>('/api/inventory/traceability?'+params.toString())
-      .then(response=>{if(active)setResult(response.data)})
-      .catch(e=>{if(active)setRequestError(errorMessage(e))})
-      .finally(()=>{if(active)setLoading(false)});
+      .then(response=>{if(active&&sequence===requestSequence.current)setResult(response.data)})
+      .catch(e=>{if(active&&sequence===requestSequence.current)setRequestError(errorMessage(e))})
+      .finally(()=>{if(active&&sequence===requestSequence.current)setLoading(false)});
     return ()=>{active=false};
   },[linkedReversal,initialReferenceId]);
 
@@ -131,6 +134,7 @@ export default function InventoryTraceability(){
     }
     setResult(null);
     setLoading(true);
+    const sequence=++requestSequence.current;
     try{
       const params=new URLSearchParams();
       if(form.warehouseId)params.set('warehouseId',form.warehouseId);
@@ -140,9 +144,11 @@ export default function InventoryTraceability(){
       if(form.referenceType.trim())params.set('referenceType',form.referenceType.trim());
       if(form.referenceId)params.set('referenceId',form.referenceId);
       params.set('limit','200');
-      setResult((await apiClient.get('/api/inventory/traceability?'+params.toString())).data);
-    }catch(e){setResult(null);setRequestError(errorMessage(e))}
-    finally{setLoading(false)}
+      const response=await apiClient.get<Result>('/api/inventory/traceability?'+params.toString());
+      if(sequence===requestSequence.current)setResult(response.data);
+    }catch(e){
+      if(sequence===requestSequence.current){setResult(null);setRequestError(errorMessage(e))}
+    }finally{if(sequence===requestSequence.current)setLoading(false)}
   };
 
   const referencePairErrorActive=Boolean(validationError&&referencePairInvalid);

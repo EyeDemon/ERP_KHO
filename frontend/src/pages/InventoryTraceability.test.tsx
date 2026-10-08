@@ -93,6 +93,32 @@ describe('InventoryTraceability',()=>{
     });
   });
 
+  it('does not let a pending manual search overwrite a newer reversal deep link',async()=>{
+    let resolveManual:(value:unknown)=>void=()=>{};
+    const manual=new Promise(resolve=>{resolveManual=resolve});
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('productId=10'))return await manual as never;
+      return {data:{...result,events:[{...result.events[0],transactionId:84,referenceId:84}]}} as never;
+    });
+    const view=render(
+      <MemoryRouter initialEntries={['/inventory-traceability']}>
+        <Link to="/inventory-traceability?referenceType=InventoryReversal&referenceId=84">Mở chuỗi mới</Link>
+        <Routes><Route path="/inventory-traceability" element={<InventoryTraceability/>}/></Routes>
+      </MemoryRouter>
+    );
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&limit=200'
+    ));
+    fireEvent.click(view.getByText('Mở chuỗi mới'));
+    expect(await view.findByText('#84 • đã đảo')).toBeTruthy();
+    await act(async()=>{resolveManual({data:result});});
+    expect(view.queryByText('#41 • đã đảo')).toBeNull();
+    expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');
+    expect(view.getByRole('status').textContent).toContain('Đã tải');
+  });
+
   it('renders legacy uppercase or underscored inventory status in Vietnamese',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:{
       currentBuckets:[{...result.currentBuckets[0],inventoryStatus:'RECALL_BLOCKED'}],
