@@ -36,7 +36,7 @@ describe('Inventory shared production UI', () => {
         } as never;
       }
       if (value === '/api/inventory/statuses') {
-        return { data: [{ code: 'AVAILABLE', name: 'Available', isAvailable: true, isReservable: true, isAllocatable: true, isPickable: true, isShippable: true }] } as never;
+        return { data: [{ code: 'AVAILABLE', name: 'Khả dụng', isAvailable: true, isReservable: true, isAllocatable: true, isPickable: true, isShippable: true }] } as never;
       }
       if (value.startsWith('/api/inventory/buckets?')) {
         return { data: [{
@@ -121,8 +121,8 @@ describe('Inventory shared production UI', () => {
     expect(view.getByRole('tab', { name: 'Tồn kho hiện tại' }).getAttribute('aria-selected')).toBe('true');
     expect(view.getByRole('button', { name: 'Xuất Excel Tồn Kho' })).toBeTruthy();
 
-    fireEvent.click(view.getByRole('tab', { name: 'Bucket / Lot / Serial' }));
-    expect(await view.findByRole('table', { name: 'Inventory bucket' })).toBeTruthy();
+    fireEvent.click(view.getByRole('tab', { name: 'Nhóm tồn / Lô / Sê-ri' }));
+    expect(await view.findByRole('table', { name: 'Nhóm tồn kho' })).toBeTruthy();
     expect(await view.findByText('LOT-PROD-10')).toBeTruthy();
 
     fireEvent.click(view.getByRole('tab', { name: 'Lịch sử giao dịch' }));

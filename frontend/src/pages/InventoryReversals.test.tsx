@@ -31,24 +31,24 @@ describe('InventoryReversals',()=>{
 
   it('shows supported transactions read-only without reversal permission',async()=>{
     const view=render(<InventoryReversals/>);
-    expect(await view.findByText('StatusChange')).toBeTruthy();
-    expect(view.getByText('Move')).toBeTruthy();
-    expect(view.queryByText('Reversal')).toBeNull();
+    expect(await view.findByText('Đổi trạng thái')).toBeTruthy();
+    expect(view.getByText('Di chuyển vị trí')).toBeTruthy();
+    expect(view.queryByText('Đảo giao dịch')).toBeNull();
   });
 
   it('posts reversal once with idempotency key',async()=>{
     permissionState.granted.add('inventory_reversal.create');
     vi.mocked(apiClient.post).mockResolvedValue({data:{reversalTransactionId:99}} as never);
     const view=render(<InventoryReversals/>);
-    await view.findByText('StatusChange');
-    const buttons=view.getAllByText('Reversal');
+    await view.findByText('Đổi trạng thái');
+    const buttons=view.getAllByText('Đảo giao dịch');
     fireEvent.click(buttons[0]);
-    fireEvent.change(view.getByLabelText('Lý do inventory reversal'),{target:{value:'Operator correction'}});
-    const submit=view.getByText('Xác nhận Reversal');
+    fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{target:{value:'Hiệu chỉnh theo xác nhận của người vận hành'}});
+    const submit=view.getByText('Xác nhận đảo giao dịch');
     fireEvent.click(submit);fireEvent.click(submit);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/reversals',{
-      originalTransactionId:42,reason:'Operator correction'
+      originalTransactionId:42,reason:'Hiệu chỉnh theo xác nhận của người vận hành'
     },{headers:{'Idempotency-Key':'key:inventory-reversal-42'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-reversal-42');
   });
@@ -63,7 +63,7 @@ describe('InventoryReversals',()=>{
       return {data:{items:[]}} as never;
     });
     const view=render(<InventoryReversals/>);
-    expect(await view.findByText('Đã reversal')).toBeTruthy();
-    expect((view.getByText('Reversal') as HTMLButtonElement).disabled).toBe(true);
+    expect(await view.findByText('Đã đảo')).toBeTruthy();
+    expect((view.getByText('Đảo giao dịch') as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -36,74 +36,74 @@ const getOptionalCapabilityDemo = (
   moduleName: string,
 ): CapabilityDemoDefinition => {
   const commonFields: CapabilityDemoField[] = [
-    { label: 'Capability', value: capability.id },
-    { label: 'Module', value: moduleName },
-    { label: 'Applicability', value: 'Optional / feature-enabled' },
-    { label: 'Spec', value: capability.spec },
+    { label: 'Chức năng', value: capability.id },
+    { label: 'Phân hệ', value: moduleName },
+    { label: 'Phạm vi áp dụng', value: 'Tùy chọn / bật theo chức năng' },
+    { label: 'Đặc tả', value: capability.spec },
   ];
 
   if (capability.id === 'OUT-04') {
     return {
-      title: 'Wave / Batch / Cluster Planning',
+      title: 'Lập kế hoạch đợt / lô / cụm',
       subtitle: capability.goal,
       mode: 'workbench',
-      stages: ['Order pool', 'Grouping', 'Release wave', 'Pick execution'],
-      fields: [...commonFields, { label: 'Candidate orders', value: '84' }, { label: 'Suggested waves', value: '4' }],
+      stages: ['Nhóm đơn hàng', 'Gom nhóm', 'Phát hành đợt', 'Thực hiện lấy hàng'],
+      fields: [...commonFields, { label: 'Đơn hàng ứng viên', value: '84' }, { label: 'Đợt đề xuất', value: '4' }],
       commands: ['BUILD_WAVE', 'REBALANCE_WAVE', 'RELEASE_WAVE'],
       exceptionTitle: 'WAVE_CAPACITY_CONFLICT',
-      exceptionDetail: 'Wave vượt labor/equipment/location capacity hoặc chứa order không còn eligible.',
+      exceptionDetail: 'Đợt vượt năng lực nhân lực/thiết bị/vị trí hoặc chứa đơn hàng không còn đủ điều kiện.',
     };
   }
 
   if (capability.id === 'HU-04') {
     return {
-      title: 'SSCC / Logistics Label Lab',
+      title: 'Phòng thử nghiệm nhãn SSCC / logistics',
       subtitle: capability.goal,
       mode: 'workbench',
-      stages: ['Generate SSCC', 'Preview label', 'Print', 'Verify scan'],
+      stages: ['Tạo SSCC', 'Xem trước nhãn', 'In nhãn', 'Xác minh quét'],
       fields: [...commonFields, { label: 'SSCC', value: '089385001234567890' }, { label: 'HU', value: 'PLT-2026-00418' }],
       commands: ['GENERATE_SSCC', 'PRINT_LOGISTICS_LABEL', 'VERIFY_SSCC'],
       exceptionTitle: 'SSCC_DUPLICATE',
-      exceptionDetail: 'Logistics identifier phải unique và không được tái sử dụng cho HU khác.',
+      exceptionDetail: 'Định danh logistics phải duy nhất và không được tái sử dụng cho HU khác.',
     };
   }
 
   if (capability.id === 'DY-03') {
     return {
-      title: 'Yard Management Board',
+      title: 'Bảng điều hành sân bãi',
       subtitle: capability.goal,
       mode: 'control',
-      stages: ['Gate arrival', 'Yard position', 'Dock queue', 'Exit'],
-      fields: [...commonFields, { label: 'Vehicles in yard', value: '12' }, { label: 'Waiting > 45m', value: '3' }],
+      stages: ['Đến cổng', 'Vị trí sân bãi', 'Hàng đợi cửa kho', 'Rời khỏi kho'],
+      fields: [...commonFields, { label: 'Phương tiện trong sân', value: '12' }, { label: 'Chờ > 45 phút', value: '3' }],
       commands: ['ASSIGN_YARD_POSITION', 'MOVE_TO_DOCK_QUEUE', 'CHECK_OUT_VEHICLE'],
       exceptionTitle: 'YARD_POSITION_OCCUPIED',
-      exceptionDetail: 'Trailer/vehicle không thể được gán vào yard position đang bị giữ.',
+      exceptionDetail: 'Rơ-moóc/phương tiện không thể được gán vào vị trí sân bãi đang bị giữ.',
     };
   }
 
   if (capability.id === 'DY-04') {
     return {
-      title: 'Cross-Docking Match Board',
+      title: 'Bảng ghép nối chuyển thẳng',
       subtitle: capability.goal,
       mode: 'workbench',
-      stages: ['Inbound eligible', 'Match outbound demand', 'Stage cross-dock', 'Load outbound'],
-      fields: [...commonFields, { label: 'Inbound HU', value: 'PLT-IN-0441' }, { label: 'Matched shipment', value: 'SHP-2026-5108' }],
+      stages: ['Hàng nhập đủ điều kiện', 'Ghép nhu cầu xuất', 'Đưa vào khu chuyển thẳng', 'Xếp hàng xuất'],
+      fields: [...commonFields, { label: 'HU hàng nhập', value: 'PLT-IN-0441' }, { label: 'Lô giao hàng đã ghép', value: 'SHP-2026-5108' }],
       commands: ['MATCH_CROSS_DOCK', 'STAGE_CROSS_DOCK', 'RELEASE_TO_LOAD'],
       exceptionTitle: 'CROSS_DOCK_MATCH_INVALID',
-      exceptionDetail: 'Product/lot/status/quantity hoặc outbound demand không còn phù hợp để bypass storage.',
+      exceptionDetail: 'Sản phẩm/lô/trạng thái/số lượng hoặc nhu cầu xuất không còn phù hợp để bỏ qua lưu kho.',
     };
   }
 
   if (capability.id === 'IG-06') {
     return {
-      title: 'Carrier / E-commerce / TMS Integration Lab',
+      title: 'Phòng thử nghiệm tích hợp Đơn vị vận chuyển / Thương mại điện tử / TMS',
       subtitle: capability.goal,
       mode: 'trace',
-      stages: ['Request', 'External accepted', 'Tracking updates', 'Reconciled'],
-      fields: [...commonFields, { label: 'Connector', value: 'TMS-CARRIER-V2' }, { label: 'Correlation', value: 'CORR-TMS-88102' }],
+      stages: ['Gửi yêu cầu', 'Hệ thống ngoài chấp nhận', 'Cập nhật theo dõi', 'Đã đối chiếu'],
+      fields: [...commonFields, { label: 'Bộ kết nối', value: 'TMS-CARRIER-V2' }, { label: 'Mã tương quan', value: 'CORR-TMS-88102' }],
       commands: ['SEND_REQUEST', 'INGEST_UPDATE', 'RETRY_DELIVERY'],
       exceptionTitle: 'EXTERNAL_CONNECTOR_DEGRADED',
-      exceptionDetail: 'External API down/rate-limited; retry phải idempotent và không duplicate business state.',
+      exceptionDetail: 'API bên ngoài không khả dụng/bị giới hạn tốc độ; thử lại phải có tính idempotent và không tạo trùng trạng thái nghiệp vụ.',
     };
   }
 
@@ -116,78 +116,78 @@ const getOptionalCapabilityDemo = (
 
   if (technology) {
     return {
-      title: name + ' • Technology Sandbox',
+      title: name + ' • Môi trường thử nghiệm công nghệ',
       subtitle: capability.goal,
       mode: 'control',
-      stages: ['Device/adapter online', 'Capture signal', 'Validate event', 'Create WMS action', 'Observe health'],
-      fields: [...commonFields, { label: 'Device / adapter', value: 'SIM-DEVICE-01' }, { label: 'Health', value: 'ONLINE' }],
+      stages: ['Thiết bị/bộ chuyển đổi trực tuyến', 'Ghi nhận tín hiệu', 'Xác minh sự kiện', 'Tạo hành động WMS', 'Theo dõi tình trạng'],
+      fields: [...commonFields, { label: 'Thiết bị / bộ chuyển đổi', value: 'SIM-DEVICE-01' }, { label: 'Tình trạng', value: 'ONLINE' }],
       commands: ['CAPTURE_SIGNAL', 'VALIDATE_DEVICE_EVENT', 'CREATE_WMS_TASK'],
       exceptionTitle: 'DEVICE_OR_ADAPTER_UNAVAILABLE',
-      exceptionDetail: 'Automation/device failure phải fail safe và giữ canonical WMS state ở application layer.',
+      exceptionDetail: 'Lỗi tự động hóa/thiết bị phải an toàn khi thất bại và giữ trạng thái WMS chuẩn ở lớp ứng dụng.',
     };
   }
 
   if (regulated) {
     return {
-      title: name + ' • Compliance Sandbox',
+      title: name + ' • Môi trường thử nghiệm tuân thủ',
       subtitle: capability.goal,
       mode: 'wizard',
-      stages: ['Capture condition', 'Policy check', 'Hold/restrict', 'Disposition', 'Evidence'],
-      fields: [...commonFields, { label: 'Policy profile', value: 'SPECIAL-STORAGE-v2' }, { label: 'Evidence', value: 'Sensor / checklist / reason' }],
+      stages: ['Ghi nhận điều kiện', 'Kiểm tra chính sách', 'Giữ/hạn chế', 'Quyết định xử lý', 'Bằng chứng'],
+      fields: [...commonFields, { label: 'Hồ sơ chính sách', value: 'SPECIAL-STORAGE-v2' }, { label: 'Bằng chứng', value: 'Cảm biến / danh sách kiểm / lý do' }],
       commands: ['CHECK_SPECIAL_POLICY', 'PLACE_RESTRICTION', 'RELEASE_OR_DISPOSE'],
       exceptionTitle: 'SPECIAL_INVENTORY_POLICY_VIOLATION',
-      exceptionDetail: 'Inventory không đạt điều kiện chuyên biệt phải bị hold/restrict và lưu evidence.',
+      exceptionDetail: 'Tồn kho không đạt điều kiện chuyên biệt phải bị giữ/hạn chế và lưu bằng chứng.',
     };
   }
 
   if (ownership) {
     return {
-      title: name + ' • Ownership & Billing Sandbox',
+      title: name + ' • Môi trường thử nghiệm sở hữu & tính phí',
       subtitle: capability.goal,
       mode: 'workbench',
-      stages: ['Owner/contract', 'Operational event', 'Charge/ownership rule', 'Reconcile'],
-      fields: [...commonFields, { label: 'Owner', value: 'OWNER-3PL-01' }, { label: 'Contract', value: 'CTR-2026-PLATINUM' }],
+      stages: ['Chủ sở hữu/hợp đồng', 'Sự kiện vận hành', 'Quy tắc phí/sở hữu', 'Đối chiếu'],
+      fields: [...commonFields, { label: 'Chủ sở hữu', value: 'OWNER-3PL-01' }, { label: 'Hợp đồng', value: 'CTR-2026-PLATINUM' }],
       commands: ['APPLY_OWNER_RULE', 'CALCULATE_CHARGE_EVENT', 'RECONCILE_OWNER_BALANCE'],
       exceptionTitle: 'OWNER_OR_CONTRACT_MISMATCH',
-      exceptionDetail: 'Warehouse, owner và commercial contract là dimensions độc lập và phải reconcile rõ ràng.',
+      exceptionDetail: 'Kho, chủ sở hữu và hợp đồng thương mại là các chiều độc lập và phải được đối chiếu rõ ràng.',
     };
   }
 
   if (execution) {
     return {
-      title: name + ' • Advanced Execution Sandbox',
+      title: name + ' • Môi trường thử nghiệm thực thi nâng cao',
       subtitle: capability.goal,
       mode: 'workbench',
-      stages: ['Plan work', 'Allocate inputs', 'Execute', 'Validate output', 'Complete'],
-      fields: [...commonFields, { label: 'Work order', value: 'ADV-2026-0042' }, { label: 'Status', value: 'PLANNED' }],
+      stages: ['Lập kế hoạch công việc', 'Phân bổ đầu vào', 'Thực thi', 'Xác minh đầu ra', 'Hoàn tất'],
+      fields: [...commonFields, { label: 'Lệnh công việc', value: 'ADV-2026-0042' }, { label: 'Trạng thái', value: 'PLANNED' }],
       commands: ['CREATE_ADVANCED_TASK', 'START_EXECUTION', 'CONFIRM_OUTPUT'],
       exceptionTitle: 'ADVANCED_EXECUTION_MISMATCH',
-      exceptionDetail: 'Input/output quantity, HU, owner hoặc status không reconcile với execution plan.',
+      exceptionDetail: 'Số lượng đầu vào/đầu ra, HU, chủ sở hữu hoặc trạng thái không khớp kế hoạch thực thi.',
     };
   }
 
   if (decision) {
     return {
-      title: name + ' • Decision Support Sandbox',
+      title: name + ' • Môi trường thử nghiệm hỗ trợ quyết định',
       subtitle: capability.goal,
       mode: 'control',
-      stages: ['Inputs', 'Analyze', 'Recommendation', 'Human review', 'Apply / export'],
-      fields: [...commonFields, { label: 'Scenario', value: 'BASELINE-2026-W40' }, { label: 'Decision mode', value: 'Human-in-the-loop' }],
+      stages: ['Đầu vào', 'Phân tích', 'Khuyến nghị', 'Rà soát của người dùng', 'Áp dụng / xuất dữ liệu'],
+      fields: [...commonFields, { label: 'Kịch bản', value: 'BASELINE-2026-W40' }, { label: 'Chế độ quyết định', value: 'Có người tham gia phê duyệt' }],
       commands: ['RUN_ANALYSIS', 'COMPARE_SCENARIO', 'APPROVE_RECOMMENDATION'],
       exceptionTitle: 'DECISION_INPUT_OR_POLICY_CONFLICT',
-      exceptionDetail: 'Recommendation thiếu dữ liệu/policy hợp lệ phải được chặn hoặc yêu cầu human review.',
+      exceptionDetail: 'Khuyến nghị thiếu dữ liệu/chính sách hợp lệ phải bị chặn hoặc yêu cầu người dùng rà soát.',
     };
   }
 
   return {
-    title: name + ' • Optional Feature Sandbox',
+    title: name + ' • Môi trường thử nghiệm chức năng tùy chọn',
     subtitle: capability.goal,
     mode: 'workbench',
-    stages: ['Configure', 'Simulate', 'Review', 'Apply'],
+    stages: ['Cấu hình', 'Mô phỏng', 'Rà soát', 'Áp dụng'],
     fields: commonFields,
     commands: ['CONFIGURE_OPTIONAL_FEATURE', 'RUN_SIMULATION', 'REVIEW_RESULT'],
     exceptionTitle: 'OPTIONAL_FEATURE_NOT_ENABLED',
-    exceptionDetail: 'Capability chỉ hoạt động khi feature/applicability tương ứng được bật và cấu hình đủ.',
+    exceptionDetail: 'Chức năng chỉ hoạt động khi tính năng/phạm vi áp dụng tương ứng được bật và cấu hình đầy đủ.',
   };
 };
 
@@ -201,18 +201,18 @@ const getImplementedCapabilityDemo = (
   if (exact) return exact;
 
   return {
-    title: capability.name + ' • Implemented Capability Preview',
+    title: capability.name + ' • Xem trước chức năng đã triển khai',
     subtitle: capability.goal,
     mode: capability.surfaces.includes('Mobile') ? 'scan' : 'workbench',
-    stages: ['Open', 'Validate', 'Execute', 'Verify'],
+    stages: ['Mở', 'Xác minh', 'Thực thi', 'Kiểm tra kết quả'],
     fields: [
-      { label: 'Capability', value: capability.id },
-      { label: 'Production maturity', value: capability.status === 'live' ? 'LIVE' : 'FOUNDATION' },
-      { label: 'Spec', value: capability.spec },
+      { label: 'Chức năng', value: capability.id },
+      { label: 'Mức triển khai hệ thống thật', value: capability.status === 'live' ? 'HOÀN THIỆN' : 'NỀN TẢNG' },
+      { label: 'Đặc tả', value: capability.spec },
     ],
     commands: ['OPEN_REAL_SCREEN', 'VALIDATE_STATE', 'VERIFY_RESULT'],
     exceptionTitle: 'IMPLEMENTED_FLOW_EXCEPTION',
-    exceptionDetail: 'Mô phỏng recovery path cho capability production/foundation hiện có.',
+    exceptionDetail: 'Mô phỏng hướng phục hồi cho chức năng hệ thống thật/nền tảng hiện có.',
   };
 };
 
@@ -223,7 +223,7 @@ export const getCapabilityDemoDefinition = (
 ): CapabilityDemoDefinition => {
   const specialized = coreCapabilityDemos[capability.id] ?? plannedCapabilityDemos[capability.id];
   if (capability.status === 'live' || capability.status === 'foundation') {
-    const specializedIsImplemented = specialized?.fields.some((field) => field.label === 'Production maturity') ?? false;
+    const specializedIsImplemented = specialized?.fields.some((field) => field.label === 'Production maturity' || field.label === 'Mức triển khai hệ thống thật') ?? false;
     return specializedIsImplemented ? specialized : getImplementedCapabilityDemo(capability);
   }
   if (specialized) return specialized;
@@ -231,23 +231,23 @@ export const getCapabilityDemoDefinition = (
 
   const stages = moduleFlow && moduleFlow.length >= 2
     ? moduleFlow
-    : ['Danh sách', 'Chi tiết', 'Validate', 'Thực thi', 'Hoàn tất'];
+    : ['Danh sách', 'Chi tiết', 'Xác minh', 'Thực thi', 'Hoàn tất'];
 
   return {
-    title: capability.name + ' • Interactive Blueprint',
+    title: capability.name + ' • Bản thiết kế tương tác',
     subtitle: capability.goal,
     mode: capability.surfaces.includes('Mobile') ? 'scan' : 'workbench',
     stages,
     fields: [
-      { label: 'Capability', value: capability.id },
-      { label: 'Module', value: moduleName },
-      { label: 'Surface', value: capability.surfaces.join(' / ') },
-      { label: 'Spec', value: capability.spec },
-      { label: 'Demo scope', value: 'Mock-only • không gọi API production' },
+      { label: 'Chức năng', value: capability.id },
+      { label: 'Phân hệ', value: moduleName },
+      { label: 'Kênh sử dụng', value: capability.surfaces.join(' / ') },
+      { label: 'Đặc tả', value: capability.spec },
+      { label: 'Phạm vi mô phỏng', value: 'Chỉ mô phỏng • không gọi API hệ thống thật' },
     ],
     commands: ['OPEN_DETAIL', 'VALIDATE', 'SIMULATE_ACTION'],
     exceptionTitle: 'MOCK_VALIDATION_EXCEPTION',
-    exceptionDetail: 'Mô phỏng validation/permission/state conflict để kiểm tra recovery path của capability.',
+    exceptionDetail: 'Mô phỏng xung đột kiểm tra dữ liệu/quyền/trạng thái để kiểm tra hướng phục hồi của chức năng.',
   };
 };
 

@@ -14,40 +14,40 @@ describe('SystemBlueprint', () => {
     expect(view.getByText(`${mockRecordCount}`)).toBeTruthy();
     expect(view.getAllByText('Nhập kho').length).toBeGreaterThan(0);
     expect(view.getAllByText('Xuất kho').length).toBeGreaterThan(0);
-    expect(view.getAllByText('Mobile WMS').length).toBeGreaterThan(0);
-    expect(view.getAllByText('Advanced WMS & Planning').length).toBeGreaterThan(0);
+    expect(view.getAllByText('WMS di động').length).toBeGreaterThan(0);
+    expect(view.getAllByText('WMS nâng cao & Lập kế hoạch').length).toBeGreaterThan(0);
   });
 
   it('separates mock coverage from production maturity in the visible labels', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
-    expect(view.getByText('Capability có mock preview')).toBeTruthy();
-    expect(view.getAllByText('Có mock tương tác • production chưa triển khai').length).toBeGreaterThan(0);
-    expect(view.getAllByText('Có mock nâng cao • bật khi cần').length).toBeGreaterThan(0);
+    expect(view.getByText('Chức năng có bản xem trước mô phỏng')).toBeTruthy();
+    expect(view.getAllByText('Có mô phỏng tương tác • hệ thống thật chưa triển khai').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Có mô phỏng nâng cao • bật khi cần').length).toBeGreaterThan(0);
   });
 
   it('filters capability cards by text and implementation status', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
-    const search = view.getByPlaceholderText('Tìm chức năng, mã capability, spec...');
-    fireEvent.change(search, { target: { value: 'Receipt Posting' } });
-    expect(view.getByText('Receipt Posting')).toBeTruthy();
-    expect(view.queryByText('Shipment Dispatch')).toBeNull();
+    const search = view.getByPlaceholderText('Tìm chức năng, mã chức năng, đặc tả...');
+    fireEvent.change(search, { target: { value: 'Ghi sổ phiếu nhập' } });
+    expect(view.getByText('Ghi sổ phiếu nhập')).toBeTruthy();
+    expect(view.queryByText('Xác nhận giao hàng')).toBeNull();
 
     fireEvent.change(search, { target: { value: '' } });
     const statusSelect = view.getAllByRole('combobox')[0];
     fireEvent.change(statusSelect, { target: { value: 'live' } });
     expect(view.getByText('Sản phẩm / SKU')).toBeTruthy();
-    expect(view.queryByText('Allocation')).toBeNull();
+    expect(view.queryByText('Phân bổ tồn')).toBeNull();
   });
 
   it('keeps real-system actions out of the Blueprint capability cards', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     expect(view.queryByText('Mở thật →')).toBeNull();
-    expect(view.getByText('Mở mock chuyên biệt →').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
+    expect(view.getByText('Mở mô phỏng chuyên biệt →').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
   });
 
   it('links every visible module to its mock work center preview', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
-    const links = view.getAllByText('Xem work center →');
+    const links = view.getAllByText('Xem trung tâm công việc →');
     expect(links.length).toBeGreaterThanOrEqual(10);
     expect(links[0].getAttribute('href')).toContain('/system-blueprint/');
   });

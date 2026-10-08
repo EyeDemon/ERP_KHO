@@ -21,15 +21,26 @@ const statusTone=(code:string):'neutral'|'success'|'warning'|'danger'=>
   ['QC_HOLD','QUARANTINE'].includes(code)?'warning':
   ['BLOCKED','DAMAGED','EXPIRED','RECALL_BLOCKED','REJECTED'].includes(code)?'danger':'neutral';
 
+const inventoryStatusLabel=(code:string)=>({
+  AVAILABLE:'Khả dụng',
+  QC_HOLD:'Chờ kiểm tra chất lượng',
+  QUARANTINE:'Cách ly',
+  BLOCKED:'Bị chặn',
+  DAMAGED:'Hư hỏng',
+  REJECTED:'Từ chối',
+  EXPIRED:'Hết hạn',
+  RECALL_BLOCKED:'Khóa thu hồi',
+}[code]??code);
+
 const messageOf=(e:unknown)=>{
   const response=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
   const code=response?.data?.code;
-  if(code==='INV_STATUS_CHANGE_NOT_ALLOWED')return response?.data?.message??'Không thể đổi status bucket này.';
-  if(code==='INV_INSUFFICIENT_ON_HAND')return response?.data?.message??'Không đủ tồn để đổi status.';
-  if(code==='INV_STOCK_LOCKED')return response?.data?.message??'Inventory bucket đang bị khóa.';
-  if(code==='CONCURRENCY_CONFLICT'||response?.status===409)return response?.data?.message??'Inventory bucket đã thay đổi. Vui lòng tải lại.';
-  if(response?.status===403)return 'Bạn không có quyền đổi Inventory Status.';
-  return response?.data?.message??'Không thể xử lý Inventory Status.';
+  if(code==='INV_STATUS_CHANGE_NOT_ALLOWED')return response?.data?.message??'Không thể đổi trạng thái nhóm tồn này.';
+  if(code==='INV_INSUFFICIENT_ON_HAND')return response?.data?.message??'Không đủ tồn để đổi trạng thái.';
+  if(code==='INV_STOCK_LOCKED')return response?.data?.message??'Nhóm tồn đang bị khóa.';
+  if(code==='CONCURRENCY_CONFLICT'||response?.status===409)return response?.data?.message??'Nhóm tồn đã thay đổi. Vui lòng tải lại.';
+  if(response?.status===403)return 'Bạn không có quyền đổi trạng thái tồn kho.';
+  return response?.data?.message??'Không thể xử lý trạng thái tồn kho.';
 };
 
 export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOption[]}){
@@ -95,83 +106,83 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
   };
 
   return <div className="ui-stack">
-    <UiCard title="Inventory theo Bucket / Lot / Serial / Status">
+    <UiCard title="Tồn kho theo Nhóm / Lô / Sê-ri / Trạng thái">
       <p className="ui-muted-text">
-        Đây là current operational balance theo dimension. Expired lot và status không đủ eligibility sẽ không được reservation/allocation/pick/ship.
+        Đây là số dư vận hành hiện tại theo từng chiều dữ liệu. Lô hết hạn và trạng thái không đủ điều kiện sẽ không được giữ hàng, phân bổ, lấy hàng hoặc giao hàng.
       </p>
       <form onSubmit={e=>{e.preventDefault();void load()}}>
         <UiToolbar>
           <UiToolbarField label="Kho">
-            <select aria-label="Kho bucket" value={filters.warehouseId} onChange={e=>setFilters(x=>({...x,warehouseId:e.target.value}))}>
+            <select aria-label="Kho nhóm tồn" value={filters.warehouseId} onChange={e=>setFilters(x=>({...x,warehouseId:e.target.value}))}>
               <option value="">Tất cả kho được phép</option>
               {warehouses.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           </UiToolbarField>
           <UiToolbarField label="ID sản phẩm">
-            <input aria-label="ID sản phẩm bucket" type="number" min="1" value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}/>
+            <input aria-label="ID sản phẩm nhóm tồn" type="number" min="1" value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}/>
           </UiToolbarField>
-          <UiToolbarField label="Status">
-            <select aria-label="Inventory status filter" value={filters.status} onChange={e=>setFilters(x=>({...x,status:e.target.value}))}>
-              <option value="">Tất cả status</option>
-              {statuses.map(x=><option key={x.code} value={x.code}>{x.code}</option>)}
+          <UiToolbarField label="Trạng thái">
+            <select aria-label="Lọc trạng thái tồn kho" value={filters.status} onChange={e=>setFilters(x=>({...x,status:e.target.value}))}>
+              <option value="">Tất cả trạng thái</option>
+              {statuses.map(x=><option key={x.code} value={x.code}>{inventoryStatusLabel(x.code)}</option>)}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="Lot">
-            <input aria-label="Lot filter" value={filters.lotNumber} onChange={e=>setFilters(x=>({...x,lotNumber:e.target.value}))} placeholder="LOT-..."/>
+          <UiToolbarField label="Lô">
+            <input aria-label="Lọc mã lô" value={filters.lotNumber} onChange={e=>setFilters(x=>({...x,lotNumber:e.target.value}))} placeholder="LOT-..."/>
           </UiToolbarField>
-          <UiToolbarField label="Serial">
-            <input aria-label="Serial filter" value={filters.serialNumber} onChange={e=>setFilters(x=>({...x,serialNumber:e.target.value}))} placeholder="SER-..."/>
+          <UiToolbarField label="Sê-ri">
+            <input aria-label="Lọc số sê-ri" value={filters.serialNumber} onChange={e=>setFilters(x=>({...x,serialNumber:e.target.value}))} placeholder="SER-..."/>
           </UiToolbarField>
-          <button type="submit">Lọc bucket</button>
+          <button type="submit">Lọc nhóm tồn</button>
         </UiToolbar>
       </form>
 
       {error&&<p role="alert">{error}</p>}
-      {loading?<p role="status">Đang tải inventory bucket...</p>:<UiTableScroll>
-        <table aria-label="Inventory bucket">
+      {loading?<p role="status">Đang tải nhóm tồn kho...</p>:<UiTableScroll>
+        <table aria-label="Nhóm tồn kho">
           <thead><tr>
-            <th>Sản phẩm</th><th>Kho / Location</th><th>Status</th><th>Lot / Expiry</th><th>Serial</th>
-            <th>Eligibility</th><th className="inventory-numeric">OnHand</th><th className="inventory-numeric">Reserved</th><th className="inventory-numeric">Available</th>
+            <th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Hạn dùng</th><th>Sê-ri</th>
+            <th>Điều kiện sử dụng</th><th className="inventory-numeric">Tồn thực tế</th><th className="inventory-numeric">Đã giữ</th><th className="inventory-numeric">Khả dụng</th>
             {canChange&&<th>Thao tác</th>}
           </tr></thead>
           <tbody>
-            {buckets.length===0?<tr><td colSpan={canChange?10:9} className="ui-empty-cell">Không có inventory bucket phù hợp.</td></tr>:
+            {buckets.length===0?<tr><td colSpan={canChange?10:9} className="ui-empty-cell">Không có nhóm tồn kho phù hợp.</td></tr>:
               buckets.map(bucket=><tr key={bucket.inventoryStockId}>
                 <td><strong>{bucket.productCode}</strong><br/><small>{bucket.productName}</small></td>
                 <td>{bucket.warehouseName}<br/><small>{bucket.locationCode||'—'}</small></td>
-                <td><UiBadge tone={statusTone(bucket.status)}>{bucket.status}</UiBadge></td>
+                <td><UiBadge tone={statusTone(bucket.status)}>{inventoryStatusLabel(bucket.status)}</UiBadge></td>
                 <td>{bucket.lotNumber||'—'}<br/><small>{bucket.expiryDate?`HSD ${new Date(bucket.expiryDate).toLocaleDateString('vi-VN')}`:'Không HSD'}</small></td>
                 <td>{bucket.serialNumber||'—'}</td>
                 <td>
                   <small>
-                    R:{bucket.isReservable?'✓':'—'} • A:{bucket.isAllocatable?'✓':'—'} •
-                    P:{bucket.isPickable?'✓':'—'} • S:{bucket.isShippable?'✓':'—'}
+                    Giữ:{bucket.isReservable?'✓':'—'} • Phân bổ:{bucket.isAllocatable?'✓':'—'} •
+                    Lấy:{bucket.isPickable?'✓':'—'} • Giao:{bucket.isShippable?'✓':'—'}
                   </small>
                 </td>
                 <td className="inventory-numeric">{bucket.onHandQuantity}</td>
                 <td className="inventory-numeric">{bucket.reservedQuantity}</td>
                 <td className="inventory-numeric inventory-available">{bucket.availableQuantity}</td>
-                {canChange&&<td><button type="button" disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startChange(bucket)}>Đổi status</button></td>}
+                {canChange&&<td><button type="button" disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startChange(bucket)}>Đổi trạng thái</button></td>}
               </tr>)}
           </tbody>
         </table>
       </UiTableScroll>}
     </UiCard>
 
-    {selected&&canChange&&<UiCard title={`Đổi status • ${selected.productCode} • ${selected.status}`}>
+    {selected&&canChange&&<UiCard title={`Đổi trạng thái • ${selected.productCode} • ${selected.status}`}>
       <form onSubmit={submit} className="ui-form-grid">
         <p className="ui-muted-text">
-          Bucket {selected.locationCode} • {selected.lotNumber||'không lot'} • {selected.serialNumber||'không serial'}.
-          Tối đa chưa reserved: {Math.max(0,selected.onHandQuantity-selected.reservedQuantity)}.
+          Nhóm tồn {selected.locationCode} • {selected.lotNumber||'không có lô'} • {selected.serialNumber||'không có sê-ri'}.
+          Tối đa chưa được giữ: {Math.max(0,selected.onHandQuantity-selected.reservedQuantity)}.
         </p>
-        <select aria-label="Status đích" value={change.toStatus} onChange={e=>setChange(x=>({...x,toStatus:e.target.value}))} required>
-          <option value="">Chọn status đích</option>
+        <UiToolbarField label="Trạng thái đích"><select aria-label="Trạng thái đích" value={change.toStatus} onChange={e=>setChange(x=>({...x,toStatus:e.target.value}))} required>
+          <option value="">Chọn trạng thái đích</option>
           {statuses.filter(x=>x.code!==selected.status).map(x=><option key={x.code} value={x.code}>{x.code} — {x.name}</option>)}
-        </select>
-        <input aria-label="Số lượng đổi status" type="number" min="0.0001" step="any" max={Math.max(0,selected.onHandQuantity-selected.reservedQuantity)} value={change.quantity} onChange={e=>setChange(x=>({...x,quantity:e.target.value}))} required/>
-        <input aria-label="Lý do đổi status" value={change.reason} onChange={e=>setChange(x=>({...x,reason:e.target.value}))} placeholder="Lý do / evidence" required/>
+        </select></UiToolbarField>
+        <UiToolbarField label="Số lượng"><input aria-label="Số lượng" type="number" min="0.0001" step="any" max={Math.max(0,selected.onHandQuantity-selected.reservedQuantity)} value={change.quantity} onChange={e=>setChange(x=>({...x,quantity:e.target.value}))} required/></UiToolbarField>
+        <UiToolbarField label="Lý do"><input aria-label="Lý do" value={change.reason} onChange={e=>setChange(x=>({...x,reason:e.target.value}))} placeholder="Lý do / bằng chứng" required/></UiToolbarField>
         <div className="ui-inline-actions">
-          <button type="submit" disabled={busy||!change.toStatus||!change.reason.trim()}>Xác nhận status change</button>
+          <button type="submit" disabled={busy||!change.toStatus||!change.reason.trim()}>Xác nhận đổi trạng thái</button>
           <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
         </div>
       </form>

@@ -24,14 +24,14 @@ const Header = ({
     <div className="inbound-mock-title-row">
       <span className="inbound-mock-icon" aria-hidden="true">{icon}</span>
       <div>
-        <span className="inbound-mock-kicker">INBOUND • {id} • FRONTEND MOCK</span>
+        <span className="inbound-mock-kicker">NHẬP KHO • {id} • MÔ PHỎNG GIAO DIỆN</span>
         <h2 id={'inbound-' + id.toLowerCase() + '-title'}>{title}</h2>
       </div>
     </div>
     <p>{description}</p>
     <div className="inbound-mock-scope">
-      <Badge tone="neutral">Read-only</Badge>
-      <span>Không gọi API production • Không ghi inventory • Không giả mutation thành công</span>
+      <Badge tone="neutral">Chỉ đọc</Badge>
+      <span>Không gọi API hệ thống thật • Không ghi tồn kho • Không giả thao tác thay đổi thành công</span>
     </div>
   </header>
 );
@@ -47,19 +47,19 @@ const PurchaseOrderAsnMock = () => {
     <section className="inbound-capability-mock" data-testid="inbound-capability-mock-IN-01" aria-labelledby="inbound-in-01-title">
       <Header
         id="IN-01"
-        title="Purchase Order / ASN Reconciliation"
-        description="Mô phỏng expected inbound từ PO và ASN, tách rõ dữ liệu dự kiến khỏi Receipt và On Hand."
+        title="Đối chiếu Đơn mua / ASN"
+        description="Mô phỏng hàng nhập dự kiến từ PO và ASN, tách rõ dữ liệu dự kiến khỏi Phiếu nhập và Tồn thực tế."
         icon={<ClipboardList size={20} />}
       />
       <div className="inbound-mock-metrics">
-        <div><span>PO</span><strong>PO-2026-8831</strong><small>Supplier SUP-0008</small></div>
+        <div><span>PO</span><strong>PO-2026-8831</strong><small>Nhà cung cấp SUP-0008</small></div>
         <div><span>ASN</span><strong>ASN-2026-4172</strong><small>ETA 16:30 • 04/10</small></div>
-        <div><span>Expected</span><strong>120 Thùng</strong><small>3 SKU</small></div>
-        <div><span>Inventory effect</span><strong>0</strong><small>Chỉ tăng khi Receipt POST</small></div>
+        <div><span>Dự kiến</span><strong>120 Thùng</strong><small>3 SKU</small></div>
+        <div><span>Ảnh hưởng tồn kho</span><strong>0</strong><small>Chỉ tăng khi ghi sổ Phiếu nhập</small></div>
       </div>
       <div className="inbound-mock-table-scroll">
-        <table aria-label="Mock PO ASN reconciliation">
-          <thead><tr><th>SKU</th><th>PO quantity</th><th>ASN quantity</th><th>Delta</th><th>Validation</th></tr></thead>
+        <table aria-label="Đối chiếu PO/ASN mô phỏng">
+          <thead><tr><th>SKU</th><th>Số lượng PO</th><th>Số lượng ASN</th><th>Chênh lệch</th><th>Kiểm tra</th></tr></thead>
           <tbody>
             {lines.map((line) => (
               <tr key={line.sku}>
@@ -71,8 +71,8 @@ const PurchaseOrderAsnMock = () => {
         </table>
       </div>
       <div className="inbound-mock-callout warning">
-        <strong>Expected ≠ Received</strong>
-        <span>PO/ASN chỉ tạo kỳ vọng nhận hàng. Không được dùng ASN arrival để tăng On Hand hoặc bỏ qua receiving/QC/posting boundary.</span>
+        <strong>Dự kiến ≠ Đã nhận</strong>
+        <span>PO/ASN chỉ tạo kỳ vọng nhận hàng. Không được dùng thời điểm ASN đến để tăng Tồn thực tế hoặc bỏ qua ranh giới tiếp nhận/QC/ghi sổ.</span>
       </div>
     </section>
   );
@@ -80,38 +80,38 @@ const PurchaseOrderAsnMock = () => {
 
 const AppointmentMock = () => {
   const appointments = [
-    { time: '08:30–09:00', ref: 'APT-1048', vehicle: '51D-482.16', dock: 'D01', status: 'Checked in', tone: 'success' as const },
-    { time: '09:10–09:40', ref: 'APT-1052', vehicle: '43C-218.08', dock: 'D02', status: 'Arrived', tone: 'warning' as const },
-    { time: '09:40–10:10', ref: 'APT-1058', vehicle: '51C-778.21', dock: 'D03', status: 'Confirmed', tone: 'neutral' as const },
-    { time: '10:00–10:30', ref: 'APT-1060', vehicle: '60C-113.84', dock: 'D03', status: 'Dock conflict', tone: 'danger' as const },
+    { time: '08:30–09:00', ref: 'APT-1048', vehicle: '51D-482.16', dock: 'D01', status: 'Đã nhận xe', tone: 'success' as const },
+    { time: '09:10–09:40', ref: 'APT-1052', vehicle: '43C-218.08', dock: 'D02', status: 'Đã đến', tone: 'warning' as const },
+    { time: '09:40–10:10', ref: 'APT-1058', vehicle: '51C-778.21', dock: 'D03', status: 'Đã xác nhận', tone: 'neutral' as const },
+    { time: '10:00–10:30', ref: 'APT-1060', vehicle: '60C-113.84', dock: 'D03', status: 'Xung đột cửa kho', tone: 'danger' as const },
   ];
 
   return (
     <section className="inbound-capability-mock" data-testid="inbound-capability-mock-IN-02" aria-labelledby="inbound-in-02-title">
       <Header
         id="IN-02"
-        title="Receiving Appointment Board"
-        description="Mock lịch xe vào kho với arrival, gate check-in và dock assignment là các trạng thái riêng, có conflict/no-show rõ ràng."
+        title="Bảng lịch nhận hàng"
+        description="Mô phỏng lịch xe vào kho với trạng thái đến, nhận xe tại cổng và gán cửa kho tách biệt, có xung đột/vắng mặt rõ ràng."
         icon={<CalendarClock size={20} />}
       />
       <div className="inbound-mock-metrics">
-        <div><span>Window</span><strong>08:00–12:00</strong><small>WH-HCM-01</small></div>
-        <div><span>Appointments</span><strong>4</strong><small>3 valid • 1 conflict</small></div>
-        <div><span>Dock utilization</span><strong>67%</strong><small>2 / 3 đang dùng</small></div>
-        <div><span>Late / no-show</span><strong>1</strong><small>Requires triage</small></div>
+        <div><span>Khung giờ</span><strong>08:00–12:00</strong><small>WH-HCM-01</small></div>
+        <div><span>Lịch hẹn</span><strong>4</strong><small>3 hợp lệ • 1 xung đột</small></div>
+        <div><span>Mức sử dụng cửa kho</span><strong>67%</strong><small>2 / 3 đang dùng</small></div>
+        <div><span>Trễ / vắng mặt</span><strong>1</strong><small>Cần phân loại xử lý</small></div>
       </div>
-      <div className="inbound-appointment-list" aria-label="Mock receiving appointment timeline">
+      <div className="inbound-appointment-list" aria-label="Dòng thời gian lịch nhận hàng mô phỏng">
         {appointments.map((item) => (
           <article key={item.ref}>
             <time>{item.time}</time>
-            <div><strong>{item.ref}</strong><span>{item.vehicle} • Dock {item.dock}</span></div>
+            <div><strong>{item.ref}</strong><span>{item.vehicle} • Cửa {item.dock}</span></div>
             <Badge tone={item.tone}>{item.status}</Badge>
           </article>
         ))}
       </div>
       <div className="inbound-mock-callout danger">
-        <strong>Dock collision guard</strong>
-        <span>D03 không thể nhận hai appointment chồng window nếu capacity chỉ là một vehicle. Conflict phải được re-plan, không tự ghi đè assignment.</span>
+        <strong>Rào chắn xung đột cửa kho</strong>
+        <span>D03 không thể nhận hai lịch hẹn chồng khung giờ khi sức chứa chỉ một phương tiện. Xung đột phải được lập kế hoạch lại, không tự ghi đè phân công.</span>
       </div>
     </section>
   );
@@ -122,33 +122,33 @@ const DiscrepancyMock = () => {
     <section className="inbound-capability-mock" data-testid="inbound-capability-mock-IN-05" aria-labelledby="inbound-in-05-title">
       <Header
         id="IN-05"
-        title="Over / Under Receipt Resolution"
-        description="Mock xử lý chênh lệch expected/observed theo tolerance, reason và approval boundary trước khi tiếp tục flow."
+        title="Xử lý nhận thừa / thiếu"
+        description="Mô phỏng xử lý chênh lệch dự kiến/thực nhận theo dung sai, lý do và ranh giới phê duyệt trước khi tiếp tục luồng."
         icon={<Scale size={20} />}
       />
       <div className="inbound-mock-metrics">
-        <div><span>Expected</span><strong>100 Thùng</strong><small>PO / ASN snapshot</small></div>
-        <div><span>Observed</span><strong>108 Thùng</strong><small>Receiving count</small></div>
-        <div><span>Variance</span><strong>+8%</strong><small>+8 Thùng</small></div>
-        <div><span>Tolerance</span><strong>±2%</strong><small>Approval required</small></div>
+        <div><span>Dự kiến</span><strong>100 Thùng</strong><small>Ảnh chụp PO / ASN</small></div>
+        <div><span>Thực nhận</span><strong>108 Thùng</strong><small>Số lượng tiếp nhận</small></div>
+        <div><span>Chênh lệch</span><strong>+8%</strong><small>+8 Thùng</small></div>
+        <div><span>Dung sai</span><strong>±2%</strong><small>Cần phê duyệt</small></div>
       </div>
       <div className="inbound-discrepancy-grid">
         <article>
-          <span>1 • Detect</span><strong>OVER_RECEIPT</strong><p>Observed quantity vượt expected snapshot.</p><Badge tone="danger">Outside tolerance</Badge>
+          <span>1 • Phát hiện</span><strong>OVER_RECEIPT</strong><p>Số lượng thực nhận vượt ảnh chụp dự kiến.</p><Badge tone="danger">Ngoài dung sai</Badge>
         </article>
         <article>
-          <span>2 • Reason</span><strong>SUPPLIER_OVER_SHIP</strong><p>Gắn reason + note/evidence bắt buộc.</p><Badge tone="warning">Evidence needed</Badge>
+          <span>2 • Lý do</span><strong>SUPPLIER_OVER_SHIP</strong><p>Gắn lý do + ghi chú/bằng chứng bắt buộc.</p><Badge tone="warning">Cần bằng chứng</Badge>
         </article>
         <article>
-          <span>3 • Approval</span><strong>PENDING_APPROVAL</strong><p>Không resolve tự động khi vượt threshold.</p><Badge tone="warning">Manager review</Badge>
+          <span>3 • Phê duyệt</span><strong>PENDING_APPROVAL</strong><p>Không tự xử lý khi vượt ngưỡng.</p><Badge tone="warning">Quản lý rà soát</Badge>
         </article>
         <article>
-          <span>4 • Resolution</span><strong>Accept / Reject excess</strong><p>Result phải reconcile với received quantity.</p><Badge tone="neutral">Not decided</Badge>
+          <span>4 • Xử lý</span><strong>Chấp nhận / Từ chối phần thừa</strong><p>Kết quả phải đối chiếu khớp với số lượng đã nhận.</p><Badge tone="neutral">Chưa quyết định</Badge>
         </article>
       </div>
       <div className="inbound-mock-callout warning">
-        <strong>Posting guard</strong>
-        <span>Chênh lệch vượt tolerance phải có resolution hợp lệ trước boundary tiếp theo; mock không thay đổi Receipt hoặc Inventory.</span>
+        <strong>Rào chắn ghi sổ</strong>
+        <span>Chênh lệch vượt dung sai phải có cách xử lý hợp lệ trước ranh giới tiếp theo; mô phỏng không thay đổi Phiếu nhập hoặc Tồn kho.</span>
       </div>
     </section>
   );
@@ -156,35 +156,35 @@ const DiscrepancyMock = () => {
 
 const QcMock = () => {
   const disposition = [
-    { bucket: 'Accepted', qty: 90, tone: 'success' as const },
-    { bucket: 'Damaged', qty: 4, tone: 'warning' as const },
-    { bucket: 'Rejected', qty: 2, tone: 'danger' as const },
+    { bucket: 'Chấp nhận', qty: 90, tone: 'success' as const },
+    { bucket: 'Hư hỏng', qty: 4, tone: 'warning' as const },
+    { bucket: 'Từ chối', qty: 2, tone: 'danger' as const },
   ];
   return (
     <section className="inbound-capability-mock" data-testid="inbound-capability-mock-IN-06" aria-labelledby="inbound-in-06-title">
       <Header
         id="IN-06"
-        title="Inbound QC Inspection"
-        description="Mock inspection checklist, evidence và disposition; tổng Accepted + Damaged + Rejected phải cân bằng Received."
+        title="Kiểm tra chất lượng hàng nhập"
+        description="Mô phỏng danh sách kiểm tra, bằng chứng và phân loại xử lý; tổng Chấp nhận + Hư hỏng + Từ chối phải cân bằng Đã nhận."
         icon={<ShieldCheck size={20} />}
       />
       <div className="inbound-mock-metrics">
-        <div><span>Receipt</span><strong>GR-2026-1045</strong><small>SKU-1001</small></div>
-        <div><span>Received</span><strong>96 Cái</strong><small>QC required</small></div>
-        <div><span>Evidence</span><strong>3 items</strong><small>2 ảnh • 1 checklist</small></div>
-        <div><span>Balance</span><strong>96 / 96</strong><small>Disposition balanced</small></div>
+        <div><span>Phiếu nhập</span><strong>GR-2026-1045</strong><small>SKU-1001</small></div>
+        <div><span>Đã nhận</span><strong>96 Cái</strong><small>Cần QC</small></div>
+        <div><span>Bằng chứng</span><strong>3 mục</strong><small>2 ảnh • 1 checklist</small></div>
+        <div><span>Cân bằng</span><strong>96 / 96</strong><small>Phân loại đã cân bằng</small></div>
       </div>
       <div className="inbound-qc-layout">
         <div>
-          <h3>Inspection criteria</h3>
+          <h3>Tiêu chí kiểm tra</h3>
           <ul>
-            <li><span aria-hidden="true">✓</span><strong>Packaging integrity</strong><small>Pass • sample 12/12</small></li>
-            <li><span aria-hidden="true">✓</span><strong>Label / lot match</strong><small>Pass • LOT-261004-A</small></li>
-            <li><span aria-hidden="true">!</span><strong>Visual damage</strong><small>6 units require disposition</small></li>
+            <li><span aria-hidden="true">✓</span><strong>Tình trạng bao bì</strong><small>Đạt • mẫu 12/12</small></li>
+            <li><span aria-hidden="true">✓</span><strong>Nhãn / lô khớp</strong><small>Đạt • LOT-261004-A</small></li>
+            <li><span aria-hidden="true">!</span><strong>Hư hỏng quan sát được</strong><small>6 đơn vị cần phân loại xử lý</small></li>
           </ul>
         </div>
         <div>
-          <h3>Disposition</h3>
+          <h3>Phân loại xử lý</h3>
           {disposition.map((item) => (
             <div className="inbound-disposition-row" key={item.bucket}>
               <span>{item.bucket}</span><strong>{item.qty} Cái</strong><Badge tone={item.tone}>{item.bucket}</Badge>
@@ -193,8 +193,8 @@ const QcMock = () => {
         </div>
       </div>
       <div className="inbound-mock-callout warning">
-        <strong>QC balance rule</strong>
-        <span>90 + 4 + 2 = 96. Nếu disposition không cân bằng Received thì READY_TO_POST phải bị chặn.</span>
+        <strong>Quy tắc cân bằng QC</strong>
+        <span>90 + 4 + 2 = 96. Nếu phân loại xử lý không cân bằng với Đã nhận thì READY_TO_POST phải bị chặn.</span>
       </div>
     </section>
   );
@@ -202,28 +202,28 @@ const QcMock = () => {
 
 const PutawayRuleMock = () => {
   const candidates = [
-    { code: 'A01-R02-L03-B04', compatibility: 'Pass', capacity: 'Tight', distance: '18 m', score: '92', result: 'Recommended', tone: 'success' as const },
-    { code: 'A02-R01-L01-B02', compatibility: 'Pass', capacity: 'Pass', distance: '32 m', score: '78', result: 'Eligible', tone: 'neutral' as const },
-    { code: 'B01-R03-L02-B07', compatibility: 'Fail', capacity: 'Pass', distance: '21 m', score: '—', result: 'Rejected', tone: 'danger' as const },
+    { code: 'A01-R02-L03-B04', compatibility: 'Đạt', capacity: 'Sát giới hạn', distance: '18 m', score: '92', result: 'Khuyến nghị', tone: 'success' as const },
+    { code: 'A02-R01-L01-B02', compatibility: 'Đạt', capacity: 'Đạt', distance: '32 m', score: '78', result: 'Đủ điều kiện', tone: 'neutral' as const },
+    { code: 'B01-R03-L02-B07', compatibility: 'Không đạt', capacity: 'Đạt', distance: '21 m', score: '—', result: 'Từ chối', tone: 'danger' as const },
   ];
 
   return (
     <section className="inbound-capability-mock" data-testid="inbound-capability-mock-IN-09" aria-labelledby="inbound-in-09-title">
       <Header
         id="IN-09"
-        title="Putaway Recommendation Explainability"
-        description="Mock candidate filtering + ranking theo compatibility, status, capacity và travel cost; recommendation luôn hiển thị lý do."
+        title="Giải thích khuyến nghị cất hàng"
+        description="Mô phỏng lọc + xếp hạng ứng viên theo độ tương thích, trạng thái, sức chứa và chi phí di chuyển; khuyến nghị luôn hiển thị lý do."
         icon={<MapPin size={20} />}
       />
       <div className="inbound-mock-metrics">
-        <div><span>SKU</span><strong>SKU-1001</strong><small>Food • Ambient</small></div>
-        <div><span>Source</span><strong>RECEIVING-01</strong><small>WH-HCM-01</small></div>
-        <div><span>Quantity</span><strong>20 Thùng</strong><small>240 Cái base UOM</small></div>
-        <div><span>Recommended</span><strong>B04</strong><small>Score 92 / 100</small></div>
+        <div><span>SKU</span><strong>SKU-1001</strong><small>Thực phẩm • Nhiệt độ thường</small></div>
+        <div><span>Nguồn</span><strong>RECEIVING-01</strong><small>WH-HCM-01</small></div>
+        <div><span>Số lượng</span><strong>20 Thùng</strong><small>240 Cái UOM cơ sở</small></div>
+        <div><span>Khuyến nghị</span><strong>B04</strong><small>Điểm 92 / 100</small></div>
       </div>
       <div className="inbound-mock-table-scroll">
-        <table aria-label="Mock putaway candidates">
-          <thead><tr><th>Candidate</th><th>Compatibility</th><th>Capacity</th><th>Travel</th><th>Score</th><th>Result</th></tr></thead>
+        <table aria-label="Các vị trí cất hàng ứng viên mô phỏng">
+          <thead><tr><th>Ứng viên</th><th>Tương thích</th><th>Sức chứa</th><th>Di chuyển</th><th>Điểm</th><th>Kết quả</th></tr></thead>
           <tbody>
             {candidates.map((item) => (
               <tr key={item.code}>
@@ -236,7 +236,7 @@ const PutawayRuleMock = () => {
       </div>
       <div className="inbound-recommendation-reason">
         <strong>Vì sao chọn B04?</strong>
-        <span>Cùng storage profile + đúng status + đủ capacity sau projected load + gần source nhất trong nhóm score cao.</span>
+        <span>Cùng hồ sơ lưu trữ + đúng trạng thái + đủ sức chứa sau tải dự kiến + gần nguồn nhất trong nhóm điểm cao.</span>
       </div>
     </section>
   );

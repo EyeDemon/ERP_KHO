@@ -34,34 +34,74 @@ describe('InventoryTraceability',()=>{
   beforeEach(()=>vi.resetAllMocks());
   afterEach(cleanup);
 
-  it('requires at least identity or reference before calling API',()=>{
+  it('requires at least identity or reference and focuses the primary identity field',()=>{
     const view=render(<InventoryTraceability/>);
+    const productId=view.getByLabelText('ID sản phẩm');
     fireEvent.click(view.getByText('Truy vết'));
     expect(view.getByRole('alert').textContent).toContain('ít nhất');
+    expect(document.activeElement).toBe(productId);
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it('requires reference type and id together',()=>{
+  it('requires reference type and id together and exposes inline field state',()=>{
     const view=render(<InventoryTraceability/>);
-    fireEvent.change(view.getByLabelText('Reference Type traceability'),{target:{value:'Shipment'}});
+    const referenceType=view.getByLabelText('Loại tham chiếu');
+    const referenceId=view.getByLabelText('ID tham chiếu');
+    fireEvent.change(referenceType,{target:{value:'Shipment'}});
     fireEvent.click(view.getByText('Truy vết'));
     expect(view.getByRole('alert').textContent).toContain('cùng nhau');
+    expect(referenceType.getAttribute('aria-invalid')).toBe('true');
+    expect(referenceId.getAttribute('aria-invalid')).toBe('true');
+    expect(referenceType.getAttribute('aria-describedby')).toContain('traceability-reference-help');
+    expect(referenceType.getAttribute('aria-describedby')).toContain('traceability-validation-error');
+    expect(document.activeElement).toBe(referenceId);
     expect(apiClient.get).not.toHaveBeenCalled();
+
+    fireEvent.change(referenceId,{target:{value:'99'}});
+    expect(view.queryByRole('alert')).toBeNull();
+    expect(referenceType.getAttribute('aria-invalid')).toBeNull();
+    expect(referenceId.getAttribute('aria-invalid')).toBeNull();
   });
 
-  it('renders current buckets and reversal-aware immutable timeline',async()=>{
+  it('renders visible labels, current buckets and reversal-aware immutable timeline',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=render(<InventoryTraceability/>);
-    fireEvent.change(view.getByLabelText('Product ID traceability'),{target:{value:'10'}});
-    fireEvent.change(view.getByLabelText('Lot traceability'),{target:{value:'LOT-A'}});
+    expect(view.getByLabelText('ID kho (tùy chọn)')).toBeTruthy();
+    expect(view.getByLabelText('ID sản phẩm')).toBeTruthy();
+    expect(view.getByLabelText('Mã lô')).toBeTruthy();
+    expect(view.getByLabelText('Số sê-ri')).toBeTruthy();
+    expect(view.getByLabelText('Loại tham chiếu')).toBeTruthy();
+    expect(view.getByLabelText('ID tham chiếu')).toBeTruthy();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Mã lô'),{target:{value:'LOT-A'}});
     fireEvent.click(view.getByText('Truy vết'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'));
     expect(await view.findByText('A01-R01-B01')).toBeTruthy();
-    expect(view.getByText('Reversal')).toBeTruthy();
-    expect(view.getByText(/đã reversal/)).toBeTruthy();
+    expect(view.getByText('Đảo giao dịch')).toBeTruthy();
+    expect(view.getAllByText(/đã đảo/).length).toBeGreaterThan(0);
     expect(view.getByText(/đảo #41/)).toBeTruthy();
-    expect(view.getAllByText(/Corrective #42/).length).toBeGreaterThan(0);
-    expect(view.getAllByText(/Marker #43/).length).toBeGreaterThan(0);
-    expect(view.getByText(/Original #41/)).toBeTruthy();
+    expect(view.getAllByText(/Hiệu chỉnh #42/).length).toBeGreaterThan(0);
+    expect(view.getAllByText(/Dấu đảo #43/).length).toBeGreaterThan(0);
+    expect(view.getByText(/Gốc #41/)).toBeTruthy();
+    expect(view.getByRole('status').textContent).toContain('Đã tải 1 nhóm tồn kho hiện tại và 2 sự kiện sổ cái');
+  });
+
+  it('surfaces request errors with a recovery path',async()=>{
+    vi.mocked(apiClient.get).mockRejectedValue({response:{status:500,data:{message:'Máy chủ bận.'}}});
+    const view=render(<InventoryTraceability/>);
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    const alert=await view.findByRole('alert');
+    expect(alert.textContent).toContain('Máy chủ bận.');
+    expect(alert.textContent).toContain('thử lại');
+  });
+
+  it('announces loading state for asynchronous trace queries',async()=>{
+    vi.mocked(apiClient.get).mockImplementation(()=>new Promise(()=>{}) as never);
+    const view=render(<InventoryTraceability/>);
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    expect(view.getByRole('status').textContent).toContain('Đang truy vết tồn kho');
+    expect(view.getByText('Đang truy vết...')).toBeTruthy();
   });
 });

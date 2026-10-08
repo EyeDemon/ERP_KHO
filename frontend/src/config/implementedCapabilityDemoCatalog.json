@@ -11,7 +11,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "OV-01"
       },
       {
@@ -19,11 +19,11 @@
         "value": "Tổng quan & Work Center"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "68, 216, 227"
       },
       {
@@ -55,7 +55,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "OV-03"
       },
       {
@@ -63,11 +63,11 @@
         "value": "Tổng quan & Work Center"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "17, 70, 221"
       },
       {
@@ -99,7 +99,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "MD-01"
       },
       {
@@ -107,11 +107,11 @@
         "value": "Dữ liệu danh mục"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "16, 84, 162"
       },
       {
@@ -143,7 +143,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "MD-02"
       },
       {
@@ -151,11 +151,11 @@
         "value": "Dữ liệu danh mục"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "84, 162"
       },
       {
@@ -187,7 +187,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "MD-03"
       },
       {
@@ -195,11 +195,11 @@
         "value": "Dữ liệu danh mục"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "65, 84, 162"
       },
       {
@@ -231,7 +231,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "MD-04"
       },
       {
@@ -239,11 +239,11 @@
         "value": "Dữ liệu danh mục"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "16, 84, 220"
       },
       {
@@ -286,7 +286,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "MD-05"
       },
       {
@@ -294,11 +294,11 @@
         "value": "Dữ liệu danh mục"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "84, 162"
       },
       {
@@ -330,7 +330,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "WH-01"
       },
       {
@@ -338,15 +338,15 @@
         "value": "Kho & Vị trí"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "16, 60, 148"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -375,7 +375,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "IN-03"
       },
       {
@@ -383,11 +383,11 @@
         "value": "Nhập kho"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "34, 216, 228, 229"
       },
       {
@@ -395,7 +395,7 @@
         "value": "GR-2026-1045"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       }
     ],
@@ -414,12 +414,12 @@
     "stages": [
       "Scan product",
       "Capture tracking",
-      "Enter quantity",
+      "Nhập số lượng",
       "Save line"
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "IN-04"
       },
       {
@@ -427,11 +427,11 @@
         "value": "Nhập kho"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "34, 228, 229"
       },
       {
@@ -470,7 +470,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "IN-07"
       },
       {
@@ -478,11 +478,11 @@
         "value": "Nhập kho"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "29, 34, 228"
       },
       {
@@ -521,7 +521,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "IN-08"
       },
       {
@@ -529,11 +529,11 @@
         "value": "Nhập kho"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "35, 229"
       },
       {
@@ -541,7 +541,7 @@
         "value": "PUT-2026-3321"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "A01-R02-L03-B04"
       }
     ],
@@ -565,7 +565,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "OUT-01"
       },
       {
@@ -573,11 +573,11 @@
         "value": "Xuất kho"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "72, 87, 161, 228"
       },
       {
@@ -609,7 +609,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "OUT-02"
       },
       {
@@ -617,11 +617,11 @@
         "value": "Xuất kho"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "30, 72"
       },
       {
@@ -653,7 +653,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "INV-01"
       },
       {
@@ -661,11 +661,11 @@
         "value": "Tồn kho & Inventory Control"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "29, 41, 73, 77, 78, 82, 88, 222"
       },
       {
@@ -697,7 +697,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "INV-02"
       },
       {
@@ -705,11 +705,11 @@
         "value": "Tồn kho & Inventory Control"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "28, 29, 32"
       },
       {
@@ -741,7 +741,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "INV-03"
       },
       {
@@ -749,11 +749,11 @@
         "value": "Tồn kho & Inventory Control"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "29, 82"
       },
       {
@@ -785,7 +785,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "INV-04"
       },
       {
@@ -793,11 +793,11 @@
         "value": "Tồn kho & Inventory Control"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "30, 41, 77, 88"
       },
       {
@@ -831,7 +831,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "TR-01"
       },
       {
@@ -839,11 +839,11 @@
         "value": "Điều chuyển & Replenishment"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "39, 157"
       },
       {
@@ -875,7 +875,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "TR-03"
       },
       {
@@ -883,11 +883,11 @@
         "value": "Điều chuyển & Replenishment"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "39"
       },
       {
@@ -895,7 +895,7 @@
         "value": "TRF-2026-0018"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "WH-HCM-01"
       }
     ],
@@ -919,7 +919,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "TR-04"
       },
       {
@@ -927,11 +927,11 @@
         "value": "Điều chuyển & Replenishment"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "39"
       },
       {
@@ -939,7 +939,7 @@
         "value": "TRF-2026-0018"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "WH-DN-01"
       }
     ],
@@ -964,7 +964,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "CT-01"
       },
       {
@@ -972,11 +972,11 @@
         "value": "Kiểm kê & Điều chỉnh"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "40, 216"
       },
       {
@@ -1008,7 +1008,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "CT-02"
       },
       {
@@ -1016,11 +1016,11 @@
         "value": "Kiểm kê & Điều chỉnh"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "40"
       },
       {
@@ -1052,7 +1052,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "RP-01"
       },
       {
@@ -1060,15 +1060,15 @@
         "value": "Báo cáo & Analytics"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "82, 227"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -1097,7 +1097,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "RP-02"
       },
       {
@@ -1105,11 +1105,11 @@
         "value": "Báo cáo & Analytics"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "13, 82, 227"
       },
       {
@@ -1141,7 +1141,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "AD-01"
       },
       {
@@ -1149,11 +1149,11 @@
         "value": "Quản trị & Bảo mật"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "17, 112, 113, 225, 276"
       },
       {
@@ -1185,7 +1185,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "AD-02"
       },
       {
@@ -1193,11 +1193,11 @@
         "value": "Quản trị & Bảo mật"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "17, 225"
       },
       {
@@ -1229,7 +1229,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "AD-03"
       },
       {
@@ -1237,11 +1237,11 @@
         "value": "Quản trị & Bảo mật"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "17, 99, 225"
       },
       {
@@ -1273,7 +1273,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "AD-04"
       },
       {
@@ -1281,11 +1281,11 @@
         "value": "Quản trị & Bảo mật"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "LIVE"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "70, 221"
       },
       {
@@ -1317,7 +1317,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "AD-06"
       },
       {
@@ -1325,11 +1325,11 @@
         "value": "Quản trị & Bảo mật"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "08, 17, 83, 280"
       },
       {
@@ -1361,7 +1361,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "IG-04"
       },
       {
@@ -1369,11 +1369,11 @@
         "value": "Tích hợp"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "09, 19, 103, 107"
       },
       {
@@ -1405,7 +1405,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "OP-01"
       },
       {
@@ -1413,11 +1413,11 @@
         "value": "Vận hành & Resilience"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "10, 121, 122, 123"
       },
       {
@@ -1449,7 +1449,7 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "OP-03"
       },
       {
@@ -1457,11 +1457,11 @@
         "value": "Vận hành & Resilience"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "11, 142, 143"
       },
       {
@@ -1493,19 +1493,19 @@
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "OUT-08"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Production route",
+        "label": "Route hệ thống thật",
         "value": "/shipments"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "29, 31, 38, 228"
       },
       {
@@ -1545,11 +1545,11 @@
     ],
     "fields": [
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -1579,43 +1579,43 @@
     "exceptionDetail": "Projection rebuild vẫn không khớp ledger; warehouse/release gate phải giữ blocked."
   },
   "INV-08": {
-    "title": "Internal Location Move",
-    "subtitle": "Same-warehouse production foundation: move unreserved stock source → destination while preserving Status / Lot / Serial and total On Hand.",
+    "title": "Di chuyển vị trí nội bộ",
+    "subtitle": "Nền tảng hệ thống thật trong cùng kho: di chuyển tồn chưa được giữ từ nguồn → đích, giữ nguyên Trạng thái / Lô / Sê-ri và tổng Tồn thực tế.",
     "mode": "scan",
     "stages": [
-      "Scan source",
-      "Scan product/lot",
-      "Enter quantity",
-      "Scan destination",
+      "Quét vị trí nguồn",
+      "Quét sản phẩm/lô",
+      "Nhập số lượng",
+      "Quét vị trí đích",
       "POSTED"
     ],
     "fields": [
       {
-        "label": "Capability",
+        "label": "Chức năng",
         "value": "INV-08"
       },
       {
-        "label": "Production maturity",
+        "label": "Mức triển khai hệ thống thật",
         "value": "FOUNDATION"
       },
       {
-        "label": "Production route",
+        "label": "Route hệ thống thật",
         "value": "/inventory-movements"
       },
       {
-        "label": "Spec",
+        "label": "Đặc tả",
         "value": "29, 222, 282"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "A01-R02-L03-B04"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "B02-R01-L02-B03"
       },
       {
@@ -1623,7 +1623,7 @@
         "value": "SKU-1001 / LOT-1001-260930"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "REBALANCE_PICK_FACE"
       }
     ],
@@ -1634,9 +1634,9 @@
       "VERIFY_MOVE_LEDGER"
     ],
     "exceptionTitle": "MOVE_DESTINATION_INELIGIBLE",
-    "exceptionDetail": "Destination vi phạm lock/capacity/storage/status, source có reserved quantity, hoặc source quantity không còn đủ; move phải fail closed.",
+    "exceptionDetail": "Vị trí đích vi phạm khóa/sức chứa/lưu trữ/trạng thái, nguồn có lượng đã giữ hoặc số lượng nguồn không còn đủ; thao tác di chuyển phải đóng an toàn khi lỗi.",
     "quantity": {
-      "label": "Move quantity",
+      "label": "Số lượng di chuyển",
       "operationUom": "Thùng",
       "baseUom": "Cái",
       "factor": 12,

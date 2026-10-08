@@ -23,9 +23,9 @@ public sealed class InventoryReversalService(
         CancellationToken cancellationToken = default)
     {
         if (request.OriginalTransactionId <= 0)
-            throw new BusinessRuleException("OriginalTransactionId phải hợp lệ.");
+            throw new BusinessRuleException("ID giao dịch gốc không hợp lệ.");
         if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new BusinessRuleException("Lý do reversal là bắt buộc.");
+            throw new BusinessRuleException("Lý do đảo giao dịch là bắt buộc.");
 
         var own = context.Database.CurrentTransaction is null;
         await using var tx = own
@@ -36,14 +36,14 @@ public sealed class InventoryReversalService(
             var original = await context.InventoryTransactions
                 .AsNoTracking()
                 .SingleOrDefaultAsync(x => x.Id == request.OriginalTransactionId, cancellationToken)
-                ?? throw new NotFoundException("Không tìm thấy inventory transaction.");
+                ?? throw new NotFoundException("Không tìm thấy giao dịch tồn kho.");
 
             await warehouseAuthorization.EnsureWarehouseAccessAsync(original.WarehouseId, cancellationToken);
 
             if (original.TransactionType is not (TransactionType.Move or TransactionType.StatusChange))
                 throw Conflict(
                     "INV_REVERSAL_UNSUPPORTED",
-                    "Foundation reversal chỉ hỗ trợ Internal Move và Inventory Status Change; document-bound transaction phải đảo tại workflow chuyên biệt.");
+                    "Phạm vi hiện tại chỉ hỗ trợ đảo giao dịch di chuyển vị trí nội bộ và đổi trạng thái tồn kho; giao dịch gắn với chứng từ phải được đảo tại quy trình nghiệp vụ chuyên biệt.");
 
             var reason = request.Reason.Trim();
             int? fromLocationId = null;
@@ -54,7 +54,7 @@ public sealed class InventoryReversalService(
             if (original.TransactionType == TransactionType.Move)
             {
                 if (!original.FromLocationId.HasValue || !original.ToLocationId.HasValue)
-                    throw Conflict("INV_REVERSAL_INVALID_SOURCE", "MOVE transaction thiếu From/To Location để reversal.");
+                    throw Conflict("INV_REVERSAL_INVALID_SOURCE", "Giao dịch MOVE thiếu vị trí nguồn/đích để thực hiện đảo giao dịch.");
 
                 fromLocationId = original.ToLocationId;
                 toLocationId = original.FromLocationId;
@@ -62,7 +62,7 @@ public sealed class InventoryReversalService(
             else
             {
                 if (!original.FromInventoryStatus.HasValue || !original.ToInventoryStatus.HasValue)
-                    throw Conflict("INV_REVERSAL_INVALID_SOURCE", "StatusChange transaction thiếu From/To Status để reversal.");
+                    throw Conflict("INV_REVERSAL_INVALID_SOURCE", "Giao dịch StatusChange thiếu trạng thái trước/sau để thực hiện đảo giao dịch.");
 
                 fromStatus = original.ToInventoryStatus;
                 toStatus = original.FromInventoryStatus;
@@ -105,14 +105,14 @@ public sealed class InventoryReversalService(
                          x.LotId == original.LotId &&
                          x.SerialId == original.SerialId,
                     cancellationToken)
-                    ?? throw Conflict("INV_REVERSAL_SOURCE_NOT_FOUND", "Không còn bucket tại location đích của MOVE gốc để reversal.");
+                    ?? throw Conflict("INV_REVERSAL_SOURCE_NOT_FOUND", "Không còn nhóm tồn kho tại vị trí đích của giao dịch MOVE gốc để thực hiện đảo giao dịch.");
 
                 var correction = await movementService.MoveAsync(new CreateInventoryMoveDto
                 {
                     InventoryStockId = source.Id,
                     DestinationLocationId = original.FromLocationId!.Value,
                     Quantity = original.Quantity,
-                    Reason = $"Reversal transaction {original.Id}: {reason}"
+                    Reason = $"Đảo giao dịch {original.Id}: {reason}"
                 }, cancellationToken);
 
                 correctiveTransactionId = correction.TransactionId;
@@ -127,14 +127,14 @@ public sealed class InventoryReversalService(
                          x.LotId == original.LotId &&
                          x.SerialId == original.SerialId,
                     cancellationToken)
-                    ?? throw Conflict("INV_REVERSAL_SOURCE_NOT_FOUND", "Không còn bucket ở status đích của transaction gốc để reversal.");
+                    ?? throw Conflict("INV_REVERSAL_SOURCE_NOT_FOUND", "Không còn nhóm tồn kho ở trạng thái đích của giao dịch gốc để thực hiện đảo giao dịch.");
 
                 var correction = await statusService.ChangeAsync(new CreateInventoryStatusChangeDto
                 {
                     InventoryStockId = source.Id,
                     Quantity = original.Quantity,
                     ToStatus = original.FromInventoryStatus!.Value.ToString(),
-                    Reason = $"Reversal transaction {original.Id}: {reason}"
+                    Reason = $"Đảo giao dịch {original.Id}: {reason}"
                 }, cancellationToken);
 
                 correctiveTransactionId = correction.TransactionId;
@@ -179,7 +179,7 @@ public sealed class InventoryReversalService(
         catch (DbUpdateException ex) when (IsReversalClaimDuplicate(ex))
         {
             if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
-            throw Conflict("INV_ALREADY_REVERSED", "Inventory transaction đã được reversal trước đó.");
+            throw Conflict("INV_ALREADY_REVERSED", "Giao dịch tồn kho đã được đảo trước đó.");
         }
         catch
         {

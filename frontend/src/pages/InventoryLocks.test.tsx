@@ -31,25 +31,25 @@ describe('InventoryLocks',()=>{
 
   it('shows active lock read-only without manage permission',async()=>{
     const view=render(<InventoryLocks/>);
-    expect(await view.findByText('QualityHold')).toBeTruthy();
+    expect(await view.findByText('Giữ do chất lượng')).toBeTruthy();
     expect(view.getByText(/LOT-A/)).toBeTruthy();
-    expect(view.queryByText('Tạo Lock')).toBeNull();
-    expect(view.queryByText('Release')).toBeNull();
+    expect(view.queryByText('Tạo khóa')).toBeNull();
+    expect(view.queryByText('Mở khóa')).toBeNull();
   });
 
   it('creates lock once with canonical manage permission and idempotency',async()=>{
     permissionState.granted.add('inventory_lock.manage');
     vi.mocked(apiClient.post).mockResolvedValue({data:lock} as never);
     const view=render(<InventoryLocks/>);
-    await view.findByText('QualityHold');
-    fireEvent.change(view.getByLabelText('Warehouse lock'),{target:{value:'1'}});
-    fireEvent.change(view.getByLabelText('Product ID lock'),{target:{value:'10'}});
-    fireEvent.change(view.getByLabelText('Lý do Inventory Lock'),{target:{value:'Cycle count freeze'}});
-    const button=view.getByText('Tạo Lock');
+    await view.findByText('Giữ do chất lượng');
+    fireEvent.change(view.getByLabelText('Kho'),{target:{value:'1'}});
+    fireEvent.change(view.getByLabelText('ID sản phẩm (tùy chọn)'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Lý do'),{target:{value:'Đóng băng phục vụ kiểm kê'}});
+    const button=view.getByText('Tạo khóa');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/locks',expect.objectContaining({
-      lockType:'ManualOperationalLock',warehouseId:1,productId:10,reason:'Cycle count freeze'
+      lockType:'ManualOperationalLock',warehouseId:1,productId:10,reason:'Đóng băng phục vụ kiểm kê'
     }),{headers:{'Idempotency-Key':'key:inventory-lock-create'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-lock-create');
   });
@@ -58,12 +58,12 @@ describe('InventoryLocks',()=>{
     permissionState.granted.add('inventory_lock.manage');
     vi.mocked(apiClient.post).mockResolvedValue({data:{...lock,status:'Released'}} as never);
     const view=render(<InventoryLocks/>);
-    await view.findByText('QualityHold');
-    fireEvent.click(view.getByText('Release'));
-    fireEvent.change(view.getByLabelText('Lý do release Inventory Lock'),{target:{value:'Investigation cleared'}});
-    fireEvent.click(view.getByText('Xác nhận release'));
+    await view.findByText('Giữ do chất lượng');
+    fireEvent.click(view.getByText('Mở khóa'));
+    fireEvent.change(view.getByLabelText('Lý do mở khóa'),{target:{value:'Đã hoàn tất điều tra'}});
+    fireEvent.click(view.getByText('Xác nhận mở khóa'));
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/locks/9/release',{
-      reason:'Investigation cleared',rowVersion:'AQ=='
+      reason:'Đã hoàn tất điều tra',rowVersion:'AQ=='
     },{headers:{'Idempotency-Key':'key:inventory-lock-release-9'}}));
   });
 });

@@ -14,6 +14,7 @@ import {
   type MockOperationalRecord,
 } from '../mocks/erpWmsMockData';
 import { useMockDemo } from '../context/MockDemoContext';
+import { mockDisplayText, mockOwnerLabel, mockStatusLabel, mockTypeLabel } from '../utils/mockDisplayLabels';
 import './SystemBlueprint.css';
 import './ModuleBlueprint.css';
 
@@ -26,6 +27,13 @@ const qtyText = (record: MockOperationalRecord) =>
   record.quantity == null ? '—' : `${record.quantity.toLocaleString('vi-VN')} ${record.uom ?? ''}`.trim();
 
 const localTime = (iso: string) => new Date(iso).toLocaleString('vi-VN');
+
+const priorityLabel = (priority: MockOperationalRecord['priority']) => ({
+  Low: 'Thấp',
+  Normal: 'Bình thường',
+  High: 'Cao',
+  Critical: 'Khẩn cấp',
+}[priority]);
 
 const ModuleBlueprint = () => {
   const { moduleKey } = useParams();
@@ -53,11 +61,14 @@ const ModuleBlueprint = () => {
         record.reference,
         record.id,
         record.type,
+        mockTypeLabel(record.type),
         record.subject,
+        mockDisplayText(record.subject),
         record.productCode,
         record.partnerCode,
         record.location,
         record.owner,
+        mockOwnerLabel(record.owner),
       ].filter(Boolean).join(' ').toLocaleLowerCase('vi').includes(q);
       const warehouseMatch = !warehouseFilter || record.warehouse === warehouseFilter;
       const statusMatch = !statusFilter || record.status === statusFilter;
@@ -73,7 +84,7 @@ const ModuleBlueprint = () => {
   if (!module) {
     return (
       <div className="module-blueprint-not-found">
-        <h1>Không tìm thấy module</h1>
+        <h1>Không tìm thấy phân hệ</h1>
         <Link to="/system-blueprint">Quay lại bản đồ hệ thống</Link>
       </div>
     );
@@ -93,15 +104,15 @@ const ModuleBlueprint = () => {
 
       <section className="module-hero">
         <div>
-          <span className="eyebrow"><Workflow size={16} /> Module Blueprint • Mock Dataset</span>
+          <span className="eyebrow"><Workflow size={16} /> Bản thiết kế phân hệ • Dữ liệu mô phỏng</span>
           <h1>{module.name}</h1>
           <p>{module.description}</p>
         </div>
         <div className="module-stat-grid">
-          <div><strong>{module.capabilities.length}</strong><span>Mock preview</span></div>
-          <div><strong>{liveCount}</strong><span>Prod. hoàn thiện</span></div>
-          <div><strong>{foundationCount}</strong><span>Prod. một phần</span></div>
-          <div><strong>{plannedCount + optionalCount}</strong><span>Chưa triển khai / optional</span></div>
+          <div><strong>{module.capabilities.length}</strong><span>Bản xem trước mô phỏng</span></div>
+          <div><strong>{liveCount}</strong><span>Hệ thống thật hoàn thiện</span></div>
+          <div><strong>{foundationCount}</strong><span>Hệ thống thật một phần</span></div>
+          <div><strong>{plannedCount + optionalCount}</strong><span>Chưa triển khai / tùy chọn</span></div>
         </div>
       </section>
 
@@ -124,27 +135,27 @@ const ModuleBlueprint = () => {
         <div className="workbench-main">
           <div className="workbench-header">
             <div>
-              <span className="workbench-kicker">WORK CENTER • MOCK DATA</span>
+              <span className="workbench-kicker">TRUNG TÂM CÔNG VIỆC • DỮ LIỆU MÔ PHỎNG</span>
               <h2>{module.name}</h2>
               <p>
-                Dataset mô phỏng tại {workCenter ? localTime(workCenter.snapshotAt) : '—'} • Persona {mockDemo.selectedUser.name} • {mockDemo.allowedWarehouses.length} kho scope.
+                Bộ dữ liệu mô phỏng tại {workCenter ? localTime(workCenter.snapshotAt) : '—'} • Vai trò {mockDemo.selectedUser.name} • {mockDemo.allowedWarehouses.length} kho trong phạm vi.
                 Không gọi API thật và không thay đổi dữ liệu nghiệp vụ.
               </p>
             </div>
-            <button type="button" className="demo-primary" disabled title="Mock dataset là read-only">Mock read-only</button>
+            <button type="button" className="demo-primary" disabled title="Bộ dữ liệu mô phỏng chỉ đọc">Mô phỏng chỉ đọc</button>
           </div>
 
           <div className="demo-kpis">
-            <article><span>Mock records</span><strong>{filteredRecords.length}/{records.length}</strong><small>Sau bộ lọc / tổng</small></article>
-            <article><span>Đang xử lý</span><strong>{activeCount}</strong><small>Active / in progress</small></article>
-            <article><span>Cần chú ý</span><strong>{attentionCount}</strong><small>Warning / exception</small></article>
-            <article><span>Critical</span><strong>{criticalCount}</strong><small>Ưu tiên cao nhất</small></article>
+            <article><span>Bản ghi mô phỏng</span><strong>{filteredRecords.length}/{records.length}</strong><small>Sau bộ lọc / tổng</small></article>
+            <article><span>Đang xử lý</span><strong>{activeCount}</strong><small>Đang hoạt động / đang xử lý</small></article>
+            <article><span>Cần chú ý</span><strong>{attentionCount}</strong><small>Cảnh báo / ngoại lệ</small></article>
+            <article><span>Khẩn cấp</span><strong>{criticalCount}</strong><small>Ưu tiên cao nhất</small></article>
           </div>
 
           <div className="demo-filterbar">
             <input
-              aria-label="Tìm trong work center"
-              placeholder="Tìm mã, sản phẩm, chứng từ, lot/serial..."
+              aria-label="Tìm trong trung tâm công việc"
+              placeholder="Tìm mã, sản phẩm, chứng từ, lô/sê-ri..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -154,7 +165,7 @@ const ModuleBlueprint = () => {
             </select>
             <select aria-label="Trạng thái" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <option value="">Tất cả trạng thái</option>
-              {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
+              {statuses.map((status) => <option key={status} value={status}>{mockStatusLabel(status)}</option>)}
             </select>
             <button type="button" onClick={() => { setSearch(''); setWarehouseFilter(''); setStatusFilter(''); }}>Xóa lọc</button>
           </div>
@@ -177,72 +188,72 @@ const ModuleBlueprint = () => {
                 {filteredRecords.map((record) => (
                   <tr key={record.id} className={selected?.id === record.id ? 'selected-row' : undefined}>
                     <td><strong>{record.reference}</strong><span>{record.id}</span></td>
-                    <td><strong>{record.type}</strong><span>{record.subject}</span></td>
+                    <td><strong>{mockTypeLabel(record.type)}</strong><span>{mockDisplayText(record.subject)}</span></td>
                     <td><strong>{record.warehouse}</strong><span>{record.location ?? '—'}</span></td>
                     <td>{qtyText(record)}</td>
-                    <td><strong>{record.owner}</strong><span>{localTime(record.updatedAt)}</span></td>
-                    <td><span className={'priority-chip priority-' + record.priority.toLowerCase()}>{record.priority}</span></td>
-                    <td><span className={'mock-status tone-' + record.tone}>{record.status}</span></td>
+                    <td><strong>{mockOwnerLabel(record.owner)}</strong><span>{localTime(record.updatedAt)}</span></td>
+                    <td><span className={'priority-chip priority-' + record.priority.toLowerCase()}>{priorityLabel(record.priority)}</span></td>
+                    <td><span className={'mock-status tone-' + record.tone}>{mockStatusLabel(record.status)}</span></td>
                     <td><button type="button" className="table-detail-button" onClick={() => setSelectedId(record.id)}>Chi tiết</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {filteredRecords.length === 0 && <div className="mock-empty">Không có mock record phù hợp bộ lọc.</div>}
+            {filteredRecords.length === 0 && <div className="mock-empty">Không có bản ghi mô phỏng phù hợp bộ lọc.</div>}
           </div>
         </div>
 
         <aside className="trace-panel">
           {selected && (
             <div className="selected-record">
-              <span className="workbench-kicker">SELECTED MOCK RECORD</span>
+              <span className="workbench-kicker">BẢN GHI MÔ PHỎNG ĐANG CHỌN</span>
               <h3>{selected.reference}</h3>
-              <p>{selected.subject}</p>
+              <p>{mockDisplayText(selected.subject)}</p>
               <dl>
-                <div><dt>Loại</dt><dd>{selected.type}</dd></div>
-                <div><dt>Trạng thái</dt><dd><span className={'mock-status tone-' + selected.tone}>{selected.status}</span></dd></div>
-                <div><dt>Warehouse</dt><dd>{selected.warehouse}</dd></div>
-                <div><dt>Location</dt><dd>{selected.location ?? '—'}</dd></div>
-                <div><dt>Product</dt><dd>{selected.productCode ?? '—'}</dd></div>
-                <div><dt>Partner</dt><dd>{selected.partnerCode ?? '—'}</dd></div>
-                <div><dt>Quantity</dt><dd>{qtyText(selected)}</dd></div>
-                <div><dt>Owner</dt><dd>{selected.owner}</dd></div>
-                <div><dt>Priority</dt><dd>{selected.priority}</dd></div>
-                <div><dt>Updated</dt><dd>{localTime(selected.updatedAt)}</dd></div>
+                <div><dt>Loại</dt><dd>{mockTypeLabel(selected.type)}</dd></div>
+                <div><dt>Trạng thái</dt><dd><span className={'mock-status tone-' + selected.tone}>{mockStatusLabel(selected.status)}</span></dd></div>
+                <div><dt>Kho</dt><dd>{selected.warehouse}</dd></div>
+                <div><dt>Vị trí</dt><dd>{selected.location ?? '—'}</dd></div>
+                <div><dt>Sản phẩm</dt><dd>{selected.productCode ?? '—'}</dd></div>
+                <div><dt>Đối tác</dt><dd>{selected.partnerCode ?? '—'}</dd></div>
+                <div><dt>Số lượng</dt><dd>{qtyText(selected)}</dd></div>
+                <div><dt>Người phụ trách</dt><dd>{mockOwnerLabel(selected.owner)}</dd></div>
+                <div><dt>Ưu tiên</dt><dd>{priorityLabel(selected.priority)}</dd></div>
+                <div><dt>Cập nhật</dt><dd>{localTime(selected.updatedAt)}</dd></div>
               </dl>
-              {selected.note ? <div className="selected-note">{selected.note}</div> : null}
+              {selected.note ? <div className="selected-note">{mockDisplayText(selected.note)}</div> : null}
             </div>
           )}
 
           <div className="trace-divider" />
-          <span className="workbench-kicker">TRACEABILITY</span>
+          <span className="workbench-kicker">TRUY VẾT</span>
           <h3>Đường kiểm soát bắt buộc</h3>
           <div className="trace-chain">
-            <div><ShieldCheck size={17} /><span><strong>Permission</strong><small>Role + warehouse scope</small></span></div>
-            <div><Workflow size={17} /><span><strong>Command / API</strong><small>Explicit business action</small></span></div>
-            <div><LockKeyhole size={17} /><span><strong>State + Concurrency</strong><small>Transition + version/idempotency</small></span></div>
-            <div><Boxes size={17} /><span><strong>Domain Rules</strong><small>UOM, status, lot/serial, capacity</small></span></div>
-            <div><Database size={17} /><span><strong>Ledger / Balance</strong><small>Posting boundary khi có inventory effect</small></span></div>
-            <div><FileCheck2 size={17} /><span><strong>Audit / Outbox</strong><small>Evidence và integration event</small></span></div>
+            <div><ShieldCheck size={17} /><span><strong>Quyền</strong><small>Vai trò + phạm vi kho</small></span></div>
+            <div><Workflow size={17} /><span><strong>Lệnh / API</strong><small>Hành động nghiệp vụ tường minh</small></span></div>
+            <div><LockKeyhole size={17} /><span><strong>Trạng thái + Đồng thời</strong><small>Chuyển trạng thái + phiên bản/idempotency</small></span></div>
+            <div><Boxes size={17} /><span><strong>Quy tắc nghiệp vụ</strong><small>UOM, trạng thái, lô/sê-ri, sức chứa</small></span></div>
+            <div><Database size={17} /><span><strong>Sổ cái / Số dư</strong><small>Ranh giới ghi sổ khi có ảnh hưởng tồn kho</small></span></div>
+            <div><FileCheck2 size={17} /><span><strong>Kiểm toán / Outbox</strong><small>Bằng chứng và sự kiện tích hợp</small></span></div>
           </div>
           <div className="trace-note">
-            Mock records chỉ phục vụ demo/test. Capability chưa có backend vẫn giữ đúng nhãn “Theo đặc tả” hoặc
-            “Nâng cao”, không giả lập production readiness.
+            Bản ghi mô phỏng chỉ phục vụ mô phỏng/kiểm thử. Chức năng chưa có phía máy chủ vẫn giữ đúng nhãn “Theo đặc tả” hoặc
+            “Nâng cao”, không giả lập mức sẵn sàng của hệ thống thật.
           </div>
         </aside>
       </section>
 
       <section className="module-panel">
-        <div className="module-panel-title"><ShieldCheck size={18} /><h2>Coverage capability</h2></div>
+        <div className="module-panel-title"><ShieldCheck size={18} /><h2>Độ phủ chức năng</h2></div>
         <div className="demo-table-wrap">
           <table className="demo-table">
             <thead>
               <tr>
-                <th>Mã / Capability</th>
+                <th>Mã / Chức năng</th>
                 <th>Mục tiêu vận hành</th>
-                <th>Surface</th>
+                <th>Bề mặt sử dụng</th>
                 <th>Trạng thái</th>
-                <th>Spec</th>
+                <th>Đặc tả</th>
                 <th></th>
               </tr>
             </thead>
@@ -269,8 +280,8 @@ const ModuleBlueprint = () => {
                   <td>{capability.spec}</td>
                   <td>
                     <div className="table-capability-links">
-                      <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + capability.id}>Preview</Link>
-                      {capability.mockRoute ? <Link className="table-open-link" to={capability.mockRoute}>Mock chuyên biệt</Link> : null}
+                      <Link className="table-open-link" to={'/system-blueprint/' + module.key + '/' + capability.id}>Xem trước</Link>
+                      {capability.mockRoute ? <Link className="table-open-link" to={capability.mockRoute}>Mô phỏng chuyên biệt</Link> : null}
                       {capability.route ? <span className="table-production-note">Có trong hệ thống thật</span> : null}
                     </div>
                   </td>
@@ -282,14 +293,14 @@ const ModuleBlueprint = () => {
       </section>
 
       <section className="module-panel">
-        <div className="module-panel-title"><ShieldCheck size={18} /><h2>Nguyên tắc triển khai module</h2></div>
+        <div className="module-panel-title"><ShieldCheck size={18} /><h2>Nguyên tắc triển khai phân hệ</h2></div>
         <div className="module-rule-grid">
-          <div><strong>01</strong><span>Không dùng UI state thay cho server authorization.</span></div>
-          <div><strong>02</strong><span>Không update balance trực tiếp từ business document.</span></div>
-          <div><strong>03</strong><span>Mutation critical phải concurrency-safe và idempotent.</span></div>
-          <div><strong>04</strong><span>Ledger đã post là immutable; sửa sai bằng reversal/correction.</span></div>
-          <div><strong>05</strong><span>UI phải giữ đúng state-machine semantics và error code contract.</span></div>
-          <div><strong>06</strong><span>Chỉ đánh dấu hoàn tất khi có test + QA + release evidence.</span></div>
+          <div><strong>01</strong><span>Không dùng trạng thái UI thay cho phân quyền phía máy chủ.</span></div>
+          <div><strong>02</strong><span>Không cập nhật số dư trực tiếp từ chứng từ nghiệp vụ.</span></div>
+          <div><strong>03</strong><span>Thao tác thay đổi quan trọng phải an toàn đồng thời và idempotent.</span></div>
+          <div><strong>04</strong><span>Sổ cái đã ghi là bất biến; sửa sai bằng đảo giao dịch/hiệu chỉnh.</span></div>
+          <div><strong>05</strong><span>UI phải giữ đúng ngữ nghĩa máy trạng thái và hợp đồng mã lỗi.</span></div>
+          <div><strong>06</strong><span>Chỉ đánh dấu hoàn tất khi có kiểm thử + QA + bằng chứng phát hành.</span></div>
         </div>
       </section>
     </div>

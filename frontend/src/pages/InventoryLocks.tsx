@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
 
 type Warehouse={id:number;name:string;isActive:boolean};
 type Status={code:string;name:string};
@@ -12,14 +12,41 @@ type LockRow={
   reason:string;createdAt:string;createdBy:number;expiresAt?:string;releasedAt?:string;releasedBy?:number;releaseReason?:string;rowVersion:string;
 };
 const types=['CountFreeze','QualityHold','InvestigationHold','RecallHold','MaintenanceFreeze','ManualOperationalLock'];
+
+const lockTypeLabel=(value:string)=>({
+  CountFreeze:'Đóng băng kiểm kê',
+  QualityHold:'Giữ do chất lượng',
+  InvestigationHold:'Giữ để điều tra',
+  RecallHold:'Giữ do thu hồi',
+  MaintenanceFreeze:'Đóng băng bảo trì',
+  ManualOperationalLock:'Khóa vận hành thủ công',
+}[value]??value);
+
+const lockStatusLabel=(value:string)=>({
+  Active:'Đang hiệu lực',
+  Released:'Đã mở khóa',
+  Expired:'Đã hết hiệu lực',
+}[value]??value);
+
+const inventoryStatusLabel=(value:string)=>({
+  AVAILABLE:'Khả dụng',
+  QC_HOLD:'Chờ kiểm tra chất lượng',
+  QUARANTINE:'Cách ly',
+  BLOCKED:'Bị chặn',
+  DAMAGED:'Hư hỏng',
+  REJECTED:'Từ chối',
+  EXPIRED:'Hết hạn',
+  RECALL_BLOCKED:'Khóa thu hồi',
+}[value]??value);
+
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Active'?'danger':status==='Released'?'success':status==='Expired'?'warning':'neutral';
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
-  if(r?.data?.code==='INV_STOCK_LOCKED')return r.data.message??'Inventory Lock không còn ở trạng thái có thể thay đổi.';
-  if(r?.status===403)return 'Bạn không có quyền quản lý Inventory Lock.';
-  if(r?.status===409)return r.data?.message??'Inventory Lock đã thay đổi. Vui lòng tải lại.';
-  return r?.data?.message??'Không thể xử lý Inventory Lock.';
+  if(r?.data?.code==='INV_STOCK_LOCKED')return r.data.message??'Khóa tồn kho không còn ở trạng thái có thể thay đổi.';
+  if(r?.status===403)return 'Bạn không có quyền quản lý khóa tồn kho.';
+  if(r?.status===409)return r.data?.message??'Khóa tồn kho đã thay đổi. Vui lòng tải lại.';
+  return r?.data?.message??'Không thể xử lý khóa tồn kho.';
 };
 
 export default function InventoryLocks(){
@@ -94,60 +121,80 @@ export default function InventoryLocks(){
   };
 
   return <UiPage>
-    <UiPageHeader eyebrow="Inventory Control" title="Inventory Locks / Freeze"
-      description="Lock thay đổi eligibility, không thay đổi quantity. Active lock được re-check trong inventory mutation transaction."/>
+    <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Khóa / đóng băng tồn kho"
+      description="Khóa thay đổi điều kiện được phép thao tác nhưng không thay đổi số lượng. Khóa đang hiệu lực được kiểm tra lại ngay trong giao dịch thay đổi tồn kho."/>
     {error&&<p role="alert">{error}</p>}
     <div className="ui-stack">
-      {canManage&&<UiCard title="Tạo Inventory Lock">
-        <form onSubmit={create} className="ui-form-grid">
-          <select aria-label="Loại Inventory Lock" value={form.lockType} onChange={e=>setForm(x=>({...x,lockType:e.target.value}))}>
-            {types.map(x=><option key={x} value={x}>{x}</option>)}
-          </select>
-          <select aria-label="Warehouse lock" value={form.warehouseId} onChange={e=>setForm(x=>({...x,warehouseId:e.target.value}))} required>
-            <option value="">Chọn Warehouse</option>
-            {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
-          </select>
-          <input aria-label="Location ID lock" type="number" min="1" placeholder="Location ID (tùy chọn)" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))}/>
-          <input aria-label="Product ID lock" type="number" min="1" placeholder="Product ID (tùy chọn)" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))}/>
-          <select aria-label="Inventory status lock" value={form.inventoryStatus} onChange={e=>setForm(x=>({...x,inventoryStatus:e.target.value}))}>
-            <option value="">Mọi Inventory Status</option>
-            {statuses.map(x=><option key={x.code} value={x.code}>{x.code}</option>)}
-          </select>
-          <input aria-label="Lot ID lock" type="number" min="1" placeholder="Lot ID (tùy chọn)" value={form.lotId} onChange={e=>setForm(x=>({...x,lotId:e.target.value}))}/>
-          <input aria-label="Serial ID lock" type="number" min="1" placeholder="Serial ID (tùy chọn)" value={form.serialId} onChange={e=>setForm(x=>({...x,serialId:e.target.value}))}/>
-          <input aria-label="Hết hạn Inventory Lock" type="datetime-local" value={form.expiresAt} onChange={e=>setForm(x=>({...x,expiresAt:e.target.value}))}/>
-          <input aria-label="Lý do Inventory Lock" value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} placeholder="Lý do / evidence" required/>
-          <button type="submit" disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo Lock</button>
+      {canManage&&<UiCard title="Tạo khóa tồn kho">
+        <form onSubmit={create} className="ui-form-grid" aria-busy={busy}>
+          <UiToolbarField label="Loại khóa">
+            <select value={form.lockType} onChange={e=>setForm(x=>({...x,lockType:e.target.value}))}>
+              {types.map(x=><option key={x} value={x}>{lockTypeLabel(x)}</option>)}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Kho">
+            <select value={form.warehouseId} onChange={e=>setForm(x=>({...x,warehouseId:e.target.value}))} required>
+              <option value="">Chọn kho</option>
+              {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="ID vị trí (tùy chọn)">
+            <input type="number" min="1" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))} inputMode="numeric"/>
+          </UiToolbarField>
+          <UiToolbarField label="ID sản phẩm (tùy chọn)">
+            <input type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
+          </UiToolbarField>
+          <UiToolbarField label="Trạng thái tồn kho (tùy chọn)">
+            <select value={form.inventoryStatus} onChange={e=>setForm(x=>({...x,inventoryStatus:e.target.value}))}>
+              <option value="">Mọi trạng thái tồn kho</option>
+              {statuses.map(x=><option key={x.code} value={x.code}>{inventoryStatusLabel(x.code)}</option>)}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="ID lô (tùy chọn)">
+            <input type="number" min="1" value={form.lotId} onChange={e=>setForm(x=>({...x,lotId:e.target.value}))} inputMode="numeric"/>
+          </UiToolbarField>
+          <UiToolbarField label="ID sê-ri (tùy chọn)">
+            <input type="number" min="1" value={form.serialId} onChange={e=>setForm(x=>({...x,serialId:e.target.value}))} inputMode="numeric"/>
+          </UiToolbarField>
+          <UiToolbarField label="Hết hiệu lực lúc (tùy chọn)">
+            <input type="datetime-local" value={form.expiresAt} onChange={e=>setForm(x=>({...x,expiresAt:e.target.value}))}/>
+          </UiToolbarField>
+          <UiToolbarField label="Lý do">
+            <input value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} required/>
+          </UiToolbarField>
+          <button type="submit" disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
         </form>
-        <p className="ui-muted-text">QUALITY_HOLD / INVESTIGATION_HOLD / RECALL_HOLD phải release thủ công; không cho auto-expiry.</p>
+        <p className="ui-muted-text">Giữ do chất lượng, giữ để điều tra và giữ do thu hồi phải được mở thủ công; không tự hết hiệu lực.</p>
       </UiCard>}
 
-      <UiCard title="Danh sách Inventory Lock">
-        <p className="ui-muted-text">Foundation hiện hỗ trợ scope Warehouse / Location / Product / Status / Lot / Serial. Owner, HU, partial-quantity và privileged override chưa canonical.</p>
-        {loading?<p role="status">Đang tải Inventory Lock...</p>:<UiTableScroll>
-          <table aria-label="Inventory locks">
-            <thead><tr><th>Lock</th><th>Scope</th><th>Trạng thái</th><th>Lý do</th><th>Thời gian</th>{canManage&&<th>Thao tác</th>}</tr></thead>
-            <tbody>{locks.length===0?<tr><td colSpan={canManage?6:5} className="ui-empty-cell">Chưa có Inventory Lock.</td></tr>:
+      <UiCard title="Danh sách khóa tồn kho">
+        <p className="ui-muted-text">Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, HU, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
+        {loading?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
+          <table aria-label="Danh sách khóa tồn kho">
+            <thead><tr><th>Khóa</th><th>Phạm vi</th><th>Trạng thái</th><th>Lý do</th><th>Thời gian</th>{canManage&&<th>Thao tác</th>}</tr></thead>
+            <tbody>{locks.length===0?<tr><td colSpan={canManage?6:5} className="ui-empty-cell">Chưa có khóa tồn kho.</td></tr>:
               locks.map(item=><tr key={item.id}>
-                <td><strong>{item.lockType}</strong><br/><small>#{item.id}</small></td>
+                <td><strong>{lockTypeLabel(item.lockType)}</strong><br/><small>#{item.id}</small></td>
                 <td>{item.warehouseName}<br/><small>
-                  {item.locationCode??'mọi location'} • {item.productCode??'mọi product'} • {item.inventoryStatus??'mọi status'} • {item.lotNumber??'mọi lot'} • {item.serialNumber??'mọi serial'}
+                  {item.locationCode??'mọi vị trí'} • {item.productCode??'mọi sản phẩm'} • {item.inventoryStatus?inventoryStatusLabel(item.inventoryStatus):'mọi trạng thái'} • {item.lotNumber??'mọi lô'} • {item.serialNumber??'mọi sê-ri'}
                 </small></td>
-                <td><UiBadge tone={tone(item.status)}>{item.status}</UiBadge></td>
-                <td>{item.reason}{item.releaseReason&&<><br/><small>Release: {item.releaseReason}</small></>}</td>
-                <td>{new Date(item.createdAt).toLocaleString('vi-VN')}<br/><small>{item.expiresAt?`Hết hạn ${new Date(item.expiresAt).toLocaleString('vi-VN')}`:'Không auto-expire'}</small></td>
-                {canManage&&<td>{item.status==='Active'&&<button type="button" onClick={()=>{setRelease(item);setReleaseReason('')}}>Release</button>}</td>}
+                <td><UiBadge tone={tone(item.status)}>{lockStatusLabel(item.status)}</UiBadge></td>
+                <td>{item.reason}{item.releaseReason&&<><br/><small>Lý do mở khóa: {item.releaseReason}</small></>}</td>
+                <td>{new Date(item.createdAt).toLocaleString('vi-VN')}<br/><small>{item.expiresAt?`Hết hiệu lực ${new Date(item.expiresAt).toLocaleString('vi-VN')}`:'Không tự hết hiệu lực'}</small></td>
+                {canManage&&<td>{item.status==='Active'&&<button type="button" onClick={()=>{setRelease(item);setReleaseReason('')}}>Mở khóa</button>}</td>}
               </tr>)}
             </tbody>
           </table>
         </UiTableScroll>}
       </UiCard>
 
-      {release&&canManage&&<UiCard title={`Release Lock #${release.id}`}>
-        <form onSubmit={releaseLock} className="ui-form-grid">
-          <input aria-label="Lý do release Inventory Lock" value={releaseReason} onChange={e=>setReleaseReason(e.target.value)} placeholder="Lý do release" required/>
+      {release&&canManage&&<UiCard title={`Mở khóa #${release.id}`}>
+        <form onSubmit={releaseLock} className="ui-form-grid" aria-busy={busy}>
+          <UiToolbarField label="Lý do mở khóa">
+            <input value={releaseReason} onChange={e=>setReleaseReason(e.target.value)} required/>
+          </UiToolbarField>
           <div className="ui-inline-actions">
-            <button type="submit" disabled={busy||!releaseReason.trim()}>Xác nhận release</button>
+            <button type="submit" disabled={busy||!releaseReason.trim()}>Xác nhận mở khóa</button>
             <button type="button" disabled={busy} onClick={()=>setRelease(null)}>Hủy</button>
           </div>
         </form>

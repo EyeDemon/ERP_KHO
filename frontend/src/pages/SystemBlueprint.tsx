@@ -53,59 +53,59 @@ const SystemBlueprint = () => {
     <div className="blueprint-page">
       <section className="blueprint-hero">
         <div>
-          <div className="eyebrow"><Layers3 size={16} /> ERP WMS • Complete System Blueprint</div>
+          <div className="eyebrow"><Layers3 size={16} /> ERP WMS • Bản thiết kế hệ thống hoàn chỉnh</div>
           <h1>Bản đồ chức năng ERP/WMS hoàn chỉnh</h1>
           <p>
-            Blueprint dùng Notion canonical ở chế độ chỉ đọc để đối chiếu nghiệp vụ. Trạng thái capability bên dưới
-            phản ánh hệ thống production thật đã merge, deploy và QA; mock preview không được dùng để tự nâng maturity.
+            Bản thiết kế dùng Notion chuẩn ở chế độ chỉ đọc để đối chiếu nghiệp vụ. Trạng thái chức năng bên dưới
+            phản ánh hệ thống thật đã merge, triển khai và QA; bản xem trước mô phỏng không được dùng để tự nâng mức trưởng thành.
           </p>
         </div>
         <div className="hero-badge">
           <ShieldCheck size={22} />
-          <span>Ledger-first • Permission-aware • State-machine driven</span>
+          <span>Ưu tiên sổ cái • Theo quyền truy cập • Điều khiển bằng máy trạng thái</span>
         </div>
       </section>
 
       <section className="blueprint-kpis">
         <article><strong>{blueprintTotals.modules}</strong><span>Nhóm hệ thống</span></article>
-        <article><strong>{blueprintTotals.capabilities}</strong><span>Capability có mock preview</span></article>
-        <article className="kpi-live"><strong>{blueprintTotals.live}</strong><span>Production hoàn thiện phạm vi hiện tại</span></article>
-        <article className="kpi-foundation"><strong>{blueprintTotals.foundation}</strong><span>Production đã có một phần</span></article>
-        <article><strong>{blueprintTotals.planned}</strong><span>Chưa triển khai production</span></article>
-        <article><strong>{blueprintTotals.optional}</strong><span>Optional / advanced</span></article>
-        <article className="kpi-mock"><strong>{mockRecordCount}</strong><span>Mock records</span></article>
+        <article><strong>{blueprintTotals.capabilities}</strong><span>Chức năng có bản xem trước mô phỏng</span></article>
+        <article className="kpi-live"><strong>{blueprintTotals.live}</strong><span>Hệ thống thật hoàn thiện phạm vi hiện tại</span></article>
+        <article className="kpi-foundation"><strong>{blueprintTotals.foundation}</strong><span>Hệ thống thật đã có một phần</span></article>
+        <article><strong>{blueprintTotals.planned}</strong><span>Chưa triển khai hệ thống thật</span></article>
+        <article><strong>{blueprintTotals.optional}</strong><span>Tùy chọn / nâng cao</span></article>
+        <article className="kpi-mock"><strong>{mockRecordCount}</strong><span>Bản ghi mô phỏng</span></article>
       </section>
 
       <section className="mock-dataset-summary">
-        <strong>Verified implementation baseline:</strong>
-        <span>Branch: {blueprintProductionSnapshot.branch}</span>
-        <span>Baseline commit: {blueprintProductionSnapshot.commit.slice(0, 12)}</span>
-        <span>Deploy: {blueprintProductionSnapshot.deployment}</span>
-        <span>Verified: {blueprintProductionSnapshot.verifiedAt}</span>
-        <span>Notion: canonical reference • read-only</span>
+        <strong>Mốc triển khai đã xác minh:</strong>
+        <span>Nhánh: {blueprintProductionSnapshot.branch}</span>
+        <span>Commit mốc: {blueprintProductionSnapshot.commit.slice(0, 12)}</span>
+        <span>Triển khai: {blueprintProductionSnapshot.deployment}</span>
+        <span>Xác minh: {blueprintProductionSnapshot.verifiedAt}</span>
+        <span>Notion: tài liệu chuẩn • chỉ đọc</span>
       </section>
 
       <section className="mock-dataset-summary">
-        <strong>Demo dataset:</strong>
-        <span>Persona: {mockDemo.selectedUser.name}</span>
-        <span>Scope: {mockDemo.allowedWarehouses.join(', ')}</span>
+        <strong>Bộ dữ liệu mô phỏng:</strong>
+        <span>Vai trò: {mockDemo.selectedUser.name}</span>
+        <span>Phạm vi: {mockDemo.allowedWarehouses.join(', ')}</span>
         <span>{mockWarehouses.length} kho</span>
         <span>{mockProducts.length} SKU</span>
         <span>{mockPartners.length} đối tác</span>
-        <span>{mockRecordCount} operational records</span>
-        <span>Lot / Serial / Inventory / Transfer / Count / Approval / Integration / Mobile</span>
+        <span>{mockRecordCount} bản ghi vận hành</span>
+        <span>Lô / Sê-ri / Tồn kho / Điều chuyển / Kiểm kê / Phê duyệt / Tích hợp / Di động</span>
         <div className="blueprint-lab-links">
-          <Link className="scenario-lab-link" to="/system-blueprint/search">Mở Global Search →</Link>
-          <Link className="scenario-lab-link" to="/system-blueprint/coverage">Mở Coverage & Readiness →</Link>
-          <Link className="scenario-lab-link" to="/system-blueprint/mock-data">Mở Mock Data Lab →</Link>
-          <Link className="scenario-lab-link" to="/system-blueprint/scenarios">Mở Golden Scenario Lab →</Link>
+          <Link className="scenario-lab-link" to="/system-blueprint/search">Mở Tìm kiếm toàn hệ thống →</Link>
+          <Link className="scenario-lab-link" to="/system-blueprint/coverage">Mở Độ phủ & mức sẵn sàng →</Link>
+          <Link className="scenario-lab-link" to="/system-blueprint/mock-data">Mở Phòng dữ liệu mô phỏng →</Link>
+          <Link className="scenario-lab-link" to="/system-blueprint/scenarios">Mở Phòng kịch bản chuẩn →</Link>
         </div>
       </section>
 
       <section className="blueprint-principles">
-        <div><Workflow size={18} /><span>Command → Authorization → State → Domain Rules → Posting</span></div>
-        <div><Boxes size={18} /><span>Immutable Ledger → Balance Projection → Audit → Outbox</span></div>
-        <div><Network size={18} /><span>Web ERP + Mobile WMS + Integration dùng chung business semantics</span></div>
+        <div><Workflow size={18} /><span>Lệnh → Phân quyền → Trạng thái → Quy tắc nghiệp vụ → Ghi sổ</span></div>
+        <div><Boxes size={18} /><span>Sổ cái bất biến → Số dư dự phóng → Kiểm toán → Outbox</span></div>
+        <div><Network size={18} /><span>ERP trên web + WMS di động + Tích hợp dùng chung ngữ nghĩa nghiệp vụ</span></div>
       </section>
 
       <section className="blueprint-toolbar">
@@ -114,23 +114,23 @@ const SystemBlueprint = () => {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tìm chức năng, mã capability, spec..."
+            placeholder="Tìm chức năng, mã chức năng, đặc tả..."
           />
         </label>
         <label className="blueprint-select">
           <Filter size={16} />
           <select value={status} onChange={(event) => setStatus(event.target.value as BlueprintStatus | 'all')}>
             <option value="all">Tất cả trạng thái</option>
-            <option value="live">Production hoàn thiện phạm vi hiện tại</option>
-            <option value="foundation">Production đã có một phần</option>
-            <option value="planned">Chưa triển khai production</option>
-            <option value="optional">Có mock nâng cao • bật khi cần</option>
+            <option value="live">Hệ thống thật hoàn thiện phạm vi hiện tại</option>
+            <option value="foundation">Hệ thống thật đã có một phần</option>
+            <option value="planned">Chưa triển khai hệ thống thật</option>
+            <option value="optional">Có mô phỏng nâng cao • bật khi cần</option>
           </select>
         </label>
         <label className="blueprint-select">
           <Layers3 size={16} />
           <select value={activeModule} onChange={(event) => setActiveModule(event.target.value)}>
-            <option value="all">Tất cả module</option>
+            <option value="all">Tất cả phân hệ</option>
             {erpWmsBlueprint.map((module) => <option key={module.key} value={module.key}>{module.name}</option>)}
           </select>
         </label>
@@ -152,7 +152,7 @@ const SystemBlueprint = () => {
               </div>
               <div className="module-actions">
                 <span className="module-count">{module.capabilities.length} chức năng</span>
-                <Link className="module-preview-link" to={'/system-blueprint/' + module.key}>Xem work center →</Link>
+                <Link className="module-preview-link" to={'/system-blueprint/' + module.key}>Xem trung tâm công việc →</Link>
               </div>
             </header>
 
@@ -186,10 +186,10 @@ const SystemBlueprint = () => {
                     ))}
                   </div>
                   <footer>
-                    <span>Spec {capability.spec}</span>
+                    <span>Đặc tả {capability.spec}</span>
                     <div className="capability-links">
-                      <Link to={'/system-blueprint/' + module.key + '/' + capability.id}>Mở mock →</Link>
-                      {capability.mockRoute ? <Link to={capability.mockRoute}>Mở mock chuyên biệt →</Link> : null}
+                      <Link to={'/system-blueprint/' + module.key + '/' + capability.id}>Mở mô phỏng →</Link>
+                      {capability.mockRoute ? <Link to={capability.mockRoute}>Mở mô phỏng chuyên biệt →</Link> : null}
                     </div>
                   </footer>
                 </article>
@@ -197,7 +197,7 @@ const SystemBlueprint = () => {
             </div>
           </section>
         ))}
-        {filtered.length === 0 && <div className="blueprint-empty">Không có capability phù hợp bộ lọc.</div>}
+        {filtered.length === 0 && <div className="blueprint-empty">Không có chức năng phù hợp bộ lọc.</div>}
       </div>
     </div>
   );

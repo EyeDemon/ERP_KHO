@@ -1,56 +1,55 @@
-# Inventory Control Blueprint Domain Mocks
+# Inventory Control bản thiết kế Domain Mocks
 
-Status: **BLUEPRINT UI REFERENCE — production status synced 2026-10-07**
+Trạng thái: **THAM CHIẾU GIAO DIỆN BẢN THIẾT KẾ — trạng thái hệ thống thật đồng bộ ngày 2026-10-08**
 
-This document describes specialized Blueprint-only mock panels. It does **not** define production maturity by itself. Production status comes from the verified integration branch and `frontend/src/config/erpWmsBlueprint.ts`; Notion remains the canonical read-only business/spec reference.
+Tài liệu này mô tả các bảng mô phỏng chuyên biệt chỉ dành cho bản thiết kế. Bản thân tài liệu **không quyết định mức trưởng thành hệ thống thật**. Trạng thái production lấy từ nhánh tích hợp đã xác minh và `frontend/src/config/erpWmsbản thiết kế.ts`; Notion tiếp tục là tài liệu nghiệp vụ/đặc tả chuẩn ở chế độ chỉ đọc.
 
-## Specialized capability panels
+## Các bảng chức năng chuyên biệt
 
-The Inventory Control Blueprint includes domain-specific, read-only mock panels for:
+bản thiết kế Kiểm soát tồn kho gồm các bảng mô phỏng chỉ đọc theo từng capability:
 
-### Production foundations
+### Các nền tảng hệ thống thật
 
 - **INV-05 — Inventory Status**
-  - status quantities;
-  - reserve/allocate/pick eligibility;
-  - hold/block/release guardrails.
-  - Production maturity: `foundation`.
+  - số lượng theo trạng thái;
+  - điều kiện được giữ hàng/phân bổ/lấy hàng;
+  - rào chắn giữ/chặn/mở.
+  - Mức trưởng thành hệ thống thật: `foundation`.
 
 - **INV-06 — Lot / Serial / Expiry**
-  - lot/serial identity search;
-  - expiry / FEFO context;
-  - duplicate identity protection.
-  - Production maturity: `foundation`.
+  - tìm định danh lô/sê-ri;
+  - ngữ cảnh hạn dùng / FEFO;
+  - bảo vệ chống trùng định danh.
+  - Mức trưởng thành hệ thống thật: `foundation`.
 
 - **INV-07 — Inventory Locks / Freeze**
-  - lock scope;
-  - lock type / effective overlap semantics;
-  - open-work impact.
-  - Production maturity: `foundation`.
+  - phạm vi khóa;
+  - loại khóa / semantics khi nhiều khóa chồng lấp;
+  - ảnh hưởng tới công việc đang mở.
+  - Mức trưởng thành hệ thống thật: `foundation`.
 
 - **INV-08 — Internal Location Move**
-  - same-warehouse location movement;
-  - lock/capacity/storage compatibility;
-  - MOVE ledger and quantity preservation.
-  - Production maturity: `foundation`.
+  - di chuyển vị trí trong cùng kho;
+  - tương thích khóa/sức chứa/lưu trữ;
+  - sổ cái MOVE và bảo toàn số lượng.
+  - Mức trưởng thành hệ thống thật: `foundation`.
 
-### Still planned in production
+- **INV-09 — Đảo giao dịch**
+  - giao dịch sổ cái gốc bất biến;
+  - giao dịch hiệu chỉnh + dấu mốc đảo;
+  - liên kết cấu trúc Gốc / Hiệu chỉnh / Dấu đảo;
+  - ràng buộc cơ sở dữ liệu chống đảo lặp;
+  - phạm vi hệ thống thật hiện hỗ trợ Di chuyển vị trí nội bộ và Đổi trạng thái tồn kho.
+  - Mức trưởng thành hệ thống thật: `foundation`.
 
-- **INV-09 — Reversal**
-  - immutable original ledger transaction;
-  - reversal transaction;
-  - corrected transaction;
-  - correlation and reversibility guards.
-  - Production maturity: `planned`.
+- **INV-10 — Truy vết & phả hệ tồn kho**
+  - truy theo Sản phẩm / Lô / Sê-ri / Tham chiếu trong phạm vi kho được phép;
+  - nhóm tồn hiện tại + dòng thời gian sổ cái bất biến;
+  - phép chiếu chuỗi đảo có cấu trúc;
+  - phả hệ và điều phối Return/Recall đầy đủ vẫn chưa hoàn tất.
+  - Mức trưởng thành hệ thống thật: `foundation`.
 
-- **INV-10 — Traceability & Genealogy**
-  - backward and forward lot/serial trace;
-  - shipment exposure;
-  - return/recall branches;
-  - explicit incomplete-chain state.
-  - Production maturity: `planned`.
-
-## Other production foundations
+## Các nền tảng hệ thống thật khác
 
 - **INV-01 — Inventory Browser** — `foundation` route.
 - **INV-02 — Immutable Inventory Ledger** — `foundation`.
@@ -58,35 +57,35 @@ The Inventory Control Blueprint includes domain-specific, read-only mock panels 
 - **INV-04 — Availability Engine** — `foundation`.
 - **INV-11 — Integrity & Reconciliation** — `foundation` route.
 
-## Integrity rules represented by the UI
+## Các quy tắc toàn vẹn được thể hiện trên UI
 
-- Posted ledger entries are immutable.
-- Status controls do not bypass lock/security policy.
-- Lot/serial identity does not bypass inventory eligibility.
-- Reversal creates new signed entries; it never edits/deletes historical ledger rows.
-- Genealogy with missing source/correlation links must be shown as incomplete rather than inferred.
-- Same-warehouse move semantics remain owned by INV-08 and preserve total warehouse On Hand.
+- Bản ghi sổ cái đã ghi là bất biến.
+- Thao tác trạng thái không được bỏ qua chính sách khóa/bảo mật.
+- Định danh lô/sê-ri không được bỏ qua điều kiện hợp lệ của tồn kho.
+- Đảo giao dịch tạo bản ghi mới có dấu; không bao giờ sửa/xóa dòng sổ cái lịch sử.
+- Phả hệ thiếu liên kết nguồn/tương quan phải hiển thị là chưa đầy đủ thay vì tự suy diễn.
+- Quy tắc di chuyển trong cùng kho tiếp tục thuộc INV-08 và bảo toàn tổng tồn thực tế của kho.
 
-## Runtime boundary
+## Ranh giới môi trường chạy
 
-The specialized panels themselves are Blueprint-only:
+Các bảng chuyên biệt này chỉ thuộc bản thiết kế:
 
-- they do not call production mutation APIs;
-- they do not write the database;
-- they do not mutate ledger or inventory;
-- they must not display fake successful production commands;
-- they must not promote capability maturity merely because a mock exists.
+- không gọi API thay đổi dữ liệu hệ thống thật;
+- không ghi vào cơ sở dữ liệu;
+- không thay đổi sổ cái hoặc tồn kho;
+- không được hiển thị lệnh hệ thống thật thành công giả;
+- không được nâng mức trưởng thành chức năng chỉ vì có mô phỏng.
 
-INV-05, INV-06, INV-07 and INV-08 now have real production foundations elsewhere in the application. INV-09 and INV-10 remain planned until their production implementations are merged, deployed and QA-verified.
+INV-05 đến INV-10 hiện đều có nền tảng hệ thống thật ở phần hệ thống tương ứng. INV-09 và INV-10 chỉ được nâng trạng thái sau khi đã merge, CI sau merge xanh và có bằng chứng bản triển khai hệ thống thật ở trạng thái READY; các khoảng trống chuẩn đã nêu giữ chúng ở `foundation`, không phải `live`.
 
 ## UI/UX
 
-The screens follow the project UI UX Pro Max direction:
+Các màn hình tuân theo định hướng UI UX Pro Max của dự án:
 
-- operational flat/minimal layout;
-- semantic status text in addition to color;
-- contained responsive data tables;
-- readable numeric states;
-- no emoji as structural UI icons;
-- reduced-motion safe;
-- clear warning/recovery language.
+- bố cục vận hành phẳng, tối giản;
+- trạng thái có chữ mang nghĩa, không chỉ dựa vào màu;
+- bảng dữ liệu thích ứng trong vùng chứa;
+- trạng thái số dễ đọc;
+- không dùng emoji làm icon cấu trúc;
+- an toàn với chế độ giảm chuyển động;
+- cảnh báo và hướng phục hồi rõ ràng.

@@ -28,15 +28,15 @@ const MockScenarioLab = () => {
       <Link to="/system-blueprint" className="scenario-back"><ArrowLeft size={16} /> Bản đồ hệ thống</Link>
       <section className="scenario-hero">
         <div>
-          <span className="scenario-eyebrow"><FlaskConical size={16} /> ERP WMS • Golden Scenario Lab</span>
-          <h1>Mock test nghiệp vụ end-to-end</h1>
-          <p>{mockGoldenScenarios.length} scenario bao phủ core inventory, outbound/inbound, returns, offline, advanced WMS, planning, finance, automation và safety.</p>
+          <span className="scenario-eyebrow"><FlaskConical size={16} /> ERP WMS • PHÒNG KỊCH BẢN CHUẨN</span>
+          <h1>Kiểm thử mô phỏng nghiệp vụ đầu-cuối</h1>
+          <p>{mockGoldenScenarios.length} kịch bản bao phủ tồn kho cốt lõi, nhập/xuất kho, hàng trả, ngoại tuyến, WMS nâng cao, lập kế hoạch, tài chính, tự động hóa và an toàn.</p>
         </div>
-        <div className="scenario-count"><strong>{mockGoldenScenarios.length}</strong><span>scenarios</span></div>
+        <div className="scenario-count"><strong>{mockGoldenScenarios.length}</strong><span>kịch bản</span></div>
       </section>
 
       <section className="scenario-layout">
-        <nav className="scenario-nav" aria-label="Golden scenarios">
+        <nav className="scenario-nav" aria-label="Các kịch bản chuẩn">
           {mockGoldenScenarios.map((scenario) => (
             <button
               type="button"
@@ -46,7 +46,7 @@ const MockScenarioLab = () => {
             >
               <span>{scenario.id}</span>
               <strong>{scenario.title}</strong>
-              <small>Spec {scenario.spec}</small>
+              <small>Đặc tả {scenario.spec}</small>
             </button>
           ))}
         </nav>
@@ -59,18 +59,18 @@ const MockScenarioLab = () => {
                 <h2>{selected.title}</h2>
                 <p>{selected.purpose}</p>
               </div>
-              <span className="scenario-spec">Spec {selected.spec}</span>
+              <span className="scenario-spec">Đặc tả {selected.spec}</span>
             </header>
 
             <div className="scenario-precondition">
-              <strong>Precondition</strong>
+              <strong>Điều kiện tiên quyết</strong>
               <span>{selected.precondition}</span>
             </div>
 
             <section className="scenario-runner">
               <div>
-                <span>SHARED SCENARIO SESSION • CROSS-SCREEN</span>
-                <strong>Step {executedSteps} / {selected.steps.length}</strong>
+                <span>PHIÊN KỊCH BẢN DÙNG CHUNG • LIÊN MÀN HÌNH</span>
+                <strong>Bước {executedSteps} / {selected.steps.length}</strong>
               </div>
               <div className="scenario-runner-actions">
                 <button
@@ -81,12 +81,12 @@ const MockScenarioLab = () => {
                   <Play size={14} /> Chạy bước tiếp
                 </button>
                 <button type="button" onClick={() => mockDemo.resetScenario(selected.id)} disabled={executedSteps === 0}>
-                  <RotateCcw size={14} /> Reset
+                  <RotateCcw size={14} /> Đặt lại
                 </button>
                 <Link className="scenario-runtime-link" to="/system-blueprint/mock-data">Xem trạng thái dùng chung →</Link>
               </div>
               <div className="scenario-execution-log" data-testid="scenario-execution-log">
-                {executedSteps === 0 && <p>Chưa chạy bước nào. Khi chạy, trạng thái session sẽ dùng chung với Mock Data Lab và capability liên quan.</p>}
+                {executedSteps === 0 && <p>Chưa chạy bước nào. Khi chạy, trạng thái phiên sẽ dùng chung với Phòng dữ liệu mô phỏng và các chức năng liên quan.</p>}
                 {selected.steps.slice(0, executedSteps).map((step, index) => (
                   <div key={'run-' + step.label}>
                     <CheckCircle2 size={14} />
@@ -99,13 +99,13 @@ const MockScenarioLab = () => {
             {runtimeDefinition && (
               <section className="scenario-shared-state">
                 <div>
-                  <span>SHARED RUNTIME</span>
-                  <strong>{runtimeDefinition.affectedCapabilities.length} capability liên quan</strong>
+                  <span>TRẠNG THÁI DÙNG CHUNG</span>
+                  <strong>{runtimeDefinition.affectedCapabilities.length} chức năng liên quan</strong>
                 </div>
                 {mockDemo.activeScenarioId === selected.id && mockDemo.scenarioTotalBalanceCount > 0 && (
                   <div className="scenario-scope-note">
-                    Persona thấy {mockDemo.scenarioBalances.length}/{mockDemo.scenarioTotalBalanceCount} inventory bucket
-                    {mockDemo.scenarioHiddenBalanceCount > 0 ? ' • ' + mockDemo.scenarioHiddenBalanceCount + ' bucket bị ẩn bởi warehouse scope' : ' • toàn bộ bucket trong scope'}
+                    Vai trò thấy {mockDemo.scenarioBalances.length}/{mockDemo.scenarioTotalBalanceCount} nhóm tồn kho
+                    {mockDemo.scenarioHiddenBalanceCount > 0 ? ' • ' + mockDemo.scenarioHiddenBalanceCount + ' nhóm tồn bị ẩn bởi phạm vi kho' : ' • toàn bộ nhóm tồn trong phạm vi'}
                   </div>
                 )}
                 <div className="scenario-capability-chips">
@@ -122,7 +122,7 @@ const MockScenarioLab = () => {
                       <div key={item.warehouse + item.location + item.productCode}>
                         <small>{item.warehouse} • {item.location}</small>
                         <strong>{item.productCode}</strong>
-                        <span>OnHand {item.onHand} • Avail {item.available ?? '—'} • Transit {item.inTransit}</span>
+                        <span>Tồn thực tế {item.onHand} • Khả dụng {item.available ?? '—'} • Đang vận chuyển {item.inTransit}</span>
                       </div>
                     ))}
                   </div>
@@ -144,7 +144,7 @@ const MockScenarioLab = () => {
             </div>
 
             <section className={'scenario-assertions ' + (executedSteps === selected.steps.length ? 'scenario-assertions-complete' : '')}>
-              <div className="scenario-section-title"><ShieldCheck size={17} /><h3>Expected assertions</h3>{executedSteps === selected.steps.length && <span className="scenario-pass">SIMULATION COMPLETE</span>}</div>
+              <div className="scenario-section-title"><ShieldCheck size={17} /><h3>Kết quả mong đợi</h3>{executedSteps === selected.steps.length && <span className="scenario-pass">MÔ PHỎNG HOÀN TẤT</span>}</div>
               <div className="assertion-grid">
                 {selected.assertions.map((assertion) => (
                   <div key={assertion}><CheckCircle2 size={15} /><span>{assertion}</span></div>
@@ -153,7 +153,7 @@ const MockScenarioLab = () => {
             </section>
 
             <section className="scenario-metrics">
-              <h3>Structured mock metrics</h3>
+              <h3>Chỉ số mô phỏng có cấu trúc</h3>
               <div>
                 {Object.entries(selected.metrics).map(([key, value]) => (
                   <span key={key}><small>{key}</small><strong>{String(value)}</strong></span>

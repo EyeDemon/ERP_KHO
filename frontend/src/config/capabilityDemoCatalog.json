@@ -321,7 +321,7 @@
     ],
     "fields": [
       {
-        "label": "Receipt",
+        "label": "Phiếu nhập",
         "value": "GR-2026-1045"
       },
       {
@@ -369,7 +369,7 @@
     ],
     "fields": [
       {
-        "label": "Receipt",
+        "label": "Phiếu nhập",
         "value": "GR-2026-1045"
       },
       {
@@ -422,7 +422,7 @@
         "value": "SKU-1001"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "RECEIVING-01"
       },
       {
@@ -434,7 +434,7 @@
         "value": "A02-R01-L01-B02 • 78 điểm"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "Same SKU + capacity + Zone A"
       }
     ],
@@ -511,7 +511,7 @@
         "value": "PICK-2026-6110"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "A01-R02-L03-B04"
       },
       {
@@ -523,7 +523,7 @@
         "value": "120 Gói"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "PACK-02"
       }
     ],
@@ -651,7 +651,7 @@
         "value": "SHP-2026-5108"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -774,7 +774,7 @@
       "Overview",
       "Granular status",
       "Eligibility check",
-      "Reason/evidence",
+      "Lý do/bằng chứng",
       "Status action"
     ],
     "fields": [
@@ -825,7 +825,7 @@
         "value": "SKU-1001"
       },
       {
-        "label": "Lot",
+        "label": "Lô",
         "value": "LOT-1001-260930"
       },
       {
@@ -833,7 +833,7 @@
         "value": "30/09/2027"
       },
       {
-        "label": "Status",
+        "label": "Trạng thái",
         "value": "AVAILABLE"
       },
       {
@@ -871,7 +871,7 @@
         "value": "SOFT_FREEZE"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "CYCLE_COUNT"
       },
       {
@@ -892,27 +892,27 @@
     "exceptionDetail": "Lock mới chồng lấn lock khác hoặc đang có critical mutation không thể freeze an toàn."
   },
   "INV-08": {
-    "title": "Internal Location Move",
-    "subtitle": "Same-warehouse move source → destination, bảo toàn tổng On Hand.",
+    "title": "Di chuyển vị trí nội bộ",
+    "subtitle": "Di chuyển nguồn → đích trong cùng kho, bảo toàn tổng Tồn thực tế.",
     "mode": "scan",
     "stages": [
-      "Scan source",
-      "Scan product/lot",
-      "Enter quantity",
-      "Scan destination",
+      "Quét vị trí nguồn",
+      "Quét sản phẩm/lô",
+      "Nhập số lượng",
+      "Quét vị trí đích",
       "POSTED"
     ],
     "fields": [
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "A01-R02-L03-B04"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "B02-R01-L02-B03"
       },
       {
@@ -920,7 +920,7 @@
         "value": "SKU-1001 / LOT-1001-260930"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "REBALANCE_PICK_FACE"
       }
     ],
@@ -930,9 +930,9 @@
       "POST_MOVE"
     ],
     "exceptionTitle": "MOVE_DESTINATION_INELIGIBLE",
-    "exceptionDetail": "Destination vi phạm capacity/storage/status hoặc source quantity không còn đủ.",
+    "exceptionDetail": "Vị trí đích vi phạm sức chứa/lưu trữ/trạng thái hoặc số lượng tại nguồn không còn đủ.",
     "quantity": {
-      "label": "Move quantity",
+      "label": "Số lượng di chuyển",
       "operationUom": "Thùng",
       "baseUom": "Cái",
       "factor": 12,
@@ -940,35 +940,35 @@
     }
   },
   "INV-09": {
-    "title": "Inventory Reversal",
-    "subtitle": "Sửa sai bằng corrective transaction; ledger gốc không bao giờ bị sửa/xóa.",
+    "title": "Đảo giao dịch tồn kho",
+    "subtitle": "Sửa sai bằng giao dịch hiệu chỉnh; sổ cái gốc không bao giờ bị sửa/xóa.",
     "mode": "wizard",
     "stages": [
-      "Select transaction",
-      "Validate reversible",
-      "Reason/evidence",
-      "Create reversal",
+      "Chọn giao dịch",
+      "Kiểm tra khả năng đảo",
+      "Lý do/bằng chứng",
+      "Tạo giao dịch đảo",
       "POSTED"
     ],
     "fields": [
       {
-        "label": "Original txn",
+        "label": "Giao dịch gốc",
         "value": "LED-2026-882177"
       },
       {
-        "label": "Type",
+        "label": "Loại",
         "value": "MOVE"
       },
       {
-        "label": "Signed delta",
+        "label": "Chênh lệch có dấu",
         "value": "-40 / +40 Cái"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "WRONG_DESTINATION"
       },
       {
-        "label": "Correlation",
+        "label": "Mã tương quan",
         "value": "CORR-9A10F"
       }
     ],
@@ -978,39 +978,39 @@
       "POST_CORRECTION"
     ],
     "exceptionTitle": "TRANSACTION_NOT_REVERSIBLE",
-    "exceptionDetail": "Transaction đã có downstream dependency hoặc đã được reversal trước đó."
+    "exceptionDetail": "Giao dịch đã có phụ thuộc downstream hoặc đã được đảo trước đó."
   },
   "INV-10": {
-    "title": "Traceability & Genealogy",
-    "subtitle": "Truy ngược/xuôi xuyên receipt, QC, move, pick, shipment, return và recall.",
+    "title": "Truy vết & phả hệ tồn kho",
+    "subtitle": "Truy ngược/xuôi xuyên phiếu nhập, QC, di chuyển, lấy hàng, giao hàng, hàng trả và thu hồi.",
     "mode": "trace",
     "stages": [
-      "Identity",
-      "Backward trace",
-      "Forward trace",
-      "Exposure",
-      "Recall/Return branch"
+      "Định danh",
+      "Truy ngược",
+      "Truy xuôi",
+      "Mức phơi nhiễm",
+      "Nhánh thu hồi/hàng trả"
     ],
     "fields": [
       {
-        "label": "Lot",
+        "label": "Lô",
         "value": "LOT-1001-260930"
       },
       {
-        "label": "Receipt",
+        "label": "Phiếu nhập",
         "value": "GR-2026-1045"
       },
       {
-        "label": "Current stock",
+        "label": "Tồn hiện tại",
         "value": "420 Cái"
       },
       {
-        "label": "Shipped exposure",
-        "value": "180 Cái / 12 customers"
+        "label": "Lượng đã giao bị ảnh hưởng",
+        "value": "180 Cái / 12 khách hàng"
       },
       {
-        "label": "Returns",
-        "value": "2 open RMA"
+        "label": "Hàng trả",
+        "value": "2 RMA đang mở"
       }
     ],
     "commands": [
@@ -1020,7 +1020,7 @@
       "START_RECALL"
     ],
     "exceptionTitle": "TRACE_CHAIN_INCOMPLETE",
-    "exceptionDetail": "Một node thiếu source/correlation linkage; hệ thống không được giả định genealogy hoàn chỉnh."
+    "exceptionDetail": "Một nút thiếu liên kết nguồn/tương quan; hệ thống không được giả định phả hệ đã hoàn chỉnh."
   },
   "TR-02": {
     "title": "In-Transit Inventory Explorer",
@@ -1275,7 +1275,7 @@
         "value": "SKU-1001 / A01-R02-L03-B04"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "COUNT_VARIANCE"
       },
       {
@@ -1314,7 +1314,7 @@
         "value": "QC-2026-3011"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "GR-2026-1045"
       },
       {
@@ -1358,7 +1358,7 @@
         "value": "QC_HOLD"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "QUALITY_REVIEW"
       }
     ],
@@ -1394,7 +1394,7 @@
         "value": "RECEIVING-01"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "PACKAGE_TORN"
       }
     ],
@@ -1475,7 +1475,7 @@
         "value": "RCL-2026-004"
       },
       {
-        "label": "Lot",
+        "label": "Lô",
         "value": "LOT-1001-260930"
       },
       {
@@ -1483,8 +1483,8 @@
         "value": "420 Cái"
       },
       {
-        "label": "Shipped exposure",
-        "value": "180 Cái / 12 customers"
+        "label": "Lượng đã giao bị ảnh hưởng",
+        "value": "180 Cái / 12 khách hàng"
       }
     ],
     "commands": [
@@ -1515,7 +1515,7 @@
         "value": "SKU-1001 / LOT-1001-260930"
       },
       {
-        "label": "Reason",
+        "label": "Lý do",
         "value": "IRREPAIRABLE_DAMAGE"
       },
       {
@@ -1555,7 +1555,7 @@
         "value": "PLT-2026-00418"
       },
       {
-        "label": "Type",
+        "label": "Loại",
         "value": "Pallet"
       },
       {
@@ -1739,7 +1739,7 @@
         "value": "U-HCM-OP-01"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -1766,12 +1766,12 @@
     "stages": [
       "Select receipt",
       "Scan product",
-      "Enter quantity",
+      "Nhập số lượng",
       "Confirm receive"
     ],
     "fields": [
       {
-        "label": "Receipt",
+        "label": "Phiếu nhập",
         "value": "GR-2026-1045"
       },
       {
@@ -1808,9 +1808,9 @@
     "mode": "scan",
     "stages": [
       "Task",
-      "Scan source",
+      "Quét vị trí nguồn",
       "Scan product",
-      "Scan destination",
+      "Quét vị trí đích",
       "Complete"
     ],
     "fields": [
@@ -1819,11 +1819,11 @@
         "value": "PUT-2026-4410"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "RECEIVING-01"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "A01-R02-L03-B04"
       },
       {
@@ -1863,7 +1863,7 @@
         "value": "PICK-2026-6110"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "A01-R02-L03-B04"
       },
       {
@@ -1996,11 +1996,11 @@
         "value": "TRF-2026-0024"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "WH-HCM-01"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "WH-DN-01"
       },
       {
@@ -2030,8 +2030,8 @@
     "stages": [
       "Home",
       "Task",
-      "Scan source",
-      "Scan destination",
+      "Quét vị trí nguồn",
+      "Quét vị trí đích",
       "Complete"
     ],
     "fields": [
@@ -2044,11 +2044,11 @@
         "value": "SP008"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "RESERVE-B-02"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "PICK-A-01"
       }
     ],
@@ -2206,7 +2206,7 @@
         "value": "PICK-2026-6110"
       },
       {
-        "label": "Type",
+        "label": "Loại",
         "value": "DAMAGE_FOUND"
       },
       {
@@ -2275,7 +2275,7 @@
         "value": "EXC-2026-0441"
       },
       {
-        "label": "Type",
+        "label": "Loại",
         "value": "DAMAGE_FOUND"
       },
       {
@@ -2349,11 +2349,11 @@
         "value": "TSK-2026-9008"
       },
       {
-        "label": "Type",
+        "label": "Loại",
         "value": "PICK"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -2371,31 +2371,31 @@
     "exceptionDetail": "Task đã đổi assignee/state ở thiết bị khác; cần reload canonical state."
   },
   "OV-07": {
-    "title": "Enterprise / Global Search",
-    "subtitle": "Exact-first search Product, Barcode, Partner, Document, Lot/Serial, Location, Shipment và Task.",
+    "title": "Tìm kiếm toàn doanh nghiệp",
+    "subtitle": "Ưu tiên khớp chính xác khi tìm Sản phẩm, Mã vạch, Đối tác, Chứng từ, Lô/Sê-ri, Vị trí, Lô giao hàng và Nhiệm vụ.",
     "mode": "workbench",
     "stages": [
-      "Query",
-      "Exact match",
-      "Scoped results",
-      "Open entity"
+      "Truy vấn",
+      "Khớp chính xác",
+      "Kết quả theo phạm vi",
+      "Mở đối tượng"
     ],
     "fields": [
       {
-        "label": "Query",
+        "label": "Truy vấn",
         "value": "8938500123456"
       },
       {
-        "label": "Exact match",
+        "label": "Khớp chính xác",
         "value": "SKU-1001"
       },
       {
-        "label": "Warehouse scope",
+        "label": "Phạm vi kho",
         "value": "WH-HCM-01, WH-DN-01"
       },
       {
-        "label": "Result type",
-        "value": "Barcode → Product"
+        "label": "Loại kết quả",
+        "value": "Mã vạch → Sản phẩm"
       }
     ],
     "commands": [
@@ -2404,7 +2404,7 @@
       "OPEN_RESULT"
     ],
     "exceptionTitle": "SEARCH_SCOPE_FORBIDDEN",
-    "exceptionDetail": "Kết quả ngoài permission/warehouse scope phải bị omit khỏi index response."
+    "exceptionDetail": "Kết quả ngoài quyền hoặc phạm vi kho phải bị loại khỏi phản hồi chỉ mục tìm kiếm."
   },
   "OV-08": {
     "title": "Activity Feed",
@@ -2422,7 +2422,7 @@
         "value": "128 today"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -2538,7 +2538,7 @@
         "value": "15 kg"
       },
       {
-        "label": "Type",
+        "label": "Loại",
         "value": "Carton"
       }
     ],
@@ -2718,7 +2718,7 @@
         "value": "0"
       },
       {
-        "label": "Status",
+        "label": "Trạng thái",
         "value": "GREEN"
       }
     ],
@@ -2858,7 +2858,7 @@
         "value": "182,440"
       },
       {
-        "label": "Destination",
+        "label": "Đích",
         "value": "Analytics Lakehouse"
       },
       {
@@ -2947,18 +2947,18 @@
     "exceptionDetail": "Delivery failure phải retry/idempotent và không duplicate alert state."
   },
   "AD-08": {
-    "title": "SSO / Identity Federation",
-    "subtitle": "Enterprise SSO mapping identity, group, role và warehouse scope.",
+    "title": "SSO / Liên kết danh tính",
+    "subtitle": "SSO doanh nghiệp ánh xạ danh tính, nhóm, vai trò và phạm vi kho.",
     "mode": "configuration",
     "stages": [
-      "Metadata",
-      "Mapping",
-      "Test login",
-      "Enabled"
+      "Siêu dữ liệu",
+      "Ánh xạ",
+      "Kiểm thử đăng nhập",
+      "Đã bật"
     ],
     "fields": [
       {
-        "label": "Provider",
+        "label": "Nhà cung cấp",
         "value": "SAML 2.0"
       },
       {
@@ -2966,12 +2966,12 @@
         "value": "erp-wms-prod"
       },
       {
-        "label": "Group mapping",
+        "label": "Ánh xạ nhóm",
         "value": "WMS_SUPERVISOR → role"
       },
       {
-        "label": "Status",
-        "value": "Test mode"
+        "label": "Trạng thái",
+        "value": "Chế độ kiểm thử"
       }
     ],
     "commands": [
@@ -2980,7 +2980,7 @@
       "ENABLE_SSO"
     ],
     "exceptionTitle": "SSO_MAPPING_AMBIGUOUS",
-    "exceptionDetail": "Một external group map tới nhiều role/scope xung đột."
+    "exceptionDetail": "Một nhóm bên ngoài ánh xạ tới nhiều vai trò/phạm vi xung đột."
   },
   "AD-09": {
     "title": "Number Sequence & Document Numbering",
@@ -3150,7 +3150,7 @@
         "value": "Compliance"
       },
       {
-        "label": "Status",
+        "label": "Trạng thái",
         "value": "ACTIVE"
       }
     ],
@@ -3179,7 +3179,7 @@
         "value": "DSR-2026-0102"
       },
       {
-        "label": "Type",
+        "label": "Loại",
         "value": "ACCESS"
       },
       {
@@ -3216,7 +3216,7 @@
         "value": "Product SKU-1001"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "ERP-MDM"
       },
       {
@@ -3224,7 +3224,7 @@
         "value": "v1028"
       },
       {
-        "label": "Status",
+        "label": "Trạng thái",
         "value": "VALIDATED"
       }
     ],
@@ -3252,7 +3252,7 @@
         "value": "PO-2026-8831"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "ERP Procurement"
       },
       {
@@ -3288,7 +3288,7 @@
         "value": "SO-2026-5108"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "OMS"
       },
       {
@@ -3324,11 +3324,11 @@
         "value": "MSG-2026-88318"
       },
       {
-        "label": "Source",
+        "label": "Nguồn",
         "value": "ERP"
       },
       {
-        "label": "Type",
+        "label": "Loại",
         "value": "PurchaseOrderUpdated"
       },
       {
@@ -3501,7 +3501,7 @@
     ],
     "fields": [
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -3574,7 +3574,7 @@
     ],
     "fields": [
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {
@@ -3610,7 +3610,7 @@
     ],
     "fields": [
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-DN-02"
       },
       {
@@ -3720,7 +3720,7 @@
     ],
     "fields": [
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-LEGACY-01"
       },
       {
@@ -3839,7 +3839,7 @@
         "value": "/warehouse-structure"
       },
       {
-        "label": "Warehouse",
+        "label": "Kho",
         "value": "WH-HCM-01"
       },
       {

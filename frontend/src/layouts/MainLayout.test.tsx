@@ -31,8 +31,8 @@ const renderAt = (path: string) => render(
     <MockDemoProvider>
       <Routes>
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<div>Production home</div>} />
-          <Route path="system-blueprint/*" element={<div>Blueprint content</div>} />
+          <Route index element={<div>Trang chủ hệ thống thật</div>} />
+          <Route path="system-blueprint/*" element={<div>Nội dung bản thiết kế</div>} />
         </Route>
       </Routes>
     </MockDemoProvider>
@@ -52,43 +52,43 @@ describe('MainLayout blueprint navigation mode', () => {
   it('shows all blueprint modules and explicit read-only demo state', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/system-blueprint/inbound');
-    await view.findByText('Blueprint content');
-    expect(view.getByText('DEMO / MOCK • READ ONLY')).toBeTruthy();
-    expect(view.getByText('17 module groups')).toBeTruthy();
+    await view.findByText('Nội dung bản thiết kế');
+    expect(view.getByText('MÔ PHỎNG • CHỈ ĐỌC')).toBeTruthy();
+    expect(view.getByText('17 nhóm phân hệ')).toBeTruthy();
     expect(view.getByText('Nhập kho')).toBeTruthy();
-    expect(view.getByText(/Inventory Control/)).toBeTruthy();
-    expect(view.getByText('Global Search')).toBeTruthy();
-    expect(view.getByText('Golden Scenario Lab')).toBeTruthy();
-    expect(view.getByText('Mock Data Lab')).toBeTruthy();
+    expect(view.getByText(/Kiểm soát tồn kho/)).toBeTruthy();
+    expect(view.getByText('Tìm kiếm toàn hệ thống')).toBeTruthy();
+    expect(view.getByText('Phòng kịch bản chuẩn')).toBeTruthy();
+    expect(view.getByText('Phòng dữ liệu mô phỏng')).toBeTruthy();
   });
 
 
   it('runs blueprint routes without calling the real auth API', async () => {
     vi.mocked(apiClient.get).mockRejectedValue(new Error('backend unavailable'));
     const view = renderAt('/system-blueprint');
-    await view.findByText('Blueprint content');
+    await view.findByText('Nội dung bản thiết kế');
     expect(apiClient.get).not.toHaveBeenCalled();
     expect(view.queryByRole('alert')).toBeNull();
-    expect(view.getByText('Blueprint runtime')).toBeTruthy();
+    expect(view.getByText('Môi trường bản thiết kế')).toBeTruthy();
   });
 
   it('switches demo persona and reports the simulated warehouse scope', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/system-blueprint/inbound');
-    await view.findByText('Blueprint content');
-    const selector = view.getByLabelText('Persona mô phỏng');
+    await view.findByText('Nội dung bản thiết kế');
+    const selector = view.getByLabelText('Vai trò mô phỏng');
     fireEvent.change(selector, { target: { value: 'U-DN-MGR' } });
     expect((selector as HTMLSelectElement).value).toBe('U-DN-MGR');
-    expect(view.getByText('1 kho scope')).toBeTruthy();
+    expect(view.getByText('1 kho trong phạm vi')).toBeTruthy();
   });
 
   it('keeps production navigation separate from blueprint-only module menu', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/');
-    await view.findByText('Production home');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByText('Bản đồ hệ thống')).toBeTruthy();
-    expect(view.queryByText('17 module groups')).toBeNull();
-    expect(view.queryByText('DEMO / MOCK • READ ONLY')).toBeNull();
+    expect(view.queryByText('17 nhóm phân hệ')).toBeNull();
+    expect(view.queryByText('MÔ PHỎNG • CHỈ ĐỌC')).toBeNull();
   });
 
   it('shows the real WH-02 production route when location.read is granted', async () => {
@@ -96,7 +96,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'location.read');
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['location.read'] } });
     const view = renderAt('/');
-    await view.findByText('Production home');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByRole('link', { name: 'Cấu trúc vị trí' }).getAttribute('href')).toBe('/warehouse-structure');
     expect(view.getByRole('link', { name: 'Bản đồ kho' }).getAttribute('href')).toBe('/warehouse-map');
   });
@@ -106,7 +106,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'warehouse.read');
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['warehouse.read'] } });
     const view = renderAt('/');
-    await view.findByText('Production home');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByRole('link', { name: 'Lịch & ca kho' }).getAttribute('href')).toBe('/warehouse-calendar');
   });
 
@@ -115,7 +115,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(authorization.hasPermission).mockImplementation(code => ['purchase_order.read', 'asn.read'].includes(code));
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['purchase_order.read', 'asn.read'] } });
     const view = renderAt('/');
-    await view.findByText('Production home');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(view.getByRole('link', { name: 'Đơn mua (PO)' }).getAttribute('href')).toBe('/purchase-orders');
     expect(view.getByRole('link', { name: 'ASN dự kiến' }).getAttribute('href')).toBe('/asns');
     expect(view.queryByRole('link', { name: 'Phiếu nhập kho' })).toBeNull();
@@ -126,8 +126,8 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(authorization.hasPermission).mockImplementation(code => code === 'dock_appointment.read');
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: ['dock_appointment.read'] } });
     const view = renderAt('/');
-    await view.findByText('Production home');
-    expect(view.getByRole('link', { name: 'Dock & Yard' }).getAttribute('href')).toBe('/dock-yard');
+    await view.findByText('Trang chủ hệ thống thật');
+    expect(view.getByRole('link', { name: 'Cổng, sân bãi & cửa kho' }).getAttribute('href')).toBe('/dock-yard');
   });
 
   it('opens production UI routes on the Vercel blueprint demo without calling real auth', async () => {
@@ -135,17 +135,17 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.mocked(apiClient.get).mockRejectedValue(new Error('backend unavailable'));
     const view = renderAt('/');
 
-    await view.findByText('Production home');
+    await view.findByText('Trang chủ hệ thống thật');
     expect(apiClient.get).not.toHaveBeenCalled();
     expect(view.queryByRole('alert')).toBeNull();
-    expect(view.getByText('DEMO RUNTIME • MOCK BACKEND')).toBeTruthy();
-    expect(view.getByText('Frontend production UI')).toBeTruthy();
+    expect(view.getByText('MÔI TRƯỜNG MÔ PHỎNG • PHÍA MÁY CHỦ MÔ PHỎNG')).toBeTruthy();
+    expect(view.getByText('Giao diện hệ thống thật')).toBeTruthy();
   });
 
   it('exposes accessible navigation, current location and skip-to-content behavior', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/');
-    await view.findByText('Production home');
+    await view.findByText('Trang chủ hệ thống thật');
 
     expect(view.getByText('Bỏ qua điều hướng').getAttribute('href')).toBe('#main-content');
     expect(view.getByRole('navigation', { name: 'Điều hướng nghiệp vụ' })).toBeTruthy();
@@ -161,6 +161,6 @@ describe('MainLayout blueprint navigation mode', () => {
     const view = renderAt('/');
     await waitFor(() => expect(view.getByRole('alert')).toBeTruthy());
     expect(view.getByRole('alert').textContent).toContain('Không thể xác minh quyền truy cập');
-    expect(view.queryByText('Production home')).toBeNull();
+    expect(view.queryByText('Trang chủ hệ thống thật')).toBeNull();
   });
 });

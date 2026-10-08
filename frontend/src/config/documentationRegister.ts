@@ -5,6 +5,7 @@ export type CanonicalDocRepresentation = 'Capability-linked' | 'Platform / Gover
 export interface CanonicalDocumentationRow {
   spec: number;
   title: string;
+  displayTitle: string;
   category: string;
   representation: CanonicalDocRepresentation;
   capabilityIds: string[];
@@ -34,6 +35,49 @@ const parseCanonicalSpecTitles = (catalog: string): Record<number, string> => {
 };
 
 export const canonicalSpecTitles = parseCanonicalSpecTitles(canonicalSpecCatalog);
+
+const localizedCanonicalSpecTitles: Partial<Record<number, string>> = {
+  1: 'Đặc tả quy tắc nghiệp vụ & máy trạng thái',
+  2: 'Đặc tả cơ sở dữ liệu & DBML',
+  3: 'Đặc tả REST API & hợp đồng backend',
+  5: 'Bản thiết kế triển khai & kế hoạch tổng thể Codex',
+  6: 'Chiến lược kiểm thử, ma trận QA & danh sách kiểm mức sẵn sàng production',
+  8: 'Đặc tả bảo mật, RBAC & kiểm toán',
+  16: 'Từ điển dữ liệu & danh mục bảng',
+  17: 'Sổ đăng ký quyền & ma trận phân quyền',
+  18: 'Sổ đăng ký mã lỗi',
+  27: 'Backlog thực thi Codex & hợp đồng bàn giao chức năng',
+  28: 'Đặc tả triển khai bộ máy tồn kho',
+  29: 'Thuật toán ghi sổ tồn kho & dự phóng số dư',
+  30: 'Đặc tả bộ máy giữ hàng & phân bổ',
+  31: 'Đặc tả đồng thời, khóa & idempotency tồn kho',
+  32: 'Đặc tả bộ máy đảo giao dịch & hiệu chỉnh',
+  40: 'Đặc tả kiểm kê chu kỳ & điều chỉnh tồn kho',
+  41: 'Đặc tả trạng thái tồn kho, giữ QC & cách ly',
+  48: 'Đặc tả thu hồi, truy vết Lô/Sê-ri & phả hệ',
+  77: 'Đặc tả đóng băng, khóa tồn kho & giữ vận hành',
+  78: 'Đặc tả hạn dùng, thời hạn sử dụng & FEFO',
+  79: 'Đặc tả thực thi thu hồi & khoanh vùng',
+  82: 'Đặc tả ảnh chụp tồn kho, đối chiếu & giám sát toàn vẹn',
+  88: 'Đặc tả bộ máy tính khả dụng tồn kho',
+  127: 'Khung sửa dữ liệu production có kiểm soát',
+  128: 'Đặc tả công cụ hỗ trợ & quản trị',
+  211: 'Lộ trình sản phẩm, mức trưởng thành capability & kế hoạch đợt phát hành',
+  214: 'Chỉ mục tài liệu kỹ thuật tổng & hướng dẫn đọc',
+  215: 'Đặc tả kiến trúc frontend & khung ứng dụng',
+  217: 'Đặc tả hệ thống thiết kế ERP/WMS & ngôn ngữ trực quan',
+  222: 'Đặc tả UX trực quan hóa & truy vết tồn kho',
+  223: 'Đặc tả UX WMS di động ưu tiên quét',
+  224: 'Tiêu chuẩn UX responsive, accessibility & quốc tế hóa',
+  229: 'Ma trận màn hình & độ phủ',
+  230: 'Tiêu chuẩn nội dung tiếng Việt, nhãn & thuật ngữ UX',
+  234: 'Danh sách kiểm Definition of Ready / Definition of Done & rà soát UX/UI',
+  275: 'Sổ đăng ký kiểm toán độ phủ & tính đầy đủ tài liệu cuối',
+  282: 'Đặc tả quản trị UX & bàn giao Ma trận màn hình 229',
+};
+
+const displayTitleForSpec = (spec: number) =>
+  localizedCanonicalSpecTitles[spec] ?? `Tài liệu kỹ thuật chuẩn số ${spec}`;
 
 const categoryForSpec = (spec: number) => {
   if (spec <= 33) return 'Foundation / Core Design';
@@ -70,6 +114,7 @@ export const getCanonicalDocumentationRegister = (modules: BlueprintModule[]): C
       return {
         spec: numericSpec,
         title,
+        displayTitle: displayTitleForSpec(numericSpec),
         category: categoryForSpec(numericSpec),
         representation: capabilityIds.length > 0 ? 'Capability-linked' as const : 'Platform / Governance' as const,
         capabilityIds,

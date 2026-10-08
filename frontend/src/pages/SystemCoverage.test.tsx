@@ -9,50 +9,53 @@ describe('SystemCoverage', () => {
 
   it('renders all traced capabilities and the four closed Screen Matrix mappings', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
-    expect(view.getByText('Coverage & Readiness')).toBeTruthy();
-    expect(view.getByText('capabilities traced').parentElement?.textContent).toContain('179');
-    expect(view.getByText('Screen Matrix 229 • Traceability Closed')).toBeTruthy();
-    expect(view.getAllByText('Traceability Closed').length).toBeGreaterThanOrEqual(4);
+    expect(view.getByText('Độ phủ & mức sẵn sàng')).toBeTruthy();
+    expect(view.getByText('chức năng đã truy vết').parentElement?.textContent).toContain('179');
+    expect(view.getByText('Ma trận màn hình 229 • Đã đóng truy vết')).toBeTruthy();
+    expect(view.getAllByText('Đã đóng truy vết').length).toBeGreaterThanOrEqual(4);
     expect(view.getByText(/inventory-control.*INV-08/)).toBeTruthy();
     expect(view.getByText(/outbound.*OUT-05/)).toBeTruthy();
     expect(view.getByText(/outbound.*OUT-06/)).toBeTruthy();
     expect(view.getByText(/transfer-replenishment.*TR-01/)).toBeTruthy();
     expect(view.queryByText(/UNMAPPED/)).toBeNull();
     expect(view.getAllByText('282').length).toBeGreaterThan(0);
-    expect(view.getByText('Canonical Documentation Register • Specs 1–282')).toBeTruthy();
+    expect(view.getByText('Sổ đăng ký tài liệu chuẩn • Đặc tả 1–282')).toBeTruthy();
   });
 
   it('filters by release wave and implementation status', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
-    fireEvent.change(view.getByLabelText('Lọc release wave'), { target: { value: '5' } });
-    expect(table.getByText(/AX-09 • Kitting/)).toBeTruthy();
-    expect(table.queryByText(/INV-02 • Immutable/)).toBeNull();
+    fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: '5' } });
+    expect(table.getByText(/AX-09 • Đóng bộ \/ Gộp bộ \/ Lắp ráp \/ Tháo bộ/)).toBeTruthy();
+    expect(table.queryByText(/INV-02 • Sổ cái tồn kho bất biến/)).toBeNull();
 
-    fireEvent.change(view.getByLabelText('Lọc release wave'), { target: { value: 'all' } });
-    fireEvent.change(view.getByLabelText('Lọc implementation status'), { target: { value: 'live' } });
-    expect(table.getByText(/TR-01 • Warehouse Transfer/)).toBeTruthy();
-    expect(table.queryByText(/OUT-05 • Picking/)).toBeNull();
+    fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: 'all' } });
+    fireEvent.change(view.getByLabelText('Lọc trạng thái triển khai'), { target: { value: 'live' } });
+    expect(table.getByText(/TR-01 • Điều chuyển kho/)).toBeTruthy();
+    expect(table.queryByText(/OUT-05 • Lấy hàng/)).toBeNull();
   });
 
   it('shows advanced canonical capabilities without promoting them to core implementation', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
-    fireEvent.change(view.getByLabelText('Tìm coverage'), { target: { value: 'Warehouse Safety' } });
-    expect(table.getByText(/AX-14 • Warehouse Safety/)).toBeTruthy();
-    expect(table.getByText(/Industry optional/)).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'An toàn kho' } });
+    expect(table.getByText(/AX-14 • An toàn kho \/ Công thái học \/ Kiểm soát rủi ro/)).toBeTruthy();
+    expect(table.getByText(/Tùy chọn theo ngành/)).toBeTruthy();
   });
 
   it('indexes the complete canonical documentation set separately from capability readiness', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
-    expect(view.getByText(/Xem toàn bộ 282 tài liệu canonical/)).toBeTruthy();
+    expect(view.getByText(/Xem toàn bộ 282 tài liệu chuẩn/)).toBeTruthy();
+    expect(view.getByText('Đặc tả thu hồi, truy vết Lô/Sê-ri & phả hệ')).toBeTruthy();
+    expect(view.getByText('Tài liệu kỹ thuật chuẩn số 93')).toBeTruthy();
+    expect(view.queryByText('Recall, Lot/Serial Traceability & Genealogy Specification')).toBeNull();
   });
 
   it('supports capability text search', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     const table = within(view.getByTestId('coverage-table'));
-    fireEvent.change(view.getByLabelText('Tìm coverage'), { target: { value: 'Inventory Integrity' } });
-    expect(table.getByText(/INV-11 • Inventory Integrity/)).toBeTruthy();
-    expect(table.queryByText(/OUT-05 • Picking/)).toBeNull();
+    fireEvent.change(view.getByLabelText('Tìm độ phủ'), { target: { value: 'toàn vẹn' } });
+    expect(table.getByText(/INV-11 • Bộ máy toàn vẹn/)).toBeTruthy();
+    expect(table.queryByText(/OUT-05 • Lấy hàng/)).toBeNull();
   });
 });

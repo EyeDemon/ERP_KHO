@@ -71,6 +71,31 @@ interface WarehouseOption {
   isActive: boolean;
 }
 
+const transactionTypeLabel = (value: string) => ({
+  Import: 'Nhập kho',
+  Export: 'Xuất kho',
+  AdjustmentIncrease: 'Điều chỉnh tăng',
+  AdjustmentDecrease: 'Điều chỉnh giảm',
+  TransferIn: 'Nhập điều chuyển',
+  TransferOut: 'Xuất điều chuyển',
+  TransferAdjustment: 'Điều chỉnh điều chuyển',
+  StatusChange: 'Đổi trạng thái',
+  Move: 'Di chuyển vị trí nội bộ',
+  Reversal: 'Dấu mốc đảo giao dịch',
+  Ship: 'Xuất giao hàng',
+}[value] ?? value);
+
+const inventoryStatusLabel = (value: string) => ({
+  AVAILABLE: 'Khả dụng',
+  QC_HOLD: 'Chờ kiểm tra chất lượng',
+  QUARANTINE: 'Cách ly',
+  BLOCKED: 'Bị chặn',
+  DAMAGED: 'Hư hỏng',
+  REJECTED: 'Từ chối',
+  EXPIRED: 'Hết hạn',
+  RECALL_BLOCKED: 'Khóa thu hồi',
+}[value] ?? value);
+
 const Inventory = () => {
   const [activeTab, setActiveTab] = useState<'stock' | 'buckets' | 'history' | 'inout'>('stock');
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
@@ -376,13 +401,13 @@ const Inventory = () => {
           <UiToolbarField label="Loại GD">
             <select aria-label="Loại giao dịch" value={historyFilter.transactionType} onChange={e => setHistoryFilter({ ...historyFilter, transactionType: e.target.value })}>
               <option value="">-- Tất cả --</option>
-              <option value="Import">Nhập kho (Import)</option>
-              <option value="Export">Xuất kho (Export)</option>
+              <option value="Import">Nhập kho</option>
+              <option value="Export">Xuất kho</option>
               <option value="AdjustmentIncrease">Điều chỉnh Tăng</option>
               <option value="AdjustmentDecrease">Điều chỉnh Giảm</option>
               <option value="StatusChange">Đổi trạng thái</option>
-              <option value="Move">Internal Move</option>
-              <option value="Reversal">Reversal marker</option>
+              <option value="Move">Di chuyển vị trí nội bộ</option>
+              <option value="Reversal">Dấu mốc đảo giao dịch</option>
             </select>
           </UiToolbarField>
 
@@ -416,8 +441,8 @@ const Inventory = () => {
                   <th>Loại GD</th>
                   <th>Kho</th>
                   <th>Sản phẩm</th>
-                  <th>Status</th>
-                  <th>Lot / Serial</th>
+                  <th>Trạng thái</th>
+                  <th>Lô / Sê-ri</th>
                   <th className="inventory-numeric">SL</th>
                   <th>Tham chiếu</th>
                   <th>Ghi chú</th>
@@ -434,13 +459,13 @@ const Inventory = () => {
                     return (
                       <tr key={item.id}>
                         <td>{new Date(item.transactionDate).toLocaleString('vi-VN')}</td>
-                        <td>{item.transactionType}</td>
+                        <td>{transactionTypeLabel(item.transactionType)}</td>
                         <td>{item.warehouseName}</td>
                         <td>{item.productCode} - {item.productName}</td>
                         <td>
                           {item.fromInventoryStatus && item.toInventoryStatus
-                            ? `${item.fromInventoryStatus} → ${item.toInventoryStatus}`
-                            : item.inventoryStatus || '—'}
+                            ? `${inventoryStatusLabel(item.fromInventoryStatus)} → ${inventoryStatusLabel(item.toInventoryStatus)}`
+                            : item.inventoryStatus ? inventoryStatusLabel(item.inventoryStatus) : '—'}
                         </td>
                         <td>{item.lotNumber || '—'}{item.serialNumber ? ` / ${item.serialNumber}` : ''}</td>
                         <td className={'inventory-numeric ' + quantityClass}>
@@ -560,9 +585,9 @@ const Inventory = () => {
     <UiPage>
       <div className="inventory-page">
         <UiPageHeader
-          eyebrow="Inventory"
-          title="Báo Cáo Tồn Kho"
-          description="Theo dõi tồn thực tế, bucket theo Status/Lot/Serial, eligibility, ledger movement và báo cáo xuất nhập tồn theo phạm vi kho được phép."
+          eyebrow="Tồn kho"
+          title="Báo cáo tồn kho"
+          description="Theo dõi tồn thực tế, nhóm tồn theo Trạng thái/Lô/Sê-ri, điều kiện sử dụng, biến động sổ cái và báo cáo xuất nhập tồn theo phạm vi kho được phép."
         />
 
         <div className="inventory-tabs" role="tablist" aria-label="Chế độ báo cáo tồn kho">
@@ -584,7 +609,7 @@ const Inventory = () => {
             aria-controls="inventory-buckets-panel"
             onClick={() => setActiveTab('buckets')}
           >
-            Bucket / Lot / Serial
+            Nhóm tồn / Lô / Sê-ri
           </button>
           <button
             type="button"

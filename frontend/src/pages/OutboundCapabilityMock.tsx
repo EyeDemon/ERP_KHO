@@ -24,42 +24,42 @@ const Header = ({
     <div className="outbound-mock-title-row">
       <span className="outbound-mock-icon" aria-hidden="true">{icon}</span>
       <div>
-        <span className="outbound-mock-kicker">OUTBOUND • {id} • FRONTEND MOCK</span>
+        <span className="outbound-mock-kicker">XUẤT KHO • {id} • MÔ PHỎNG GIAO DIỆN</span>
         <h2 id={'outbound-' + id.toLowerCase() + '-title'}>{title}</h2>
       </div>
     </div>
     <p>{description}</p>
     <div className="outbound-mock-scope">
-      <Badge tone="neutral">Read-only</Badge>
-      <span>Không gọi API production • Không ghi inventory • Không giả mutation thành công</span>
+      <Badge tone="neutral">Chỉ đọc</Badge>
+      <span>Không gọi API hệ thống thật • Không ghi tồn kho • Không giả thao tác thay đổi thành công</span>
     </div>
   </header>
 );
 
 const AllocationMock = () => {
   const candidates = [
-    { location: 'A01-R02-L03-B04', lot: 'LOT-260930-A', eligible: '120 Gói', rule: 'FEFO + unlocked', score: 94, tone: 'success' as const, result: 'Allocated' },
-    { location: 'A02-R01-L01-B02', lot: 'LOT-261001-B', eligible: '64 Gói', rule: 'FEFO + farther', score: 81, tone: 'neutral' as const, result: 'Fallback' },
-    { location: 'QC-HOLD-02', lot: 'LOT-260928-Q', eligible: '0', rule: 'QC Hold', score: 0, tone: 'danger' as const, result: 'Rejected' },
+    { location: 'A01-R02-L03-B04', lot: 'LOT-260930-A', eligible: '120 Gói', rule: 'FEFO + không bị khóa', score: 94, tone: 'success' as const, result: 'Đã phân bổ' },
+    { location: 'A02-R01-L01-B02', lot: 'LOT-261001-B', eligible: '64 Gói', rule: 'FEFO + xa hơn', score: 81, tone: 'neutral' as const, result: 'Dự phòng' },
+    { location: 'QC-HOLD-02', lot: 'LOT-260928-Q', eligible: '0', rule: 'QC Hold', score: 0, tone: 'danger' as const, result: 'Bị loại' },
   ];
 
   return (
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-03" aria-labelledby="outbound-out-03-title">
       <Header
         id="OUT-03"
-        title="Allocation Candidate Workbench"
-        description="Mô phỏng cách reserved demand được gắn vào location/lot/serial eligible mà chưa làm giảm warehouse On Hand."
+        title="Bàn làm việc ứng viên phân bổ"
+        description="Mô phỏng cách nhu cầu đã giữ được gắn vào vị trí/lô/sê-ri đủ điều kiện mà chưa làm giảm OnHand toàn kho."
         icon={<Layers3 size={20} />}
       />
       <div className="outbound-mock-metrics">
-        <div><span>Sales order</span><strong>SO-2026-5108</strong><small>Released</small></div>
-        <div><span>Reserved</span><strong>120 Gói</strong><small>Demand protected</small></div>
-        <div><span>Allocated</span><strong>120 Gói</strong><small>1 location • 1 lot</small></div>
-        <div><span>On Hand effect</span><strong>0</strong><small>Dispatch mới deduct</small></div>
+        <div><span>Đơn bán</span><strong>SO-2026-5108</strong><small>Đã mở</small></div>
+        <div><span>Đã giữ</span><strong>120 Gói</strong><small>Nhu cầu đã được giữ</small></div>
+        <div><span>Đã phân bổ</span><strong>120 Gói</strong><small>1 vị trí • 1 lô</small></div>
+        <div><span>Ảnh hưởng OnHand</span><strong>0</strong><small>Chỉ khấu trừ khi xác nhận giao hàng</small></div>
       </div>
       <div className="outbound-mock-table-scroll">
-        <table aria-label="Mock allocation candidates">
-          <thead><tr><th>Location</th><th>Lot</th><th>Eligible</th><th>Rule</th><th>Score</th><th>Result</th></tr></thead>
+        <table aria-label="Các ứng viên phân bổ mô phỏng">
+          <thead><tr><th>Vị trí</th><th>Lô</th><th>Đủ điều kiện</th><th>Quy tắc</th><th>Điểm</th><th>Kết quả</th></tr></thead>
           <tbody>
             {candidates.map(item => (
               <tr key={item.location}>
@@ -71,8 +71,8 @@ const AllocationMock = () => {
         </table>
       </div>
       <div className="outbound-mock-callout warning">
-        <strong>Eligibility guard</strong>
-        <span>Allocation phải loại inventory không eligible theo status/lock/lot/serial; biết location ID không được phép bypass rule.</span>
+        <strong>Rào chắn điều kiện</strong>
+        <span>Phân bổ phải loại tồn không đủ điều kiện theo trạng thái/khóa/lô/sê-ri; biết ID vị trí không được phép bỏ qua quy tắc.</span>
       </div>
     </section>
   );
@@ -80,40 +80,40 @@ const AllocationMock = () => {
 
 const WaveMock = () => {
   const buckets = [
-    { label: 'Priority express', orders: 8, lines: 26, tasks: 14, tone: 'warning' as const },
-    { label: 'Same-day', orders: 14, lines: 51, tasks: 22, tone: 'success' as const },
-    { label: 'Standard', orders: 21, lines: 74, tasks: 31, tone: 'neutral' as const },
+    { label: 'Ưu tiên nhanh', orders: 8, lines: 26, tasks: 14, tone: 'warning' as const },
+    { label: 'Trong ngày', orders: 14, lines: 51, tasks: 22, tone: 'success' as const },
+    { label: 'Tiêu chuẩn', orders: 21, lines: 74, tasks: 31, tone: 'neutral' as const },
   ];
   return (
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-04" aria-labelledby="outbound-out-04-title">
       <Header
         id="OUT-04"
-        title="Wave / Batch / Cluster Planning"
-        description="Mock gom order thành execution batch theo priority, cutoff, zone và workload; release wave không tự làm thay đổi inventory."
+        title="Lập kế hoạch đợt / lô / cụm"
+        description="Mô phỏng gom đơn thành lô thực hiện theo ưu tiên, giờ chốt, khu và khối lượng công việc; mở đợt không tự làm thay đổi tồn kho."
         icon={<Waves size={20} />}
       />
       <div className="outbound-mock-metrics">
-        <div><span>Wave</span><strong>WV-2026-301</strong><small>Cutoff 14:30</small></div>
-        <div><span>Orders</span><strong>43</strong><small>151 lines</small></div>
-        <div><span>Projected tasks</span><strong>67</strong><small>5 picking zones</small></div>
-        <div><span>Labor fit</span><strong>86%</strong><small>Within shift capacity</small></div>
+        <div><span>Đợt</span><strong>WV-2026-301</strong><small>Giờ chốt 14:30</small></div>
+        <div><span>Đơn hàng</span><strong>43</strong><small>151 dòng</small></div>
+        <div><span>Nhiệm vụ dự kiến</span><strong>67</strong><small>5 khu lấy hàng</small></div>
+        <div><span>Mức phù hợp nhân lực</span><strong>86%</strong><small>Trong sức chứa của ca</small></div>
       </div>
       <div className="outbound-wave-grid">
         {buckets.map(bucket => (
           <article key={bucket.label}>
-            <div><strong>{bucket.label}</strong><Badge tone={bucket.tone}>{bucket.orders} orders</Badge></div>
+            <div><strong>{bucket.label}</strong><Badge tone={bucket.tone}>{bucket.orders} đơn</Badge></div>
             <dl>
-              <div><dt>Lines</dt><dd>{bucket.lines}</dd></div>
-              <div><dt>Projected tasks</dt><dd>{bucket.tasks}</dd></div>
+              <div><dt>Dòng</dt><dd>{bucket.lines}</dd></div>
+              <div><dt>Nhiệm vụ dự kiến</dt><dd>{bucket.tasks}</dd></div>
             </dl>
           </article>
         ))}
       </div>
       <div className="outbound-wave-rules">
-        <div><span>1</span><strong>Filter eligible released demand</strong><small>Warehouse scope + cutoff + hold state.</small></div>
-        <div><span>2</span><strong>Cluster by zone / carrier / service</strong><small>Giảm travel nhưng không đổi allocation truth.</small></div>
-        <div><span>3</span><strong>Capacity check</strong><small>Labor, equipment và remaining shift.</small></div>
-        <div><span>4</span><strong>Release execution tasks</strong><small>Task creation phải idempotent.</small></div>
+        <div><span>1</span><strong>Lọc nhu cầu đã mở và đủ điều kiện</strong><small>Phạm vi kho + giờ chốt + trạng thái giữ.</small></div>
+        <div><span>2</span><strong>Gom cụm theo khu / đơn vị vận chuyển / dịch vụ</strong><small>Giảm di chuyển nhưng không thay đổi sự thật phân bổ.</small></div>
+        <div><span>3</span><strong>Kiểm tra sức chứa</strong><small>Nhân lực, thiết bị và thời gian ca còn lại.</small></div>
+        <div><span>4</span><strong>Mở nhiệm vụ thực hiện</strong><small>Tạo nhiệm vụ phải idempotent.</small></div>
       </div>
     </section>
   );
@@ -121,28 +121,28 @@ const WaveMock = () => {
 
 const StagingLoadingMock = () => {
   const hus = [
-    { hu: 'HU-5108-01', lane: 'STAGE-OUT-03', sequence: '1', status: 'Ready', tone: 'success' as const },
-    { hu: 'HU-5108-02', lane: 'STAGE-OUT-03', sequence: '2', status: 'Ready', tone: 'success' as const },
-    { hu: 'HU-5108-03', lane: 'STAGE-OUT-03', sequence: '3', status: 'Seal check', tone: 'warning' as const },
-    { hu: 'HU-5108-08', lane: 'PACK-02', sequence: '8', status: 'Missing at stage', tone: 'danger' as const },
+    { hu: 'HU-5108-01', lane: 'STAGE-OUT-03', sequence: '1', status: 'Sẵn sàng', tone: 'success' as const },
+    { hu: 'HU-5108-02', lane: 'STAGE-OUT-03', sequence: '2', status: 'Sẵn sàng', tone: 'success' as const },
+    { hu: 'HU-5108-03', lane: 'STAGE-OUT-03', sequence: '3', status: 'Kiểm tra niêm phong', tone: 'warning' as const },
+    { hu: 'HU-5108-08', lane: 'PACK-02', sequence: '8', status: 'Thiếu tại khu chờ', tone: 'danger' as const },
   ];
   return (
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-07" aria-labelledby="outbound-out-07-title">
       <Header
         id="OUT-07"
-        title="Staging & Loading Control"
-        description="Mock kiểm tra HU readiness, staging lane, vehicle, seal và loading sequence trước dispatch."
+        title="Kiểm soát khu chờ & xếp hàng"
+        description="Mô phỏng kiểm tra mức sẵn sàng HU, làn chờ, phương tiện, niêm phong và thứ tự xếp hàng trước khi xác nhận giao."
         icon={<Truck size={20} />}
       />
       <div className="outbound-mock-metrics">
-        <div><span>Shipment</span><strong>SHP-2026-5108</strong><small>8 HU expected</small></div>
-        <div><span>Vehicle</span><strong>51C-882.14</strong><small>Dock D04</small></div>
-        <div><span>Seal</span><strong>SEAL-028817</strong><small>Pending verify</small></div>
-        <div><span>Ready HU</span><strong>7 / 8</strong><small>1 missing from stage</small></div>
+        <div><span>Lô giao hàng</span><strong>SHP-2026-5108</strong><small>Dự kiến 8 HU</small></div>
+        <div><span>Phương tiện</span><strong>51C-882.14</strong><small>Cửa D04</small></div>
+        <div><span>Niêm phong</span><strong>SEAL-028817</strong><small>Chờ xác minh</small></div>
+        <div><span>Sẵn sàng HU</span><strong>7 / 8</strong><small>Thiếu 1 HU tại khu chờ</small></div>
       </div>
       <div className="outbound-mock-table-scroll">
-        <table aria-label="Mock staging and loading units">
-          <thead><tr><th>HU</th><th>Current lane</th><th>Load sequence</th><th>Status</th></tr></thead>
+        <table aria-label="Các HU tại khu chờ/xếp hàng mô phỏng">
+          <thead><tr><th>HU</th><th>Làn hiện tại</th><th>Thứ tự xếp</th><th>Trạng thái</th></tr></thead>
           <tbody>
             {hus.map(item => (
               <tr key={item.hu}><td><strong>{item.hu}</strong></td><td>{item.lane}</td><td>{item.sequence}</td><td><Badge tone={item.tone}>{item.status}</Badge></td></tr>
@@ -151,8 +151,8 @@ const StagingLoadingMock = () => {
         </table>
       </div>
       <div className="outbound-mock-callout danger">
-        <strong>Load completeness guard</strong>
-        <span>Không được chuyển LOAD_READY/LOADED khi HU bắt buộc chưa ở đúng staging/load context hoặc vehicle/seal không khớp kế hoạch.</span>
+        <strong>Rào chắn đủ hàng xếp</strong>
+        <span>Không được chuyển LOAD_READY/LOADED khi HU bắt buộc chưa ở đúng ngữ cảnh khu chờ/xếp hàng hoặc phương tiện/niêm phong không khớp kế hoạch.</span>
       </div>
     </section>
   );
@@ -160,25 +160,25 @@ const StagingLoadingMock = () => {
 
 const DispatchMock = () => {
   const checks = [
-    { label: 'Shipment state', detail: 'LOADED', tone: 'success' as const, status: 'Pass' },
-    { label: 'Loaded HU', detail: '8 / 8', tone: 'success' as const, status: 'Pass' },
-    { label: 'Inventory version', detail: 'v1842', tone: 'success' as const, status: 'Current' },
-    { label: 'Idempotency key', detail: 'dispatch-SHP-5108-v3', tone: 'neutral' as const, status: 'Unique' },
-    { label: 'Reservation / Allocation', detail: '120 / 120', tone: 'success' as const, status: 'Consumable' },
+    { label: 'Trạng thái lô giao hàng', detail: 'LOADED', tone: 'success' as const, status: 'Đạt' },
+    { label: 'HU đã xếp', detail: '8 / 8', tone: 'success' as const, status: 'Đạt' },
+    { label: 'Phiên bản tồn kho', detail: 'v1842', tone: 'success' as const, status: 'Hiện hành' },
+    { label: 'Khóa idempotency', detail: 'dispatch-SHP-5108-v3', tone: 'neutral' as const, status: 'Duy nhất' },
+    { label: 'Giữ hàng / Phân bổ', detail: '120 / 120', tone: 'success' as const, status: 'Có thể tiêu thụ' },
   ];
   return (
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-08" aria-labelledby="outbound-out-08-title">
       <Header
         id="OUT-08"
-        title="Shipment Dispatch Boundary"
-        description="Mock pre-flight checks cho outbound posting. Đây là boundary duy nhất trong outbound flow làm giảm warehouse On Hand."
+        title="Ranh giới xác nhận giao hàng"
+        description="Mô phỏng kiểm tra trước khi ghi sổ xuất kho. Đây là ranh giới duy nhất trong luồng xuất kho làm giảm OnHand toàn kho."
         icon={<PackageCheck size={20} />}
       />
       <div className="outbound-mock-metrics">
-        <div><span>Shipment</span><strong>SHP-2026-5108</strong><small>WH-HCM-01</small></div>
-        <div><span>Dispatch quantity</span><strong>120 Gói</strong><small>Base quantity reconciled</small></div>
-        <div><span>Current On Hand</span><strong>1.842</strong><small>Pre-dispatch snapshot</small></div>
-        <div><span>Projected On Hand</span><strong>1.722</strong><small>Only after successful POST</small></div>
+        <div><span>Lô giao hàng</span><strong>SHP-2026-5108</strong><small>WH-HCM-01</small></div>
+        <div><span>Số lượng giao</span><strong>120 Gói</strong><small>Số lượng cơ sở đã đối chiếu</small></div>
+        <div><span>Hiện hành On Hand</span><strong>1.842</strong><small>Ảnh chụp trước giao hàng</small></div>
+        <div><span>OnHand dự kiến</span><strong>1.722</strong><small>Chỉ sau khi POST thành công</small></div>
       </div>
       <div className="outbound-dispatch-checks">
         {checks.map(check => (
@@ -186,11 +186,11 @@ const DispatchMock = () => {
         ))}
       </div>
       <div className="outbound-boundary-box">
-        <div><span>Before dispatch</span><strong>Reservation + allocation + pick/load state</strong><small>On Hand unchanged</small></div>
+        <div><span>Trước giao hàng</span><strong>Trạng thái giữ + phân bổ + lấy/xếp hàng</strong><small>OnHand không đổi</small></div>
         <span className="outbound-boundary-arrow" aria-hidden="true">→</span>
-        <div><span>Atomic dispatch</span><strong>Deduct physical stock exactly once</strong><small>Ledger + audit + outbox</small></div>
+        <div><span>Giao hàng nguyên tử</span><strong>Khấu trừ tồn vật lý đúng một lần</strong><small>Sổ cái + kiểm toán + outbox</small></div>
         <span className="outbound-boundary-arrow" aria-hidden="true">→</span>
-        <div><span>After dispatch</span><strong>Reservation/allocation consumed</strong><small>Retry returns same canonical result</small></div>
+        <div><span>Sau giao hàng</span><strong>Giữ hàng/phân bổ đã được tiêu thụ</strong><small>Thử lại trả cùng kết quả chuẩn</small></div>
       </div>
     </section>
   );
@@ -198,28 +198,28 @@ const DispatchMock = () => {
 
 const BackorderMock = () => {
   const rows = [
-    { label: 'Ordered', value: 300, tone: 'neutral' as const },
-    { label: 'Reserved', value: 220, tone: 'success' as const },
-    { label: 'Allocated', value: 200, tone: 'success' as const },
-    { label: 'Picked', value: 180, tone: 'warning' as const },
-    { label: 'Shipped', value: 160, tone: 'success' as const },
-    { label: 'Backorder', value: 80, tone: 'danger' as const },
+    { label: 'Đã đặt', value: 300, tone: 'neutral' as const },
+    { label: 'Đã giữ', value: 220, tone: 'success' as const },
+    { label: 'Đã phân bổ', value: 200, tone: 'success' as const },
+    { label: 'Đã lấy', value: 180, tone: 'warning' as const },
+    { label: 'Đã giao', value: 160, tone: 'success' as const },
+    { label: 'Đơn thiếu hàng', value: 80, tone: 'danger' as const },
   ];
   return (
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-09" aria-labelledby="outbound-out-09-title">
       <Header
         id="OUT-09"
-        title="Backorder & Promise Replanning"
-        description="Mock quantity waterfall và promise-date replanning để tránh trộn ordered/reserved/allocated/picked/shipped/backorder semantics."
+        title="Đơn thiếu hàng & lập lại cam kết"
+        description="Mô phỏng thác số lượng và lập lại ngày cam kết để tránh trộn ngữ nghĩa đã đặt/đã giữ/đã phân bổ/đã lấy/đã giao/đơn thiếu."
         icon={<Boxes size={20} />}
       />
       <div className="outbound-mock-metrics">
-        <div><span>Sales order</span><strong>SO-2026-5112</strong><small>Customer CUS-0044</small></div>
-        <div><span>Next supply ETA</span><strong>05/10/2026</strong><small>120 Cái expected</small></div>
-        <div><span>Backorder</span><strong>80 Cái</strong><small>26.7% of order</small></div>
-        <div><span>Promise risk</span><strong>Medium</strong><small>Needs replan</small></div>
+        <div><span>Đơn bán</span><strong>SO-2026-5112</strong><small>Khách hàng CUS-0044</small></div>
+        <div><span>ETA nguồn cung tiếp theo</span><strong>05/10/2026</strong><small>Dự kiến 120 Cái</small></div>
+        <div><span>Đơn thiếu hàng</span><strong>80 Cái</strong><small>26,7% đơn hàng</small></div>
+        <div><span>Rủi ro cam kết</span><strong>Trung bình</strong><small>Cần lập kế hoạch lại</small></div>
       </div>
-      <div className="outbound-waterfall" aria-label="Mock outbound quantity waterfall">
+      <div className="outbound-waterfall" aria-label="Thác số lượng xuất kho mô phỏng">
         {rows.map(row => (
           <article key={row.label}>
             <div><span>{row.label}</span><strong>{row.value}</strong></div>
@@ -228,8 +228,8 @@ const BackorderMock = () => {
         ))}
       </div>
       <div className="outbound-mock-callout warning">
-        <strong>Promise-date guard</strong>
-        <span>Replan phải kiểm supply ETA, allocation hiện tại và customer policy; không được tự tạo reservation hay hứa ngày mới vượt available supply.</span>
+        <strong>Rào chắn ngày cam kết</strong>
+        <span>Lập lại kế hoạch phải kiểm ETA nguồn cung, phân bổ hiện tại và chính sách khách hàng; không được tự tạo giữ hàng hoặc hứa ngày mới vượt nguồn cung khả dụng.</span>
       </div>
     </section>
   );
@@ -237,24 +237,24 @@ const BackorderMock = () => {
 
 const TrackingMock = () => {
   const events = [
-    { time: '04/10 08:10', title: 'Dispatched', detail: 'WH-HCM-01 • Gate out', tone: 'success' as const },
-    { time: '04/10 09:25', title: 'In transit', detail: 'HCM Hub', tone: 'success' as const },
-    { time: '04/10 12:40', title: 'Out for delivery', detail: 'Route HCM-07', tone: 'warning' as const },
-    { time: '—', title: 'Delivered / POD', detail: 'Pending signature + photo', tone: 'neutral' as const },
+    { time: '04/10 08:10', title: 'Đã xuất giao', detail: 'WH-HCM-01 • Rời cổng', tone: 'success' as const },
+    { time: '04/10 09:25', title: 'Đang vận chuyển', detail: 'HCM Hub', tone: 'success' as const },
+    { time: '04/10 12:40', title: 'Đang giao', detail: 'Route HCM-07', tone: 'warning' as const },
+    { time: '—', title: 'Đã giao / POD', detail: 'Chờ chữ ký + ảnh', tone: 'neutral' as const },
   ];
   return (
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-10" aria-labelledby="outbound-out-10-title">
       <Header
         id="OUT-10"
-        title="Shipment Tracking / POD Timeline"
-        description="Mock logistics tracking sau dispatch, POD và delivery failure/retry mà không tạo thêm outbound inventory movement."
+        title="Dòng thời gian theo dõi giao hàng / POD"
+        description="Mô phỏng theo dõi logistics sau khi xuất giao, POD và giao thất bại/thử lại mà không tạo thêm biến động tồn kho xuất."
         icon={<Route size={20} />}
       />
       <div className="outbound-mock-metrics">
-        <div><span>Shipment</span><strong>SHP-2026-5108</strong><small>Already dispatched</small></div>
-        <div><span>Carrier</span><strong>CAR-FAST-01</strong><small>TRK-88941002</small></div>
-        <div><span>Current node</span><strong>Route HCM-07</strong><small>Out for delivery</small></div>
-        <div><span>POD</span><strong>Pending</strong><small>Signature + photo</small></div>
+        <div><span>Lô giao hàng</span><strong>SHP-2026-5108</strong><small>Đã xuất giao</small></div>
+        <div><span>Đơn vị vận chuyển</span><strong>CAR-FAST-01</strong><small>TRK-88941002</small></div>
+        <div><span>Hiện hành node</span><strong>Route HCM-07</strong><small>Đang giao</small></div>
+        <div><span>POD</span><strong>Đang chờ</strong><small>Chữ ký + ảnh</small></div>
       </div>
       <div className="outbound-tracking-timeline">
         {events.map((event, index) => (
@@ -262,13 +262,13 @@ const TrackingMock = () => {
             <span className={'outbound-tracking-dot ' + event.tone} aria-hidden="true" />
             <time>{event.time}</time>
             <div><strong>{event.title}</strong><span>{event.detail}</span></div>
-            <Badge tone={event.tone}>{index < 3 ? 'Recorded' : 'Pending'}</Badge>
+            <Badge tone={event.tone}>{index < 3 ? 'Đã ghi nhận' : 'Đang chờ'}</Badge>
           </article>
         ))}
       </div>
       <div className="outbound-mock-callout warning">
-        <strong>Delivery failure semantics</strong>
-        <span>Delivery failure chỉ mở retry/return workflow. Stock không được tự cộng lại warehouse cho tới khi return receipt/posting hợp lệ.</span>
+        <strong>Ngữ nghĩa giao hàng thất bại</strong>
+        <span>Giao hàng thất bại chỉ mở quy trình thử lại/trả hàng. Tồn không được tự cộng lại kho cho tới khi phiếu nhận trả hàng/ghi sổ hợp lệ.</span>
       </div>
     </section>
   );
