@@ -407,6 +407,74 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
     [SqlServerFact]
+    public async Task DownstreamMovement_InsufficientStockRejectsReversalAndRollsBackMarker()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            int originalId;
+            await using (var firstMoveDb = CreateContext())
+            {
+                var first = await CreateMovementService(firstMoveDb, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 3,
+                    Reason = "Giao dịch gốc được hiệu chỉnh sau này"
+                });
+                originalId = first.TransactionId;
+            }
+
+            await using (var downstreamDb = CreateContext())
+            {
+                var bucket = await downstreamDb.InventoryStocks
+                    .SingleAsync(x => x.ProductId == fixture.ProductId &&
+                                      x.WarehouseId == fixture.WarehouseId &&
+                                      x.LocationId == fixture.DestinationLocationId);
+                await CreateMovementService(downstreamDb, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = bucket.Id,
+                    DestinationLocationId = fixture.SourceLocationId,
+                    Quantity = 2,
+                    Reason = "Hàng đã được di chuyển sau giao dịch gốc"
+                });
+            }
+
+            await using (var reversalDb = CreateContext())
+            {
+                var act = () => CreateReversalService(reversalDb, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = originalId,
+                    Reason = "Không được đảo vượt số dư thực tế"
+                });
+                var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
+                thrown.Which.Data["ErrorCode"].Should().Be("INV_REVERSAL_INSUFFICIENT_STOCK");
+            }
+
+            await using var verify = CreateContext();
+            (await verify.InventoryTransactions.CountAsync(x =>
+                x.ProductId == fixture.ProductId &&
+                x.TransactionType == TransactionType.Reversal)).Should().Be(0);
+            (await verify.InventoryTransactions.CountAsync(x =>
+                x.ProductId == fixture.ProductId &&
+                x.TransactionType == TransactionType.Move)).Should().Be(2);
+            (await verify.AuditLogs.CountAsync(x =>
+                x.UserId == fixture.UserId && x.Action == "Inventory.Reversed")).Should().Be(0);
+            var stocks = await verify.InventoryStocks.AsNoTracking()
+                .Where(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId)
+                .ToListAsync();
+            stocks.Sum(x => x.Quantity).Should().Be(10);
+            stocks.Single(x => x.LocationId == fixture.SourceLocationId).Quantity.Should().Be(9);
+            stocks.Single(x => x.LocationId == fixture.DestinationLocationId).Quantity.Should().Be(1);
+
+            var candidate = await CreateReversalService(verify, fixture.UserId)
+                .GetCandidatesAsync(fixture.WarehouseId, 1, 20, originalId);
+            candidate.Items.Should().ContainSingle().Which.IsReversed.Should().BeFalse();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task InventoryReversal_RejectsSecondReversalOfSameOriginalTransaction()
     {
         var fixture = await CreateFixtureAsync();

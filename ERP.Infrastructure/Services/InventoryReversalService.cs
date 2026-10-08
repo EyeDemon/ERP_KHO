@@ -198,6 +198,10 @@ public sealed class InventoryReversalService(
                     cancellationToken)
                     ?? throw Conflict("INV_REVERSAL_SOURCE_NOT_FOUND", "Không còn nhóm tồn kho tại vị trí đích của giao dịch MOVE gốc để thực hiện đảo giao dịch.");
 
+                if (source.Quantity - source.ReservedQuantity < original.Quantity)
+                    throw Conflict("INV_REVERSAL_INSUFFICIENT_STOCK",
+                        "Tồn khả dụng tại vị trí/trạng thái đích không đủ để đảo toàn bộ giao dịch. Hãy kiểm tra các nghiệp vụ đã phát sinh sau giao dịch gốc.");
+
                 var correction = await movementService.MoveAsync(new CreateInventoryMoveDto
                 {
                     InventoryStockId = source.Id,
@@ -219,6 +223,10 @@ public sealed class InventoryReversalService(
                          x.SerialId == original.SerialId,
                     cancellationToken)
                     ?? throw Conflict("INV_REVERSAL_SOURCE_NOT_FOUND", "Không còn nhóm tồn kho ở trạng thái đích của giao dịch gốc để thực hiện đảo giao dịch.");
+
+                if (source.Quantity - source.ReservedQuantity < original.Quantity)
+                    throw Conflict("INV_REVERSAL_INSUFFICIENT_STOCK",
+                        "Tồn khả dụng tại vị trí/trạng thái đích không đủ để đảo toàn bộ giao dịch. Hãy kiểm tra các nghiệp vụ đã phát sinh sau giao dịch gốc.");
 
                 var correction = await statusService.ChangeAsync(new CreateInventoryStatusChangeDto
                 {

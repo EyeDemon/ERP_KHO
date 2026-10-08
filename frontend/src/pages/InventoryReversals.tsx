@@ -18,6 +18,7 @@ const errorMessage=(e:unknown)=>{
   if(r?.data?.code==='INV_ALREADY_REVERSED')return r.data.message??'Giao dịch đã được đảo trước đó.';
   if(r?.data?.code==='INV_REVERSAL_UNSUPPORTED')return r.data.message??'Loại giao dịch này phải được đảo tại quy trình nghiệp vụ chuyên biệt.';
   if(r?.data?.code==='INV_REVERSAL_SOURCE_NOT_FOUND')return r.data.message??'Không còn nhóm tồn kho phù hợp để đảo giao dịch.';
+  if(r?.data?.code==='INV_REVERSAL_INSUFFICIENT_STOCK')return r.data.message??'Tồn hiện tại không đủ để đảo giao dịch; hãy kiểm tra các giao dịch phát sinh sau.';
   if(r?.data?.code==='INV_STOCK_LOCKED')return r.data.message??'Tồn kho đang bị khóa.';
   if(r?.status===403)return 'Bạn không có quyền tạo giao dịch đảo tồn kho.';
   if(r?.status===409)return r.data?.message??'Trạng thái tồn kho đã thay đổi; vui lòng tải lại.';
