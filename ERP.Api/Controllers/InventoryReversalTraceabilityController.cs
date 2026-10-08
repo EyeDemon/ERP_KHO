@@ -15,6 +15,12 @@ public sealed class InventoryReversalTraceabilityController(
     IInventoryReversalService reversalService,
     IInventoryTraceabilityQueryService traceabilityService) : ControllerBase
 {
+    [HttpGet("reversal-reasons")]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+    public async Task<ActionResult<IReadOnlyList<InventoryReversalReasonDto>>> ReversalReasons(
+        CancellationToken cancellationToken = default) =>
+        Ok(await reversalService.GetReversalReasonsAsync(cancellationToken));
+
     [HttpGet("reversal-warehouses")]
     [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
     public async Task<ActionResult<IReadOnlyList<InventoryReversalWarehouseDto>>> ReversalWarehouses(

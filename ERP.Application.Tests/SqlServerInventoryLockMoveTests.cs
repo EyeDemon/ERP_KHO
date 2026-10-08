@@ -374,6 +374,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 reversed = await CreateReversalService(reversalDb, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = moved.TransactionId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "operator correction"
                 });
             }
@@ -400,6 +401,8 @@ public sealed class SqlServerInventoryLockMoveTests
             marker.ReferenceId.Should().Be(moved.TransactionId);
             marker.ReversalOfTransactionId.Should().Be(moved.TransactionId);
             marker.CorrectiveTransactionId.Should().Be(reversed.CorrectiveTransactionId);
+            marker.ReasonCode.Should().Be("OPERATION_CORRECTION");
+            reversed.ReasonCode.Should().Be("OPERATION_CORRECTION");
             marker.Note.Should().Be("operator correction");
             marker.Quantity.Should().Be(4);
         }
@@ -445,6 +448,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 var act = () => CreateReversalService(reversalDb, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = originalId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "Không được đảo vượt số dư thực tế"
                 });
                 var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
@@ -496,6 +500,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 await CreateReversalService(firstDb, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = moved.TransactionId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "first correction"
                 });
 
@@ -504,6 +509,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 var act = () => CreateReversalService(secondDb, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = moved.TransactionId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "must be blocked"
                 });
                 var thrown = await act.Should().ThrowAsync<BusinessRuleException>();
@@ -541,6 +547,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 reversal = await CreateReversalService(reversalDb, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = moved.TransactionId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "trace reversal"
                 });
 
@@ -596,6 +603,7 @@ public sealed class SqlServerInventoryLockMoveTests
                     var result = await CreateReversalService(db, fixture.UserId).ReverseAsync(new()
                     {
                         OriginalTransactionId = moved.TransactionId,
+                        ReasonCode = "OPERATION_CORRECTION",
                         Reason = reason
                     });
                     return (result, null);
@@ -657,6 +665,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 reversal = await CreateReversalService(reversalDb, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = moved.TransactionId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "reference trace reversal"
                 });
 
@@ -729,6 +738,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 reversed = await CreateReversalService(correction, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = originalId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "Hiệu chỉnh chuyển vị trí"
                 });
 
@@ -746,6 +756,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 var action = () => CreateReversalService(denied, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = reversed.CorrectiveTransactionId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "Không được đảo độc lập nhánh hiệu chỉnh"
                 });
                 var thrown = await action.Should().ThrowAsync<BusinessRuleException>();
@@ -817,6 +828,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 await CreateReversalService(reverse, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = originalTransactionId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "Đã xác minh số lượng và kho nguồn"
                 });
             }
@@ -916,6 +928,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 var action = () => CreateReversalService(rejected, fixture.UserId).ReverseAsync(new()
                 {
                     OriginalTransactionId = originalId,
+                    ReasonCode = "OPERATION_CORRECTION",
                     Reason = "must reject legacy duplicate"
                 });
                 var error = await action.Should().ThrowAsync<BusinessRuleException>();
@@ -1073,6 +1086,69 @@ public sealed class SqlServerInventoryLockMoveTests
                 .ReversalTransactionId.Should().Be(reversed.ReversalTransactionId);
             chain.Events.Single(x => x.TransactionId == reversed.ReversalTransactionId)
                 .CorrectiveTransactionId.Should().Be(reversed.CorrectiveTransactionId);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task ReversalReasonCode_ValidatesTypeAndPersistsWithLedgerAndAudit()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            int originalId;
+            await using (var moving = CreateContext())
+                originalId = (await CreateMovementService(moving, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 2,
+                    Reason = "Reason code fixture"
+                })).TransactionId;
+
+            await using (var rejected = CreateContext())
+            {
+                var attempt = () => CreateReversalService(rejected, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = originalId,
+                    ReasonCode = "STATUS_ERROR",
+                    Reason = "Mã dành cho giao dịch trạng thái không hợp lệ ở đây"
+                });
+                await attempt.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
+                    .WithMessage("*Mã lý do đảo*");
+            }
+
+            await using (var verify = CreateContext())
+            {
+                (await verify.InventoryTransactions.CountAsync(x =>
+                    x.ReversalOfTransactionId == originalId)).Should().Be(0);
+                (await verify.AuditLogs.CountAsync(x =>
+                    x.EntityId == originalId && x.Action == "Inventory.Reversed")).Should().Be(0);
+            }
+
+            InventoryReversalResultDto result;
+            await using (var accepted = CreateContext())
+                result = await CreateReversalService(accepted, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = originalId,
+                    ReasonCode = " LOCATION_ERROR ",
+                    Reason = "Xác minh sai vị trí cần đảo"
+                });
+
+            await using var after = CreateContext();
+            var marker = await after.InventoryTransactions.AsNoTracking()
+                .SingleAsync(x => x.Id == result.ReversalTransactionId);
+            marker.ReasonCode.Should().Be("LOCATION_ERROR");
+            marker.Note.Should().Be("Xác minh sai vị trí cần đảo");
+            result.ReasonCode.Should().Be("LOCATION_ERROR");
+            var audit = await after.AuditLogs.AsNoTracking().SingleAsync(x =>
+                x.EntityId == originalId && x.Action == "Inventory.Reversed");
+            audit.NewValues.Should().Contain("ReasonCode: LOCATION_ERROR");
+            var trace = await new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                after, new WarehouseAuthorizationService(after, new CurrentUser(fixture.UserId)))
+                .TraceAsync(referenceType: "InventoryReversal", referenceId: originalId);
+            trace.Events.Single(x => x.TransactionId == marker.Id)
+                .ReasonCode.Should().Be("LOCATION_ERROR");
         }
         finally { await CleanupAsync(fixture); }
     }

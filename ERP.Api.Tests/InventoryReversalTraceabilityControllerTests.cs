@@ -38,6 +38,25 @@ public sealed class InventoryReversalTraceabilityControllerTests
     }
 
     [Fact]
+    public async Task Reasons_AuthoritativeCatalog_RequiresReadOnlyDelegation()
+    {
+        var reversal = new Mock<IInventoryReversalService>(MockBehavior.Strict);
+        IReadOnlyList<InventoryReversalReasonDto> items =
+        [
+            new InventoryReversalReasonDto { Code = "LOCATION_ERROR", Name = "Sai vị trí lưu kho", TransactionType = "Move" }
+        ];
+        reversal.Setup(x => x.GetReversalReasonsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(items);
+        var controller = new InventoryReversalTraceabilityController(
+            reversal.Object, Mock.Of<IInventoryTraceabilityQueryService>());
+
+        var response = await controller.ReversalReasons();
+        Assert.Same(items, Assert.IsType<OkObjectResult>(response.Result).Value);
+        reversal.Verify(x => x.GetReversalReasonsAsync(It.IsAny<CancellationToken>()), Times.Once);
+        reversal.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Warehouses_DelegatesToAuthorizedScopeService()
     {
         var reversal = new Mock<IInventoryReversalService>(MockBehavior.Strict);

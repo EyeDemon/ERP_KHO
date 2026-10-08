@@ -333,6 +333,7 @@ namespace ERP.Api.Tests
         }
 
         [Theory]
+        [InlineData("ReversalReasons", AppPermissions.InventoryLedgerRead)]
         [InlineData("ReversalWarehouses", AppPermissions.InventoryLedgerRead)]
         [InlineData("Candidates", AppPermissions.InventoryLedgerRead)]
         [InlineData("Reverse", AppPermissions.InventoryReversalCreate)]

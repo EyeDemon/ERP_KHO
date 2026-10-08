@@ -4,6 +4,7 @@ using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Services;
 using ERP.Application.Exceptions;
+using ERP.Application.Inventory;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -121,6 +122,36 @@ public sealed class InventoryReversalCandidatesTests
         var outOfRange = () => service.GetCandidatesAsync(null, int.MaxValue, 100);
         await outOfRange.Should().ThrowAsync<BusinessRuleException>()
             .WithMessage("*Số trang*");
+    }
+
+    [Fact]
+    public void ReversalReasonCatalog_RejectsUnknownOrWrongSourceType()
+    {
+        InventoryReversalReasonCatalog.All.Should().HaveCount(4);
+        InventoryReversalReasonCatalog.IsAllowed("LOCATION_ERROR", TransactionType.Move).Should().BeTrue();
+        InventoryReversalReasonCatalog.IsAllowed("LOCATION_ERROR", TransactionType.StatusChange).Should().BeFalse();
+        InventoryReversalReasonCatalog.IsAllowed("STATUS_ERROR", TransactionType.StatusChange).Should().BeTrue();
+        InventoryReversalReasonCatalog.IsAllowed("STATUS_ERROR", TransactionType.Move).Should().BeFalse();
+        InventoryReversalReasonCatalog.IsAllowed("OPERATION_CORRECTION", TransactionType.Move).Should().BeTrue();
+        InventoryReversalReasonCatalog.IsAllowed("DATA_ENTRY_ERROR", TransactionType.StatusChange).Should().BeTrue();
+        InventoryReversalReasonCatalog.IsAllowed("NOT_A_REASON", TransactionType.Move).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task MissingReasonCode_IsRejectedBeforeDatabaseMutation()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var context = new ErpKhoDbContext(options);
+        var service = new InventoryReversalService(context, Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>(), Mock.Of<IInventoryMovementService>(),
+            Mock.Of<IInventoryStatusService>());
+        var act = () => service.ReverseAsync(new()
+        {
+            OriginalTransactionId = 1, Reason = "Chưa có mã lý do"
+        });
+        await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("*Mã lý do*");
+        (await context.InventoryTransactions.CountAsync()).Should().Be(0);
     }
 
     [Fact]
