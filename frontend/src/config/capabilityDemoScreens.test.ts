@@ -148,7 +148,7 @@ describe('interactive capability demo registry', () => {
     expect(entry.capability.route).toBe('/purchase-orders');
 
     const demo = getCapabilityDemoDefinition(entry.capability, entry.module.name, entry.module.flow);
-    expect(demo.fields).toContainEqual({ label: 'Production maturity', value: 'LIVE' });
+    expect(demo.fields).toContainEqual({ label: 'Mức triển khai hệ thống thật', value: 'HOÀN THIỆN' });
     expect(demo.commands).toContain('OPEN_REAL_SCREEN');
     expect(demo.commands).not.toContain('SIMULATE_ACTION');
   });

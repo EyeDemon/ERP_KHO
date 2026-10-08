@@ -12,7 +12,7 @@ describe('MockGlobalSearch', () => {
     const view = render(<MemoryRouter><MockDemoProvider><MockGlobalSearch /></MockDemoProvider></MemoryRouter>);
     const input = view.getByLabelText('Tìm kiếm toàn hệ thống');
     fireEvent.change(input, { target: { value: '8938501000011' } });
-    expect(view.getByText('EXACT')).toBeTruthy();
+    expect(view.getByText('KHỚP CHÍNH XÁC')).toBeTruthy();
     expect(view.getByText('SKU-1001 • Cà phê Arabica 500g')).toBeTruthy();
 
     fireEvent.change(input, { target: { value: 'GR-2026-1048' } });
