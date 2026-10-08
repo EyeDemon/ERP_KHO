@@ -50,13 +50,13 @@ const statusLabel: Record<number, string> = {
   0: 'Nháp',
   1: 'Đã xác nhận',
   2: 'Đã đến',
-  3: 'Đã check-in',
-  4: 'Đã gán dock',
+  3: 'Đã vào cổng',
+  4: 'Đã gán cửa kho',
   5: 'Đang phục vụ',
   6: 'Hoàn thành',
   7: 'Đã hủy',
-  8: 'No-show',
-  9: 'Exception',
+  8: 'Không đến',
+  9: 'Ngoại lệ',
 };
 const statusTone = (status: number) =>
   status === 6 ? 'success' as const
@@ -64,7 +64,21 @@ const statusTone = (status: number) =>
       : status === 0 ? 'neutral' as const
         : status === 5 ? 'warning' as const
           : 'success' as const;
-const directionLabel = (value: number) => value === 0 ? 'Inbound' : 'Outbound';
+const directionLabel = (value: number) => value === 0 ? 'Nhập kho' : 'Xuất kho';
+
+const eventTypeLabel = (value: string) => ({
+  CREATED: 'Đã tạo',
+  CONFIRMED: 'Đã xác nhận',
+  ARRIVED: 'Xe đã đến',
+  CHECKED_IN: 'Đã vào cổng',
+  DOCK_ASSIGNED: 'Đã gán cửa kho',
+  SERVICE_STARTED: 'Bắt đầu phục vụ',
+  SERVICE_COMPLETED: 'Hoàn thành phục vụ',
+  CHECKED_OUT: 'Đã rời cổng',
+  CANCELLED: 'Đã hủy',
+  NO_SHOW: 'Không đến',
+  EXCEPTION_RECORDED: 'Ghi nhận ngoại lệ',
+}[value] ?? value);
 const timeZoneParts = (date: Date, timeZone: string) => {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -136,7 +150,7 @@ const DockYard = () => {
   const canManageAppointment = usePermission('dock_appointment.manage');
   const canCheckIn = usePermission('yard.checkin');
   const canAssignDock = usePermission('yard.assign_dock');
-  const canCheckout = usePermission('yard.checkout');
+  const canRời cổng = usePermission('yard.checkout');
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState(0);
@@ -178,7 +192,7 @@ const DockYard = () => {
       setDocks(dockResponse.data as Dock[]);
       setYardSlots(yardResponse.data as YardSlot[]);
     } catch (failure) {
-      if (revision === loadRevisionRef.current) setError(messageOf(failure, 'Không thể tải Dock & Yard.'));
+      if (revision === loadRevisionRef.current) setError(messageOf(failure, 'Không thể tải dữ liệu cửa kho & sân bãi.'));
     } finally {
       if (revision === loadRevisionRef.current) setLoading(false);
     }
@@ -400,7 +414,7 @@ const DockYard = () => {
       const response = await apiClient.get('/api/dock-yard/appointments/' + appointment.id);
       setSelected(response.data as Appointment);
     } catch (failure) {
-      setError(messageOf(failure, 'Không thể tải chi tiết appointment.'));
+      setError(messageOf(failure, 'Không thể tải chi tiết lịch hẹn.'));
     }
   };
 
@@ -408,49 +422,49 @@ const DockYard = () => {
     <UiPage>
       <UiPageHeader
         eyebrow="Vận hành"
-        title="Dock & Yard Control"
-        description="Điều phối lịch xe, gate check-in, yard slot và dock assignment. Các trạng thái tại yard không tạo inventory effect; tồn kho chỉ thay đổi ở nghiệp vụ receiving/dispatch riêng."
-        actions={canManageAppointment ? <button type="button" className="ui-primary-button" onClick={() => openAppointment()}>Tạo appointment</button> : undefined}
+        title="Điều hành cửa kho & sân bãi"
+        description="Điều phối lịch xe, ghi nhận vào cổng, vị trí sân bãi và phân cửa kho. Các trạng thái tại sân bãi không làm thay đổi tồn kho; tồn kho chỉ thay đổi ở nghiệp vụ nhận hàng/xác nhận giao riêng."
+        actions={canManageAppointment ? <button type="button" className="ui-primary-button" onClick={() => openAppointment()}>Tạo lịch hẹn</button> : undefined}
       />
 
       {success && <p role="status" className="ui-success-text">{success}</p>}
       {error && <p role="alert">{error} <button type="button" onClick={() => void refresh()}>Tải lại</button></p>}
 
       <UiMetricGrid>
-        <UiMetric value={appointments.length} label="Appointment trong phạm vi" />
-        <UiMetric value={waitingCount} label="Đang chờ / gate" />
-        <UiMetric value={inServiceCount} label="Đã gán dock / phục vụ" />
-        <UiMetric value={exceptionCount} label="No-show / Exception" />
-        <UiMetric value={activeDockCount} label="Dock hoạt động" />
-        <UiMetric value={occupiedYardCount} label="Yard slot đang dùng" />
+        <UiMetric value={appointments.length} label="Lịch hẹn trong phạm vi" />
+        <UiMetric value={waitingCount} label="Đang chờ / tại cổng" />
+        <UiMetric value={inServiceCount} label="Đã gán cửa kho / phục vụ" />
+        <UiMetric value={exceptionCount} label="Không đến / Ngoại lệ" />
+        <UiMetric value={activeDockCount} label="Cửa kho hoạt động" />
+        <UiMetric value={occupiedYardCount} label="Vị trí sân bãi đang dùng" />
       </UiMetricGrid>
 
       <UiToolbar>
         <UiToolbarField label="Kho">
-          <select aria-label="Kho Dock Yard" value={warehouseId} onChange={event => setWarehouseId(Number(event.target.value))}>
+          <select aria-label="Kho cửa kho sân bãi" value={warehouseId} onChange={event => setWarehouseId(Number(event.target.value))}>
             {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}{warehouse.calendarConfigured ? '' : ' • chưa có lịch'}</option>)}
           </select>
         </UiToolbarField>
         <UiToolbarField label="Trạng thái">
-          <select aria-label="Lọc trạng thái appointment" value={status} onChange={event => setStatus(event.target.value)}>
+          <select aria-label="Lọc trạng thái lịch hẹn" value={status} onChange={event => setStatus(event.target.value)}>
             <option value="">Tất cả</option>
             {Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </UiToolbarField>
         <UiToolbarField label="Tìm kiếm">
-          <input aria-label="Tìm appointment" value={search} onChange={event => setSearch(event.target.value)} placeholder="Mã, carrier, xe, tài xế, dock..." />
+          <input aria-label="Tìm lịch hẹn" value={search} onChange={event => setSearch(event.target.value)} placeholder="Mã, đơn vị vận chuyển, xe, tài xế, cửa kho..." />
         </UiToolbarField>
         <button type="button" onClick={() => void refresh()} disabled={!warehouseId || loading}>Làm mới</button>
       </UiToolbar>
 
-      {loading ? <p role="status">Đang tải Dock & Yard...</p> : warehouses.length === 0 ? (
+      {loading ? <p role="status">Đang tải dữ liệu cửa kho & sân bãi...</p> : warehouses.length === 0 ? (
         <UiEmptyState title="Không có kho nào trong phạm vi được phép." />
       ) : (
         <>
-          <UiCard title="Appointment Operations">
+          <UiCard title="Vận hành lịch hẹn">
             <UiTableScroll>
-              <table aria-label="Danh sách appointment Dock Yard">
-                <thead><tr><th>Appointment</th><th>Khung giờ</th><th>Carrier / Vehicle</th><th>Yard</th><th>Dock</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+              <table aria-label="Danh sách lịch hẹn cửa kho sân bãi">
+                <thead><tr><th>Lịch hẹn</th><th>Khung giờ</th><th>Đơn vị vận chuyển / Phương tiện</th><th>Sân bãi</th><th>Cửa kho</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
                 <tbody>
                   {filtered.map(item => (
                     <tr key={item.id}>
@@ -459,56 +473,56 @@ const DockYard = () => {
                       <td>{item.carrierName || item.carrierCode || '—'}<br /><small>{item.vehiclePlate || 'Chưa có biển số'}</small></td>
                       <td>{item.yardSlotCode || '—'}</td>
                       <td>{item.dockCode || '—'}</td>
-                      <td><UiBadge tone={statusTone(item.status)}>{statusLabel[item.status] || item.status}</UiBadge>{item.checkedOutAtUtc && <><br /><small>Đã checkout</small></>}</td>
+                      <td><UiBadge tone={statusTone(item.status)}>{statusLabel[item.status] || item.status}</UiBadge>{item.checkedOutAtUtc && <><br /><small>Đã rời cổng</small></>}</td>
                       <td>
                         <div className="ui-inline-actions">
-                          <button type="button" aria-label={'Chi tiết appointment ' + item.code} onClick={() => void showDetail(item)}>Chi tiết</button>
-                          {canManageAppointment && item.status === 0 && <button type="button" aria-label={'Sửa appointment ' + item.code} onClick={() => openAppointment(item)}>Sửa</button>}
-                          {canManageAppointment && item.status === 0 && <button type="button" aria-label={'Xác nhận appointment ' + item.code} onClick={() => void runCommand(item, 'confirm')}>Xác nhận</button>}
+                          <button type="button" aria-label={'Chi tiết lịch hẹn ' + item.code} onClick={() => void showDetail(item)}>Chi tiết</button>
+                          {canManageAppointment && item.status === 0 && <button type="button" aria-label={'Sửa lịch hẹn ' + item.code} onClick={() => openAppointment(item)}>Sửa</button>}
+                          {canManageAppointment && item.status === 0 && <button type="button" aria-label={'Xác nhận lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'confirm')}>Xác nhận</button>}
                           {canCheckIn && item.status === 1 && <button type="button" aria-label={'Ghi nhận xe đến ' + item.code} onClick={() => void runCommand(item, 'arrive')}>Xe đến</button>}
-                          {canCheckIn && item.status === 2 && <button type="button" aria-label={'Check-in appointment ' + item.code} onClick={() => setActionPanel({ mode: 'checkin', appointment: item, vehiclePlate: item.vehiclePlate ?? '', trailerPlate: item.trailerPlate ?? '', driverName: '', driverPhone: '', sealNumber: '', yardSlotId: '', note: '' })}>Check-in</button>}
-                          {canAssignDock && [3, 4].includes(item.status) && <button type="button" aria-label={(item.status === 4 ? 'Đổi dock appointment ' : 'Gán dock appointment ') + item.code} onClick={() => setActionPanel({ mode: 'assignDock', appointment: item, dockId: item.dockId?.toString() ?? '', note: '' })}>{item.status === 4 ? 'Đổi dock' : 'Gán dock'}</button>}
-                          {canManageAppointment && item.status === 4 && <button type="button" aria-label={'Bắt đầu dịch vụ appointment ' + item.code} onClick={() => void runCommand(item, 'start-service')}>Bắt đầu</button>}
-                          {canManageAppointment && item.status === 5 && <button type="button" aria-label={'Hoàn thành dịch vụ appointment ' + item.code} onClick={() => void runCommand(item, 'complete')}>Hoàn thành</button>}
-                          {canCheckout && (item.status === 6 || (item.status === 9 && Boolean(item.checkedInAtUtc))) && !item.checkedOutAtUtc && <button type="button" aria-label={'Checkout appointment ' + item.code} onClick={() => void runCommand(item, 'checkout')}>Checkout</button>}
-                          {canManageAppointment && [0, 1].includes(item.status) && <button type="button" aria-label={'Hủy appointment ' + item.code} onClick={() => window.confirm('Hủy appointment này?') && void runCommand(item, 'cancel')}>Hủy</button>}
-                          {canManageAppointment && [1, 2, 3].includes(item.status) && <button type="button" aria-label={'Đánh dấu no-show appointment ' + item.code} onClick={() => void runCommand(item, 'no-show')}>No-show</button>}
-                          {canManageAppointment && ![6, 7, 8, 9].includes(item.status) && <button type="button" aria-label={'Ghi nhận exception appointment ' + item.code} onClick={() => setActionPanel({ mode: 'exception', appointment: item, exceptionCode: '', note: '' })}>Exception</button>}
+                          {canCheckIn && item.status === 2 && <button type="button" aria-label={'Ghi nhận vào cổng cho lịch hẹn ' + item.code} onClick={() => setActionPanel({ mode: 'checkin', appointment: item, vehiclePlate: item.vehiclePlate ?? '', trailerPlate: item.trailerPlate ?? '', driverName: '', driverPhone: '', sealNumber: '', yardSlotId: '', note: '' })}>Ghi nhận vào cổng</button>}
+                          {canAssignDock && [3, 4].includes(item.status) && <button type="button" aria-label={(item.status === 4 ? 'Đổi cửa kho cho lịch hẹn ' : 'Gán cửa kho cho lịch hẹn ') + item.code} onClick={() => setActionPanel({ mode: 'assignDock', appointment: item, dockId: item.dockId?.toString() ?? '', note: '' })}>{item.status === 4 ? 'Đổi cửa kho' : 'Gán cửa kho'}</button>}
+                          {canManageAppointment && item.status === 4 && <button type="button" aria-label={'Bắt đầu phục vụ lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'start-service')}>Bắt đầu</button>}
+                          {canManageAppointment && item.status === 5 && <button type="button" aria-label={'Hoàn thành phục vụ lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'complete')}>Hoàn thành</button>}
+                          {canRời cổng && (item.status === 6 || (item.status === 9 && Boolean(item.checkedInAtUtc))) && !item.checkedOutAtUtc && <button type="button" aria-label={'Ghi nhận rời cổng cho lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'checkout')}>Rời cổng</button>}
+                          {canManageAppointment && [0, 1].includes(item.status) && <button type="button" aria-label={'Hủy lịch hẹn ' + item.code} onClick={() => window.confirm('Hủy lịch hẹn này?') && void runCommand(item, 'cancel')}>Hủy</button>}
+                          {canManageAppointment && [1, 2, 3].includes(item.status) && <button type="button" aria-label={'Đánh dấu không đến cho lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'no-show')}>Không đến</button>}
+                          {canManageAppointment && ![6, 7, 8, 9].includes(item.status) && <button type="button" aria-label={'Ghi nhận ngoại lệ cho lịch hẹn ' + item.code} onClick={() => setActionPanel({ mode: 'exception', appointment: item, exceptionCode: '', note: '' })}>Ngoại lệ</button>}
                         </div>
                       </td>
                     </tr>
                   ))}
-                  {filtered.length === 0 && <tr><td className="ui-empty-cell" colSpan={7}>Không có appointment phù hợp.</td></tr>}
+                  {filtered.length === 0 && <tr><td className="ui-empty-cell" colSpan={7}>Không có lịch hẹn phù hợp.</td></tr>}
                 </tbody>
               </table>
             </UiTableScroll>
           </UiCard>
 
-          <UiCard title="Dock Master">
-            {canManageDock && <div className="ui-inline-actions"><button type="button" onClick={() => setDockForm(emptyDock())}>Thêm dock</button></div>}
+          <UiCard title="Danh mục cửa kho">
+            {canManageDock && <div className="ui-inline-actions"><button type="button" onClick={() => setDockForm(emptyDock())}>Thêm cửa kho</button></div>}
             <UiTableScroll>
-              <table aria-label="Danh sách dock">
-                <thead><tr><th>Mã</th><th>Tên</th><th>Luồng</th><th>Vehicle</th><th>Nhiệt độ</th><th>Hazard</th><th>Trạng thái</th>{canManageDock && <th>Thao tác</th>}</tr></thead>
+              <table aria-label="Danh sách cửa kho">
+                <thead><tr><th>Mã</th><th>Tên</th><th>Luồng</th><th>Phương tiện</th><th>Nhiệt độ</th><th>Hàng nguy hiểm</th><th>Trạng thái</th>{canManageDock && <th>Thao tác</th>}</tr></thead>
                 <tbody>{docks.map(dock => <tr key={dock.id}>
                   <td><strong>{dock.code}</strong></td><td>{dock.name}</td>
-                  <td>{[dock.supportsInbound ? 'Inbound' : '', dock.supportsOutbound ? 'Outbound' : ''].filter(Boolean).join(' + ')}</td>
+                  <td>{[dock.supportsInbound ? 'Nhập kho' : '', dock.supportsOutbound ? 'Xuất kho' : ''].filter(Boolean).join(' + ')}</td>
                   <td>{dock.allowedVehicleType || 'Mọi loại'}</td><td>{dock.isTemperatureControlled ? 'Có' : 'Không'}</td><td>{dock.hazardAllowed ? 'Cho phép' : 'Không'}</td>
                   <td><UiBadge tone={dock.isActive ? 'success' : 'neutral'}>{dock.isActive ? 'Hoạt động' : 'Ngừng'}</UiBadge></td>
-                  {canManageDock && <td><button type="button" aria-label={'Sửa dock ' + dock.code} onClick={() => setDockForm({ id: dock.id, code: dock.code, name: dock.name, supportsInbound: dock.supportsInbound, supportsOutbound: dock.supportsOutbound, allowedVehicleType: dock.allowedVehicleType ?? '', isTemperatureControlled: dock.isTemperatureControlled, hazardAllowed: dock.hazardAllowed, isActive: dock.isActive, rowVersion: dock.rowVersion })}>Sửa</button></td>}
+                  {canManageDock && <td><button type="button" aria-label={'Sửa cửa kho ' + dock.code} onClick={() => setDockForm({ id: dock.id, code: dock.code, name: dock.name, supportsInbound: dock.supportsInbound, supportsOutbound: dock.supportsOutbound, allowedVehicleType: dock.allowedVehicleType ?? '', isTemperatureControlled: dock.isTemperatureControlled, hazardAllowed: dock.hazardAllowed, isActive: dock.isActive, rowVersion: dock.rowVersion })}>Sửa</button></td>}
                 </tr>)}</tbody>
               </table>
             </UiTableScroll>
           </UiCard>
 
-          <UiCard title="Yard Slots">
-            {canManageDock && <div className="ui-inline-actions"><button type="button" onClick={() => setYardForm(emptyYard())}>Thêm yard slot</button></div>}
+          <UiCard title="Vị trí sân bãi">
+            {canManageDock && <div className="ui-inline-actions"><button type="button" onClick={() => setYardForm(emptyYard())}>Thêm vị trí sân bãi</button></div>}
             <UiTableScroll>
-              <table aria-label="Danh sách yard slot">
-                <thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th>Occupancy</th>{canManageDock && <th>Thao tác</th>}</tr></thead>
+              <table aria-label="Danh sách vị trí sân bãi">
+                <thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th>Tình trạng sử dụng</th>{canManageDock && <th>Thao tác</th>}</tr></thead>
                 <tbody>{yardSlots.map(slot => <tr key={slot.id}>
                   <td><strong>{slot.code}</strong></td><td>{slot.name}</td><td><UiBadge tone={slot.isActive ? 'success' : 'neutral'}>{slot.isActive ? 'Hoạt động' : 'Ngừng'}</UiBadge></td>
                   <td>{slot.occupied ? <UiBadge tone="warning">{slot.occupiedByAppointmentCode || 'Đang dùng'}</UiBadge> : <UiBadge tone="success">Trống</UiBadge>}</td>
-                  {canManageDock && <td><button type="button" aria-label={'Sửa yard slot ' + slot.code} onClick={() => setYardForm({ id: slot.id, code: slot.code, name: slot.name, isActive: slot.isActive, rowVersion: slot.rowVersion })}>Sửa</button></td>}
+                  {canManageDock && <td><button type="button" aria-label={'Sửa vị trí sân bãi ' + slot.code} onClick={() => setYardForm({ id: slot.id, code: slot.code, name: slot.name, isActive: slot.isActive, rowVersion: slot.rowVersion })}>Sửa</button></td>}
                 </tr>)}</tbody>
               </table>
             </UiTableScroll>
@@ -516,61 +530,61 @@ const DockYard = () => {
         </>
       )}
 
-      {selected && <UiCard title={'Timeline • ' + selected.code}>
+      {selected && <UiCard title={'Dòng thời gian • ' + selected.code}>
         <p><strong>{statusLabel[selected.status]}</strong> • {directionLabel(selected.direction)} • {selected.vehiclePlate || 'Chưa có xe'} • {selected.dockCode || 'Chưa gán dock'}</p>
         <UiTableScroll>
-          <table aria-label="Timeline appointment">
-            <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Dock</th><th>Yard</th><th>Ghi chú</th></tr></thead>
+          <table aria-label="Dòng thời gian lịch hẹn">
+            <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Cửa kho</th><th>Sân bãi</th><th>Ghi chú</th></tr></thead>
             <tbody>{(selected.events ?? []).map(event => <tr key={event.id}>
-              <td>{new Date(event.eventAtUtc).toLocaleString('vi-VN')}</td><td>{event.eventType}</td><td>{event.dockId ?? '—'}</td><td>{event.yardSlotId ?? '—'}</td><td>{event.note || '—'}</td>
+              <td>{new Date(event.eventAtUtc).toLocaleString('vi-VN')}</td><td>{eventTypeLabel(event.eventType)}</td><td>{event.dockId ?? '—'}</td><td>{event.yardSlotId ?? '—'}</td><td>{event.note || '—'}</td>
             </tr>)}</tbody>
           </table>
         </UiTableScroll>
         <div className="ui-inline-actions"><button type="button" onClick={() => setSelected(null)}>Đóng</button></div>
       </UiCard>}
 
-      {appointmentForm && canManageAppointment && <UiCard title={appointmentForm.id ? 'Sửa appointment ' + appointmentForm.code : 'Tạo appointment'}>
+      {appointmentForm && canManageAppointment && <UiCard title={appointmentForm.id ? 'Sửa lịch hẹn ' + appointmentForm.code : 'Tạo lịch hẹn'}>
         <form className="ui-form-grid" onSubmit={saveAppointment}>
-          <label className="ui-stack"><span>Mã *</span><input aria-label="Mã appointment" value={appointmentForm.code} disabled={saving || Boolean(appointmentForm.id)} onChange={event => setAppointmentForm(current => current && ({ ...current, code: event.target.value.toUpperCase() }))} required /></label>
-          <label className="ui-stack"><span>Luồng *</span><select aria-label="Luồng appointment" value={appointmentForm.direction} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, direction: event.target.value as '0' | '1' }))}><option value="0">Inbound</option><option value="1">Outbound</option></select></label>
-          <label className="ui-stack"><span>Bắt đầu * • {warehouseTimeZone}</span><input aria-label="Bắt đầu appointment theo timezone kho" type="datetime-local" value={appointmentForm.plannedStart} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, plannedStart: event.target.value }))} required /></label>
-          <label className="ui-stack"><span>Kết thúc * • {warehouseTimeZone}</span><input aria-label="Kết thúc appointment theo timezone kho" type="datetime-local" value={appointmentForm.plannedEnd} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, plannedEnd: event.target.value }))} required /></label>
-          <label className="ui-stack"><span>Carrier code</span><input aria-label="Carrier code" value={appointmentForm.carrierCode} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, carrierCode: event.target.value }))} /></label>
-          <label className="ui-stack"><span>Carrier name</span><input aria-label="Carrier name" value={appointmentForm.carrierName} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, carrierName: event.target.value }))} /></label>
+          <label className="ui-stack"><span>Mã *</span><input aria-label="Mã lịch hẹn" value={appointmentForm.code} disabled={saving || Boolean(appointmentForm.id)} onChange={event => setAppointmentForm(current => current && ({ ...current, code: event.target.value.toUpperCase() }))} required /></label>
+          <label className="ui-stack"><span>Luồng *</span><select aria-label="Luồng lịch hẹn" value={appointmentForm.direction} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, direction: event.target.value as '0' | '1' }))}><option value="0">Nhập kho</option><option value="1">Xuất kho</option></select></label>
+          <label className="ui-stack"><span>Bắt đầu * • {warehouseTimeZone}</span><input aria-label="Bắt đầu lịch hẹn theo múi giờ kho" type="datetime-local" value={appointmentForm.plannedStart} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, plannedStart: event.target.value }))} required /></label>
+          <label className="ui-stack"><span>Kết thúc * • {warehouseTimeZone}</span><input aria-label="Kết thúc lịch hẹn theo múi giờ kho" type="datetime-local" value={appointmentForm.plannedEnd} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, plannedEnd: event.target.value }))} required /></label>
+          <label className="ui-stack"><span>Mã đơn vị vận chuyển</span><input aria-label="Mã đơn vị vận chuyển" value={appointmentForm.carrierCode} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, carrierCode: event.target.value }))} /></label>
+          <label className="ui-stack"><span>Tên đơn vị vận chuyển</span><input aria-label="Tên đơn vị vận chuyển" value={appointmentForm.carrierName} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, carrierName: event.target.value }))} /></label>
           <label className="ui-stack"><span>Biển số xe dự kiến</span><input aria-label="Biển số xe dự kiến" value={appointmentForm.vehiclePlate} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, vehiclePlate: event.target.value.toUpperCase() }))} /></label>
-          <label className="ui-stack"><span>Trailer</span><input aria-label="Trailer dự kiến" value={appointmentForm.trailerPlate} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, trailerPlate: event.target.value.toUpperCase() }))} /></label>
-          <label className="ui-stack"><span>Vehicle type</span><input aria-label="Vehicle type" value={appointmentForm.vehicleType} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, vehicleType: event.target.value.toUpperCase() }))} /></label>
+          <label className="ui-stack"><span>Rơ-moóc</span><input aria-label="Rơ-moóc dự kiến" value={appointmentForm.trailerPlate} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, trailerPlate: event.target.value.toUpperCase() }))} /></label>
+          <label className="ui-stack"><span>Loại phương tiện</span><input aria-label="Loại phương tiện" value={appointmentForm.vehicleType} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, vehicleType: event.target.value.toUpperCase() }))} /></label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={appointmentForm.requiresTemperatureControl} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, requiresTemperatureControl: event.target.checked }))} /> Yêu cầu kiểm soát nhiệt độ</label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={appointmentForm.hazardous} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, hazardous: event.target.checked }))} /> Hàng nguy hiểm</label>
-          <label className="ui-stack"><span>Ghi chú</span><textarea aria-label="Ghi chú appointment" value={appointmentForm.note} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, note: event.target.value }))} /></label>
-          <div className="ui-inline-actions"><button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu appointment'}</button><button type="button" disabled={saving} onClick={() => setAppointmentForm(null)}>Hủy</button></div>
+          <label className="ui-stack"><span>Ghi chú</span><textarea aria-label="Ghi chú lịch hẹn" value={appointmentForm.note} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, note: event.target.value }))} /></label>
+          <div className="ui-inline-actions"><button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu lịch hẹn'}</button><button type="button" disabled={saving} onClick={() => setAppointmentForm(null)}>Hủy</button></div>
         </form>
       </UiCard>}
 
-      {dockForm && canManageDock && <UiCard title={dockForm.id ? 'Sửa dock ' + dockForm.code : 'Thêm dock'}>
+      {dockForm && canManageDock && <UiCard title={dockForm.id ? 'Sửa cửa kho ' + dockForm.code : 'Thêm cửa kho'}>
         <form className="ui-form-grid" onSubmit={saveDock}>
           <label className="ui-stack"><span>Mã *</span><input value={dockForm.code} disabled={saving || Boolean(dockForm.id)} onChange={event => setDockForm(current => current && ({ ...current, code: event.target.value.toUpperCase() }))} required /></label>
           <label className="ui-stack"><span>Tên *</span><input value={dockForm.name} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, name: event.target.value }))} required /></label>
-          <label className="ui-stack"><span>Vehicle type</span><input value={dockForm.allowedVehicleType} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, allowedVehicleType: event.target.value.toUpperCase() }))} /></label>
+          <label className="ui-stack"><span>Loại phương tiện</span><input value={dockForm.allowedVehicleType} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, allowedVehicleType: event.target.value.toUpperCase() }))} /></label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.supportsInbound} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, supportsInbound: event.target.checked }))} /> Inbound</label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.supportsOutbound} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, supportsOutbound: event.target.checked }))} /> Outbound</label>
-          <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.isTemperatureControlled} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, isTemperatureControlled: event.target.checked }))} /> Temperature controlled</label>
-          <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.hazardAllowed} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, hazardAllowed: event.target.checked }))} /> Cho phép hazard</label>
+          <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.isTemperatureControlled} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, isTemperatureControlled: event.target.checked }))} /> Kiểm soát nhiệt độ</label>
+          <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.hazardAllowed} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, hazardAllowed: event.target.checked }))} /> Cho phép hàng nguy hiểm</label>
           {dockForm.id && <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.isActive} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, isActive: event.target.checked }))} /> Đang hoạt động</label>}
-          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Lưu dock</button><button type="button" onClick={() => setDockForm(null)} disabled={saving}>Hủy</button></div>
+          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Lưu cửa kho</button><button type="button" onClick={() => setDockForm(null)} disabled={saving}>Hủy</button></div>
         </form>
       </UiCard>}
 
-      {yardForm && canManageDock && <UiCard title={yardForm.id ? 'Sửa yard slot ' + yardForm.code : 'Thêm yard slot'}>
+      {yardForm && canManageDock && <UiCard title={yardForm.id ? 'Sửa vị trí sân bãi ' + yardForm.code : 'Thêm vị trí sân bãi'}>
         <form className="ui-form-grid" onSubmit={saveYard}>
           <label className="ui-stack"><span>Mã *</span><input value={yardForm.code} disabled={saving || Boolean(yardForm.id)} onChange={event => setYardForm(current => current && ({ ...current, code: event.target.value.toUpperCase() }))} required /></label>
           <label className="ui-stack"><span>Tên *</span><input value={yardForm.name} disabled={saving} onChange={event => setYardForm(current => current && ({ ...current, name: event.target.value }))} required /></label>
           {yardForm.id && <label className="ui-checkbox-label"><input type="checkbox" checked={yardForm.isActive} disabled={saving} onChange={event => setYardForm(current => current && ({ ...current, isActive: event.target.checked }))} /> Đang hoạt động</label>}
-          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Lưu yard slot</button><button type="button" onClick={() => setYardForm(null)} disabled={saving}>Hủy</button></div>
+          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Lưu vị trí sân bãi</button><button type="button" onClick={() => setYardForm(null)} disabled={saving}>Hủy</button></div>
         </form>
       </UiCard>}
 
-      {actionPanel && <UiCard title={actionPanel.mode === 'checkin' ? 'Gate check-in • ' + actionPanel.appointment.code : actionPanel.mode === 'assignDock' ? 'Gán dock • ' + actionPanel.appointment.code : 'Ghi nhận exception • ' + actionPanel.appointment.code}>
+      {actionPanel && <UiCard title={actionPanel.mode === 'checkin' ? 'Ghi nhận vào cổng • ' + actionPanel.appointment.code : actionPanel.mode === 'assignDock' ? 'Gán cửa kho • ' + actionPanel.appointment.code : 'Ghi nhận ngoại lệ • ' + actionPanel.appointment.code}>
         {actionPanel.mode === 'checkin' && <form className="ui-form-grid" onSubmit={event => {
           event.preventDefault();
           void runCommand(actionPanel.appointment, 'check-in', {
@@ -584,31 +598,31 @@ const DockYard = () => {
           });
         }}>
           <label className="ui-stack"><span>Biển số xe *</span><input value={actionPanel.vehiclePlate} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, vehiclePlate: event.target.value.toUpperCase() } : current)} required /></label>
-          <label className="ui-stack"><span>Trailer</span><input value={actionPanel.trailerPlate} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, trailerPlate: event.target.value.toUpperCase() } : current)} /></label>
+          <label className="ui-stack"><span>Rơ-moóc</span><input value={actionPanel.trailerPlate} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, trailerPlate: event.target.value.toUpperCase() } : current)} /></label>
           <label className="ui-stack"><span>Tài xế *</span><input value={actionPanel.driverName} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, driverName: event.target.value } : current)} required /></label>
           <label className="ui-stack"><span>Điện thoại</span><input value={actionPanel.driverPhone} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, driverPhone: event.target.value } : current)} /></label>
-          <label className="ui-stack"><span>Seal</span><input value={actionPanel.sealNumber} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, sealNumber: event.target.value.toUpperCase() } : current)} /></label>
-          <label className="ui-stack"><span>Yard slot</span><select value={actionPanel.yardSlotId} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, yardSlotId: event.target.value } : current)}><option value="">Chưa gán</option>{yardSlots.filter(slot => slot.isActive && !slot.occupied).map(slot => <option key={slot.id} value={slot.id}>{slot.code} — {slot.name}</option>)}</select></label>
+          <label className="ui-stack"><span>Số niêm phong</span><input value={actionPanel.sealNumber} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, sealNumber: event.target.value.toUpperCase() } : current)} /></label>
+          <label className="ui-stack"><span>Vị trí sân bãi</span><select value={actionPanel.yardSlotId} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, yardSlotId: event.target.value } : current)}><option value="">Chưa gán</option>{yardSlots.filter(slot => slot.isActive && !slot.occupied).map(slot => <option key={slot.id} value={slot.id}>{slot.code} — {slot.name}</option>)}</select></label>
           <label className="ui-stack"><span>Ghi chú</span><textarea value={actionPanel.note} onChange={event => setActionPanel(current => current?.mode === 'checkin' ? { ...current, note: event.target.value } : current)} /></label>
-          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Check-in</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
+          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Ghi nhận vào cổng</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
         </form>}
         {actionPanel.mode === 'assignDock' && <form className="ui-form-grid" onSubmit={event => {
           event.preventDefault();
           void runCommand(actionPanel.appointment, 'assign-dock', { dockId: Number(actionPanel.dockId), note: actionPanel.note || null });
         }}>
-          <label className="ui-stack"><span>Dock *</span><select value={actionPanel.dockId} onChange={event => setActionPanel(current => current?.mode === 'assignDock' ? { ...current, dockId: event.target.value } : current)} required><option value="">Chọn dock</option>{docks.filter(dock => dock.isActive).map(dock => <option key={dock.id} value={dock.id}>{dock.code} — {dock.name}</option>)}</select></label>
+          <label className="ui-stack"><span>Cửa kho *</span><select value={actionPanel.dockId} onChange={event => setActionPanel(current => current?.mode === 'assignDock' ? { ...current, dockId: event.target.value } : current)} required><option value="">Chọn cửa kho</option>{docks.filter(dock => dock.isActive).map(dock => <option key={dock.id} value={dock.id}>{dock.code} — {dock.name}</option>)}</select></label>
           <label className="ui-stack"><span>Ghi chú</span><textarea value={actionPanel.note} onChange={event => setActionPanel(current => current?.mode === 'assignDock' ? { ...current, note: event.target.value } : current)} /></label>
-          <div className="ui-inline-actions"><button type="submit" disabled={saving || !actionPanel.dockId}>Gán dock</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
+          <div className="ui-inline-actions"><button type="submit" disabled={saving || !actionPanel.dockId}>Gán cửa kho</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
         </form>}
         {actionPanel.mode === 'exception' && <form className="ui-form-grid" onSubmit={event => {
           event.preventDefault();
           void runCommand(actionPanel.appointment, 'exception', { exceptionCode: actionPanel.exceptionCode, note: actionPanel.note || null });
         }}>
-          <label className="ui-stack"><span>Mã exception *</span><select value={actionPanel.exceptionCode} onChange={event => setActionPanel(current => current?.mode === 'exception' ? { ...current, exceptionCode: event.target.value } : current)} required>
-            <option value="">Chọn nguyên nhân</option><option value="LATE_ARRIVAL">Late arrival</option><option value="EARLY_ARRIVAL">Early arrival</option><option value="VEHICLE_MISMATCH">Vehicle mismatch</option><option value="DOCK_UNAVAILABLE">Dock unavailable</option><option value="DAMAGED_SEAL">Damaged seal</option><option value="CAPACITY_ISSUE">Capacity issue</option><option value="WAITING_TIME_BREACH">Waiting time breach</option>
+          <label className="ui-stack"><span>Mã ngoại lệ *</span><select value={actionPanel.exceptionCode} onChange={event => setActionPanel(current => current?.mode === 'exception' ? { ...current, exceptionCode: event.target.value } : current)} required>
+            <option value="">Chọn nguyên nhân</option><option value="LATE_ARRIVAL">Đến trễ</option><option value="EARLY_ARRIVAL">Đến sớm</option><option value="VEHICLE_MISMATCH">Sai phương tiện</option><option value="DOCK_UNAVAILABLE">Cửa kho không khả dụng</option><option value="DAMAGED_SEAL">Niêm phong hư hỏng</option><option value="CAPACITY_ISSUE">Vấn đề sức chứa</option><option value="WAITING_TIME_BREACH">Vượt thời gian chờ</option>
           </select></label>
           <label className="ui-stack"><span>Ghi chú</span><textarea value={actionPanel.note} onChange={event => setActionPanel(current => current?.mode === 'exception' ? { ...current, note: event.target.value } : current)} /></label>
-          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Ghi nhận exception</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
+          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Ghi nhận ngoại lệ</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
         </form>}
       </UiCard>}
     </UiPage>
