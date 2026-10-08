@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 type TransactionRow={
   id:number;productId:number;productCode?:string;productName?:string;warehouseId:number;warehouseName?:string;
@@ -11,6 +11,7 @@ type TransactionRow={
   transactionDate:string;isReversed:boolean;
 };
 type Page={items:TransactionRow[];totalRecords:number;pageIndex:number;pageSize:number;totalPages:number};
+type WarehouseOption={id:number;code:string;name:string};
 
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
@@ -30,20 +31,23 @@ const transactionTypeLabel=(value:string)=>({
 }[value]??value);
 
 const inventoryStatusLabel=(value:string)=>({
-  Available:'Khả dụng',
-  QcHold:'Chờ kiểm tra chất lượng',
-  Quarantine:'Cách ly',
-  Damaged:'Hư hỏng',
-  Rejected:'Từ chối',
-  Blocked:'Bị chặn',
-  Expired:'Hết hạn',
-  RecallBlocked:'Khóa thu hồi',
-}[value]??value);
+  available:'Khả dụng',
+  qchold:'Chờ kiểm tra chất lượng',
+  quarantine:'Cách ly',
+  damaged:'Hư hỏng',
+  rejected:'Từ chối',
+  blocked:'Bị chặn',
+  expired:'Hết hạn',
+  recallblocked:'Khóa thu hồi',
+}[value.replace(/[_\s-]/g,'').toLowerCase()]??value);
 
 export default function InventoryReversals(){
   const canReverse=usePermission('inventory_reversal.create');
   const [rows,setRows]=useState<TransactionRow[]>([]);
   const [page,setPage]=useState(1);
+  const [warehouseId,setWarehouseId]=useState<number|null>(null);
+  const [warehouses,setWarehouses]=useState<WarehouseOption[]>([]);
+  const [warehouseError,setWarehouseError]=useState('');
   const [totalRecords,setTotalRecords]=useState(0);
   const [totalPages,setTotalPages]=useState(0);
   const [success,setSuccess]=useState('');
@@ -55,11 +59,20 @@ export default function InventoryReversals(){
   const [error,setError]=useState('');
   const guard=useRef(false);
 
+  useEffect(()=>{
+    let active=true;
+    void apiClient.get<WarehouseOption[]>('/api/inventory/reversal-warehouses')
+      .then(response=>{if(active)setWarehouses(response.data)})
+      .catch(()=>{if(active)setWarehouseError('Không thể tải danh sách kho được phân quyền.')});
+    return ()=>{active=false};
+  },[]);
+
   const load=useCallback(async(targetPage:number)=>{
     const sequence=++requestSequence.current;
     setLoading(true);setError('');
     try{
-      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20');
+      const filter=warehouseId===null?'':'&warehouseId='+warehouseId;
+      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+filter);
       if(sequence!==requestSequence.current)return;
       setRows(response.data.items);
       setTotalRecords(response.data.totalRecords);
@@ -68,7 +81,7 @@ export default function InventoryReversals(){
       if(sequence!==requestSequence.current)return;
       setRows([]);setTotalRecords(0);setTotalPages(0);setError(errorMessage(e));
     }finally{if(sequence===requestSequence.current)setLoading(false)}
-  },[]);
+  },[warehouseId]);
   useEffect(()=>{void load(page)},[load,page]);
 
   const submit=async(e:FormEvent)=>{
@@ -85,7 +98,15 @@ export default function InventoryReversals(){
       setSelected(null);setReason('');
       setSuccess('Đã ghi nhận giao dịch đảo và cập nhật danh sách.');
       await load(page);
-    }catch(e){setError(errorMessage(e))}
+    }catch(e){
+      const message=errorMessage(e);
+      const code=(e as {response?:{data?:{code?:string}}})?.response?.data?.code;
+      if(code==='INV_ALREADY_REVERSED'){
+        setSelected(null);
+        await load(page);
+      }
+      setError(message);
+    }
     finally{guard.current=false;setBusy(false)}
   };
 
@@ -93,9 +114,20 @@ export default function InventoryReversals(){
     <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Đảo giao dịch tồn kho"
       description="Không sửa hoặc xóa sổ cái đã ghi. Thao tác đảo tạo một giao dịch hiệu chỉnh mới và một dấu mốc liên kết về giao dịch gốc."/>
     {error&&<p role="alert">{error}</p>}
+    {warehouseError&&<p role="alert">{warehouseError}</p>}
     {success&&<p role="status">{success}</p>}
-    <UiCard title="Giao dịch có thể đảo hiệu chỉnh">
-      <p className="ui-muted-text">Phạm vi hiện tại chỉ hỗ trợ di chuyển vị trí nội bộ và đổi trạng thái tồn kho. Giao hàng, điều chuyển và giao dịch gắn với chứng từ phải được đảo tại quy trình nghiệp vụ sở hữu.</p>
+    <UiCard title="Lịch sử giao dịch hỗ trợ đảo hiệu chỉnh">
+      <p className="ui-muted-text">Chỉ hỗ trợ di chuyển vị trí nội bộ và đổi trạng thái tồn kho. Trạng thái “Chưa đảo” không bảo đảm đủ điều kiện thực hiện; hệ thống kiểm tra khóa, lượng tồn và các ràng buộc ngay khi xác nhận.</p>
+      <UiToolbar>
+        <UiToolbarField label="Kho">
+          <select aria-label="Lọc theo kho" value={warehouseId??''}
+            onChange={e=>{setSelected(null);setPage(1);setWarehouseId(e.target.value?Number(e.target.value):null)}}>
+            <option value="">Tất cả kho được phân quyền</option>
+            {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}
+          </select>
+        </UiToolbarField>
+        <button type="button" disabled={loading||busy} onClick={()=>void load(page)}>Tải lại danh sách</button>
+      </UiToolbar>
       <p role="status" className="ui-muted-text">{loading?'Đang tải giao dịch...':('Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch')}</p>
       {loading?<p role="status">Đang tải giao dịch...</p>:<UiTableScroll>
         <table aria-label="Danh sách giao dịch có thể đảo">

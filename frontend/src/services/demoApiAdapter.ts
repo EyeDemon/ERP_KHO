@@ -312,6 +312,9 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       ]);
     }
 
+    if (path === '/api/inventory/reversal-warehouses') {
+      return ok(config, demoWarehouses.map(item => ({ id: item.id, code: item.code, name: item.name })));
+    }
     if (path === '/api/inventory/reversal-candidates') {
       const warehouseId = Number(params.get('warehouseId') ?? 0);
       const reversalMarkers = demoInventoryTransactions

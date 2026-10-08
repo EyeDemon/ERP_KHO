@@ -58,6 +58,8 @@ public sealed class InventoryReversalCandidatesTests
             .ReturnsAsync(new List<int> { 1 });
         var service = new InventoryReversalService(context, auth.Object, Mock.Of<ICurrentUser>(),
             Mock.Of<IInventoryMovementService>(), Mock.Of<IInventoryStatusService>());
+        var allowedWarehouses = await service.GetReversalWarehousesAsync();
+        allowedWarehouses.Should().ContainSingle().Which.Name.Should().Be("Kho được phép");
         var first = await service.GetCandidatesAsync(null, 1, 20);
         first.TotalRecords.Should().Be(121);
         first.Items.Should().HaveCount(20);

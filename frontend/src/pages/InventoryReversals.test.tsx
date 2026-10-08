@@ -21,7 +21,11 @@ const statusChange={...move,id:42,transactionType:'StatusChange',fromInventorySt
 const page=(items:typeof move[],pageIndex=1,totalRecords=items.length)=>({
   items,totalRecords,pageIndex,pageSize:20,totalPages:Math.ceil(totalRecords/20)
 });
-const reads=()=>vi.mocked(apiClient.get).mockResolvedValue({data:page([statusChange,move])} as never);
+const reads=()=>vi.mocked(apiClient.get).mockImplementation(async url=>{
+  if(String(url).includes('reversal-warehouses'))
+    return {data:[{id:1,code:'HCM',name:'Kho Hồ Chí Minh'},{id:2,code:'HN',name:'Kho Hà Nội'}]} as never;
+  return {data:page([statusChange,move])} as never;
+});
 
 describe('InventoryReversals — backend-authoritative list',()=>{
   beforeEach(()=>{
@@ -61,11 +65,30 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     const view=render(<InventoryReversals/>);
     expect(await view.findByText('Đã đảo')).toBeTruthy();
     expect((view.getByText('Đảo giao dịch') as HTMLButtonElement).disabled).toBe(true);
-    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apiClient.get).mock.calls.filter(([url])=>String(url).includes('reversal-candidates'))).toHaveLength(1);
+  });
+
+  it('filters by an authorized warehouse using the real query parameter',async()=>{
+    const view=render(<InventoryReversals/>);
+    await view.findByText('Di chuyển vị trí');
+    const filter=await view.findByLabelText('Lọc theo kho');
+    fireEvent.change(filter,{target:{value:'2'}});
+    await waitFor(()=>expect(apiClient.get)
+      .toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=1&pageSize=20&warehouseId=2'));
+  });
+
+  it('translates upper-case API inventory status into Vietnamese',async()=>{
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
+      return {data:page([{...move,inventoryStatus:'RECALL_BLOCKED'}])} as never;
+    });
+    const view=render(<InventoryReversals/>);
+    expect(await view.findByText('Khóa thu hồi')).toBeTruthy();
   });
 
   it('requests later pages from server without truncating older transactions',async()=>{
     vi.mocked(apiClient.get).mockImplementation(async (url)=>{
+      if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       const second=String(url).includes('page=2');
       return {data:page(second?[{...move,id:21}]:[move],second?2:1,130)} as never;
     });

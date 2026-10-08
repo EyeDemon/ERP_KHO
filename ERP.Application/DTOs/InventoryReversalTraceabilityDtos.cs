@@ -1,5 +1,12 @@
 namespace ERP.Application.DTOs;
 
+public sealed class InventoryReversalWarehouseDto
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+}
+
 public sealed class InventoryReversalCandidateDto
 {
     public int Id { get; set; }

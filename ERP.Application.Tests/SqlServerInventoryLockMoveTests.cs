@@ -719,6 +719,9 @@ public sealed class SqlServerInventoryLockMoveTests
 
             await using (var before = CreateContext())
             {
+                var grantedWarehouses = await CreateReversalService(before, fixture.UserId)
+                    .GetReversalWarehousesAsync();
+                grantedWarehouses.Should().ContainSingle(x => x.Id == fixture.WarehouseId);
                 var page = await CreateReversalService(before, fixture.UserId)
                     .GetCandidatesAsync(fixture.WarehouseId, 1, 20);
                 page.Items.Should().ContainSingle(x => x.Id == originalTransactionId)

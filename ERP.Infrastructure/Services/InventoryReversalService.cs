@@ -19,6 +19,19 @@ public sealed class InventoryReversalService(
     IInventoryMovementService movementService,
     IInventoryStatusService statusService) : IInventoryReversalService
 {
+    public async Task<IReadOnlyList<InventoryReversalWarehouseDto>> GetReversalWarehousesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var accessible = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        return await context.Warehouses.AsNoTracking()
+            .Where(x => accessible.Contains(x.Id))
+            .OrderBy(x => x.Code).ThenBy(x => x.Id)
+            .Select(x => new InventoryReversalWarehouseDto
+            {
+                Id = x.Id, Code = x.Code, Name = x.Name
+            }).ToListAsync(cancellationToken);
+    }
+
     public async Task<PagedResult<InventoryReversalCandidateDto>> GetCandidatesAsync(
         int? warehouseId = null, int page = 1, int pageSize = 20,
         CancellationToken cancellationToken = default)
