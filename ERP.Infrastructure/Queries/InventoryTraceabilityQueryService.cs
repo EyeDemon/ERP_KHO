@@ -132,10 +132,20 @@ public sealed class InventoryTraceabilityQueryService(
 
         if (!productId.HasValue && lot is null && serial is null)
         {
-            var productIds = events.Select(x => x.ProductId).Distinct().ToArray();
-            if (productIds.Length == 0)
+            var eventIds = events.Select(x => x.TransactionId).ToArray();
+            if (eventIds.Length == 0)
                 return new InventoryTraceabilityResultDto { Events = events };
-            stockQuery = stockQuery.Where(x => productIds.Contains(x.ProductId));
+
+            // A reference trace must resolve exact stock identities BEFORE the
+            // 500-row response cap. Capping product-wide buckets first can hide
+            // the referenced lot/serial in a warehouse with many locations.
+            var referencedIdentities = context.InventoryTransactions.AsNoTracking()
+                .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) && eventIds.Contains(x.Id));
+            stockQuery = stockQuery.Where(stock => referencedIdentities.Any(transaction =>
+                transaction.ProductId == stock.ProductId &&
+                transaction.WarehouseId == stock.WarehouseId &&
+                transaction.LotId == stock.LotId &&
+                transaction.SerialId == stock.SerialId));
         }
 
         var buckets = await stockQuery
@@ -163,16 +173,6 @@ public sealed class InventoryTraceabilityQueryService(
                 ReservedQuantity = x.ReservedQuantity
             })
             .ToListAsync(cancellationToken);
-
-        if (hasReference && !productId.HasValue && lot is null && serial is null)
-        {
-            var keys = events
-                .Select(x => (x.ProductId, x.WarehouseId, x.LotId, x.SerialId))
-                .ToHashSet();
-            buckets = buckets
-                .Where(x => keys.Contains((x.ProductId, x.WarehouseId, x.LotId, x.SerialId)))
-                .ToList();
-        }
 
         return new InventoryTraceabilityResultDto
         {

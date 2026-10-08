@@ -938,6 +938,70 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
     [SqlServerFact]
+    public async Task Traceability_ReferenceStockMatchIsAppliedBeforeFiveHundredBucketCap()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            const int count = 501;
+            await using (var seed = CreateContext())
+            {
+                var locations = Enumerable.Range(0, count)
+                    .Select(i => new WarehouseLocation
+                    {
+                        WarehouseId = fixture.WarehouseId,
+                        Code = $"REFS{i:D4}{Guid.NewGuid():N}".Substring(0, 20),
+                        Name = $"Vị trí tham chiếu {i:D4}"
+                    }).ToList();
+                seed.WarehouseLocations.AddRange(locations);
+                await seed.SaveChangesAsync();
+
+                var buckets = locations.Select(location => new InventoryStock
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    LocationId = location.Id,
+                    LotId = fixture.LotId,
+                    Status = InventoryStatus.Available,
+                    Quantity = 1
+                }).ToList();
+                seed.InventoryStocks.AddRange(buckets);
+                seed.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    LocationId = locations[^1].Id,
+                    LotId = fixture.LotId,
+                    InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Move,
+                    Quantity = 1,
+                    ReferenceType = "ReferenceBucketLimit",
+                    ReferenceId = 319,
+                    CreatedBy = fixture.UserId,
+                    TransactionDate = DateTime.UtcNow
+                });
+                await seed.SaveChangesAsync();
+            }
+
+            await using var db = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                db, new WarehouseAuthorizationService(db, new CurrentUser(fixture.UserId)));
+            var trace = await query.TraceAsync(
+                referenceType: "ReferenceBucketLimit", referenceId: 319, limit: 20);
+
+            trace.Events.Should().ContainSingle();
+            // All buckets with the referenced identity remain visible only when
+            // identity selection happens in SQL before Take(500). In particular,
+            // the newest high-ID location cannot be omitted from the query.
+            trace.CurrentBuckets.Should().HaveCount(500);
+            trace.CurrentBuckets.Should().OnlyContain(x =>
+                x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId &&
+                x.LotId == fixture.LotId);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task Traceability_UsesNewestSqlEventsAndIncludesOlderOriginalInReversalChain()
     {
         var fixture = await CreateFixtureAsync();
