@@ -16,8 +16,8 @@ vi.mock('../services/idempotency',()=>({
 }));
 
 const statuses=[
-  {code:'AVAILABLE',name:'Available',isAvailable:true,isReservable:true,isAllocatable:true,isPickable:true,isShippable:true},
-  {code:'QUARANTINE',name:'Quarantine',isAvailable:false,isReservable:false,isAllocatable:false,isPickable:false,isShippable:false},
+  {code:'AVAILABLE',name:'Khả dụng',isAvailable:true,isReservable:true,isAllocatable:true,isPickable:true,isShippable:true},
+  {code:'QUARANTINE',name:'Cách ly',isAvailable:false,isReservable:false,isAllocatable:false,isPickable:false,isShippable:false},
 ];
 const bucket={
   inventoryStockId:51,productId:10,productCode:'SKU-10',productName:'Sản phẩm 10',
@@ -50,20 +50,20 @@ describe('InventoryBuckets',()=>{
   it('renders canonical status lot serial dimensions read-only without mutation permission',async()=>{
     const view=render(<InventoryBuckets warehouses={warehouses}/>);
     expect(await view.findByText('LOT-A')).toBeTruthy();
-    expect(within(view.getByRole('table',{name:'Inventory bucket'})).getByText('AVAILABLE')).toBeTruthy();
-    expect(view.getByText(/R:✓/)).toBeTruthy();
-    expect(view.queryByText('Đổi status')).toBeNull();
+    expect(within(view.getByRole('table',{name:'Nhóm tồn kho'})).getByText('Khả dụng')).toBeTruthy();
+    expect(view.getByText(/Giữ:✓/)).toBeTruthy();
+    expect(view.queryByText('Đổi trạng thái')).toBeNull();
   });
 
   it('filters bucket query by warehouse status lot serial and product',async()=>{
     const view=render(<InventoryBuckets warehouses={warehouses}/>);
     await view.findByText('LOT-A');
-    fireEvent.change(view.getByLabelText('Kho bucket'),{target:{value:'1'}});
-    fireEvent.change(view.getByLabelText('ID sản phẩm bucket'),{target:{value:'10'}});
-    fireEvent.change(view.getByLabelText('Inventory status filter'),{target:{value:'AVAILABLE'}});
-    fireEvent.change(view.getByLabelText('Lot filter'),{target:{value:'LOT-A'}});
-    fireEvent.change(view.getByLabelText('Serial filter'),{target:{value:'SER-1'}});
-    fireEvent.click(view.getByText('Lọc bucket'));
+    fireEvent.change(view.getByLabelText('Kho nhóm tồn'),{target:{value:'1'}});
+    fireEvent.change(view.getByLabelText('ID sản phẩm nhóm tồn'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Lọc trạng thái tồn kho'),{target:{value:'AVAILABLE'}});
+    fireEvent.change(view.getByLabelText('Lọc mã lô'),{target:{value:'LOT-A'}});
+    fireEvent.change(view.getByLabelText('Lọc số sê-ri'),{target:{value:'SER-1'}});
+    fireEvent.click(view.getByText('Lọc nhóm tồn'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
       '/api/inventory/buckets?warehouseId=1&productId=10&status=AVAILABLE&lotNumber=LOT-A&serialNumber=SER-1'
     ));
@@ -74,15 +74,15 @@ describe('InventoryBuckets',()=>{
     vi.mocked(apiClient.post).mockResolvedValue({data:{}} as never);
     const view=render(<InventoryBuckets warehouses={warehouses}/>);
     await view.findByText('LOT-A');
-    fireEvent.click(view.getByText('Đổi status'));
-    expect((view.getByLabelText('Số lượng đổi status') as HTMLInputElement).value).toBe('8');
-    fireEvent.change(view.getByLabelText('Status đích'),{target:{value:'QUARANTINE'}});
-    fireEvent.change(view.getByLabelText('Lý do đổi status'),{target:{value:'Quality hold evidence'}});
-    const submit=view.getByText('Xác nhận status change');
+    fireEvent.click(view.getByText('Đổi trạng thái'));
+    expect((view.getByLabelText('Số lượng') as HTMLInputElement).value).toBe('8');
+    fireEvent.change(view.getByLabelText('Trạng thái đích'),{target:{value:'QUARANTINE'}});
+    fireEvent.change(view.getByLabelText('Lý do'),{target:{value:'Bằng chứng giữ do chất lượng'}});
+    const submit=view.getByText('Xác nhận đổi trạng thái');
     fireEvent.click(submit);fireEvent.click(submit);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/status-changes',{
-      inventoryStockId:51,quantity:8,toStatus:'QUARANTINE',reason:'Quality hold evidence'
+      inventoryStockId:51,quantity:8,toStatus:'QUARANTINE',reason:'Bằng chứng giữ do chất lượng'
     },{headers:{'Idempotency-Key':'key:inventory-status-change-51'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-status-change-51');
   });
@@ -90,14 +90,14 @@ describe('InventoryBuckets',()=>{
   it('maps reserved-bucket status rejection to canonical message',async()=>{
     permissionState.granted.add('inventory_status_change.create');
     vi.mocked(apiClient.post).mockRejectedValue({
-      response:{status:409,data:{code:'INV_STATUS_CHANGE_NOT_ALLOWED',message:'Không thể đổi status phần tồn đang reserved/allocation.'}}
+      response:{status:409,data:{code:'INV_STATUS_CHANGE_NOT_ALLOWED',message:'Không thể đổi trạng thái phần tồn đang được giữ hoặc phân bổ.'}}
     });
     const view=render(<InventoryBuckets warehouses={warehouses}/>);
     await view.findByText('LOT-A');
-    fireEvent.click(view.getByText('Đổi status'));
-    fireEvent.change(view.getByLabelText('Status đích'),{target:{value:'QUARANTINE'}});
-    fireEvent.change(view.getByLabelText('Lý do đổi status'),{target:{value:'Quality hold'}});
-    fireEvent.click(view.getByText('Xác nhận status change'));
-    expect((await view.findByRole('alert')).textContent).toContain('reserved/allocation');
+    fireEvent.click(view.getByText('Đổi trạng thái'));
+    fireEvent.change(view.getByLabelText('Trạng thái đích'),{target:{value:'QUARANTINE'}});
+    fireEvent.change(view.getByLabelText('Lý do'),{target:{value:'Giữ do chất lượng'}});
+    fireEvent.click(view.getByText('Xác nhận đổi trạng thái'));
+    expect((await view.findByRole('alert')).textContent).toContain('được giữ hoặc phân bổ');
   });
 });
