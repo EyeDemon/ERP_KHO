@@ -743,6 +743,10 @@ public sealed class SqlServerInventoryLockMoveTests
                     .GetCandidatesAsync(fixture.WarehouseId, 1, 20);
                 page.Items.Should().ContainSingle(x => x.Id == originalTransactionId)
                     .Which.IsReversed.Should().BeTrue();
+                var exact = await CreateReversalService(after, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20, originalTransactionId);
+                exact.TotalRecords.Should().Be(1);
+                exact.Items.Single().IsReversed.Should().BeTrue();
                 (await after.InventoryTransactions.CountAsync(x =>
                     x.ReversalOfTransactionId == originalTransactionId)).Should().Be(1);
 

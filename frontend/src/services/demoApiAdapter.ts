@@ -317,6 +317,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     }
     if (path === '/api/inventory/reversal-candidates') {
       const warehouseId = Number(params.get('warehouseId') ?? 0);
+      const transactionId = Number(params.get('transactionId') ?? 0);
       const reversalMarkers = demoInventoryTransactions
         .filter(item => item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal');
       const reversedIds = new Set(reversalMarkers.map(item => item.referenceId));
@@ -324,7 +325,8 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       const candidates = demoInventoryTransactions
         .filter(item => (item.transactionType === 'Move' || item.transactionType === 'StatusChange')
           && !correctionIds.has(item.id)
-          && (!warehouseId || item.warehouseId === warehouseId))
+          && (!warehouseId || item.warehouseId === warehouseId)
+          && (!transactionId || item.id === transactionId))
         .map(item => ({ ...item, isReversed: reversedIds.has(item.id) }))
         .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime() || b.id - a.id);
       return ok(config, paged(candidates, Number(params.get('page') ?? 1), Number(params.get('pageSize') ?? 20)));

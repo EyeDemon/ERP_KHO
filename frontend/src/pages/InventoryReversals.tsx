@@ -47,6 +47,8 @@ export default function InventoryReversals(){
   const [page,setPage]=useState(1);
   const [warehouseId,setWarehouseId]=useState<number|null>(null);
   const [warehouses,setWarehouses]=useState<WarehouseOption[]>([]);
+  const [transactionIdInput,setTransactionIdInput]=useState('');
+  const [transactionId,setTransactionId]=useState<number|null>(null);
   const [warehouseError,setWarehouseError]=useState('');
   const [totalRecords,setTotalRecords]=useState(0);
   const [totalPages,setTotalPages]=useState(0);
@@ -71,8 +73,9 @@ export default function InventoryReversals(){
     const sequence=++requestSequence.current;
     setLoading(true);setError('');
     try{
-      const filter=warehouseId===null?'':'&warehouseId='+warehouseId;
-      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+filter);
+      const warehouseFilter=warehouseId===null?'':'&warehouseId='+warehouseId;
+      const transactionFilter=transactionId===null?'':'&transactionId='+transactionId;
+      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+warehouseFilter+transactionFilter);
       if(sequence!==requestSequence.current)return;
       setRows(response.data.items);
       setTotalRecords(response.data.totalRecords);
@@ -81,7 +84,7 @@ export default function InventoryReversals(){
       if(sequence!==requestSequence.current)return;
       setRows([]);setTotalRecords(0);setTotalPages(0);setError(errorMessage(e));
     }finally{if(sequence===requestSequence.current)setLoading(false)}
-  },[warehouseId]);
+  },[warehouseId,transactionId]);
   useEffect(()=>{void load(page)},[load,page]);
 
   const submit=async(e:FormEvent)=>{
@@ -96,7 +99,7 @@ export default function InventoryReversals(){
       },{headers:idempotencyHeaders(key)});
       completeIdempotentAction(key);
       setSelected(null);setReason('');
-      setSuccess('Đã ghi nhận giao dịch đảo và cập nhật danh sách.');
+      setSuccess('Đã ghi nhận giao dịch đảo thành công.');
       await load(page);
     }catch(e){
       const message=errorMessage(e);
@@ -126,6 +129,26 @@ export default function InventoryReversals(){
             {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}
           </select>
         </UiToolbarField>
+        <form onSubmit={e=>{
+          e.preventDefault();
+          const searched=transactionIdInput.trim();
+          const parsed=Number(searched);
+          if(searched!==''&&(!Number.isSafeInteger(parsed)||parsed<=0)){
+            setError('ID giao dịch phải là số nguyên dương.');
+            return;
+          }
+          setError('');
+          setSelected(null);
+          setPage(1);
+          setTransactionId(searched===''?null:parsed);
+        }} className="ui-inline-actions">
+          <UiToolbarField label="ID giao dịch">
+            <input aria-label="Tìm theo ID giao dịch" type="number" min="1" step="1"
+              value={transactionIdInput} onChange={e=>setTransactionIdInput(e.target.value)}
+              placeholder="Ví dụ: 12345" />
+          </UiToolbarField>
+          <button type="submit" disabled={loading||busy}>Tìm giao dịch</button>
+        </form>
         <button type="button" disabled={loading||busy} onClick={()=>void load(page)}>Tải lại danh sách</button>
       </UiToolbar>
       <p role="status" className="ui-muted-text">{loading?'Đang tải giao dịch...':('Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch')}</p>

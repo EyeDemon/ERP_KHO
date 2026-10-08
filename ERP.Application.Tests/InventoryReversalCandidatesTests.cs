@@ -73,6 +73,13 @@ public sealed class InventoryReversalCandidatesTests
         last.Items.Should().ContainSingle();
         last.Items[0].Id.Should().Be(1);
         last.Items[0].IsReversed.Should().BeTrue();
+        var located = await service.GetCandidatesAsync(null, 1, 20, 1);
+        located.Items.Should().ContainSingle().Which.IsReversed.Should().BeTrue();
+        var outsideScope = await service.GetCandidatesAsync(null, 1, 20, 300);
+        outsideScope.Items.Should().BeEmpty();
+        outsideScope.TotalRecords.Should().Be(0);
+        var invalidId = () => service.GetCandidatesAsync(null, 1, 20, 0);
+        await invalidId.Should().ThrowAsync<BusinessRuleException>();
         (await service.GetCandidatesAsync(null, 1, 1000)).PageSize.Should().Be(20);
         var outOfRange = () => service.GetCandidatesAsync(null, int.MaxValue, 100);
         await outOfRange.Should().ThrowAsync<BusinessRuleException>()

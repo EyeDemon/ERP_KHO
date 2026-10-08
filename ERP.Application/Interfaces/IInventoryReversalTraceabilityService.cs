@@ -10,7 +10,7 @@ public interface IInventoryReversalService
 
     Task<PagedResult<InventoryReversalCandidateDto>> GetCandidatesAsync(
         int? warehouseId = null, int page = 1, int pageSize = 20,
-        CancellationToken cancellationToken = default);
+        int? transactionId = null, CancellationToken cancellationToken = default);
 
     Task<InventoryReversalResultDto> ReverseAsync(
         CreateInventoryReversalDto request,

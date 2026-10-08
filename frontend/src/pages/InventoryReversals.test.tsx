@@ -105,6 +105,16 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       .toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=1&pageSize=20&warehouseId=2'));
   });
 
+  it('looks up an old transaction by exact ID without revealing other records',async()=>{
+    const view=render(<InventoryReversals/>);
+    await view.findByText('Di chuyển vị trí');
+    fireEvent.change(view.getByLabelText('Tìm theo ID giao dịch'),{target:{value:'41'}});
+    fireEvent.click(view.getByText('Tìm giao dịch'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/reversal-candidates?page=1&pageSize=20&transactionId=41'
+    ));
+  });
+
   it('translates upper-case API inventory status into Vietnamese',async()=>{
     vi.mocked(apiClient.get).mockImplementation(async url=>{
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
