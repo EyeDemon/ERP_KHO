@@ -77,7 +77,10 @@ export default function InventoryTraceability(){
   useEffect(()=>{
     if(!linkedReversal)return;
     let active=true;
-    setForm(x=>({...x,referenceType:'InventoryReversal',referenceId:initialReferenceId}));
+    setForm({
+      warehouseId:'',productId:'',lotNumber:'',serialNumber:'',
+      referenceType:'InventoryReversal',referenceId:initialReferenceId
+    });
     setValidationError('');
     setRequestError('');
     setResult(null);
