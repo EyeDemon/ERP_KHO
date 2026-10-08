@@ -46,6 +46,9 @@ describe('SystemCoverage', () => {
   it('indexes the complete canonical documentation set separately from capability readiness', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
     expect(view.getByText(/Xem toàn bộ 282 tài liệu chuẩn/)).toBeTruthy();
+    expect(view.getByText('Đặc tả thu hồi, truy vết Lô/Sê-ri & phả hệ')).toBeTruthy();
+    expect(view.getByText('Tài liệu kỹ thuật chuẩn số 93')).toBeTruthy();
+    expect(view.queryByText('Recall, Lot/Serial Traceability & Genealogy Specification')).toBeNull();
   });
 
   it('supports capability text search', () => {
