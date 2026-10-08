@@ -126,6 +126,9 @@ namespace ERP.Api.Tests
         [InlineData("POST", "/api/ImportReceipts")]
         [InlineData("POST", "/api/ExportReceipts")]
         [InlineData("POST", "/api/Stocktakes/1/approve")]
+        [InlineData("GET", "/api/inventory/reversal-warehouses")]
+        [InlineData("GET", "/api/inventory/reversal-candidates?transactionId=1")]
+        [InlineData("POST", "/api/inventory/reversals")]
         [InlineData("GET", "/api/Reports/inventory-in-out-stock")]
         public async Task NoAuth_Returns401(string method, string url)
         {
@@ -162,6 +165,9 @@ namespace ERP.Api.Tests
         [InlineData("POST", "/api/ExportReceipts/1/approve", "Viewer")]
         [InlineData("POST", "/api/ExportReceipts/1/cancel", "Viewer")]
         [InlineData("POST", "/api/Stocktakes/1/approve", "Viewer")]
+        [InlineData("GET", "/api/inventory/reversal-warehouses", "Viewer")]
+        [InlineData("GET", "/api/inventory/reversal-candidates?transactionId=1", "Viewer")]
+        [InlineData("POST", "/api/inventory/reversals", "Viewer")]
         [InlineData("GET", "/api/Reports/inventory-in-out-stock?fromDate=2020-01-01", "WarehouseStaff")]
         public async Task ForbiddenRole_Returns403(string method, string url, string role)
         {
