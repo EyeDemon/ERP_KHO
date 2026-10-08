@@ -26,6 +26,7 @@ describe('StockTransfer return-to-source UI', () => {
     vi.resetAllMocks();
     localStorage.clear();
     localStorage.setItem('role', 'WarehouseStaff');
+    localStorage.setItem('permissions', '["inventory_reversal.create"]');
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     get.mockImplementation(async url => {
       if (url === '/api/stock-transfers') return { data: { items: [transfer], totalPages: 1 } } as never;

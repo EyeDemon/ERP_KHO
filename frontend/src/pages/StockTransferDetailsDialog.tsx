@@ -45,6 +45,7 @@ type Props = {
   statusLabel: Record<string, string>;
   statusTone: (status: string) => 'neutral' | 'success' | 'warning' | 'danger';
   canWrite: boolean;
+  canReturn: boolean;
   canApprove: boolean;
   userId: number | null;
   actionInFlight: boolean;
@@ -56,7 +57,7 @@ type Props = {
 };
 
 export default function StockTransferDetailsDialog({
-  selected, status, statusNames, statusLabel, statusTone, canWrite, canApprove, userId,
+  selected, status, statusNames, statusLabel, statusTone, canWrite, canReturn, canApprove, userId,
   actionInFlight, receive, setReceive, onClose, onAction, onReceive,
 }: Props) {
   const [returnReasons, setReturnReasons] = useState<Array<{ code: string; name: string }>>([]);
@@ -65,7 +66,7 @@ export default function StockTransferDetailsDialog({
   const [returnReasonError, setReturnReasonError] = useState('');
 
   useEffect(() => {
-    if (!canWrite || status !== 'InTransit') return;
+    if (!canWrite || !canReturn || status !== 'InTransit') return;
     let active = true;
     void apiClient.get('/api/stock-transfers/return-reasons').then(response => {
       if (active) setReturnReasons(Array.isArray(response.data) ? response.data : []);
@@ -73,7 +74,7 @@ export default function StockTransferDetailsDialog({
       if (active) setReturnReasonError('Không thể tải mã lý do; chức năng hoàn trả đã bị khóa an toàn.');
     });
     return () => { active = false; };
-  }, [canWrite, selected.id, status]);
+  }, [canWrite, canReturn, selected.id, status]);
 
   return (
           <div className="transfer-modal" role="presentation">
@@ -199,7 +200,7 @@ export default function StockTransferDetailsDialog({
                 </table>
               </UiTableScroll>
 
-              {canWrite && status === 'InTransit' && (
+              {canWrite && canReturn && status === 'InTransit' && (
                 <section className="transfer-return-form" aria-label="Hoàn trả điều chuyển">
                   <h3>Hoàn trả về kho nguồn</h3>
                   <p>Chỉ dùng khi hàng chưa được kho đích nhận. Giao dịch xuất kho gốc được giữ nguyên để truy vết.</p>

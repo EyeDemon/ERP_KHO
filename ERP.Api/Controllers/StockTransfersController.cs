@@ -17,6 +17,7 @@ public sealed class StockTransfersController(IStockTransferService service) : Co
     public async Task<IActionResult> Get([FromQuery] StockTransferQueryDto query, CancellationToken cancellationToken) => Ok(await service.GetAsync(query, cancellationToken));
 
     [HttpGet("return-reasons")]
+    [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]
     public IActionResult ReturnReasons() => Ok(StockTransferReturnReasonCatalog.All);
 
     [HttpGet("{id:int}")]
@@ -52,6 +53,7 @@ public sealed class StockTransfersController(IStockTransferService service) : Co
     public async Task<IActionResult> Receive(int id, ReceiveStockTransferDto request, CancellationToken cancellationToken) { await service.ReceiveAsync(id, request, cancellationToken); return NoContent(); }
 
     [HttpPost("{id:int}/return")]
+    [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]
     [IdempotentCommand("StockTransfer.Return")]
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
     public async Task<IActionResult> Return(int id, ReturnStockTransferDto request, CancellationToken cancellationToken)

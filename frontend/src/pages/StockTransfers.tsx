@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Plus, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
-import { currentUserId } from '../services/authorization';
+import { currentUserId, usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import {
   UiBadge,
@@ -74,6 +74,7 @@ export default function StockTransfers() {
   const role = localStorage.getItem('role') || 'Viewer';
   const canWrite = ['Admin', 'Manager', 'WarehouseStaff'].includes(role);
   const canApprove = ['Admin', 'Manager'].includes(role);
+  const canReturn = usePermission('inventory_reversal.create');
   const userId = currentUserId();
 
   const [items, setItems] = useState<Transfer[]>([]);
@@ -468,6 +469,7 @@ export default function StockTransfers() {
             statusLabel={statusLabel}
             statusTone={statusTone}
             canWrite={canWrite}
+            canReturn={canReturn}
             canApprove={canApprove}
             userId={userId}
             actionInFlight={actionInFlight}
