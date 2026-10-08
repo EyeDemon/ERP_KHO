@@ -795,6 +795,13 @@ public sealed class SqlServerInventoryLockMoveTests
                     .GetCandidatesAsync(fixture.WarehouseId, 1, 20);
                 page.Items.Should().ContainSingle(x => x.Id == originalTransactionId)
                     .Which.IsReversed.Should().BeFalse();
+                var pending = await CreateReversalService(before, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20, originalTransactionId, false);
+                pending.TotalRecords.Should().Be(1);
+                pending.Items.Single().IsReversed.Should().BeFalse();
+                var notYetReversed = await CreateReversalService(before, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20, originalTransactionId, true);
+                notYetReversed.TotalRecords.Should().Be(0);
             }
 
             await using (var reverse = CreateContext())
@@ -816,6 +823,13 @@ public sealed class SqlServerInventoryLockMoveTests
                     .GetCandidatesAsync(fixture.WarehouseId, 1, 20, originalTransactionId);
                 exact.TotalRecords.Should().Be(1);
                 exact.Items.Single().IsReversed.Should().BeTrue();
+                var completed = await CreateReversalService(after, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20, originalTransactionId, true);
+                completed.TotalRecords.Should().Be(1);
+                completed.Items.Single().IsReversed.Should().BeTrue();
+                var pending = await CreateReversalService(after, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20, originalTransactionId, false);
+                pending.TotalRecords.Should().Be(0);
                 (await after.InventoryTransactions.CountAsync(x =>
                     x.ReversalOfTransactionId == originalTransactionId)).Should().Be(1);
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -183,7 +184,7 @@ export default function InventoryReversals(){
                 <td>{x.quantity}</td>
                 <td>{new Date(x.transactionDate).toLocaleString('vi-VN')}</td>
                 <td><UiBadge tone={reversed?'success':'warning'}>{reversed?'Đã đảo':'Chưa đảo'}</UiBadge>
-                  {reversed&&canTrace&&<><br/><a href={'/inventory-traceability?referenceType=InventoryReversal&referenceId='+x.id}>Truy vết chuỗi đảo</a></>}
+                  {reversed&&canTrace&&<><br/><Link to={'/inventory-traceability?referenceType=InventoryReversal&referenceId='+x.id}>Truy vết chuỗi đảo</Link></>}
                 </td>
                 {canReverse&&<td><button type="button" disabled={reversed} onClick={()=>{setSelected(x);setReason('')}}>Đảo giao dịch</button></td>}
               </tr>

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryReversals from './InventoryReversals';
 import apiClient from '../services/apiClient';
@@ -35,7 +36,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
   afterEach(cleanup);
 
   it('reads one server-filtered page and hides mutation without permission',async()=>{
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     expect(await view.findByText('Đổi trạng thái')).toBeTruthy();
     expect(view.getByText('Di chuyển vị trí')).toBeTruthy();
     expect(view.queryByText('Xác nhận đảo giao dịch')).toBeNull();
@@ -45,7 +46,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
   it('posts one reversal with a stable idempotency key',async()=>{
     permissionState.granted.add('inventory_reversal.create');
     vi.mocked(apiClient.post).mockResolvedValue({data:{reversalTransactionId:99}} as never);
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Đổi trạng thái');
     const buttons=view.getAllByText('Đảo giao dịch');
     fireEvent.click(buttons[0]);
@@ -65,7 +66,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       return {data:page([{...move,isReversed:true}])} as never;
     });
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     expect(await view.findByText('Đã đảo')).toBeTruthy();
     expect((view.getByText('Đảo giao dịch') as HTMLButtonElement).disabled).toBe(true);
     expect(vi.mocked(apiClient.get).mock.calls.filter(([url])=>String(url).includes('reversal-candidates'))).toHaveLength(1);
@@ -83,7 +84,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       throw {response:{status:409,data:{code:'INV_ALREADY_REVERSED',message:'Giao dịch đã được đảo trước đó.'}}};
     });
 
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Chưa đảo');
     fireEvent.click(view.getByText('Đảo giao dịch'));
     fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
@@ -105,7 +106,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       }}
     });
 
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Di chuyển vị trí');
     fireEvent.click(view.getAllByText('Đảo giao dịch')[1]);
     fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
@@ -126,14 +127,34 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       return {data:page([{...move,isReversed:true}])} as never;
     });
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     const link=await view.findByText('Truy vết chuỗi đảo');
     expect((link as HTMLAnchorElement).getAttribute('href'))
       .toBe('/inventory-traceability?referenceType=InventoryReversal&referenceId=41');
+    expect(link.closest('a')).toBeTruthy();
+  });
+
+  it('navigates within the SPA to the immutable ledger without a full page reload',async()=>{
+    permissionState.granted.add('inventory_traceability.read');
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
+      return {data:page([{...move,isReversed:true}])} as never;
+    });
+    const view=render(
+      <MemoryRouter initialEntries={['/inventory-reversals']}>
+        <Routes>
+          <Route path="/inventory-reversals" element={<InventoryReversals/>}/>
+          <Route path="/inventory-traceability" element={<p>Đã mở truy vết sổ cái</p>}/>
+        </Routes>
+      </MemoryRouter>
+    );
+    const link=await view.findByText('Truy vết chuỗi đảo');
+    fireEvent.click(link);
+    expect(await view.findByText('Đã mở truy vết sổ cái')).toBeTruthy();
   });
 
   it('filters by an authorized warehouse using the real query parameter',async()=>{
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Di chuyển vị trí');
     const filter=await view.findByLabelText('Lọc theo kho');
     fireEvent.change(filter,{target:{value:'2'}});
@@ -142,7 +163,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
   });
 
   it('filters persisted reversal state in SQL before paging',async()=>{
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Di chuyển vị trí');
     const select=view.getByLabelText('Lọc theo trạng thái đảo');
     fireEvent.change(select,{target:{value:'pending'}});
@@ -161,7 +182,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       response:{status:409,data:{code:'INV_REVERSAL_INSUFFICIENT_STOCK',
         message:'Không đủ tồn để đảo giao dịch.'}}
     }).mockResolvedValueOnce({data:{reversalTransactionId:101}} as never);
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Di chuyển vị trí');
     fireEvent.click(view.getAllByText('Đảo giao dịch')[1]);
     const input=view.getByLabelText('Lý do đảo giao dịch tồn kho');
@@ -181,7 +202,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
   });
 
   it('looks up an old transaction by exact ID without revealing other records',async()=>{
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Di chuyển vị trí');
     fireEvent.change(view.getByLabelText('Tìm theo ID giao dịch'),{target:{value:'41'}});
     fireEvent.click(view.getByText('Tìm giao dịch'));
@@ -195,7 +216,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       return {data:page([{...move,inventoryStatus:'RECALL_BLOCKED'}])} as never;
     });
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     expect(await view.findByText('Khóa thu hồi')).toBeTruthy();
   });
 
@@ -205,7 +226,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
       const second=String(url).includes('page=2');
       return {data:page(second?[{...move,id:21}]:[move],second?2:1,130)} as never;
     });
-    const view=render(<InventoryReversals/>);
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText(/Trang 1 \/ 7/);
     fireEvent.click(view.getByText('Trang sau'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=2&pageSize=20'));
