@@ -72,7 +72,7 @@ async function main(manifestPath) {
   manifest.SourceHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
   const selected = process.argv.includes('--case') ? new RegExp(process.argv[process.argv.indexOf('--case') + 1], 'i') : null;
   const mounted = selected?.test('Mounted receipt list/detail/print late responses');
-  const outbound = selected?.test('Outbound UI reserve dispatch') || selected?.test('Outbound mounted late list detail print') || selected?.test('Outbound Approval Center independent grants nonzero count and isolation');
+  const outbound = selected?.test('Outbound UI reserve dispatch') || selected?.test('Outbound mounted late list detail print') || selected?.test('Outbound Approval Center independent grants nonzero count and isolation') || selected?.test('Outbound print keyboard accessibility');
   const evidence = { sourceHead: manifest.SourceHead, runnerSha256: createHash('sha256').update(await readFile(fileURLToPath(import.meta.url))).digest('hex'), fixtureSha256: createHash('sha256').update(await readFile(path.join(here, 'permission-fixtures.sql'))).digest('hex'), runId: manifest.RunId, runnerVersion: version, selection: selected?.source || 'all', logins: [], cases: [], requests: [] };
   const reportPath = path.join(manifest.ArtifactRoot, 'permission-browser-evidence.json');
   const save = () => writeFile(reportPath, JSON.stringify(safeEvidence(evidence), null, 2));

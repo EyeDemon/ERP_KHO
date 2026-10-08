@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useId, useRef } from 'react';
+import AccessibleDialog from './AccessibleDialog';
 import './ReceiptPrintPreview.css';
 
 export type PrintableReceipt = {
@@ -15,8 +16,8 @@ const dateTime = (value?: string | null) => value ? new Intl.DateTimeFormat('vi-
 const quantity = (value: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(value);
 
 export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose }: Props) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { closeRef.current?.focus(); }, []);
+  const titleId = useId();
+  const trigger = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const partner = kind === 'import'
     ? receipt.supplierCode && receipt.supplierName ? `${receipt.supplierCode} - ${receipt.supplierName}` : 'Chưa ghi nhận'
     : receipt.customerCode && receipt.customerName ? `${receipt.customerCode} - ${receipt.customerName}` : 'Chưa ghi nhận';
@@ -25,14 +26,14 @@ export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose 
     Posted: 'Đã ghi nhận tồn kho', QcPending: 'Chờ kết quả kiểm tra chất lượng', QcCompleted: 'Kiểm tra chất lượng đã hoàn tất — chờ duyệt',
     DiscrepancyPending: 'Chờ xử lý sai lệch', DiscrepancySubmitted: 'Đã gửi xử lý sai lệch', DiscrepancyPendingApproval: 'Chờ duyệt sai lệch',
     DiscrepancyResolved: 'Sai lệch đã xử lý', DiscrepancyRejected: 'Sai lệch bị trả lại' } as Record<string, string>)[receipt.status] || 'Trạng thái chưa xác định';
-  return <div className="receipt-print-overlay" role="dialog" aria-modal="true" aria-label={`Bản in ${receipt.code}`} onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
+  return <AccessibleDialog className="receipt-print-overlay" titleId={titleId} onClose={onClose} returnFocusTo={trigger.current}>
     <div className="receipt-print-actions">
       <span>Bản in dùng dữ liệu đã lưu trên hệ thống.</span>
       <button onClick={() => window.print()}>In / Lưu thành PDF</button>
-      <button ref={closeRef} onClick={onClose}>Đóng</button>
+      <button data-initial-focus onClick={onClose}>Đóng</button>
     </div>
     <article className="receipt-print-sheet">
-      <header><h1>{kind === 'import' ? 'PHIẾU NHẬP KHO' : 'PHIẾU XUẤT KHO'}</h1><div className="receipt-status">{statusBanner}</div></header>
+      <header><h1 id={titleId}>{kind === 'import' ? 'PHIẾU NHẬP KHO' : 'PHIẾU XUẤT KHO'}</h1><div className="receipt-status">{statusBanner}</div></header>
       <dl className="receipt-meta">
         <div><dt>Mã chứng từ</dt><dd>{receipt.code}</dd></div>
         <div><dt>Ngày chứng từ</dt><dd>{dateTime(receipt.createdAt)}</dd></div>
@@ -50,5 +51,5 @@ export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose 
       {receipt.note && <section className="receipt-note"><strong>Ghi chú:</strong><div>{receipt.note}</div></section>}
       <footer>Dữ liệu được tải lúc {dateTime(fetchedAt.toISOString())}. Thời gian hiển thị theo múi giờ của trình duyệt.</footer>
     </article>
-  </div>;
+  </AccessibleDialog>;
 }

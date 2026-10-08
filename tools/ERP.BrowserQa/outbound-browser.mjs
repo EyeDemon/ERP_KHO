@@ -9,6 +9,7 @@ export async function runOutboundCases({ run, actors, fixture: f, outboundFixtur
   const sourceHashes = {};
   for (const file of ['ERP.Application/Services/ExportReceiptService.cs', 'ERP.Api/Infrastructure/IdempotentCommandFilter.cs',
     'ERP.Infrastructure/Repositories/InventoryStockRepository.cs', 'frontend/src/pages/ExportReceipts.tsx',
+    'frontend/src/components/ReceiptPrintPreview.tsx', 'frontend/src/components/AccessibleDialog.tsx',
     'tools/ERP.BrowserQa/outbound-browser.mjs', 'tools/ERP.BrowserQa/outbound-fixtures.sql'])
     sourceHashes[file] = createHash('sha256').update(await readFile(new URL('../../' + file, import.meta.url))).digest('hex');
   const state = () => sql(`SELECT
@@ -28,6 +29,34 @@ export async function runOutboundCases({ run, actors, fixture: f, outboundFixtur
   const command = (id, action, actor, version, key = randomUUID()) => request(actor,
     `/api/exportreceipts/${id}/${action}`, 'POST', { rowVersion: version }, key);
   let dispatched;
+  await run('Outbound print keyboard accessibility', 'UI workflow + browser layout observation + SQL postconditions', async () => {
+    const id = await create(0.0001), receipt = await read(id, viewer), before = await state();
+    await viewer.page.goto(manifest.FrontendUrl + '/export-receipts');
+    const trigger = viewer.page.getByRole('row').filter({ hasText: receipt.code }).getByRole('button', { name: 'Xem bản in', exact: true });
+    const statuses = [];
+    for (const width of [375, 1280]) {
+      await viewer.page.setViewportSize({ width, height: 812 });
+      const response = viewer.page.waitForResponse(r => r.url().endsWith(`/api/exportreceipts/${id}`) && r.request().method() === 'GET');
+      await trigger.click(); statuses.push((await response).status()); assert.equal(statuses.at(-1), 200);
+      const dialog = viewer.page.getByRole('dialog', { name: 'PHIẾU XUẤT KHO', exact: true });
+      await dialog.waitFor();
+      assert.equal(await viewer.page.locator(':focus').textContent(), 'Đóng');
+      await viewer.page.keyboard.press('Tab'); assert.equal(await viewer.page.locator(':focus').textContent(), 'In / Lưu thành PDF');
+      await viewer.page.keyboard.press('Shift+Tab'); assert.equal(await viewer.page.locator(':focus').textContent(), 'Đóng');
+      assert(await viewer.page.locator('#root').evaluate(e => e.inert));
+      assert.equal(await dialog.getByText('QA_PRIVATE_OUT').count(), 0);
+      assert(await viewer.page.locator('.receipt-print-overlay').evaluate(e => e.scrollWidth <= e.clientWidth));
+      await viewer.page.emulateMedia({ media: 'print', reducedMotion: 'reduce' });
+      assert.equal(await viewer.page.locator('.receipt-print-actions').isVisible(), false);
+      assert(await viewer.page.locator('.receipt-print-sheet').isVisible());
+      await viewer.page.emulateMedia({ media: 'screen' });
+      await viewer.page.keyboard.press('Escape'); await dialog.waitFor({ state: 'hidden' });
+      assert(await trigger.evaluate(e => e === document.activeElement));
+      assert.equal(await viewer.page.locator('#root').evaluate(e => e.inert), false);
+    }
+    assert.deepEqual(await state(), before);
+    return { sourceHashes, actor: 'scoped Viewer', statuses, widths: [375, 1280], assertions: ['Vietnamese accessible name and controls', 'Tab and Shift+Tab stay in print dialog', 'background inert only while open', 'Escape restores print-trigger focus', 'print layout and narrow viewport preserved', 'private note absent; no stock ledger reservation audit claim effect'] };
+  });
   await run('Outbound UI reserve dispatch', 'UI workflow + SQL postconditions', async () => {
     await admin.page.goto(manifest.FrontendUrl + '/export-receipts');
     await admin.page.getByLabel('Mã phiếu', { exact: true }).fill('OUT-UI');

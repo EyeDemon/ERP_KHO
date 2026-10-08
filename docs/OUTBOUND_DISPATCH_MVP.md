@@ -1,5 +1,35 @@
 # Duyệt, giữ hàng và xác nhận xuất kho
 
+## Module acceptance checklist — 2026-10-08
+
+Scope: outbound PR #24 only, starting at `ed97e341c846bb589aa6395be99ec6de2be7015c`. Its CI `37657371400` passed Application 352/API 206/frontend 100. The frontend-only correction below has separate evidence; final pushed HEAD/successor CI are recorded in PR #24 body. Owner-review readiness is not owner acceptance or production release approval.
+
+| Acceptance | Source / source-specific evidence | Result |
+| --- | --- | --- |
+| Reserve/dispatch/cancel | ExportReceiptService/StockReservationService/location repository/filter; SQL 352/206 + browser a7c2acd9… | PASS: reserve On Hand 100/reserved 25/ledger 0 → dispatch 75/0/location ledger 25; cancel releases once, Dispatched immutable |
+| Immediate compatibility/legacy replay | Shared service/filter + SQL/browser replay | PASS: both grants, maker/checker; explicit reserve cannot dispatch; legacy replay uses original audited mode |
+| Permissions/scope/separation/Viewer | Controller/service/Approval Center + SQL/HTTP/browser | PASS: DB authority; Staff four-code default, no seeded approve/cancel; isolated 404 and independent maker/checker/dispatcher; sensitive fields omitted |
+| Base-UOM/customer history | Snapshot DTO/update paths + SQL/browser 77efadec… | PASS: precision/no rounding, no current-master reinterpretation or fabricated legacy UOM; rejected customer snapshot survives rename |
+| Concurrency/idempotency/late responses | Aggregate/location locks/filter/generations + controlled browser races | PASS: winner/conflict, one effect/audit/claim, revoked-access replay denied; mounted successor below |
+| Migration/provenance | Public seed unchanged + corrective EF migration; upgrade/legacy/Down SQL fixtures | PASS within rollback limitations below; no inventory/history rewrite |
+| Vietnamese print/accessibility | ReceiptPrintPreview → existing AccessibleDialog; component/browser successor | PASS: keyboard containment/inert/Escape/focus return, 375/1280 print layout and Vietnamese controls |
+
+**Findings closed:** Medium print accessibility defect: Tab from Đóng escaped the `aria-modal` dialog to the body/background. Component reproducer first failed (16 PASS/1 FAIL). Minimal shared-path fix reuses AccessibleDialog's portal/inert/focus-return, with one presentation class preserving print CSS; no new focus engine/dependency. Full frontend tests cover import print and Approval Center siblings. Low documentation defect: BUSINESS_PARTNERS.md still described compatibility authorization and omitted the customer-assignment receipt token; aligned with actual `export_receipt.update`, separate `partner.read` lookup and safe 409 behavior.
+
+Successor fingerprint: `953ec1dd1379fa5fbdbb03ce703bff1674ad7c2ab8ce67c3c5a58a39dfe91010` (66 per-file hashes in ignored manifest). Backend/model/migrations match prior verified hashes. Focused frontend **22/22**, full frontend **101/101 in 19 files**, lint/build/dependency audit **PASS, 0 vulnerabilities**, runner **18/18**. Unchanged local backend suites were not rerun; final CI verifies the pushed tree.
+
+Browser `9eae92b6c8ac48ce8891f66e254d0acc`: **2/2 selected groups PASS, exit 0**. Viewer opens actual outbound print UI at 375/1280px (both reads 200), Tab/Shift+Tab stay inside, background inert only while open, Escape restores trigger focus, print media retains sheet/hides controls, private note absent. Receipt creation is browser-origin HTTP fixture setup, not UI creation. SQL proves zero print stock/reservation/ledger/audit/claim effect. Mounted list/detail/print keeps the original heading connected through real revoke/regrant/403 identity refresh; held responses restore no old identifier/detail/dialog. Other groups retain prior evidence and are not called newly rerun.
+
+[UI/UX Pro Max SKILL.md](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/blob/main/.claude/skills/ui-ux-pro-max/SKILL.md) read in full; React web review applies accessibility/interaction/layout/form feedback and focused keyboard-modal/effect-cleanup searches. Native-only safe-area/haptic/Dynamic Type checks are not desktop-web claims. This is targeted evidence, not blanket WCAG or physical scanner certification.
+
+Notion 17 §34/01/30/38/228/229/dispatch row/18/41 reread; content is consistent with the owner contract, no conflicting delta found, no write. **CHANGE STATUS UNKNOWN for native timestamps this turn:** connector omits `page_last_edited_at`; text “as of” dates match baselines but are not substituted for native metadata. Prior native UNCHANGED checks below remain historical. Drive remains illustrative metadata-only NOT REVIEWED.
+
+Cleanup: browser Closed=true/profiles=0; official marker/PID/start/command/executable guards removed exact API/frontend/credential/database. Census: owned QA DB/process/listener/profile/credential=0; ERP_KHO ONLINE by metadata only. Main/inbound/test/checkpoint, .npm-cache, UNKNOWN cache and policy-blocked helper preserved; negative/evidence/log/dist remain ignored/unstaged.
+
+No unresolved mandatory runtime/security finding; final successor CI must pass before handoff. Deferred: membership UI (DEFERRED_BY_OWNER), Shipment/Picking/Packing/HU/Allocation, alternate outbound operation UOM, reversal/returns. Rollback is not reversal: unsafe snapshot/grant/location-ledger Down is blocked; production administration/history requires backup and approved data plan, never blind old-seed rollback. PR #1/#24 remain Draft; no acceptance, merge or deploy implied.
+
+## Reconciled baseline — 2026-10-07 (source-specific)
+
 Trạng thái local: **RECONCILIATION, MIGRATION, AUTOMATED/BROWSER GATES AND CLEANUP PASS**. Gate cuối là successor CI của merge commit; kết quả CI/owner-review readiness được ghi trong Draft PR mới, không suy diễn từ local PASS. Accepted base: `cda05eba56d3cfb41a3df803bb48d0c84e05940f`. Local checkpoint `e7a9b3221c459f7dbc5bd0ff2021cc5030d45b43` giữ nguyên 66 file đã kiểm chứng. Integration branch `feature/outbound-dispatch-reconciled`, worktree `D:\ERP_KHO-outbound-dispatch-reconciled`, từ live remote `2ba782d7518be12daed0056fa66ab44725c922e0`. PR #1 vẫn Draft và là dependency, không phải evidence của slice mới.
 
 ## Reconciliation plan and file/capability matrix — 2026-10-07
