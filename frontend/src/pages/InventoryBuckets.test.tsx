@@ -50,7 +50,7 @@ describe('InventoryBuckets',()=>{
   it('renders canonical status lot serial dimensions read-only without mutation permission',async()=>{
     const view=render(<InventoryBuckets warehouses={warehouses}/>);
     expect(await view.findByText('LOT-A')).toBeTruthy();
-    expect(within(view.getByRole('table',{name:'Nhóm tồn kho'})).getByText('Khả dụng')).toBeTruthy();
+    expect(within(view.getByRole('table',{name:'Nhóm tồn kho'})).getAllByText('Khả dụng').length).toBeGreaterThan(1);
     expect(view.getByText(/Giữ:✓/)).toBeTruthy();
     expect(view.queryByText('Đổi trạng thái')).toBeNull();
   });

@@ -172,17 +172,17 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
     {selected&&canChange&&<UiCard title={`Đổi trạng thái • ${selected.productCode} • ${selected.status}`}>
       <form onSubmit={submit} className="ui-form-grid">
         <p className="ui-muted-text">
-          Bucket {selected.locationCode} • {selected.lotNumber||'không có lô'} • {selected.serialNumber||'không có sê-ri'}.
+          Nhóm tồn {selected.locationCode} • {selected.lotNumber||'không có lô'} • {selected.serialNumber||'không có sê-ri'}.
           Tối đa chưa được giữ: {Math.max(0,selected.onHandQuantity-selected.reservedQuantity)}.
         </p>
-        <select aria-label="Status đích" value={change.toStatus} onChange={e=>setChange(x=>({...x,toStatus:e.target.value}))} required>
-          <option value="">Chọn status đích</option>
+        <UiToolbarField label="Trạng thái đích"><select aria-label="Trạng thái đích" value={change.toStatus} onChange={e=>setChange(x=>({...x,toStatus:e.target.value}))} required>
+          <option value="">Chọn trạng thái đích</option>
           {statuses.filter(x=>x.code!==selected.status).map(x=><option key={x.code} value={x.code}>{x.code} — {x.name}</option>)}
-        </select>
-        <input aria-label="Số lượng đổi status" type="number" min="0.0001" step="any" max={Math.max(0,selected.onHandQuantity-selected.reservedQuantity)} value={change.quantity} onChange={e=>setChange(x=>({...x,quantity:e.target.value}))} required/>
-        <input aria-label="Lý do đổi status" value={change.reason} onChange={e=>setChange(x=>({...x,reason:e.target.value}))} placeholder="Lý do / bằng chứng" required/>
+        </select></UiToolbarField>
+        <UiToolbarField label="Số lượng"><input aria-label="Số lượng" type="number" min="0.0001" step="any" max={Math.max(0,selected.onHandQuantity-selected.reservedQuantity)} value={change.quantity} onChange={e=>setChange(x=>({...x,quantity:e.target.value}))} required/></UiToolbarField>
+        <UiToolbarField label="Lý do"><input aria-label="Lý do" value={change.reason} onChange={e=>setChange(x=>({...x,reason:e.target.value}))} placeholder="Lý do / bằng chứng" required/></UiToolbarField>
         <div className="ui-inline-actions">
-          <button type="submit" disabled={busy||!change.toStatus||!change.reason.trim()}>Xác nhận status change</button>
+          <button type="submit" disabled={busy||!change.toStatus||!change.reason.trim()}>Xác nhận đổi trạng thái</button>
           <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
         </div>
       </form>

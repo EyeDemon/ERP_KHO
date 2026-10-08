@@ -52,6 +52,10 @@ const SystemCoverage = () => {
   const documentation = useMemo(() => getCanonicalDocumentationRegister(erpWmsBlueprint), []);
   const capabilityLinkedDocs = documentation.filter((item) => item.representation === 'Capability-linked');
   const platformDocs = documentation.filter((item) => item.representation === 'Platform / Governance');
+  const platformTitleBySpec = useMemo(
+    () => new Map(documentation.map((item) => [item.spec, item.displayTitle])),
+    [documentation],
+  );
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<BlueprintStatus | 'all'>('all');
   const [wave, setWave] = useState<ReleaseWave | 'all'>('all');
@@ -193,7 +197,7 @@ const SystemCoverage = () => {
           {platformStandards.map((item) => (
             <article key={item.spec}>
               <span>Đặc tả {item.spec} • {categoryLabel(item.category)}</span>
-              <strong>{item.displayTitle}</strong>
+              <strong>{platformTitleBySpec.get(item.spec) ?? item.title}</strong>
               <small>{representationLabel(item.representation)}</small>
               {item.mappedCapabilityIds?.length ? <p>Đã ánh xạ: {item.mappedCapabilityIds.join(', ')}</p> : null}
             </article>

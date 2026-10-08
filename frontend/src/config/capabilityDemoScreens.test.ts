@@ -34,7 +34,7 @@ describe('interactive capability demo registry', () => {
     for (const { module, capability } of optionalEntries) {
       const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
       expect(demo.commands).not.toContain('SIMULATE_ACTION');
-      expect(demo.fields.some((field) => field.label === 'Applicability')).toBe(true);
+      expect(demo.fields.some((field) => field.label === 'Phạm vi áp dụng')).toBe(true);
       expect(demo.exceptionTitle).not.toBe('MOCK_VALIDATION_EXCEPTION');
     }
   });
@@ -54,7 +54,7 @@ describe('interactive capability demo registry', () => {
       const demo = getCapabilityDemoDefinition(capability, module.name, module.flow);
       expect(demo.commands).not.toContain('SIMULATE_ACTION');
       expect(demo.exceptionTitle).not.toBe('MOCK_VALIDATION_EXCEPTION');
-      expect(demo.fields.some((field) => field.label === 'Production maturity')).toBe(true);
+      expect(demo.fields.some((field) => field.label === 'Production maturity' || field.label === 'Mức triển khai hệ thống thật')).toBe(true);
     }
   });
 

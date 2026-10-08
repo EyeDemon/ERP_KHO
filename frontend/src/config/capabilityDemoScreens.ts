@@ -223,7 +223,7 @@ export const getCapabilityDemoDefinition = (
 ): CapabilityDemoDefinition => {
   const specialized = coreCapabilityDemos[capability.id] ?? plannedCapabilityDemos[capability.id];
   if (capability.status === 'live' || capability.status === 'foundation') {
-    const specializedIsImplemented = specialized?.fields.some((field) => field.label === 'Production maturity') ?? false;
+    const specializedIsImplemented = specialized?.fields.some((field) => field.label === 'Production maturity' || field.label === 'Mức triển khai hệ thống thật') ?? false;
     return specializedIsImplemented ? specialized : getImplementedCapabilityDemo(capability);
   }
   if (specialized) return specialized;

@@ -209,7 +209,7 @@ const BackorderMock = () => {
     <section className="outbound-capability-mock" data-testid="outbound-capability-mock-OUT-09" aria-labelledby="outbound-out-09-title">
       <Header
         id="OUT-09"
-        title="Đơn thiếu hàng & Promise Replanning"
+        title="Đơn thiếu hàng & lập lại cam kết"
         description="Mô phỏng thác số lượng và lập lại ngày cam kết để tránh trộn ngữ nghĩa đã đặt/đã giữ/đã phân bổ/đã lấy/đã giao/đơn thiếu."
         icon={<Boxes size={20} />}
       />

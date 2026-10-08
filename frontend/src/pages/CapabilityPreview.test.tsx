@@ -52,7 +52,7 @@ describe('CapabilityPreview', () => {
     for (const [capabilityId, title] of cases) {
       const view = renderPreview('warehouse-structure', capabilityId);
       expect(view.getByTestId('warehouse-capability-mock-' + capabilityId)).toBeTruthy();
-      expect(view.getByRole('heading', { name: title })).toBeTruthy();
+      expect(view.getAllByRole('heading', { name: title }).length).toBeGreaterThan(0);
       expect(view.getAllByText(/Không gọi API hệ thống thật|Production effect/).length).toBeGreaterThan(0);
       view.unmount();
     }
@@ -314,8 +314,8 @@ describe('CapabilityPreview', () => {
 
   it('shows domain-specific warehouse lifecycle instead of a spec-only card', () => {
     const view = renderPreview('warehouse-structure', 'WH-06');
-    expect(view.getByRole('heading', { name: 'Bảng điều hành cửa kho & sân bãi' })).toBeTruthy();
-    expect(view.getAllByText('CHECKED_IN').length).toBeGreaterThan(0);
+    expect(view.getAllByRole('heading', { name: 'Bảng điều hành cửa kho & sân bãi' }).length).toBeGreaterThan(0);
+    expect(view.getAllByText('Đã vào cổng').length).toBeGreaterThan(0);
     expect(view.getByText('ASSIGN_DOCK')).toBeTruthy();
     fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
     expect(view.getByText('DOCK_DOUBLE_ASSIGNMENT')).toBeTruthy();

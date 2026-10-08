@@ -59,7 +59,7 @@ describe('MockScenarioLab', () => {
     fireEvent.click(view.getByRole('button', { name: /Đóng kỳ/ }));
     expect(view.getByText('Giữ nguyên sự thật số lượng WMS')).toBeTruthy();
 
-    fireEvent.click(view.getByRole('button', { name: /WCS \/ Robotics/ }));
+    fireEvent.click(view.getByRole('button', { name: /WCS \/ Robot/ }));
     expect(view.getByText('Callback thiết bị không phải sự thật tồn kho')).toBeTruthy();
   });
 
