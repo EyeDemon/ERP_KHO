@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
 
@@ -53,7 +53,15 @@ const tone=(x:Event):'neutral'|'success'|'warning'|'danger'=>
   x.transactionType==='Reversal'?'warning':x.isReversed?'neutral':'success';
 
 export default function InventoryTraceability(){
-  const [form,setForm]=useState({warehouseId:'',productId:'',lotNumber:'',serialNumber:'',referenceType:'',referenceId:''});
+  const initialQuery = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
+  const initialReferenceId = initialQuery.get('referenceId') ?? '';
+  const linkedReversal = initialQuery.get('referenceType') === 'InventoryReversal'
+    && /^[1-9]\\d*$/.test(initialReferenceId) && Number.isSafeInteger(Number(initialReferenceId));
+  const [form,setForm]=useState({
+    warehouseId:'',productId:'',lotNumber:'',serialNumber:'',
+    referenceType:linkedReversal?'InventoryReversal':'',
+    referenceId:linkedReversal?initialReferenceId:''
+  });
   const [result,setResult]=useState<Result|null>(null);
   const [loading,setLoading]=useState(false);
   const [validationError,setValidationError]=useState('');
@@ -61,6 +69,20 @@ export default function InventoryTraceability(){
   const productIdRef=useRef<HTMLInputElement>(null);
   const referenceTypeRef=useRef<HTMLInputElement>(null);
   const referenceIdRef=useRef<HTMLInputElement>(null);
+
+  useEffect(()=>{
+    if(!linkedReversal)return;
+    let active=true;
+    const params=new URLSearchParams({
+      referenceType:'InventoryReversal',referenceId:initialReferenceId,limit:'200'
+    });
+    setLoading(true);
+    void apiClient.get<Result>('/api/inventory/traceability?'+params.toString())
+      .then(response=>{if(active)setResult(response.data)})
+      .catch(e=>{if(active)setRequestError(errorMessage(e))})
+      .finally(()=>{if(active)setLoading(false)});
+    return ()=>{active=false};
+  },[linkedReversal,initialReferenceId]);
 
   const referencePairInvalid=Boolean(
     (form.referenceType.trim()&&!form.referenceId)||(!form.referenceType.trim()&&form.referenceId)

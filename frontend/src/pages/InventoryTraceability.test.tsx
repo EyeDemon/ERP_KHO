@@ -32,7 +32,23 @@ const result={
 
 describe('InventoryTraceability',()=>{
   beforeEach(()=>vi.resetAllMocks());
-  afterEach(cleanup);
+  afterEach(()=>{
+    cleanup();
+    window.history.replaceState({}, '', window.location.pathname);
+  });
+
+  it('loads an authorized immutable reversal chain directly from its deep link',async()=>{
+    window.history.replaceState({}, '', '?referenceType=InventoryReversal&referenceId=41');
+    vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
+    const view=render(<InventoryTraceability/>);
+
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?referenceType=InventoryReversal&referenceId=41&limit=200'
+    ));
+    expect((view.getByLabelText('Loại tham chiếu') as HTMLInputElement).value).toBe('InventoryReversal');
+    expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('41');
+    expect(await view.findByText('Đảo giao dịch')).toBeTruthy();
+  });
 
   it('requires at least identity or reference and focuses the primary identity field',()=>{
     const view=render(<InventoryTraceability/>);

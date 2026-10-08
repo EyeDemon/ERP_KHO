@@ -120,6 +120,18 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     expect(apiClient.post).toHaveBeenCalledTimes(1);
   });
 
+  it('opens the immutable reversal chain only when traceability permission is granted',async()=>{
+    permissionState.granted.add('inventory_traceability.read');
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
+      return {data:page([{...move,isReversed:true}])} as never;
+    });
+    const view=render(<InventoryReversals/>);
+    const link=await view.findByText('Truy vết chuỗi đảo');
+    expect((link as HTMLAnchorElement).getAttribute('href'))
+      .toBe('/inventory-traceability?referenceType=InventoryReversal&referenceId=41');
+  });
+
   it('filters by an authorized warehouse using the real query parameter',async()=>{
     const view=render(<InventoryReversals/>);
     await view.findByText('Di chuyển vị trí');

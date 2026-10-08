@@ -44,6 +44,7 @@ const inventoryStatusLabel=(value:string)=>({
 
 export default function InventoryReversals(){
   const canReverse=usePermission('inventory_reversal.create');
+  const canTrace=usePermission('inventory_traceability.read');
   const [rows,setRows]=useState<TransactionRow[]>([]);
   const [page,setPage]=useState(1);
   const [warehouseId,setWarehouseId]=useState<number|null>(null);
@@ -166,7 +167,9 @@ export default function InventoryReversals(){
                 <td>{x.lotNumber??'không có lô'} / {x.serialNumber??'không có sê-ri'}<br/><small>{x.fromInventoryStatus&&x.toInventoryStatus?(inventoryStatusLabel(x.fromInventoryStatus)+' → '+inventoryStatusLabel(x.toInventoryStatus)):inventoryStatusLabel(x.inventoryStatus)}</small></td>
                 <td>{x.quantity}</td>
                 <td>{new Date(x.transactionDate).toLocaleString('vi-VN')}</td>
-                <td><UiBadge tone={reversed?'success':'warning'}>{reversed?'Đã đảo':'Chưa đảo'}</UiBadge></td>
+                <td><UiBadge tone={reversed?'success':'warning'}>{reversed?'Đã đảo':'Chưa đảo'}</UiBadge>
+                  {reversed&&canTrace&&<><br/><a href={'/inventory-traceability?referenceType=InventoryReversal&referenceId='+x.id}>Truy vết chuỗi đảo</a></>}
+                </td>
                 {canReverse&&<td><button type="button" disabled={reversed} onClick={()=>{setSelected(x);setReason('')}}>Đảo giao dịch</button></td>}
               </tr>
             })}
