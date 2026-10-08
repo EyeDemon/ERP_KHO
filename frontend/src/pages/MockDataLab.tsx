@@ -12,6 +12,7 @@ import {
   mockWarehouses,
 } from '../mocks/erpWmsMockData';
 import { useMockDemo } from '../context/MockDemoContext';
+import { mockDisplayText, mockStatusLabel } from '../utils/mockDisplayLabels';
 import './MockDataLab.css';
 
 type Tab = 'warehouses' | 'products' | 'capabilities' | 'partners' | 'users' | 'inventory' | 'transfers' | 'recounts' | 'scenario';
@@ -86,35 +87,35 @@ const MockDataLab = () => {
           {tab === 'warehouses' && (
             <table className="data-lab-table">
               <thead><tr><th>Mã</th><th>Tên kho</th><th>Thành phố</th><th>Loại</th></tr></thead>
-              <tbody>{mockWarehouses.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.city}</td><td>{item.type}</td></tr>)}</tbody>
+              <tbody>{mockWarehouses.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.city}</td><td>{mockDisplayText(item.type)}</td></tr>)}</tbody>
             </table>
           )}
 
           {tab === 'products' && (
             <table className="data-lab-table">
               <thead><tr><th>SKU</th><th>Tên</th><th>Danh mục</th><th>Đơn vị cơ sở (UOM)</th><th>Kiểu theo dõi</th><th>Mã vạch</th></tr></thead>
-              <tbody>{mockProducts.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.category}</td><td>{item.baseUom}</td><td>{item.tracking}</td><td>{item.barcodes.join(', ')}</td></tr>)}</tbody>
+              <tbody>{mockProducts.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.category}</td><td>{item.baseUom}</td><td>{mockDisplayText(item.tracking)}</td><td>{item.barcodes.join(', ')}</td></tr>)}</tbody>
             </table>
           )}
 
           {tab === 'capabilities' && (
             <table className="data-lab-table">
               <thead><tr><th>Bộ dữ liệu mẫu</th><th>Chức năng</th><th>Phân hệ</th><th>Triển khai</th><th>Đặc tả</th><th>Tham chiếu mẫu</th><th>Kho</th><th>Trạng thái mẫu</th></tr></thead>
-              <tbody>{Object.values(mockCapabilityFixtures).map((item) => <tr key={item.fixtureId}><td>{item.fixtureId}</td><td>{item.capabilityId} — {item.capabilityName}</td><td>{item.moduleKey}</td><td>{item.implementationStatus}</td><td>{item.spec}</td><td>{item.sampleReference}</td><td>{item.sampleWarehouse}</td><td>{item.sampleStatus}</td></tr>)}</tbody>
+              <tbody>{Object.values(mockCapabilityFixtures).map((item) => <tr key={item.fixtureId}><td>{item.fixtureId}</td><td>{item.capabilityId} — {item.capabilityName}</td><td>{item.moduleKey}</td><td>{mockDisplayText(item.implementationStatus)}</td><td>{item.spec}</td><td>{item.sampleReference}</td><td>{item.sampleWarehouse}</td><td>{mockStatusLabel(item.sampleStatus)}</td></tr>)}</tbody>
             </table>
           )}
 
           {tab === 'partners' && (
             <table className="data-lab-table">
               <thead><tr><th>Mã</th><th>Tên đối tác</th><th>Vai trò</th></tr></thead>
-              <tbody>{mockPartners.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.roles.join(' / ')}</td></tr>)}</tbody>
+              <tbody>{mockPartners.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.roles.map(mockDisplayText).join(' / ')}</td></tr>)}</tbody>
             </table>
           )}
 
           {tab === 'users' && (
             <table className="data-lab-table">
               <thead><tr><th>Người dùng</th><th>Họ tên</th><th>Vai trò</th><th>Phạm vi kho</th></tr></thead>
-              <tbody>{mockUsers.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.role}</td><td>{item.warehouses.join(', ')}</td></tr>)}</tbody>
+              <tbody>{mockUsers.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{mockDisplayText(item.role)}</td><td>{item.warehouses.join(', ')}</td></tr>)}</tbody>
             </table>
           )}
 
