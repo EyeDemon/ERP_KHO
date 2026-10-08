@@ -15,9 +15,9 @@ const Dashboard = () => {
 
   const quickLinks = [
     { to: '/import-receipts', title: 'Inbound', detail: 'Nhận hàng, QC và posting', icon: ClipboardCheck },
-    { to: '/inventory', title: 'Tồn kho', detail: 'Balance, movement và báo cáo', icon: Boxes },
+    { to: '/inventory', title: 'Tồn kho', detail: 'Số dư, biến động và báo cáo', icon: Boxes },
     { to: '/inventory-reconciliation', title: 'Đối chiếu', detail: 'Kiểm tra ledger / balance mismatch', icon: PackageSearch },
-    { to: '/stock-transfers', title: 'Điều chuyển', detail: 'Theo dõi hàng in-transit giữa kho', icon: Warehouse },
+    { to: '/stock-transfers', title: 'Điều chuyển', detail: 'Theo dõi hàng đang vận chuyển giữa các kho', icon: Warehouse },
   ];
 
   return (
@@ -35,7 +35,7 @@ const Dashboard = () => {
         <UiMetric value={demoRuntime ? mockInventoryBalances.length : '—'} label="Dòng tồn kho mẫu" />
         <article className={'ui-metric' + (demoRuntime && mismatchCount > 0 ? ' dashboard-metric-warning' : '')}>
           <strong>{demoRuntime ? mismatchCount : '—'}</strong>
-          <span>Reconciliation mismatch mẫu</span>
+          <span>Chênh lệch đối chiếu mẫu</span>
         </article>
       </UiMetricGrid>
 
