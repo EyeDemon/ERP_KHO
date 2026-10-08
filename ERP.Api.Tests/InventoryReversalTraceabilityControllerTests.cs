@@ -30,7 +30,7 @@ public sealed class InventoryReversalTraceabilityControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(page, ok.Value);
-        reversal.Verify(x => x.GetCandidatesAsync(2, 3, 10, 41, It.IsAny<CancellationToken>()),
+        reversal.Verify(x => x.GetCandidatesAsync(2, 3, 10, 41, true, It.IsAny<CancellationToken>()),
             Times.Once);
         reversal.Verify(x => x.ReverseAsync(It.IsAny<CreateInventoryReversalDto>(),
             It.IsAny<CancellationToken>()), Times.Never);
