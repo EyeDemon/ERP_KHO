@@ -83,6 +83,14 @@ public sealed class InventoryReversalCandidatesTests
         var noLeak = await service.GetCandidatesAsync(null, 1, 20, 300, true);
         noLeak.TotalRecords.Should().Be(0);
         noLeak.Items.Should().BeEmpty();
+        var productPrefix = await service.GetCandidatesAsync(null, 1, 20, null, null, " SK ");
+        productPrefix.TotalRecords.Should().Be(121);
+        productPrefix.Items.Should().OnlyContain(x => x.WarehouseId == 1 && x.ProductCode == "SKU");
+        var unknownProduct = await service.GetCandidatesAsync(null, 1, 20, null, null, "NO-SKU");
+        unknownProduct.TotalRecords.Should().Be(0);
+        unknownProduct.Items.Should().BeEmpty();
+        var codeTooLong = () => service.GetCandidatesAsync(null, 1, 20, null, null, new string('X', 65));
+        await codeTooLong.Should().ThrowAsync<BusinessRuleException>().WithMessage("*64 ký tự*");
         var located = await service.GetCandidatesAsync(null, 1, 20, 1);
         located.Items.Should().ContainSingle().Which.IsReversed.Should().BeTrue();
         var outsideScope = await service.GetCandidatesAsync(null, 1, 20, 300);

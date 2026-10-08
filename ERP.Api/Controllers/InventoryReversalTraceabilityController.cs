@@ -25,10 +25,10 @@ public sealed class InventoryReversalTraceabilityController(
     [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
     public async Task<ActionResult<PagedResult<InventoryReversalCandidateDto>>> Candidates(
         [FromQuery] int? warehouseId, [FromQuery] int? transactionId,
-        [FromQuery] bool? isReversed,
+        [FromQuery] bool? isReversed, [FromQuery] string? productCode,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default) =>
-        Ok(await reversalService.GetCandidatesAsync(warehouseId, page, pageSize, transactionId, isReversed, cancellationToken));
+        Ok(await reversalService.GetCandidatesAsync(warehouseId, page, pageSize, transactionId, isReversed, productCode, cancellationToken));
 
     [HttpPost("reversals")]
     [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]

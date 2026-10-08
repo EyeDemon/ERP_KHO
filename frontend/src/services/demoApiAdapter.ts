@@ -319,6 +319,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       const warehouseId = Number(params.get('warehouseId') ?? 0);
       const transactionId = Number(params.get('transactionId') ?? 0);
       const reversedFilter = params.get('isReversed');
+      const codePrefix = params.get('productCode')?.trim().toLocaleLowerCase() ?? '';
       const reversalMarkers = demoInventoryTransactions
         .filter(item => item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal');
       const reversedIds = new Set(reversalMarkers.map(item => item.referenceId));
@@ -327,7 +328,8 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         .filter(item => (item.transactionType === 'Move' || item.transactionType === 'StatusChange')
           && !correctionIds.has(item.id)
           && (!warehouseId || item.warehouseId === warehouseId)
-          && (!transactionId || item.id === transactionId))
+          && (!transactionId || item.id === transactionId)
+          && (!codePrefix || (demoProducts.find(p => p.id === item.productId)?.code?.toLocaleLowerCase().startsWith(codePrefix) ?? false)))
         .map(item => ({ ...item, isReversed: reversedIds.has(item.id) }))
         .filter(item => reversedFilter === null || item.isReversed === (reversedFilter === 'true'))
         .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime() || b.id - a.id);

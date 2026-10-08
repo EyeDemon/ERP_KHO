@@ -791,6 +791,14 @@ public sealed class SqlServerInventoryLockMoveTests
                 var grantedWarehouses = await CreateReversalService(before, fixture.UserId)
                     .GetReversalWarehousesAsync();
                 grantedWarehouses.Should().ContainSingle(x => x.Id == fixture.WarehouseId);
+                var productCode = await before.Products.AsNoTracking()
+                    .Where(x => x.Id == fixture.ProductId).Select(x => x.Code).SingleAsync();
+                var byProduct = await CreateReversalService(before, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20, null, false, productCode[..3]);
+                byProduct.Items.Should().ContainSingle(x => x.Id == originalTransactionId);
+                var wrongProduct = await CreateReversalService(before, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20, null, false, "ZZ_NO_MATCH");
+                wrongProduct.TotalRecords.Should().Be(0);
                 var page = await CreateReversalService(before, fixture.UserId)
                     .GetCandidatesAsync(fixture.WarehouseId, 1, 20);
                 page.Items.Should().ContainSingle(x => x.Id == originalTransactionId)

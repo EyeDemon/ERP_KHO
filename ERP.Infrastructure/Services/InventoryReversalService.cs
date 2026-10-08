@@ -35,8 +35,11 @@ public sealed class InventoryReversalService(
     public async Task<PagedResult<InventoryReversalCandidateDto>> GetCandidatesAsync(
         int? warehouseId = null, int page = 1, int pageSize = 20,
         int? transactionId = null, bool? isReversed = null,
-        CancellationToken cancellationToken = default)
+        string? productCode = null, CancellationToken cancellationToken = default)
     {
+        var normalizedProductCode = string.IsNullOrWhiteSpace(productCode) ? null : productCode.Trim();
+        if (normalizedProductCode is { Length: > 64 })
+            throw new BusinessRuleException("Mã sản phẩm tìm kiếm không được quá 64 ký tự.");
         if (transactionId.HasValue && transactionId.Value <= 0)
             throw new BusinessRuleException("ID giao dịch tìm kiếm không hợp lệ.");
         if (warehouseId.HasValue && warehouseId.Value <= 0)
@@ -55,6 +58,7 @@ public sealed class InventoryReversalService(
             .Where(x => permittedWarehouseIds.Contains(x.WarehouseId)
                 && (!warehouseId.HasValue || x.WarehouseId == warehouseId.Value)
                 && (!transactionId.HasValue || x.Id == transactionId.Value)
+                && (normalizedProductCode == null || x.Product.Code.StartsWith(normalizedProductCode))
                 && (x.TransactionType == TransactionType.Move || x.TransactionType == TransactionType.StatusChange)
                 // A corrective leg already belongs to an immutable reversal chain.
                 && !context.InventoryTransactions.Any(marker => marker.CorrectiveTransactionId == x.Id));

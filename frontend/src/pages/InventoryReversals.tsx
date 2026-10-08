@@ -52,6 +52,8 @@ export default function InventoryReversals(){
   const [warehouses,setWarehouses]=useState<WarehouseOption[]>([]);
   const [transactionIdInput,setTransactionIdInput]=useState('');
   const [transactionId,setTransactionId]=useState<number|null>(null);
+  const [productCodeInput,setProductCodeInput]=useState('');
+  const [productCode,setProductCode]=useState('');
   const [reversalState,setReversalState]=useState<'all'|'pending'|'reversed'>('all');
   const [warehouseError,setWarehouseError]=useState('');
   const [totalRecords,setTotalRecords]=useState(0);
@@ -80,7 +82,8 @@ export default function InventoryReversals(){
       const warehouseFilter=warehouseId===null?'':'&warehouseId='+warehouseId;
       const transactionFilter=transactionId===null?'':'&transactionId='+transactionId;
       const reversalFilter=reversalState==='all'?'':'&isReversed='+(reversalState==='reversed');
-      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+warehouseFilter+transactionFilter+reversalFilter);
+      const productFilter=productCode?'&productCode='+encodeURIComponent(productCode):'';
+      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+warehouseFilter+transactionFilter+reversalFilter+productFilter);
       if(sequence!==requestSequence.current)return;
       setRows(response.data.items);
       setTotalRecords(response.data.totalRecords);
@@ -89,7 +92,7 @@ export default function InventoryReversals(){
       if(sequence!==requestSequence.current)return;
       setRows([]);setTotalRecords(0);setTotalPages(0);setError(errorMessage(e));
     }finally{if(sequence===requestSequence.current)setLoading(false)}
-  },[warehouseId,transactionId,reversalState]);
+  },[warehouseId,transactionId,reversalState,productCode]);
   useEffect(()=>{void load(page)},[load,page]);
 
   const submit=async(e:FormEvent)=>{
@@ -159,7 +162,12 @@ export default function InventoryReversals(){
           setSelected(null);
           setPage(1);
           setTransactionId(searched===''?null:parsed);
+          setProductCode(productCodeInput.trim());
         }} className="ui-inline-actions">
+          <UiToolbarField label="Mã sản phẩm (SKU)">
+            <input aria-label="Tìm theo mã sản phẩm" value={productCodeInput} maxLength={64}
+              onChange={e=>setProductCodeInput(e.target.value)} placeholder="Mã SKU bắt đầu bằng..." />
+          </UiToolbarField>
           <UiToolbarField label="ID giao dịch">
             <input aria-label="Tìm theo ID giao dịch" type="number" min="1" step="1"
               value={transactionIdInput} onChange={e=>setTransactionIdInput(e.target.value)}
