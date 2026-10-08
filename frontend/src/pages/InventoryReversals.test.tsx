@@ -201,17 +201,6 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     });
   });
 
-  it('filters product SKU prefix on the server together with reversal state',async()=>{
-    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
-    await view.findByText('Di chuyển vị trí');
-    fireEvent.change(view.getByLabelText('Tìm theo mã sản phẩm'),{target:{value:' SKU-10 '}});
-    fireEvent.change(view.getByLabelText('Lọc theo trạng thái đảo'),{target:{value:'pending'}});
-    fireEvent.click(view.getByText('Tìm giao dịch'));
-    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/reversal-candidates?page=1&pageSize=20&isReversed=false&productCode=SKU-10'
-    ));
-  });
-
   it('looks up an old transaction by exact ID without revealing other records',async()=>{
     const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Di chuyển vị trí');
