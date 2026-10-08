@@ -34,6 +34,7 @@ const dialog = (
     onClose={() => {}}
     onAction={async () => {}}
     onReceive={async () => {}}
+    onOpenTransfer={async () => {}}
   />
 );
 

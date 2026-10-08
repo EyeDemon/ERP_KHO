@@ -24,7 +24,7 @@ it('invalidates a previously selected return reason on status transition', async
     statusTone: () => 'warning' as const, canWrite: true, canReturn: true,
     canApprove: false, userId: 1, actionInFlight: false, receive: {},
     setReceive: vi.fn(), onClose: vi.fn(), onAction: vi.fn(async () => {}),
-    onReceive: vi.fn(async () => {}),
+    onReceive: vi.fn(async () => {}), onOpenTransfer: vi.fn(async () => {}),
   };
   const view = render(<Dialog {...props} />);
   await view.findByRole('option', { name: 'Sai tuyến' });
