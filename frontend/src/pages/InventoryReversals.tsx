@@ -110,7 +110,10 @@ export default function InventoryReversals(){
       completeIdempotentAction(key);
       setSelected(null);setReason('');
       setSuccess('Đã ghi nhận giao dịch đảo thành công.');
-      await load(page);
+      // The last filtered item can disappear after reversal. Return to the
+      // first valid server page, preserving the active warehouse/SKU filters.
+      if(page===1)await load(1);
+      else setPage(1);
     }catch(e){
       const message=errorMessage(e);
       const code=(e as {response?:{data?:{code?:string}}})?.response?.data?.code;
@@ -133,14 +136,14 @@ export default function InventoryReversals(){
       <p className="ui-muted-text">Chỉ hỗ trợ di chuyển vị trí nội bộ và đổi trạng thái tồn kho. Trạng thái “Chưa đảo” không bảo đảm đủ điều kiện thực hiện; hệ thống kiểm tra khóa, lượng tồn và các ràng buộc ngay khi xác nhận.</p>
       <UiToolbar>
         <UiToolbarField label="Kho">
-          <select aria-label="Lọc theo kho" value={warehouseId??''}
+          <select aria-label="Lọc theo kho" disabled={busy||loading} value={warehouseId??''}
             onChange={e=>{setSelected(null);setPage(1);setWarehouseId(e.target.value?Number(e.target.value):null)}}>
             <option value="">Tất cả kho được phân quyền</option>
             {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}
           </select>
         </UiToolbarField>
         <UiToolbarField label="Trạng thái đảo">
-          <select aria-label="Lọc theo trạng thái đảo" value={reversalState}
+          <select aria-label="Lọc theo trạng thái đảo" disabled={busy||loading} value={reversalState}
             onChange={e=>{
               setSelected(null);setPage(1);
               setReversalState(e.target.value as 'all'|'pending'|'reversed');
@@ -165,11 +168,11 @@ export default function InventoryReversals(){
           setProductCode(productCodeInput.trim());
         }} className="ui-inline-actions">
           <UiToolbarField label="Mã sản phẩm (SKU)">
-            <input aria-label="Tìm theo mã sản phẩm" value={productCodeInput} maxLength={64}
+            <input aria-label="Tìm theo mã sản phẩm" disabled={busy||loading} value={productCodeInput} maxLength={64}
               onChange={e=>setProductCodeInput(e.target.value)} placeholder="Mã SKU bắt đầu bằng..." />
           </UiToolbarField>
           <UiToolbarField label="ID giao dịch">
-            <input aria-label="Tìm theo ID giao dịch" type="number" min="1" step="1"
+            <input aria-label="Tìm theo ID giao dịch" disabled={busy||loading} type="number" min="1" step="1"
               value={transactionIdInput} onChange={e=>setTransactionIdInput(e.target.value)}
               placeholder="Ví dụ: 12345" />
           </UiToolbarField>

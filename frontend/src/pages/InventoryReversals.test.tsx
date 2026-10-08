@@ -220,6 +220,36 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     expect(await view.findByText('Khóa thu hồi')).toBeTruthy();
   });
 
+  it('returns to the first filtered server page after reversing the final pending item',async()=>{
+    permissionState.granted.add('inventory_reversal.create');
+    let reversed=false;
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      const path=String(url);
+      if(path.includes('reversal-warehouses'))return {data:[]} as never;
+      const second=path.includes('page=2');
+      return {data:page(second
+        ? (reversed?[]:[{...move,id:21}])
+        : [move],second?2:1,reversed?20:21)} as never;
+    });
+    vi.mocked(apiClient.post).mockImplementation(async()=>{
+      reversed=true;
+      return {data:{reversalTransactionId:99}} as never;
+    });
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
+    await view.findByText(/Trang 1 \/ 2/);
+    fireEvent.click(view.getByText('Trang sau'));
+    await view.findByText(/Trang 2 \/ 2/);
+    fireEvent.click(view.getByText('Đảo giao dịch'));
+    fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
+      target:{value:'Đã kiểm tra hàng hóa cần đảo'}
+    });
+    fireEvent.click(view.getByText('Xác nhận đảo giao dịch'));
+    await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
+    expect(await view.findByText(/Trang 1 \/ 1/)).toBeTruthy();
+    expect(view.getByText('Đã ghi nhận giao dịch đảo thành công.')).toBeTruthy();
+    expect((view.getByText('Trang sau') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('requests later pages from server without truncating older transactions',async()=>{
     vi.mocked(apiClient.get).mockImplementation(async (url)=>{
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
