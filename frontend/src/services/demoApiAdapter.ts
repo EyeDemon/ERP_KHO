@@ -312,6 +312,14 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       ]);
     }
 
+    if (path === '/api/inventory/reversal-reasons') {
+      return ok(config, [
+        { code:'LOCATION_ERROR', name:'Sai vị trí lưu kho', transactionType:'Move' },
+        { code:'STATUS_ERROR', name:'Sai trạng thái tồn kho', transactionType:'StatusChange' },
+        { code:'OPERATION_CORRECTION', name:'Hiệu chỉnh nghiệp vụ sau kiểm tra', transactionType:null },
+        { code:'DATA_ENTRY_ERROR', name:'Sai sót nhập liệu', transactionType:null },
+      ]);
+    }
     if (path === '/api/inventory/reversal-warehouses') {
       return ok(config, demoWarehouses.map(item => ({ id: item.id, code: item.code, name: item.name })));
     }

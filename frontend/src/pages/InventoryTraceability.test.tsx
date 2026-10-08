@@ -26,6 +26,7 @@ const result={
       transactionType:'Reversal',inventoryStatus:'Available',fromLocationCode:'A01-R01-B02',toLocationCode:'A01-R01-B01',
       lotNumber:'LOT-A',serialNumber:null,quantity:4,referenceType:'InventoryReversal',referenceId:41,
       transactionDate:'2026-10-07T11:00:00Z',createdBy:5,createdByName:'Manager',note:'corrective',
+      reasonCode:'LOCATION_ERROR',
       reversalOfTransactionId:41,correctiveTransactionId:42,reversalTransactionId:43,isReversed:false
     }
   ]
@@ -184,6 +185,7 @@ describe('InventoryTraceability',()=>{
     expect(view.getAllByText(/Hiệu chỉnh #42/).length).toBeGreaterThan(0);
     expect(view.getAllByText(/Dấu đảo #43/).length).toBeGreaterThan(0);
     expect(view.getByText(/Gốc #41/)).toBeTruthy();
+    expect(view.getByText(/Mã lý do: LOCATION_ERROR/)).toBeTruthy();
     expect(view.getByRole('status').textContent).toContain('Đã tải 1 nhóm tồn kho hiện tại và 2 sự kiện sổ cái');
   });
 

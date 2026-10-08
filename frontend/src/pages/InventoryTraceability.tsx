@@ -13,7 +13,7 @@ type Event={
   transactionType:string;inventoryStatus:string;fromInventoryStatus?:string|null;toInventoryStatus?:string|null;
   locationCode?:string|null;fromLocationCode?:string|null;toLocationCode?:string|null;lotNumber?:string|null;
   expiryDate?:string|null;serialNumber?:string|null;quantity:number;referenceType?:string|null;referenceId?:number|null;
-  transactionDate:string;createdBy:number;createdByName:string;note?:string|null;reversalOfTransactionId?:number|null;
+  transactionDate:string;createdBy:number;createdByName:string;note?:string|null;reasonCode?:string|null;reversalOfTransactionId?:number|null;
   correctiveTransactionId?:number|null;reversalTransactionId?:number|null;isReversed:boolean;
 };
 type Result={
@@ -266,7 +266,10 @@ export default function InventoryTraceability(){
                 {x.reversalTransactionId?<>Dấu đảo #{x.reversalTransactionId}</>:null}
                 {!x.reversalOfTransactionId&&!x.correctiveTransactionId&&!x.reversalTransactionId?'—':null}
               </td>
-              <td>{x.createdByName||('Người dùng #'+x.createdBy)}<br/><small>{x.note??''}</small></td>
+              <td>{x.createdByName||('Người dùng #'+x.createdBy)}<br/>
+                {x.reasonCode&&<small>Mã lý do: {x.reasonCode}<br/></small>}
+                <small>{x.note??''}</small>
+              </td>
             </tr>)}
           </tbody>
         </table></UiTableScroll>

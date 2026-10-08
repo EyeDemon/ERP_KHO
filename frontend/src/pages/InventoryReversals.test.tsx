@@ -16,6 +16,12 @@ vi.mock('../services/idempotency',()=>({
 
 const move={id:41,productId:10,productCode:'SKU-10',productName:'Sản phẩm 10',warehouseId:1,warehouseName:'Kho HCM',
   transactionType:'Move',inventoryStatus:'Available',lotNumber:'LOT-A',quantity:4,transactionDate:'2026-10-07T10:00:00Z',isReversed:false};
+const reasons=[
+  {code:'LOCATION_ERROR',name:'Sai vị trí lưu kho',transactionType:'Move'},
+  {code:'STATUS_ERROR',name:'Sai trạng thái tồn kho',transactionType:'StatusChange'},
+  {code:'OPERATION_CORRECTION',name:'Hiệu chỉnh nghiệp vụ sau kiểm tra',transactionType:null},
+  {code:'DATA_ENTRY_ERROR',name:'Sai sót nhập liệu',transactionType:null},
+];
 const statusChange={...move,id:42,transactionType:'StatusChange',fromInventoryStatus:'Available',
   toInventoryStatus:'QcHold',inventoryStatus:'QcHold',quantity:2,transactionDate:'2026-10-07T11:00:00Z'};
 
@@ -23,6 +29,7 @@ const page=(items:typeof move[],pageIndex=1,totalRecords=items.length)=>({
   items,totalRecords,pageIndex,pageSize:20,totalPages:Math.ceil(totalRecords/20)
 });
 const reads=()=>vi.mocked(apiClient.get).mockImplementation(async url=>{
+  if(String(url).includes('reversal-reasons'))return {data:reasons} as never;
   if(String(url).includes('reversal-warehouses'))
     return {data:[{id:1,code:'HCM',name:'Kho Hồ Chí Minh'},{id:2,code:'HN',name:'Kho Hà Nội'}]} as never;
   return {data:page([statusChange,move])} as never;
@@ -43,6 +50,45 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=1&pageSize=20');
   });
 
+  it('requires a valid reason code and offers only codes for the selected transaction type',async()=>{
+    permissionState.granted.add('inventory_reversal.create');
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
+    await view.findByText('Di chuyển vị trí');
+    fireEvent.click(view.getAllByText('Đảo giao dịch')[0]);
+    const selector=view.getByLabelText('Mã lý do đảo giao dịch') as HTMLSelectElement;
+    expect(selector.value).toBe('');
+    expect(view.getByRole('option',{name:/Sai trạng thái tồn kho/})).toBeTruthy();
+    expect(view.queryByRole('option',{name:/Sai vị trí lưu kho/})).toBeNull();
+    fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
+      target:{value:'Đã kiểm tra'}
+    });
+    expect((view.getByText('Xác nhận đảo giao dịch') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(selector,{target:{value:'STATUS_ERROR'}});
+    expect((view.getByText('Xác nhận đảo giao dịch') as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(view.getByText('Hủy'));
+    fireEvent.click(view.getAllByText('Đảo giao dịch')[1]);
+    expect(view.getByRole('option',{name:/Sai vị trí lưu kho/})).toBeTruthy();
+    expect(view.queryByRole('option',{name:/Sai trạng thái tồn kho/})).toBeNull();
+  });
+
+  it('fails closed when the reason catalog cannot be loaded',async()=>{
+    permissionState.granted.add('inventory_reversal.create');
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-reasons'))throw new Error('offline');
+      if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
+      return {data:page([move])} as never;
+    });
+    const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
+    await view.findByText('Di chuyển vị trí');
+    expect(await view.findByText(/Không thể tải danh mục mã lý do đảo/)).toBeTruthy();
+    fireEvent.click(view.getByText('Đảo giao dịch'));
+    fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
+      target:{value:'Có lý do nhưng không có mã'}
+    });
+    expect((view.getByText('Xác nhận đảo giao dịch') as HTMLButtonElement).disabled).toBe(true);
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
   it('posts one reversal with a stable idempotency key',async()=>{
     permissionState.granted.add('inventory_reversal.create');
     vi.mocked(apiClient.post).mockResolvedValue({data:{reversalTransactionId:99}} as never);
@@ -50,19 +96,21 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     await view.findByText('Đổi trạng thái');
     const buttons=view.getAllByText('Đảo giao dịch');
     fireEvent.click(buttons[0]);
+    fireEvent.change(view.getByLabelText('Mã lý do đảo giao dịch'),{target:{value:'OPERATION_CORRECTION'}});
     fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{target:{value:'Đã kiểm tra theo chứng từ'}});
     const submit=view.getByText('Xác nhận đảo giao dịch');
     fireEvent.click(submit);fireEvent.click(submit);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/reversals',{
-      originalTransactionId:42,reason:'Đã kiểm tra theo chứng từ'
-    },{headers:{'Idempotency-Key':'key:inventory-reversal-42:Đã kiểm tra theo chứng từ'}});
-    expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-reversal-42:Đã kiểm tra theo chứng từ');
+      originalTransactionId:42,reasonCode:'OPERATION_CORRECTION',reason:'Đã kiểm tra theo chứng từ'
+    },{headers:{'Idempotency-Key':'key:inventory-reversal-42:OPERATION_CORRECTION:Đã kiểm tra theo chứng từ'}});
+    expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-reversal-42:OPERATION_CORRECTION:Đã kiểm tra theo chứng từ');
   });
 
   it('disables old reversed transaction even without the marker in this page',async()=>{
     permissionState.granted.add('inventory_reversal.create');
     vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-reasons'))return {data:reasons} as never;
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       return {data:page([{...move,isReversed:true}])} as never;
     });
@@ -76,6 +124,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     permissionState.granted.add('inventory_reversal.create');
     let reversed=false;
     vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-reasons'))return {data:reasons} as never;
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       return {data:page([{...move,isReversed:reversed}])} as never;
     });
@@ -87,6 +136,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Chưa đảo');
     fireEvent.click(view.getByText('Đảo giao dịch'));
+    fireEvent.change(view.getByLabelText('Mã lý do đảo giao dịch'),{target:{value:'OPERATION_CORRECTION'}});
     fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
       target:{value:'Xác minh trường hợp thao tác đồng thời'}
     });
@@ -109,6 +159,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Di chuyển vị trí');
     fireEvent.click(view.getAllByText('Đảo giao dịch')[1]);
+    fireEvent.change(view.getByLabelText('Mã lý do đảo giao dịch'),{target:{value:'OPERATION_CORRECTION'}});
     fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
       target:{value:'Kiểm tra hậu quả dịch chuyển hàng'}
     });
@@ -124,6 +175,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
   it('opens the immutable reversal chain only when traceability permission is granted',async()=>{
     permissionState.granted.add('inventory_traceability.read');
     vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-reasons'))return {data:reasons} as never;
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       return {data:page([{...move,isReversed:true}])} as never;
     });
@@ -137,6 +189,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
   it('navigates within the SPA to the immutable ledger without a full page reload',async()=>{
     permissionState.granted.add('inventory_traceability.read');
     vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-reasons'))return {data:reasons} as never;
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       return {data:page([{...move,isReversed:true}])} as never;
     });
@@ -185,6 +238,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText('Di chuyển vị trí');
     fireEvent.click(view.getAllByText('Đảo giao dịch')[1]);
+    fireEvent.change(view.getByLabelText('Mã lý do đảo giao dịch'),{target:{value:'OPERATION_CORRECTION'}});
     const input=view.getByLabelText('Lý do đảo giao dịch tồn kho');
     fireEvent.change(input,{target:{value:'Lý do thứ nhất'}});
     fireEvent.click(view.getByText('Xác nhận đảo giao dịch'));
@@ -194,10 +248,10 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     fireEvent.click(view.getByText('Xác nhận đảo giao dịch'));
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(2));
     expect(vi.mocked(apiClient.post).mock.calls[0][2]?.headers).toEqual({
-      'Idempotency-Key':'key:inventory-reversal-41:Lý do thứ nhất'
+      'Idempotency-Key':'key:inventory-reversal-41:OPERATION_CORRECTION:Lý do thứ nhất'
     });
     expect(vi.mocked(apiClient.post).mock.calls[1][2]?.headers).toEqual({
-      'Idempotency-Key':'key:inventory-reversal-41:Lý do đã sửa'
+      'Idempotency-Key':'key:inventory-reversal-41:OPERATION_CORRECTION:Lý do đã sửa'
     });
   });
 
@@ -213,6 +267,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
 
   it('translates upper-case API inventory status into Vietnamese',async()=>{
     vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-reasons'))return {data:reasons} as never;
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       return {data:page([{...move,inventoryStatus:'RECALL_BLOCKED'}])} as never;
     });
@@ -240,6 +295,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     fireEvent.click(view.getByText('Trang sau'));
     await view.findByText(/Trang 2 \/ 2/);
     fireEvent.click(view.getByText('Đảo giao dịch'));
+    fireEvent.change(view.getByLabelText('Mã lý do đảo giao dịch'),{target:{value:'OPERATION_CORRECTION'}});
     fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
       target:{value:'Đã kiểm tra hàng hóa cần đảo'}
     });
@@ -252,6 +308,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
 
   it('requests later pages from server without truncating older transactions',async()=>{
     vi.mocked(apiClient.get).mockImplementation(async (url)=>{
+      if(String(url).includes('reversal-reasons'))return {data:reasons} as never;
       if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
       const second=String(url).includes('page=2');
       return {data:page(second?[{...move,id:21}]:[move],second?2:1,130)} as never;

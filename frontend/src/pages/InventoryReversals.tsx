@@ -13,6 +13,7 @@ type TransactionRow={
 };
 type Page={items:TransactionRow[];totalRecords:number;pageIndex:number;pageSize:number;totalPages:number};
 type WarehouseOption={id:number;code:string;name:string};
+type ReversalReasonOption={code:string;name:string;transactionType?:string|null};
 
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
@@ -50,6 +51,8 @@ export default function InventoryReversals(){
   const [page,setPage]=useState(1);
   const [warehouseId,setWarehouseId]=useState<number|null>(null);
   const [warehouses,setWarehouses]=useState<WarehouseOption[]>([]);
+  const [reversalReasons,setReversalReasons]=useState<ReversalReasonOption[]>([]);
+  const [reasonsError,setReasonsError]=useState('');
   const [transactionIdInput,setTransactionIdInput]=useState('');
   const [transactionId,setTransactionId]=useState<number|null>(null);
   const [productCodeInput,setProductCodeInput]=useState('');
@@ -62,10 +65,19 @@ export default function InventoryReversals(){
   const requestSequence=useRef(0);
   const [selected,setSelected]=useState<TransactionRow|null>(null);
   const [reason,setReason]=useState('');
+  const [reasonCode,setReasonCode]=useState('');
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const guard=useRef(false);
+
+  useEffect(()=>{
+    let active=true;
+    void apiClient.get<ReversalReasonOption[]>('/api/inventory/reversal-reasons')
+      .then(response=>{if(active)setReversalReasons(response.data)})
+      .catch(()=>{if(active)setReasonsError('Không thể tải danh mục mã lý do đảo. Không thể xác nhận giao dịch khi chưa có mã hợp lệ.')});
+    return ()=>{active=false};
+  },[]);
 
   useEffect(()=>{
     let active=true;
@@ -97,18 +109,21 @@ export default function InventoryReversals(){
 
   const submit=async(e:FormEvent)=>{
     e.preventDefault();
-    if(!selected||selected.isReversed||!canReverse||guard.current||!reason.trim())return;
+    if(!selected||selected.isReversed||!canReverse||guard.current||!reason.trim()||
+      !reversalReasons.some(option=>option.code===reasonCode &&
+        (!option.transactionType||option.transactionType===selected.transactionType)))return;
     // Bind retries to both the original transaction and its normalized reason.
     // A changed reason is a different command and must not reuse its idempotency key.
-    const key='inventory-reversal-'+selected.id+':'+reason.trim();
+    const key='inventory-reversal-'+selected.id+':'+reasonCode+':'+reason.trim();
     guard.current=true;setBusy(true);setError('');setSuccess('');
     try{
       await apiClient.post('/api/inventory/reversals',{
         originalTransactionId:selected.id,
+        reasonCode,
         reason:reason.trim(),
       },{headers:idempotencyHeaders(key)});
       completeIdempotentAction(key);
-      setSelected(null);setReason('');
+      setSelected(null);setReason('');setReasonCode('');
       setSuccess('Đã ghi nhận giao dịch đảo thành công.');
       // The last filtered item can disappear after reversal. Return to the
       // first valid server page, preserving the active warehouse/SKU filters.
@@ -131,6 +146,7 @@ export default function InventoryReversals(){
       description="Không sửa hoặc xóa sổ cái đã ghi. Thao tác đảo tạo một giao dịch hiệu chỉnh mới và một dấu mốc liên kết về giao dịch gốc."/>
     {error&&<p role="alert">{error}</p>}
     {warehouseError&&<p role="alert">{warehouseError}</p>}
+    {reasonsError&&<p role="alert">{reasonsError}</p>}
     {success&&<p role="status">{success}</p>}
     <UiCard title="Lịch sử giao dịch hỗ trợ đảo hiệu chỉnh">
       <p className="ui-muted-text">Chỉ hỗ trợ di chuyển vị trí nội bộ và đổi trạng thái tồn kho. Trạng thái “Chưa đảo” không bảo đảm đủ điều kiện thực hiện; hệ thống kiểm tra khóa, lượng tồn và các ràng buộc ngay khi xác nhận.</p>
@@ -197,7 +213,7 @@ export default function InventoryReversals(){
                 <td><UiBadge tone={reversed?'success':'warning'}>{reversed?'Đã đảo':'Chưa đảo'}</UiBadge>
                   {reversed&&canTrace&&<><br/><Link to={'/inventory-traceability?referenceType=InventoryReversal&referenceId='+x.id}>Truy vết chuỗi đảo</Link></>}
                 </td>
-                {canReverse&&<td><button type="button" disabled={reversed} onClick={()=>{setSelected(x);setReason('')}}>Đảo giao dịch</button></td>}
+                {canReverse&&<td><button type="button" disabled={reversed} onClick={()=>{setSelected(x);setReason('');setReasonCode('')}}>Đảo giao dịch</button></td>}
               </tr>
             })}
           </tbody>
@@ -212,9 +228,21 @@ export default function InventoryReversals(){
     {selected&&canReverse&&<UiCard title={'Đảo giao dịch #'+selected.id}>
       <form onSubmit={submit} className="ui-form-grid">
         <p className="ui-muted-text">{transactionTypeLabel(selected.transactionType)} • {selected.productCode??selected.productId} • số lượng {selected.quantity}. Thao tác hiệu chỉnh vẫn kiểm tra lại khóa tồn, lượng đã giữ, sức chứa và chính sách trạng thái trong cùng giao dịch Serializable.</p>
+        <UiToolbarField label="Mã lý do đảo (bắt buộc)">
+          <select aria-label="Mã lý do đảo giao dịch" value={reasonCode}
+            required disabled={busy||reversalReasons.length===0}
+            onChange={e=>setReasonCode(e.target.value)}>
+            <option value="">Chọn mã lý do</option>
+            {reversalReasons.filter(option=>!option.transactionType||
+              option.transactionType===selected.transactionType)
+              .map(option=><option key={option.code} value={option.code}>
+                {option.name} ({option.code})
+              </option>)}
+          </select>
+        </UiToolbarField>
         <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do / bằng chứng bắt buộc (tối đa 400 ký tự)" maxLength={400} required/>
         <div className="ui-inline-actions">
-          <button type="submit" disabled={busy||!reason.trim()}>Xác nhận đảo giao dịch</button>
+          <button type="submit" disabled={busy||!reason.trim()||!reasonCode||reversalReasons.length===0}>Xác nhận đảo giao dịch</button>
           <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
         </div>
       </form>
