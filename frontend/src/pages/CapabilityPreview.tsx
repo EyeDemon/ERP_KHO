@@ -12,6 +12,7 @@ import { getMockCapabilityFixture, getMockWorkCenter } from '../mocks/erpWmsMock
 import { useMockDemo } from '../context/MockDemoContext';
 import { evidenceStatusLabels, getCapabilityGovernanceProfile } from '../config/capabilityGovernance';
 import { getSpecializedScreenPreview } from '../config/reviewRequiredScreens';
+import { mockDisplayText, mockStatusLabel, mockTypeLabel } from '../utils/mockDisplayLabels';
 import CapabilityInteractiveDemo from './CapabilityInteractiveDemo';
 import WarehouseCapabilityMock from './WarehouseCapabilityMock';
 import InboundCapabilityMock from './InboundCapabilityMock';
@@ -175,7 +176,7 @@ const CapabilityPreview = () => {
                   <>
                     <span>{fixture.sampleReference}</span>
                     <span>{fixture.sampleWarehouse}</span>
-                    <span>{fixture.sampleStatus}</span>
+                    <span>{mockStatusLabel(fixture.sampleStatus)}</span>
                   </>
                 ) : (
                   <span>Bản ghi mẫu bị ẩn bởi phạm vi kho mô phỏng</span>
@@ -187,13 +188,13 @@ const CapabilityPreview = () => {
               {records.slice(0, 5).map((record) => (
                 <article key={record.id}>
                   <div>
-                    <span>{record.type}</span>
+                    <span>{mockTypeLabel(record.type)}</span>
                     <strong>{record.reference}</strong>
-                    <p>{record.subject}</p>
+                    <p>{mockDisplayText(record.subject)}</p>
                   </div>
                   <div>
                     <small>{record.warehouse}</small>
-                    <span className={'cap-record-status tone-' + record.tone}>{record.status}</span>
+                    <span className={'cap-record-status tone-' + record.tone}>{mockStatusLabel(record.status)}</span>
                   </div>
                 </article>
               ))}
@@ -215,7 +216,7 @@ const CapabilityPreview = () => {
                   <div className="mobile-record-card">
                     <small>Tham chiếu</small>
                     <strong>{fixtureVisible ? fixture?.sampleReference : (records[0]?.reference ?? '—')}</strong>
-                    <span>{records[0]?.subject ?? capability.goal}</span>
+                    <span>{records[0]?.subject ? mockDisplayText(records[0].subject) : capability.goal}</span>
                   </div>
                   <div className="mobile-quantity-row">
                     <span className="mobile-quantity-label">Số lượng</span>
