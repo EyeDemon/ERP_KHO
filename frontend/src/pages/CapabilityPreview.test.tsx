@@ -52,7 +52,7 @@ describe('CapabilityPreview', () => {
     for (const [capabilityId, title] of cases) {
       const view = renderPreview('warehouse-structure', capabilityId);
       expect(view.getByTestId('warehouse-capability-mock-' + capabilityId)).toBeTruthy();
-      expect(view.getByText(title)).toBeTruthy();
+      expect(view.getByRole('heading', { name: title })).toBeTruthy();
       expect(view.getAllByText(/Không gọi API hệ thống thật|Production effect/).length).toBeGreaterThan(0);
       view.unmount();
     }
@@ -116,7 +116,7 @@ describe('CapabilityPreview', () => {
       ['OUT-03', 'Bàn làm việc ứng viên phân bổ'],
       ['OUT-04', 'Lập kế hoạch đợt / lô / cụm'],
       ['OUT-07', 'Kiểm soát khu chờ & xếp hàng'],
-      ['OUT-08', 'Xác nhận giao hàng Boundary'],
+      ['OUT-08', 'Ranh giới xác nhận giao hàng'],
       ['OUT-09', 'Đơn thiếu hàng & lập lại cam kết'],
       ['OUT-10', 'Dòng thời gian theo dõi giao hàng / POD'],
     ];
@@ -240,8 +240,8 @@ describe('CapabilityPreview', () => {
 
   it('renders scan-first phone preview for mobile capabilities', () => {
     const view = renderPreview('mobile', 'MO-04');
-    expect(view.getByText('Mobile scan-first preview')).toBeTruthy();
-    expect(view.getByText('▣ Quét barcode / location / serial')).toBeTruthy();
+    expect(view.getByText('Xem trước luồng quét trên di động')).toBeTruthy();
+    expect(view.getByText('▣ Quét mã vạch / vị trí / sê-ri')).toBeTruthy();
     expect(view.getByText('Xác nhận • Mô phỏng chỉ đọc')).toBeTruthy();
     expect(view.getAllByText('FX-MO-04').length).toBeGreaterThan(0);
   });
@@ -314,7 +314,7 @@ describe('CapabilityPreview', () => {
 
   it('shows domain-specific warehouse lifecycle instead of a spec-only card', () => {
     const view = renderPreview('warehouse-structure', 'WH-06');
-    expect(view.getAllByText(/Cổng, sân bãi & cửa kho/).length).toBeGreaterThan(0);
+    expect(view.getByRole('heading', { name: 'Bảng điều hành cửa kho & sân bãi' })).toBeTruthy();
     expect(view.getAllByText('CHECKED_IN').length).toBeGreaterThan(0);
     expect(view.getByText('ASSIGN_DOCK')).toBeTruthy();
     fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
