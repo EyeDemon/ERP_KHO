@@ -544,7 +544,8 @@ public sealed class SqlServerInventoryLockMoveTests
 
             attempts.Count(x => x.Result is not null).Should().Be(1);
             var failure = attempts.Single(x => x.Error is not null).Error;
-            failure.Should().BeOfType<BusinessRuleException>();
+            failure.Should().BeOfType<BusinessRuleException>(
+                $"both concurrent attempts must yield one success and a controlled conflict, actual error: {failure}");
             failure!.Data["ErrorCode"].Should().Be("INV_ALREADY_REVERSED");
 
             await using var verify = CreateContext();

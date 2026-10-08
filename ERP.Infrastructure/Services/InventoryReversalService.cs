@@ -104,12 +104,26 @@ public sealed class InventoryReversalService(
             : null;
         try
         {
-            var original = await context.InventoryTransactions
-                .AsNoTracking()
+            // An UPDLOCK on the immutable original serializes concurrent reversal claims.
+            // Without it, two SERIALIZABLE readers may both hold shared locks and
+            // deadlock when they attempt to insert competing reversal markers.
+            // The unique ReversalOfTransactionId index remains the final invariant.
+            var originalQuery = context.Database.IsSqlServer()
+                ? context.InventoryTransactions.FromSqlInterpolated(
+                    $"SELECT * FROM dbo.InventoryTransactions WITH (UPDLOCK, HOLDLOCK) WHERE Id = {request.OriginalTransactionId}")
+                : context.InventoryTransactions.AsQueryable();
+
+            var original = await originalQuery.AsNoTracking()
                 .SingleOrDefaultAsync(x => x.Id == request.OriginalTransactionId, cancellationToken)
                 ?? throw new NotFoundException("Không tìm thấy giao dịch tồn kho.");
 
             await warehouseAuthorization.EnsureWarehouseAccessAsync(original.WarehouseId, cancellationToken);
+
+            // This check occurs only after the original row lock is acquired.
+            // A second concurrent request sees the first transaction's committed marker.
+            if (await context.InventoryTransactions.AsNoTracking().AnyAsync(
+                    x => x.ReversalOfTransactionId == original.Id, cancellationToken))
+                throw Conflict("INV_ALREADY_REVERSED", "Giao dịch tồn kho đã được đảo trước đó.");
 
             if (original.TransactionType is not (TransactionType.Move or TransactionType.StatusChange))
                 throw Conflict(
