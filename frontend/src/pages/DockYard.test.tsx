@@ -64,11 +64,11 @@ describe('DockYard production UI', () => {
     const view = render(<DockYard />);
 
     expect(await view.findByText('APT-2026-1040')).toBeTruthy();
-    expect(view.getByRole('table', { name: 'Danh sách appointment Dock Yard' })).toBeTruthy();
-    expect(view.queryByRole('button', { name: 'Tạo appointment' })).toBeNull();
+    expect(view.getByRole('table', { name: 'Danh sách lịch hẹn cửa kho sân bãi' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Tạo lịch hẹn' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Xác nhận' })).toBeNull();
-    expect(view.queryByRole('button', { name: 'Thêm dock' })).toBeNull();
-    expect(view.queryByRole('button', { name: 'Thêm yard slot' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Thêm cửa kho' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Thêm vị trí sân bãi' })).toBeNull();
   });
 
   it('guards a double-click command and sends an idempotency key', async () => {
@@ -82,7 +82,7 @@ describe('DockYard production UI', () => {
     post.mockImplementation(() => new Promise(resolve => { release = resolve; }) as never);
 
     const view = render(<DockYard />);
-    const confirm = await view.findByRole('button', { name: 'Xác nhận appointment APT-2026-1040' });
+    const confirm = await view.findByRole('button', { name: 'Xác nhận lịch hẹn APT-2026-1040' });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
 
@@ -94,7 +94,7 @@ describe('DockYard production UI', () => {
     );
 
     release?.({ data: {} });
-    await waitFor(() => expect(view.getByText('Đã cập nhật trạng thái appointment.')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('Đã cập nhật trạng thái lịch hẹn.')).toBeTruthy());
   });
 
   it('edits appointment wall-clock values in the warehouse timezone, not the browser timezone', async () => {
@@ -107,11 +107,11 @@ describe('DockYard production UI', () => {
     ]));
     const view = render(<DockYard />);
 
-    const edit = await view.findByRole('button', { name: 'Sửa appointment APT-2026-1040' });
+    const edit = await view.findByRole('button', { name: 'Sửa lịch hẹn APT-2026-1040' });
     fireEvent.click(edit);
 
-    const start = view.getByLabelText('Bắt đầu appointment theo timezone kho') as HTMLInputElement;
-    const end = view.getByLabelText('Kết thúc appointment theo timezone kho') as HTMLInputElement;
+    const start = view.getByLabelText('Bắt đầu lịch hẹn theo múi giờ kho') as HTMLInputElement;
+    const end = view.getByLabelText('Kết thúc lịch hẹn theo múi giờ kho') as HTMLInputElement;
     expect(start.value).toBe('2026-10-05T16:00');
     expect(end.value).toBe('2026-10-05T17:00');
     expect(start.closest('label')?.textContent).toContain('Asia/Ho_Chi_Minh');
