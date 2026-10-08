@@ -10,6 +10,7 @@ public class ExportReceipt
     
     [System.ComponentModel.DataAnnotations.ConcurrencyCheck]
     public ReceiptStatus Status { get; set; } = ReceiptStatus.Draft;
+    public byte[] RowVersion { get; set; } = [];
     
     public string? Note { get; set; }
     public int CreatedBy { get; set; }

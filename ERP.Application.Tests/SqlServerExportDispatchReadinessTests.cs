@@ -11,7 +11,7 @@ public sealed class SqlServerExportDispatchReadinessTests
     private static string ConnectionString => Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!;
 
     [SqlServerFact]
-    public async Task ProductionPreflight_IsReadOnlySafeAndRequiredIndexExists()
+    public async Task CurrentDispatchInvariants_AreReadOnlySafeAndLocationUniqueIndexExists()
     {
         await using var context = new ErpKhoDbContext(
             new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(ConnectionString).Options);
@@ -23,10 +23,10 @@ public sealed class SqlServerExportDispatchReadinessTests
             """
             SELECT COUNT(*) FROM
             (
-                SELECT ReferenceId, ProductId, WarehouseId
+                SELECT ReferenceId, ProductId, WarehouseId, LocationId
                 FROM InventoryTransactions
                 WHERE ReferenceType = 'ExportReceipt' AND TransactionType = 1 AND ReferenceId IS NOT NULL
-                GROUP BY ReferenceId, ProductId, WarehouseId
+                GROUP BY ReferenceId, ProductId, WarehouseId, LocationId
                 HAVING COUNT(*) > 1
             ) duplicate_exports
             """))
@@ -37,19 +37,15 @@ public sealed class SqlServerExportDispatchReadinessTests
             (
                 NOT EXISTS (SELECT 1 FROM ExportReceiptDetails d WHERE d.ExportReceiptId = e.Id)
                 OR EXISTS (SELECT 1 FROM ExportReceiptDetails d WHERE d.ExportReceiptId = e.Id AND d.Quantity <= 0)
-                OR EXISTS
-                (
-                    SELECT 1 FROM ExportReceiptDetails d WHERE d.ExportReceiptId = e.Id AND 1 <>
-                    (SELECT COUNT(*) FROM InventoryTransactions t WHERE t.ReferenceType = 'ExportReceipt' AND t.ReferenceId = e.Id AND t.TransactionType = 1 AND t.ProductId = d.ProductId AND t.WarehouseId = e.WarehouseId AND t.Quantity = d.Quantity)
-                )
-                OR (SELECT COUNT(*) FROM InventoryTransactions t WHERE t.ReferenceType = 'ExportReceipt' AND t.ReferenceId = e.Id AND t.TransactionType = 1)
-                   <> (SELECT COUNT(*) FROM ExportReceiptDetails d WHERE d.ExportReceiptId = e.Id)
-                OR EXISTS (SELECT 1 FROM StockReservations r WHERE r.SourceType = 'ExportReceipt' AND r.SourceId = e.Id AND r.Status IN (0, 1))
+                OR EXISTS (SELECT 1 FROM InventoryTransactions t WHERE t.ReferenceType='ExportReceipt' AND t.ReferenceId=e.Id AND t.TransactionType=1)
+                OR EXISTS (SELECT 1 FROM ExportReceiptDetails d WHERE d.ExportReceiptId=e.Id AND d.Quantity <>
+                    COALESCE((SELECT SUM(r.Quantity-r.ConsumedQuantity-r.ReleasedQuantity) FROM StockReservations r
+                        WHERE r.SourceType='ExportReceipt' AND r.SourceId=e.Id AND r.ProductId=d.ProductId AND r.Status IN(0,1)),0))
             )
             """))
-            .Should().Be(0, "legacy Approved receipts must have an exact safe backfill ledger");
+            .Should().Be(0, "Approved means reservation only; physical export belongs to Dispatched");
         (await ScalarAsync(context,
-            "SELECT COUNT(*) FROM sys.indexes WHERE name = 'IX_InventoryTransactions_ExportReceiptReference' AND object_id = OBJECT_ID('InventoryTransactions')"))
+            "SELECT COUNT(*) FROM sys.indexes WHERE name = 'IX_InventoryTransactions_ExportReceiptLocationReference' AND is_unique=1 AND object_id = OBJECT_ID('InventoryTransactions')"))
             .Should().Be(1);
     }
 

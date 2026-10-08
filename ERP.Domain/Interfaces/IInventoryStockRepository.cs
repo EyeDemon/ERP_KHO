@@ -5,6 +5,8 @@ namespace ERP.Domain.Interfaces
 {
     public interface IInventoryStockRepository : IRepository<InventoryStock>
     {
+        Task<decimal> GetEligibleAvailableAsync(int productId, int warehouseId, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<(int LocationId, decimal Quantity)>> ConsumeReservedLocationsAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default);
         Task<InventoryStock?> GetByProductAndWarehouseAsync(int productId, int warehouseId);
         Task<InventoryStock?> GetByProductWarehouseAndStatusAsync(int productId, int warehouseId, InventoryStatus status);
         Task<InventoryStock?> GetByProductWarehouseStatusAndLocationAsync(int productId, int warehouseId, InventoryStatus status, int locationId);

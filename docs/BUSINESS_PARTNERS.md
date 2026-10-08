@@ -17,7 +17,7 @@ Inactive partners remain visible on existing receipts but cannot be newly assign
 
 ## API contract
 
-Partner master actions require database `partner.read/create/update/deactivate` grants. Import supplier assignment requires `receipt.update`; reading supplier choices separately requires `partner.read`. Export customer assignment retains outbound compatibility authorization. Both assignment paths enforce warehouse scope before checking receipt state or partner validity, so a foreign direct ID returns isolated 404 without a state/partner oracle. See `ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md` for the acceptance regression.
+Partner master actions require database `partner.read/create/update/deactivate` grants. Import supplier assignment requires `receipt.update`; reading supplier choices separately requires `partner.read`. Export customer assignment requires database `export_receipt.update` and the latest receipt `rowVersion`; customer lookup separately requires `partner.read`. Both assignment paths enforce warehouse scope before checking receipt state or partner validity, so a foreign direct ID returns isolated 404 without a state/partner oracle. See `ACCUMULATED_PR_OWNER_ACCEPTANCE_REVIEW.md` for the inherited acceptance regression and `OUTBOUND_DISPATCH_MVP.md` for outbound successor evidence.
 
 `GET /api/business-partners?page=1&pageSize=20&search=ACME&role=supplier&active=true` returns the normal `PagedResult` shape. `role` accepts `supplier` or `customer`.
 
@@ -48,10 +48,10 @@ Content-Type: application/json
 PUT /api/exportreceipts/84/customer
 Content-Type: application/json
 
-{"partnerId":null}
+{"partnerId":null,"rowVersion":"AAAAAAAAB9E="}
 ```
 
-`null` removes the association. An omitted new field in legacy receipt operations never clears an existing association.
+`null` removes the association. The export token above is illustrative; use the fresh eight-byte Base64 token from that receipt, never copy the example. Missing/malformed/stale export tokens return safe 409. An omitted new field in legacy receipt operations never clears an existing association.
 
 ## Snapshot, migration, and compatibility
 
@@ -69,7 +69,11 @@ Later transitions do not overwrite the snapshot. Draft DTOs show current partner
 
 Migration `AddBusinessPartnersAndReceiptAssociations` only adds the partner table, nullable receipt columns, indexes, checks, and restrictive foreign keys. It does not update inventory, reservation, ledger, document status, or historical migrations.
 
-## Verification record
+## Outbound reconciliation successor — 2026-10-07
+
+Approval Center ExportReceipt rejection now captures Customer Code/Name in the same conditional UPDATE/transaction as Draft → Cancelled, using the current persisted relationship. Permission, warehouse, maker/checker, state, replay and exactly-once audit remain independent; no inventory/ledger effect or model change. SQL-backed regression first proved the missing snapshot (null customerCode), then verifies the saved name/code survive master rename after rejection. Fresh source, full-suite and focused browser evidence are recorded in [outbound reconciliation](OUTBOUND_DISPATCH_MVP.md#integrated-successor-evidence--2026-10-07). Prior partner evidence below remains historical/source-specific; inbound source/evidence is preserved.
+
+## Historical verification record
 
 The feature checkpoint and follow-up at revision `7a7a1359558c0bfc060c7affbe8c38131b297025` supplied these inherited results; they were not rerun for the controlled-delay UI change:
 

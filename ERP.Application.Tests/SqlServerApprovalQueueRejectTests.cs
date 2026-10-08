@@ -248,6 +248,9 @@ public sealed class SqlServerApprovalQueueRejectTests
         var role = new Role { RoleName = $"QA-MANAGER-{suffix}" };
         db.Roles.Add(role); await db.SaveChangesAsync();
         await GrantInboundAsync(db, role.Id);
+        foreach(var permission in await db.Permissions.Where(p=>p.Code=="export_receipt.read"||p.Code=="export_receipt.approve"||p.Code=="export_receipt.cancel").ToListAsync())
+            db.RolePermissions.Add(new RolePermission{RoleId=role.Id,PermissionId=permission.Id});
+        await db.SaveChangesAsync();
         var creator = new User { Username = $"qa-maker-{suffix}", FullName = "QA Maker", PasswordHash = "test-only", RoleId = role.Id };
         var checker = new User { Username = $"qa-checker-{suffix}", FullName = "QA Checker", PasswordHash = "test-only", RoleId = role.Id };
         db.Users.AddRange(creator, checker); await db.SaveChangesAsync();

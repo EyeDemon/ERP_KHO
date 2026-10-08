@@ -3,6 +3,7 @@ namespace ERP.Api.Authorization;
 public static class AppPermissions
 {
     public const string ApprovalReject = "approval.reject";
+    public const string ExportReceiptRead = "export_receipt.read", ExportReceiptCreate = "export_receipt.create", ExportReceiptUpdate = "export_receipt.update", ExportReceiptApprove = "export_receipt.approve", ExportReceiptDispatch = "export_receipt.dispatch", ExportReceiptCancel = "export_receipt.cancel";
     public const string CategoryRead="product_category.read", CategoryManage="product_category.manage", BarcodeManage="product_barcode.manage", WarehouseRead="warehouse.read", WarehouseManage="warehouse.manage";
     public const string ReceiptRead="receipt.read", ReceiptCreate="receipt.create", ReceiptUpdate="receipt.update", ReceiptCancel="receipt.cancel", ReceiptReceive="receipt.receive", ReceiptComplete="receipt.complete", ReceiptPost="receipt.post";
     public const string QualityExecute="quality_inspection.execute", QualityComplete="quality_inspection.complete", QualityApprove="quality_disposition.approve";

@@ -1,9 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-type Props = { titleId:string; busy?:boolean; onClose:()=>void; returnFocusTo?:HTMLElement|null; children:ReactNode };
+type Props = { titleId:string; busy?:boolean; onClose:()=>void; returnFocusTo?:HTMLElement|null; className?:string; children:ReactNode };
 
-export default function AccessibleDialog({titleId,busy=false,onClose,returnFocusTo,children}:Props) {
+export default function AccessibleDialog({titleId,busy=false,onClose,returnFocusTo,className,children}:Props) {
   const dialog=useRef<HTMLDivElement>(null);
   const options=useRef({busy,onClose});
   useEffect(()=>{options.current={busy,onClose}},[busy,onClose]);
@@ -27,5 +27,5 @@ export default function AccessibleDialog({titleId,busy=false,onClose,returnFocus
     document.addEventListener('focusin',contain);
     return()=>{document.removeEventListener('keydown',key);document.removeEventListener('focusin',contain);siblings.forEach((x,i)=>{x.inert=previous[i]});returnFocusTo?.focus();};
   },[returnFocusTo]);
-  return createPortal(<div className="approval-modal" role="presentation"><div ref={dialog} tabIndex={-1} className="approval-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>{children}</div></div>,document.body);
+  return createPortal(<div className={className ?? 'approval-modal'} role="presentation"><div ref={dialog} tabIndex={-1} className={className ? undefined : 'approval-dialog'} role="dialog" aria-modal="true" aria-labelledby={titleId}>{children}</div></div>,document.body);
 }

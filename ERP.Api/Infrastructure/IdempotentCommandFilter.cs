@@ -17,7 +17,8 @@ public sealed class IdempotentCommandFilter(
     string commandScope,
     ErpKhoDbContext context,
     IRequestMetadata metadata,
-    IWarehouseAuthorizationService warehouseAuthorization) : IAsyncActionFilter
+    IWarehouseAuthorizationService warehouseAuthorization,
+    ERP.Application.Options.ExportReceiptOptions? exportOptions = null) : IAsyncActionFilter
 {
     public const string HeaderName = "Idempotency-Key";
     private const int MaxStoredResponseLength = 65_536;
@@ -51,6 +52,7 @@ public sealed class IdempotentCommandFilter(
         metadata.IdempotencyKeyHash = keyHash;
         metadata.RequestFingerprint = fingerprint;
         await using var transaction = await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
+        await AuthorizeExportAsync(actionContext, userId, keyHash, fingerprint);
         var record = new IdempotencyRecord
         {
             UserId = userId, CommandScope = commandScope, KeyHash = keyHash,
@@ -115,7 +117,8 @@ public sealed class IdempotentCommandFilter(
         }
 
         var statusCode = ResultStatus(executed.Result);
-        if (statusCode >= 500 || statusCode is 401 or 403 or 404)
+        if (statusCode >= 500 || statusCode is 401 or 403 or 404 ||
+            (commandScope.StartsWith("ExportReceipt.", StringComparison.Ordinal) && statusCode >= 400))
         {
             await transaction.RollbackAsync(CancellationToken.None);
             context.ChangeTracker.Clear();
@@ -141,6 +144,76 @@ public sealed class IdempotentCommandFilter(
     {
         foreach (var warehouseId in new[] { record.WarehouseId, record.SourceWarehouseId, record.DestinationWarehouseId }.Where(x => x.HasValue).Select(x => x!.Value).Distinct())
             await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, token);
+    }
+
+    private async Task AuthorizeExportAsync(ActionExecutingContext action, int actor, string keyHash, string fingerprint)
+    {
+        var exportReject = commandScope == "Approval.Reject" && action.ActionArguments.TryGetValue("documentType", out var documentType) && documentType as string == "ExportReceipt";
+        if (!commandScope.StartsWith("ExportReceipt.", StringComparison.Ordinal) && !exportReject) return;
+        var token = action.HttpContext.RequestAborted;
+        var permission = commandScope switch
+        {
+            "ExportReceipt.Create" => "export_receipt.create",
+            "ExportReceipt.CustomerChanged" => "export_receipt.update",
+            "ExportReceipt.Dispatch" => "export_receipt.dispatch",
+            "ExportReceipt.Cancel" => "export_receipt.cancel",
+            _ => exportReject ? "export_receipt.cancel" : "export_receipt.approve"
+        };
+        async Task Require(string code)
+        {
+            if (!await context.Users.AsNoTracking().AnyAsync(u => u.Id == actor && u.IsActive &&
+                (u.LockoutEnd == null || u.LockoutEnd <= DateTime.UtcNow) && u.Role.Permissions.Any(g => g.Permission.Code == code), token))
+                throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+        }
+        await Require(permission);
+        if (exportReject) await Require("approval.reject");
+        if (commandScope == "ExportReceipt.Create")
+        {
+            var dto = (ERP.Application.DTOs.CreateExportReceiptDto)action.ActionArguments["dto"]!;
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(dto.WarehouseId, token);
+            return;
+        }
+        var id = (int)action.ActionArguments["id"]!;
+        // Lock before reading the original claim: a concurrent same-key retry sees the committed winner.
+        if (context.Database.IsSqlServer())
+            await context.Database.SqlQuery<int>($"SELECT Id AS Value FROM ExportReceipts WITH (UPDLOCK,HOLDLOCK) WHERE Id={id}").ToListAsync(token);
+        var receipt = await context.ExportReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token)
+            ?? throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId, token);
+        if (commandScope.Contains("Approve", StringComparison.Ordinal) || exportReject)
+            ERP.Application.Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, actor);
+        if (commandScope == "ExportReceipt.Dispatch" && receipt.ApprovedBy == actor)
+            throw new ForbiddenException("Người duyệt phải khác người xác nhận xuất.");
+        var existing = await context.IdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == actor && x.CommandScope == commandScope && x.KeyHash == keyHash, token);
+        if (existing is not null && (existing.RequestFingerprint != fingerprint || existing.Status != IdempotencyStatus.Completed))
+            throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+        var immediate = commandScope == "ExportReceipt.ApproveAndDispatch";
+        if (commandScope == "ExportReceipt.Approve")
+        {
+            if (existing is null) immediate = (exportOptions ?? new()).GetDefaultMode() == ERP.Domain.Enums.ExportDispatchMode.DispatchOnApproval;
+            else
+            {
+                var original = await context.AuditLogs.AsNoTracking().SingleOrDefaultAsync(x => x.CorrelationId == existing.CorrelationId && x.EntityName == "ExportReceipt" && x.EntityId == id &&
+                    (x.Action == "ExportReceipt.ApprovedAndReserved" || x.Action == "ExportReceipt.ApprovedAndDispatched") && x.Result == "Success", token)
+                    ?? throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+                immediate = original.Action == "ExportReceipt.ApprovedAndDispatched";
+            }
+        }
+        if (immediate) await Require("export_receipt.dispatch");
+        if (existing is not null) return; // Reauthorize original semantics, then permit terminal-state replay.
+        var expectedState = commandScope == "ExportReceipt.Dispatch" ? ERP.Domain.Enums.ReceiptStatus.Approved : ERP.Domain.Enums.ReceiptStatus.Draft;
+        if (commandScope == "ExportReceipt.Cancel" ? receipt.Status is not ERP.Domain.Enums.ReceiptStatus.Draft and not ERP.Domain.Enums.ReceiptStatus.Approved : receipt.Status != expectedState)
+            throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+        if (!exportReject)
+        {
+            var dto = action.ActionArguments.Values.FirstOrDefault(x => x is ERP.Application.DTOs.ExportReceiptCommandDto or ERP.Application.DTOs.SetReceiptPartnerDto);
+            var value = dto?.GetType().GetProperty("RowVersion")?.GetValue(dto) as string;
+            byte[] bytes;
+            try { bytes = Convert.FromBase64String(value ?? ""); }
+            catch (FormatException) { throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại."); }
+            if (bytes.Length != 8 || !bytes.SequenceEqual(receipt.RowVersion))
+                throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+        }
     }
 
     private (int? Warehouse, int? Source, int? Destination) TrackedWarehouses(IDictionary<string, object?> arguments)

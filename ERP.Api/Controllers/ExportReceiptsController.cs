@@ -7,7 +7,7 @@ using ERP.Api.Infrastructure;
 
 namespace ERP.Api.Controllers
 {
-    [Authorize(Roles = AppRoles.AllRoles)]
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class ExportReceiptsController : ControllerBase
@@ -28,6 +28,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet]
+        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> GetAll()
         {
             var receipts = await _exportReceiptService.GetAllAsync();
@@ -35,6 +36,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("{id}")]
+        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> GetById(int id)
         {
             var receipt = await _exportReceiptService.GetByIdAsync(id);
@@ -43,7 +45,7 @@ namespace ERP.Api.Controllers
 
         [HttpPost]
         [IdempotentCommand("ExportReceipt.Create")]
-        [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+        [PermissionAuthorize(AppPermissions.ExportReceiptCreate)]
         public async Task<IActionResult> Create([FromBody] ERP.Application.DTOs.CreateExportReceiptDto dto)
         {
             if (!TryGetUserId(out var userId))
@@ -64,64 +66,65 @@ namespace ERP.Api.Controllers
 
         [HttpPost("{id}/cancel")]
         [IdempotentCommand("ExportReceipt.Cancel")]
-        [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
-        public async Task<IActionResult> Cancel(int id)
+        [PermissionAuthorize(AppPermissions.ExportReceiptCancel)]
+        public async Task<IActionResult> Cancel(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId))
             {
                 return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
             }
 
-            await _exportReceiptService.CancelAsync(id, userId);
+            await _exportReceiptService.CancelAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Hủy phiếu xuất thành công" });
         }
 
         [HttpPost("{id}/approve-and-reserve")]
         [IdempotentCommand("ExportReceipt.ApproveAndReserve")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
-        public async Task<IActionResult> ApproveAndReserve(int id)
+        [PermissionAuthorize(AppPermissions.ExportReceiptApprove)]
+        public async Task<IActionResult> ApproveAndReserve(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized();
-            await _exportReceiptService.ApproveAndReserveAsync(id, userId);
+            await _exportReceiptService.ApproveAndReserveAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Đã duyệt và giữ hàng." });
         }
 
         [HttpPost("{id}/approve-and-dispatch")]
         [IdempotentCommand("ExportReceipt.ApproveAndDispatch")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
-        public async Task<IActionResult> ApproveAndDispatch(int id)
+        [PermissionAuthorize(AppPermissions.ExportReceiptApprove), PermissionAuthorize(AppPermissions.ExportReceiptDispatch)]
+        public async Task<IActionResult> ApproveAndDispatch(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized();
-            await _exportReceiptService.ApproveAndDispatchAsync(id, userId);
+            await _exportReceiptService.ApproveAndDispatchAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Đã duyệt và xuất kho." });
         }
 
         [HttpPost("{id}/dispatch")]
         [IdempotentCommand("ExportReceipt.Dispatch")]
-        [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
-        public async Task<IActionResult> Dispatch(int id)
+        [PermissionAuthorize(AppPermissions.ExportReceiptDispatch)]
+        public async Task<IActionResult> Dispatch(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId)) return Unauthorized();
-            await _exportReceiptService.DispatchAsync(id, userId);
+            await _exportReceiptService.DispatchAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Đã xác nhận xuất kho." });
         }
 
         [HttpPost("{id}/approve")]
         [IdempotentCommand("ExportReceipt.Approve")]
-        [Authorize(Policy = ApprovalPolicies.Checker)]
-        public async Task<IActionResult> Approve(int id)
+        [PermissionAuthorize(AppPermissions.ExportReceiptApprove)]
+        public async Task<IActionResult> Approve(int id, [FromBody] ERP.Application.DTOs.ExportReceiptCommandDto? command = null)
         {
             if (!TryGetUserId(out var userId))
             {
                 return Unauthorized();
             }
 
-            await _exportReceiptService.ApproveAsync(id, userId);
+            await _exportReceiptService.ApproveAsync(id, userId, command?.RowVersion);
             return Ok(new { message = "Duyệt phiếu xuất thành công" });
         }
 
-        [HttpPut("{id:int}/customer"), Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+        [HttpPut("{id:int}/customer"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate)]
+        [IdempotentCommand("ExportReceipt.CustomerChanged")]
         public async Task<IActionResult> SetCustomer(int id, [FromBody] ERP.Application.DTOs.SetReceiptPartnerDto dto, [FromServices] IBusinessPartnerService partners, CancellationToken ct)
-        { await partners.SetExportCustomerAsync(id, dto.PartnerId, ct); return NoContent(); }
+        { await partners.SetExportCustomerAsync(id, dto.PartnerId, ct, dto.RowVersion); return NoContent(); }
     }
 }

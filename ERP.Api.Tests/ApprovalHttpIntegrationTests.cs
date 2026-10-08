@@ -238,7 +238,7 @@ public sealed class ApprovalHttpIntegrationTests
         Reservations = await db.StockReservations.AsNoTracking().OrderBy(x => x.Id).ToListAsync(),
         Ledger = await db.InventoryTransactions.AsNoTracking().OrderBy(x => x.Id).ToListAsync()
     });
-    private static WebApplicationFactory<Program> Factory(string connection, SaveChangesInterceptor? interceptor = null) => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+    internal static WebApplicationFactory<Program> Factory(string connection, SaveChangesInterceptor? interceptor = null) => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(new Dictionary<string, string?> {

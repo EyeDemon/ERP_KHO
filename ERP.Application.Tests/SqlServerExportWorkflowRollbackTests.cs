@@ -77,10 +77,8 @@ public sealed class SqlServerExportWorkflowRollbackTests
 
     private static async Task<bool> HasDispatchColumnsAsync(ErpKhoDbContext context)
     {
-        await context.Database.OpenConnectionAsync();
-        await using var command = context.Database.GetDbConnection().CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('ExportReceipts') AND name IN ('DispatchMode','DispatchedAt','DispatchedBy')";
-        return Convert.ToInt32(await command.ExecuteScalarAsync()) == 3;
+        var count = await context.Database.SqlQuery<int>($"SELECT COUNT(*) AS Value FROM sys.columns WHERE object_id = OBJECT_ID('ExportReceipts') AND name IN ('DispatchMode','DispatchedAt','DispatchedBy')").SingleAsync();
+        return count == 3;
     }
 
 }

@@ -17,4 +17,9 @@ describe('approval workflow presentation', () => {
     expect(approvalDisplayAction('ImportReceipt.Approved')).toBe('Đã duyệt');
     expect(approvalDisplayAction('Unknown.TechnicalAction')).toBe('Đã cập nhật chứng từ');
   });
+  it('presents export reservation, dispatch and release as distinct Vietnamese actions', () => {
+    expect(approvalDisplayAction('ExportReceipt.ApprovedAndReserved')).toBe('Đã duyệt và giữ hàng');
+    expect(approvalDisplayAction('ExportReceipt.Dispatched')).toBe('Đã xuất kho');
+    expect(approvalDisplayAction('ExportReceipt.CancelledAndReleased')).toBe('Đã hủy và giải phóng hàng giữ');
+  });
 });

@@ -5,10 +5,10 @@ namespace ERP.Application.Options;
 public sealed class ExportReceiptOptions
 {
     public bool WriteEnabled { get; set; } = true;
-    public bool AllowPerReceiptDispatchMode { get; set; } = true;
+    public bool AllowPerReceiptDispatchMode { get; set; } = false;
     public string DefaultDispatchMode { get; set; } = nameof(ExportDispatchMode.RequireSeparateDispatch);
     public bool AllowWarehouseStaffDirectDispatch { get; set; }
-    public bool RequireDifferentDispatcher { get; set; }
+    public bool RequireDifferentDispatcher { get; set; } = true;
 
     public ExportDispatchMode GetDefaultMode() =>
         Enum.TryParse<ExportDispatchMode>(DefaultDispatchMode, true, out var mode)
