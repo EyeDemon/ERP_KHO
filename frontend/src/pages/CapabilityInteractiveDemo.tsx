@@ -13,6 +13,15 @@ interface CapabilityInteractiveDemoProps {
   recordCount: number;
 }
 
+const modeLabel = (mode: string) => ({
+  workbench: 'Bàn làm việc',
+  wizard: 'Trình hướng dẫn',
+  control: 'Điều khiển',
+  scan: 'Luồng quét',
+  trace: 'Truy vết',
+  configuration: 'Cấu hình',
+}[mode] ?? mode);
+
 const CapabilityInteractiveDemo = ({
   capability,
   moduleName,
@@ -57,7 +66,7 @@ const CapabilityInteractiveDemo = ({
     setStageIndex(0);
     setExceptionOpen(false);
     setQuantity(definition.quantity?.initial ?? 0);
-    setActivity(['Demo reset về trạng thái đầu.']);
+    setActivity(['Đã đặt lại mô phỏng về trạng thái đầu.']);
   };
 
   const raiseException = () => {
@@ -74,21 +83,21 @@ const CapabilityInteractiveDemo = ({
     <section className="capability-panel interactive-demo" data-testid="interactive-capability-demo">
       <div className="interactive-demo-header">
         <div>
-          <span className="interactive-demo-kicker">INTERACTIVE BLUEPRINT • MOCK ONLY</span>
+          <span className="interactive-demo-kicker">BẢN THIẾT KẾ TƯƠNG TÁC • CHỈ MÔ PHỎNG</span>
           <h2>{definition.title}</h2>
           <p>{definition.subtitle}</p>
         </div>
         <div className="interactive-demo-meta">
-          <span>{definition.mode}</span>
+          <span>{modeLabel(definition.mode)}</span>
           <strong>{stage}</strong>
         </div>
       </div>
 
       {linkedToSharedScenario && (
         <div className="interactive-shared-scenario" data-testid="shared-scenario-banner">
-          <span>ACTIVE SHARED SCENARIO</span>
+          <span>KỊCH BẢN DÙNG CHUNG ĐANG HOẠT ĐỘNG</span>
           <strong>{mockDemo.activeScenarioId} • {mockDemo.activeScenarioTitle}</strong>
-          <small>Step {mockDemo.activeScenarioStep} • trạng thái này dùng chung với Golden Scenario Lab và Mock Data Lab.</small>
+          <small>Bước {mockDemo.activeScenarioStep} • trạng thái này dùng chung với Phòng kịch bản chuẩn và Phòng dữ liệu mô phỏng.</small>
         </div>
       )}
 
@@ -119,10 +128,10 @@ const CapabilityInteractiveDemo = ({
       <div className="interactive-demo-grid">
         <div className="interactive-demo-workbench">
           <div className="interactive-demo-context">
-            <div><span>Reference</span><strong>{sampleReference ?? 'MOCK-' + capability.id}</strong></div>
-            <div><span>Warehouse</span><strong>{sampleWarehouse ?? 'WH-HCM-01'}</strong></div>
-            <div><span>Mock records</span><strong>{recordCount}</strong></div>
-            <div><span>Production effect</span><strong>Không có</strong></div>
+            <div><span>Tham chiếu</span><strong>{sampleReference ?? 'MOCK-' + capability.id}</strong></div>
+            <div><span>Kho</span><strong>{sampleWarehouse ?? 'WH-HCM-01'}</strong></div>
+            <div><span>Bản ghi mô phỏng</span><strong>{recordCount}</strong></div>
+            <div><span>Ảnh hưởng hệ thống thật</span><strong>Không có</strong></div>
           </div>
 
           <div className="interactive-demo-fields">
@@ -150,7 +159,7 @@ const CapabilityInteractiveDemo = ({
                 <b>=</b>
                 <strong>{baseQuantity?.toLocaleString('vi-VN')} {definition.quantity.baseUom}</strong>
               </div>
-              <small>Operation UOM → Base UOM được hiển thị trước khi xác nhận.</small>
+              <small>Đơn vị thao tác → Đơn vị cơ sở được hiển thị trước khi xác nhận.</small>
             </div>
           )}
 
@@ -173,19 +182,19 @@ const CapabilityInteractiveDemo = ({
               {finalStage ? 'Đã tới bước cuối' : 'Thực hiện bước tiếp theo'}
             </button>
             <button type="button" disabled={exceptionOpen} onClick={raiseException}>Mô phỏng ngoại lệ</button>
-            <button type="button" onClick={reset}>Reset demo</button>
+            <button type="button" onClick={reset}>Đặt lại mô phỏng</button>
           </div>
         </div>
 
         <aside className="interactive-command-panel">
-          <span className="interactive-demo-kicker">COMMANDS / ACTIONS</span>
-          <h3>Action mô phỏng</h3>
+          <span className="interactive-demo-kicker">LỆNH / HÀNH ĐỘNG</span>
+          <h3>Hành động mô phỏng</h3>
           <div className="interactive-command-list">
             {definition.commands.map((command) => (
               <button
                 type="button"
                 key={command}
-                onClick={() => pushActivity('Command mock → ' + command)}
+                onClick={() => pushActivity('Lệnh mô phỏng → ' + command)}
               >
                 {command}
               </button>
@@ -193,16 +202,16 @@ const CapabilityInteractiveDemo = ({
           </div>
 
           <div className="interactive-activity">
-            <strong>Activity log</strong>
+            <strong>Nhật ký hoạt động</strong>
             {activity.length ? (
               <ul>{activity.map((item, index) => <li key={item + index}>{item}</li>)}</ul>
             ) : (
-              <p>Chưa có thao tác trong phiên demo.</p>
+              <p>Chưa có thao tác trong phiên mô phỏng.</p>
             )}
           </div>
 
           <div className="interactive-demo-note">
-            Đây là simulator client-side phục vụ Blueprint. Không gọi API thật, không ghi database và không thay đổi inventory production.
+            Đây là trình mô phỏng phía trình duyệt phục vụ bản thiết kế hệ thống. Không gọi API thật, không ghi cơ sở dữ liệu và không thay đổi tồn kho trên hệ thống thật.
           </div>
         </aside>
       </div>
