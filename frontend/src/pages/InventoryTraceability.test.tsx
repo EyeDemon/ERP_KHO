@@ -77,7 +77,7 @@ describe('InventoryTraceability',()=>{
       '/api/inventory/traceability?referenceType=InventoryReversal&referenceId=84&limit=200'
     ));
     expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');
-    expect(await view.findByText('#84')).toBeTruthy();
+    expect(await view.findByText('#84 • đã đảo')).toBeTruthy();
     resolveFirst({data:result});
     await waitFor(()=>expect(view.queryByText('#41 • đã đảo')).toBeNull());
     expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');

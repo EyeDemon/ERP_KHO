@@ -48,7 +48,7 @@ const inventoryStatusLabel=(value:string)=>({
   blocked:'Bị chặn',
   expired:'Hết hạn',
   recallblocked:'Khóa thu hồi',
-}[value.replace(/[_\\s-]/g,'').toLowerCase()]??value);
+}[value.replace(/[_\s-]/g,'').toLowerCase()]??value);
 
 const tone=(x:Event):'neutral'|'success'|'warning'|'danger'=>
   x.transactionType==='Reversal'?'warning':x.isReversed?'neutral':'success';
