@@ -286,8 +286,8 @@ describe('CapabilityPreview', () => {
 
     fireEvent.click(view.getByText('Chạy GS01 dùng chung'));
     expect(view.getByTestId('shared-scenario-banner')).toBeTruthy();
-    expect(view.getByText(/GS-01 • Inbound Receipt → Post → Putaway/)).toBeTruthy();
-    expect(view.getByText(/Step 1 • trạng thái này dùng chung/)).toBeTruthy();
+    expect(view.getByText(/GS-01 • Nhận hàng nhập → Ghi sổ → Cất hàng/)).toBeTruthy();
+    expect(view.getByText(/Bước 1 • trạng thái này dùng chung/)).toBeTruthy();
   });
 
   it('renders canonical governance metadata and specialized review-required screen content', () => {
@@ -296,7 +296,7 @@ describe('CapabilityPreview', () => {
     expect(picking.getByText('Ma trận màn hình • Đã đóng truy vết')).toBeTruthy();
     expect(picking.getByText('Quản trị & mức hoàn thiện chức năng')).toBeTruthy();
     expect(picking.getAllByText('Đợt 2').length).toBeGreaterThan(0);
-    expect(picking.getByText(/Lấy hàng không được làm giảm OnHand toàn kho/)).toBeTruthy();
+    expect(picking.getByText(/Lấy hàng không được làm giảm Tồn thực tế toàn kho/)).toBeTruthy();
     expect(picking.getByText(/Đã đóng truy vết — Ma trận màn hình 229/)).toBeTruthy();
   });
 
@@ -304,12 +304,12 @@ describe('CapabilityPreview', () => {
     const view = renderPreview('outbound', 'OUT-08');
     expect(view.getByTestId('interactive-capability-demo')).toBeTruthy();
     fireEvent.click(view.getByText('Thực hiện bước tiếp theo'));
-    expect(view.getByText('State → VALIDATING')).toBeTruthy();
+    expect(view.getByText('Trạng thái → VALIDATING')).toBeTruthy();
 
     fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
     expect(view.getByText('DISPATCH_INVENTORY_CONFLICT')).toBeTruthy();
     fireEvent.click(view.getByText('Giải quyết ngoại lệ'));
-    expect(view.getByText(/Exception resolved/)).toBeTruthy();
+    expect(view.getByText(/Đã xử lý ngoại lệ/)).toBeTruthy();
   });
 
   it('shows domain-specific warehouse lifecycle instead of a spec-only card', () => {
@@ -323,14 +323,14 @@ describe('CapabilityPreview', () => {
 
   it('keeps quantity conversion interactive for core execution demos', () => {
     const view = renderPreview('inventory-control', 'INV-08');
-    const quantity = view.getByLabelText('Move quantity') as HTMLInputElement;
+    const quantity = view.getByLabelText('Số lượng di chuyển') as HTMLInputElement;
     fireEvent.change(quantity, { target: { value: '7' } });
     expect(view.getByText('84 Cái')).toBeTruthy();
   });
 
   it('renders a dedicated enterprise SSO simulator for the remaining planned capability tranche', () => {
     const view = renderPreview('administration', 'AD-08');
-    expect(view.getAllByText('SSO / Identity Federation').length).toBeGreaterThan(0);
+    expect(view.getAllByText('SSO / Liên kết danh tính').length).toBeGreaterThan(0);
     expect(view.getByText('TEST_SSO')).toBeTruthy();
     fireEvent.click(view.getByText('Mô phỏng ngoại lệ'));
     expect(view.getByText('SSO_MAPPING_AMBIGUOUS')).toBeTruthy();
