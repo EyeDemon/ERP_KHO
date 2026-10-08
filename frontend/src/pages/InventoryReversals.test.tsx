@@ -96,6 +96,30 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     expect(vi.mocked(apiClient.get).mock.calls.filter(([url])=>String(url).includes('reversal-candidates'))).toHaveLength(2);
   });
 
+  it('keeps the correction form open when downstream stock prevents reversal',async()=>{
+    permissionState.granted.add('inventory_reversal.create');
+    vi.mocked(apiClient.post).mockRejectedValue({
+      response:{status:409,data:{
+        code:'INV_REVERSAL_INSUFFICIENT_STOCK',
+        message:'Tồn khả dụng tại vị trí đích không đủ để đảo giao dịch.'
+      }}
+    });
+
+    const view=render(<InventoryReversals/>);
+    await view.findByText('Di chuyển vị trí');
+    fireEvent.click(view.getAllByText('Đảo giao dịch')[1]);
+    fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
+      target:{value:'Kiểm tra hậu quả dịch chuyển hàng'}
+    });
+    fireEvent.click(view.getByText('Xác nhận đảo giao dịch'));
+
+    expect(await view.findByRole('alert')).toHaveProperty('textContent',
+      'Tồn khả dụng tại vị trí đích không đủ để đảo giao dịch.');
+    expect(view.getByText('Xác nhận đảo giao dịch')).toBeTruthy();
+    expect(view.queryByText('Đã ghi nhận giao dịch đảo thành công.')).toBeNull();
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+  });
+
   it('filters by an authorized warehouse using the real query parameter',async()=>{
     const view=render(<InventoryReversals/>);
     await view.findByText('Di chuyển vị trí');
