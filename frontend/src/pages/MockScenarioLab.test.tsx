@@ -13,7 +13,7 @@ describe('MockScenarioLab', () => {
   it('renders canonical inbound scenario with steps and assertions', () => {
     const view = renderLab();
     expect(view.getAllByText('GS-01').length).toBeGreaterThan(0);
-    expect(view.getByText(/22 scenario bao phủ core inventory/)).toBeTruthy();
+    expect(view.getByText(/22 kịch bản bao phủ tồn kho cốt lõi/)).toBeTruthy();
     expect(view.getAllByText('Nhận hàng nhập → Ghi sổ → Cất hàng').length).toBeGreaterThan(0);
     expect(view.getByText('Ghi sổ phiếu nhập')).toBeTruthy();
     expect(view.getByText('Sổ cái phiếu nhập chỉ ghi đúng một lần')).toBeTruthy();
@@ -27,7 +27,7 @@ describe('MockScenarioLab', () => {
     fireEvent.click(view.getByText('Chạy bước tiếp'));
     expect(log.textContent).toContain('Nhận 100');
     expect(log.textContent).toContain('Không tăng Tồn thực tế toàn kho');
-    fireEvent.click(view.getByText('Reset'));
+    fireEvent.click(view.getByText('Đặt lại'));
     expect(log.textContent).toContain('Chưa chạy bước nào');
   });
 
@@ -35,7 +35,7 @@ describe('MockScenarioLab', () => {
     const view = renderLab();
     fireEvent.click(view.getByText('Chạy bước tiếp'));
     expect(view.getByText(/PHIÊN KỊCH BẢN DÙNG CHUNG/)).toBeTruthy();
-    expect(view.getByText(/5 capability liên quan/)).toBeTruthy();
+    expect(view.getByText(/5 chức năng liên quan/)).toBeTruthy();
     expect(view.getByRole('link', { name: 'IN-07' }).getAttribute('href')).toBe('/system-blueprint/inbound/IN-07');
     expect(view.getAllByText(/Tồn thực tế 0 • Khả dụng 0 • Đang vận chuyển 0/).length).toBeGreaterThan(0);
 
