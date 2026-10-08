@@ -853,6 +853,91 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
     [SqlServerFact]
+    public async Task LegacyReferenceOnlyReversal_IsReportedAndCannotBeExecutedTwice()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            int originalId;
+            await using (var moveDb = CreateContext())
+                originalId = (await CreateMovementService(moveDb, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 2,
+                    Reason = "legacy reversal claim fixture"
+                })).TransactionId;
+
+            int markerId;
+            await using (var seed = CreateContext())
+            {
+                var marker = new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.DestinationLocationId,
+                    LotId = fixture.LotId,
+                    CreatedBy = fixture.UserId,
+                    InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Reversal,
+                    Quantity = 2,
+                    ReferenceType = "InventoryReversal",
+                    ReferenceId = originalId,
+                    ReversalOfTransactionId = null,
+                    TransactionDate = DateTime.UtcNow
+                };
+                seed.InventoryTransactions.Add(marker);
+                await seed.SaveChangesAsync();
+                markerId = marker.Id;
+            }
+
+            await using (var queryDb = CreateContext())
+            {
+                var service = CreateReversalService(queryDb, fixture.UserId);
+                var completed = await service.GetCandidatesAsync(
+                    fixture.WarehouseId, 1, 20, originalId, true);
+                completed.Items.Should().ContainSingle()
+                    .Which.IsReversed.Should().BeTrue();
+                (await service.GetCandidatesAsync(
+                    fixture.WarehouseId, 1, 20, originalId, false))
+                    .TotalRecords.Should().Be(0);
+
+                var trace = await new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                    queryDb, new WarehouseAuthorizationService(queryDb, new CurrentUser(fixture.UserId)))
+                    .TraceAsync(productId: fixture.ProductId, limit: 20);
+                trace.Events.Single(x => x.TransactionId == originalId)
+                    .ReversalTransactionId.Should().Be(markerId);
+                trace.Events.Single(x => x.TransactionId == originalId)
+                    .IsReversed.Should().BeTrue();
+            }
+
+            await using (var rejected = CreateContext())
+            {
+                var action = () => CreateReversalService(rejected, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = originalId,
+                    Reason = "must reject legacy duplicate"
+                });
+                var error = await action.Should().ThrowAsync<BusinessRuleException>();
+                error.Which.Data["ErrorCode"].Should().Be("INV_ALREADY_REVERSED");
+            }
+
+            await using var verify = CreateContext();
+            (await verify.InventoryTransactions.CountAsync(x =>
+                x.TransactionType == TransactionType.Reversal &&
+                x.ReferenceType == "InventoryReversal" &&
+                x.ReferenceId == originalId)).Should().Be(1);
+            var stocks = await verify.InventoryStocks.AsNoTracking()
+                .Where(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId)
+                .ToListAsync();
+            stocks.Sum(x => x.Quantity).Should().Be(10);
+            stocks.Single(x => x.LocationId == fixture.DestinationLocationId)
+                .Quantity.Should().Be(2);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task Traceability_UsesNewestSqlEventsAndIncludesOlderOriginalInReversalChain()
     {
         var fixture = await CreateFixtureAsync();

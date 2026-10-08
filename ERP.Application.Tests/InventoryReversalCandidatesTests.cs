@@ -49,8 +49,23 @@ public sealed class InventoryReversalCandidatesTests
         });
         context.InventoryTransactions.Add(new InventoryTransaction
         {
+            Id = 202, ProductId = 1, WarehouseId = 1, CreatedBy = 1,
+            TransactionType = TransactionType.Reversal,
+            ReversalOfTransactionId = null,
+            ReferenceId = 2, ReferenceType = "InventoryReversal", Quantity = 1
+        });
+        context.InventoryTransactions.Add(new InventoryTransaction
+        {
             Id = 300, ProductId = 1, WarehouseId = 2, CreatedBy = 1,
             TransactionType = TransactionType.Move, Quantity = 1
+        });
+        // A malformed cross-warehouse legacy reference must not mark W1/ID 3 as reversed.
+        context.InventoryTransactions.Add(new InventoryTransaction
+        {
+            Id = 301, ProductId = 1, WarehouseId = 2, CreatedBy = 1,
+            TransactionType = TransactionType.Reversal,
+            ReversalOfTransactionId = null,
+            ReferenceId = 3, ReferenceType = "InventoryReversal", Quantity = 1
         });
         await context.SaveChangesAsync();
 
@@ -74,10 +89,14 @@ public sealed class InventoryReversalCandidatesTests
         last.Items[0].Id.Should().Be(1);
         last.Items[0].IsReversed.Should().BeTrue();
         var onlyReversed = await service.GetCandidatesAsync(null, 1, 20, null, true);
-        onlyReversed.TotalRecords.Should().Be(1);
-        onlyReversed.Items.Should().ContainSingle().Which.Id.Should().Be(1);
+        onlyReversed.TotalRecords.Should().Be(2);
+        onlyReversed.Items.Select(x => x.Id).Should().BeEquivalentTo([1, 2]);
+        var legacy = await service.GetCandidatesAsync(null, 1, 20, 2);
+        legacy.Items.Should().ContainSingle().Which.IsReversed.Should().BeTrue();
+        var crossWarehouse = await service.GetCandidatesAsync(null, 1, 20, 3);
+        crossWarehouse.Items.Should().ContainSingle().Which.IsReversed.Should().BeFalse();
         var notReversed = await service.GetCandidatesAsync(null, 1, 20, null, false);
-        notReversed.TotalRecords.Should().Be(120);
+        notReversed.TotalRecords.Should().Be(119);
         notReversed.Items.Should().HaveCount(20);
         notReversed.Items.Should().OnlyContain(x => !x.IsReversed && x.WarehouseId == 1);
         var noLeak = await service.GetCandidatesAsync(null, 1, 20, 300, true);

@@ -69,9 +69,19 @@ public sealed class InventoryReversalService(
         {
             candidates = isReversed.Value
                 ? candidates.Where(x => context.InventoryTransactions.Any(marker =>
-                    marker.ReversalOfTransactionId == x.Id))
+                    marker.ReversalOfTransactionId == x.Id ||
+                    (marker.TransactionType == TransactionType.Reversal &&
+                     marker.ReversalOfTransactionId == null &&
+                     marker.WarehouseId == x.WarehouseId &&
+                     marker.ReferenceType == "InventoryReversal" &&
+                     marker.ReferenceId == x.Id)))
                 : candidates.Where(x => !context.InventoryTransactions.Any(marker =>
-                    marker.ReversalOfTransactionId == x.Id));
+                    marker.ReversalOfTransactionId == x.Id ||
+                    (marker.TransactionType == TransactionType.Reversal &&
+                     marker.ReversalOfTransactionId == null &&
+                     marker.WarehouseId == x.WarehouseId &&
+                     marker.ReferenceType == "InventoryReversal" &&
+                     marker.ReferenceId == x.Id)));
         }
 
         var count = await candidates.CountAsync(cancellationToken);
@@ -94,7 +104,13 @@ public sealed class InventoryReversalService(
                 Quantity = x.Quantity,
                 TransactionDate = x.TransactionDate,
                 // Database-authoritative: never infer reversal state from a limited frontend page.
-                IsReversed = context.InventoryTransactions.Any(marker => marker.ReversalOfTransactionId == x.Id)
+                IsReversed = context.InventoryTransactions.Any(marker =>
+                    marker.ReversalOfTransactionId == x.Id ||
+                    (marker.TransactionType == TransactionType.Reversal &&
+                     marker.ReversalOfTransactionId == null &&
+                     marker.WarehouseId == x.WarehouseId &&
+                     marker.ReferenceType == "InventoryReversal" &&
+                     marker.ReferenceId == x.Id))
             }).ToListAsync(cancellationToken);
 
         return new PagedResult<InventoryReversalCandidateDto>
@@ -137,8 +153,16 @@ public sealed class InventoryReversalService(
 
             // This check occurs only after the original row lock is acquired.
             // A second concurrent request sees the first transaction's committed marker.
+            // Older immutable markers may carry only the InventoryReversal reference.
+            // Treat them as completed claims as well; otherwise a legacy reversal
+            // could be executed twice despite the modern filtered unique index.
             if (await context.InventoryTransactions.AsNoTracking().AnyAsync(
-                    x => x.ReversalOfTransactionId == original.Id, cancellationToken))
+                    x => x.ReversalOfTransactionId == original.Id ||
+                         (x.TransactionType == TransactionType.Reversal &&
+                          x.ReversalOfTransactionId == null &&
+                          x.WarehouseId == original.WarehouseId &&
+                          x.ReferenceType == "InventoryReversal" &&
+                          x.ReferenceId == original.Id), cancellationToken))
                 throw Conflict("INV_ALREADY_REVERSED", "Giao dịch tồn kho đã được đảo trước đó.");
 
             if (original.TransactionType is not (TransactionType.Move or TransactionType.StatusChange))
