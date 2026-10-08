@@ -44,6 +44,9 @@ public sealed class InventoryReversalService(
         var permittedWarehouseIds = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
         var safePage = Math.Max(1, page);
         var safeSize = pageSize is >= 1 and <= 100 ? pageSize : 20;
+        var offset = (long)(safePage - 1) * safeSize;
+        if (offset > int.MaxValue)
+            throw new BusinessRuleException("Số trang vượt quá phạm vi tra cứu cho phép.");
 
         var candidates = context.InventoryTransactions.AsNoTracking()
             .Where(x => permittedWarehouseIds.Contains(x.WarehouseId)
@@ -54,7 +57,7 @@ public sealed class InventoryReversalService(
 
         var count = await candidates.CountAsync(cancellationToken);
         var items = await candidates.OrderByDescending(x => x.TransactionDate).ThenByDescending(x => x.Id)
-            .Skip((safePage - 1) * safeSize).Take(safeSize)
+            .Skip((int)offset).Take(safeSize)
             .Select(x => new InventoryReversalCandidateDto
             {
                 Id = x.Id,
@@ -89,6 +92,8 @@ public sealed class InventoryReversalService(
             throw new BusinessRuleException("ID giao dịch gốc không hợp lệ.");
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new BusinessRuleException("Lý do đảo giao dịch là bắt buộc.");
+        if (request.Reason.Trim().Length > 400)
+            throw new BusinessRuleException("Lý do đảo giao dịch không được quá 400 ký tự.");
 
         var own = context.Database.CurrentTransaction is null;
         await using var tx = own

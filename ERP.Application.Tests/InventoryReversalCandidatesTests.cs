@@ -3,6 +3,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Services;
+using ERP.Domain.Exceptions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -73,6 +74,28 @@ public sealed class InventoryReversalCandidatesTests
         last.Items[0].Id.Should().Be(1);
         last.Items[0].IsReversed.Should().BeTrue();
         (await service.GetCandidatesAsync(null, 1, 1000)).PageSize.Should().Be(20);
+        var outOfRange = () => service.GetCandidatesAsync(null, int.MaxValue, 100);
+        await outOfRange.Should().ThrowAsync<BusinessRuleException>()
+            .WithMessage("*Số trang*");
+    }
+
+    [Fact]
+    public async Task ReversalReason_OverLimitIsRejectedBeforeDatabaseMutation()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var context = new ErpKhoDbContext(options);
+        var service = new InventoryReversalService(context, Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>(), Mock.Of<IInventoryMovementService>(),
+            Mock.Of<IInventoryStatusService>());
+
+        var tooLong = () => service.ReverseAsync(new()
+        {
+            OriginalTransactionId = 1,
+            Reason = new string('x', 401)
+        });
+        await tooLong.Should().ThrowAsync<BusinessRuleException>().WithMessage("*400 ký tự*");
+        (await context.InventoryTransactions.CountAsync()).Should().Be(0);
     }
 
     [Fact]

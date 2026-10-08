@@ -158,7 +158,7 @@ export default function InventoryReversals(){
     {selected&&canReverse&&<UiCard title={'Đảo giao dịch #'+selected.id}>
       <form onSubmit={submit} className="ui-form-grid">
         <p className="ui-muted-text">{transactionTypeLabel(selected.transactionType)} • {selected.productCode??selected.productId} • số lượng {selected.quantity}. Thao tác hiệu chỉnh vẫn kiểm tra lại khóa tồn, lượng đã giữ, sức chứa và chính sách trạng thái trong cùng giao dịch Serializable.</p>
-        <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do / bằng chứng bắt buộc" required/>
+        <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do / bằng chứng bắt buộc (tối đa 400 ký tự)" maxLength={400} required/>
         <div className="ui-inline-actions">
           <button type="submit" disabled={busy||!reason.trim()}>Xác nhận đảo giao dịch</button>
           <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
