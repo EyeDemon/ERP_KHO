@@ -944,6 +944,7 @@ public sealed class SqlServerInventoryLockMoveTests
         try
         {
             const int count = 501;
+            int targetLocationId;
             await using (var seed = CreateContext())
             {
                 var locations = Enumerable.Range(0, count)
@@ -956,12 +957,15 @@ public sealed class SqlServerInventoryLockMoveTests
                 seed.WarehouseLocations.AddRange(locations);
                 await seed.SaveChangesAsync();
 
-                var buckets = locations.Select(location => new InventoryStock
+                targetLocationId = locations[^1].Id;
+                var buckets = locations.Select((location, index) => new InventoryStock
                 {
                     ProductId = fixture.ProductId,
                     WarehouseId = fixture.WarehouseId,
                     LocationId = location.Id,
-                    LotId = fixture.LotId,
+                    // 500 preceding unrelated location buckets share the product
+                    // but not the traceable lot/serial identity.
+                    LotId = index == count - 1 ? fixture.LotId : null,
                     Status = InventoryStatus.Available,
                     Quantity = 1
                 }).ToList();
@@ -970,7 +974,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 {
                     ProductId = fixture.ProductId,
                     WarehouseId = fixture.WarehouseId,
-                    LocationId = locations[^1].Id,
+                    LocationId = targetLocationId,
                     LotId = fixture.LotId,
                     InventoryStatus = InventoryStatus.Available,
                     TransactionType = TransactionType.Move,
@@ -990,10 +994,11 @@ public sealed class SqlServerInventoryLockMoveTests
                 referenceType: "ReferenceBucketLimit", referenceId: 319, limit: 20);
 
             trace.Events.Should().ContainSingle();
-            // All buckets with the referenced identity remain visible only when
-            // identity selection happens in SQL before Take(500). In particular,
-            // the newest high-ID location cannot be omitted from the query.
-            trace.CurrentBuckets.Should().HaveCount(500);
+            // The target location sorts after >500 irrelevant product buckets.
+            // Product-only Take(500) followed by in-memory lot filtering
+            // silently drops it. Identity filtering inside SQL must retain it.
+            trace.CurrentBuckets.Should().ContainSingle(x =>
+                x.LocationId == targetLocationId && x.LotId == fixture.LotId);
             trace.CurrentBuckets.Should().OnlyContain(x =>
                 x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId &&
                 x.LotId == fixture.LotId);
