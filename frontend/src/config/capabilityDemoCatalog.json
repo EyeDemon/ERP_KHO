@@ -2371,31 +2371,31 @@
     "exceptionDetail": "Task đã đổi assignee/state ở thiết bị khác; cần reload canonical state."
   },
   "OV-07": {
-    "title": "Enterprise / Global Search",
-    "subtitle": "Exact-first search Product, Barcode, Partner, Document, Lot/Serial, Location, Shipment và Task.",
+    "title": "Tìm kiếm toàn doanh nghiệp",
+    "subtitle": "Ưu tiên khớp chính xác khi tìm Sản phẩm, Mã vạch, Đối tác, Chứng từ, Lô/Sê-ri, Vị trí, Lô giao hàng và Nhiệm vụ.",
     "mode": "workbench",
     "stages": [
-      "Query",
-      "Exact match",
-      "Scoped results",
-      "Open entity"
+      "Truy vấn",
+      "Khớp chính xác",
+      "Kết quả theo phạm vi",
+      "Mở đối tượng"
     ],
     "fields": [
       {
-        "label": "Query",
+        "label": "Truy vấn",
         "value": "8938500123456"
       },
       {
-        "label": "Exact match",
+        "label": "Khớp chính xác",
         "value": "SKU-1001"
       },
       {
-        "label": "Warehouse scope",
+        "label": "Phạm vi kho",
         "value": "WH-HCM-01, WH-DN-01"
       },
       {
-        "label": "Result type",
-        "value": "Barcode → Product"
+        "label": "Loại kết quả",
+        "value": "Mã vạch → Sản phẩm"
       }
     ],
     "commands": [
@@ -2404,7 +2404,7 @@
       "OPEN_RESULT"
     ],
     "exceptionTitle": "SEARCH_SCOPE_FORBIDDEN",
-    "exceptionDetail": "Kết quả ngoài permission/warehouse scope phải bị omit khỏi index response."
+    "exceptionDetail": "Kết quả ngoài quyền hoặc phạm vi kho phải bị loại khỏi phản hồi chỉ mục tìm kiếm."
   },
   "OV-08": {
     "title": "Activity Feed",
