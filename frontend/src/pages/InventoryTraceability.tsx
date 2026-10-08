@@ -75,7 +75,16 @@ export default function InventoryTraceability(){
   const referenceIdRef=useRef<HTMLInputElement>(null);
 
   useEffect(()=>{
-    if(!linkedReversal)return;
+    if(!linkedReversal){
+      // A route transition back to an unfiltered trace view must not leave
+      // the previous document or warehouse filters visible as current data.
+      setForm({warehouseId:'',productId:'',lotNumber:'',serialNumber:'',referenceType:'',referenceId:''});
+      setResult(null);
+      setRequestError('');
+      setValidationError('');
+      setLoading(false);
+      return;
+    }
     let active=true;
     setForm({
       warehouseId:'',productId:'',lotNumber:'',serialNumber:'',

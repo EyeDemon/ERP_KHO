@@ -66,6 +66,7 @@ describe('InventoryTraceability',()=>{
     const view=render(
       <MemoryRouter initialEntries={['/inventory-traceability?referenceType=InventoryReversal&referenceId=41']}>
         <Link to="/inventory-traceability?referenceType=InventoryReversal&referenceId=84">Mở chuỗi đảo khác</Link>
+        <Link to="/inventory-traceability">Về trang truy vết trống</Link>
         <Routes><Route path="/inventory-traceability" element={<InventoryTraceability/>}/></Routes>
       </MemoryRouter>
     );
@@ -85,6 +86,11 @@ describe('InventoryTraceability',()=>{
     await act(async()=>{resolveFirst({data:result});});
     expect(view.queryByText('#41 • đã đảo')).toBeNull();
     expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');
+    fireEvent.click(view.getByText('Về trang truy vết trống'));
+    await waitFor(()=>{
+      expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('');
+      expect(view.queryByText('#84 • đã đảo')).toBeNull();
+    });
   });
 
   it('renders legacy uppercase or underscored inventory status in Vietnamese',async()=>{
