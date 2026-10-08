@@ -73,6 +73,7 @@ export default function InventoryTraceability(){
   });
   const [result,setResult]=useState<Result|null>(null);
   const [loading,setLoading]=useState(false);
+  const [eventLimit,setEventLimit]=useState<50|100|200|500>(200);
   const [validationError,setValidationError]=useState('');
   const [requestError,setRequestError]=useState('');
   const productIdRef=useRef<HTMLInputElement>(null);
@@ -148,7 +149,7 @@ export default function InventoryTraceability(){
       if(form.serialNumber.trim())params.set('serialNumber',form.serialNumber.trim());
       if(form.referenceType.trim())params.set('referenceType',form.referenceType.trim());
       if(form.referenceId)params.set('referenceId',form.referenceId);
-      params.set('limit','200');
+      params.set('limit',String(eventLimit));
       const response=await apiClient.get<Result>('/api/inventory/traceability?'+params.toString());
       if(sequence===requestSequence.current)setResult(response.data);
     }catch(e){
@@ -207,6 +208,15 @@ export default function InventoryTraceability(){
           Loại tham chiếu và ID tham chiếu là một cặp; nhập cả hai khi truy theo chứng từ.
         </p>
         {validationError&&<p id="traceability-validation-error" role="alert">{validationError}</p>}
+        <UiToolbarField label="Giới hạn sự kiện">
+          <select aria-label="Giới hạn sự kiện truy vết" value={eventLimit} disabled={loading}
+            onChange={e=>setEventLimit(Number(e.target.value) as 50|100|200|500)}>
+            <option value={50}>50 sự kiện</option>
+            <option value={100}>100 sự kiện</option>
+            <option value={200}>200 sự kiện</option>
+            <option value={500}>500 sự kiện</option>
+          </select>
+        </UiToolbarField>
         <button type="submit" disabled={loading}>{loading?'Đang truy vết...':'Truy vết'}</button>
         {resultStatus&&<p role="status" aria-live="polite" className="ui-muted-text">{resultStatus}</p>}
       </form>
@@ -234,7 +244,7 @@ export default function InventoryTraceability(){
       <UiCard title="Dòng thời gian sổ cái bất biến">
         <p className="ui-muted-text">Sự kiện đảo giao dịch là dấu mốc hiệu chỉnh, không xóa giao dịch gốc. Giao dịch gốc đã đảo được đánh dấu riêng.</p>
         {result.eventsTruncated&&<p role="status" className="ui-muted-text">
-          Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; hãy thu hẹp điều kiện tìm kiếm.
+          Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; hãy tăng giới hạn hoặc thu hẹp điều kiện tìm kiếm.
         </p>}
         <UiTableScroll><table aria-label="Dòng thời gian sổ cái phục vụ truy vết">
           <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Sản phẩm</th><th>Vị trí / Trạng thái</th><th>Lô / Sê-ri</th><th>Số lượng</th><th>Tham chiếu</th><th>Chuỗi đảo giao dịch</th><th>Người thực hiện / Ghi chú</th></tr></thead>

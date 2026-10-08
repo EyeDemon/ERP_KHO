@@ -194,6 +194,20 @@ describe('InventoryTraceability',()=>{
     expect(view.getByText(/Lịch sử còn dữ liệu cũ hơn/)).toBeTruthy();
   });
 
+  it('can increase server event window to 500 without client-side truncation',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
+    const view=renderTrace();
+    expect((view.getByLabelText('Giới hạn sự kiện truy vết') as HTMLSelectElement).value).toBe('200');
+    fireEvent.change(view.getByLabelText('Giới hạn sự kiện truy vết'),{
+      target:{value:'500'}
+    });
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&limit=500'
+    ));
+  });
+
   it('surfaces request errors with a recovery path',async()=>{
     vi.mocked(apiClient.get).mockRejectedValue({response:{status:500,data:{message:'Máy chủ bận.'}}});
     const view=renderTrace();
