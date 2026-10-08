@@ -61,11 +61,39 @@ describe('InventoryReversals — backend-authoritative list',()=>{
 
   it('disables old reversed transaction even without the marker in this page',async()=>{
     permissionState.granted.add('inventory_reversal.create');
-    vi.mocked(apiClient.get).mockResolvedValue({data:page([{...move,isReversed:true}])} as never);
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
+      return {data:page([{...move,isReversed:true}])} as never;
+    });
     const view=render(<InventoryReversals/>);
     expect(await view.findByText('Đã đảo')).toBeTruthy();
     expect((view.getByText('Đảo giao dịch') as HTMLButtonElement).disabled).toBe(true);
     expect(vi.mocked(apiClient.get).mock.calls.filter(([url])=>String(url).includes('reversal-candidates'))).toHaveLength(1);
+  });
+
+  it('reloads authoritative reversal state when another operator reversed first',async()=>{
+    permissionState.granted.add('inventory_reversal.create');
+    let reversed=false;
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('reversal-warehouses'))return {data:[]} as never;
+      return {data:page([{...move,isReversed:reversed}])} as never;
+    });
+    vi.mocked(apiClient.post).mockImplementation(async()=>{
+      reversed=true;
+      throw {response:{status:409,data:{code:'INV_ALREADY_REVERSED',message:'Giao dịch đã được đảo trước đó.'}}};
+    });
+
+    const view=render(<InventoryReversals/>);
+    await view.findByText('Chưa đảo');
+    fireEvent.click(view.getByText('Đảo giao dịch'));
+    fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{
+      target:{value:'Xác minh trường hợp thao tác đồng thời'}
+    });
+    fireEvent.click(view.getByText('Xác nhận đảo giao dịch'));
+    expect(await view.findByText('Đã đảo')).toBeTruthy();
+    expect(await view.findByRole('alert')).toHaveProperty('textContent','Giao dịch đã được đảo trước đó.');
+    expect((view.getByText('Đảo giao dịch') as HTMLButtonElement).disabled).toBe(true);
+    expect(vi.mocked(apiClient.get).mock.calls.filter(([url])=>String(url).includes('reversal-candidates'))).toHaveLength(2);
   });
 
   it('filters by an authorized warehouse using the real query parameter',async()=>{
