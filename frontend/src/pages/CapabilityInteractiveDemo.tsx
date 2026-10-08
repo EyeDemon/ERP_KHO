@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { BlueprintCapability } from '../config/erpWmsBlueprint';
 import { getCapabilityDemoDefinition } from '../config/capabilityDemoScreens';
 import { useMockDemo } from '../context/MockDemoContext';
+import { mockDisplayText } from '../utils/mockDisplayLabels';
 import './CapabilityInteractiveDemo.css';
 
 interface CapabilityInteractiveDemoProps {
@@ -59,7 +60,7 @@ const CapabilityInteractiveDemo = ({
     if (exceptionOpen || finalStage) return;
     const nextIndex = Math.min(stageIndex + 1, definition.stages.length - 1);
     setStageIndex(nextIndex);
-    pushActivity('Trạng thái → ' + definition.stages[nextIndex]);
+    pushActivity('Trạng thái → ' + mockDisplayText(definition.stages[nextIndex]));
   };
 
   const reset = () => {
@@ -84,12 +85,12 @@ const CapabilityInteractiveDemo = ({
       <div className="interactive-demo-header">
         <div>
           <span className="interactive-demo-kicker">BẢN THIẾT KẾ TƯƠNG TÁC • CHỈ MÔ PHỎNG</span>
-          <h2>{definition.title}</h2>
-          <p>{definition.subtitle}</p>
+          <h2>{mockDisplayText(definition.title)}</h2>
+          <p>{mockDisplayText(definition.subtitle)}</p>
         </div>
         <div className="interactive-demo-meta">
           <span>{modeLabel(definition.mode)}</span>
-          <strong>{stage}</strong>
+          <strong>{mockDisplayText(stage)}</strong>
         </div>
       </div>
 
@@ -115,11 +116,11 @@ const CapabilityInteractiveDemo = ({
               onClick={() => {
                 setStageIndex(index);
                 setExceptionOpen(false);
-                pushActivity('Chuyển nhanh trạng thái → ' + item);
+                pushActivity('Chuyển nhanh trạng thái → ' + mockDisplayText(item));
               }}
             >
               <span>{index + 1}</span>
-              <strong>{item}</strong>
+              <strong>{mockDisplayText(item)}</strong>
             </button>
           );
         })}
@@ -137,16 +138,16 @@ const CapabilityInteractiveDemo = ({
           <div className="interactive-demo-fields">
             {definition.fields.map((field) => (
               <div key={field.label}>
-                <span>{field.label}</span>
-                <strong>{field.value}</strong>
-                {field.helper ? <small>{field.helper}</small> : null}
+                <span>{mockDisplayText(field.label)}</span>
+                <strong>{mockDisplayText(field.value)}</strong>
+                {field.helper ? <small>{mockDisplayText(field.helper)}</small> : null}
               </div>
             ))}
           </div>
 
           {definition.quantity && (
             <div className="interactive-quantity">
-              <label htmlFor={'demo-qty-' + capability.id}>{definition.quantity.label}</label>
+              <label htmlFor={'demo-qty-' + capability.id}>{mockDisplayText(definition.quantity.label)}</label>
               <div>
                 <input
                   id={'demo-qty-' + capability.id}
@@ -166,7 +167,7 @@ const CapabilityInteractiveDemo = ({
           {exceptionOpen ? (
             <div className="interactive-exception" role="alert">
               <strong>{definition.exceptionTitle}</strong>
-              <p>{definition.exceptionDetail}</p>
+              <p>{mockDisplayText(definition.exceptionDetail)}</p>
               <button type="button" onClick={resolveException}>Giải quyết ngoại lệ</button>
             </div>
           ) : (
