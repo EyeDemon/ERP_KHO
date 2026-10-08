@@ -33,6 +33,12 @@ public sealed class ReceiveStockTransferDto
     public List<ReceiveStockTransferLineDto> Details { get; set; } = [];
 }
 
+public sealed class ReturnStockTransferDto
+{
+    public string? ReasonCode { get; set; }
+    public string? Reason { get; set; }
+}
+
 public sealed class StockTransferDetailDto
 {
     public int ProductId { get; set; }
@@ -43,7 +49,7 @@ public sealed class StockTransferDetailDto
     public decimal ReceivedQuantity { get; set; }
     public decimal MissingQuantity { get; set; }
     public decimal DamagedQuantity { get; set; }
-    public decimal InTransitQuantity => DispatchedQuantity - ReceivedQuantity;
+    public decimal InTransitQuantity { get; set; }
     public string? Note { get; set; }
 }
 
@@ -64,6 +70,8 @@ public sealed class StockTransferDto
     public DateTime? ReceivedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime? CancelledAt { get; set; }
+    public string? ReturnReasonCode { get; set; }
+    public string? ReturnReason { get; set; }
     public List<StockTransferDetailDto> Details { get; set; } = [];
 }
 

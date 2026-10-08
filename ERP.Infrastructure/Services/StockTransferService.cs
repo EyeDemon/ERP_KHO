@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Services;
 
-public sealed class StockTransferService(
+public sealed partial class StockTransferService(
     ErpKhoDbContext context,
     IInventoryStockRepository stockRepository,
     IWarehouseAuthorizationService warehouseAuthorization,
@@ -36,8 +36,8 @@ public sealed class StockTransferService(
         return new PagedResult<StockTransferDto> { Items = rows.Select(MapSummary).ToList(), TotalRecords = total, PageIndex = page, PageSize = size };
     }
 
-    public async Task<StockTransferDto> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
-        Map(await GetScopedAsync(id, cancellationToken));
+    public Task<StockTransferDto> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
+        GetDetailAsync(id, cancellationToken);
 
     public async Task<StockTransferDto> CreateAsync(CreateStockTransferDto request, CancellationToken cancellationToken = default)
     {
@@ -259,5 +259,5 @@ WHEN NOT MATCHED THEN
     private static ConcurrencyException Conflict(string message) => new(message);
 
     private static StockTransferDto MapSummary(StockTransfer x) => new() { Id = x.Id, Code = x.Code, SourceWarehouseId = x.SourceWarehouseId, SourceWarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, Status = x.Status, Note = x.Note, CreatedBy = x.CreatedBy, CreatedAt = x.CreatedAt, ApprovedAt = x.ApprovedAt, DispatchedAt = x.DispatchedAt, ReceivedAt = x.ReceivedAt, CompletedAt = x.CompletedAt, CancelledAt = x.CancelledAt };
-    private static StockTransferDto Map(StockTransfer x) { var dto = MapSummary(x); dto.Details = x.Details.OrderBy(d => d.ProductId).Select(d => new StockTransferDetailDto { ProductId = d.ProductId, ProductCode = d.Product.Code, ProductName = d.Product.Name, RequestedQuantity = d.RequestedQuantity, DispatchedQuantity = d.DispatchedQuantity, ReceivedQuantity = d.ReceivedQuantity, MissingQuantity = d.MissingQuantity, DamagedQuantity = d.DamagedQuantity, Note = d.Note }).ToList(); return dto; }
+    private static StockTransferDto Map(StockTransfer x) { var dto = MapSummary(x); dto.Details = x.Details.OrderBy(d => d.ProductId).Select(d => new StockTransferDetailDto { ProductId = d.ProductId, ProductCode = d.Product.Code, ProductName = d.Product.Name, RequestedQuantity = d.RequestedQuantity, DispatchedQuantity = d.DispatchedQuantity, ReceivedQuantity = d.ReceivedQuantity, MissingQuantity = d.MissingQuantity, DamagedQuantity = d.DamagedQuantity, InTransitQuantity = x.Status == StockTransferStatus.InTransit ? d.DispatchedQuantity - d.ReceivedQuantity - d.MissingQuantity - d.DamagedQuantity : 0, Note = d.Note }).ToList(); return dto; }
 }

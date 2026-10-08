@@ -14,4 +14,5 @@ public interface IStockTransferService
     Task ReceiveAsync(int id, ReceiveStockTransferDto request, CancellationToken cancellationToken = default);
     Task CompleteAsync(int id, CancellationToken cancellationToken = default);
     Task CancelAsync(int id, CancellationToken cancellationToken = default);
+    Task ReturnAsync(int id, ReturnStockTransferDto request, CancellationToken cancellationToken = default);
 }

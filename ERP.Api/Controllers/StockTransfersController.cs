@@ -2,6 +2,7 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Application.Inventory;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,6 +15,9 @@ public sealed class StockTransfersController(IStockTransferService service) : Co
 {
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] StockTransferQueryDto query, CancellationToken cancellationToken) => Ok(await service.GetAsync(query, cancellationToken));
+
+    [HttpGet("return-reasons")]
+    public IActionResult ReturnReasons() => Ok(StockTransferReturnReasonCatalog.All);
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken) => Ok(await service.GetByIdAsync(id, cancellationToken));
@@ -46,6 +50,12 @@ public sealed class StockTransfersController(IStockTransferService service) : Co
     [IdempotentCommand("StockTransfer.Receive")]
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
     public async Task<IActionResult> Receive(int id, ReceiveStockTransferDto request, CancellationToken cancellationToken) { await service.ReceiveAsync(id, request, cancellationToken); return NoContent(); }
+
+    [HttpPost("{id:int}/return")]
+    [IdempotentCommand("StockTransfer.Return")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
+    public async Task<IActionResult> Return(int id, ReturnStockTransferDto request, CancellationToken cancellationToken)
+    { await service.ReturnAsync(id, request, cancellationToken); return NoContent(); }
 
     [HttpPost("{id:int}/complete")]
     [IdempotentCommand("StockTransfer.Complete")]
