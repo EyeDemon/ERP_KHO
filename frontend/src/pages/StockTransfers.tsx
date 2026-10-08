@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Check, PackageCheck, Plus, Send, X } from 'lucide-react';
+import { ArrowRight, Plus, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -14,6 +14,7 @@ import {
   UiToolbarField,
 } from '../ui/ProductionUi';
 import './StockTransfers.css';
+import StockTransferDetailsDialog from './StockTransferDetailsDialog';
 
 type Warehouse = { id: number; name: string };
 type Product = { id: number; code: string; name: string };
@@ -49,7 +50,7 @@ type Transfer = {
   details: TransferLine[];
 };
 
-const statusNames = ['Draft', 'Approved', 'InTransit', 'Received', 'Completed', 'Cancelled'];
+const statusNames = ['Draft', 'Approved', 'InTransit', 'Received', 'Completed', 'Cancelled', 'Returned'];
 const statusLabel: Record<string, string> = {
   Draft: 'Nháp',
   Approved: 'Đã duyệt',
@@ -57,6 +58,7 @@ const statusLabel: Record<string, string> = {
   Received: 'Đã nhận',
   Completed: 'Hoàn tất',
   Cancelled: 'Đã hủy',
+  Returned: 'Đã hoàn trả',
 };
 const normalizeStatus = (status: string | number) =>
   typeof status === 'number' ? statusNames[status] : status;
@@ -64,6 +66,7 @@ const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger
   if (status === 'Completed' || status === 'Received') return 'success';
   if (status === 'InTransit' || status === 'Approved') return 'warning';
   if (status === 'Cancelled') return 'danger';
+  if (status === 'Returned') return 'warning';
   return 'neutral';
 };
 
@@ -184,11 +187,11 @@ export default function StockTransfers() {
   };
 
   const act = async (action: string, body?: unknown) => {
-    if (!selected || !window.confirm(`Xác nhận thao tác ${statusLabel[action] || action}?`)) return;
+    if (!selected || !window.confirm(`Xác nhận thao tác ${action === 'return' ? 'hoàn trả về kho nguồn' : statusLabel[action] || action}?`)) return;
     if (actionInFlight) return;
 
     setActionInFlight(true);
-    const logicalAction = `transfer-${action}:${selected.id}`;
+    const logicalAction = `transfer-${action}:${selected.id}${action === 'return' ? `:${JSON.stringify(body)}` : ''}`;
     try {
       await apiClient.post(`/api/stock-transfers/${selected.id}/${action}`, body, {
         headers: idempotencyHeaders(logicalAction),
@@ -457,158 +460,23 @@ export default function StockTransfers() {
         )}
 
         {selected && (
-          <div className="transfer-modal" role="presentation">
-            <div
-              className="transfer-dialog detail"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="transfer-detail-title"
-            >
-              <div className="dialog-title">
-                <div>
-                  <h2 id="transfer-detail-title">{selected.code}</h2>
-                  <UiBadge tone={statusTone(status)}>{statusLabel[status]}</UiBadge>
-                </div>
-                <button type="button" aria-label="Đóng chi tiết điều chuyển" onClick={() => setSelected(null)}>
-                  <X aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className="timeline" aria-label="Tiến trình điều chuyển">
-                {['Draft', 'Approved', 'InTransit', 'Received', 'Completed'].map((name, index) => (
-                  <div
-                    className={statusNames.indexOf(status) >= index && status !== 'Cancelled' ? 'done' : ''}
-                    key={name}
-                  >
-                    <span>{index + 1}</span>
-                    <small>{statusLabel[name]}</small>
-                  </div>
-                ))}
-              </div>
-
-              <p className="route">
-                <strong>{selected.sourceWarehouseName}</strong>
-                <ArrowRight aria-hidden="true" />
-                <strong>{selected.destinationWarehouseName}</strong>
-              </p>
-
-              <UiTableScroll>
-                <table aria-label={`Chi tiết điều chuyển ${selected.code}`}>
-                  <thead>
-                    <tr>
-                      <th>Sản phẩm</th>
-                      <th>Yêu cầu</th>
-                      <th>Đã xuất</th>
-                      <th>Thực nhận</th>
-                      <th>Thiếu</th>
-                      <th>Hỏng</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selected.details.map(line => (
-                      <tr key={line.productId}>
-                        <td>{line.productCode} - {line.productName}</td>
-                        <td>{line.requestedQuantity}</td>
-                        <td>{line.dispatchedQuantity}</td>
-                        {status === 'InTransit' ? (
-                          <>
-                            <td>
-                              <input
-                                aria-label={`Thực nhận ${line.productCode}`}
-                                type="number"
-                                min="0"
-                                step="0.0001"
-                                value={receive[line.productId]?.receivedQuantity ?? 0}
-                                onChange={event =>
-                                  setReceive({
-                                    ...receive,
-                                    [line.productId]: {
-                                      ...receive[line.productId],
-                                      receivedQuantity: Number(event.target.value),
-                                    },
-                                  })
-                                }
-                              />
-                            </td>
-                            <td>
-                              <input
-                                aria-label={`Thiếu ${line.productCode}`}
-                                type="number"
-                                min="0"
-                                step="0.0001"
-                                value={receive[line.productId]?.missingQuantity ?? 0}
-                                onChange={event =>
-                                  setReceive({
-                                    ...receive,
-                                    [line.productId]: {
-                                      ...receive[line.productId],
-                                      missingQuantity: Number(event.target.value),
-                                    },
-                                  })
-                                }
-                              />
-                            </td>
-                            <td>
-                              <input
-                                aria-label={`Hỏng ${line.productCode}`}
-                                type="number"
-                                min="0"
-                                step="0.0001"
-                                value={receive[line.productId]?.damagedQuantity ?? 0}
-                                onChange={event =>
-                                  setReceive({
-                                    ...receive,
-                                    [line.productId]: {
-                                      ...receive[line.productId],
-                                      damagedQuantity: Number(event.target.value),
-                                    },
-                                  })
-                                }
-                              />
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td>{line.receivedQuantity}</td>
-                            <td>{line.missingQuantity}</td>
-                            <td>{line.damagedQuantity}</td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </UiTableScroll>
-
-              <div className="dialog-actions">
-                {canWrite && ['Draft', 'Approved'].includes(status) && (
-                  <button type="button" disabled={actionInFlight} className="danger" onClick={() => void act('cancel')}>
-                    Hủy phiếu
-                  </button>
-                )}
-                {canApprove && selected.createdBy !== userId && status === 'Draft' && (
-                  <button type="button" disabled={actionInFlight} onClick={() => void act('approve')}>
-                    <Check size={17} aria-hidden="true" /> Duyệt
-                  </button>
-                )}
-                {canWrite && status === 'Approved' && (
-                  <button type="button" disabled={actionInFlight} onClick={() => void act('dispatch')}>
-                    <Send size={17} aria-hidden="true" /> Xuất kho
-                  </button>
-                )}
-                {canWrite && status === 'InTransit' && (
-                  <button type="button" disabled={actionInFlight} onClick={() => void submitReceive()}>
-                    <PackageCheck size={17} aria-hidden="true" /> Xác nhận nhận
-                  </button>
-                )}
-                {canWrite && status === 'Received' && (
-                  <button type="button" disabled={actionInFlight} className="ui-primary-button" onClick={() => void act('complete')}>
-                    Hoàn tất
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+          <StockTransferDetailsDialog
+            key={selected.id}
+            selected={selected}
+            status={status}
+            statusNames={statusNames}
+            statusLabel={statusLabel}
+            statusTone={statusTone}
+            canWrite={canWrite}
+            canApprove={canApprove}
+            userId={userId}
+            actionInFlight={actionInFlight}
+            receive={receive}
+            setReceive={setReceive}
+            onClose={() => setSelected(null)}
+            onAction={act}
+            onReceive={submitReceive}
+          />
         )}
       </div>
     </UiPage>
