@@ -636,6 +636,62 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task ReversalCandidates_UseSqlServerAuthoritativeMarkerAfterCommittedReversal()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            int originalTransactionId;
+            await using (var move = CreateContext())
+            {
+                var result = await CreateMovementService(move, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 2,
+                    Reason = "Đối chiếu trạng thái đảo trên SQL Server"
+                });
+                originalTransactionId = result.TransactionId;
+            }
+
+            await using (var before = CreateContext())
+            {
+                var page = await CreateReversalService(before, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20);
+                page.Items.Should().ContainSingle(x => x.Id == originalTransactionId)
+                    .Which.IsReversed.Should().BeFalse();
+            }
+
+            await using (var reverse = CreateContext())
+            {
+                await CreateReversalService(reverse, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = originalTransactionId,
+                    Reason = "Đã xác minh số lượng và kho nguồn"
+                });
+            }
+
+            await using (var after = CreateContext())
+            {
+                var page = await CreateReversalService(after, fixture.UserId)
+                    .GetCandidatesAsync(fixture.WarehouseId, 1, 20);
+                page.Items.Should().ContainSingle(x => x.Id == originalTransactionId)
+                    .Which.IsReversed.Should().BeTrue();
+                (await after.InventoryTransactions.CountAsync(x =>
+                    x.ReversalOfTransactionId == originalTransactionId)).Should().Be(1);
+
+                var stocks = await after.InventoryStocks.AsNoTracking()
+                    .Where(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId)
+                    .ToListAsync();
+                stocks.Sum(x => x.Quantity).Should().Be(10);
+                stocks.Single(x => x.LocationId == fixture.SourceLocationId)
+                    .Quantity.Should().Be(10);
+            }
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     private static InventoryLockService CreateLockService(ErpKhoDbContext db, int userId)
     {
         var current = new CurrentUser(userId);
