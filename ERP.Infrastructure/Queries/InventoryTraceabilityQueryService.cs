@@ -23,6 +23,15 @@ public sealed class InventoryTraceabilityQueryService(
         int limit = 200,
         CancellationToken cancellationToken = default)
     {
+        // A malformed positive-identifier filter must never be treated as an
+        // empty search or silently widened to all accessible warehouses.
+        if (warehouseId is <= 0)
+            throw new BusinessRuleException("ID kho truy vết phải là số nguyên dương.");
+        if (productId is <= 0)
+            throw new BusinessRuleException("ID sản phẩm truy vết phải là số nguyên dương.");
+        if (referenceId is <= 0)
+            throw new BusinessRuleException("ID tham chiếu truy vết phải là số nguyên dương.");
+
         var lot = string.IsNullOrWhiteSpace(lotNumber) ? null : lotNumber.Trim();
         var serial = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber.Trim();
         var refType = string.IsNullOrWhiteSpace(referenceType) ? null : referenceType.Trim();
