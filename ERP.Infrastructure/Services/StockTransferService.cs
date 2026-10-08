@@ -64,6 +64,7 @@ public sealed partial class StockTransferService(
     {
         EnsureWriteRole();
         var entity = await GetScopedAsync(id, cancellationToken);
+        if (entity.ReverseOfTransferId.HasValue) throw Conflict("Phiếu điều chuyển ngược không được sửa.");
         if (entity.Status != StockTransferStatus.Draft) throw Conflict("Chỉ phiếu nháp được chỉnh sửa.");
         await ValidateDraftAsync(request, cancellationToken);
         entity.SourceWarehouseId = request.SourceWarehouseId;

@@ -36,6 +36,10 @@ type Transfer = {
   cancelledAt?: string;
   returnReasonCode?: string;
   returnReason?: string;
+  reverseOfTransferId?: number;
+  reverseTransferId?: number;
+  reverseReasonCode?: string;
+  reverseReason?: string;
   details: TransferLine[];
 };
 
@@ -56,11 +60,12 @@ type Props = {
   onClose: () => void;
   onAction: (action: string, body?: unknown) => Promise<void>;
   onReceive: () => Promise<void>;
+  onOpenTransfer: (id: number) => Promise<void>;
 };
 
 export default function StockTransferDetailsDialog({
   selected, status, statusNames, statusLabel, statusTone, canWrite, canReturn, canApprove, userId,
-  actionInFlight, receive, setReceive, onClose, onAction, onReceive,
+  actionInFlight, receive, setReceive, onClose, onAction, onReceive, onOpenTransfer,
 }: Props) {
   const canTrace = usePermission('inventory_traceability.read');
   const inRouter = useInRouterContext();
@@ -75,7 +80,7 @@ export default function StockTransferDetailsDialog({
     setReturnCode('');
     setReturnReason('');
     setReturnReasonError('');
-    if (!canWrite || !canReturn || status !== 'InTransit') return;
+    if (!canWrite || !canReturn || !['InTransit', 'Received', 'Completed'].includes(status) || !!selected.reverseTransferId) return;
     let active = true;
     void apiClient.get('/api/stock-transfers/return-reasons').then(response => {
       if (active) setReturnReasons(Array.isArray(response.data) ? response.data : []);
@@ -83,7 +88,7 @@ export default function StockTransferDetailsDialog({
       if (active) setReturnReasonError('Không thể tải mã lý do; chức năng hoàn trả đã bị khóa an toàn.');
     });
     return () => { active = false; };
-  }, [canWrite, canReturn, selected.id, status]);
+  }, [canWrite, canReturn, selected.id, selected.reverseTransferId, status]);
 
   return (
           <div className="transfer-modal" role="presentation">
@@ -226,6 +231,45 @@ export default function StockTransferDetailsDialog({
                   <button type="button" className="danger" disabled={actionInFlight || !returnReasons.some(item => item.code === returnCode) || !returnReason.trim()}
                     onClick={() => void onAction('return', { reasonCode: returnCode, reason: returnReason.trim() })}>
                     Hoàn trả kho nguồn
+                  </button>
+                </section>
+              )}
+              {selected.reverseOfTransferId && (
+                <p role="status" className="transfer-return-result">
+                  Phiếu điều chuyển ngược từ chứng từ #{selected.reverseOfTransferId}.
+                  {selected.reverseReasonCode && <strong> Mã lý do: {selected.reverseReasonCode}.</strong>}
+                  {selected.reverseReason && <> {selected.reverseReason}</>}
+                </p>
+              )}
+              {selected.reverseTransferId && (
+                <p role="status" className="transfer-return-result">
+                  Đã lập phiếu điều chuyển ngược #{selected.reverseTransferId}.
+                  <button type="button" disabled={actionInFlight}
+                    onClick={() => void onOpenTransfer(selected.reverseTransferId!)}>
+                    Xem phiếu điều chuyển ngược
+                  </button>
+                </p>
+              )}
+              {canWrite && canReturn && ['Received', 'Completed'].includes(status) &&
+                !selected.reverseOfTransferId && !selected.reverseTransferId && (
+                <section className="transfer-return-form" aria-label="Lập điều chuyển ngược">
+                  <h3>Lập phiếu điều chuyển ngược</h3>
+                  <p>Hàng đã nhận phải trả qua phiếu mới, duyệt và xuất/nhận kho như bình thường. Sổ cái cũ được giữ nguyên.</p>
+                  {returnReasonError && <p role="alert">{returnReasonError}</p>}
+                  <label htmlFor="transfer-reverse-code">Mã lý do điều chuyển ngược
+                    <select id="transfer-reverse-code" value={returnCode} onChange={event => setReturnCode(event.target.value)}>
+                      <option value="">Chọn mã lý do</option>
+                      {returnReasons.map(item => <option key={item.code} value={item.code}>{item.name}</option>)}
+                    </select>
+                  </label>
+                  <label htmlFor="transfer-reverse-note">Diễn giải điều chuyển ngược
+                    <textarea id="transfer-reverse-note" maxLength={400} value={returnReason}
+                      onChange={event => setReturnReason(event.target.value)} />
+                  </label>
+                  <button type="button" disabled={actionInFlight ||
+                    !returnReasons.some(item => item.code === returnCode) || !returnReason.trim()}
+                    onClick={() => void onAction('reverse-draft', { reasonCode: returnCode, reason: returnReason.trim() })}>
+                    Tạo phiếu điều chuyển ngược
                   </button>
                 </section>
               )}

@@ -10,6 +10,12 @@ public sealed partial class StockTransferService
     {
         var entity = await GetScopedAsync(id, cancellationToken);
         var dto = Map(entity);
+        dto.ReverseOfTransferId = entity.ReverseOfTransferId;
+        dto.ReverseReasonCode = entity.ReverseReasonCode;
+        dto.ReverseReason = entity.ReverseReason;
+        dto.ReverseTransferId = await context.StockTransfers.AsNoTracking()
+            .Where(x => x.ReverseOfTransferId == id)
+            .Select(x => (int?)x.Id).SingleOrDefaultAsync(cancellationToken);
         if (entity.Status == StockTransferStatus.Returned)
         {
             var returned = await context.InventoryTransactions.AsNoTracking()

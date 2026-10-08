@@ -10,6 +10,9 @@ public class StockTransfer
     public int DestinationWarehouseId { get; set; }
     public StockTransferStatus Status { get; set; } = StockTransferStatus.Draft;
     public string? Note { get; set; }
+    public int? ReverseOfTransferId { get; set; }
+    public string? ReverseReasonCode { get; set; }
+    public string? ReverseReason { get; set; }
     public int CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int? ApprovedBy { get; set; }

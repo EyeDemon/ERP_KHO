@@ -86,6 +86,8 @@ internal sealed class StockTransferReturnFixture : IAsyncDisposable
         await db.InventoryTransactions.Where(x => x.ProductId == ProductId).ExecuteDeleteAsync();
         await db.AuditLogs.Where(x => x.UserId.HasValue && ids.Contains(x.UserId.Value)).ExecuteDeleteAsync();
         await db.StockTransferDetails.Where(x => x.ProductId == ProductId).ExecuteDeleteAsync();
+        await db.StockTransfers.Where(x => x.ReverseOfTransferId != null &&
+            x.SourceWarehouseId == Destination && x.DestinationWarehouseId == Source).ExecuteDeleteAsync();
         await db.StockTransfers.Where(x => x.SourceWarehouseId == Source && x.DestinationWarehouseId == Destination).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == ProductId).ExecuteDeleteAsync();
         await db.UserWarehouses.Where(x => ids.Contains(x.UserId)).ExecuteDeleteAsync();

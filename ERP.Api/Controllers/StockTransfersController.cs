@@ -59,6 +59,16 @@ public sealed class StockTransfersController(IStockTransferService service) : Co
     public async Task<IActionResult> Return(int id, ReturnStockTransferDto request, CancellationToken cancellationToken)
     { await service.ReturnAsync(id, request, cancellationToken); return NoContent(); }
 
+    [HttpPost("{id:int}/reverse-draft")]
+    [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]
+    [IdempotentCommand("StockTransfer.ReverseDraft")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
+    public async Task<IActionResult> ReverseDraft(int id, CreateReverseStockTransferDto request, CancellationToken cancellationToken)
+    {
+        var result = await service.CreateReverseDraftAsync(id, request, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+
     [HttpPost("{id:int}/complete")]
     [IdempotentCommand("StockTransfer.Complete")]
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]

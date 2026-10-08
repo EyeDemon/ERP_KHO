@@ -188,17 +188,17 @@ export default function StockTransfers() {
   };
 
   const act = async (action: string, body?: unknown) => {
-    if (!selected || !window.confirm(`Xác nhận thao tác ${action === 'return' ? 'hoàn trả về kho nguồn' : statusLabel[action] || action}?`)) return;
+    if (!selected || !window.confirm(`Xác nhận thao tác ${action === 'return' ? 'hoàn trả về kho nguồn' : action === 'reverse-draft' ? 'lập phiếu điều chuyển ngược' : statusLabel[action] || action}?`)) return;
     if (actionInFlight) return;
 
     setActionInFlight(true);
-    const logicalAction = `transfer-${action}:${selected.id}${action === 'return' ? `:${JSON.stringify(body)}` : ''}`;
+    const logicalAction = `transfer-${action}:${selected.id}${['return', 'reverse-draft'].includes(action) ? `:${JSON.stringify(body)}` : ''}`;
     try {
-      await apiClient.post(`/api/stock-transfers/${selected.id}/${action}`, body, {
+      const response = await apiClient.post(`/api/stock-transfers/${selected.id}/${action}`, body, {
         headers: idempotencyHeaders(logicalAction),
       });
       completeIdempotentAction(logicalAction);
-      await openDetail(selected.id);
+      await openDetail(action === 'reverse-draft' ? response.data.id : selected.id);
       await load();
     } catch (failure: any) {
       setError(failure.response?.data?.message || 'Thao tác không thành công.');
@@ -477,7 +477,7 @@ export default function StockTransfers() {
             setReceive={setReceive}
             onClose={() => setSelected(null)}
             onAction={act}
-            onReceive={submitReceive}
+            onReceive={submitReceive} onOpenTransfer={openDetail}
           />
         )}
       </div>
