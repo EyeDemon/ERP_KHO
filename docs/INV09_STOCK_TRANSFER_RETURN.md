@@ -32,3 +32,10 @@ Chưa triển khai hoàn trả sau `Received`, return-to-vendor, shipment, recei
 - SQL Server regression kiểm tra chuỗi chỉ lấy 1 sự kiện, chống đảo trùng từ marker tồn tại, và giữ nguyên audit/tồn. React regression kiểm tra deep link và quyền truy vết.
 
 **Giới hạn:** Không đồng nghĩa hỗ trợ đảo Receipt/Shipment/Adjustment/Return/Scrap; không xác nhận browser QA hoặc backend staging. PR vẫn Draft.
+
+## Bảo vệ bổ sung trước dữ liệu lịch sử
+
+- Khi kiểm tra `TransferOut` gốc, từ chối cả marker hiện đại (`ReversalOfTransactionId`) **và** marker cũ chỉ có `TransactionType=Reversal`, `ReferenceType=InventoryReversal`, `ReferenceId` bằng ID xuất gốc, đúng kho nguồn. Không tạo `TransferIn` lần hai trên lịch sử đã đảo.
+- SQL Server regression tái hiện marker cũ không có khóa liên kết hiện đại; xác minh trạng thái chứng từ vẫn `InTransit`, không hoàn trả.
+- Biểu mẫu hoàn trả xóa mã lý do, diễn giải và danh mục cũ khi trạng thái/phiếu thay đổi; nút hoàn trả chỉ mở khi mã vẫn nằm trong danh mục mới tải từ API.
+- Đây là kiểm thử hồi quy mã nguồn; chưa thay thế browser QA hoặc xác minh staging SQL/API.

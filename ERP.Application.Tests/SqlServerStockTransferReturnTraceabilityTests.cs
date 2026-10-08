@@ -41,6 +41,26 @@ public sealed class SqlServerStockTransferReturnTraceabilityTests
     }
 
     [SqlServerFact]
+    public async Task LegacyReferenceMarkerBlocksNativeReturn()
+    {
+        await using var f = await StockTransferReturnFixture.CreateAsync();
+        var id = await f.DispatchAsync();
+        await using (var db = StockTransferReturnFixture.Db())
+        {
+            var original = await db.InventoryTransactions.SingleAsync(x => x.ReferenceType == "StockTransfer" && x.ReferenceId == id);
+            db.InventoryTransactions.Add(new InventoryTransaction {
+                ProductId = f.ProductId, WarehouseId = f.Source, TransactionType = TransactionType.Reversal,
+                Quantity = 8, ReferenceType = "InventoryReversal", ReferenceId = original.Id, CreatedBy = f.Checker
+            });
+            await db.SaveChangesAsync();
+        }
+        await using var verify = StockTransferReturnFixture.Db();
+        var action = () => f.Service(verify, f.Checker).ReturnAsync(id, Reason());
+        await action.Should().ThrowAsync<ConcurrencyException>();
+        (await verify.StockTransfers.SingleAsync(x => x.Id == id)).Status.Should().Be(StockTransferStatus.InTransit);
+    }
+
+    [SqlServerFact]
     public async Task AlreadyLinkedOutboundRejectsReturnWithoutNewStockOrAudit()
     {
         await using var fixture = await StockTransferReturnFixture.CreateAsync();

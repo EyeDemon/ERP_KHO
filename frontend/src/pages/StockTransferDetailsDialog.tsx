@@ -71,6 +71,10 @@ export default function StockTransferDetailsDialog({
   const [returnReasonError, setReturnReasonError] = useState('');
 
   useEffect(() => {
+    setReturnReasons([]);
+    setReturnCode('');
+    setReturnReason('');
+    setReturnReasonError('');
     if (!canWrite || !canReturn || status !== 'InTransit') return;
     let active = true;
     void apiClient.get('/api/stock-transfers/return-reasons').then(response => {
@@ -219,7 +223,7 @@ export default function StockTransferDetailsDialog({
                   <label htmlFor="transfer-return-note">Diễn giải hoàn trả
                     <textarea id="transfer-return-note" maxLength={400} value={returnReason} onChange={event => setReturnReason(event.target.value)} />
                   </label>
-                  <button type="button" className="danger" disabled={actionInFlight || returnReasons.length === 0 || !returnCode || !returnReason.trim()}
+                  <button type="button" className="danger" disabled={actionInFlight || !returnReasons.some(item => item.code === returnCode) || !returnReason.trim()}
                     onClick={() => void onAction('return', { reasonCode: returnCode, reason: returnReason.trim() })}>
                     Hoàn trả kho nguồn
                   </button>
