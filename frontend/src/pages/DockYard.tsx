@@ -150,7 +150,7 @@ const DockYard = () => {
   const canManageAppointment = usePermission('dock_appointment.manage');
   const canCheckIn = usePermission('yard.checkin');
   const canAssignDock = usePermission('yard.assign_dock');
-  const canRời cổng = usePermission('yard.checkout');
+  const canCheckout = usePermission('yard.checkout');
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState(0);
@@ -259,11 +259,11 @@ const DockYard = () => {
       const logicalAction = 'dock-yard:' + suffix + ':' + appointment.id + ':' + appointment.rowVersion + ':' + JSON.stringify(payload);
       await apiClient.post('/api/dock-yard/appointments/' + appointment.id + '/' + suffix, body, { headers: idempotencyHeaders(logicalAction) });
       completeIdempotentAction(logicalAction);
-      setSuccess('Đã cập nhật trạng thái appointment.');
+      setSuccess('Đã cập nhật trạng thái lịch hẹn.');
       setActionPanel(null);
       await refresh();
     } catch (failure) {
-      setError(messageOf(failure, 'Không thể cập nhật appointment.'));
+      setError(messageOf(failure, 'Không thể cập nhật lịch hẹn.'));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -320,7 +320,7 @@ const DockYard = () => {
         rowVersion: appointmentForm.rowVersion,
       };
     } catch {
-      setError('Giờ appointment không hợp lệ trong timezone của kho. Hãy kiểm tra lại ngày/giờ.');
+      setError('Giờ lịch hẹn không hợp lệ trong múi giờ của kho. Hãy kiểm tra lại ngày/giờ.');
       return;
     }
     savingRef.current = true;
@@ -328,17 +328,17 @@ const DockYard = () => {
     try {
       if (appointmentForm.id) {
         await apiClient.put('/api/dock-yard/appointments/' + appointmentForm.id, payload);
-        setSuccess('Đã cập nhật appointment Nháp.');
+        setSuccess('Đã cập nhật lịch hẹn Nháp.');
       } else {
         const logicalAction = 'dock-appointment:create:' + warehouseId + ':' + JSON.stringify(payload);
         await apiClient.post('/api/dock-yard/appointments', payload, { headers: idempotencyHeaders(logicalAction) });
         completeIdempotentAction(logicalAction);
-        setSuccess('Đã tạo appointment Nháp.');
+        setSuccess('Đã tạo lịch hẹn Nháp.');
       }
       setAppointmentForm(null);
       await refresh();
     } catch (failure) {
-      setError(messageOf(failure, 'Không thể lưu appointment.'));
+      setError(messageOf(failure, 'Không thể lưu lịch hẹn.'));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -369,10 +369,10 @@ const DockYard = () => {
         completeIdempotentAction(logicalAction);
       }
       setDockForm(null);
-      setSuccess('Đã lưu cấu hình dock.');
+      setSuccess('Đã lưu cấu hình cửa kho.');
       await refresh();
     } catch (failure) {
-      setError(messageOf(failure, 'Không thể lưu dock.'));
+      setError(messageOf(failure, 'Không thể lưu cửa kho.'));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -398,10 +398,10 @@ const DockYard = () => {
         completeIdempotentAction(logicalAction);
       }
       setYardForm(null);
-      setSuccess('Đã lưu yard slot.');
+      setSuccess('Đã lưu vị trí sân bãi.');
       await refresh();
     } catch (failure) {
-      setError(messageOf(failure, 'Không thể lưu yard slot.'));
+      setError(messageOf(failure, 'Không thể lưu vị trí sân bãi.'));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -484,7 +484,7 @@ const DockYard = () => {
                           {canAssignDock && [3, 4].includes(item.status) && <button type="button" aria-label={(item.status === 4 ? 'Đổi cửa kho cho lịch hẹn ' : 'Gán cửa kho cho lịch hẹn ') + item.code} onClick={() => setActionPanel({ mode: 'assignDock', appointment: item, dockId: item.dockId?.toString() ?? '', note: '' })}>{item.status === 4 ? 'Đổi cửa kho' : 'Gán cửa kho'}</button>}
                           {canManageAppointment && item.status === 4 && <button type="button" aria-label={'Bắt đầu phục vụ lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'start-service')}>Bắt đầu</button>}
                           {canManageAppointment && item.status === 5 && <button type="button" aria-label={'Hoàn thành phục vụ lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'complete')}>Hoàn thành</button>}
-                          {canRời cổng && (item.status === 6 || (item.status === 9 && Boolean(item.checkedInAtUtc))) && !item.checkedOutAtUtc && <button type="button" aria-label={'Ghi nhận rời cổng cho lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'checkout')}>Rời cổng</button>}
+                          {canCheckout && (item.status === 6 || (item.status === 9 && Boolean(item.checkedInAtUtc))) && !item.checkedOutAtUtc && <button type="button" aria-label={'Ghi nhận rời cổng cho lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'checkout')}>Rời cổng</button>}
                           {canManageAppointment && [0, 1].includes(item.status) && <button type="button" aria-label={'Hủy lịch hẹn ' + item.code} onClick={() => window.confirm('Hủy lịch hẹn này?') && void runCommand(item, 'cancel')}>Hủy</button>}
                           {canManageAppointment && [1, 2, 3].includes(item.status) && <button type="button" aria-label={'Đánh dấu không đến cho lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'no-show')}>Không đến</button>}
                           {canManageAppointment && ![6, 7, 8, 9].includes(item.status) && <button type="button" aria-label={'Ghi nhận ngoại lệ cho lịch hẹn ' + item.code} onClick={() => setActionPanel({ mode: 'exception', appointment: item, exceptionCode: '', note: '' })}>Ngoại lệ</button>}
@@ -531,7 +531,7 @@ const DockYard = () => {
       )}
 
       {selected && <UiCard title={'Dòng thời gian • ' + selected.code}>
-        <p><strong>{statusLabel[selected.status]}</strong> • {directionLabel(selected.direction)} • {selected.vehiclePlate || 'Chưa có xe'} • {selected.dockCode || 'Chưa gán dock'}</p>
+        <p><strong>{statusLabel[selected.status]}</strong> • {directionLabel(selected.direction)} • {selected.vehiclePlate || 'Chưa có xe'} • {selected.dockCode || 'Chưa gán cửa kho'}</p>
         <UiTableScroll>
           <table aria-label="Dòng thời gian lịch hẹn">
             <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Cửa kho</th><th>Sân bãi</th><th>Ghi chú</th></tr></thead>
@@ -566,8 +566,8 @@ const DockYard = () => {
           <label className="ui-stack"><span>Mã *</span><input value={dockForm.code} disabled={saving || Boolean(dockForm.id)} onChange={event => setDockForm(current => current && ({ ...current, code: event.target.value.toUpperCase() }))} required /></label>
           <label className="ui-stack"><span>Tên *</span><input value={dockForm.name} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, name: event.target.value }))} required /></label>
           <label className="ui-stack"><span>Loại phương tiện</span><input value={dockForm.allowedVehicleType} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, allowedVehicleType: event.target.value.toUpperCase() }))} /></label>
-          <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.supportsInbound} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, supportsInbound: event.target.checked }))} /> Inbound</label>
-          <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.supportsOutbound} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, supportsOutbound: event.target.checked }))} /> Outbound</label>
+          <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.supportsInbound} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, supportsInbound: event.target.checked }))} /> Nhập kho</label>
+          <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.supportsOutbound} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, supportsOutbound: event.target.checked }))} /> Xuất kho</label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.isTemperatureControlled} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, isTemperatureControlled: event.target.checked }))} /> Kiểm soát nhiệt độ</label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.hazardAllowed} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, hazardAllowed: event.target.checked }))} /> Cho phép hàng nguy hiểm</label>
           {dockForm.id && <label className="ui-checkbox-label"><input type="checkbox" checked={dockForm.isActive} disabled={saving} onChange={event => setDockForm(current => current && ({ ...current, isActive: event.target.checked }))} /> Đang hoạt động</label>}
