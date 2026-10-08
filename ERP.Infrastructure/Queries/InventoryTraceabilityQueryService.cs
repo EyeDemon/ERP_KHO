@@ -50,8 +50,8 @@ public sealed class InventoryTraceabilityQueryService(
             eventQuery = eventQuery.Where(x => x.ReferenceType == refType && x.ReferenceId == referenceId);
 
         var events = await ProjectEvents(eventQuery)
-            .OrderBy(x => x.TransactionDate)
-            .ThenBy(x => x.TransactionId)
+            .OrderByDescending(x => x.TransactionDate)
+            .ThenByDescending(x => x.TransactionId)
             .Take(limit)
             .ToListAsync(cancellationToken);
 

@@ -844,6 +844,66 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task Traceability_UsesNewestSqlEventsAndIncludesOlderOriginalInReversalChain()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var db = CreateContext())
+            {
+                var start = DateTime.UtcNow.AddDays(-3);
+                for (var i = 0; i < 210; i++)
+                    db.InventoryTransactions.Add(new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.Move, Quantity = 1,
+                        ReferenceType = "TraceHistory", ReferenceId = i + 1,
+                        TransactionDate = start.AddMinutes(i)
+                    });
+                await db.SaveChangesAsync();
+            }
+
+            int originalId;
+            await using (var db = CreateContext())
+                originalId = (await CreateMovementService(db, fixture.UserId).MoveAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId,
+                    DestinationLocationId = fixture.DestinationLocationId,
+                    Quantity = 2, Reason = "recent timeline test"
+                })).TransactionId;
+
+            InventoryReversalResultDto reversed;
+            await using (var db = CreateContext())
+                reversed = await CreateReversalService(db, fixture.UserId).ReverseAsync(new()
+                {
+                    OriginalTransactionId = originalId, Reason = "recent reversal test"
+                });
+
+            await using var read = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var expected = new[]
+            {
+                originalId, reversed.ReversalTransactionId, reversed.CorrectiveTransactionId
+            };
+            var recent = await query.TraceAsync(productId: fixture.ProductId, limit: 20);
+            recent.Events.Should().HaveCount(20);
+            recent.Events.Select(x => x.TransactionId).Should().Contain(expected);
+            recent.Events.Select(x => x.TransactionDate).Should().BeInAscendingOrder();
+
+            var chain = await query.TraceAsync(productId: fixture.ProductId, limit: 2);
+            chain.Events.Select(x => x.TransactionId).Should().Contain(expected);
+            chain.Events.Single(x => x.TransactionId == originalId)
+                .ReversalTransactionId.Should().Be(reversed.ReversalTransactionId);
+            chain.Events.Single(x => x.TransactionId == reversed.ReversalTransactionId)
+                .CorrectiveTransactionId.Should().Be(reversed.CorrectiveTransactionId);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     private static InventoryLockService CreateLockService(ErpKhoDbContext db, int userId)
     {
         var current = new CurrentUser(userId);
