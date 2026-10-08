@@ -7,7 +7,7 @@ import { MockDemoProvider, useMockDemo } from '../context/MockDemoContext';
 
 const ScenarioStarter = () => {
   const demo = useMockDemo();
-  return <button type="button" onClick={() => demo.runScenarioStep('GS-01')}>Run shared GS01</button>;
+  return <button type="button" onClick={() => demo.runScenarioStep('GS-01')}>Chạy GS01 dùng chung</button>;
 };
 
 describe('MockDataLab', () => {
@@ -47,11 +47,11 @@ describe('MockDataLab', () => {
       </MockDemoProvider>,
     );
 
-    fireEvent.click(view.getByText('Run shared GS01'));
-    fireEvent.click(view.getByText('Run shared GS01'));
+    fireEvent.click(view.getByText('Chạy GS01 dùng chung'));
+    fireEvent.click(view.getByText('Chạy GS01 dùng chung'));
     fireEvent.click(view.getByRole('tab', { name: 'Phiên kịch bản dùng chung' }));
 
-    expect(view.getByText(/GS-01 • Inbound Receipt → Post → Putaway/)).toBeTruthy();
+    expect(view.getByText(/GS-01 • Nhận hàng nhập → Ghi sổ → Cất hàng/)).toBeTruthy();
     expect(view.getByText('RECV-01')).toBeTruthy();
     expect(view.getAllByText('100').length).toBeGreaterThan(0);
     expect(view.getByText('Ghi sổ phiếu nhập')).toBeTruthy();
