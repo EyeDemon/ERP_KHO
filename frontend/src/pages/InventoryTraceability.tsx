@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
 
@@ -39,21 +40,24 @@ const transactionTypeLabel=(value:string)=>({
 }[value]??value);
 
 const inventoryStatusLabel=(value:string)=>({
-  Available:'Khả dụng',
-  QcHold:'Chờ kiểm tra chất lượng',
-  Quarantine:'Cách ly',
-  Damaged:'Hư hỏng',
-  Rejected:'Từ chối',
-  Blocked:'Bị chặn',
-  Expired:'Hết hạn',
-  RecallBlocked:'Khóa thu hồi',
-}[value]??value);
+  available:'Khả dụng',
+  qchold:'Chờ kiểm tra chất lượng',
+  quarantine:'Cách ly',
+  damaged:'Hư hỏng',
+  rejected:'Từ chối',
+  blocked:'Bị chặn',
+  expired:'Hết hạn',
+  recallblocked:'Khóa thu hồi',
+}[value.replace(/[_\\s-]/g,'').toLowerCase()]??value);
 
 const tone=(x:Event):'neutral'|'success'|'warning'|'danger'=>
   x.transactionType==='Reversal'?'warning':x.isReversed?'neutral':'success';
 
 export default function InventoryTraceability(){
-  const initialQuery = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
+  // Read URL state from the router so navigation between two reversal links
+  // updates the existing screen rather than reusing stale form/query data.
+  const location=useLocation();
+  const initialQuery=new URLSearchParams(location.search);
   const initialReferenceId = initialQuery.get('referenceId') ?? '';
   const linkedReversal = initialQuery.get('referenceType') === 'InventoryReversal'
     && /^[1-9]\d*$/.test(initialReferenceId) && Number.isSafeInteger(Number(initialReferenceId));
@@ -73,6 +77,10 @@ export default function InventoryTraceability(){
   useEffect(()=>{
     if(!linkedReversal)return;
     let active=true;
+    setForm(x=>({...x,referenceType:'InventoryReversal',referenceId:initialReferenceId}));
+    setValidationError('');
+    setRequestError('');
+    setResult(null);
     const params=new URLSearchParams({
       referenceType:'InventoryReversal',referenceId:initialReferenceId,limit:'200'
     });

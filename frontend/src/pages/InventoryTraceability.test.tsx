@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryTraceability from './InventoryTraceability';
 import apiClient from '../services/apiClient';
@@ -30,6 +31,12 @@ const result={
   ]
 };
 
+const renderTrace=(entries=['/inventory-traceability'])=>render(
+  <MemoryRouter initialEntries={entries}>
+    <Routes><Route path="/inventory-traceability" element={<InventoryTraceability/>}/></Routes>
+  </MemoryRouter>
+);
+
 describe('InventoryTraceability',()=>{
   beforeEach(()=>vi.resetAllMocks());
   afterEach(()=>{
@@ -38,9 +45,8 @@ describe('InventoryTraceability',()=>{
   });
 
   it('loads an authorized immutable reversal chain directly from its deep link',async()=>{
-    window.history.replaceState({}, '', '?referenceType=InventoryReversal&referenceId=41');
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
-    const view=render(<InventoryTraceability/>);
+    const view=renderTrace(['/inventory-traceability?referenceType=InventoryReversal&referenceId=41']);
 
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
       '/api/inventory/traceability?referenceType=InventoryReversal&referenceId=41&limit=200'
@@ -50,8 +56,47 @@ describe('InventoryTraceability',()=>{
     expect(await view.findByText('Đảo giao dịch')).toBeTruthy();
   });
 
+  it('tracks router deep-link changes and ignores a stale earlier ledger response',async()=>{
+    let resolveFirst:(value:unknown)=>void=()=>{};
+    const first=new Promise(resolve=>{resolveFirst=resolve});
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(String(url).includes('referenceId=41'))return await first as never;
+      return {data:{...result,events:[{...result.events[0],transactionId:84,referenceId:84}]}} as never;
+    });
+    const view=render(
+      <MemoryRouter initialEntries={['/inventory-traceability?referenceType=InventoryReversal&referenceId=41']}>
+        <Link to="/inventory-traceability?referenceType=InventoryReversal&referenceId=84">Mở chuỗi đảo khác</Link>
+        <Routes><Route path="/inventory-traceability" element={<InventoryTraceability/>}/></Routes>
+      </MemoryRouter>
+    );
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?referenceType=InventoryReversal&referenceId=41&limit=200'
+    ));
+    fireEvent.click(view.getByText('Mở chuỗi đảo khác'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?referenceType=InventoryReversal&referenceId=84&limit=200'
+    ));
+    expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');
+    expect(await view.findByText('#84')).toBeTruthy();
+    resolveFirst({data:result});
+    await waitFor(()=>expect(view.queryByText('#41 • đã đảo')).toBeNull());
+    expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');
+  });
+
+  it('renders legacy uppercase or underscored inventory status in Vietnamese',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      currentBuckets:[{...result.currentBuckets[0],inventoryStatus:'RECALL_BLOCKED'}],
+      events:[{...result.events[0],inventoryStatus:'QC_HOLD'}]
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    expect(await view.findByText('Khóa thu hồi')).toBeTruthy();
+    expect(view.getByText('Chờ kiểm tra chất lượng')).toBeTruthy();
+  });
+
   it('requires at least identity or reference and focuses the primary identity field',()=>{
-    const view=render(<InventoryTraceability/>);
+    const view=renderTrace();
     const productId=view.getByLabelText('ID sản phẩm');
     fireEvent.click(view.getByText('Truy vết'));
     expect(view.getByRole('alert').textContent).toContain('ít nhất');
@@ -60,7 +105,7 @@ describe('InventoryTraceability',()=>{
   });
 
   it('requires reference type and id together and exposes inline field state',()=>{
-    const view=render(<InventoryTraceability/>);
+    const view=renderTrace();
     const referenceType=view.getByLabelText('Loại tham chiếu');
     const referenceId=view.getByLabelText('ID tham chiếu');
     fireEvent.change(referenceType,{target:{value:'Shipment'}});
@@ -81,7 +126,7 @@ describe('InventoryTraceability',()=>{
 
   it('renders visible labels, current buckets and reversal-aware immutable timeline',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
-    const view=render(<InventoryTraceability/>);
+    const view=renderTrace();
     expect(view.getByLabelText('ID kho (tùy chọn)')).toBeTruthy();
     expect(view.getByLabelText('ID sản phẩm')).toBeTruthy();
     expect(view.getByLabelText('Mã lô')).toBeTruthy();
@@ -104,7 +149,7 @@ describe('InventoryTraceability',()=>{
 
   it('surfaces request errors with a recovery path',async()=>{
     vi.mocked(apiClient.get).mockRejectedValue({response:{status:500,data:{message:'Máy chủ bận.'}}});
-    const view=render(<InventoryTraceability/>);
+    const view=renderTrace();
     fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
     fireEvent.click(view.getByText('Truy vết'));
     const alert=await view.findByRole('alert');
@@ -114,7 +159,7 @@ describe('InventoryTraceability',()=>{
 
   it('announces loading state for asynchronous trace queries',async()=>{
     vi.mocked(apiClient.get).mockImplementation(()=>new Promise(()=>{}) as never);
-    const view=render(<InventoryTraceability/>);
+    const view=renderTrace();
     fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
     fireEvent.click(view.getByText('Truy vết'));
     expect(view.getByRole('status').textContent).toContain('Đang truy vết tồn kho');
