@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryTraceability from './InventoryTraceability';
@@ -78,8 +78,10 @@ describe('InventoryTraceability',()=>{
     ));
     expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');
     expect(await view.findByText('#84 • đã đảo')).toBeTruthy();
-    resolveFirst({data:result});
-    await waitFor(()=>expect(view.queryByText('#41 • đã đảo')).toBeNull());
+    // Flush the delayed first response before asserting: otherwise the
+    // assertion can pass prematurely without exercising the race.
+    await act(async()=>{resolveFirst({data:result});});
+    expect(view.queryByText('#41 • đã đảo')).toBeNull();
     expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');
   });
 
