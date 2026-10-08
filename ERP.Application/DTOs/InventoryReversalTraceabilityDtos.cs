@@ -1,5 +1,25 @@
 namespace ERP.Application.DTOs;
 
+public sealed class InventoryReversalCandidateDto
+{
+    public int Id { get; set; }
+    public int ProductId { get; set; }
+    public string ProductCode { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public int WarehouseId { get; set; }
+    public string WarehouseName { get; set; } = string.Empty;
+    public string TransactionType { get; set; } = string.Empty;
+    public string InventoryStatus { get; set; } = string.Empty;
+    public string? FromInventoryStatus { get; set; }
+    public string? ToInventoryStatus { get; set; }
+    public string? LotNumber { get; set; }
+    public string? SerialNumber { get; set; }
+    public decimal Quantity { get; set; }
+    public DateTime TransactionDate { get; set; }
+    public bool IsReversed { get; set; }
+}
+
+
 public sealed class CreateInventoryReversalDto
 {
     public int OriginalTransactionId { get; set; }

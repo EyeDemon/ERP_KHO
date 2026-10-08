@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -8,9 +8,9 @@ type TransactionRow={
   id:number;productId:number;productCode?:string;productName?:string;warehouseId:number;warehouseName?:string;
   transactionType:string;inventoryStatus:string;fromInventoryStatus?:string|null;toInventoryStatus?:string|null;
   lotNumber?:string|null;serialNumber?:string|null;quantity:number;referenceId?:number|null;referenceType?:string|null;
-  transactionDate:string;createdByName?:string|null;note?:string|null;
+  transactionDate:string;isReversed:boolean;
 };
-type Page={items:TransactionRow[]};
+type Page={items:TransactionRow[];totalRecords:number;pageIndex:number;pageSize:number;totalPages:number};
 
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
@@ -43,7 +43,11 @@ const inventoryStatusLabel=(value:string)=>({
 export default function InventoryReversals(){
   const canReverse=usePermission('inventory_reversal.create');
   const [rows,setRows]=useState<TransactionRow[]>([]);
-  const [reversedIds,setReversedIds]=useState<Set<number>>(new Set());
+  const [page,setPage]=useState(1);
+  const [totalRecords,setTotalRecords]=useState(0);
+  const [totalPages,setTotalPages]=useState(0);
+  const [success,setSuccess]=useState('');
+  const requestSequence=useRef(0);
   const [selected,setSelected]=useState<TransactionRow|null>(null);
   const [reason,setReason]=useState('');
   const [loading,setLoading]=useState(true);
@@ -51,33 +55,27 @@ export default function InventoryReversals(){
   const [error,setError]=useState('');
   const guard=useRef(false);
 
-  const load=async()=>{
+  const load=useCallback(async(targetPage:number)=>{
+    const sequence=++requestSequence.current;
     setLoading(true);setError('');
     try{
-      const params='page=1&pageSize=100';
-      const [moves,statusChanges,reversals]=await Promise.all([
-        apiClient.get('/api/InventoryTransactions?transactionType=Move&'+params),
-        apiClient.get('/api/InventoryTransactions?transactionType=StatusChange&'+params),
-        apiClient.get('/api/InventoryTransactions?transactionType=Reversal&'+params),
-      ]);
-      const candidates=[...(moves.data as Page).items,...(statusChanges.data as Page).items]
-        .sort((a,b)=>new Date(b.transactionDate).getTime()-new Date(a.transactionDate).getTime());
-      const reversed=new Set<number>(
-        (reversals.data as Page).items
-          .filter(x=>x.referenceType==='InventoryReversal'&&typeof x.referenceId==='number')
-          .map(x=>x.referenceId as number)
-      );
-      setRows(candidates);setReversedIds(reversed);
-    }catch(e){setRows([]);setReversedIds(new Set());setError(errorMessage(e))}
-    finally{setLoading(false)}
-  };
-  useEffect(()=>{void load()},[]);
+      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20');
+      if(sequence!==requestSequence.current)return;
+      setRows(response.data.items);
+      setTotalRecords(response.data.totalRecords);
+      setTotalPages(response.data.totalPages);
+    }catch(e){
+      if(sequence!==requestSequence.current)return;
+      setRows([]);setTotalRecords(0);setTotalPages(0);setError(errorMessage(e));
+    }finally{if(sequence===requestSequence.current)setLoading(false)}
+  },[]);
+  useEffect(()=>{void load(page)},[load,page]);
 
   const submit=async(e:FormEvent)=>{
     e.preventDefault();
-    if(!selected||!canReverse||guard.current||!reason.trim())return;
+    if(!selected||selected.isReversed||!canReverse||guard.current||!reason.trim())return;
     const key='inventory-reversal-'+selected.id;
-    guard.current=true;setBusy(true);setError('');
+    guard.current=true;setBusy(true);setError('');setSuccess('');
     try{
       await apiClient.post('/api/inventory/reversals',{
         originalTransactionId:selected.id,
@@ -85,7 +83,8 @@ export default function InventoryReversals(){
       },{headers:idempotencyHeaders(key)});
       completeIdempotentAction(key);
       setSelected(null);setReason('');
-      await load();
+      setSuccess('Đã ghi nhận giao dịch đảo và cập nhật danh sách.');
+      await load(page);
     }catch(e){setError(errorMessage(e))}
     finally{guard.current=false;setBusy(false)}
   };
@@ -94,14 +93,16 @@ export default function InventoryReversals(){
     <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Đảo giao dịch tồn kho"
       description="Không sửa hoặc xóa sổ cái đã ghi. Thao tác đảo tạo một giao dịch hiệu chỉnh mới và một dấu mốc liên kết về giao dịch gốc."/>
     {error&&<p role="alert">{error}</p>}
+    {success&&<p role="status">{success}</p>}
     <UiCard title="Giao dịch có thể đảo hiệu chỉnh">
       <p className="ui-muted-text">Phạm vi hiện tại chỉ hỗ trợ di chuyển vị trí nội bộ và đổi trạng thái tồn kho. Giao hàng, điều chuyển và giao dịch gắn với chứng từ phải được đảo tại quy trình nghiệp vụ sở hữu.</p>
+      <p role="status" className="ui-muted-text">{loading?'Đang tải giao dịch...':('Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch')}</p>
       {loading?<p role="status">Đang tải giao dịch...</p>:<UiTableScroll>
         <table aria-label="Danh sách giao dịch có thể đảo">
           <thead><tr><th>Giao dịch</th><th>Sản phẩm</th><th>Kho</th><th>Chi tiết theo dõi</th><th>Số lượng</th><th>Thời gian</th><th>Trạng thái đảo</th>{canReverse&&<th>Thao tác</th>}</tr></thead>
           <tbody>{rows.length===0?<tr><td colSpan={canReverse?8:7} className="ui-empty-cell">Không có giao dịch phù hợp.</td></tr>:
             rows.map(x=>{
-              const reversed=reversedIds.has(x.id);
+              const reversed=x.isReversed;
               return <tr key={x.id}>
                 <td><strong>{transactionTypeLabel(x.transactionType)}</strong><br/><small>#{x.id}</small></td>
                 <td>{x.productCode??('#'+x.productId)}<br/><small>{x.productName??''}</small></td>
@@ -116,11 +117,15 @@ export default function InventoryReversals(){
           </tbody>
         </table>
       </UiTableScroll>}
+      <div className="ui-inline-actions" aria-label="Phân trang giao dịch đảo">
+        <button type="button" disabled={loading||busy||page<=1} onClick={()=>{setSelected(null);setPage(p=>Math.max(1,p-1))}}>Trang trước</button>
+        <button type="button" disabled={loading||busy||page>=totalPages} onClick={()=>{setSelected(null);setPage(p=>p+1)}}>Trang sau</button>
+      </div>
     </UiCard>
 
     {selected&&canReverse&&<UiCard title={'Đảo giao dịch #'+selected.id}>
       <form onSubmit={submit} className="ui-form-grid">
-        <p className="ui-muted-text">{selected.transactionType} • {selected.productCode??selected.productId} • số lượng {selected.quantity}. Thao tác hiệu chỉnh vẫn kiểm tra lại khóa tồn, lượng đã giữ, sức chứa và chính sách trạng thái trong cùng giao dịch Serializable.</p>
+        <p className="ui-muted-text">{transactionTypeLabel(selected.transactionType)} • {selected.productCode??selected.productId} • số lượng {selected.quantity}. Thao tác hiệu chỉnh vẫn kiểm tra lại khóa tồn, lượng đã giữ, sức chứa và chính sách trạng thái trong cùng giao dịch Serializable.</p>
         <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do / bằng chứng bắt buộc" required/>
         <div className="ui-inline-actions">
           <button type="submit" disabled={busy||!reason.trim()}>Xác nhận đảo giao dịch</button>

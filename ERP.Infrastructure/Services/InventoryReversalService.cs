@@ -1,5 +1,6 @@
 using System.Data;
 using ERP.Application.DTOs;
+using ERP.Application.Common;
 using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
@@ -18,6 +19,53 @@ public sealed class InventoryReversalService(
     IInventoryMovementService movementService,
     IInventoryStatusService statusService) : IInventoryReversalService
 {
+    public async Task<PagedResult<InventoryReversalCandidateDto>> GetCandidatesAsync(
+        int? warehouseId = null, int page = 1, int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (warehouseId.HasValue && warehouseId.Value <= 0)
+            throw new BusinessRuleException("Mã kho không hợp lệ.");
+        if (warehouseId.HasValue)
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+        var permittedWarehouseIds = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        var safePage = Math.Max(1, page);
+        var safeSize = pageSize is >= 1 and <= 100 ? pageSize : 20;
+
+        var candidates = context.InventoryTransactions.AsNoTracking()
+            .Where(x => permittedWarehouseIds.Contains(x.WarehouseId)
+                && (!warehouseId.HasValue || x.WarehouseId == warehouseId.Value)
+                && (x.TransactionType == TransactionType.Move || x.TransactionType == TransactionType.StatusChange));
+
+        var count = await candidates.CountAsync(cancellationToken);
+        var items = await candidates.OrderByDescending(x => x.TransactionDate).ThenByDescending(x => x.Id)
+            .Skip((safePage - 1) * safeSize).Take(safeSize)
+            .Select(x => new InventoryReversalCandidateDto
+            {
+                Id = x.Id,
+                ProductId = x.ProductId,
+                ProductCode = x.Product.Code,
+                ProductName = x.Product.Name,
+                WarehouseId = x.WarehouseId,
+                WarehouseName = x.Warehouse.Name,
+                TransactionType = x.TransactionType.ToString(),
+                InventoryStatus = x.InventoryStatus.ToString(),
+                FromInventoryStatus = x.FromInventoryStatus.HasValue ? x.FromInventoryStatus.Value.ToString() : null,
+                ToInventoryStatus = x.ToInventoryStatus.HasValue ? x.ToInventoryStatus.Value.ToString() : null,
+                LotNumber = x.Lot == null ? null : x.Lot.LotNumber,
+                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
+                Quantity = x.Quantity,
+                TransactionDate = x.TransactionDate,
+                // Database-authoritative: never infer reversal state from a limited frontend page.
+                IsReversed = context.InventoryTransactions.Any(marker => marker.ReversalOfTransactionId == x.Id)
+            }).ToListAsync(cancellationToken);
+
+        return new PagedResult<InventoryReversalCandidateDto>
+        {
+            Items = items, TotalRecords = count, PageIndex = safePage, PageSize = safeSize
+        };
+    }
+
     public async Task<InventoryReversalResultDto> ReverseAsync(
         CreateInventoryReversalDto request,
         CancellationToken cancellationToken = default)

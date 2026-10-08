@@ -13,57 +13,66 @@ vi.mock('../services/idempotency',()=>({
   completeIdempotentAction,
 }));
 
-const move={id:41,productId:10,productCode:'SKU-10',productName:'Product 10',warehouseId:1,warehouseName:'DC HCM',
-  transactionType:'Move',inventoryStatus:'Available',lotNumber:'LOT-A',quantity:4,transactionDate:'2026-10-07T10:00:00Z'};
-const statusChange={id:42,productId:10,productCode:'SKU-10',productName:'Product 10',warehouseId:1,warehouseName:'DC HCM',
-  transactionType:'StatusChange',inventoryStatus:'QcHold',fromInventoryStatus:'Available',toInventoryStatus:'QcHold',quantity:2,transactionDate:'2026-10-07T11:00:00Z'};
-const reads=()=>vi.mocked(apiClient.get).mockImplementation(async url=>{
-  const value=String(url);
-  if(value.includes('transactionType=Move'))return {data:{items:[move]}} as never;
-  if(value.includes('transactionType=StatusChange'))return {data:{items:[statusChange]}} as never;
-  if(value.includes('transactionType=Reversal'))return {data:{items:[]}} as never;
-  return {data:{items:[]}} as never;
-});
+const move={id:41,productId:10,productCode:'SKU-10',productName:'Sản phẩm 10',warehouseId:1,warehouseName:'Kho HCM',
+  transactionType:'Move',inventoryStatus:'Available',lotNumber:'LOT-A',quantity:4,transactionDate:'2026-10-07T10:00:00Z',isReversed:false};
+const statusChange={...move,id:42,transactionType:'StatusChange',fromInventoryStatus:'Available',
+  toInventoryStatus:'QcHold',inventoryStatus:'QcHold',quantity:2,transactionDate:'2026-10-07T11:00:00Z'};
 
-describe('InventoryReversals',()=>{
-  beforeEach(()=>{vi.resetAllMocks();completeIdempotentAction.mockReset();permissionState.granted.clear();permissionState.granted.add('inventory_ledger.read');reads()});
+const page=(items:typeof move[],pageIndex=1,totalRecords=items.length)=>({
+  items,totalRecords,pageIndex,pageSize:20,totalPages:Math.ceil(totalRecords/20)
+});
+const reads=()=>vi.mocked(apiClient.get).mockResolvedValue({data:page([statusChange,move])} as never);
+
+describe('InventoryReversals — backend-authoritative list',()=>{
+  beforeEach(()=>{
+    vi.resetAllMocks();completeIdempotentAction.mockReset();permissionState.granted.clear();
+    permissionState.granted.add('inventory_ledger.read');reads();
+  });
   afterEach(cleanup);
 
-  it('shows supported transactions read-only without reversal permission',async()=>{
+  it('reads one server-filtered page and hides mutation without permission',async()=>{
     const view=render(<InventoryReversals/>);
     expect(await view.findByText('Đổi trạng thái')).toBeTruthy();
     expect(view.getByText('Di chuyển vị trí')).toBeTruthy();
-    expect(view.queryByText('Đảo giao dịch')).toBeNull();
+    expect(view.queryByText('Xác nhận đảo giao dịch')).toBeNull();
+    expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=1&pageSize=20');
   });
 
-  it('posts reversal once with idempotency key',async()=>{
+  it('posts one reversal with a stable idempotency key',async()=>{
     permissionState.granted.add('inventory_reversal.create');
     vi.mocked(apiClient.post).mockResolvedValue({data:{reversalTransactionId:99}} as never);
     const view=render(<InventoryReversals/>);
     await view.findByText('Đổi trạng thái');
     const buttons=view.getAllByText('Đảo giao dịch');
     fireEvent.click(buttons[0]);
-    fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{target:{value:'Hiệu chỉnh theo xác nhận của người vận hành'}});
+    fireEvent.change(view.getByLabelText('Lý do đảo giao dịch tồn kho'),{target:{value:'Đã kiểm tra theo chứng từ'}});
     const submit=view.getByText('Xác nhận đảo giao dịch');
     fireEvent.click(submit);fireEvent.click(submit);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/reversals',{
-      originalTransactionId:42,reason:'Hiệu chỉnh theo xác nhận của người vận hành'
+      originalTransactionId:42,reason:'Đã kiểm tra theo chứng từ'
     },{headers:{'Idempotency-Key':'key:inventory-reversal-42'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-reversal-42');
   });
 
-  it('disables reversal when marker already references original transaction',async()=>{
+  it('disables old reversed transaction even without the marker in this page',async()=>{
     permissionState.granted.add('inventory_reversal.create');
-    vi.mocked(apiClient.get).mockImplementation(async url=>{
-      const value=String(url);
-      if(value.includes('transactionType=Move'))return {data:{items:[move]}} as never;
-      if(value.includes('transactionType=StatusChange'))return {data:{items:[]}} as never;
-      if(value.includes('transactionType=Reversal'))return {data:{items:[{...move,id:90,transactionType:'Reversal',referenceType:'InventoryReversal',referenceId:41}]}} as never;
-      return {data:{items:[]}} as never;
-    });
+    vi.mocked(apiClient.get).mockResolvedValue({data:page([{...move,isReversed:true}])} as never);
     const view=render(<InventoryReversals/>);
     expect(await view.findByText('Đã đảo')).toBeTruthy();
     expect((view.getByText('Đảo giao dịch') as HTMLButtonElement).disabled).toBe(true);
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('requests later pages from server without truncating older transactions',async()=>{
+    vi.mocked(apiClient.get).mockImplementation(async (url)=>{
+      const second=String(url).includes('page=2');
+      return {data:page(second?[{...move,id:21}]:[move],second?2:1,130)} as never;
+    });
+    const view=render(<InventoryReversals/>);
+    await view.findByText('1 / 7');
+    fireEvent.click(view.getByText('Trang sau'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=2&pageSize=20'));
+    expect(await view.findByText('2 / 7')).toBeTruthy();
   });
 });

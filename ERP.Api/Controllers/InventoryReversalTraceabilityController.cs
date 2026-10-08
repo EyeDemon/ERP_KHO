@@ -1,6 +1,7 @@
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
+using ERP.Application.Common;
 using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,13 @@ public sealed class InventoryReversalTraceabilityController(
     IInventoryReversalService reversalService,
     IInventoryTraceabilityQueryService traceabilityService) : ControllerBase
 {
+    [HttpGet("reversal-candidates")]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+    public async Task<ActionResult<PagedResult<InventoryReversalCandidateDto>>> Candidates(
+        [FromQuery] int? warehouseId, [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default) =>
+        Ok(await reversalService.GetCandidatesAsync(warehouseId, page, pageSize, cancellationToken));
+
     [HttpPost("reversals")]
     [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]
     [IdempotentCommand("InventoryReversal.Create")]
