@@ -20,9 +20,9 @@ const MockGlobalSearch = () => {
       <Link to="/system-blueprint" className="global-search-back"><ArrowLeft size={16} /> Bản đồ hệ thống</Link>
       <section className="global-search-hero">
         <div>
-          <span>ERP WMS • MOCK GLOBAL SEARCH</span>
+          <span>ERP WMS • TÌM KIẾM MÔ PHỎNG TOÀN HỆ THỐNG</span>
           <h1>Tìm kiếm toàn hệ thống</h1>
-          <p>Ưu tiên Product, exact Barcode, Document No., Lot/Serial và Business Partner. Operational results tôn trọng warehouse scope của persona mô phỏng.</p>
+          <p>Ưu tiên Sản phẩm, Mã vạch khớp chính xác, Số chứng từ, Lô/Sê-ri và Đối tác. Kết quả vận hành tôn trọng phạm vi kho của vai trò mô phỏng.</p>
         </div>
         <div className="global-search-scope">
           <strong>{demo.selectedUser.name}</strong>
@@ -34,10 +34,10 @@ const MockGlobalSearch = () => {
       <section className="global-search-box">
         <Search size={20} />
         <input
-          aria-label="Global search"
+          aria-label="Tìm kiếm toàn hệ thống"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="SKU, barcode, chứng từ, lot, serial, partner..."
+          placeholder="SKU, mã vạch, chứng từ, lô, sê-ri, đối tác..."
         />
         {query.length > 0 ? <button type="button" onClick={() => setQuery('')}>Xóa</button> : null}
       </section>
@@ -54,7 +54,7 @@ const MockGlobalSearch = () => {
         </header>
 
         {query.length > 0 && results.length === 0 ? (
-          <div className="global-search-empty">Không có dữ liệu phù hợp trong scope hiện tại.</div>
+          <div className="global-search-empty">Không có dữ liệu phù hợp trong phạm vi hiện tại.</div>
         ) : null}
 
         {results.map((result) => (
@@ -66,7 +66,7 @@ const MockGlobalSearch = () => {
               <p>{result.detail}</p>
             </div>
             <div className="global-search-meta">
-              {result.exact && <span className="exact-badge">EXACT</span>}
+              {result.exact && <span className="exact-badge">KHỚP CHÍNH XÁC</span>}
               {result.warehouse ? <span>{result.warehouse}</span> : null}
               {result.status ? <span>{result.status}</span> : null}
             </div>
