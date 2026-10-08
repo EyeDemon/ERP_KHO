@@ -88,6 +88,7 @@ export default function InventoryTraceability(){
       // A route transition back to an unfiltered trace view must not leave
       // the previous document or warehouse filters visible as current data.
       setForm({warehouseId:'',productId:'',lotNumber:'',serialNumber:'',referenceType:'',referenceId:''});
+      setEventLimit(200);
       setResult(null);
       setRequestError('');
       setValidationError('');
@@ -99,6 +100,8 @@ export default function InventoryTraceability(){
       warehouseId:'',productId:'',lotNumber:'',serialNumber:'',
       referenceType:'InventoryReversal',referenceId:initialReferenceId
     });
+    // Linked searches use the default 200-event window; keep the UI in sync.
+    setEventLimit(200);
     setValidationError('');
     setRequestError('');
     setResult(null);

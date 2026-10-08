@@ -73,6 +73,9 @@ describe('InventoryTraceability',()=>{
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
       '/api/inventory/traceability?referenceType=InventoryReversal&referenceId=41&limit=200'
     ));
+    fireEvent.change(view.getByLabelText('Giới hạn sự kiện truy vết'),{
+      target:{value:'500'}
+    });
     fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
     fireEvent.click(view.getByText('Mở chuỗi đảo khác'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
@@ -80,6 +83,7 @@ describe('InventoryTraceability',()=>{
     ));
     expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('84');
     expect((view.getByLabelText('ID sản phẩm') as HTMLInputElement).value).toBe('');
+    expect((view.getByLabelText('Giới hạn sự kiện truy vết') as HTMLSelectElement).value).toBe('200');
     expect(await view.findByText('#84 • đã đảo')).toBeTruthy();
     // Flush the delayed first response before asserting: otherwise the
     // assertion can pass prematurely without exercising the race.
