@@ -11,6 +11,7 @@ using ERP.Infrastructure.Queries;
 using ERP.Infrastructure.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace ERP.Application.Tests;
 
@@ -18,6 +19,136 @@ namespace ERP.Application.Tests;
 public sealed class SqlServerStockTransferTests
 {
     private static string ConnectionString => Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable)!;
+
+    [SqlServerFact]
+    public async Task CreateMustRollbackDocumentAndDetailsWhenAuditPersistenceFails()
+    {
+        var fixture = await CreateFixtureAsync(10);
+        var note = "Bắt buộc nguyên tử tạo phiếu " + Guid.NewGuid().ToString("N");
+        try
+        {
+            await using (var db = CreateContext(new RejectTransferAuditInterceptor("StockTransfer.Created")))
+            {
+                var request = Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 3);
+                request.Note = note;
+                var act = () => CreateService(db, fixture.CreatorId).CreateAsync(request);
+                await act.Should().ThrowAsync<InvalidOperationException>()
+                    .WithMessage("*Chặn lưu audit thử nghiệm*");
+            }
+            await using var verify = CreateContext();
+            (await verify.StockTransfers.CountAsync(x => x.Note == note)).Should().Be(0);
+            (await verify.StockTransferDetails.CountAsync(x =>
+                x.StockTransfer.Note == note)).Should().Be(0);
+            (await StockAsync(verify, fixture.ProductId, fixture.SourceId)).Should().Be(10);
+            (await verify.AuditLogs.CountAsync(x => x.Action == "StockTransfer.Created" &&
+                x.UserId == fixture.CreatorId && x.SourceWarehouseId == fixture.SourceId &&
+                x.DestinationWarehouseId == fixture.DestinationId)).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task ApproveCancelAndCompleteMustRollbackStatusWhenAuditSaveFails()
+    {
+        var fixture = await CreateFixtureAsync(12);
+        try
+        {
+            int approveId, cancelId, completeId;
+            await using (var setup = CreateContext())
+            {
+                var maker = CreateService(setup, fixture.CreatorId);
+                approveId = (await maker.CreateAsync(Request(fixture.SourceId,
+                    fixture.DestinationId, fixture.ProductId, 2))).Id;
+                cancelId = (await maker.CreateAsync(Request(fixture.SourceId,
+                    fixture.DestinationId, fixture.ProductId, 2))).Id;
+                completeId = (await maker.CreateAsync(Request(fixture.SourceId,
+                    fixture.DestinationId, fixture.ProductId, 3))).Id;
+                var checker = CreateService(setup, fixture.UserId);
+                await checker.ApproveAsync(completeId);
+                await checker.DispatchAsync(completeId);
+                await checker.ReceiveAsync(completeId, new ReceiveStockTransferDto
+                {
+                    Details = [new() { ProductId = fixture.ProductId, ReceivedQuantity = 3 }]
+                });
+            }
+
+            async Task RejectTransitionAsync(int id, string action,
+                Func<StockTransferService, Task> perform,
+                StockTransferStatus expectedStatus)
+            {
+                await using (var failing = CreateContext(new RejectTransferAuditInterceptor(action)))
+                {
+                    var act = () => perform(CreateService(failing, fixture.UserId));
+                    await act.Should().ThrowAsync<InvalidOperationException>()
+                        .WithMessage("*Chặn lưu audit thử nghiệm*");
+                }
+                await using var verify = CreateContext();
+                (await verify.StockTransfers.AsNoTracking()
+                    .Where(x => x.Id == id).Select(x => x.Status).SingleAsync())
+                    .Should().Be(expectedStatus);
+                (await verify.AuditLogs.CountAsync(x =>
+                    x.EntityName == "StockTransfer" && x.EntityId == id &&
+                    x.Action == action)).Should().Be(0);
+            }
+
+            await RejectTransitionAsync(approveId, "StockTransfer.Approved",
+                service => service.ApproveAsync(approveId), StockTransferStatus.Draft);
+            await RejectTransitionAsync(cancelId, "StockTransfer.Cancelled",
+                service => service.CancelAsync(cancelId), StockTransferStatus.Draft);
+            await RejectTransitionAsync(completeId, "StockTransfer.Completed",
+                service => service.CompleteAsync(completeId), StockTransferStatus.Received);
+
+            await using (var recover = CreateContext())
+            {
+                var service = CreateService(recover, fixture.UserId);
+                await service.ApproveAsync(approveId);
+                await service.CancelAsync(cancelId);
+                await service.CompleteAsync(completeId);
+            }
+            await using (var verify = CreateContext())
+            {
+                (await verify.StockTransfers.AsNoTracking()
+                    .Where(x => x.Id == approveId).Select(x => x.Status).SingleAsync())
+                    .Should().Be(StockTransferStatus.Approved);
+                (await verify.StockTransfers.AsNoTracking()
+                    .Where(x => x.Id == cancelId).Select(x => x.Status).SingleAsync())
+                    .Should().Be(StockTransferStatus.Cancelled);
+                (await verify.StockTransfers.AsNoTracking()
+                    .Where(x => x.Id == completeId).Select(x => x.Status).SingleAsync())
+                    .Should().Be(StockTransferStatus.Completed);
+                foreach (var (id, action) in new[]
+                {
+                    (approveId, "StockTransfer.Approved"),
+                    (cancelId, "StockTransfer.Cancelled"),
+                    (completeId, "StockTransfer.Completed")
+                })
+                {
+                    (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer"
+                        && x.EntityId == id && x.Action == action)).Should().Be(1);
+                }
+                (await StockAsync(verify, fixture.ProductId, fixture.SourceId)).Should().Be(9);
+                (await StockAsync(verify, fixture.ProductId, fixture.DestinationId)).Should().Be(3);
+                (await verify.InventoryTransactions.CountAsync(x =>
+                    x.ReferenceType == "StockTransfer" && x.ReferenceId == completeId))
+                    .Should().Be(2);
+            }
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    private sealed class RejectTransferAuditInterceptor(string action) : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context?.ChangeTracker.Entries<AuditLog>().Any(entry =>
+                    entry.State == EntityState.Added && entry.Entity.Action == action) == true)
+                throw new InvalidOperationException("Chặn lưu audit thử nghiệm.");
+            return new ValueTask<InterceptionResult<int>>(result);
+        }
+    }
 
     [SqlServerFact]
     public async Task ValidationRejectsSameWarehouseNonPositiveAndDuplicateProducts()
@@ -658,7 +789,13 @@ public sealed class SqlServerStockTransferTests
     }
 
     private static Task<decimal> StockAsync(ErpKhoDbContext db, int product, int warehouse) => db.InventoryStocks.Where(x => x.ProductId == product && x.WarehouseId == warehouse).Select(x => x.Quantity).SingleAsync();
-    private static ErpKhoDbContext CreateContext() => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(ConnectionString).Options);
+    private static ErpKhoDbContext CreateContext(SaveChangesInterceptor? interceptor = null)
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseSqlServer(ConnectionString);
+        if (interceptor is not null) options.AddInterceptors(interceptor);
+        return new ErpKhoDbContext(options.Options);
+    }
     private sealed record TestCurrentUser(int UserId, bool IsGlobalAdmin, string Role) : ICurrentUser { public bool IsAuthenticated => true; }
     private sealed record Fixture(int CreatorId, int UserId, int RoleId, int UnitId, int ProductId, int SourceId, int DestinationId);
 }
