@@ -12,7 +12,8 @@ describe('Danh sách kho truy vết được cấp quyền',()=>{
     const choices=[{id:7,code:'K7',name:'Kho phía Nam'}];
     vi.mocked(apiClient.get).mockResolvedValue({data:choices} as never);
     expect(await getTraceabilityWarehouses()).toEqual(choices);
-    expect(apiClient.get).toHaveBeenCalledExactlyOnceWith('/api/inventory/traceability-warehouses');
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/traceability-warehouses');
   });
 
   it.each([
