@@ -13,7 +13,7 @@ const post = vi.mocked(apiClient.post);
 const transfer = {
   id: 807, code: 'TRF-807', sourceWarehouseId: 1, sourceWarehouseName: 'Kho nguồn',
   destinationWarehouseId: 2, destinationWarehouseName: 'Kho đích',
-  status: 'InTransit', createdBy: 1, createdAt: '2026-10-08T09:00:00Z',
+  status: 'InTransit', draftRevision: 1, createdBy: 1, createdAt: '2026-10-08T09:00:00Z',
   details: [{
     productId: 9, productCode: 'SKU-9', productName: 'Sản phẩm',
     requestedQuantity: 5, dispatchedQuantity: 5, receivedQuantity: 0,
@@ -89,6 +89,7 @@ describe('Stock transfer command consistency', () => {
       '/api/stock-transfers/807',
       {
         sourceWarehouseId: 1, destinationWarehouseId: 2, note: 'Phiếu ban đầu',
+        expectedDraftRevision: 1,
         details: [{ productId: 9, quantity: 6, note: 'Đã chỉnh sửa ghi chú dòng' }],
       },
       expect.objectContaining({ headers: expect.objectContaining({

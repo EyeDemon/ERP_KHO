@@ -13,6 +13,7 @@ public sealed class StockTransferConfiguration : IEntityTypeConfiguration<StockT
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
         builder.HasIndex(x => x.Code).IsUnique();
         builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.DraftRevision).HasDefaultValue(1).IsConcurrencyToken();
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.ReverseReasonCode).HasMaxLength(40);
         builder.Property(x => x.ReverseReason).HasMaxLength(400);

@@ -3428,6 +3428,12 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("DestinationWarehouseId")
                         .HasColumnType("int");
 
+                    b.Property<int>("DraftRevision")
+                        .ValueGeneratedOnAdd()
+                        .IsConcurrencyToken()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<DateTime?>("DispatchedAt")
                         .HasColumnType("datetime2");
 

@@ -39,6 +39,7 @@ type Transfer = {
   destinationWarehouseId: number;
   destinationWarehouseName: string;
   status: string | number;
+  draftRevision: number;
   note?: string;
   reverseOfTransferId?: number;
   createdBy: number;
@@ -86,6 +87,7 @@ export default function StockTransfers() {
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingRevision, setEditingRevision] = useState<number | null>(null);
   const [draftConflict, setDraftConflict] = useState(false);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const draftDialogRef = useRef<HTMLFormElement>(null);
@@ -174,6 +176,7 @@ export default function StockTransfers() {
 
   const openNewDraft = () => {
     setEditingId(null);
+    setEditingRevision(null);
     setDraftConflict(false);
     setSourceId('');
     setDestinationId('');
@@ -183,10 +186,15 @@ export default function StockTransfers() {
     setShowCreate(true);
   };
 
-  const openDraftEditor = (transfer: Transfer) => {
+  const openDraftEditor = (transfer: Omit<Transfer, 'draftRevision'> & { draftRevision?: number }) => {
     if (!canWrite || normalizeStatus(transfer.status) !== 'Draft' || transfer.reverseOfTransferId) return;
+    if (!Number.isSafeInteger(transfer.draftRevision) || !transfer.draftRevision || transfer.draftRevision < 1) {
+      setError('Phiếu nháp thiếu phiên bản hợp lệ. Không thể lưu; hãy tải lại chi tiết phiếu.');
+      return;
+    }
     detailRequestSequence.current += 1;
     setEditingId(transfer.id);
+    setEditingRevision(transfer.draftRevision);
     setDraftConflict(false);
     setSourceId(transfer.sourceWarehouseId);
     setDestinationId(transfer.destinationWarehouseId);
@@ -203,6 +211,7 @@ export default function StockTransfers() {
     if (createInFlightRef.current) return;
     setShowCreate(false);
     setEditingId(null);
+    setEditingRevision(null);
     setDraftConflict(false);
     setError('');
     createButtonRef.current?.focus();
@@ -226,6 +235,7 @@ export default function StockTransfers() {
         detailRequestSequence.current += 1;
         setShowCreate(false);
         setEditingId(null);
+        setEditingRevision(null);
         setDraftConflict(false);
         setError('');
         showTransferDetail(latest);
@@ -242,6 +252,8 @@ export default function StockTransfers() {
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     if (createInFlightRef.current || (editingId !== null && draftConflict)) return;
+    if (editingId !== null && (!Number.isSafeInteger(editingRevision) || !editingRevision || editingRevision < 1))
+      return setError('Không có phiên bản nháp hợp lệ để lưu. Vui lòng tải lại phiếu.');
     // Fail closed even on programmatic submit (which bypasses native required inputs).
     if (!sourceId || !destinationId ||
         !warehouses.some(warehouse => warehouse.id === sourceId) ||
@@ -269,6 +281,7 @@ export default function StockTransfers() {
       destinationWarehouseId: destinationId,
       note,
       details: lines,
+      ...(editingId === null ? {} : { expectedDraftRevision: editingRevision }),
     };
     const editId = editingId;
     const action = `transfer-${editId === null ? 'create' : 'update:' + editId}:${JSON.stringify(payload)}`;
@@ -287,6 +300,7 @@ export default function StockTransfers() {
       completeIdempotentAction(action);
       setShowCreate(false);
       setEditingId(null);
+      setEditingRevision(null);
       setDraftConflict(false);
       createButtonRef.current?.focus();
       setLines([{ productId: '', quantity: '', note: '' }]);
@@ -518,6 +532,9 @@ export default function StockTransfers() {
               </div>
 
               {error && <p role="alert" className="transfer-error">{error}</p>}
+              {editingId !== null && editingRevision !== null && (
+                <p className="ui-muted-text">Phiên bản nháp: {editingRevision}. Hệ thống từ chối lưu nếu người khác đã chỉnh sửa phiếu.</p>
+              )}
               {editingId !== null && draftConflict && (
                 <p role="status" className="ui-muted-text">
                   Phiếu đã thay đổi ở phiên khác. Tải lại dữ liệu mới nhất trước khi chỉnh sửa tiếp.

@@ -111,11 +111,17 @@ public sealed partial class StockTransferService(
                 throw Conflict("Phiếu điều chuyển ngược không được sửa.");
             if (entity.Status != StockTransferStatus.Draft)
                 throw Conflict("Chỉ phiếu nháp được chỉnh sửa.");
+            if (request.ExpectedDraftRevision <= 0 || request.ExpectedDraftRevision != entity.DraftRevision)
+                throw Conflict("Phiên bản phiếu nháp đã thay đổi. Vui lòng tải lại trước khi lưu.");
+            if (entity.DraftRevision == int.MaxValue)
+                throw Conflict("Phiên bản phiếu đã đạt giới hạn; cần hỗ trợ quản trị.");
 
             await ValidateDraftAsync(request, cancellationToken);
+            var previousRevision = entity.DraftRevision;
             entity.SourceWarehouseId = request.SourceWarehouseId;
             entity.DestinationWarehouseId = request.DestinationWarehouseId;
             entity.Note = request.Note;
+            entity.DraftRevision = previousRevision + 1;
             entity.Details.Clear();
             foreach (var line in request.Details)
                 entity.Details.Add(new StockTransferDetail
@@ -126,8 +132,12 @@ public sealed partial class StockTransferService(
                 });
 
             await context.SaveChangesAsync(cancellationToken);
-            await AuditAsync(entity, "StockTransfer.Updated", StockTransferStatus.Draft,
-                StockTransferStatus.Draft, cancellationToken);
+            var editAudit = Audit(entity, "StockTransfer.Updated", StockTransferStatus.Draft,
+                StockTransferStatus.Draft, DateTime.UtcNow);
+            editAudit.OldValues = $"Status: Draft; DraftRevision: {previousRevision}";
+            editAudit.NewValues = $"Status: Draft; DraftRevision: {entity.DraftRevision}";
+            context.AuditLogs.Add(editAudit);
+            await context.SaveChangesAsync(cancellationToken);
             if (transaction is not null) await transaction.CommitAsync(cancellationToken);
             if (ownsTransaction) context.ChangeTracker.Clear();
         }
@@ -456,6 +466,6 @@ WHEN NOT MATCHED THEN
     { context.AuditLogs.Add(Audit(entity, action, from, to, now ?? DateTime.UtcNow)); await context.SaveChangesAsync(cancellationToken); }
     private static ConcurrencyException Conflict(string message) => new(message);
 
-    private static StockTransferDto MapSummary(StockTransfer x) => new() { Id = x.Id, Code = x.Code, SourceWarehouseId = x.SourceWarehouseId, SourceWarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, Status = x.Status, Note = x.Note, CreatedBy = x.CreatedBy, CreatedAt = x.CreatedAt, ApprovedAt = x.ApprovedAt, DispatchedAt = x.DispatchedAt, ReceivedAt = x.ReceivedAt, CompletedAt = x.CompletedAt, CancelledAt = x.CancelledAt };
+    private static StockTransferDto MapSummary(StockTransfer x) => new() { Id = x.Id, Code = x.Code, SourceWarehouseId = x.SourceWarehouseId, SourceWarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, Status = x.Status, DraftRevision = x.DraftRevision, Note = x.Note, CreatedBy = x.CreatedBy, CreatedAt = x.CreatedAt, ApprovedAt = x.ApprovedAt, DispatchedAt = x.DispatchedAt, ReceivedAt = x.ReceivedAt, CompletedAt = x.CompletedAt, CancelledAt = x.CancelledAt };
     private static StockTransferDto Map(StockTransfer x) { var dto = MapSummary(x); dto.Details = x.Details.OrderBy(d => d.ProductId).Select(d => new StockTransferDetailDto { ProductId = d.ProductId, ProductCode = d.Product.Code, ProductName = d.Product.Name, RequestedQuantity = d.RequestedQuantity, DispatchedQuantity = d.DispatchedQuantity, ReceivedQuantity = d.ReceivedQuantity, MissingQuantity = d.MissingQuantity, DamagedQuantity = d.DamagedQuantity, InTransitQuantity = x.Status == StockTransferStatus.InTransit ? d.DispatchedQuantity - d.ReceivedQuantity - d.MissingQuantity - d.DamagedQuantity : 0, Note = d.Note }).ToList(); return dto; }
 }

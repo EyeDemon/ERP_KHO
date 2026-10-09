@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ERP.Domain.Enums;
 
 namespace ERP.Application.DTOs;
@@ -17,7 +18,12 @@ public class CreateStockTransferDto
     public List<StockTransferDetailInputDto> Details { get; set; } = [];
 }
 
-public sealed class UpdateStockTransferDto : CreateStockTransferDto;
+public sealed class UpdateStockTransferDto : CreateStockTransferDto
+{
+    // JSON callers must send this field. The default supports existing in-process clients.
+    [JsonRequired]
+    public int ExpectedDraftRevision { get; set; } = 1;
+}
 
 public sealed class ReceiveStockTransferLineDto
 {
@@ -68,6 +74,7 @@ public sealed class StockTransferDto
     public int DestinationWarehouseId { get; set; }
     public string DestinationWarehouseName { get; set; } = string.Empty;
     public StockTransferStatus Status { get; set; }
+    public int DraftRevision { get; set; }
     public string? Note { get; set; }
     public int CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; }
