@@ -494,7 +494,7 @@ public sealed class SqlServerStockTransferTests
     }
 
     [SqlServerFact]
-    public async Task ApprovalMustRejectTheWarehousePairChangedAfterAuthorization()
+    public async Task ApprovalHeaderLockPreventsConcurrentDraftWarehouseRewrite()
     {
         var fixture = await CreateFixtureAsync(10);
         try
@@ -504,27 +504,35 @@ public sealed class SqlServerStockTransferTests
                 id = (await CreateService(db, fixture.CreatorId).CreateAsync(
                     Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 3))).Id;
 
+            ChangeWarehouseAfterScopeCheck racingAuth;
             await using (var approvingDb = CreateContext())
             {
                 var user = new TestCurrentUser(fixture.UserId, false, "Manager");
                 var auth = new WarehouseAuthorizationService(approvingDb, user);
-                var racingAuth = new ChangeWarehouseAfterScopeCheck(
-                    auth, id, fixture.SourceId, fixture.DestinationId);
+                racingAuth = new ChangeWarehouseAfterScopeCheck(
+                    auth, id, fixture.SourceId, fixture.DestinationId, fixture.CreatorId,
+                    fixture.ProductId);
                 var service = new StockTransferService(approvingDb,
                     new InventoryStockRepository(approvingDb), racingAuth, user);
-                var act = () => service.ApproveAsync(id);
-                await act.Should().ThrowAsync<ConcurrencyException>()
-                    .WithMessage("*Trạng thái phiếu đã thay đổi*");
+                await service.ApproveAsync(id);
             }
+
+            // The competing draft edit is started after warehouse access is
+            // checked, while approval still holds UPDLOCK/HOLDLOCK. Once
+            // approval commits, the stale editor must reject Approved state.
+            var attempt = () => racingAuth.AttemptedEdit
+                ?? throw new InvalidOperationException("Concurrent edit never started.");
+            await attempt.Should().ThrowAsync<ConcurrencyException>();
 
             await using var verify = CreateContext();
             var transfer = await verify.StockTransfers.SingleAsync(x => x.Id == id);
-            transfer.Status.Should().Be(StockTransferStatus.Draft);
-            transfer.SourceWarehouseId.Should().Be(fixture.DestinationId);
-            transfer.DestinationWarehouseId.Should().Be(fixture.SourceId);
-            (await verify.AuditLogs.CountAsync(x =>
-                x.EntityName == "StockTransfer" && x.EntityId == id &&
-                x.Action == "StockTransfer.Approved")).Should().Be(0);
+            transfer.Status.Should().Be(StockTransferStatus.Approved);
+            transfer.SourceWarehouseId.Should().Be(fixture.SourceId);
+            transfer.DestinationWarehouseId.Should().Be(fixture.DestinationId);
+            (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                x.EntityId == id && x.Action == "StockTransfer.Approved")).Should().Be(1);
+            (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                x.EntityId == id && x.Action == "StockTransfer.Updated")).Should().Be(0);
         }
         finally { await CleanupAsync(fixture); }
     }
@@ -686,10 +694,13 @@ public sealed class SqlServerStockTransferTests
     }
 
     private sealed class ChangeWarehouseAfterScopeCheck(
-        IWarehouseAuthorizationService inner, int transferId, int sourceId, int destinationId)
+        IWarehouseAuthorizationService inner, int transferId, int sourceId,
+        int destinationId, int creatorId, int productId)
         : IWarehouseAuthorizationService
     {
-        private bool changed;
+        private bool started;
+        public Task? AttemptedEdit { get; private set; }
+
         public Task<IReadOnlyList<int>> GetAccessibleWarehouseIdsAsync(
             CancellationToken cancellationToken = default) =>
             inner.GetAccessibleWarehouseIdsAsync(cancellationToken);
@@ -702,18 +713,22 @@ public sealed class SqlServerStockTransferTests
             CancellationToken cancellationToken = default)
         {
             await inner.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
-            if (changed || warehouseId != destinationId) return;
-            changed = true;
-            // Simulate another editor committing a different warehouse pair
-            // between the approval's permission reads and status CAS.
-            await using var editingDb = CreateContext();
-            var rows = await editingDb.StockTransfers
-                .Where(x => x.Id == transferId && x.Status == StockTransferStatus.Draft)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(x => x.SourceWarehouseId, destinationId)
-                    .SetProperty(x => x.DestinationWarehouseId, sourceId),
-                    cancellationToken);
-            rows.Should().Be(1);
+            if (started || warehouseId != destinationId) return;
+            started = true;
+            // Run the real edit service on a separate SQL connection. Do not
+            // await it from the approval callback: approval holds the header
+            // lock until commit. The editor must subsequently reject Approved.
+            AttemptedEdit = Task.Run(async () =>
+            {
+                await using var editingDb = CreateContext();
+                await CreateService(editingDb, creatorId).UpdateAsync(transferId,
+                    new UpdateStockTransferDto
+                    {
+                        SourceWarehouseId = destinationId,
+                        DestinationWarehouseId = sourceId,
+                        Details = [new() { ProductId = productId, Quantity = 3 }]
+                    });
+            });
         }
     }
 
