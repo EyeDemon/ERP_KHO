@@ -1140,6 +1140,162 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+
+    [SqlServerFact]
+    public async Task Traceability_RelatedDocuments_UsesTrackedIdentityAuthorizedWarehousesAndLedgerAnchor()
+    {
+        var fixture = await CreateFixtureAsync();
+        var otherWarehouseId = 0;
+        try
+        {
+            var lotNumber = string.Empty;
+            await using (var seed = CreateContext())
+            {
+                lotNumber = await seed.InventoryLots.Where(x => x.Id == fixture.LotId)
+                    .Select(x => x.LotNumber).SingleAsync();
+                var hiddenWarehouse = new Warehouse
+                {
+                    Code = "LH" + Guid.NewGuid().ToString("N")[..10],
+                    Name = "Kho không có quyền xem"
+                };
+                seed.Warehouses.Add(hiddenWarehouse);
+                await seed.SaveChangesAsync();
+                otherWarehouseId = hiddenWarehouse.Id;
+
+                var start = DateTime.UtcNow.AddDays(-4);
+                void Add(int warehouseId, int? lotId, string reference, int referenceId, int minute)
+                {
+                    seed.InventoryTransactions.Add(new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = warehouseId,
+                        LocationId = warehouseId == fixture.WarehouseId ? fixture.SourceLocationId : null,
+                        LotId = lotId, CreatedBy = fixture.UserId,
+                        InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.Move, Quantity = 1,
+                        ReferenceType = reference, ReferenceId = referenceId,
+                        TransactionDate = start.AddMinutes(minute)
+                    });
+                }
+
+                Add(fixture.WarehouseId, fixture.LotId, "GoodsReceipt", 21, 0);
+                Add(fixture.WarehouseId, fixture.LotId, "GoodsReceipt", 21, 1);
+                Add(fixture.WarehouseId, fixture.LotId, "InboundQC", 22, 2);
+                Add(fixture.WarehouseId, fixture.LotId, "Shipment", 23, 3);
+                Add(fixture.WarehouseId, null, "UntrackedDifferentLot", 24, 4);
+                Add(otherWarehouseId, fixture.LotId, "HiddenShipment", 25, 5);
+                await seed.SaveChangesAsync();
+            }
+
+            await using var read = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var first = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
+
+            first.RelatedDocumentsTruncated.Should().BeFalse();
+            first.RelatedDocuments.Should().HaveCount(3);
+            first.RelatedDocuments.Should().OnlyContain(x =>
+                x.WarehouseId == fixture.WarehouseId && x.WarehouseName != "");
+            first.RelatedDocuments.Should().NotContain(x => x.ReferenceType == "HiddenShipment");
+            first.RelatedDocuments.Should().NotContain(x => x.ReferenceType == "UntrackedDifferentLot");
+            first.RelatedDocuments.Single(x => x.ReferenceType == "GoodsReceipt" && x.ReferenceId == 21)
+                .EventCount.Should().Be(2);
+            first.RelatedDocuments.Select(x => x.LastTransactionId).Should().BeInDescendingOrder();
+            first.EventAnchorId.Should().BeGreaterThan(0);
+
+            await using (var later = CreateContext())
+            {
+                later.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                    CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Move, Quantity = 1,
+                    ReferenceType = "Return", ReferenceId = 26,
+                    TransactionDate = DateTime.UtcNow.AddYears(-1)
+                });
+                await later.SaveChangesAsync();
+            }
+
+            var sameAnchor = await query.TraceAsync(productId: fixture.ProductId,
+                lotNumber: lotNumber, limit: 20, eventAnchorId: first.EventAnchorId);
+            sameAnchor.RelatedDocuments.Select(x => x.ReferenceType)
+                .Should().NotContain("Return");
+            sameAnchor.RelatedDocuments.Select(x => x.LastTransactionId)
+                .Should().Equal(first.RelatedDocuments.Select(x => x.LastTransactionId));
+
+            var fresh = await query.TraceAsync(productId: fixture.ProductId,
+                lotNumber: lotNumber, limit: 20);
+            fresh.RelatedDocuments.Should().ContainSingle(x =>
+                x.ReferenceType == "Return" && x.ReferenceId == 26);
+            fresh.EventAnchorId.Should().BeGreaterThan(first.EventAnchorId!.Value);
+
+            var documentFiltered = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber,
+                referenceType: "GoodsReceipt", referenceId: 21, limit: 20);
+            documentFiltered.RelatedDocuments.Should().BeEmpty();
+            var missingLot = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber + "-missing", limit: 20);
+            missingLot.RelatedDocuments.Should().BeEmpty();
+            // A tracked identity without an explicit product does not fan out
+            // into an unbounded cross-product document query.
+            var lotWithoutProduct = await query.TraceAsync(lotNumber: lotNumber, limit: 20);
+            lotWithoutProduct.RelatedDocuments.Should().BeEmpty();
+        }
+        finally
+        {
+            if (otherWarehouseId > 0)
+            {
+                await using var cleanupOther = CreateContext();
+                await cleanupOther.InventoryTransactions.Where(x =>
+                    x.WarehouseId == otherWarehouseId).ExecuteDeleteAsync();
+                await cleanupOther.Warehouses.Where(x => x.Id == otherWarehouseId)
+                    .ExecuteDeleteAsync();
+            }
+            await CleanupAsync(fixture);
+        }
+    }
+
+    [SqlServerFact]
+    public async Task Traceability_RelatedDocuments_CapsAt100AndReportsTruncation()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            var lotNumber = string.Empty;
+            await using (var seed = CreateContext())
+            {
+                lotNumber = await seed.InventoryLots.Where(x => x.Id == fixture.LotId)
+                    .Select(x => x.LotNumber).SingleAsync();
+                var start = DateTime.UtcNow.AddDays(-2);
+                for (var i = 0; i < 103; i++)
+                    seed.InventoryTransactions.Add(new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.Move, Quantity = 1,
+                        ReferenceType = "TrackedDocument", ReferenceId = i + 1,
+                        TransactionDate = start.AddMinutes(i)
+                    });
+                await seed.SaveChangesAsync();
+            }
+            await using var read = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var result = await query.TraceAsync(warehouseId: fixture.WarehouseId,
+                productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
+            result.RelatedDocuments.Should().HaveCount(100);
+            result.RelatedDocumentsTruncated.Should().BeTrue();
+            result.RelatedDocuments.Should().OnlyContain(x =>
+                x.WarehouseId == fixture.WarehouseId &&
+                x.ReferenceType == "TrackedDocument" && x.EventCount == 1);
+            result.RelatedDocuments.Select(x => x.ReferenceId)
+                .Should().Contain(103).And.NotContain(1);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task TraceabilityWarehouseChoices_ContainOnlyAssignedWarehouses()
     {

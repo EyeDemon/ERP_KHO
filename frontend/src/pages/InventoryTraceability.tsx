@@ -17,9 +17,15 @@ type Event={
   transactionDate:string;createdBy:number;createdByName:string;note?:string|null;reasonCode?:string|null;reversalOfTransactionId?:number|null;
   correctiveTransactionId?:number|null;reversalTransactionId?:number|null;isReversed:boolean;
 };
+type RelatedDocument={
+  warehouseId:number;warehouseName:string;referenceType:string;referenceId:number;
+  eventCount:number;firstTransactionDate:string;lastTransactionDate:string;lastTransactionId:number;
+};
 type Result={
   currentBuckets:Bucket[];
   events:Event[];
+  relatedDocuments?:RelatedDocument[];
+  relatedDocumentsTruncated?:boolean;
   eventAnchorId?:number|null;
   eventsTruncated?:boolean;
   bucketsTruncated?:boolean;
@@ -44,6 +50,13 @@ const transactionTypeLabel=(value:string)=>({
   StatusChange:'Đổi trạng thái',
   Move:'Di chuyển vị trí',
   Reversal:'Đảo giao dịch',
+}[value]??value);
+
+const referenceTypeLabel=(value:string)=>({
+  GoodsReceipt:'Phiếu nhập kho', Receipt:'Phiếu nhập kho', StockTransfer:'Phiếu điều chuyển',
+  Shipment:'Chuyến giao hàng', InventoryReversal:'Phiếu đảo giao dịch',
+  InventoryAdjustment:'Phiếu điều chỉnh', InventoryMove:'Phiếu di chuyển',
+  Return:'Phiếu trả hàng', PickTask:'Phiếu lấy hàng',
 }[value]??value);
 
 const inventoryStatusLabel=(value:string)=>({
@@ -346,6 +359,32 @@ export default function InventoryTraceability(){
             <span className="ui-muted-text">Đã tới giới hạn xem trang; hãy lọc chi tiết hơn.</span>}
         </nav>
       </UiCard>
+
+
+      {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
+        <UiCard title="Chứng từ có giao dịch cùng lô / sê-ri">
+          <p className="ui-muted-text">
+            Tổng hợp chứng từ có phát sinh sổ cái của đúng sản phẩm và lô/sê-ri trong các kho được cấp quyền, tại mốc lịch sử đang xem.
+            Đây là liên hệ theo danh tính hàng hóa, chưa chứng minh quan hệ giao nhận, chủ sở hữu hoặc luồng thu hồi.
+          </p>
+          {result.relatedDocumentsTruncated&&<p role="status" className="ui-muted-text">
+            Chỉ hiển thị 100 chứng từ mới nhất trong phạm vi truy vết. Hãy chọn một kho hoặc lọc thêm sê-ri để thu hẹp kết quả.
+          </p>}
+          <UiTableScroll><table aria-label="Chứng từ liên quan cùng lô hoặc sê-ri">
+            <thead><tr><th>Chứng từ</th><th>Kho</th><th>Sự kiện</th><th>Phát sinh đầu</th><th>Phát sinh cuối</th></tr></thead>
+            <tbody>{!result.relatedDocuments?.length?
+              <tr><td colSpan={5} className="ui-empty-cell">Chưa có chứng từ có giao dịch sổ cái khớp lô hoặc sê-ri trong phạm vi được phép.</td></tr>:
+              result.relatedDocuments.map(doc=>
+                <tr key={doc.warehouseId+'-'+doc.referenceType+'-'+doc.referenceId}>
+                  <td><strong>{referenceTypeLabel(doc.referenceType)}</strong><br/><small>{doc.referenceType} #{doc.referenceId}</small></td>
+                  <td>{doc.warehouseName}</td>
+                  <td>{doc.eventCount}</td>
+                  <td>{new Date(doc.firstTransactionDate).toLocaleString('vi-VN')}</td>
+                  <td>{new Date(doc.lastTransactionDate).toLocaleString('vi-VN')}</td>
+                </tr>)}
+            </tbody>
+          </table></UiTableScroll>
+        </UiCard>}
 
       <UiCard title="Dòng thời gian sổ cái bất biến">
         <p className="ui-muted-text">Sự kiện đảo giao dịch là dấu mốc hiệu chỉnh, không xóa giao dịch gốc. Lịch sử được cố định theo mốc lúc truy vết; chọn “Truy vết” để cập nhật sự kiện mới, tồn kho hiện tại vẫn được tải mới.</p>

@@ -14,3 +14,11 @@
 - SQL Server integration: original page 1/page 2 stable after inserting two transactions (one backdated); fresh search sees newly committed transactions; filtered direct references still return full committed reversal chains at the first load.
 - API contract and UI Vitest: anchor forwarded and preserved for page navigation; absent anchor refuses unsafe later pages; new searches reset anchor.
 - CI and Vercel Preview do not substitute for real browser QA and SQL/API staging signoff. Keep PR Draft.
+
+## INV-10 next slice: identity-linked document occurrences (2026-10-09)
+- `TraceAsync` now adds `relatedDocuments[]` and `relatedDocumentsTruncated` only for searches with an explicit positive `productId` and a nonempty `lotNumber` and/or `serialNumber`, **without** an explicit document reference filter.
+- Group direct immutable ledger transactions by `WarehouseId + ReferenceType + ReferenceId`, with first/last activity and event counts. These are co-occurrences, **not** proven custody, causal, owner/HU genealogy or a recall decision.
+- Scope always uses authorized warehouse IDs, matching the requested warehouse when supplied. Product/lot/serial filters are intersections. All returned document events are bounded by the same ledger `eventAnchorId`; a new query obtains a new anchor.
+- The SQL projection returns at most 100 groups, using a 101st sentinel for a visible truncation warning; no full COUNT and no schema migration.
+- Frontend renders an accessible Vietnamese table using the current production UI primitives; if the operator narrows to a specific document reference, the supplemental related-document table is suppressed so it cannot silently widen that explicit filter.
+- Coverage remains **foundation** until full Receipt→QC→Pick→Shipment→Return/Recall lineage, owner/HU identity, real browser QA and staging API/SQL evidence are complete.

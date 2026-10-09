@@ -64,12 +64,28 @@ public sealed class InventoryTraceabilityResultDto
 {
     public IReadOnlyList<InventoryTraceabilityBucketDto> CurrentBuckets { get; set; } = [];
     public IReadOnlyList<InventoryTraceabilityEventDto> Events { get; set; } = [];
+    public IReadOnlyList<InventoryTraceabilityRelatedDocumentDto> RelatedDocuments { get; set; } = [];
+    public bool RelatedDocumentsTruncated { get; set; }
     // These flags describe whether the initial chronological event window or
     // matching current-stock window was capped; reversal chain closure is retained.
     // Stable transaction-ID fence for ledger pagination. Null for older clients only.
     public int? EventAnchorId { get; set; }
     public bool EventsTruncated { get; set; }
     public bool BucketsTruncated { get; set; }
+}
+
+// One authorized warehouse/document occurrence for an explicitly tracked
+// product+lot/serial. Do not mistake co-occurrence for causal custody links.
+public sealed class InventoryTraceabilityRelatedDocumentDto
+{
+    public int WarehouseId { get; set; }
+    public string WarehouseName { get; set; } = string.Empty;
+    public string ReferenceType { get; set; } = string.Empty;
+    public int ReferenceId { get; set; }
+    public int EventCount { get; set; }
+    public DateTime FirstTransactionDate { get; set; }
+    public DateTime LastTransactionDate { get; set; }
+    public int LastTransactionId { get; set; }
 }
 
 public sealed class InventoryTraceabilityBucketDto

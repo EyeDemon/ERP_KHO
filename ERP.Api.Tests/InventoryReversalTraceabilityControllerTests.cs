@@ -90,6 +90,11 @@ public sealed class InventoryReversalTraceabilityControllerTests
         var trace = new Mock<IInventoryTraceabilityQueryService>(MockBehavior.Strict);
         var response = new InventoryTraceabilityResultDto
         {
+            RelatedDocuments = [new InventoryTraceabilityRelatedDocumentDto
+            {
+                WarehouseId = 7, ReferenceType = "GoodsReceipt", ReferenceId = 21,
+                EventCount = 2
+            }],
             CurrentBuckets = [new InventoryTraceabilityBucketDto
             {
                 ProductId = 9, WarehouseId = 7, OnHandQuantity = 4
@@ -101,6 +106,8 @@ public sealed class InventoryReversalTraceabilityControllerTests
 
         var result = await controller.Trace(7, null, null, null, null, null, 50, 500);
         Assert.Same(response, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Single(response.RelatedDocuments);
+        Assert.Equal("GoodsReceipt", response.RelatedDocuments[0].ReferenceType);
         trace.Verify(x => x.TraceAsync(7, null, null, null, null, null, 50,
             It.IsAny<CancellationToken>(), 500, 0, null), Times.Once);
         trace.VerifyNoOtherCalls();

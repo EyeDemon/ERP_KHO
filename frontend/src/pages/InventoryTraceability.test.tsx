@@ -415,6 +415,59 @@ describe('InventoryTraceability',()=>{
     ));
   });
 
+
+  it('shows document occurrences across receipt, QC and shipment for the same tracked product lot',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,
+      relatedDocuments:[
+        {warehouseId:1,warehouseName:'DC HCM',referenceType:'Shipment',referenceId:99,
+          eventCount:1,firstTransactionDate:'2026-10-07T12:00:00Z',
+          lastTransactionDate:'2026-10-07T12:00:00Z',lastTransactionId:86},
+        {warehouseId:1,warehouseName:'DC HCM',referenceType:'GoodsReceipt',referenceId:21,
+          eventCount:2,firstTransactionDate:'2026-10-06T08:00:00Z',
+          lastTransactionDate:'2026-10-06T09:00:00Z',lastTransactionId:30}
+      ],relatedDocumentsTruncated:false
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Mã lô'),{target:{value:'LOT-A'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    expect(await view.findByRole('table',{name:'Chứng từ liên quan cùng lô hoặc sê-ri'})).toBeTruthy();
+    expect(view.getByText('Shipment #99')).toBeTruthy();
+    expect(view.getByText('GoodsReceipt #21')).toBeTruthy();
+    expect(view.getByText(/chưa chứng minh quan hệ giao nhận/)).toBeTruthy();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'
+    );
+  });
+
+  it('warns on the 100-document bound and does not present an unrelated document scope',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,relatedDocuments:[{
+        warehouseId:1,warehouseName:'DC HCM',referenceType:'StockTransfer',referenceId:12,
+        eventCount:3,firstTransactionDate:'2026-10-07T10:00:00Z',
+        lastTransactionDate:'2026-10-07T11:00:00Z',lastTransactionId:41
+      }],relatedDocumentsTruncated:true
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Số sê-ri'),{target:{value:'SER-A'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    expect(await view.findByText(/Chỉ hiển thị 100 chứng từ mới nhất/)).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Loại tham chiếu'),{target:{value:'Shipment'}});
+    expect(view.queryByRole('table',{name:'Chứng từ liên quan cùng lô hoặc sê-ri'})).toBeNull();
+  });
+
+  it('does not synthesize related documents for an untracked warehouse-only view',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
+    const view=renderTrace();
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    fireEvent.change(view.getByLabelText('Kho truy vết'),{target:{value:'1'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    await view.findByRole('table',{name:'Dòng thời gian sổ cái phục vụ truy vết'});
+    expect(view.queryByRole('table',{name:'Chứng từ liên quan cùng lô hoặc sê-ri'})).toBeNull();
+  });
+
   it('can increase server event window to 500 without client-side truncation',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=renderTrace();

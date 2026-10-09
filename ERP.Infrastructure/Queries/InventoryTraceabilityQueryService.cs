@@ -243,10 +243,53 @@ public sealed class InventoryTraceabilityQueryService(
         var bucketsTruncated = buckets.Count > 500;
         if (bucketsTruncated) buckets = buckets.Take(500).ToList();
 
+
+        // A bounded document-occurrence view, not inferred ownership or a
+        // causal custody graph. Require a product and tracked identity before
+        // grouping any references; an explicit document filter is not broadened.
+        var relatedDocuments = new List<InventoryTraceabilityRelatedDocumentDto>();
+        var relatedDocumentsTruncated = false;
+        if (productId.HasValue && (lot is not null || serial is not null) && !hasReference)
+        {
+            var documentEvents = scopedLedger.Where(x =>
+                x.Id <= anchorId &&
+                x.ProductId == productId.Value &&
+                x.ReferenceType != null && x.ReferenceType != "" &&
+                x.ReferenceId.HasValue);
+            if (lot is not null)
+                documentEvents = documentEvents.Where(x => x.Lot != null && x.Lot.LotNumber == lot);
+            if (serial is not null)
+                documentEvents = documentEvents.Where(x => x.Serial != null && x.Serial.SerialNumber == serial);
+
+            var documentWindow = await documentEvents
+                .GroupBy(x => new { x.WarehouseId, x.ReferenceType, x.ReferenceId })
+                .Select(group => new InventoryTraceabilityRelatedDocumentDto
+                {
+                    WarehouseId = group.Key.WarehouseId,
+                    WarehouseName = group.Max(x => x.Warehouse.Name)!,
+                    ReferenceType = group.Key.ReferenceType!,
+                    ReferenceId = group.Key.ReferenceId!.Value,
+                    EventCount = group.Count(),
+                    FirstTransactionDate = group.Min(x => x.TransactionDate),
+                    LastTransactionDate = group.Max(x => x.TransactionDate),
+                    LastTransactionId = group.Max(x => x.Id)
+                })
+                .OrderByDescending(x => x.LastTransactionId)
+                .ThenBy(x => x.WarehouseId)
+                .ThenBy(x => x.ReferenceType)
+                .ThenBy(x => x.ReferenceId)
+                .Take(101)
+                .ToListAsync(cancellationToken);
+            relatedDocumentsTruncated = documentWindow.Count > 100;
+            relatedDocuments = documentWindow.Take(100).ToList();
+        }
+
         return new InventoryTraceabilityResultDto
         {
             CurrentBuckets = buckets,
             Events = events,
+            RelatedDocuments = relatedDocuments,
+            RelatedDocumentsTruncated = relatedDocumentsTruncated,
             EventAnchorId = anchorId,
             EventsTruncated = eventsTruncated,
             BucketsTruncated = bucketsTruncated
