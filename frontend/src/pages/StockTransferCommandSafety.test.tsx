@@ -176,14 +176,17 @@ describe('Stock transfer command consistency', () => {
     fireEvent.click(within(editor).getByRole('button', { name: 'Tải lại phiên bản mới' }));
 
     const refreshed = await view.findByRole('dialog', { name: 'TRF-807' });
-    expect(within(refreshed).getByText('Đã duyệt')).toBeTruthy();
+    expect(within(refreshed).getAllByText('Đã duyệt').length).toBeGreaterThan(0);
     expect(view.queryByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Chỉnh sửa phiếu nháp' })).toBeNull();
     expect(apiClient.put).toHaveBeenCalledTimes(1);
   });
 
   it('repopulates draft lines from the server after a conflicting update', async () => {
-    const draft = { ...transfer, status: 'Draft' };
+    const draft = {
+      ...transfer, status: 'Draft', note: 'Phiếu ban đầu',
+      details: [{ ...transfer.details[0], note: 'Ghi chú ban đầu' }],
+    };
     let latest = draft;
     get.mockImplementation(async url => {
       if (url === '/api/stock-transfers') return {

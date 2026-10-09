@@ -363,6 +363,42 @@ public sealed class SqlServerStockTransferTests
     }
 
     [SqlServerFact]
+    public async Task ApprovalMustRejectTheWarehousePairChangedAfterAuthorization()
+    {
+        var fixture = await CreateFixtureAsync(10);
+        try
+        {
+            int id;
+            await using (var db = CreateContext())
+                id = (await CreateService(db, fixture.CreatorId).CreateAsync(
+                    Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 3))).Id;
+
+            await using (var approvingDb = CreateContext())
+            {
+                var user = new TestCurrentUser(fixture.UserId, false, "Manager");
+                var auth = new WarehouseAuthorizationService(approvingDb, user);
+                var racingAuth = new ChangeWarehouseAfterScopeCheck(
+                    auth, id, fixture.SourceId, fixture.DestinationId);
+                var service = new StockTransferService(approvingDb,
+                    new InventoryStockRepository(approvingDb), racingAuth, user);
+                var act = () => service.ApproveAsync(id);
+                await act.Should().ThrowAsync<ConcurrencyException>()
+                    .WithMessage("*Trạng thái phiếu đã thay đổi*");
+            }
+
+            await using var verify = CreateContext();
+            var transfer = await verify.StockTransfers.SingleAsync(x => x.Id == id);
+            transfer.Status.Should().Be(StockTransferStatus.Draft);
+            transfer.SourceWarehouseId.Should().Be(fixture.DestinationId);
+            transfer.DestinationWarehouseId.Should().Be(fixture.SourceId);
+            (await verify.AuditLogs.CountAsync(x =>
+                x.EntityName == "StockTransfer" && x.EntityId == id &&
+                x.Action == "StockTransfer.Approved")).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task ConcurrentReceiveAllowsOneSuccessAndWarehouseScopeIsEnforced()
     {
         var fixture = await CreateFixtureAsync(10);
@@ -429,6 +465,38 @@ public sealed class SqlServerStockTransferTests
             (await verify.InventoryTransactions.CountAsync(x => x.ReferenceType == "StockTransfer" && (x.ReferenceId == firstId || x.ReferenceId == secondId) && x.TransactionType == TransactionType.TransferIn)).Should().Be(2);
         }
         finally { await CleanupAsync(fixture); }
+    }
+
+    private sealed class ChangeWarehouseAfterScopeCheck(
+        IWarehouseAuthorizationService inner, int transferId, int sourceId, int destinationId)
+        : IWarehouseAuthorizationService
+    {
+        private bool changed;
+        public Task<IReadOnlyList<int>> GetAccessibleWarehouseIdsAsync(
+            CancellationToken cancellationToken = default) =>
+            inner.GetAccessibleWarehouseIdsAsync(cancellationToken);
+
+        public Task<bool> CanAccessWarehouseAsync(int warehouseId,
+            CancellationToken cancellationToken = default) =>
+            inner.CanAccessWarehouseAsync(warehouseId, cancellationToken);
+
+        public async Task EnsureWarehouseAccessAsync(int warehouseId,
+            CancellationToken cancellationToken = default)
+        {
+            await inner.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+            if (changed || warehouseId != destinationId) return;
+            changed = true;
+            // Simulate another editor committing a different warehouse pair
+            // between the approval's permission reads and status CAS.
+            await using var editingDb = CreateContext();
+            var rows = await editingDb.StockTransfers
+                .Where(x => x.Id == transferId && x.Status == StockTransferStatus.Draft)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.SourceWarehouseId, destinationId)
+                    .SetProperty(x => x.DestinationWarehouseId, sourceId),
+                    cancellationToken);
+            rows.Should().Be(1);
+        }
     }
 
     private static StockTransferService CreateService(ErpKhoDbContext db, int userId)
