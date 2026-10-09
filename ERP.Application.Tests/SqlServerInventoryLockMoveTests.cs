@@ -1067,7 +1067,8 @@ public sealed class SqlServerInventoryLockMoveTests
             {
                 var other = new Warehouse
                 {
-                    Code = "UNASSIGNED-" + Guid.NewGuid().ToString("N")[..10],
+                    // Warehouse.Code in the production schema is capped at 20 characters.
+                    Code = "UA" + Guid.NewGuid().ToString("N")[..10],
                     Name = "Kho không được phân quyền"
                 };
                 setup.Warehouses.Add(other);

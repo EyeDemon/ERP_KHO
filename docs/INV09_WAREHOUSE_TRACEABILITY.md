@@ -32,6 +32,7 @@
 - Chọn một kho để xem các nhóm tồn trong kho; chọn **Tất cả kho được phân quyền** chỉ hợp lệ khi nhập thêm sản phẩm, lô, sê-ri hoặc cặp tham chiếu. Không gửi truy vấn hoàn toàn trống.
 - Khi đang tải danh sách kho, selector bị khóa và có trạng thái tải; lỗi tải danh sách phải hiển thị lỗi, khóa selector và cung cấp nút **Tải lại danh sách kho**, không tự tạo kho hoặc hiện kho giả.
 - Danh sách trả về rỗng thì thông báo chưa được phân quyền, không tự động nới phạm vi truy vấn. Backend luôn xác minh quyền truy vết/kho lại khi truy vấn nhóm tồn hoặc dòng thời gian.
+- Frontend từ chối payload danh sách kho sai hợp đồng: ID phải là số nguyên dương và không trùng; mã/tên kho là chuỗi có nội dung thực. Lỗi dữ liệu hoặc HTTP không được hiển thị danh sách giả. Kiểm thử SQL tạo mã kho giả nằm trong giới hạn `Warehouses.Code` 20 ký tự đúng schema thật.
 - Giao diện Việt ngữ, dùng `UiToolbarField`, select native hỗ trợ bàn phím, focus rõ ràng và bố cục responsive theo `design-system/erp-wms/MASTER.md`.
 - Kiểm thử: SQL Server chỉ trả kho trong quyền; API chuyển đúng tới dịch vụ truy vết + kiểm tra annotation `InventoryTraceabilityRead`; frontend có loading, danh sách kho thật, lỗi, retry, danh sách rỗng; module HTTP từ chối payload sai kiểu.
 - CI đúng HEAD, browser QA và staging backend/SQL là các cổng nghiệm thu riêng. Không merge PR Draft khi chưa có bằng chứng. Notion chỉ đọc.
