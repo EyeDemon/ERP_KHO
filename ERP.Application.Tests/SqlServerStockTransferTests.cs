@@ -208,6 +208,123 @@ public sealed class SqlServerStockTransferTests
     }
 
     [SqlServerFact]
+    public async Task DraftEditingPreservesInventoryAndAuditAndRejectsChangesAfterApproval()
+    {
+        var fixture = await CreateFixtureAsync(10);
+        try
+        {
+            int id;
+            await using (var db = CreateContext())
+                id = (await CreateService(db, fixture.CreatorId).CreateAsync(
+                    Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 8))).Id;
+
+            await using (var edit = CreateContext())
+                await CreateService(edit, fixture.CreatorId).UpdateAsync(id, new UpdateStockTransferDto
+                {
+                    SourceWarehouseId = fixture.SourceId,
+                    DestinationWarehouseId = fixture.DestinationId,
+                    Note = "Đã kiểm tra và sửa số lượng",
+                    Details = [new()
+                    {
+                        ProductId = fixture.ProductId,
+                        Quantity = 6,
+                        Note = "Theo phiếu đã đối soát"
+                    }]
+                });
+
+            await using (var verify = CreateContext())
+            {
+                var updated = await verify.StockTransfers.Include(x => x.Details).SingleAsync(x => x.Id == id);
+                updated.Status.Should().Be(StockTransferStatus.Draft);
+                updated.Note.Should().Be("Đã kiểm tra và sửa số lượng");
+                updated.Details.Should().ContainSingle();
+                updated.Details.Single().RequestedQuantity.Should().Be(6);
+                updated.Details.Single().Note.Should().Be("Theo phiếu đã đối soát");
+                (await StockAsync(verify, fixture.ProductId, fixture.SourceId)).Should().Be(10);
+                (await verify.InventoryTransactions.CountAsync(x => x.ReferenceType == "StockTransfer" &&
+                    x.ReferenceId == id)).Should().Be(0);
+                (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                    x.EntityId == id && x.Action == "StockTransfer.Updated")).Should().Be(1);
+            }
+
+            await using (var approve = CreateContext())
+                await CreateService(approve, fixture.UserId).ApproveAsync(id);
+
+            await using (var rejected = CreateContext())
+            {
+                var act = () => CreateService(rejected, fixture.CreatorId).UpdateAsync(id,
+                    new UpdateStockTransferDto
+                    {
+                        SourceWarehouseId = fixture.SourceId,
+                        DestinationWarehouseId = fixture.DestinationId,
+                        Details = [new() { ProductId = fixture.ProductId, Quantity = 3 }]
+                    });
+                await act.Should().ThrowAsync<ConcurrencyException>();
+            }
+            await using (var verify = CreateContext())
+            {
+                var unchanged = await verify.StockTransfers.Include(x => x.Details).SingleAsync(x => x.Id == id);
+                unchanged.Status.Should().Be(StockTransferStatus.Approved);
+                unchanged.Details.Single().RequestedQuantity.Should().Be(6);
+                (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                    x.EntityId == id && x.Action == "StockTransfer.Updated")).Should().Be(1);
+            }
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task DraftEditRejectsInvalidQuantityAndLongNotesWithoutDocumentMutation()
+    {
+        var fixture = await CreateFixtureAsync(10);
+        try
+        {
+            int id;
+            await using (var db = CreateContext())
+                id = (await CreateService(db, fixture.CreatorId).CreateAsync(
+                    Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 8))).Id;
+            await using (var db = CreateContext())
+            {
+                var service = CreateService(db, fixture.CreatorId);
+                foreach (var request in new[]
+                {
+                    new UpdateStockTransferDto
+                    {
+                        SourceWarehouseId = fixture.SourceId, DestinationWarehouseId = fixture.DestinationId,
+                        Details = [new() { ProductId = fixture.ProductId, Quantity = 8.00001m }]
+                    },
+                    new UpdateStockTransferDto
+                    {
+                        SourceWarehouseId = fixture.SourceId, DestinationWarehouseId = fixture.DestinationId,
+                        Note = new string('x', 501),
+                        Details = [new() { ProductId = fixture.ProductId, Quantity = 4 }]
+                    },
+                    new UpdateStockTransferDto
+                    {
+                        SourceWarehouseId = fixture.SourceId, DestinationWarehouseId = fixture.DestinationId,
+                        Details = [new()
+                        {
+                            ProductId = fixture.ProductId, Quantity = 4,
+                            Note = new string('x', 501)
+                        }]
+                    }
+                })
+                {
+                    var act = () => service.UpdateAsync(id, request);
+                    await act.Should().ThrowAsync<BusinessRuleException>();
+                }
+            }
+            await using var verify = CreateContext();
+            var untouched = await verify.StockTransfers.Include(x => x.Details).SingleAsync(x => x.Id == id);
+            untouched.Status.Should().Be(StockTransferStatus.Draft);
+            untouched.Details.Single().RequestedQuantity.Should().Be(8);
+            (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                x.EntityId == id && x.Action == "StockTransfer.Updated")).Should().Be(0);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task CompetingTransfersCannotDriveSourceStockNegative()
     {
         var fixture = await CreateFixtureAsync(10);

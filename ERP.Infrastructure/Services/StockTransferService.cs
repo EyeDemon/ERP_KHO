@@ -1,3 +1,4 @@
+using System.Data;
 using ERP.Application.Common;
 using ERP.Application.DTOs;
 using ERP.Application.Exceptions;
@@ -63,17 +64,57 @@ public sealed partial class StockTransferService(
     public async Task UpdateAsync(int id, UpdateStockTransferDto request, CancellationToken cancellationToken = default)
     {
         EnsureWriteRole();
-        var entity = await GetScopedAsync(id, cancellationToken);
-        if (entity.ReverseOfTransferId.HasValue) throw Conflict("Phiếu điều chuyển ngược không được sửa.");
-        if (entity.Status != StockTransferStatus.Draft) throw Conflict("Chỉ phiếu nháp được chỉnh sửa.");
-        await ValidateDraftAsync(request, cancellationToken);
-        entity.SourceWarehouseId = request.SourceWarehouseId;
-        entity.DestinationWarehouseId = request.DestinationWarehouseId;
-        entity.Note = request.Note;
-        entity.Details.Clear();
-        foreach (var line in request.Details) entity.Details.Add(new StockTransferDetail { ProductId = line.ProductId, RequestedQuantity = line.Quantity, Note = line.Note });
-        await context.SaveChangesAsync(cancellationToken);
-        await AuditAsync(entity, "StockTransfer.Updated", entity.Status, entity.Status, cancellationToken);
+        if (id <= 0) throw new BusinessRuleException("ID phiếu điều chuyển không hợp lệ.");
+
+        var ownsTransaction = context.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : null;
+        try
+        {
+            var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            // Lock the header before checking Draft. A concurrent approval must
+            // never be able to commit while we replace the posted document lines.
+            var lockedQuery = context.Database.IsSqlServer()
+                ? context.StockTransfers.FromSqlInterpolated(
+                    $"SELECT * FROM dbo.StockTransfers WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}")
+                : context.StockTransfers.AsQueryable();
+            var entity = await lockedQuery
+                .Include(x => x.Details)
+                .SingleOrDefaultAsync(x => x.Id == id &&
+                    (allowed.Contains(x.SourceWarehouseId) || allowed.Contains(x.DestinationWarehouseId)),
+                    cancellationToken)
+                ?? throw new NotFoundException("Không tìm thấy phiếu điều chuyển.");
+
+            if (entity.ReverseOfTransferId.HasValue)
+                throw Conflict("Phiếu điều chuyển ngược không được sửa.");
+            if (entity.Status != StockTransferStatus.Draft)
+                throw Conflict("Chỉ phiếu nháp được chỉnh sửa.");
+
+            await ValidateDraftAsync(request, cancellationToken);
+            entity.SourceWarehouseId = request.SourceWarehouseId;
+            entity.DestinationWarehouseId = request.DestinationWarehouseId;
+            entity.Note = request.Note;
+            entity.Details.Clear();
+            foreach (var line in request.Details)
+                entity.Details.Add(new StockTransferDetail
+                {
+                    ProductId = line.ProductId,
+                    RequestedQuantity = line.Quantity,
+                    Note = line.Note
+                });
+
+            await context.SaveChangesAsync(cancellationToken);
+            await AuditAsync(entity, "StockTransfer.Updated", StockTransferStatus.Draft,
+                StockTransferStatus.Draft, cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task ApproveAsync(int id, CancellationToken cancellationToken = default)
@@ -178,7 +219,12 @@ public sealed partial class StockTransferService(
             throw new BusinessRuleException("Kho nguồn và kho đích phải hợp lệ và khác nhau.");
         await warehouseAuthorization.EnsureWarehouseAccessAsync(request.SourceWarehouseId, cancellationToken);
         if (!await context.Warehouses.AnyAsync(x => x.Id == request.DestinationWarehouseId, cancellationToken)) throw new BusinessRuleException("Kho đích không tồn tại.");
-        if (request.Details.Count == 0 || request.Details.Any(x => x.ProductId <= 0 || x.Quantity <= 0)) throw new BusinessRuleException("Phiếu phải có sản phẩm với số lượng lớn hơn 0.");
+        if (request.Details == null || request.Details.Count == 0 ||
+            request.Details.Any(x => x == null || x.ProductId <= 0 ||
+                x.Quantity <= 0 || decimal.Round(x.Quantity, 4) != x.Quantity))
+            throw new BusinessRuleException("Phiếu phải có sản phẩm với số lượng dương và tối đa 4 chữ số thập phân.");
+        if (request.Note?.Length > 500 || request.Details.Any(x => x.Note?.Length > 500))
+            throw new BusinessRuleException("Ghi chú phiếu hoặc từng sản phẩm không được quá 500 ký tự.");
         if (request.Details.GroupBy(x => x.ProductId).Any(x => x.Count() > 1)) throw new BusinessRuleException("Một sản phẩm không được lặp nhiều dòng.");
         var ids = request.Details.Select(x => x.ProductId).Distinct().ToList();
         if (await context.Products.CountAsync(x => ids.Contains(x.Id), cancellationToken) != ids.Count) throw new BusinessRuleException("Có sản phẩm không tồn tại.");
