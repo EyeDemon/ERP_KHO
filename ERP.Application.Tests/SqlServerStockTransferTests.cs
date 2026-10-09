@@ -480,6 +480,29 @@ public sealed class SqlServerStockTransferTests
                 // SERIALIZABLE range-lock conversion deadlock on the same bucket.
                 await setup.InventoryStocks.Where(x => x.ProductId == fixture.ProductId &&
                     x.WarehouseId == fixture.DestinationId).ExecuteDeleteAsync();
+                // Another tracked identity shares product, warehouse, location
+                // and status. The transfer must only upsert the NULL lot/serial
+                // bucket, never increment this lot-controlled stock.
+                var locationId = await setup.WarehouseLocations
+                    .Where(x => x.WarehouseId == fixture.DestinationId && x.Code == "LEGACY")
+                    .Select(x => x.Id).SingleAsync();
+                var lot = new InventoryLot
+                {
+                    ProductId = fixture.ProductId,
+                    LotNumber = "TRANSFER-LOT-" + Guid.NewGuid().ToString("N")[..8],
+                };
+                setup.InventoryLots.Add(lot);
+                await setup.SaveChangesAsync();
+                setup.InventoryStocks.Add(new InventoryStock
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.DestinationId,
+                    LocationId = locationId,
+                    LotId = lot.Id,
+                    Status = InventoryStatus.Available,
+                    Quantity = 7
+                });
+                await setup.SaveChangesAsync();
                 var maker = CreateService(setup, fixture.CreatorId);
                 var checker = CreateService(setup, fixture.UserId);
                 for (var i = 0; i < 4; i++)
@@ -506,7 +529,13 @@ public sealed class SqlServerStockTransferTests
             await Task.WhenAll(ids.Select(PostReceiptAsync));
             await using var verify = CreateContext();
             (await StockAsync(verify, fixture.ProductId, fixture.SourceId)).Should().Be(8);
-            (await StockAsync(verify, fixture.ProductId, fixture.DestinationId)).Should().Be(12);
+            (await verify.InventoryStocks.Where(x =>
+                x.ProductId == fixture.ProductId && x.WarehouseId == fixture.DestinationId &&
+                x.LotId == null && x.SerialId == null &&
+                x.Status == InventoryStatus.Available).Select(x => x.Quantity).SingleAsync()).Should().Be(12);
+            (await verify.InventoryStocks.Where(x =>
+                x.ProductId == fixture.ProductId && x.WarehouseId == fixture.DestinationId &&
+                x.LotId != null).Select(x => x.Quantity).SingleAsync()).Should().Be(7);
             (await verify.InventoryTransactions.CountAsync(x =>
                 x.ReferenceType == "StockTransfer" && x.ReferenceId.HasValue &&
                 ids.Contains(x.ReferenceId.Value) && x.TransactionType == TransactionType.TransferIn))
@@ -519,7 +548,8 @@ public sealed class SqlServerStockTransferTests
             (await verify.InventoryStocks.CountAsync(x =>
                 x.ProductId == fixture.ProductId &&
                 x.WarehouseId == fixture.DestinationId &&
-                x.Status == 0)).Should().Be(1);
+                x.Status == InventoryStatus.Available &&
+                x.LotId == null && x.SerialId == null)).Should().Be(1);
         }
         finally { await CleanupAsync(fixture); }
     }
@@ -617,6 +647,7 @@ public sealed class SqlServerStockTransferTests
         await db.StockTransferDetails.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.StockTransfers.Where(x => transferIds.Contains(x.Id)).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
+        await db.InventoryLots.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.UserWarehouses.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == fixture.ProductId).ExecuteDeleteAsync();
         await db.Units.Where(x => x.Id == fixture.UnitId).ExecuteDeleteAsync();

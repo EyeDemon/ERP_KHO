@@ -294,6 +294,7 @@ IF @lockResult < 0
 MERGE INTO InventoryStocks WITH (HOLDLOCK) AS target
 USING (SELECT {productId} AS ProductId, {warehouseId} AS WarehouseId, {locationId} AS LocationId, {quantity} AS Quantity, {now} AS LastUpdated, 0 AS Status) AS source
 ON target.ProductId = source.ProductId AND target.WarehouseId = source.WarehouseId AND target.Status = source.Status AND target.LocationId = source.LocationId
+   AND target.LotId IS NULL AND target.SerialId IS NULL
 WHEN MATCHED THEN
     UPDATE SET Quantity = target.Quantity + source.Quantity, LastUpdated = source.LastUpdated
 WHEN NOT MATCHED THEN
