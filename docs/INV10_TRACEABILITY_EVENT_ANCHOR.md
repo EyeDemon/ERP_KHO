@@ -30,3 +30,9 @@
 - No schema migration or mutation permission needed; existing read permission and warehouse boundaries apply.
 - Verification: SQL Server real tracked-lot shipment dispatch + forged/orphan reference exclusion + anchor and filter isolation; frontend Vietnamese display, empty state, truncation, and explicit filter reset; API JSON contract.
 - Keep INV-10 as `foundation` pending canonical Receipt→QC→Move→Pick→Shipment→Return/Recall causal ancestry and real browser/staging SQL/API evidence.
+
+## SQL integration fixture correction (CI 37920211055)
+- The new real dispatch scenario inserts a tracked-lot inventory stock before creating picking/allocation.
+- The shared test helper now scans the **exact LotNumber / SerialNumber returned by the assigned PickingTaskLine** when present. Existing untracked scenarios continue passing null, so no production scan validation is weakened.
+- Root cause from failed Application integration: `PICK_WRONG_LOT` because the previous fixture omitted LotNumber. The corrected fixture exercises the actual canonical tracking contract.
+- Production PickingService and shipment dispatch rules remain unchanged. Rerun on the next commit is required to establish PASS.

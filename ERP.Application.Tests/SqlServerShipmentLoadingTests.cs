@@ -926,6 +926,8 @@ public sealed class SqlServerShipmentLoadingTests
                 TaskLineId = started.Lines.Single().Id,
                 LocationBarcode = fixture.LocationCode,
                 ProductBarcode = fixture.ProductCode,
+                LotNumber = started.Lines.Single().LotNumber,
+                SerialNumber = started.Lines.Single().SerialNumber,
                 Quantity = 10,
                 RowVersion = started.RowVersion!
             });
