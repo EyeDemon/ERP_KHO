@@ -268,6 +268,11 @@
 .production-ui .ui-page {
   display: grid;
   gap: var(--ui-space-4);
+  min-width: 0;
+  width: 100%;
+}
+.production-ui .ui-page > * {
+  min-width: 0;
 }
 
 .production-ui .ui-page-header {
@@ -321,6 +326,8 @@
 }
 
 .production-ui .ui-card {
+  min-width: 0;
+  max-width: 100%;
   background: var(--ui-surface);
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius);
@@ -406,6 +413,8 @@
 }
 
 .production-ui .ui-table-scroll {
+  min-width: 0;
+  max-width: 100%;
   width: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;

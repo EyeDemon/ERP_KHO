@@ -8,3 +8,16 @@
 .reconciliation-empty{text-align:center!important;color:var(--ui-muted);padding:24px!important}
 .reconciliation-pagination{display:flex;align-items:center;justify-content:center;gap:var(--ui-space-2);margin-top:var(--ui-space-3);color:var(--ui-muted);font-size:12px}
 @media(max-width:768px){.reconciliation-filter-actions{width:100%}.reconciliation-filter-actions button{flex:1}}
+
+/* Keep wide ledger/evidence tables inside their own horizontal scroller.
+   Browser Use found a 693px document at a 390px viewport (QA-11). */
+.production-ui .ui-page:has(.reconciliation-table){width:100%;min-width:0;max-width:100%}
+.production-ui .ui-page:has(.reconciliation-table)>*{min-width:0;max-width:100%}
+.production-ui .ui-page:has(.reconciliation-table) .ui-card{min-width:0;max-width:100%}
+.production-ui .ui-page:has(.reconciliation-table) .ui-table-scroll{min-width:0;max-width:100%;overflow-x:auto}
+.production-ui .ui-page:has(.reconciliation-table) .ui-metric-grid{min-width:0}
+.production-ui .ui-page:has(.reconciliation-table) .reconciliation-pagination{flex-wrap:wrap;min-width:0}
+@media(max-width:768px){
+  .production-ui .ui-page:has(.reconciliation-table) .ui-toolbar-group{min-width:0;flex:1 1 100%}
+  .production-ui .ui-page:has(.reconciliation-table) .ui-toolbar-group :is(input,select){min-width:0;max-width:100%}
+}
