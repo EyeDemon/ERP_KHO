@@ -101,7 +101,7 @@ describe('Stock transfer command consistency', () => {
     expect(destination.value).toBe('2');
     fireEvent.change(source, { target: { value: '2' } });
     expect(destination.value).toBe('');
-    expect(within(dialog).queryByRole('option', { name: 'Kho đích' })).toBeNull();
+    expect(destination.querySelector('option[value="2"]')).toBeNull();
   });
 
   it('rejects a create with no detail lines before sending an API command', async () => {
