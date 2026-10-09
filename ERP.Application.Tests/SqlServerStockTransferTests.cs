@@ -104,6 +104,89 @@ public sealed class SqlServerStockTransferTests
     }
 
     [SqlServerFact]
+    public async Task ReceiveRequiresFullDispositionBeforeLeavingTransitAndPostingLedger()
+    {
+        var fixture = await CreateFixtureAsync(10);
+        try
+        {
+            int id;
+            await using (var db = CreateContext())
+            {
+                var create = CreateService(db, fixture.CreatorId);
+                id = (await create.CreateAsync(Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 8))).Id;
+                var operations = CreateService(db, fixture.UserId);
+                await operations.ApproveAsync(id);
+                await operations.DispatchAsync(id);
+            }
+
+            async Task RejectAndVerifyAsync(decimal received, decimal missing, decimal damaged)
+            {
+                await using (var db = CreateContext())
+                {
+                    var act = () => CreateService(db, fixture.UserId).ReceiveAsync(id,
+                        new ReceiveStockTransferDto
+                        {
+                            Details = [new()
+                            {
+                                ProductId = fixture.ProductId,
+                                ReceivedQuantity = received,
+                                MissingQuantity = missing,
+                                DamagedQuantity = damaged
+                            }]
+                        });
+                    await act.Should().ThrowAsync<BusinessRuleException>();
+                }
+                await using var verify = CreateContext();
+                (await verify.StockTransfers.SingleAsync(x => x.Id == id)).Status
+                    .Should().Be(StockTransferStatus.InTransit);
+                (await StockAsync(verify, fixture.ProductId, fixture.DestinationId)).Should().Be(0);
+                (await verify.InventoryTransactions.CountAsync(x => x.ReferenceType == "StockTransfer" &&
+                    x.ReferenceId == id && x.TransactionType == TransactionType.TransferIn)).Should().Be(0);
+                (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                    x.EntityId == id && x.Action == "StockTransfer.Received")).Should().Be(0);
+            }
+
+            // All five units left over must be explicitly recorded as missing
+            // or damaged; they cannot disappear on Received/Completed.
+            await RejectAndVerifyAsync(3, 0, 0);
+            await RejectAndVerifyAsync(7, 0, 2);
+            await RejectAndVerifyAsync(-1, 9, 0);
+            await RejectAndVerifyAsync(7.00001m, 0.99999m, 0);
+
+            await using (var db = CreateContext())
+                await CreateService(db, fixture.UserId).ReceiveAsync(id,
+                    new ReceiveStockTransferDto
+                    {
+                        Details = [new()
+                        {
+                            ProductId = fixture.ProductId,
+                            ReceivedQuantity = 3,
+                            MissingQuantity = 4,
+                            DamagedQuantity = 1
+                        }]
+                    });
+
+            await using (var verify = CreateContext())
+            {
+                var transfer = await verify.StockTransfers.Include(x => x.Details).SingleAsync(x => x.Id == id);
+                transfer.Status.Should().Be(StockTransferStatus.Received);
+                var line = transfer.Details.Single();
+                line.ReceivedQuantity.Should().Be(3);
+                line.MissingQuantity.Should().Be(4);
+                line.DamagedQuantity.Should().Be(1);
+                (await StockAsync(verify, fixture.ProductId, fixture.DestinationId)).Should().Be(3);
+                var posted = await verify.InventoryTransactions.SingleAsync(x =>
+                    x.ReferenceType == "StockTransfer" && x.ReferenceId == id &&
+                    x.TransactionType == TransactionType.TransferIn);
+                posted.Quantity.Should().Be(3);
+                (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                    x.EntityId == id && x.Action == "StockTransfer.Received")).Should().Be(1);
+            }
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task CompetingTransfersCannotDriveSourceStockNegative()
     {
         var fixture = await CreateFixtureAsync(10);

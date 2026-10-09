@@ -236,13 +236,35 @@ export default function StockTransfers() {
     }
   };
 
-  const submitReceive = () =>
-    act('receive', {
-      details: selected?.details.map(line => ({
-        productId: line.productId,
-        ...receive[line.productId],
+  const submitReceive = () => {
+    if (!selected || actionInFlightRef.current) return;
+    // Match SQL decimal(18,4) precisely enough for browser number inputs.
+    // Never allow a terminal receive that leaves transit quantity unclassified.
+    const units = (quantity: number) => Math.round(quantity * 10_000);
+    for (const line of selected.details) {
+      const quantities = receive[line.productId];
+      const parts = quantities && [
+        quantities.receivedQuantity, quantities.missingQuantity, quantities.damagedQuantity,
+      ];
+      if (!parts || parts.some(quantity =>
+        !Number.isFinite(quantity) || quantity < 0 ||
+        Math.abs(quantity * 10_000 - units(quantity)) > 0.000001
+      )) {
+        setError(`Sản phẩm ${line.productCode}: số lượng thực nhận, thiếu và hỏng phải không âm, tối đa 4 chữ số thập phân.`);
+        return;
+      }
+      if (parts.reduce((total, quantity) => total + units(quantity), 0) !== units(line.dispatchedQuantity)) {
+        setError(`Sản phẩm ${line.productCode}: tổng thực nhận, thiếu và hỏng phải bằng số lượng đã xuất (${line.dispatchedQuantity}).`);
+        return;
+      }
+    }
+    setError('');
+    void act('receive', {
+      details: selected.details.map(line => ({
+        productId: line.productId, ...receive[line.productId],
       })),
     });
+  };
 
   const status = selected ? normalizeStatus(selected.status) : '';
 
@@ -250,7 +272,7 @@ export default function StockTransfers() {
     <UiPage>
       <div className="transfer-page">
         <UiPageHeader
-          eyebrow="Inventory Control"
+          eyebrow="Kiểm soát tồn kho"
           title="Điều chuyển kho"
           description="Theo dõi hàng từ kho nguồn, duyệt xuất, trạng thái đang vận chuyển đến khi kho đích xác nhận và hoàn tất."
           actions={

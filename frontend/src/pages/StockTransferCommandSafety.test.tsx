@@ -63,13 +63,45 @@ describe('Stock transfer command consistency', () => {
     expect(retryKey).toBe(firstKey);
 
     fireEvent.change(view.getByLabelText('Thực nhận SKU-9'), { target: { value: '3' } });
+    fireEvent.change(view.getByLabelText('Thiếu SKU-9'), { target: { value: '2' } });
     fireEvent.click(receiveButton);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
     const editedKey = (post.mock.calls[2][2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
     expect(editedKey).not.toBe(firstKey);
     expect(post.mock.calls[2][1]).toEqual({
-      details: [{ productId: 9, receivedQuantity: 3, missingQuantity: 0, damagedQuantity: 0 }],
+      details: [{ productId: 9, receivedQuantity: 3, missingQuantity: 2, damagedQuantity: 0 }],
     });
+  });
+
+  it('rejects a short receive without posting a command, then permits a fully reconciled receipt', async () => {
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    const receiveButton = await view.findByRole('button', { name: 'Xác nhận nhận' });
+    fireEvent.change(view.getByLabelText('Thực nhận SKU-9'), { target: { value: '3' } });
+    fireEvent.click(receiveButton);
+    expect(await view.findByRole('alert')).toHaveProperty('textContent',
+      'Sản phẩm SKU-9: tổng thực nhận, thiếu và hỏng phải bằng số lượng đã xuất (5).');
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(view.getByLabelText('Thiếu SKU-9'), { target: { value: '1' } });
+    fireEvent.change(view.getByLabelText('Hỏng SKU-9'), { target: { value: '1' } });
+    fireEvent.click(receiveButton);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/stock-transfers/807/receive', {
+      details: [{ productId: 9, receivedQuantity: 3, missingQuantity: 1, damagedQuantity: 1 }],
+    }, expect.anything()));
+  });
+
+  it('rejects a negative or over-precision receive amount before sending to SQL', async () => {
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    const receiveButton = await view.findByRole('button', { name: 'Xác nhận nhận' });
+    fireEvent.change(view.getByLabelText('Thực nhận SKU-9'), { target: { value: '-1' } });
+    fireEvent.click(receiveButton);
+    expect(await view.findByRole('alert')).toHaveProperty('textContent',
+      'Sản phẩm SKU-9: số lượng thực nhận, thiếu và hỏng phải không âm, tối đa 4 chữ số thập phân.');
+    fireEvent.change(view.getByLabelText('Thực nhận SKU-9'), { target: { value: '4.00001' } });
+    fireEvent.change(view.getByLabelText('Thiếu SKU-9'), { target: { value: '0.99999' } });
+    fireEvent.click(receiveButton);
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('rejects programmatic create without both authorized warehouse choices', async () => {

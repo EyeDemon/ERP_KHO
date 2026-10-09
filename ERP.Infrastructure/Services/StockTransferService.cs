@@ -191,8 +191,17 @@ public sealed partial class StockTransferService(
         foreach (var input in request.Details)
         {
             var line = entity.Details.SingleOrDefault(x => x.ProductId == input.ProductId) ?? throw new BusinessRuleException("Sản phẩm không thuộc phiếu.");
-            if (input.ReceivedQuantity < 0 || input.MissingQuantity < 0 || input.DamagedQuantity < 0 || input.ReceivedQuantity + input.MissingQuantity + input.DamagedQuantity > line.DispatchedQuantity)
-                throw new BusinessRuleException("Số lượng nhận, thiếu và hư hỏng không hợp lệ.");
+            if (input.ReceivedQuantity < 0 || input.MissingQuantity < 0 || input.DamagedQuantity < 0 ||
+                decimal.Round(input.ReceivedQuantity, 4) != input.ReceivedQuantity ||
+                decimal.Round(input.MissingQuantity, 4) != input.MissingQuantity ||
+                decimal.Round(input.DamagedQuantity, 4) != input.DamagedQuantity)
+                throw new BusinessRuleException("Số lượng nhận, thiếu và hư hỏng phải không âm và có tối đa 4 chữ số thập phân.");
+
+            // Receiving is a terminal movement for each line, not a partial
+            // receiving workflow. Every dispatched unit must be accounted for
+            // as received, missing or damaged before the document leaves transit.
+            if (input.ReceivedQuantity + input.MissingQuantity + input.DamagedQuantity != line.DispatchedQuantity)
+                throw new BusinessRuleException("Tổng thực nhận, thiếu và hỏng phải đúng bằng số lượng đã xuất của từng sản phẩm.");
         }
     }
 
