@@ -154,6 +154,100 @@ namespace ERP.Application.Tests
             authorization.VerifyNoOtherCalls();
         }
 
+
+        [Theory]
+        [InlineData(0, 1, null, 50)]
+        [InlineData(1, 0, null, 50)]
+        [InlineData(1, 1, -1, 50)]
+        [InlineData(1, 1, null, 0)]
+        [InlineData(1, 1, null, 101)]
+        public async Task Investigation_InvalidInputs_FailBeforeAuthorization(
+            int warehouseId, int productId, int? anchor, int limit)
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var call = () => service.GetInvestigationAsync(warehouseId, productId, anchor, limit);
+            await call.Should().ThrowAsync<BusinessRuleException>();
+            auth.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task Investigation_DeniedWarehouse_DoesNotReadEvidence()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(2, default))
+                .ThrowsAsync(new NotFoundException("Không tìm thấy tài nguyên."));
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var call = () => service.GetInvestigationAsync(2, 1);
+            await call.Should().ThrowAsync<NotFoundException>();
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(2, default), Times.Once);
+            auth.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task Investigation_SignedLedgerAndCurrentStock_AreDistinctAndAnchored()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+
+            var result = await service.GetInvestigationAsync(1, 1, limit: 2);
+            result.IsReadOnly.Should().BeTrue();
+            result.ProductCode.Should().Be("P1");
+            result.WarehouseId.Should().Be(1);
+            result.CurrentQuantity.Should().Be(12m);
+            result.ExpectedQuantity.Should().Be(12m);
+            result.Difference.Should().Be(0m);
+            result.BucketCount.Should().Be(1);
+            result.Buckets.Should().ContainSingle();
+            result.Buckets[0].Quantity.Should().Be(12m);
+            result.EventCount.Should().Be(6);
+            result.Events.Should().HaveCount(2);
+            result.EventsTruncated.Should().BeTrue();
+            result.Events.Select(x => x.TransactionId).Should().BeInDescendingOrder();
+            result.EventAnchorId.Should().BeGreaterThan(0);
+
+            db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                ProductId = 1, WarehouseId = 1,
+                TransactionType = TransactionType.AdjustmentIncrease,
+                Quantity = 2m, InventoryStatus = InventoryStatus.Available,
+                TransactionDate = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var anchored = await service.GetInvestigationAsync(1, 1, result.EventAnchorId, limit: 2);
+            anchored.EventCount.Should().Be(6);
+            anchored.ExpectedQuantity.Should().Be(12m);
+            anchored.Events.Select(x => x.TransactionId)
+                .Should().Equal(result.Events.Select(x => x.TransactionId));
+
+            var fresh = await service.GetInvestigationAsync(1, 1, limit: 2);
+            fresh.EventCount.Should().Be(7);
+            fresh.ExpectedQuantity.Should().Be(14m);
+            fresh.Difference.Should().Be(-2m);
+            fresh.EventAnchorId.Should().BeGreaterThan(result.EventAnchorId);
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(3));
+        }
+
+        [Fact]
+        public async Task Investigation_EmptyPairOrMissingProduct_FailsClosed()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var missingPair = () => service.GetInvestigationAsync(1, 3, eventAnchorId: 0);
+            await missingPair.Should().ThrowAsync<NotFoundException>();
+            var missingProduct = () => service.GetInvestigationAsync(1, int.MaxValue);
+            await missingProduct.Should().ThrowAsync<NotFoundException>();
+        }
+
         [Fact]
         public async Task GetReconciliationsAsync_CalculatesCorrectExpectedQuantity()
         {

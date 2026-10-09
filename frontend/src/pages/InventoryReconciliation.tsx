@@ -41,6 +41,30 @@ interface ReconciliationRow {
   status: string;
 }
 
+interface InvestigationBucket {
+  inventoryStockId: number;
+  locationId?: number | null; locationCode?: string | null;
+  lotId?: number | null; lotNumber?: string | null;
+  serialId?: number | null; serialNumber?: string | null;
+  quantity: number; reservedQuantity: number;
+}
+interface InvestigationEvent {
+  transactionId: number; transactionType: string;
+  locationId?: number | null; locationCode?: string | null;
+  lotId?: number | null; lotNumber?: string | null;
+  serialId?: number | null; serialNumber?: string | null;
+  quantity: number; signedQuantity: number;
+  referenceType?: string | null; referenceId?: number | null;
+  transactionDate: string;
+}
+interface Investigation {
+  warehouseId:number; warehouseName:string; productId:number;
+  productCode:string; productName:string; eventAnchorId:number;
+  eventCount:number; bucketCount:number;
+  eventsTruncated:boolean; bucketsTruncated:boolean;
+  currentQuantity:number; expectedQuantity:number; difference:number;
+  isReadOnly:boolean; buckets:InvestigationBucket[]; events:InvestigationEvent[];
+}
 interface PagedResult<T> {
   items: T[];
   totalRecords: number;
@@ -66,6 +90,11 @@ export default function InventoryReconciliation() {
   const [result, setResult] = useState<PagedResult<ReconciliationRow> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [investigation, setInvestigation] = useState<Investigation | null>(null);
+  const [investigationError, setInvestigationError] = useState('');
+  const [investigating, setInvestigating] = useState(false);
+  const investigationGeneration = useRef(0);
+  const investigationTrigger = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (demoRuntime) {
@@ -149,6 +178,58 @@ export default function InventoryReconciliation() {
     void load();
     return () => { active = false; };
   }, [applied, demoRuntime, page]);
+
+  // Invalidate in-flight evidence reads after pagination/filter changes or
+  // unmount. Never display stale evidence belonging to another scope.
+  useEffect(() => {
+    investigationGeneration.current += 1;
+    setInvestigation(null);
+    setInvestigationError('');
+    setInvestigating(false);
+    return () => { investigationGeneration.current += 1; };
+  }, [applied, page]);
+
+  const openInvestigation = async (row: ReconciliationRow) => {
+    if (demoRuntime) return;
+    const generation = ++investigationGeneration.current;
+    setInvestigation(null);
+    setInvestigationError('');
+    setInvestigating(true);
+    try {
+      const params = new URLSearchParams({
+        warehouseId: String(row.warehouseId),
+        productId: String(row.productId),
+        limit: '50',
+      });
+      const response = await apiClient.get('/api/InventoryReconciliation/investigation?' + params.toString());
+      if (generation !== investigationGeneration.current) return;
+      const evidence = response.data as Investigation;
+      if (!evidence || evidence.warehouseId !== row.warehouseId ||
+          evidence.productId !== row.productId || evidence.isReadOnly !== true ||
+          !Array.isArray(evidence.buckets) || !Array.isArray(evidence.events)) {
+        throw new Error('Dữ liệu điều tra không hợp lệ.');
+      }
+      setInvestigation(evidence);
+    } catch (cause) {
+      if (generation !== investigationGeneration.current) return;
+      const status = (cause as { response?: { status?: number } })?.response?.status;
+      setInvestigationError(status === 403
+        ? 'Bạn không có quyền xem bằng chứng đối chiếu.'
+        : status === 404
+          ? 'Không tìm thấy bằng chứng trong kho được cấp quyền.'
+          : 'Không thể tải bằng chứng điều tra. Hãy thử lại.');
+    } finally {
+      if (generation === investigationGeneration.current) setInvestigating(false);
+    }
+  };
+
+  const closeInvestigation = () => {
+    investigationGeneration.current += 1;
+    setInvestigation(null);
+    setInvestigationError('');
+    setInvestigating(false);
+    investigationTrigger.current?.focus();
+  };
 
   const currentRows = result?.items ?? [];
   const mismatchCount = currentRows.filter(row => row.status !== 'Match').length;
@@ -234,12 +315,13 @@ export default function InventoryReconciliation() {
                   <th>Ledger kỳ vọng</th>
                   <th>Chênh lệch</th>
                   <th>Trạng thái</th>
-                  <th>Movement breakdown</th>
+                  <th>Thành phần biến động</th>
+                  <th>Bằng chứng</th>
                 </tr>
               </thead>
               <tbody>
                 {currentRows.length === 0 ? (
-                  <tr><td colSpan={7} className="reconciliation-empty">Không có dữ liệu phù hợp. Hãy thay đổi bộ lọc và thử lại.</td></tr>
+                  <tr><td colSpan={8} className="reconciliation-empty">Không có dữ liệu phù hợp. Hãy thay đổi bộ lọc và thử lại.</td></tr>
                 ) : currentRows.map(row => {
                   const matches = row.status === 'Match';
                   return (
@@ -263,6 +345,16 @@ export default function InventoryReconciliation() {
                           <span>Điều chỉnh +{numberFormat.format(row.adjustmentIncreaseQuantity)} / -{numberFormat.format(row.adjustmentDecreaseQuantity)}</span>
                         </div>
                       </td>
+                      <td>
+                        <button type="button" disabled={demoRuntime || investigating || loading}
+                          aria-label={`Xem bằng chứng ${row.productCode} tại ${row.warehouseName}`}
+                          onClick={event => {
+                            investigationTrigger.current = event.currentTarget;
+                            void openInvestigation(row);
+                          }}>
+                          {demoRuntime ? 'Chỉ hệ thống thật' : 'Xem bằng chứng'}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -279,6 +371,61 @@ export default function InventoryReconciliation() {
           </nav>
         )}
       </UiCard>
+
+      {(investigating || investigationError || investigation) && (
+        <UiCard title="Hồ sơ điều tra chênh lệch (chỉ đọc)">
+          {investigating && <p role="status">Đang tải bằng chứng theo kho và sản phẩm...</p>}
+          {investigationError && <p role="alert">{investigationError}</p>}
+          {investigation && (
+            <>
+              <p><strong>{investigation.productCode}</strong> — {investigation.productName} • {investigation.warehouseName}</p>
+              <p className="ui-muted-text">
+                Bằng chứng Ledger được cố định tại ID #{investigation.eventAnchorId}.
+                Bucket tồn và số dư hiện tại là dữ liệu thời điểm truy vấn, không phải ảnh chụp quá khứ.
+                Không sử dụng số chênh lệch này để tự sửa tồn kho hay tạo giao dịch đảo.
+              </p>
+              <UiMetricGrid>
+                <UiMetric label="Số dư hiện tại" value={numberFormat.format(investigation.currentQuantity)} />
+                <UiMetric label="Ledger đến mốc" value={numberFormat.format(investigation.expectedQuantity)} />
+                <UiMetric label="Chênh lệch tham khảo" value={numberFormat.format(investigation.difference)} />
+              </UiMetricGrid>
+              {(investigation.eventsTruncated || investigation.bucketsTruncated) && (
+                <p role="status" className="ui-muted-text">
+                  Bằng chứng đã giới hạn ({investigation.events.length}/{investigation.eventCount} sự kiện,
+                  {investigation.buckets.length}/{investigation.bucketCount} bucket). Không coi danh sách này là toàn bộ hồ sơ.
+                </p>
+              )}
+              <h3>Bucket tồn AVAILABLE hiện tại ({investigation.bucketCount})</h3>
+              <UiTableScroll><table aria-label="Bucket tồn phục vụ điều tra chênh lệch">
+                <thead><tr><th>ID bucket</th><th>Vị trí</th><th>Lô</th><th>Sê-ri</th><th>Tồn</th><th>Đã giữ</th></tr></thead>
+                <tbody>{investigation.buckets.length === 0?
+                  <tr><td colSpan={6}>Không có bucket AVAILABLE.</td></tr>:
+                  investigation.buckets.map(b=><tr key={b.inventoryStockId}>
+                    <td>#{b.inventoryStockId}</td><td>{b.locationCode ?? '—'}</td>
+                    <td>{b.lotNumber ?? '—'}</td><td>{b.serialNumber ?? '—'}</td>
+                    <td>{numberFormat.format(b.quantity)}</td><td>{numberFormat.format(b.reservedQuantity)}</td>
+                  </tr>)}
+                </tbody>
+              </table></UiTableScroll>
+              <h3>Sự kiện Ledger AVAILABLE ({investigation.eventCount})</h3>
+              <UiTableScroll><table aria-label="Sự kiện Ledger phục vụ điều tra chênh lệch">
+                <thead><tr><th>ID giao dịch</th><th>Loại</th><th>Vị trí</th><th>Lô/sê-ri</th><th>Số lượng có dấu</th><th>Chứng từ</th></tr></thead>
+                <tbody>{investigation.events.length === 0?
+                  <tr><td colSpan={6}>Không có sự kiện Ledger tại mốc này.</td></tr>:
+                  investigation.events.map(e=><tr key={e.transactionId}>
+                    <td>#{e.transactionId}</td><td>{e.transactionType}</td>
+                    <td>{e.locationCode ?? '—'}</td>
+                    <td>{e.lotNumber ?? '—'} / {e.serialNumber ?? '—'}</td>
+                    <td>{numberFormat.format(e.signedQuantity)}</td>
+                    <td>{e.referenceType ?? '—'}{e.referenceId != null ? ` #${e.referenceId}` : ''}</td>
+                  </tr>)}
+                </tbody>
+              </table></UiTableScroll>
+            </>
+          )}
+          <button type="button" onClick={closeInvestigation}>Đóng hồ sơ</button>
+        </UiCard>
+      )}
     </UiPage>
   );
 }

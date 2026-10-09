@@ -44,6 +44,43 @@ namespace ERP.Api.Tests
             mock.VerifyNoOtherCalls();
         }
 
+
+        [Fact]
+        public async Task Investigation_IsAuthorizedAndReturnsTypedReadOnlyEvidence()
+        {
+            var method = typeof(InventoryReconciliationController)
+                .GetMethod(nameof(InventoryReconciliationController.Investigation));
+            method.Should().NotBeNull();
+            var route = method!.GetCustomAttribute<HttpGetAttribute>();
+            route.Should().NotBeNull();
+            route!.Template.Should().Be("investigation");
+            typeof(InventoryReconciliationController)
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.InventoryLedgerRead);
+
+            var mock = new Mock<IInventoryReconciliationQueryService>(MockBehavior.Strict);
+            var result = new InventoryReconciliationInvestigationDto
+            {
+                WarehouseId = 7, ProductId = 17, EventAnchorId = 32,
+                CurrentQuantity = 9, ExpectedQuantity = 11, Difference = -2,
+                BucketCount = 1, EventCount = 2, EventsTruncated = false,
+                IsReadOnly = true,
+                Events = [new InventoryReconciliationEvidenceEventDto
+                {
+                    TransactionId = 32, TransactionType = "Import",
+                    Quantity = 11, SignedQuantity = 11
+                }]
+            };
+            mock.Setup(x => x.GetInvestigationAsync(7, 17, 32, 50))
+                .ReturnsAsync(result);
+            var response = await new InventoryReconciliationController(mock.Object)
+                .Investigation(7, 17, 32, 50);
+            var ok = response.Result.Should().BeOfType<OkObjectResult>().Subject;
+            ok.Value.Should().BeSameAs(result);
+            mock.Verify(x => x.GetInvestigationAsync(7, 17, 32, 50), Times.Once);
+            mock.VerifyNoOtherCalls();
+        }
+
         [Fact]
         public async Task GetReconciliations_ReturnsOkResult_WithPagedResult()
         {

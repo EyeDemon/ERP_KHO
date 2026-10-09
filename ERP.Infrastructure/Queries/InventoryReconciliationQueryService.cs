@@ -45,6 +45,128 @@ namespace ERP.Infrastructure.Queries
                 }).ToListAsync();
         }
 
+
+        public async Task<InventoryReconciliationInvestigationDto> GetInvestigationAsync(
+            int warehouseId, int productId, int? eventAnchorId = null, int limit = 50)
+        {
+            if (warehouseId <= 0 || productId <= 0)
+                throw new BusinessRuleException("ID kho và ID sản phẩm phải là số nguyên dương.");
+            if (eventAnchorId is < 0)
+                throw new BusinessRuleException("Mốc lịch sử sổ cái không hợp lệ.");
+            if (limit is < 1 or > 100)
+                throw new BusinessRuleException("Giới hạn sự kiện phải nằm từ 1 đến 100.");
+            if (_warehouseAuthorization is null)
+                throw new InvalidOperationException("Thiếu dịch vụ phân quyền kho đối chiếu.");
+
+            await _warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId);
+
+            // Scope every query by the authorized warehouse and exact product,
+            // including all second-phase detail reads.
+            var product = await _context.Products.AsNoTracking()
+                .Where(x => x.Id == productId)
+                .Select(x => new { x.Code, x.Name })
+                .SingleOrDefaultAsync();
+            if (product is null)
+                throw new NotFoundException("Không tìm thấy sản phẩm cần đối chiếu.");
+
+            var warehouseName = await _context.Warehouses.AsNoTracking()
+                .Where(x => x.Id == warehouseId)
+                .Select(x => x.Name)
+                .SingleOrDefaultAsync();
+            if (warehouseName is null)
+                throw new NotFoundException("Không tìm thấy kho cần đối chiếu.");
+
+            var stocks = _context.InventoryStocks.AsNoTracking()
+                .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId &&
+                            x.Status == InventoryStatus.Available);
+            var ledger = _context.InventoryTransactions.AsNoTracking()
+                .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId &&
+                            x.InventoryStatus == InventoryStatus.Available);
+
+            // Immutable monotonically increasing transaction IDs: a returned
+            // anchor never expands because newer events were appended.
+            var anchor = eventAnchorId ?? await ledger.MaxAsync(x => (int?)x.Id) ?? 0;
+            var anchoredLedger = ledger.Where(x => x.Id <= anchor);
+
+            var bucketCount = await stocks.CountAsync();
+            var eventCount = await anchoredLedger.CountAsync();
+            if (bucketCount == 0 && eventCount == 0)
+                throw new NotFoundException("Không có bucket hoặc sự kiện sổ cái cho kho và sản phẩm này.");
+
+            var currentQuantity = await stocks.SumAsync(x => (decimal?)x.Quantity) ?? 0m;
+            // Compute the signed quantity from a small bounded transaction-type
+            // aggregate, not by materializing the entire immutable history.
+            var grouped = await anchoredLedger
+                .GroupBy(x => x.TransactionType)
+                .Select(x => new { Type = x.Key, Quantity = x.Sum(t => t.Quantity) })
+                .ToListAsync();
+            var expectedQuantity = grouped.Sum(x => x.Type.ApplySign(x.Quantity));
+
+            var buckets = await stocks
+                .OrderBy(x => x.Id)
+                .Take(101)
+                .Select(x => new InventoryReconciliationEvidenceBucketDto
+                {
+                    InventoryStockId = x.Id,
+                    LocationId = x.LocationId,
+                    LocationCode = x.Location != null ? x.Location.Code : null,
+                    LotId = x.LotId,
+                    LotNumber = x.Lot != null ? x.Lot.LotNumber : null,
+                    SerialId = x.SerialId,
+                    SerialNumber = x.Serial != null ? x.Serial.SerialNumber : null,
+                    Quantity = x.Quantity,
+                    ReservedQuantity = x.ReservedQuantity
+                }).ToListAsync();
+
+            var rawEvents = await anchoredLedger
+                .OrderByDescending(x => x.Id)
+                .Take(limit + 1)
+                .Select(x => new
+                {
+                    x.Id, x.TransactionType, x.LocationId,
+                    LocationCode = x.Location != null ? x.Location.Code : null,
+                    x.LotId, LotNumber = x.Lot != null ? x.Lot.LotNumber : null,
+                    x.SerialId, SerialNumber = x.Serial != null ? x.Serial.SerialNumber : null,
+                    x.Quantity, x.ReferenceType, x.ReferenceId, x.TransactionDate
+                })
+                .ToListAsync();
+
+            return new InventoryReconciliationInvestigationDto
+            {
+                WarehouseId = warehouseId,
+                WarehouseName = warehouseName,
+                ProductId = productId,
+                ProductCode = product.Code,
+                ProductName = product.Name,
+                EventAnchorId = anchor,
+                EventCount = eventCount,
+                BucketCount = bucketCount,
+                CurrentQuantity = currentQuantity,
+                ExpectedQuantity = expectedQuantity,
+                Difference = currentQuantity - expectedQuantity,
+                EventsTruncated = rawEvents.Count > limit,
+                BucketsTruncated = buckets.Count > 100,
+                Buckets = buckets.Take(100).ToList(),
+                Events = rawEvents.Take(limit).Select(x =>
+                    new InventoryReconciliationEvidenceEventDto
+                    {
+                        TransactionId = x.Id,
+                        TransactionType = x.TransactionType.ToString(),
+                        LocationId = x.LocationId,
+                        LocationCode = x.LocationCode,
+                        LotId = x.LotId,
+                        LotNumber = x.LotNumber,
+                        SerialId = x.SerialId,
+                        SerialNumber = x.SerialNumber,
+                        Quantity = x.Quantity,
+                        SignedQuantity = x.TransactionType.ApplySign(x.Quantity),
+                        ReferenceType = x.ReferenceType,
+                        ReferenceId = x.ReferenceId,
+                        TransactionDate = x.TransactionDate
+                    }).ToList()
+            };
+        }
+
         public async Task<PagedResult<InventoryReconciliationDto>> GetReconciliationsAsync(
             int? warehouseId,
             int? productId,

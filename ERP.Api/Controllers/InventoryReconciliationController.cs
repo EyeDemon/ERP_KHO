@@ -24,6 +24,14 @@ namespace ERP.Api.Controllers
         public async Task<ActionResult<IReadOnlyList<InventoryReconciliationWarehouseDto>>> Warehouses()
             => Ok(await _queryService.GetAccessibleWarehousesAsync());
 
+        // Explicit warehouse and product identity is mandatory. A broad
+        // unscoped evidence download is intentionally not exposed.
+        [HttpGet("investigation")]
+        public async Task<ActionResult<InventoryReconciliationInvestigationDto>> Investigation(
+            [FromQuery] int warehouseId, [FromQuery] int productId,
+            [FromQuery] int? eventAnchorId = null, [FromQuery] int limit = 50)
+            => Ok(await _queryService.GetInvestigationAsync(warehouseId, productId, eventAnchorId, limit));
+
         [HttpGet]
         public async Task<IActionResult> GetReconciliations(
             [FromQuery] int? warehouseId,

@@ -1366,6 +1366,102 @@ public sealed class SqlServerInventoryLockMoveTests
         }
     }
 
+
+    [SqlServerFact]
+    public async Task ReconciliationInvestigation_RealLedgerBucketEvidence_IsAuthorizedBoundedAndAnchored()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var seed = CreateContext())
+            {
+                seed.InventoryTransactions.AddRange(
+                    new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId,
+                        WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId,
+                        LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId,
+                        InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.Import,
+                        Quantity = 8,
+                        TransactionDate = DateTime.UtcNow
+                    },
+                    new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId,
+                        WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId,
+                        LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId,
+                        InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.AdjustmentIncrease,
+                        Quantity = 4,
+                        TransactionDate = DateTime.UtcNow
+                    });
+                await seed.SaveChangesAsync();
+            }
+
+            await using var read = CreateContext();
+            var service = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var first = await service.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId, limit: 1);
+            first.IsReadOnly.Should().BeTrue();
+            first.CurrentQuantity.Should().Be(10);
+            first.ExpectedQuantity.Should().Be(12);
+            first.Difference.Should().Be(-2);
+            first.BucketCount.Should().Be(1);
+            first.Buckets.Should().ContainSingle(x =>
+                x.InventoryStockId == fixture.SourceStockId &&
+                x.LocationId == fixture.SourceLocationId &&
+                x.LotId == fixture.LotId && x.Quantity == 10);
+            first.Buckets[0].LocationCode.Should().NotBeNullOrWhiteSpace();
+            first.Buckets[0].LotNumber.Should().StartWith("LOT-");
+            first.EventCount.Should().Be(2);
+            first.Events.Should().ContainSingle();
+            first.EventsTruncated.Should().BeTrue();
+            first.Events[0].SignedQuantity.Should().Be(4);
+            first.EventAnchorId.Should().Be(first.Events[0].TransactionId);
+
+            await using (var newEvent = CreateContext())
+            {
+                newEvent.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.SourceLocationId,
+                    LotId = fixture.LotId,
+                    CreatedBy = fixture.UserId,
+                    InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Export,
+                    Quantity = 1,
+                    TransactionDate = DateTime.UtcNow
+                });
+                await newEvent.SaveChangesAsync();
+            }
+            var anchored = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId, first.EventAnchorId, limit: 1);
+            anchored.Events.Select(x => x.TransactionId)
+                .Should().Equal(first.Events.Select(x => x.TransactionId));
+            anchored.ExpectedQuantity.Should().Be(12);
+            anchored.EventCount.Should().Be(2);
+            var fresh = await service.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId);
+            fresh.EventCount.Should().Be(3);
+            fresh.ExpectedQuantity.Should().Be(11);
+            fresh.Difference.Should().Be(-1);
+            fresh.Events.First().TransactionType.Should().Be("Export");
+            fresh.Events.First().SignedQuantity.Should().Be(-1);
+            fresh.EventAnchorId.Should().BeGreaterThan(first.EventAnchorId);
+
+            var notAllowed = () => service.GetInvestigationAsync(int.MaxValue, fixture.ProductId);
+            await notAllowed.Should().ThrowAsync<NotFoundException>();
+            var invalid = () => service.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId, limit: 101);
+            await invalid.Should().ThrowAsync<BusinessRuleException>();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task TraceabilityWarehouseChoices_ContainOnlyAssignedWarehouses()
     {
