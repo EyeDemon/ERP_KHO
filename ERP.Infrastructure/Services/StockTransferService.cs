@@ -30,10 +30,33 @@ public sealed partial class StockTransferService(
         if (request.SourceWarehouseId.HasValue) query = query.Where(x => x.SourceWarehouseId == request.SourceWarehouseId);
         if (request.DestinationWarehouseId.HasValue) query = query.Where(x => x.DestinationWarehouseId == request.DestinationWarehouseId);
         if (request.FromDate.HasValue) query = query.Where(x => x.CreatedAt >= request.FromDate.Value);
-        if (request.ToDate.HasValue) query = query.Where(x => x.CreatedAt < request.ToDate.Value.AddDays(1));
+        if (request.ToDate.HasValue)
+        {
+            // A date-only upper bound includes the entire day. DateTime.MaxValue
+            // must not be incremented, otherwise a valid query throws 500.
+            var inclusiveEndDate = request.ToDate.Value.Date;
+            if (inclusiveEndDate < DateTime.MaxValue.Date)
+            {
+                var exclusiveEnd = inclusiveEndDate.AddDays(1);
+                query = query.Where(x => x.CreatedAt < exclusiveEnd);
+            }
+        }
+
         var total = await query.CountAsync(cancellationToken);
+        // Skip uses Int32 in EF/SQL Server. Compute outside Int32 and avoid
+        // querying an impossible page instead of overflowing into a negative offset.
+        var offset = ((long)page - 1) * size;
+        if (offset >= total)
+        {
+            return new PagedResult<StockTransferDto>
+            {
+                Items = [], TotalRecords = total, PageIndex = page, PageSize = size
+            };
+        }
+
         var rows = await query.Include(x => x.SourceWarehouse).Include(x => x.DestinationWarehouse)
-            .OrderByDescending(x => x.CreatedAt).Skip((page - 1) * size).Take(size).ToListAsync(cancellationToken);
+            .OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+            .Skip(checked((int)offset)).Take(size).ToListAsync(cancellationToken);
         return new PagedResult<StockTransferDto> { Items = rows.Select(MapSummary).ToList(), TotalRecords = total, PageIndex = page, PageSize = size };
     }
 
