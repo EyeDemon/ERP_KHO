@@ -436,6 +436,22 @@ public sealed class SqlServerShipmentLoadingTests
             exposure.LastTransactionId.Should().Be(posted.Id);
             result.ShipmentExposuresTruncated.Should().BeFalse();
 
+            // Linked records must be the canonical Shipment -> Packing ->
+            // Picking -> Allocation chain and the same SHIP ledger bucket.
+            var pickEvidence = result.ShipmentPickingEvidence.Should().ContainSingle().Which;
+            pickEvidence.ShipmentId.Should().Be(prepared.Prepared.ShipmentId);
+            pickEvidence.ShipmentCode.Should().Be(exposure.ShipmentCode);
+            pickEvidence.WarehouseId.Should().Be(fixture.WarehouseId);
+            pickEvidence.PackingSessionId.Should().BeGreaterThan(0);
+            pickEvidence.PackingSessionCode.Should().NotBeNullOrWhiteSpace();
+            pickEvidence.PickingTaskId.Should().BeGreaterThan(0);
+            pickEvidence.PickingTaskCode.Should().NotBeNullOrWhiteSpace();
+            pickEvidence.PickingTaskLineId.Should().BeGreaterThan(0);
+            pickEvidence.AllocationId.Should().BeGreaterThan(0);
+            pickEvidence.SourceLocationCode.Should().Be(fixture.LocationCode);
+            pickEvidence.PickedQuantity.Should().Be(10m);
+            result.ShipmentPickingEvidenceTruncated.Should().BeFalse();
+
             // A forged shipment reference in the immutable ledger alone is
             // never sufficient proof that a canonical Shipment exists.
             await using (var orphan = CreateContext())
@@ -456,22 +472,42 @@ public sealed class SqlServerShipmentLoadingTests
                 productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
             afterOrphan.ShipmentExposures.Should().ContainSingle();
             afterOrphan.ShipmentExposures[0].DispatchedQuantity.Should().Be(10m);
+            afterOrphan.ShipmentPickingEvidence.Should().ContainSingle();
+            afterOrphan.ShipmentPickingEvidence[0].PickingTaskLineId.Should()
+                .Be(pickEvidence.PickingTaskLineId);
             var anchored = await query.TraceAsync(
                 productId: fixture.ProductId, lotNumber: lotNumber,
                 limit: 20, eventAnchorId: result.EventAnchorId);
             anchored.ShipmentExposures.Should().ContainSingle();
             anchored.ShipmentExposures[0].LastTransactionId.Should().Be(posted.Id);
+            anchored.ShipmentPickingEvidence.Should().ContainSingle();
+            anchored.ShipmentPickingEvidence[0].AllocationId.Should()
+                .Be(pickEvidence.AllocationId);
 
             var nonexistentLot = await query.TraceAsync(productId: fixture.ProductId,
                 lotNumber: lotNumber + "-other", limit: 20);
             nonexistentLot.ShipmentExposures.Should().BeEmpty();
+            nonexistentLot.ShipmentPickingEvidence.Should().BeEmpty();
             var untracked = await query.TraceAsync(
                 warehouseId: fixture.WarehouseId, limit: 20);
             untracked.ShipmentExposures.Should().BeEmpty();
+            untracked.ShipmentPickingEvidence.Should().BeEmpty();
             var exactDocument = await query.TraceAsync(
                 productId: fixture.ProductId, lotNumber: lotNumber,
                 referenceType: "Shipment", referenceId: prepared.Prepared.ShipmentId, limit: 20);
             exactDocument.ShipmentExposures.Should().BeEmpty();
+            exactDocument.ShipmentPickingEvidence.Should().BeEmpty();
+
+            // Losing the warehouse assignment after displaying a result
+            // must fail closed on the next query, including canonical links.
+            await using (var revoke = CreateContext())
+                await revoke.UserWarehouses.Where(x =>
+                    x.UserId == fixture.UserId &&
+                    x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+            var denied = () => query.TraceAsync(
+                warehouseId: fixture.WarehouseId, productId: fixture.ProductId,
+                lotNumber: lotNumber, limit: 20, eventAnchorId: result.EventAnchorId);
+            await denied.Should().ThrowAsync<ERP.Application.Exceptions.NotFoundException>();
         }
         finally { await CleanupAsync(fixture); }
     }

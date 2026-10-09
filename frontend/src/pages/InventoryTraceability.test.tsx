@@ -515,6 +515,48 @@ describe('InventoryTraceability',()=>{
     fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
     await view.findByRole('table',{name:'Dòng thời gian sổ cái phục vụ truy vết'});
     expect(view.queryByRole('table',{name:'Shipment có giao dịch xuất giao cần rà soát'})).toBeNull();
+    expect(view.queryByRole('table',{name:'Liên kết Shipment Packing Picking theo lô hoặc sê-ri'})).toBeNull();
+  });
+
+
+  it('shows canonical Shipment to Packing to Picking evidence only for tracked identity',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentPickingEvidence:[{
+        shipmentId:42,shipmentCode:'SHIP-42',warehouseId:1,
+        packingSessionId:15,packingSessionCode:'PACK-15',
+        pickingTaskId:16,pickingTaskCode:'PICK-16',
+        pickingTaskLineId:17,allocationId:18,
+        sourceLocationCode:'A-01',pickedQuantity:10
+      }]
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Mã lô'),{target:{value:'LOT-A'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    const table=await view.findByRole('table',{name:'Liên kết Shipment Packing Picking theo lô hoặc sê-ri'});
+    expect(table.textContent).toContain('SHIP-42');
+    expect(table.textContent).toContain('PACK-15');
+    expect(table.textContent).toContain('PICK-16');
+    expect(table.textContent).toContain('A-01');
+    expect(table.textContent).toContain('10');
+    expect(view.getByText(/chưa chứng minh quan hệ đến phiếu nhập/)).toBeTruthy();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'
+    );
+  });
+
+  it('caps canonical pick evidence and hides it when reference scope changes',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentPickingEvidence:[],shipmentPickingEvidenceTruncated:true
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Số sê-ri'),{target:{value:'SER-1'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    expect(await view.findByText(/Chỉ hiển thị 100 dòng Picking liên kết/)).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Loại tham chiếu'),{target:{value:'Shipment'}});
+    expect(view.queryByRole('table',{name:'Liên kết Shipment Packing Picking theo lô hoặc sê-ri'})).toBeNull();
+    expect(view.queryByText(/Chỉ hiển thị 100 dòng Picking liên kết/)).toBeNull();
   });
 
   it('can increase server event window to 500 without client-side truncation',async()=>{

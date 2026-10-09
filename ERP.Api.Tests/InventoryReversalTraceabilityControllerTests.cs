@@ -168,7 +168,16 @@ public sealed class InventoryReversalTraceabilityControllerTests
                     LedgerEventCount = 2, LastTransactionId = 123
                 }
             ],
-            ShipmentExposuresTruncated = true
+            ShipmentExposuresTruncated = true,
+            ShipmentPickingEvidence = [new InventoryTraceabilityShipmentPickingEvidenceDto
+            {
+                ShipmentId = 42, ShipmentCode = "SHIP-42", WarehouseId = 7,
+                PackingSessionId = 15, PackingSessionCode = "PACK-15",
+                PickingTaskId = 16, PickingTaskCode = "PICK-16",
+                PickingTaskLineId = 17, AllocationId = 18,
+                SourceLocationCode = "A-01", PickedQuantity = 10m
+            }],
+            ShipmentPickingEvidenceTruncated = true
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(
@@ -182,6 +191,14 @@ public sealed class InventoryReversalTraceabilityControllerTests
         Assert.Equal("SHIP-42", shipment.GetProperty("shipmentCode").GetString());
         Assert.Equal(10m, shipment.GetProperty("dispatchedQuantity").GetDecimal());
         Assert.Equal(2, shipment.GetProperty("ledgerEventCount").GetInt32());
+        Assert.True(root.GetProperty("shipmentPickingEvidenceTruncated").GetBoolean());
+        var pick = Assert.Single(root.GetProperty("shipmentPickingEvidence").EnumerateArray());
+        Assert.Equal(42, pick.GetProperty("shipmentId").GetInt32());
+        Assert.Equal("PICK-16", pick.GetProperty("pickingTaskCode").GetString());
+        Assert.Equal("PACK-15", pick.GetProperty("packingSessionCode").GetString());
+        Assert.Equal(17, pick.GetProperty("pickingTaskLineId").GetInt32());
+        Assert.Equal(18, pick.GetProperty("allocationId").GetInt32());
+        Assert.Equal(10m, pick.GetProperty("pickedQuantity").GetDecimal());
     }
 
     [Fact]

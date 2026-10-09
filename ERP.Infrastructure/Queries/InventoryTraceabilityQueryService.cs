@@ -319,6 +319,8 @@ public sealed class InventoryTraceabilityQueryService(
         // It is a read-only candidate view, not a return/POD/recall decision.
         var shipmentExposures = new List<InventoryTraceabilityShipmentExposureDto>();
         var shipmentExposuresTruncated = false;
+        var shipmentPickingEvidence = new List<InventoryTraceabilityShipmentPickingEvidenceDto>();
+        var shipmentPickingEvidenceTruncated = false;
         if (productId.HasValue && (lot is not null || serial is not null) && !hasReference)
         {
             var shippedEvents = scopedLedger.Where(x =>
@@ -369,6 +371,62 @@ public sealed class InventoryTraceabilityQueryService(
                     LedgerEventCount = x.LedgerEventCount,
                     LastTransactionId = x.LastTransactionId
                 }).ToList();
+            // A canonical Shipment -> Packing -> Picking link is stronger
+            // evidence than mere document co-occurrence by lot. Require the
+            // exact allocated source bucket to have a real SHIP ledger row
+            // inside the same authorized warehouse and event anchor.
+            var shipmentIds = shipmentExposures.Select(x => x.ShipmentId).ToArray();
+            if (shipmentIds.Length > 0)
+            {
+                var pickingWindow = await (
+                    from shipment in context.Shipments.AsNoTracking()
+                    join packing in context.PackingSessions.AsNoTracking()
+                        on shipment.PackingSessionId equals packing.Id
+                    join picking in context.PickingTasks.AsNoTracking()
+                        on packing.PickingTaskId equals picking.Id
+                    join line in context.PickingTaskLines.AsNoTracking()
+                        on picking.Id equals line.PickingTaskId
+                    join allocation in context.StockAllocations.AsNoTracking()
+                        on line.AllocationId equals allocation.Id
+                    where shipmentIds.Contains(shipment.Id) &&
+                          allowedWarehouseIds.Contains(shipment.WarehouseId) &&
+                          shipment.WarehouseId == packing.WarehouseId &&
+                          shipment.WarehouseId == picking.WarehouseId &&
+                          shipment.WarehouseId == allocation.WarehouseId &&
+                          line.ProductId == productId.Value &&
+                          allocation.ProductId == productId.Value &&
+                          line.SourceLocationId == allocation.LocationId &&
+                          line.PickedQuantity > 0 &&
+                          shippedEvents.Any(t =>
+                              t.ReferenceId == shipment.Id &&
+                              t.WarehouseId == shipment.WarehouseId &&
+                              t.ProductId == allocation.ProductId &&
+                              t.LocationId == allocation.LocationId &&
+                              t.InventoryStatus == allocation.InventoryStatus &&
+                              t.LotId == allocation.LotId &&
+                              t.SerialId == allocation.SerialId)
+                    select new InventoryTraceabilityShipmentPickingEvidenceDto
+                    {
+                        ShipmentId = shipment.Id,
+                        ShipmentCode = shipment.ShipmentCode,
+                        WarehouseId = shipment.WarehouseId,
+                        PackingSessionId = packing.Id,
+                        PackingSessionCode = packing.SessionCode,
+                        PickingTaskId = picking.Id,
+                        PickingTaskCode = picking.TaskCode,
+                        PickingTaskLineId = line.Id,
+                        AllocationId = allocation.Id,
+                        SourceLocationCode = line.SourceLocation.Code,
+                        PickedQuantity = line.PickedQuantity
+                    })
+                    .OrderByDescending(x => x.ShipmentId)
+                    .ThenBy(x => x.PickingTaskLineId)
+                    .Take(101)
+                    .ToListAsync(cancellationToken);
+                shipmentPickingEvidenceTruncated = pickingWindow.Count > 100;
+                shipmentPickingEvidence = pickingWindow.Take(100).ToList();
+            }
+
         }
 
         return new InventoryTraceabilityResultDto
@@ -381,6 +439,8 @@ public sealed class InventoryTraceabilityQueryService(
             ReceiptExposuresTruncated = receiptExposuresTruncated,
             ShipmentExposures = shipmentExposures,
             ShipmentExposuresTruncated = shipmentExposuresTruncated,
+            ShipmentPickingEvidence = shipmentPickingEvidence,
+            ShipmentPickingEvidenceTruncated = shipmentPickingEvidenceTruncated,
             EventAnchorId = anchorId,
             EventsTruncated = eventsTruncated,
             BucketsTruncated = bucketsTruncated

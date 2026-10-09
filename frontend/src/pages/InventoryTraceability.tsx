@@ -29,6 +29,12 @@ type ShipmentExposure={
   shipmentId:number;warehouseId:number;shipmentCode:string;shipmentStatus:string;
   dispatchedAt?:string|null;dispatchedQuantity:number;ledgerEventCount:number;lastTransactionId:number;
 };
+type ShipmentPickingEvidence={
+  shipmentId:number;shipmentCode:string;warehouseId:number;
+  packingSessionId:number;packingSessionCode:string;
+  pickingTaskId:number;pickingTaskCode:string;pickingTaskLineId:number;
+  allocationId:number;sourceLocationCode:string;pickedQuantity:number;
+};
 type Result={
   currentBuckets:Bucket[];
   events:Event[];
@@ -38,6 +44,8 @@ type Result={
   receiptExposuresTruncated?:boolean;
   shipmentExposures?:ShipmentExposure[];
   shipmentExposuresTruncated?:boolean;
+  shipmentPickingEvidence?:ShipmentPickingEvidence[];
+  shipmentPickingEvidenceTruncated?:boolean;
   eventAnchorId?:number|null;
   eventsTruncated?:boolean;
   bucketsTruncated?:boolean;
@@ -452,6 +460,33 @@ export default function InventoryTraceability(){
                   <td>{shipment.dispatchedAt?new Date(shipment.dispatchedAt).toLocaleString('vi-VN'):'—'}</td>
                   <td>{shipment.dispatchedQuantity}</td>
                   <td>{shipment.ledgerEventCount}</td>
+                </tr>)}
+            </tbody>
+          </table></UiTableScroll>
+        </UiCard>}
+
+
+      {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
+        <UiCard title="Liên kết Shipment → Packing → Picking đã ghi nhận">
+          <p className="ui-muted-text">
+            Liên kết được đối chiếu trực tiếp theo Shipment, phiên đóng gói, dòng Picking và phân bổ tồn,
+            đồng thời bắt buộc có sự kiện xuất giao SHIP khớp vị trí, trạng thái và lô/sê-ri.
+            Số lượng bên dưới là đã Picking, không phải lượng đã giao; chưa chứng minh quan hệ đến phiếu nhập hoặc Handling Unit riêng.
+          </p>
+          {result.shipmentPickingEvidenceTruncated&&<p role="status" className="ui-muted-text">
+            Chỉ hiển thị 100 dòng Picking liên kết đầu tiên; hãy giới hạn thêm kho hoặc lô/sê-ri để xem đầy đủ.
+          </p>}
+          <UiTableScroll><table aria-label="Liên kết Shipment Packing Picking theo lô hoặc sê-ri">
+            <thead><tr><th>Shipment</th><th>Packing</th><th>Picking</th><th>Phân bổ / Vị trí</th><th>Đã Picking</th></tr></thead>
+            <tbody>{!result.shipmentPickingEvidence?.length?
+              <tr><td colSpan={5} className="ui-empty-cell">Chưa có dòng Picking được xác thực bằng sự kiện xuất giao trong phạm vi truy vết.</td></tr>:
+              result.shipmentPickingEvidence.map(link=>
+                <tr key={link.shipmentId+'-'+link.pickingTaskLineId}>
+                  <td><strong>{link.shipmentCode}</strong><small> #{link.shipmentId}</small></td>
+                  <td>{link.packingSessionCode}<br/><small>#{link.packingSessionId}</small></td>
+                  <td>{link.pickingTaskCode}<br/><small>Dòng #{link.pickingTaskLineId}</small></td>
+                  <td>#{link.allocationId}<br/><small>{link.sourceLocationCode}</small></td>
+                  <td>{link.pickedQuantity}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>
