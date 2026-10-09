@@ -193,7 +193,7 @@ describe('InventoryTraceability',()=>{
       '/api/inventory/traceability?warehouseId=1&limit=200'
     ));
     expect(await view.findByText('A01-R01-B01')).toBeTruthy();
-    expect(view.getByText(/Chỉ nhập ID kho để xem tồn kho hiện tại/)).toBeTruthy();
+    expect(view.getByText(/Chọn một kho để xem toàn bộ tồn hiện tại/)).toBeTruthy();
   });
 
   it('requires at least identity or reference and focuses the primary identity field',()=>{
