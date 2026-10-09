@@ -43,22 +43,43 @@ public sealed partial class StockTransferService(
     public async Task<StockTransferDto> CreateAsync(CreateStockTransferDto request, CancellationToken cancellationToken = default)
     {
         EnsureWriteRole();
-        await ValidateDraftAsync(request, cancellationToken);
-        var now = DateTime.UtcNow;
-        var entity = new StockTransfer
+        var ownsTransaction = context.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+        int id;
+        try
         {
-            Code = $"TRF-{now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
-            SourceWarehouseId = request.SourceWarehouseId,
-            DestinationWarehouseId = request.DestinationWarehouseId,
-            Note = request.Note,
-            CreatedBy = currentUser.UserId,
-            CreatedAt = now,
-            Details = request.Details.Select(x => new StockTransferDetail { ProductId = x.ProductId, RequestedQuantity = x.Quantity, Note = x.Note }).ToList()
-        };
-        context.StockTransfers.Add(entity);
-        await context.SaveChangesAsync(cancellationToken);
-        await AuditAsync(entity, "StockTransfer.Created", entity.Status, entity.Status, cancellationToken);
-        return await GetByIdAsync(entity.Id, cancellationToken);
+            await ValidateDraftAsync(request, cancellationToken);
+            var now = DateTime.UtcNow;
+            var entity = new StockTransfer
+            {
+                Code = $"TRF-{now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
+                SourceWarehouseId = request.SourceWarehouseId,
+                DestinationWarehouseId = request.DestinationWarehouseId,
+                Note = request.Note,
+                CreatedBy = currentUser.UserId,
+                CreatedAt = now,
+                Details = request.Details.Select(x => new StockTransferDetail
+                {
+                    ProductId = x.ProductId, RequestedQuantity = x.Quantity, Note = x.Note
+                }).ToList()
+            };
+            context.StockTransfers.Add(entity);
+            await context.SaveChangesAsync(cancellationToken);
+            await AuditAsync(entity, "StockTransfer.Created", entity.Status, entity.Status, cancellationToken);
+            id = entity.Id;
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+            throw;
+        }
+
+        return await GetByIdAsync(id, cancellationToken);
     }
 
     public async Task UpdateAsync(int id, UpdateStockTransferDto request, CancellationToken cancellationToken = default)
@@ -120,12 +141,27 @@ public sealed partial class StockTransferService(
     public async Task ApproveAsync(int id, CancellationToken cancellationToken = default)
     {
         EnsureApproveRole();
-        var entity = await GetScopedAsync(id, cancellationToken);
-        await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
-        await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
-        ERP.Application.Security.ApprovalSafetyGuard.EnsureDifferentChecker(entity.CreatedBy, currentUser.UserId);
-        await TransitionAsync(entity, StockTransferStatus.Draft, StockTransferStatus.Approved,
-            "StockTransfer.Approved", cancellationToken);
+        var ownsTransaction = context.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+        try
+        {
+            var entity = await GetLockedScopedAsync(id, cancellationToken);
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
+            ERP.Application.Security.ApprovalSafetyGuard.EnsureDifferentChecker(entity.CreatedBy, currentUser.UserId);
+            await TransitionAsync(entity, StockTransferStatus.Draft, StockTransferStatus.Approved,
+                "StockTransfer.Approved", cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     public async Task DispatchAsync(int id, CancellationToken cancellationToken = default)
@@ -208,20 +244,51 @@ public sealed partial class StockTransferService(
     public async Task CompleteAsync(int id, CancellationToken cancellationToken = default)
     {
         EnsureWriteRole();
-        var entity = await GetScopedAsync(id, cancellationToken);
-        await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
-        await TransitionAsync(entity, StockTransferStatus.Received, StockTransferStatus.Completed,
-            "StockTransfer.Completed", cancellationToken);
+        var ownsTransaction = context.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+        try
+        {
+            var entity = await GetLockedScopedAsync(id, cancellationToken);
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
+            await TransitionAsync(entity, StockTransferStatus.Received, StockTransferStatus.Completed,
+                "StockTransfer.Completed", cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     public async Task CancelAsync(int id, CancellationToken cancellationToken = default)
     {
         EnsureWriteRole();
-        var entity = await GetScopedAsync(id, cancellationToken);
-        await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
-        if (entity.Status is not (StockTransferStatus.Draft or StockTransferStatus.Approved)) throw Conflict("Chỉ phiếu chưa xuất kho mới được hủy.");
-        await TransitionAsync(entity, entity.Status, StockTransferStatus.Cancelled,
-            "StockTransfer.Cancelled", cancellationToken);
+        var ownsTransaction = context.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+        try
+        {
+            var entity = await GetLockedScopedAsync(id, cancellationToken);
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
+            if (entity.Status is not (StockTransferStatus.Draft or StockTransferStatus.Approved))
+                throw Conflict("Chỉ phiếu chưa xuất kho mới được hủy.");
+            await TransitionAsync(entity, entity.Status, StockTransferStatus.Cancelled,
+                "StockTransfer.Cancelled", cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+            if (ownsTransaction) context.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     private async Task ValidateDraftAsync(CreateStockTransferDto request, CancellationToken cancellationToken)
