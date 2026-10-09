@@ -145,6 +145,87 @@ describe('Stock transfer command consistency', () => {
     expect(modified).not.toBe(first);
   });
 
+  it('recovers from a 409 by loading the approved version without overwriting it', async () => {
+    const draft = { ...transfer, status: 'Draft' };
+    let latest = draft;
+    get.mockImplementation(async url => {
+      if (url === '/api/stock-transfers') return {
+        data: { items: [latest], totalPages: 1 },
+      } as never;
+      if (url === '/api/stock-transfers/807') return { data: latest } as never;
+      if (url === '/api/warehouses') return { data: [
+        { id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' },
+      ] } as never;
+      if (url === '/api/products') return { data: [
+        { id: 9, code: 'SKU-9', name: 'Sản phẩm' },
+      ] } as never;
+      return { data: [] } as never;
+    });
+    vi.mocked(apiClient.put).mockRejectedValueOnce({
+      response: { status: 409, data: { message: 'Phiếu đã được duyệt.' } },
+    });
+
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
+    const editor = view.getByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' });
+    fireEvent.submit(editor);
+    expect(await within(editor).findByRole('alert')).toHaveProperty('textContent',
+      'Phiếu đã được duyệt.');
+    latest = { ...draft, status: 'Approved' };
+    fireEvent.click(within(editor).getByRole('button', { name: 'Tải lại phiên bản mới' }));
+
+    const refreshed = await view.findByRole('dialog', { name: 'TRF-807' });
+    expect(within(refreshed).getByText('Đã duyệt')).toBeTruthy();
+    expect(view.queryByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Chỉnh sửa phiếu nháp' })).toBeNull();
+    expect(apiClient.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('repopulates draft lines from the server after a conflicting update', async () => {
+    const draft = { ...transfer, status: 'Draft' };
+    let latest = draft;
+    get.mockImplementation(async url => {
+      if (url === '/api/stock-transfers') return {
+        data: { items: [latest], totalPages: 1 },
+      } as never;
+      if (url === '/api/stock-transfers/807') return { data: latest } as never;
+      if (url === '/api/warehouses') return { data: [
+        { id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' },
+      ] } as never;
+      if (url === '/api/products') return { data: [
+        { id: 9, code: 'SKU-9', name: 'Sản phẩm' },
+      ] } as never;
+      return { data: [] } as never;
+    });
+    vi.mocked(apiClient.put).mockRejectedValueOnce({
+      response: { status: 409, data: { message: 'Phiếu vừa được cập nhật.' } },
+    });
+
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
+    const editor = view.getByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' });
+    fireEvent.submit(editor);
+    await within(editor).findByRole('alert');
+    latest = {
+      ...draft, note: 'Phiên bản đã cập nhật',
+      details: [{ ...draft.details[0], requestedQuantity: 4, note: 'Kiểm tra lại' }],
+    };
+    fireEvent.click(within(editor).getByRole('button', { name: 'Tải lại phiên bản mới' }));
+
+    await waitFor(() => expect(
+      (within(editor).getByLabelText('Số lượng dòng 1') as HTMLInputElement).value,
+    ).toBe('4'));
+    expect((within(editor).getByLabelText('Ghi chú điều chuyển') as HTMLTextAreaElement).value)
+      .toBe('Phiên bản đã cập nhật');
+    expect((within(editor).getByLabelText('Ghi chú dòng 1') as HTMLInputElement).value)
+      .toBe('Kiểm tra lại');
+    expect(within(editor).queryByRole('button', { name: 'Tải lại phiên bản mới' }))
+      .toBeNull();
+    expect(apiClient.put).toHaveBeenCalledTimes(1);
+  });
+
   it('closes draft editing with Escape and returns keyboard focus to the new-document action', async () => {
     const draft = { ...transfer, status: 'Draft' };
     get.mockImplementation(async url => {
