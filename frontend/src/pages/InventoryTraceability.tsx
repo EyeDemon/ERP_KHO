@@ -21,6 +21,10 @@ type RelatedDocument={
   warehouseId:number;warehouseName:string;referenceType:string;referenceId:number;
   eventCount:number;firstTransactionDate:string;lastTransactionDate:string;lastTransactionId:number;
 };
+type ReceiptExposure={
+  receiptId:number;warehouseId:number;receiptCode:string;postedQuantity:number;
+  lastPostedAt:string;ledgerEventCount:number;lastTransactionId:number;
+};
 type ShipmentExposure={
   shipmentId:number;warehouseId:number;shipmentCode:string;shipmentStatus:string;
   dispatchedAt?:string|null;dispatchedQuantity:number;ledgerEventCount:number;lastTransactionId:number;
@@ -30,6 +34,8 @@ type Result={
   events:Event[];
   relatedDocuments?:RelatedDocument[];
   relatedDocumentsTruncated?:boolean;
+  receiptExposures?:ReceiptExposure[];
+  receiptExposuresTruncated?:boolean;
   shipmentExposures?:ShipmentExposure[];
   shipmentExposuresTruncated?:boolean;
   eventAnchorId?:number|null;
@@ -399,6 +405,31 @@ export default function InventoryTraceability(){
           </table></UiTableScroll>
         </UiCard>}
 
+
+      {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
+        <UiCard title="Phiếu nhập đã ghi sổ cùng lô / sê-ri">
+          <p className="ui-muted-text">
+            Chỉ hiển thị phiếu nhập đã ghi sổ thực tế (IMPORT) khớp sản phẩm và lô/sê-ri trong kho được cấp quyền.
+            Số lượng là tổng nhập theo sổ cái tại mốc lịch sử, không chứng minh QC riêng từng lô hoặc nguồn trực tiếp của Shipment.
+          </p>
+          {result.receiptExposuresTruncated&&<p role="status" className="ui-muted-text">
+            Đã đạt giới hạn 100 phiếu nhập; hãy chọn một kho hoặc thu hẹp lô/sê-ri để xem đầy đủ.
+          </p>}
+          <UiTableScroll><table aria-label="Phiếu nhập đã ghi sổ theo lô hoặc sê-ri">
+            <thead><tr><th>Mã phiếu nhập</th><th>Trạng thái</th><th>Lần ghi sổ cuối</th><th>Đã nhập</th><th>Giao dịch sổ cái</th></tr></thead>
+            <tbody>{!result.receiptExposures?.length?
+              <tr><td colSpan={5} className="ui-empty-cell">Không có phiếu nhập đã ghi sổ khớp danh tính hàng hóa trong phạm vi được phép.</td></tr>:
+              result.receiptExposures.map(receipt=>
+                <tr key={receipt.warehouseId+'-'+receipt.receiptId}>
+                  <td><strong>{receipt.receiptCode}</strong><br/><small>#{receipt.receiptId} • Kho #{receipt.warehouseId}</small></td>
+                  <td><UiBadge>Đã ghi sổ</UiBadge></td>
+                  <td>{new Date(receipt.lastPostedAt).toLocaleString('vi-VN')}</td>
+                  <td>{receipt.postedQuantity}</td>
+                  <td>{receipt.ledgerEventCount}</td>
+                </tr>)}
+            </tbody>
+          </table></UiTableScroll>
+        </UiCard>}
 
       {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
         <UiCard title="Shipment cần rà soát khi thu hồi">

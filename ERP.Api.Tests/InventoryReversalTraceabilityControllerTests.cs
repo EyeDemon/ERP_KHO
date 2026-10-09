@@ -185,6 +185,33 @@ public sealed class InventoryReversalTraceabilityControllerTests
     }
 
     [Fact]
+    public void TraceResponse_ExposesPostedReceiptEvidenceInApiContract()
+    {
+        var response = new InventoryTraceabilityResultDto
+        {
+            EventAnchorId = 89,
+            ReceiptExposures = [new InventoryTraceabilityReceiptExposureDto
+            {
+                ReceiptId = 21, WarehouseId = 7, ReceiptCode = "PN-21",
+                PostedQuantity = 5m, LastPostedAt = new DateTime(2026, 10, 9, 8, 0, 0, DateTimeKind.Utc),
+                LedgerEventCount = 2, LastTransactionId = 88
+            }],
+            ReceiptExposuresTruncated = true
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            response, new System.Text.Json.JsonSerializerOptions(
+                System.Text.Json.JsonSerializerDefaults.Web));
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var root = document.RootElement;
+        Assert.True(root.GetProperty("receiptExposuresTruncated").GetBoolean());
+        var receipt = Assert.Single(root.GetProperty("receiptExposures").EnumerateArray());
+        Assert.Equal("PN-21", receipt.GetProperty("receiptCode").GetString());
+        Assert.Equal(5m, receipt.GetProperty("postedQuantity").GetDecimal());
+        Assert.Equal(2, receipt.GetProperty("ledgerEventCount").GetInt32());
+        Assert.Equal(88, receipt.GetProperty("lastTransactionId").GetInt32());
+    }
+
+    [Fact]
     public async Task Warehouses_DelegatesToAuthorizedScopeService()
     {
         var reversal = new Mock<IInventoryReversalService>(MockBehavior.Strict);

@@ -66,6 +66,8 @@ public sealed class InventoryTraceabilityResultDto
     public IReadOnlyList<InventoryTraceabilityEventDto> Events { get; set; } = [];
     public IReadOnlyList<InventoryTraceabilityRelatedDocumentDto> RelatedDocuments { get; set; } = [];
     public bool RelatedDocumentsTruncated { get; set; }
+    public IReadOnlyList<InventoryTraceabilityReceiptExposureDto> ReceiptExposures { get; set; } = [];
+    public bool ReceiptExposuresTruncated { get; set; }
     public IReadOnlyList<InventoryTraceabilityShipmentExposureDto> ShipmentExposures { get; set; } = [];
     public bool ShipmentExposuresTruncated { get; set; }
     // These flags describe whether the initial chronological event window or
@@ -78,6 +80,19 @@ public sealed class InventoryTraceabilityResultDto
 
 // One authorized warehouse/document occurrence for an explicitly tracked
 // product+lot/serial. Do not mistake co-occurrence for causal custody links.
+// Read-only posted ImportReceipt evidence, scoped by tracked ledger identity.
+// This is not proof of per-lot QC lineage or a causal source-to-shipment link.
+public sealed class InventoryTraceabilityReceiptExposureDto
+{
+    public int ReceiptId { get; set; }
+    public int WarehouseId { get; set; }
+    public string ReceiptCode { get; set; } = string.Empty;
+    public decimal PostedQuantity { get; set; }
+    public DateTime LastPostedAt { get; set; }
+    public int LedgerEventCount { get; set; }
+    public int LastTransactionId { get; set; }
+}
+
 // Read-only gross SHIP ledger evidence. It does not imply delivery or net returns.
 public sealed class InventoryTraceabilityShipmentExposureDto
 {

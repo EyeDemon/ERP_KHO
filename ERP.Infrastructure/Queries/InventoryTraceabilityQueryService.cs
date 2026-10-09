@@ -285,6 +285,35 @@ public sealed class InventoryTraceabilityQueryService(
         }
 
 
+        // Posted receipt evidence, bounded to an authorized warehouse and ledger anchor.
+        var receiptExposures = new List<InventoryTraceabilityReceiptExposureDto>();
+        var receiptExposuresTruncated = false;
+        if (productId.HasValue && (lot is not null || serial is not null) && !hasReference)
+        {
+            var postedEvents = scopedLedger.Where(x => x.Id <= anchorId &&
+                x.ProductId == productId.Value && x.TransactionType == TransactionType.Import &&
+                x.ReferenceType == "ImportReceipt" && x.ReferenceId.HasValue);
+            if (lot is not null) postedEvents = postedEvents.Where(x => x.Lot != null && x.Lot.LotNumber == lot);
+            if (serial is not null) postedEvents = postedEvents.Where(x => x.Serial != null && x.Serial.SerialNumber == serial);
+            var receiptWindow = await (
+                from transaction in postedEvents
+                join receipt in context.ImportReceipts.AsNoTracking()
+                    on new { Id = transaction.ReferenceId, transaction.WarehouseId }
+                    equals new { Id = (int?)receipt.Id, receipt.WarehouseId }
+                where receipt.Status == ReceiptStatus.Posted
+                group transaction by new { receipt.Id, receipt.WarehouseId, receipt.Code } into g
+                select new InventoryTraceabilityReceiptExposureDto {
+                    ReceiptId = g.Key.Id, WarehouseId = g.Key.WarehouseId,
+                    ReceiptCode = g.Key.Code, PostedQuantity = g.Sum(x => x.Quantity),
+                    LastPostedAt = g.Max(x => x.TransactionDate),
+                    LedgerEventCount = g.Count(), LastTransactionId = g.Max(x => x.Id)
+                }).OrderByDescending(x => x.LastTransactionId)
+                .ThenBy(x => x.WarehouseId).ThenBy(x => x.ReceiptId)
+                .Take(101).ToListAsync(cancellationToken);
+            receiptExposuresTruncated = receiptWindow.Count > 100;
+            receiptExposures = receiptWindow.Take(100).ToList();
+        }
+
         // Gross dispatch impact is derived ONLY from committed SHIP ledger rows
         // joined to the canonical Shipment in the same authorized warehouse.
         // It is a read-only candidate view, not a return/POD/recall decision.
@@ -348,6 +377,8 @@ public sealed class InventoryTraceabilityQueryService(
             Events = events,
             RelatedDocuments = relatedDocuments,
             RelatedDocumentsTruncated = relatedDocumentsTruncated,
+            ReceiptExposures = receiptExposures,
+            ReceiptExposuresTruncated = receiptExposuresTruncated,
             ShipmentExposures = shipmentExposures,
             ShipmentExposuresTruncated = shipmentExposuresTruncated,
             EventAnchorId = anchorId,
