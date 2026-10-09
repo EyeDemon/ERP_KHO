@@ -24,3 +24,14 @@
 - Frontend: truy bằng kho đơn lẻ gửi request đúng, vẫn chặn yêu cầu trống.
 - Chỉ công nhận PASS khi CI đúng HEAD thành công; trình duyệt và staging API/SQL thật cần nghiệm thu riêng. Vercel Preview demo READY không xác nhận backend staging.
 - Notion là nguồn đặc tả **chỉ đọc**, không chỉnh sửa khi triển khai phần này.
+
+## Chọn kho theo dữ liệu thật — mốc 09/10/2026
+
+- Màn `/inventory-traceability` hiển thị một danh sách **mã kho — tên kho** từ `GET /api/inventory/traceability-warehouses`; không yêu cầu người dùng biết ID kho.
+- API mới yêu cầu `inventory_traceability.read` và chỉ lấy các kho nằm trong `GetAccessibleWarehouseIdsAsync`. **Không** dùng `reversal-warehouses` vì API đó có quyền `inventory_ledger.read` khác; không làm rò kho ở màn truy vết.
+- Chọn một kho để xem các nhóm tồn trong kho; chọn **Tất cả kho được phân quyền** chỉ hợp lệ khi nhập thêm sản phẩm, lô, sê-ri hoặc cặp tham chiếu. Không gửi truy vấn hoàn toàn trống.
+- Khi đang tải danh sách kho, selector bị khóa và có trạng thái tải; lỗi tải danh sách phải hiển thị lỗi, khóa selector và cung cấp nút **Tải lại danh sách kho**, không tự tạo kho hoặc hiện kho giả.
+- Danh sách trả về rỗng thì thông báo chưa được phân quyền, không tự động nới phạm vi truy vấn. Backend luôn xác minh quyền truy vết/kho lại khi truy vấn nhóm tồn hoặc dòng thời gian.
+- Giao diện Việt ngữ, dùng `UiToolbarField`, select native hỗ trợ bàn phím, focus rõ ràng và bố cục responsive theo `design-system/erp-wms/MASTER.md`.
+- Kiểm thử: SQL Server chỉ trả kho trong quyền; API chuyển đúng tới dịch vụ truy vết + kiểm tra annotation `InventoryTraceabilityRead`; frontend có loading, danh sách kho thật, lỗi, retry, danh sách rỗng; module HTTP từ chối payload sai kiểu.
+- CI đúng HEAD, browser QA và staging backend/SQL là các cổng nghiệm thu riêng. Không merge PR Draft khi chưa có bằng chứng. Notion chỉ đọc.

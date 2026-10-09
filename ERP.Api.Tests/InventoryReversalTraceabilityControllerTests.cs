@@ -79,7 +79,8 @@ public sealed class InventoryReversalTraceabilityControllerTests
             .GetMethod(nameof(InventoryReversalTraceabilityController.TraceabilityWarehouses))!;
         var permission = Assert.Single(method.GetCustomAttributes(
             typeof(ERP.Api.Authorization.PermissionAuthorizeAttribute), inherit: false));
-        Assert.NotNull(permission);
+        Assert.Equal(ERP.Api.Authorization.AppPermissions.InventoryTraceabilityRead,
+            ((ERP.Api.Authorization.PermissionAuthorizeAttribute)permission).Permission);
     }
 
     [Fact]
