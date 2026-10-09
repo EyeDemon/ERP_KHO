@@ -13,7 +13,9 @@ Nháp/Đã duyệt → Hủy
 - Khi **đã nhận hoặc hoàn tất**, việc đưa hàng về kho nguồn phải tạo **phiếu điều chuyển ngược mới**, rồi duyệt, xuất và nhận theo quy trình thường.
 - Các thao tác ghi sử dụng Idempotency-Key; backend kiểm tra quyền kho và trạng thái authoritative.
 - **Chỉnh sửa phiếu Nháp** trực tiếp tại màn chi tiết: sửa kho, số lượng, ghi chú qua `PUT /api/stock-transfers/{id}`, cùng khóa idempotency gắn với mã phiếu và nội dung payload; biểu mẫu cho phép sửa trước khi duyệt và tải lại chi tiết sau lưu.
-- Backend giữ khóa `UPDLOCK, HOLDLOCK` của phiếu trong giao dịch `Serializable` trước khi xác thực `Draft` và thay thế các dòng, không để phê duyệt đồng thời chen vào giữa. Từ chối phiếu đã duyệt/xuất hoặc phiếu điều chuyển ngược; dữ liệu sai phải rollback đầy đủ. Dữ liệu lịch sử posted không được sửa.
+- Backend giữ khóa `UPDLOCK, HOLDLOCK` của phiếu trong giao dịch `Serializable` trước khi xác thực `Draft` và thay thế các dòng, không để phê duyệt đồng thời chen vào giữa. Các lệnh duyệt, hoàn tất và hủy kiểm tra lại cặp kho gốc/đích trong điều kiện cập nhật SQL để không xác nhận chứng từ đã bị đổi kho sau khi phân quyền.
+- Khi cập nhật trả xung đột `409`, giao diện giữ nội dung để người vận hành kiểm tra, đồng thời cung cấp **Tải lại phiên bản mới**. Nếu phiếu vẫn Nháp thì nạp lại nội dung hiện hành; nếu đã duyệt thì đóng trình sửa và mở chi tiết chỉ đọc. Không dùng lại dữ liệu cũ để tự động ghi đè.
+- Từ chối phiếu đã duyệt/xuất hoặc phiếu điều chuyển ngược; dữ liệu sai phải rollback đầy đủ. Dữ liệu lịch sử posted không được sửa.
 
 ## Đối soát khi nhận
 

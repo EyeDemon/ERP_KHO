@@ -282,7 +282,13 @@ WHEN NOT MATCHED THEN
     {
         var id = entity.Id;
         var now = DateTime.UtcNow;
-        var target = context.StockTransfers.Where(x => x.Id == id && x.Status == from);
+        // Recheck the exact warehouse pair observed during authorization.
+        // A parallel draft edit may change either warehouse before this CAS
+        // executes; stale scope must never approve/complete/cancel that version.
+        var target = context.StockTransfers.Where(x =>
+            x.Id == id && x.Status == from &&
+            x.SourceWarehouseId == entity.SourceWarehouseId &&
+            x.DestinationWarehouseId == entity.DestinationWarehouseId);
         var affected = action switch
         {
             "StockTransfer.Approved" => await target.ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, to).SetProperty(x => x.ApprovedBy, currentUser.UserId).SetProperty(x => x.ApprovedAt, now), cancellationToken),

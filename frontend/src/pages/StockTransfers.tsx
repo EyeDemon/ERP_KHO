@@ -86,6 +86,7 @@ export default function StockTransfers() {
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [draftConflict, setDraftConflict] = useState(false);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const draftDialogRef = useRef<HTMLFormElement>(null);
   const [sourceId, setSourceId] = useState<number | ''>('');
@@ -146,24 +147,24 @@ export default function StockTransfers() {
     else setPage(1);
   };
 
+  const showTransferDetail = (transfer: Transfer) => {
+    setSelected(transfer);
+    setReceive(Object.fromEntries(transfer.details.map(line => [
+      line.productId,
+      {
+        receivedQuantity: line.dispatchedQuantity,
+        missingQuantity: 0,
+        damagedQuantity: 0,
+      },
+    ])));
+  };
+
   const openDetail = async (id: number) => {
     const requestSequence = ++detailRequestSequence.current;
     try {
       const response = await apiClient.get(`/api/stock-transfers/${id}`);
       if (requestSequence !== detailRequestSequence.current) return;
-      setSelected(response.data);
-      setReceive(
-        Object.fromEntries(
-          response.data.details.map((line: TransferLine) => [
-            line.productId,
-            {
-              receivedQuantity: line.dispatchedQuantity,
-              missingQuantity: 0,
-              damagedQuantity: 0,
-            },
-          ])
-        )
-      );
+      showTransferDetail(response.data as Transfer);
     } catch (failure: any) {
       if (requestSequence === detailRequestSequence.current) {
         setError(failure.response?.data?.message || 'Không thể tải chi tiết phiếu.');
@@ -173,6 +174,7 @@ export default function StockTransfers() {
 
   const openNewDraft = () => {
     setEditingId(null);
+    setDraftConflict(false);
     setSourceId('');
     setDestinationId('');
     setNote('');
@@ -185,6 +187,7 @@ export default function StockTransfers() {
     if (!canWrite || normalizeStatus(transfer.status) !== 'Draft' || transfer.reverseOfTransferId) return;
     detailRequestSequence.current += 1;
     setEditingId(transfer.id);
+    setDraftConflict(false);
     setSourceId(transfer.sourceWarehouseId);
     setDestinationId(transfer.destinationWarehouseId);
     setNote(transfer.note ?? '');
@@ -200,6 +203,7 @@ export default function StockTransfers() {
     if (createInFlightRef.current) return;
     setShowCreate(false);
     setEditingId(null);
+    setDraftConflict(false);
     setError('');
     createButtonRef.current?.focus();
   };
@@ -207,6 +211,33 @@ export default function StockTransfers() {
   useEffect(() => {
     if (showCreate) draftDialogRef.current?.querySelector('select')?.focus();
   }, [showCreate]);
+
+  const reloadConflictedDraft = async () => {
+    if (editingId === null || createInFlightRef.current) return;
+    const id = editingId;
+    createInFlightRef.current = true;
+    setCreateInFlight(true);
+    try {
+      const response = await apiClient.get<Transfer>(`/api/stock-transfers/${id}`);
+      const latest = response.data;
+      if (normalizeStatus(latest.status) === 'Draft' && !latest.reverseOfTransferId) {
+        openDraftEditor(latest);
+      } else {
+        detailRequestSequence.current += 1;
+        setShowCreate(false);
+        setEditingId(null);
+        setDraftConflict(false);
+        setError('');
+        showTransferDetail(latest);
+        void load();
+      }
+    } catch (failure: any) {
+      setError(failure.response?.data?.message || 'Không thể tải lại phiếu. Hãy kiểm tra kết nối và thử lại.');
+    } finally {
+      createInFlightRef.current = false;
+      setCreateInFlight(false);
+    }
+  };
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -256,6 +287,7 @@ export default function StockTransfers() {
       completeIdempotentAction(action);
       setShowCreate(false);
       setEditingId(null);
+      setDraftConflict(false);
       createButtonRef.current?.focus();
       setLines([{ productId: '', quantity: '', note: '' }]);
       setSourceId('');
@@ -264,6 +296,7 @@ export default function StockTransfers() {
       await load();
       if (editId !== null) await openDetail(editId);
     } catch (failure: any) {
+      if (editingId !== null && failure.response?.status === 409) setDraftConflict(true);
       setError(failure.response?.data?.message ||
         (editingId === null ? 'Không thể tạo phiếu.' : 'Không thể cập nhật phiếu; hãy kiểm tra trạng thái mới nhất.'));
     } finally {
@@ -480,6 +513,15 @@ export default function StockTransfers() {
               </div>
 
               {error && <p role="alert" className="transfer-error">{error}</p>}
+              {editingId !== null && draftConflict && (
+                <p role="status" className="ui-muted-text">
+                  Phiếu đã thay đổi ở phiên khác. Tải lại dữ liệu mới nhất trước khi chỉnh sửa tiếp.
+                  <button type="button" disabled={createInFlight}
+                    onClick={() => void reloadConflictedDraft()}>
+                    Tải lại phiên bản mới
+                  </button>
+                </p>
+              )}
               <div className="warehouse-pair">
                 <label>
                   Kho nguồn

@@ -122,7 +122,7 @@ describe('Stock transfer command consistency', () => {
     }).mockResolvedValueOnce({ data: {} } as never);
     const view = render(<StockTransfers />);
     fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
-    fireEvent.click(view.getByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
     const dialog = view.getByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' });
     fireEvent.submit(dialog);
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
@@ -160,7 +160,7 @@ describe('Stock transfer command consistency', () => {
     });
     const view = render(<StockTransfers />);
     fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
-    fireEvent.click(view.getByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
     const dialog = view.getByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' });
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(view.queryByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' })).toBeNull();
