@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../services/apiClient';
 import StockTransfers from './StockTransfers';
@@ -80,10 +80,10 @@ describe('Stock transfer command consistency', () => {
     fireEvent.click(view.getByRole('button', { name: 'Tạo phiếu' }));
     const dialog = view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' });
 
-    fireEvent.change(view.getByLabelText('Kho nguồn'), { target: { value: '1' } });
-    fireEvent.change(view.getByLabelText('Kho đích'), { target: { value: '2' } });
-    fireEvent.change(view.getByLabelText('Sản phẩm dòng 1'), { target: { value: '9' } });
-    fireEvent.change(view.getByLabelText('Số lượng dòng 1'), { target: { value: '5' } });
+    fireEvent.change(within(dialog).getByLabelText('Kho nguồn'), { target: { value: '1' } });
+    fireEvent.change(within(dialog).getByLabelText('Kho đích'), { target: { value: '2' } });
+    fireEvent.change(within(dialog).getByLabelText('Sản phẩm dòng 1'), { target: { value: '9' } });
+    fireEvent.change(within(dialog).getByLabelText('Số lượng dòng 1'), { target: { value: '5' } });
 
     fireEvent.submit(dialog);
     fireEvent.submit(dialog);
@@ -93,6 +93,65 @@ describe('Stock transfer command consistency', () => {
 
     await act(async () => { resolveCreate({ data: {} }); });
     await waitFor(() => expect(view.queryByRole('dialog', { name: 'Tạo phiếu điều chuyển' })).toBeNull());
+  });
+
+  it('reuses the create key after failure and rotates it when the payload changes', async () => {
+    post.mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
+    const view = render(<StockTransfers />);
+    await view.findByText('TRF-807');
+    fireEvent.click(view.getByRole('button', { name: 'Tạo phiếu' }));
+    const dialog = view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' });
+
+    fireEvent.change(within(dialog).getByLabelText('Kho nguồn'), { target: { value: '1' } });
+    fireEvent.change(within(dialog).getByLabelText('Kho đích'), { target: { value: '2' } });
+    fireEvent.change(within(dialog).getByLabelText('Sản phẩm dòng 1'), { target: { value: '9' } });
+    fireEvent.change(within(dialog).getByLabelText('Số lượng dòng 1'), { target: { value: '5' } });
+
+    fireEvent.submit(dialog);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    await view.findByRole('alert');
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Tạo phiếu' })).toBeEnabled());
+    const firstKey = (post.mock.calls[0][2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+
+    fireEvent.submit(dialog);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Tạo phiếu' })).toBeEnabled());
+    const retryKey = (post.mock.calls[1][2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+    expect(retryKey).toBe(firstKey);
+
+    fireEvent.change(within(dialog).getByLabelText('Số lượng dòng 1'), { target: { value: '6' } });
+    fireEvent.submit(dialog);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
+    const changedKey = (post.mock.calls[2][2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
+    expect(changedKey).not.toBe(firstKey);
+    expect((post.mock.calls[2][1] as { details: Array<{ quantity: number }> }).details[0].quantity).toBe(6);
+    await waitFor(() => expect(view.queryByRole('dialog', { name: 'Tạo phiếu điều chuyển' })).toBeNull());
+  });
+
+  it('ignores an outdated detail response after another transfer was opened', async () => {
+    let resolveOld!: (response: unknown) => void;
+    get.mockImplementation(async url => {
+      if (url === '/api/stock-transfers') return {
+        data: { items: [transfer, { ...transfer, id: 808, code: 'TRF-808' }], totalPages: 1 },
+      } as never;
+      if (url === '/api/stock-transfers/807') {
+        return new Promise(resolve => { resolveOld = resolve; }) as never;
+      }
+      if (url === '/api/stock-transfers/808') return {
+        data: { ...transfer, id: 808, code: 'TRF-808' },
+      } as never;
+      if (url === '/api/warehouses' || url === '/api/products') return { data: [] } as never;
+      return { data: [] } as never;
+    });
+
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    fireEvent.click(view.getByRole('button', { name: 'Xem chi tiết TRF-808' }));
+    expect(await view.findByRole('dialog', { name: 'TRF-808' })).toBeTruthy();
+
+    await act(async () => { resolveOld({ data: transfer }); });
+    expect(view.queryByRole('dialog', { name: 'TRF-807' })).toBeNull();
+    expect(view.getByRole('dialog', { name: 'TRF-808' })).toBeTruthy();
   });
 
   it('ignores an older list response after a newer filtered query has completed', async () => {

@@ -104,6 +104,7 @@ export default function StockTransfers() {
   const actionInFlightRef = useRef(false);
   const createInFlightRef = useRef(false);
   const listRequestSequence = useRef(0);
+  const detailRequestSequence = useRef(0);
 
   const load = async (requestedPage = page) => {
     const requestSequence = ++listRequestSequence.current;
@@ -142,8 +143,10 @@ export default function StockTransfers() {
   };
 
   const openDetail = async (id: number) => {
+    const requestSequence = ++detailRequestSequence.current;
     try {
       const response = await apiClient.get(`/api/stock-transfers/${id}`);
+      if (requestSequence !== detailRequestSequence.current) return;
       setSelected(response.data);
       setReceive(
         Object.fromEntries(
@@ -158,7 +161,9 @@ export default function StockTransfers() {
         )
       );
     } catch (failure: any) {
-      setError(failure.response?.data?.message || 'Không thể tải chi tiết phiếu.');
+      if (requestSequence === detailRequestSequence.current) {
+        setError(failure.response?.data?.message || 'Không thể tải chi tiết phiếu.');
+      }
     }
   };
 
@@ -494,7 +499,7 @@ export default function StockTransfers() {
             actionInFlight={actionInFlight}
             receive={receive}
             setReceive={setReceive}
-            onClose={() => setSelected(null)}
+            onClose={() => { detailRequestSequence.current += 1; setSelected(null); }}
             onAction={act}
             onReceive={submitReceive} onOpenTransfer={openDetail}
           />
