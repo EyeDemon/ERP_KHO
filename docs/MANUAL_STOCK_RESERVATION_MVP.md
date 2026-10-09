@@ -1,5 +1,45 @@
 # Quản lý giữ hàng Manual MVP
 
+Trạng thái hiện hành: **LOCAL OWNER-ACCEPTANCE REVIEW PASS**. PR #32 vẫn Draft; chưa ghi owner đã chấp nhận Manual MVP. Source/CI của successor commit được ghi trong PR body sau push; không gán CI 37935111638 của `d59a955d006fa86b6db0d443ad6fceccb5f607a7` cho fix mới. Base đã nghiệm thu vẫn `ae1f2c1c58197360a23d2d8dd2231ab600d7fa22`.
+
+## Nghiệm thu PR #32 — replay filtering successor, 2026-10-09
+
+Notion Page 17 §35 `2026-10-08T16:48:56.271Z` và Page 30 §21 `2026-10-08T16:49:12.197Z`: **UNCHANGED** qua native fetch trước review và trước handoff. Không ghi/sửa contract. Review chỉ Manual reservation MVP; không mở lại outbound acceptance hoặc các scope deferred.
+
+Finding **P2 — CLOSED**: `IdempotentCommandFilter` trả nguyên JSON của `StockReservation.Create` từ cached record. Manager tạo thành công rồi mất `reservation.release`, hoặc chuyển database classification sang Viewer có explicit create grant, vẫn nhận token cũ qua replay mặc dù fresh DTO phải omit token. Không phải permission escalation: mutation capability/scope vẫn được kiểm tra. Fix chỉ lọc `rowVersion` trong response replay theo database classification/grants hiện tại; stored response, reservation, audit và claim không đổi. Không thêm migration, permission, dependency hoặc engine.
+
+| Nhóm contract | Nghiệm thu | Source/evidence và giới hạn |
+| --- | --- | --- |
+| Ba permission/bundles/database authority | PASS | Exact six-action registry; Staff seed read/create, unknown deny; successor Manual HTTP 10/10 |
+| Manual-only public mutations; ExportReceipt read-only | PASS | Release/direct-ID/replay/implicit Manual expiry và scoped bulk expiry; accepted ExportReceipt internal lifecycle không đổi |
+| On Hand/ledger boundary; reconciliation read-only | PASS | SQL assertions giữ physical quantity/ledger, chỉ reserved quantity đổi; browser postconditions riêng |
+| Base-UOM/precision/legacy nullable | PASS | Snapshot ổn định sau master change, zero/negative/precision rejected, không backfill legacy từ master |
+| Concurrency/no oversell/exactly once | PASS | Controlled SQL-backed overlap; retained browser reserve 201/409 và release 200/409; full API successor |
+| Replay permission/all-warehouse reauthorization | PASS | Revoke capability 403/membership 404; bulk expiry rechecks mọi kho correlated audit; cached-response filtering mới được kiểm chứng riêng |
+| Viewer/sensitive-response filtering | PASS | Fresh list/detail evidence giữ nguyên; successor cached create token absent, kể cả Viewer có explicit grants; không cost/value/private/idempotency metadata |
+| Migration provenance/Designer/snapshot/rollback | PASS, có giới hạn | Migration không đổi; full API successor bao gồm upgrade/nullable legacy/totals và Down guard 51014; production rollback vẫn cần approved backup/data plan |
+| UI tiếng Việt/accessibility/guards/mounted races | PASS trong matrix MVP | Frontend unchanged; retained production UI và component-in-browser mounted list/detail; không gọi HTTP replay là UI workflow |
+
+Successor verification (fix chạy khi HEAD còn `d59a955…` + working-tree hashes, sau đó commit nguyên source):
+
+- Release `ERP.slnx`: PASS, 0 warning/error; EF pending-model PASS.
+- Pre-fix regression **0 PASS / 1 FAIL / 1**, TRX `6c5e5c6d-9808-4a92-8a95-099aa2d748d9`, retained tại ignored `acceptance-precursor/replay-projection.trx`; failure là property token vẫn có sau revoke.
+- Focused Manual SQL/HTTP **10/10 PASS**, 0 failed/skipped, TRX `594701df-4cee-40d8-9799-0781c76d4363`, ignored `acceptance-successor/manual-focused.trx`; 9/9 owned targets cleaned.
+- Full API SQL/HTTP **216/216 PASS**, 0 failed/skipped, TRX `65f5d527-1d9c-49ae-b066-834c85773d7c`, ignored `acceptance-api-successor/api.trx`; 42/42 owned targets cleaned.
+- Browser runner failure/ownership/redaction regressions **18/18 PASS**. No frontend/application/model change: local Application 352/frontend 109/lint/build/audit evidence below remains source-specific and unaffected; không chạy lại local suites chỉ để tăng PASS. Successor GitHub CI được đối chiếu riêng trong PR body.
+- Browser focused **1/1 PASS**, Run `02b1b36e2e2a42d987b9a2e52f1217fa`: normal UI login mỗi persona một lần; Admin grant/revoke và Manager create/replay là **browser-origin HTTP**, database role downgrade là **SQL fixture**, không gọi là UI administration workflow. Create/replay 201; administration 200; release-revoked replay token absent; regrant original token retained; Viewer classification token absent dù explicit create/release grants. Một reservation/audit/claim; On Hand 200, reserved 1, ledger 0. Stored original cached response không bị rewrite.
+- Final runtime filter SHA-256: `ce8ec1534e786eefd1e0b84bd74785a34d0b3ee4ada5697a93c6ca40f00f47fa`. Browser evidence chứa runner/module hashes của bản đã chạy; sau PASS chỉ đổi equality assertion thành boolean với safe message để failure không in token, giữ nguyên assertion semantics; Node 18/18 successor. Không gán browser runtime PASS cho `d59a955…` chưa chứa fix.
+
+Bảy nhóm composite lịch sử bên dưới được giữ với phạm vi chính xác: successor runtime chỉ thêm filtering cho **cached Create**; initial create, Release/Expire, stock, snapshots, UI và mounted entry không thay đổi. Không relabel run partial/FAIL thành full-run PASS hoặc lấy file hash filter cũ làm hash successor.
+
+Review nội bộ toàn PR theo Ponytail/correctness/security và ui-ux-pro-max: finding P2 đã đóng, không còn finding High/Critical hoặc mandatory contract gap trong slice. Ponytail: **Lean already. Ship.** Complexity assessment không phải independent security review hay production approval.
+
+Cleanup: precursor 1/1, focused 9/9, API 42/42 targets cleaned; metadata recheck **53 exact run targets absent** (bao gồm browser), ERP_KHO **ONLINE** qua sys.databases only. Browser Closed=true, credential/profile/process/listener thuộc run không còn. Không đọc business tables ERP_KHO; giữ main/worktrees/.npm-cache/UNKNOWN cache/policy-blocked helper. TRX/logs/manifests vẫn ignored và không stage.
+
+Membership UI, backup/restore và các advanced scope vẫn **DEFERRED_BY_OWNER**. READY FOR OWNER ACCEPTANCE chỉ khi successor CI HEAD cuối đạt; owner acceptance không tự suy ra từ báo cáo này. PR #1/#24/#32 giữ Draft. Không merge/deploy/remote staging/capacity.
+
+## Checkpoint triển khai trước acceptance fix — historical, superseded ở trạng thái handoff
+
 Trạng thái: **LOCAL VERIFICATION PASS — SUCCESSOR CI PENDING IN NEW DRAFT PR**. Branch `feature/manual-reservation-mvp`, base được owner nghiệm thu `ae1f2c1c58197360a23d2d8dd2231ab600d7fa22`; kiểm chứng dưới đây gắn với working-tree source/hashes của slice, không gán evidence outbound cũ cho runtime mới. PR #1/#24 giữ Draft; owner acceptance không phải production release approval.
 
 ## Authority và phạm vi
@@ -50,7 +90,7 @@ Up/Down SQL đã được tạo và đọc đầy đủ. Down giữ catalog/gran
 
 Synchronous submit guard; idempotency keys; giữ input khi lỗi; không tự replay 403/409. Generation/abort guards và permission change xóa list/dialog/master/stale state. Dialog reuse AccessibleDialog, focus containment/Escape/return; loading/empty/error/status/source/title/labels tiếng Việt, không dùng raw permission code làm nhãn. Responsive table scroll giữ dữ liệu; browser matrix kiểm chứng riêng.
 
-## Fresh automated evidence — 2026-10-09
+## Historical automated evidence — checkpoint d59a955, 2026-10-09
 
 - Release build: PASS, 0 warning/error. EF pending-model: PASS.
 - Focused Manual SQL-backed HTTP: **9/9 PASS**, `TestResults/ManualReservation/focused-null-final/manual-focused.trx`; metadata/bootstrap focused **3/3 PASS**. Focused TRX Run `50e77ada-89af-48f4-ae02-002b4fb2e4ed`; eight marker-owned targets were cleaned.
@@ -61,7 +101,7 @@ Synchronous submit guard; idempotency keys; giữ input khi lỗi; không tự r
 
 Precursor focused discovery thiếu configured API harness env và JSON substring assertion trùng synthetic product label đã được giữ lịch sử; successor 9/9 dùng official SQL ownership harness và JSON property assertions. Evidence cũ App/API/frontend outbound là historical, không thay fresh slice verification.
 
-## Browser successor evidence và source association
+## Historical browser composite và source association — trước acceptance replay fix
 
 | Nhóm | Evidence PASS | Phân loại và assertions |
 | --- | --- | --- |
@@ -73,7 +113,7 @@ Precursor focused discovery thiếu configured API harness env và JSON substrin
 | ExportReceipt read-only/scoped Manual expiry | `7bec06aae38545d2bc7868bf10130909` | Browser HTTP: Export hold release/replay 409; manager/old-Admin-JWT reader foreign ID 404; expire chỉ một Manual của kho được phép, foreign Manual và Export hold còn Active; replay và Viewer reconciliation không đổi số dư/ledger |
 | Mounted late list/detail + accessibility | `4981da386eec475aad2375bc41ed8b45` | Component-in-browser test entry: real apiClient 403 refresh, exact h1 còn connected xuyên revoke/regrant; old authorized list/detail không phục hồi mã cũ/dialog; 375px keyboard focus containment/Escape, title/status/labels tiếng Việt |
 
-Bảy nhóm mandatory đã PASS qua composite successor evidence, không gọi một run partial là full-run PASS. Run `7bec…` tổng 5 PASS/2 FAIL: chỉ bốn nhóm backend-only ở bảng được dùng làm closure; service/controller/filter/stock repository hashes vẫn trùng source cuối. Fix tiếp theo chỉ explicit labels/css/test ở frontend và runner wait, không thay backend/migration. Run `4981…` là selection UI/Viewer/mounted **3/3 PASS**, gắn với frontend cuối. Không chạy lại SQL suites chỉ vì thay label/test typing. File hashes nằm trong ignored browser evidence, không stage full responses/logs/credentials.
+Bảy nhóm mandatory đã PASS qua composite successor evidence, không gọi một run partial là full-run PASS. Run `7bec…` tổng 5 PASS/2 FAIL: chỉ bốn nhóm backend-only ở bảng được dùng làm closure; service/controller/filter/stock repository hashes trùng source checkpoint d59a955 trước acceptance fix; không phải filter hash successor. Fix tiếp theo chỉ explicit labels/css/test ở frontend và runner wait, không thay backend/migration. Run `4981…` là selection UI/Viewer/mounted **3/3 PASS**, gắn với frontend cuối. Không chạy lại SQL suites chỉ vì thay label/test typing. File hashes nằm trong ignored browser evidence, không stage full responses/logs/credentials.
 
 Precursor failures giữ riêng: `9e40d866d3df4b66b64886f30d58cb85` 4 PASS/3 FAIL; `7bec…` hai UI/Viewer failures; `c1c6832ecf574546a32f511e773f5474` startup loopback unavailable trước login; `60f6c45afc6b420881885a14e35aebe3` 0 PASS/2 FAIL; diagnostic `f977cf0a9ac84ec499e93b561653c08f` xác nhận label text nuốt option text. Không dùng pre-fix UI evidence cho closure.
 
@@ -86,7 +126,7 @@ Review nội bộ correctness/security đã kiểm tra sáu action, database aut
 
 Skills thực tế đã đọc/áp dụng: Ponytail/Ponytail Review (reuse và whole-diff complexity), careful (exact ownership và protected paths), plan-eng-review (boundary/dependencies/acceptance), review (correctness/security), QA/QA-only (phân lớp evidence), ui-ux-pro-max SKILL.md (form labels, keyboard/focus, targets/loading/errors/generation guards theo design system hiện có). Drive router dùng cho metadata freshness.
 
-Còn trước handoff READY: exact staged/history scans, commit/push branch riêng, Draft PR và successor CI HEAD cuối. CI sẽ ghi trong PR body, không tạo commit tài liệu nối tiếp chỉ để lặp CI.
+**Historical pre-push checkpoint, superseded by current PR #32 handoff:** Còn trước handoff READY: exact staged/history scans, commit/push branch riêng, Draft PR và successor CI HEAD cuối. CI sẽ ghi trong PR body, không tạo commit tài liệu nối tiếp chỉ để lặp CI.
 
 Drive: root **140 ảnh + 5 folders = 145 entries**; children 16/24/56/10/176, không folder con mới. Connector list limit 1000, kết quả từng folder dưới limit và không có continuation cursor. Artifact `143XzjlXxbtxR_EbQ7RcIjUqMdWnC4ECd` metadata-only **NOT REVIEWED**; illustrative reference, không security authority.
 

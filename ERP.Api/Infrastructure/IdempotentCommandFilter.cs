@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ERP.Application.Interfaces;
 using ERP.Application.Exceptions;
 using ERP.Domain.Entities;
@@ -97,7 +98,18 @@ public sealed class IdempotentCommandFilter(
                         throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
                 }
             }
-            actionContext.Result = new ContentResult { StatusCode = existing.ResponseStatusCode, ContentType = "application/json", Content = existing.ResponseBody };
+            var responseBody = existing.ResponseBody;
+            // Replay preserves the effect, but response tokens follow the actor's current database classification/grants.
+            if (commandScope == "StockReservation.Create" && !await context.Users.AsNoTracking().AnyAsync(u =>
+                u.Id == userId && u.IsActive && (u.LockoutEnd == null || u.LockoutEnd <= DateTime.UtcNow) &&
+                u.Role.RoleName != "Viewer" && u.Role.Permissions.Any(p => p.Permission.Code == "reservation.release"),
+                actionContext.HttpContext.RequestAborted))
+            {
+                var body = JsonNode.Parse(responseBody!)!.AsObject();
+                body.Remove("rowVersion");
+                responseBody = body.ToJsonString();
+            }
+            actionContext.Result = new ContentResult { StatusCode = existing.ResponseStatusCode, ContentType = "application/json", Content = responseBody };
             return;
         }
 

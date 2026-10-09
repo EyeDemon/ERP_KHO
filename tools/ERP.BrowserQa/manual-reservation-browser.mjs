@@ -23,6 +23,29 @@ export async function runManualReservationCases({run,actors,fixture:f,manualFixt
   await sql('UPDATE Users SET RoleId=@role WHERE Id=@user; SELECT 1 AS changed FOR JSON PATH,WITHOUT_ARRAY_WRAPPER',{role:f.readerRole,user:f.reader});
   await refreshReader('Có quyền đọc giữ hàng');
   let uiId;
+  await run('Manual reservation creation replay filtering','Browser-origin HTTP administration/replay + owned SQL fixture/postconditions',async()=>{
+    const before=await state(),key=randomUUID(),payload={warehouseId:m.warehouse,productId:m.product,quantity:1};
+    const first=await request(manager,'/api/stock-reservations','POST',payload,key);status(first,201);assert(Object.hasOwn(first.data,'rowVersion'));
+    const created=await state();assert.equal(created.reserved-before.reserved,1);assert.equal(created.audits-before.audits,1);assert.equal(created.claims-before.claims,1);
+    assert.equal(created.onHand,before.onHand);assert.equal(created.ledger,before.ledger);
+    status(await grant(f.managerRole,'reservation.release',false),200);
+    const restricted=await request(manager,'/api/stock-reservations','POST',payload,key);status(restricted,201);assertFiltered(restricted.data);assert.equal(restricted.data.id,first.data.id);assert.deepEqual(await state(),created);
+    status(await grant(f.managerRole,'reservation.release',true),200);
+    const regranted=await request(manager,'/api/stock-reservations','POST',payload,key);status(regranted,201);assert(regranted.data.rowVersion===first.data.rowVersion,'Original replay token retained');
+    const role=await sql("SELECT RoleId AS id FROM Users WHERE Username='qa_viewer_browser' FOR JSON PATH,WITHOUT_ARRAY_WRAPPER");
+    try {
+      status(await grant(role.id,'reservation.create',true),200);status(await grant(role.id,'reservation.release',true),200);
+      // Database role setup creates a stale Manager JWT and tests Viewer filtering independently of explicit grants.
+      await sql('UPDATE Users SET RoleId=@role WHERE Id=@user; SELECT 1 AS changed FOR JSON PATH,WITHOUT_ARRAY_WRAPPER',{role:role.id,user:f.manager});
+      const filtered=await request(manager,'/api/stock-reservations','POST',payload,key);status(filtered,201);assertFiltered(filtered.data);assert.equal(filtered.data.id,first.data.id);
+      assert.deepEqual(await state(),created);
+      const stored=await sql("SELECT COUNT(*) AS originalCachedResponses FROM IdempotencyRecords WHERE CommandScope='StockReservation.Create' AND JSON_VALUE(ResponseBody,'$.rowVersion') IS NOT NULL FOR JSON PATH,WITHOUT_ARRAY_WRAPPER");assert.equal(stored.originalCachedResponses,1);
+    } finally {
+      await sql('UPDATE Users SET RoleId=@role WHERE Id=@user; SELECT 1 AS changed FOR JSON PATH,WITHOUT_ARRAY_WRAPPER',{role:f.managerRole,user:f.manager});
+      status(await grant(role.id,'reservation.create',false),200);status(await grant(role.id,'reservation.release',false),200);
+    }
+    return {hashes,actor:'Manager same browser session; Admin grant commands; database Viewer classification fixture',statuses:[201,200,201,200,201,201],postconditions:created,assertions:['cached create filters token after release revoke','regrant preserves original replay token/effect','Viewer filtering independent of explicit grants and stale JWT','cached response remains immutable','one reservation/audit/claim; physical stock/ledger unchanged'],setup:'database role change is SQL fixture setup, not a browser administration workflow'};
+  });
   await run('Manual reservation UI create release','UI workflow + network count + SQL postconditions',async()=>{
     const before=await state();await admin.page.goto(manifest.FrontendUrl+'/stock-reservations');
     await admin.page.getByRole('button',{name:'Tạo giữ hàng',exact:true}).click();

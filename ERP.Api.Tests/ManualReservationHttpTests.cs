@@ -69,6 +69,34 @@ public sealed class ManualReservationHttpTests
     }
 
     [ApprovalSqlServerFact]
+    public async Task CreationReplayFiltersTokenUsingCurrentGrantsAndViewerClassification()
+    {
+        await using var f=await Fixture.Create();var key=Guid.NewGuid().ToString("N");
+        var payload=new{productId=f.Product,warehouseId=f.Warehouse,quantity=1m};
+        using var first=await f.Send(HttpMethod.Post,"/api/stock-reservations",f.Checker,payload,key);
+        Assert.Equal(HttpStatusCode.Created,first.StatusCode);
+        var original=await first.Content.ReadFromJsonAsync<JsonElement>();Assert.True(original.TryGetProperty("rowVersion",out _));
+        var before=await f.Counts();var stock=await f.Stock();
+        await f.Grant(f.Checker,"reservation.release",false);
+        using var noRelease=await f.Send(HttpMethod.Post,"/api/stock-reservations",f.Checker,payload,key);
+        Assert.Equal(HttpStatusCode.Created,noRelease.StatusCode);
+        Assert.False((await noRelease.Content.ReadFromJsonAsync<JsonElement>()).TryGetProperty("rowVersion",out _));
+        await f.Grant(f.Checker,"reservation.release",true);
+        using var regranted=await f.Send(HttpMethod.Post,"/api/stock-reservations",f.Checker,payload,key);
+        Assert.Equal(HttpStatusCode.Created,regranted.StatusCode);
+        Assert.Equal(original.GetProperty("rowVersion").GetString(),(await regranted.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("rowVersion").GetString());
+        await f.Grant(f.Viewer,"reservation.create",true);await f.Grant(f.Viewer,"reservation.release",true);
+        var maker=await f.Db.Users.SingleAsync(x=>x.Id==f.Checker);maker.RoleId=(await f.Db.Users.AsNoTracking().SingleAsync(x=>x.Id==f.Viewer)).RoleId;await f.Db.SaveChangesAsync();
+        using var viewer=await f.Send(HttpMethod.Post,"/api/stock-reservations",f.Checker,payload,key);
+        Assert.Equal(HttpStatusCode.Created,viewer.StatusCode);
+        var filtered=await viewer.Content.ReadFromJsonAsync<JsonElement>();Assert.False(filtered.TryGetProperty("rowVersion",out _));Assert.Equal(original.GetProperty("id").GetInt32(),filtered.GetProperty("id").GetInt32());
+        Assert.Equal(before,await f.Counts());Assert.Equal(stock,await f.Stock());
+        Assert.Equal(1,await f.Db.StockReservations.CountAsync());
+        using var stored=JsonDocument.Parse((await f.Db.IdempotencyRecords.AsNoTracking().SingleAsync()).ResponseBody!);
+        Assert.True(stored.RootElement.TryGetProperty("rowVersion",out _));
+    }
+
+    [ApprovalSqlServerFact]
     public async Task SnapshotSurvivesMasterChangeAndPrecisionNeverRounds()
     {
         await using var f=await Fixture.Create();var item=await Create(f,f.Checker,2.5m);var id=item.GetProperty("id").GetInt32();
