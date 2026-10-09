@@ -12,7 +12,10 @@ public sealed partial class StockTransferService
         EnsureWriteRole();
         var (reasonCode, reason) = ValidateReturnReason(request);
         var ownsTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        // Header UPDLOCK/HOLDLOCK and the source bucket's transaction-owned
+        // application lock serialize writes. Avoid SERIALIZABLE range-read
+        // conversion deadlocks across two independent return documents.
+        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
         try
         {
             var entity = await GetLockedScopedAsync(id, cancellationToken);

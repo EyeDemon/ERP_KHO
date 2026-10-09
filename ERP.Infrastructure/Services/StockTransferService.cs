@@ -164,7 +164,14 @@ public sealed partial class StockTransferService(
     {
         EnsureWriteRole();
         var ownsTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        // The document uses UPDLOCK/HOLDLOCK and the destination bucket gets
+        // an exclusive transaction-owned sp_getapplock before the stock MERGE.
+        // SERIALIZABLE across *all* reads here held compatible S/range locks
+        // on unrelated tables until commit, causing a lock conversion cycle
+        // while a second receipt waited for the app lock (SQL -3/1205).
+        // READ COMMITTED releases read locks after each statement. Document
+        // and canonical bucket write locks still persist to commit/rollback.
+        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
         try
         {
             var entity = await GetLockedScopedAsync(id, cancellationToken);
