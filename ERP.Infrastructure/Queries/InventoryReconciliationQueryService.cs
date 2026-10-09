@@ -47,7 +47,8 @@ namespace ERP.Infrastructure.Queries
 
 
         public async Task<InventoryReconciliationInvestigationDto> GetInvestigationAsync(
-            int warehouseId, int productId, int? eventAnchorId = null, int limit = 50)
+            int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
+            int? eventBeforeId = null)
         {
             if (warehouseId <= 0 || productId <= 0)
                 throw new BusinessRuleException("ID kho và ID sản phẩm phải là số nguyên dương.");
@@ -55,6 +56,9 @@ namespace ERP.Infrastructure.Queries
                 throw new BusinessRuleException("Mốc lịch sử sổ cái không hợp lệ.");
             if (limit is < 1 or > 100)
                 throw new BusinessRuleException("Giới hạn sự kiện phải nằm từ 1 đến 100.");
+            if (eventBeforeId.HasValue && (eventBeforeId.Value <= 0 ||
+                !eventAnchorId.HasValue || eventBeforeId.Value > eventAnchorId.Value))
+                throw new BusinessRuleException("Phân trang sự kiện yêu cầu ID trước hợp lệ và mốc sổ cái cố định.");
             if (_warehouseAuthorization is null)
                 throw new InvalidOperationException("Thiếu dịch vụ phân quyền kho đối chiếu.");
 
@@ -87,6 +91,9 @@ namespace ERP.Infrastructure.Queries
             // anchor never expands because newer events were appended.
             var anchor = eventAnchorId ?? await ledger.MaxAsync(x => (int?)x.Id) ?? 0;
             var anchoredLedger = ledger.Where(x => x.Id <= anchor);
+            // Detect an out-of-date anchor without including later events
+            // in its totals or pages. Reauthorize on every request.
+            var hasNewEvents = await ledger.AnyAsync(x => x.Id > anchor);
 
             var bucketCount = await stocks.CountAsync();
             var eventCount = await anchoredLedger.CountAsync();
@@ -118,7 +125,12 @@ namespace ERP.Infrastructure.Queries
                     ReservedQuantity = x.ReservedQuantity
                 }).ToListAsync();
 
-            var rawEvents = await anchoredLedger
+            // Stable keyset paging: never use TransactionDate (backdatable)
+            // or Skip/Take offsets (new rows can shift boundaries).
+            var pageLedger = eventBeforeId.HasValue
+                ? anchoredLedger.Where(x => x.Id < eventBeforeId.Value)
+                : anchoredLedger;
+            var rawEvents = await pageLedger
                 .OrderByDescending(x => x.Id)
                 .Take(limit + 1)
                 .Select(x => new
@@ -131,6 +143,9 @@ namespace ERP.Infrastructure.Queries
                 })
                 .ToListAsync();
 
+            var hasOlderEvents = rawEvents.Count > limit;
+            var page = rawEvents.Take(limit).ToList();
+
             return new InventoryReconciliationInvestigationDto
             {
                 WarehouseId = warehouseId,
@@ -139,15 +154,18 @@ namespace ERP.Infrastructure.Queries
                 ProductCode = product.Code,
                 ProductName = product.Name,
                 EventAnchorId = anchor,
+                EventBeforeId = eventBeforeId,
+                NextEventBeforeId = hasOlderEvents && page.Count > 0 ? page[^1].Id : null,
+                LedgerHasEventsAfterAnchor = hasNewEvents,
                 EventCount = eventCount,
                 BucketCount = bucketCount,
                 CurrentQuantity = currentQuantity,
                 ExpectedQuantity = expectedQuantity,
                 Difference = currentQuantity - expectedQuantity,
-                EventsTruncated = rawEvents.Count > limit,
+                EventsTruncated = hasOlderEvents,
                 BucketsTruncated = buckets.Count > 100,
                 Buckets = buckets.Take(100).ToList(),
-                Events = rawEvents.Take(limit).Select(x =>
+                Events = page.Select(x =>
                     new InventoryReconciliationEvidenceEventDto
                     {
                         TransactionId = x.Id,

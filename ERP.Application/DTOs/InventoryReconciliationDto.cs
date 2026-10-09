@@ -17,6 +17,11 @@ namespace ERP.Application.DTOs
         public int WarehouseId { get; set; }
         public string WarehouseName { get; set; } = string.Empty;
         public int EventAnchorId { get; set; }
+        // Cursor excludes the named ID (strict less-than); every query is
+        // independently authorized within an exact warehouse/product scope.
+        public int? EventBeforeId { get; set; }
+        public int? NextEventBeforeId { get; set; }
+        public bool LedgerHasEventsAfterAnchor { get; set; }
         public int EventCount { get; set; }
         public int BucketCount { get; set; }
         public bool EventsTruncated { get; set; }

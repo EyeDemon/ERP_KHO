@@ -1421,6 +1421,8 @@ public sealed class SqlServerInventoryLockMoveTests
             first.EventCount.Should().Be(2);
             first.Events.Should().ContainSingle();
             first.EventsTruncated.Should().BeTrue();
+            first.NextEventBeforeId.Should().Be(first.Events[0].TransactionId);
+            first.LedgerHasEventsAfterAnchor.Should().BeFalse();
             first.Events[0].SignedQuantity.Should().Be(4);
             first.EventAnchorId.Should().Be(first.Events[0].TransactionId);
 
@@ -1436,7 +1438,7 @@ public sealed class SqlServerInventoryLockMoveTests
                     InventoryStatus = InventoryStatus.Available,
                     TransactionType = TransactionType.Export,
                     Quantity = 1,
-                    TransactionDate = DateTime.UtcNow
+                    TransactionDate = DateTime.UtcNow.AddYears(-5)
                 });
                 await newEvent.SaveChangesAsync();
             }
@@ -1446,6 +1448,19 @@ public sealed class SqlServerInventoryLockMoveTests
                 .Should().Equal(first.Events.Select(x => x.TransactionId));
             anchored.ExpectedQuantity.Should().Be(12);
             anchored.EventCount.Should().Be(2);
+            anchored.LedgerHasEventsAfterAnchor.Should().BeTrue();
+            var older = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId,
+                first.EventAnchorId, limit: 1, eventBeforeId: first.NextEventBeforeId);
+            older.EventBeforeId.Should().Be(first.NextEventBeforeId);
+            older.EventAnchorId.Should().Be(first.EventAnchorId);
+            older.EventCount.Should().Be(2);
+            older.ExpectedQuantity.Should().Be(12);
+            older.Events.Should().ContainSingle();
+            older.EventsTruncated.Should().BeFalse();
+            older.NextEventBeforeId.Should().BeNull();
+            older.Events[0].SignedQuantity.Should().Be(8);
+            older.Events[0].TransactionId.Should().BeLessThan(first.NextEventBeforeId!.Value);
             var fresh = await service.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId);
             fresh.EventCount.Should().Be(3);
             fresh.ExpectedQuantity.Should().Be(11);

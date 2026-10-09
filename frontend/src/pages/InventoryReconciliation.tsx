@@ -61,6 +61,8 @@ interface Investigation {
   warehouseId:number; warehouseName:string; productId:number;
   productCode:string; productName:string; eventAnchorId:number;
   eventCount:number; bucketCount:number;
+  eventBeforeId?:number|null; nextEventBeforeId?:number|null;
+  ledgerHasEventsAfterAnchor?:boolean;
   eventsTruncated:boolean; bucketsTruncated:boolean;
   currentQuantity:number; expectedQuantity:number; difference:number;
   isReadOnly:boolean; buckets:InvestigationBucket[]; events:InvestigationEvent[];
@@ -93,6 +95,10 @@ export default function InventoryReconciliation() {
   const [investigation, setInvestigation] = useState<Investigation | null>(null);
   const [investigationError, setInvestigationError] = useState('');
   const [investigating, setInvestigating] = useState(false);
+  // Each cursor is the strict upper bound of one Ledger page. The initial
+  // page is null; previous pages can be safely reloaded with the same anchor.
+  const [eventPageCursors, setEventPageCursors] = useState<(number | null)[]>([null]);
+  const [eventPageIndex, setEventPageIndex] = useState(0);
   const investigationGeneration = useRef(0);
   const investigationTrigger = useRef<HTMLButtonElement | null>(null);
 
@@ -186,10 +192,15 @@ export default function InventoryReconciliation() {
     setInvestigation(null);
     setInvestigationError('');
     setInvestigating(false);
+    setEventPageCursors([null]);
+    setEventPageIndex(0);
     return () => { investigationGeneration.current += 1; };
   }, [applied, page]);
 
-  const openInvestigation = async (row: ReconciliationRow) => {
+  const loadInvestigation = async (
+    warehouse: number, product: number, anchor?: number, before?: number,
+    targetPage = 0, cursors: (number | null)[] = [null],
+  ) => {
     if (demoRuntime) return;
     const generation = ++investigationGeneration.current;
     setInvestigation(null);
@@ -197,19 +208,35 @@ export default function InventoryReconciliation() {
     setInvestigating(true);
     try {
       const params = new URLSearchParams({
-        warehouseId: String(row.warehouseId),
-        productId: String(row.productId),
+        warehouseId: String(warehouse),
+        productId: String(product),
         limit: '50',
       });
+      if (anchor !== undefined) params.set('eventAnchorId', String(anchor));
+      if (before !== undefined) params.set('eventBeforeId', String(before));
       const response = await apiClient.get('/api/InventoryReconciliation/investigation?' + params.toString());
       if (generation !== investigationGeneration.current) return;
       const evidence = response.data as Investigation;
-      if (!evidence || evidence.warehouseId !== row.warehouseId ||
-          evidence.productId !== row.productId || evidence.isReadOnly !== true ||
-          !Array.isArray(evidence.buckets) || !Array.isArray(evidence.events)) {
+      if (!evidence || evidence.warehouseId !== warehouse ||
+          evidence.productId !== product || evidence.isReadOnly !== true ||
+          !Number.isSafeInteger(evidence.eventAnchorId) || evidence.eventAnchorId < 0 ||
+          (anchor !== undefined && evidence.eventAnchorId !== anchor) ||
+          (before !== undefined && evidence.eventBeforeId !== before) ||
+          !Array.isArray(evidence.buckets) || !Array.isArray(evidence.events) ||
+          evidence.events.some((e, i) =>
+            !Number.isSafeInteger(e.transactionId) || e.transactionId <= 0 ||
+            e.transactionId > evidence.eventAnchorId ||
+            (before !== undefined && e.transactionId >= before) ||
+            (i > 0 && evidence.events[i - 1].transactionId <= e.transactionId)) ||
+          (evidence.nextEventBeforeId != null &&
+            (!Number.isSafeInteger(evidence.nextEventBeforeId) ||
+             evidence.nextEventBeforeId <= 0 || !evidence.eventsTruncated ||
+             evidence.events[evidence.events.length - 1]?.transactionId !== evidence.nextEventBeforeId))) {
         throw new Error('Dữ liệu điều tra không hợp lệ.');
       }
       setInvestigation(evidence);
+      setEventPageCursors(cursors);
+      setEventPageIndex(targetPage);
     } catch (cause) {
       if (generation !== investigationGeneration.current) return;
       const status = (cause as { response?: { status?: number } })?.response?.status;
@@ -223,11 +250,33 @@ export default function InventoryReconciliation() {
     }
   };
 
+  const openInvestigation = (row: ReconciliationRow) => {
+    void loadInvestigation(row.warehouseId, row.productId);
+  };
+
+  const changeEventPage = (direction: 'older' | 'newer') => {
+    if (!investigation || investigating) return;
+    if (direction === 'older') {
+      const next = investigation.nextEventBeforeId;
+      if (!investigation.eventsTruncated || !Number.isSafeInteger(next) || !next || next <= 0) return;
+      const cursors = [...eventPageCursors.slice(0, eventPageIndex + 1), next];
+      void loadInvestigation(investigation.warehouseId, investigation.productId,
+        investigation.eventAnchorId, next, eventPageIndex + 1, cursors);
+    } else if (eventPageIndex > 0) {
+      const index = eventPageIndex - 1;
+      const before = eventPageCursors[index] ?? undefined;
+      void loadInvestigation(investigation.warehouseId, investigation.productId,
+        investigation.eventAnchorId, before, index, eventPageCursors);
+    }
+  };
+
   const closeInvestigation = () => {
     investigationGeneration.current += 1;
     setInvestigation(null);
     setInvestigationError('');
     setInvestigating(false);
+    setEventPageCursors([null]);
+    setEventPageIndex(0);
     investigationTrigger.current?.focus();
   };
 
@@ -384,6 +433,15 @@ export default function InventoryReconciliation() {
                 Bucket tồn và số dư hiện tại là dữ liệu thời điểm truy vấn, không phải ảnh chụp quá khứ.
                 Không sử dụng số chênh lệch này để tự sửa tồn kho hay tạo giao dịch đảo.
               </p>
+              {investigation.ledgerHasEventsAfterAnchor && (
+                <p role="status" className="ui-muted-text">
+                  Đã có giao dịch mới hơn mốc #{investigation.eventAnchorId}. Các trang Ledger và tổng kỳ vọng vẫn chỉ tính đến mốc cũ.
+                </p>
+              )}
+              <button type="button" disabled={investigating}
+                onClick={() => void loadInvestigation(investigation.warehouseId, investigation.productId)}>
+                Làm mới mốc Ledger
+              </button>
               <UiMetricGrid>
                 <UiMetric label="Số dư hiện tại" value={numberFormat.format(investigation.currentQuantity)} />
                 <UiMetric label="Ledger đến mốc" value={numberFormat.format(investigation.expectedQuantity)} />
@@ -421,6 +479,14 @@ export default function InventoryReconciliation() {
                   </tr>)}
                 </tbody>
               </table></UiTableScroll>
+              <nav className="reconciliation-pagination" aria-label="Phân trang sự kiện Ledger">
+                <button type="button" disabled={investigating || eventPageIndex === 0}
+                  onClick={() => changeEventPage('newer')}>Sự kiện mới hơn</button>
+                <span>Trang Ledger {eventPageIndex + 1} — tối đa 50 sự kiện/trang, tổng {investigation.eventCount}</span>
+                <button type="button"
+                  disabled={investigating || !investigation.eventsTruncated || !investigation.nextEventBeforeId}
+                  onClick={() => changeEventPage('older')}>Sự kiện cũ hơn</button>
+              </nav>
             </>
           )}
           <button type="button" onClick={closeInvestigation}>Đóng hồ sơ</button>

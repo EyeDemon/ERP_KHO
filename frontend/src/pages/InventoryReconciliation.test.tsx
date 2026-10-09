@@ -197,6 +197,123 @@ describe('InventoryReconciliation', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+
+  it('pages anchored Ledger events in both directions without offsets or duplicate IDs',async()=>{
+    const evidence={
+      warehouseId:1,warehouseName:'Kho HCM',productId:10,
+      productCode:'SKU-010',productName:'Sản phẩm test',
+      eventAnchorId:72,eventCount:3,bucketCount:1,
+      currentQuantity:12,expectedQuantity:10,difference:2,isReadOnly:true,
+      eventsTruncated:true,bucketsTruncated:false,
+      buckets:[{inventoryStockId:22,quantity:12,reservedQuantity:0}],
+      events:[
+        {transactionId:72,transactionType:'Import',quantity:5,signedQuantity:5},
+        {transactionId:70,transactionType:'Import',quantity:3,signedQuantity:3}
+      ],
+      nextEventBeforeId:70,ledgerHasEventsAfterAnchor:false
+    };
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({data:[{id:1,code:'HCM',name:'Kho HCM'}]});
+      if(url.startsWith('/api/InventoryReconciliation/investigation?')){
+        if(url.includes('eventBeforeId=70'))return Promise.resolve({data:{
+          ...evidence,eventBeforeId:70,nextEventBeforeId:null,
+          ledgerHasEventsAfterAnchor:true,eventsTruncated:false,
+          events:[{transactionId:60,transactionType:'Export',quantity:1,signedQuantity:-1}]
+        }});
+        return Promise.resolve({data:{
+          ...evidence,ledgerHasEventsAfterAnchor:url.includes('eventAnchorId=72')
+        }});
+      }
+      return Promise.resolve({data:{items:[{
+        productId:10,productCode:'SKU-010',productName:'Sản phẩm test',
+        warehouseId:1,warehouseName:'Kho HCM',currentQuantity:12,expectedQuantity:10,
+        difference:2,status:'Mismatch',importQuantity:10,exportQuantity:0,
+        transferInQuantity:0,transferOutQuantity:0,
+        adjustmentIncreaseQuantity:0,adjustmentDecreaseQuantity:0
+      }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}});
+    });
+    const view=render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button',{name:'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    const table=await view.findByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'});
+    expect(table.textContent).toContain('72');
+    expect(table.textContent).toContain('70');
+    expect(view.getByText(/Trang Ledger 1/)).toBeTruthy();
+    expect((view.getByRole('button',{name:'Sự kiện mới hơn'}) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(view.getByRole('button',{name:'Sự kiện cũ hơn'}));
+    await view.findByText(/Trang Ledger 2/);
+    const nextTable=view.getByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'});
+    expect(nextTable.textContent).toContain('60');
+    expect(nextTable.textContent).not.toContain('72');
+    expect(nextTable.textContent).not.toContain('70');
+    expect(view.getByText(/Đã có giao dịch mới hơn mốc #72/)).toBeTruthy();
+    expect((view.getByRole('button',{name:'Sự kiện cũ hơn'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/InventoryReconciliation/investigation?warehouseId=1&productId=10&limit=50&eventAnchorId=72&eventBeforeId=70'
+    );
+    fireEvent.click(view.getByRole('button',{name:'Sự kiện mới hơn'}));
+    await view.findByText(/Trang Ledger 1/);
+    expect(view.getByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'}).textContent).toContain('72');
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/InventoryReconciliation/investigation?warehouseId=1&productId=10&limit=50&eventAnchorId=72'
+    );
+    fireEvent.click(view.getByRole('button',{name:'Làm mới mốc Ledger'}));
+    await waitFor(()=>expect(view.getByText(/Trang Ledger 1/)).toBeTruthy());
+    expect(vi.mocked(apiClient.get).mock.calls.filter(([url])=>
+      url==='/api/InventoryReconciliation/investigation?warehouseId=1&productId=10&limit=50'
+    ).length).toBe(2);
+  });
+
+  it('fails closed when an event page no longer has warehouse permission',async()=>{
+    const evidence={
+      warehouseId:1,warehouseName:'Kho HCM',productId:10,
+      productCode:'SKU-010',productName:'Sản phẩm test',eventAnchorId:70,
+      eventCount:2,bucketCount:0,currentQuantity:0,expectedQuantity:2,
+      difference:-2,isReadOnly:true,eventsTruncated:true,nextEventBeforeId:70,
+      buckets:[],events:[{transactionId:70,transactionType:'Import',signedQuantity:2}]
+    };
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')return Promise.resolve({data:[]});
+      if(url.includes('eventBeforeId=70'))return Promise.reject({response:{status:404}});
+      if(url.startsWith('/api/InventoryReconciliation/investigation?'))return Promise.resolve({data:evidence});
+      return Promise.resolve({data:{items:[{
+        productId:10,productCode:'SKU-010',productName:'Sản phẩm test',
+        warehouseId:1,warehouseName:'Kho HCM',currentQuantity:0,expectedQuantity:2,
+        difference:-2,status:'Mismatch'
+      }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}});
+    });
+    const view=render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button',{name:'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    await view.findByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'});
+    fireEvent.click(view.getByRole('button',{name:'Sự kiện cũ hơn'}));
+    expect(await view.findByText('Không tìm thấy bằng chứng trong kho được cấp quyền.')).toBeTruthy();
+    expect(view.queryByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'})).toBeNull();
+  });
+
+  it('rejects malformed or cross-scope event cursors from server',async()=>{
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')return Promise.resolve({data:[]});
+      if(url.startsWith('/api/InventoryReconciliation/investigation?'))return Promise.resolve({data:{
+        warehouseId:1,productId:10,isReadOnly:true,eventAnchorId:70,
+        eventCount:1,bucketCount:0,eventsTruncated:true,
+        buckets:[],events:[{transactionId:70}],nextEventBeforeId:999
+      }});
+      return Promise.resolve({data:{items:[{
+        productId:10,productCode:'SKU-010',productName:'Sản phẩm test',
+        warehouseId:1,warehouseName:'Kho HCM',currentQuantity:0,expectedQuantity:0,
+        difference:0,status:'Match'
+      }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}});
+    });
+    const view=render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button',{name:'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    expect(await view.findByText('Không thể tải bằng chứng điều tra. Hãy thử lại.')).toBeTruthy();
+    expect(view.queryByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'})).toBeNull();
+  });
+
   it('does not call real investigation API on blueprint demo',async()=>{
     vi.mocked(isBlueprintDemoRuntime).mockReturnValue(true);
     const view=render(<InventoryReconciliation />);

@@ -172,6 +172,45 @@ namespace ERP.Application.Tests
             auth.VerifyNoOtherCalls();
         }
 
+
+        [Theory]
+        [InlineData(null, 1)]
+        [InlineData(5, -1)]
+        [InlineData(5, 0)]
+        [InlineData(5, 6)]
+        public async Task Investigation_InvalidCursor_FailsBeforeWarehouseAccess(
+            int? anchor, int beforeId)
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var call = () => service.GetInvestigationAsync(
+                1, 1, eventAnchorId: anchor, limit: 2, eventBeforeId: beforeId);
+            await call.Should().ThrowAsync<BusinessRuleException>();
+            auth.VerifyNoOtherCalls();
+        }
+
+
+        [Fact]
+        public async Task Investigation_RevokedWarehouseBetweenPages_FailsClosed()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.SetupSequence(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask)
+                .ThrowsAsync(new NotFoundException("Không tìm thấy kho được cấp quyền."));
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+
+            var first = await service.GetInvestigationAsync(1, 1, limit: 2);
+            first.NextEventBeforeId.Should().NotBeNull();
+            var denied = () => service.GetInvestigationAsync(
+                1, 1, first.EventAnchorId, limit: 2,
+                eventBeforeId: first.NextEventBeforeId);
+            await denied.Should().ThrowAsync<NotFoundException>();
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(2));
+            auth.VerifyNoOtherCalls();
+        }
+
         [Fact]
         public async Task Investigation_DeniedWarehouse_DoesNotReadEvidence()
         {
@@ -208,6 +247,9 @@ namespace ERP.Application.Tests
             result.EventCount.Should().Be(6);
             result.Events.Should().HaveCount(2);
             result.EventsTruncated.Should().BeTrue();
+            result.NextEventBeforeId.Should().Be(result.Events.Last().TransactionId);
+            result.EventBeforeId.Should().BeNull();
+            result.LedgerHasEventsAfterAnchor.Should().BeFalse();
             result.Events.Select(x => x.TransactionId).Should().BeInDescendingOrder();
             result.EventAnchorId.Should().BeGreaterThan(0);
 
@@ -216,22 +258,53 @@ namespace ERP.Application.Tests
                 ProductId = 1, WarehouseId = 1,
                 TransactionType = TransactionType.AdjustmentIncrease,
                 Quantity = 2m, InventoryStatus = InventoryStatus.Available,
-                TransactionDate = DateTime.UtcNow
+                // This new event is deliberately backdated: ID, not clock,
+                // must determine whether the event is inside the anchor.
+                TransactionDate = DateTime.UtcNow.AddYears(-5)
             });
             await db.SaveChangesAsync();
 
             var anchored = await service.GetInvestigationAsync(1, 1, result.EventAnchorId, limit: 2);
             anchored.EventCount.Should().Be(6);
             anchored.ExpectedQuantity.Should().Be(12m);
+            anchored.LedgerHasEventsAfterAnchor.Should().BeTrue();
             anchored.Events.Select(x => x.TransactionId)
                 .Should().Equal(result.Events.Select(x => x.TransactionId));
+
+            var older = await service.GetInvestigationAsync(
+                1, 1, result.EventAnchorId, limit: 2,
+                eventBeforeId: result.NextEventBeforeId);
+            older.EventBeforeId.Should().Be(result.NextEventBeforeId);
+            older.Events.Should().HaveCount(2);
+            older.Events.Select(x => x.TransactionId).Should().BeInDescendingOrder();
+            older.Events.Select(x => x.TransactionId).Should()
+                .OnlyContain(id => id < result.NextEventBeforeId!.Value);
+            older.EventAnchorId.Should().Be(result.EventAnchorId);
+            older.EventCount.Should().Be(6);
+            older.ExpectedQuantity.Should().Be(12);
+            older.NextEventBeforeId.Should().Be(older.Events.Last().TransactionId);
+            older.LedgerHasEventsAfterAnchor.Should().BeTrue();
+            older.Events.Select(x => x.TransactionId)
+                .Intersect(result.Events.Select(x => x.TransactionId))
+                .Should().BeEmpty();
+
+            var finalPage = await service.GetInvestigationAsync(
+                1, 1, result.EventAnchorId, limit: 2,
+                eventBeforeId: older.NextEventBeforeId);
+            finalPage.Events.Should().HaveCount(2);
+            finalPage.EventsTruncated.Should().BeFalse();
+            finalPage.NextEventBeforeId.Should().BeNull();
+            result.Events.Select(x => x.TransactionId)
+                .Concat(older.Events.Select(x => x.TransactionId))
+                .Concat(finalPage.Events.Select(x => x.TransactionId))
+                .Distinct().Should().HaveCount(6);
 
             var fresh = await service.GetInvestigationAsync(1, 1, limit: 2);
             fresh.EventCount.Should().Be(7);
             fresh.ExpectedQuantity.Should().Be(14m);
             fresh.Difference.Should().Be(-2m);
             fresh.EventAnchorId.Should().BeGreaterThan(result.EventAnchorId);
-            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(3));
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(5));
         }
 
         [Fact]

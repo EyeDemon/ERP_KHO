@@ -29,8 +29,9 @@ namespace ERP.Api.Controllers
         [HttpGet("investigation")]
         public async Task<ActionResult<InventoryReconciliationInvestigationDto>> Investigation(
             [FromQuery] int warehouseId, [FromQuery] int productId,
-            [FromQuery] int? eventAnchorId = null, [FromQuery] int limit = 50)
-            => Ok(await _queryService.GetInvestigationAsync(warehouseId, productId, eventAnchorId, limit));
+            [FromQuery] int? eventAnchorId = null, [FromQuery] int limit = 50,
+            [FromQuery] int? eventBeforeId = null)
+            => Ok(await _queryService.GetInvestigationAsync(warehouseId, productId, eventAnchorId, limit, eventBeforeId));
 
         [HttpGet]
         public async Task<IActionResult> GetReconciliations(

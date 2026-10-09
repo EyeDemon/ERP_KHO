@@ -9,7 +9,8 @@ namespace ERP.Application.Interfaces
         Task<IReadOnlyList<InventoryReconciliationWarehouseDto>> GetAccessibleWarehousesAsync();
 
         Task<InventoryReconciliationInvestigationDto> GetInvestigationAsync(
-            int warehouseId, int productId, int? eventAnchorId = null, int limit = 50);
+            int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
+            int? eventBeforeId = null);
 
         Task<PagedResult<InventoryReconciliationDto>> GetReconciliationsAsync(
             int? warehouseId,
