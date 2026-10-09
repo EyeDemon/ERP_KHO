@@ -17,7 +17,7 @@ namespace ERP.Api.Tests
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
                 typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
-                typeof(PermissionsController), typeof(ExportReceiptsController) };
+                typeof(PermissionsController), typeof(ExportReceiptsController), typeof(StockReservationsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
             foreach (var controller in controllers)
@@ -183,13 +183,13 @@ namespace ERP.Api.Tests
         }
 
         [Fact]
-        public void StockReservationsController_Expire_RequiresAdminManagerOrStaff()
+        public void StockReservationsController_Expire_RequiresIndependentReleasePermission()
         {
-            var method = typeof(StockReservationsController).GetMethod("Expire");
+            var method = typeof(StockReservationsController).GetMethod("Expire")!;
 
-            method!.GetCustomAttribute<AuthorizeAttribute>()!.Roles
-                .Should().Be(AppRoles.AdminManagerOrStaff);
-            AppRoles.AdminManagerOrStaff.Should().NotContain(AppRoles.Viewer);
+            method!.GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission
+                .Should().Be(AppPermissions.ReservationRelease);
+            method.GetCustomAttribute<AuthorizeAttribute>().Should().BeNull();
         }
 
         [Fact]

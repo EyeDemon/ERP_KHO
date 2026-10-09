@@ -1,5 +1,11 @@
 # Rà backlog và lựa chọn slice MVP tiếp theo
 
+## Ưu tiên owner hiện hành — 2026-10-09
+
+Outbound Dispatch MVP đã được owner chấp nhận tại `ae1f2c1c58197360a23d2d8dd2231ab600d7fa22`, PR #24; đây không phải production release approval. PR #1/#24 giữ Draft và source/evidence không bị thay đổi. Slice mới **Quản lý giữ hàng Manual MVP** ở worktree/branch riêng `feature/manual-reservation-mvp` từ accepted HEAD; current implementation và fresh/remaining gates xem [Manual reservation](MANUAL_STOCK_RESERVATION_MVP.md). Notion Page 17 §35/Page 30 §21 đã được ghi/read-back theo quyết định owner. Không mở canonical Allocation hoặc nghiệp vụ kho khác.
+
+Backup/restore: **DEFERRED_BY_OWNER — PRIORITIZE FUNCTIONAL DEVELOPMENT**. Giữ kế hoạch đã lưu, không triển khai runner/drill hoặc khai đã kiểm chứng. Những current-priority statements cũ bên dưới là historical, superseded bởi quyết định này.
+
 Ngày rà backlog: **2026-10-04**; checkpoint reconciliation: **2026-10-07** (Asia/Saigon). Trạng thái hiện hành: **INTEGRATED LOCAL VERIFICATION PASS — SUCCESSOR CI IN NEW DRAFT PR**. Owner đã chốt contract; xem [kế hoạch và authority hiện hành](OUTBOUND_DISPATCH_MVP.md). Phần rà backlog bên dưới là historical checkpoint, superseded tại những đoạn còn chờ quyết định. Đây là báo cáo đối chiếu nguồn và readiness, chưa phải kế hoạch implementation đã được duyệt hoặc evidence của một slice mới.
 
 Source được đối chiếu: `cda05eba56d3cfb41a3df803bb48d0c84e05940f`. [PR #1](https://github.com/EyeDemon/ERP_KHO/pull/1) vẫn Draft; branch đã nghiệm thu, source, index và evidence không thay đổi. [CI 37137026845](https://github.com/EyeDemon/ERP_KHO/actions/runs/37137026845) được đọc lại từ GitHub: completed/success. Counts Application **352**, API **189**, frontend **89** là evidence hiện có tại source này, không phải các lần chạy mới trong lượt rà backlog.
