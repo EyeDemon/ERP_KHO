@@ -34,7 +34,7 @@ public sealed class InventoryReconciliationListSafetyTests
         await db.SaveChangesAsync();
         var access = new Moq.Mock<ERP.Application.Interfaces.IWarehouseAuthorizationService>();
         access.Setup(x => x.GetAccessibleWarehouseIdsAsync(default))
-            .ReturnsAsync(new[] { 1 });
+            .Returns(Task.FromResult<IReadOnlyList<int>>(new[] { 1 }));
         var query = new InventoryReconciliationQueryService(db, access.Object);
         var matched = (await query.GetReconciliationsAsync(null, null, null)).Items.Single();
         matched.ExpectedQuantity.Should().Be(6m);
