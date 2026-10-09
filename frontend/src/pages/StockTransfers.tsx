@@ -241,7 +241,7 @@ export default function StockTransfers() {
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (createInFlightRef.current) return;
+    if (createInFlightRef.current || (editingId !== null && draftConflict)) return;
     // Fail closed even on programmatic submit (which bypasses native required inputs).
     if (!sourceId || !destinationId ||
         !warehouses.some(warehouse => warehouse.id === sourceId) ||
