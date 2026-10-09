@@ -34,5 +34,11 @@
 - Danh sách trả về rỗng thì thông báo chưa được phân quyền, không tự động nới phạm vi truy vấn. Backend luôn xác minh quyền truy vết/kho lại khi truy vấn nhóm tồn hoặc dòng thời gian.
 - Frontend từ chối payload danh sách kho sai hợp đồng: ID phải là số nguyên dương và không trùng; mã/tên kho là chuỗi có nội dung thực. Lỗi dữ liệu hoặc HTTP không được hiển thị danh sách giả. Kiểm thử SQL tạo mã kho giả nằm trong giới hạn `Warehouses.Code` 20 ký tự đúng schema thật.
 - Giao diện Việt ngữ, dùng `UiToolbarField`, select native hỗ trợ bàn phím, focus rõ ràng và bố cục responsive theo `design-system/erp-wms/MASTER.md`.
-- Kiểm thử: SQL Server chỉ trả kho trong quyền; API chuyển đúng tới dịch vụ truy vết + kiểm tra annotation `InventoryTraceabilityRead`; frontend có loading, danh sách kho thật, lỗi, retry, danh sách rỗng; module HTTP từ chối payload sai kiểu.
+- Kiểm thử: SQL Server chỉ trả kho trong quyền; thu hồi quyền khi đang mở trang phải làm danh sách rỗng và truy vết kho cũ trả NotFound; API chuyển đúng tới dịch vụ truy vết + kiểm tra annotation `InventoryTraceabilityRead`; frontend có loading, danh sách kho thật, lỗi, retry, danh sách rỗng; module HTTP từ chối payload sai kiểu.
 - CI đúng HEAD, browser QA và staging backend/SQL là các cổng nghiệm thu riêng. Không merge PR Draft khi chưa có bằng chứng. Notion chỉ đọc.
+
+## Đồng bộ môi trường Blueprint (demo chỉ đọc)
+
+- Blueprint Vercel dùng **dữ liệu minh họa tách biệt**, chỉ trả GET `/api/inventory/traceability-warehouses` để bộ chọn kho có thể hiển thị. Không biến dữ liệu mẫu thành dữ liệu SQL thật.
+- Adapter truy vết của demo hỗ trợ lọc theo kho, tham chiếu, `limit`, `bucketOffset` và hai cờ `eventsTruncated`/`bucketsTruncated`; khi tìm theo kho không được loại các nhóm tồn chỉ vì thiếu giao dịch sổ cái mẫu.
+- POST/PUT/PATCH/DELETE trên Blueprint vẫn trả 405; mọi quyền, tồn kho và sổ cái thật phải được xác minh trên backend có xác thực và SQL staging riêng.

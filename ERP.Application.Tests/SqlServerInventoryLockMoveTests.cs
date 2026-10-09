@@ -1084,6 +1084,17 @@ public sealed class SqlServerInventoryLockMoveTests
                 warehouses.Should().ContainSingle(x => x.Id == fixture.WarehouseId);
                 warehouses.Should().NotContain(x => x.Id == otherWarehouseId);
                 warehouses.Should().OnlyContain(x => x.Id == fixture.WarehouseId);
+
+                // Revoke access while the page remains open: the next lookup
+                // and query must not expose the formerly authorized warehouse.
+                await using (var revokeDb = CreateContext())
+                    await revokeDb.UserWarehouses.Where(x =>
+                        x.UserId == fixture.UserId &&
+                        x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+
+                (await service.GetAccessibleWarehousesAsync()).Should().BeEmpty();
+                var forbidden = () => service.TraceAsync(warehouseId: fixture.WarehouseId);
+                await forbidden.Should().ThrowAsync<NotFoundException>();
             }
             finally
             {
