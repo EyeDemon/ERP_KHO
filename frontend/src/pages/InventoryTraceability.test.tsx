@@ -4,8 +4,10 @@ import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryTraceability from './InventoryTraceability';
 import apiClient from '../services/apiClient';
+import { getTraceabilityWarehouses } from '../services/traceabilityWarehouses';
 
 vi.mock('../services/apiClient',()=>({default:{get:vi.fn()}}));
+vi.mock('../services/traceabilityWarehouses',()=>({getTraceabilityWarehouses:vi.fn()}));
 
 const result={
   currentBuckets:[{
@@ -39,7 +41,13 @@ const renderTrace=(entries=['/inventory-traceability'])=>render(
 );
 
 describe('InventoryTraceability',()=>{
-  beforeEach(()=>vi.resetAllMocks());
+  beforeEach(()=>{
+    vi.resetAllMocks();
+    vi.mocked(getTraceabilityWarehouses).mockResolvedValue([
+      {id:1,code:'HCM',name:'Kho TP.HCM'},
+      {id:2,code:'HN',name:'Kho Hà Nội'}
+    ]);
+  });
   afterEach(()=>{
     cleanup();
     window.history.replaceState({}, '', window.location.pathname);
@@ -136,10 +144,50 @@ describe('InventoryTraceability',()=>{
     expect(view.getByText('Chờ kiểm tra chất lượng')).toBeTruthy();
   });
 
+  it('loads only the warehouse choices returned by the scoped API and uses their real IDs',async()=>{
+    const view=renderTrace();
+    const select=view.getByLabelText('Kho truy vết') as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    await waitFor(()=>expect(select.disabled).toBe(false));
+    expect(select.options).toHaveLength(3);
+    expect([...select.options].map(option=>option.value)).toEqual(['','1','2']);
+    expect(view.queryByRole('option',{name:/Kho không được phân quyền/})).toBeNull();
+    expect(getTraceabilityWarehouses).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not invent unrestricted warehouse choices when the lookup fails and can retry',async()=>{
+    vi.mocked(getTraceabilityWarehouses)
+      .mockRejectedValueOnce(new Error('403'))
+      .mockResolvedValueOnce([{id:2,code:'HN',name:'Kho Hà Nội'}]);
+    const view=renderTrace();
+    const alert=await view.findByRole('alert');
+    expect(alert.textContent).toContain('Không thể tải danh sách kho');
+    const select=view.getByLabelText('Kho truy vết') as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(select.options).toHaveLength(1);
+    fireEvent.click(view.getByRole('button',{name:'Tải lại danh sách kho'}));
+    await view.findByRole('option',{name:'HN — Kho Hà Nội'});
+    await waitFor(()=>expect(select.disabled).toBe(false));
+    expect([...select.options].map(option=>option.value)).toEqual(['','2']);
+    expect(getTraceabilityWarehouses).toHaveBeenCalledTimes(2);
+  });
+
+  it('handles zero assigned warehouses without inserting sample stock or identifiers',async()=>{
+    vi.mocked(getTraceabilityWarehouses).mockResolvedValue([]);
+    const view=renderTrace();
+    expect(await view.findByText(/Chưa có kho được cấp quyền truy vết/)).toBeTruthy();
+    const select=view.getByLabelText('Kho truy vết') as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(select.options).toHaveLength(1);
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
+
   it('allows an authorized warehouse-only overview without requiring a product or document',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=renderTrace();
-    fireEvent.change(view.getByLabelText('ID kho (tùy chọn)'),{target:{value:'1'}});
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    fireEvent.change(view.getByLabelText('Kho truy vết'),{target:{value:'1'}});
     fireEvent.click(view.getByText('Truy vết'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
       '/api/inventory/traceability?warehouseId=1&limit=200'
@@ -180,7 +228,7 @@ describe('InventoryTraceability',()=>{
   it('renders visible labels, current buckets and reversal-aware immutable timeline',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=renderTrace();
-    expect(view.getByLabelText('ID kho (tùy chọn)')).toBeTruthy();
+    expect(view.getByLabelText('Kho truy vết')).toBeTruthy();
     expect(view.getByLabelText('ID sản phẩm')).toBeTruthy();
     expect(view.getByLabelText('Mã lô')).toBeTruthy();
     expect(view.getByLabelText('Số sê-ri')).toBeTruthy();
@@ -222,7 +270,8 @@ describe('InventoryTraceability',()=>{
         : {data:{...result,bucketsTruncated:true}} as never
     );
     const view=renderTrace();
-    fireEvent.change(view.getByLabelText('ID kho (tùy chọn)'),{target:{value:'1'}});
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    fireEvent.change(view.getByLabelText('Kho truy vết'),{target:{value:'1'}});
     fireEvent.click(view.getByText('Truy vết'));
     expect(await view.findByText('A01-R01-B01')).toBeTruthy();
     expect(view.getByText('Trang 1')).toBeTruthy();
@@ -249,7 +298,8 @@ describe('InventoryTraceability',()=>{
         : {data:{...result,bucketsTruncated:true}} as never
     );
     const view=renderTrace();
-    fireEvent.change(view.getByLabelText('ID kho (tùy chọn)'),{target:{value:'1'}});
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    fireEvent.change(view.getByLabelText('Kho truy vết'),{target:{value:'1'}});
     fireEvent.click(view.getByText('Truy vết'));
     expect(await view.findByText('A01-R01-B01')).toBeTruthy();
     fireEvent.click(view.getByRole('button',{name:'Trang sau'}));
@@ -299,7 +349,7 @@ describe('InventoryTraceability',()=>{
     const view=renderTrace();
     fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
     fireEvent.click(view.getByText('Truy vết'));
-    expect(view.getByRole('status').textContent).toContain('Đang truy vết tồn kho');
+    expect(view.getAllByRole('status').some(x=>x.textContent?.includes('Đang truy vết tồn kho'))).toBe(true);
     expect(view.getByText('Đang truy vết...')).toBeTruthy();
   });
 });
