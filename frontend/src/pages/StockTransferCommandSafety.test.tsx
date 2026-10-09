@@ -101,7 +101,7 @@ describe('Stock transfer command consistency', () => {
     expect(await view.findByRole('dialog', { name: 'TRF-807' })).toBeTruthy();
   });
 
-  it('keeps draft editor open after conflicting approval and reuses key only for identical retry', async () => {
+  it('keeps draft editor open after a network failure and reuses key only for identical retry', async () => {
     const draft = { ...transfer, status: 'Draft' };
     get.mockImplementation(async url => {
       if (url === '/api/stock-transfers') return { data: { items: [draft], totalPages: 1 } } as never;
@@ -115,11 +115,9 @@ describe('Stock transfer command consistency', () => {
       return { data: [] } as never;
     });
     const put = vi.mocked(apiClient.put);
-    put.mockRejectedValueOnce({
-      response: { status: 409, data: { message: 'Phiếu đã được duyệt ở phiên khác.' } },
-    }).mockRejectedValueOnce({
-      response: { status: 409, data: { message: 'Phiếu đã được duyệt ở phiên khác.' } },
-    }).mockResolvedValueOnce({ data: {} } as never);
+    put.mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ data: {} } as never);
     const view = render(<StockTransfers />);
     fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
     fireEvent.click(await view.findByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
@@ -127,7 +125,7 @@ describe('Stock transfer command consistency', () => {
     fireEvent.submit(dialog);
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
     await within(dialog).findByRole('alert');
-    expect(within(dialog).getByRole('alert').textContent).toContain('Phiếu đã được duyệt');
+    expect(within(dialog).getByRole('alert').textContent).toContain('Không thể cập nhật phiếu');
     const first = (put.mock.calls[0][2] as { headers: Record<string,string> }).headers['Idempotency-Key'];
     fireEvent.submit(dialog);
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
@@ -172,6 +170,8 @@ describe('Stock transfer command consistency', () => {
     fireEvent.submit(editor);
     expect(await within(editor).findByRole('alert')).toHaveProperty('textContent',
       'Phiếu đã được duyệt.');
+    expect((within(editor).getByRole('button', { name: 'Lưu thay đổi' }) as HTMLButtonElement)
+      .disabled).toBe(true);
     latest = { ...draft, status: 'Approved' };
     fireEvent.click(within(editor).getByRole('button', { name: 'Tải lại phiên bản mới' }));
 
@@ -226,6 +226,8 @@ describe('Stock transfer command consistency', () => {
       .toBe('Kiểm tra lại');
     expect(within(editor).queryByRole('button', { name: 'Tải lại phiên bản mới' }))
       .toBeNull();
+    expect((within(editor).getByRole('button', { name: 'Lưu thay đổi' }) as HTMLButtonElement)
+      .disabled).toBe(false);
     expect(apiClient.put).toHaveBeenCalledTimes(1);
   });
 

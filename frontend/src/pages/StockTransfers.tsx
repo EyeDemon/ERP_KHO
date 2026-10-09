@@ -632,7 +632,8 @@ export default function StockTransfers() {
 
               <div className="dialog-actions">
                 <button type="button" disabled={createInFlight} onClick={closeDraftEditor}>Đóng</button>
-                <button className="ui-primary-button" type="submit" disabled={createInFlight}>
+                <button className="ui-primary-button" type="submit"
+                  disabled={createInFlight || (editingId !== null && draftConflict)}>
                   {createInFlight ? (editingId === null ? 'Đang tạo phiếu...' : 'Đang lưu thay đổi...') :
                     (editingId === null ? 'Tạo phiếu' : 'Lưu thay đổi')}
                 </button>
