@@ -1033,6 +1033,14 @@ public sealed class SqlServerInventoryLockMoveTests
             byWarehouse.BucketsTruncated.Should().BeTrue();
             byWarehouse.CurrentBuckets.Should().OnlyContain(x =>
                 x.WarehouseId == fixture.WarehouseId);
+            var secondPage = await query.TraceAsync(
+                warehouseId: fixture.WarehouseId, limit: 20, bucketOffset: 500);
+            secondPage.CurrentBuckets.Should().HaveCount(3);
+            secondPage.BucketsTruncated.Should().BeFalse();
+            secondPage.CurrentBuckets.Should().Contain(x => x.LocationId == targetLocationId);
+            var firstPageIds = byWarehouse.CurrentBuckets.Select(x => x.InventoryStockId).ToHashSet();
+            secondPage.CurrentBuckets.Should().OnlyContain(x =>
+                x.WarehouseId == fixture.WarehouseId && !firstPageIds.Contains(x.InventoryStockId));
 
             // A nonexistent document must NOT broaden the stock query to all
             // current buckets merely because the warehouse is valid.
@@ -1072,6 +1080,11 @@ public sealed class SqlServerInventoryLockMoveTests
                 x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
             overview.CurrentBuckets.Sum(x => x.OnHandQuantity).Should().Be(10);
             overview.BucketsTruncated.Should().BeFalse();
+            var beyondCurrentStocks = await query.TraceAsync(
+                warehouseId: fixture.WarehouseId, bucketOffset: 500);
+            beyondCurrentStocks.Events.Should().BeEmpty();
+            beyondCurrentStocks.CurrentBuckets.Should().BeEmpty();
+            beyondCurrentStocks.BucketsTruncated.Should().BeFalse();
 
             // The explicit single-warehouse scope must be enforced before
             // inventory or ledger results from other warehouses are returned.
