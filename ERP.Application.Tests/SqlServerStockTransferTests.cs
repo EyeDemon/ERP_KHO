@@ -541,7 +541,7 @@ public sealed class SqlServerStockTransferTests
                 ids.Contains(x.ReferenceId.Value) && x.TransactionType == TransactionType.TransferIn))
                 .Should().Be(4);
             (await verify.AuditLogs.CountAsync(x =>
-                x.EntityName == "StockTransfer" && ids.Contains(x.EntityId) &&
+                x.EntityName == "StockTransfer" && x.EntityId.HasValue && ids.Contains(x.EntityId.Value) &&
                 x.Action == "StockTransfer.Received")).Should().Be(4);
             (await verify.StockTransfers.CountAsync(x =>
                 ids.Contains(x.Id) && x.Status == StockTransferStatus.Received)).Should().Be(4);

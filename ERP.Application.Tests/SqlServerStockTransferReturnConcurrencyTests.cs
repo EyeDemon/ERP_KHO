@@ -63,7 +63,7 @@ public sealed class SqlServerStockTransferReturnConcurrencyTests
                 outbound.TransactionType == TransactionType.TransferOut &&
                 outbound.ReferenceId == x.ReferenceId)).Should().BeTrue();
         (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
-            ids.Contains(x.EntityId) && x.Action == "StockTransfer.Returned")).Should().Be(2);
+            x.EntityId.HasValue && ids.Contains(x.EntityId.Value) && x.Action == "StockTransfer.Returned")).Should().Be(2);
     }
 
     [SqlServerFact]
