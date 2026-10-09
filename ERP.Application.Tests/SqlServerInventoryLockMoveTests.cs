@@ -705,6 +705,9 @@ public sealed class SqlServerInventoryLockMoveTests
 
             foreach (var trace in traces)
             {
+                // The anchor must include already-committed corrective/reversal
+                // legs even if the direct reference matches only the original.
+                trace.EventAnchorId!.Value.Should().BeGreaterThan(expectedIds.Max() - 1);
                 trace.Events.Select(x => x.TransactionId).Should().Contain(expectedIds);
                 trace.Events.Single(x => x.TransactionId == moved.TransactionId).IsReversed.Should().BeTrue();
                 trace.Events.Single(x => x.TransactionId == reversal.ReversalTransactionId)

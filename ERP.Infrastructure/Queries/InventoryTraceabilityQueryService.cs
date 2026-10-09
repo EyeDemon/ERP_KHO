@@ -84,9 +84,13 @@ public sealed class InventoryTraceabilityQueryService(
             allowedWarehouseIds = [warehouseId.Value];
         }
 
-        var eventQuery = context.InventoryTransactions.AsNoTracking()
+        // Snapshot the whole authorized warehouse ledger, not only direct
+        // reference matches. An existing reversal/corrective leg can use
+        // another ReferenceType and a higher transaction ID than its original.
+        var scopedLedger = context.InventoryTransactions.AsNoTracking()
             .Where(x => allowedWarehouseIds.Contains(x.WarehouseId));
-        if (warehouseId.HasValue) eventQuery = eventQuery.Where(x => x.WarehouseId == warehouseId.Value);
+        if (warehouseId.HasValue) scopedLedger = scopedLedger.Where(x => x.WarehouseId == warehouseId.Value);
+        var eventQuery = scopedLedger;
         if (productId.HasValue) eventQuery = eventQuery.Where(x => x.ProductId == productId.Value);
         if (lot is not null) eventQuery = eventQuery.Where(x => x.Lot != null && x.Lot.LotNumber == lot);
         if (serial is not null) eventQuery = eventQuery.Where(x => x.Serial != null && x.Serial.SerialNumber == serial);
@@ -98,7 +102,7 @@ public sealed class InventoryTraceabilityQueryService(
         var referenceStockEvents = eventQuery;
         // Identity IDs grow monotonically. New commits cannot shift older pages,
         // even when a later transaction carries a backdated TransactionDate.
-        var anchorId = eventAnchorId ?? await eventQuery.MaxAsync(x => (int?)x.Id, cancellationToken) ?? 0;
+        var anchorId = eventAnchorId ?? await scopedLedger.MaxAsync(x => (int?)x.Id, cancellationToken) ?? 0;
         eventQuery = eventQuery.Where(x => x.Id <= anchorId);
 
         // Read one extra event so the operator can distinguish a complete

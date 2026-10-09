@@ -54,10 +54,12 @@ public sealed class SqlServerStockTransferReturnTraceabilityTests
             .ReturnsAsync(new List<int> { fixture.Source, fixture.Destination });
         var service = new InventoryTraceabilityQueryService(verify, auth.Object);
         var first = await service.TraceAsync(referenceType: "StockTransfer", referenceId: id, limit: 1);
-        var older = await service.TraceAsync(referenceType: "StockTransfer", referenceId: id, limit: 1, eventOffset: 1);
+        var older = await service.TraceAsync(referenceType: "StockTransfer", referenceId: id,
+            limit: 1, eventOffset: 1, eventAnchorId: first.EventAnchorId);
 
         first.EventsTruncated.Should().BeTrue();
         older.EventsTruncated.Should().BeFalse();
+        older.EventAnchorId.Should().Be(first.EventAnchorId);
         first.Events.Select(x => x.TransactionId).Should().BeEquivalentTo(
             older.Events.Select(x => x.TransactionId));
         var outbound = older.Events.Single(x => x.TransactionType == nameof(TransactionType.TransferOut));
