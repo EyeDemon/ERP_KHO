@@ -11,6 +11,6 @@ Chặn xuất, nhận và hoàn trả theo dữ liệu chi tiết hoặc cặp k
 - Chỉnh sửa phiếu Nháp cũng dùng khóa header để không thể chen vào giữa bước đọc chi tiết và ghi sổ.
 
 ## Kiểm chứng và giới hạn
-- SQL Server regression `CompetingTransfersCannotDriveSourceStockNegative` xác minh hai phiếu độc lập cùng xuất 8 từ tồn 10: đúng một phiếu thành công, không âm tồn, không được trả deadlock 1205 như kết quả nghiệp vụ hợp lệ. Cần đối soát thêm ledger và audit trong CI.
+- SQL Server regression `CompetingTransfersCannotDriveSourceStockNegative` xác minh hai phiếu độc lập cùng xuất 8 từ tồn 10: đúng một phiếu thành công, không âm tồn, không được trả deadlock 1205 như kết quả nghiệp vụ hợp lệ. Đối soát đồng thời trạng thái: đúng một phiếu `InTransit`, phiếu thua vẫn `Approved` với dòng `DispatchedQuantity=0`; chỉ một ledger `TransferOut` lượng 8 và một audit `StockTransfer.Dispatched`; phiếu thua không có ledger/audit xuất.
 - Cần chạy thêm kiểm thử cạnh tranh cập nhật Nháp/duyệt/xuất, kiểm thử trình duyệt và staging API/SQL thật trước khi merge.
 - Vercel Demo READY không xác nhận tính đúng đắn của SQL Server.

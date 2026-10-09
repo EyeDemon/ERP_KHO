@@ -548,7 +548,41 @@ public sealed class SqlServerStockTransferTests
             results.Count(x => x).Should().Be(1);
             await using var verify = CreateContext();
             (await StockAsync(verify, fixture.ProductId, fixture.SourceId)).Should().Be(2);
-            (await verify.InventoryStocks.Where(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.SourceId).MinAsync(x => x.Quantity)).Should().BeGreaterThanOrEqualTo(0);
+            (await StockAsync(verify, fixture.ProductId, fixture.DestinationId)).Should().Be(0);
+            (await verify.InventoryStocks.Where(x => x.ProductId == fixture.ProductId &&
+                x.WarehouseId == fixture.SourceId).MinAsync(x => x.Quantity))
+                .Should().BeGreaterThanOrEqualTo(0);
+
+            // In addition to the balance, one and only one full document,
+            // ledger posting and audit may commit. The losing document remains
+            // Approved with its detail quantities unposted.
+            var transferStates = await verify.StockTransfers.AsNoTracking()
+                .Where(x => x.Id == firstId || x.Id == secondId)
+                .Select(x => new { x.Id, x.Status }).ToListAsync();
+            transferStates.Count(x => x.Status == StockTransferStatus.InTransit).Should().Be(1);
+            transferStates.Count(x => x.Status == StockTransferStatus.Approved).Should().Be(1);
+            var winnerId = transferStates.Single(x => x.Status == StockTransferStatus.InTransit).Id;
+            var loserId = transferStates.Single(x => x.Status == StockTransferStatus.Approved).Id;
+            (await verify.InventoryTransactions.CountAsync(x =>
+                x.ReferenceType == "StockTransfer" &&
+                (x.ReferenceId == firstId || x.ReferenceId == secondId) &&
+                x.TransactionType == TransactionType.TransferOut)).Should().Be(1);
+            (await verify.InventoryTransactions.AsNoTracking()
+                .Where(x => x.ReferenceType == "StockTransfer" && x.ReferenceId == winnerId &&
+                    x.TransactionType == TransactionType.TransferOut)
+                .Select(x => x.Quantity).SingleAsync()).Should().Be(8);
+            (await verify.InventoryTransactions.CountAsync(x =>
+                x.ReferenceType == "StockTransfer" && x.ReferenceId == loserId)).Should().Be(0);
+            (await verify.AuditLogs.CountAsync(x =>
+                x.EntityName == "StockTransfer" &&
+                (x.EntityId == firstId || x.EntityId == secondId) &&
+                x.Action == "StockTransfer.Dispatched")).Should().Be(1);
+            (await verify.AuditLogs.CountAsync(x =>
+                x.EntityName == "StockTransfer" && x.EntityId == loserId &&
+                x.Action == "StockTransfer.Dispatched")).Should().Be(0);
+            (await verify.StockTransferDetails.AsNoTracking()
+                .Where(x => x.StockTransferId == loserId)
+                .Select(x => x.DispatchedQuantity).SingleAsync()).Should().Be(0);
         }
         finally { await CleanupAsync(fixture); }
     }
