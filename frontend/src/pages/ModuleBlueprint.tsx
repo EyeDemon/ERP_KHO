@@ -147,7 +147,7 @@ const ModuleBlueprint = () => {
                   INV-11 có kịch bản chênh lệch độc lập; màn Đối chiếu tồn kho của Real demo sử dụng
                   bộ dữ liệu mẫu khác. Không so sánh các số dư này như cùng một kết quả Ledger/Balance.
                 </p>
-              )
+              )}
             </div>
             <button type="button" className="demo-primary" disabled title="Bộ dữ liệu mô phỏng chỉ đọc">Mô phỏng chỉ đọc</button>
           </div>
