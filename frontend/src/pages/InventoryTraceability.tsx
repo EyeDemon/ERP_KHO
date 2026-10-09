@@ -77,6 +77,7 @@ export default function InventoryTraceability(){
   const [result,setResult]=useState<Result|null>(null);
   const [loading,setLoading]=useState(false);
   const [eventLimit,setEventLimit]=useState<50|100|200|500>(200);
+  const [bucketOffset,setBucketOffset]=useState(0);
   const [validationError,setValidationError]=useState('');
   const [requestError,setRequestError]=useState('');
   const productIdRef=useRef<HTMLInputElement>(null);
@@ -87,6 +88,7 @@ export default function InventoryTraceability(){
 
   useEffect(()=>{
     const sequence=++requestSequence.current;
+    setBucketOffset(0);
     if(!linkedDocument){
       // A route transition back to an unfiltered trace view must not leave
       // the previous document or warehouse filters visible as current data.
@@ -123,14 +125,25 @@ export default function InventoryTraceability(){
     (form.referenceType.trim()&&!form.referenceId)||(!form.referenceType.trim()&&form.referenceId)
   );
 
+  const invalidateResults=()=>{
+    // Changing filters invalidates the old results and pending responses;
+    // paging must never reuse stale query conditions.
+    requestSequence.current+=1;
+    setBucketOffset(0);
+    setResult(null);
+    setLoading(false);
+  };
+
   const updateField=(field:keyof typeof form,value:string)=>{
     setForm(x=>({...x,[field]:value}));
+    invalidateResults();
     if(validationError)setValidationError('');
     if(requestError)setRequestError('');
   };
 
-  const search=async(e:FormEvent)=>{
-    e.preventDefault();setValidationError('');setRequestError('');
+  const requestTrace=async(offset:number)=>{
+    if(loading||offset<0||offset>50_000||offset%500!==0)return;
+    setValidationError('');setRequestError('');
     const hasIdentity=form.warehouseId||form.productId||form.lotNumber.trim()||form.serialNumber.trim();
     const hasReference=form.referenceType.trim()&&form.referenceId;
     if(referencePairInvalid){
@@ -145,6 +158,7 @@ export default function InventoryTraceability(){
       return;
     }
     setResult(null);
+    setBucketOffset(offset);
     setLoading(true);
     const sequence=++requestSequence.current;
     try{
@@ -156,12 +170,14 @@ export default function InventoryTraceability(){
       if(form.referenceType.trim())params.set('referenceType',form.referenceType.trim());
       if(form.referenceId)params.set('referenceId',form.referenceId);
       params.set('limit',String(eventLimit));
+      if(offset>0)params.set('bucketOffset',String(offset));
       const response=await apiClient.get<Result>('/api/inventory/traceability?'+params.toString());
       if(sequence===requestSequence.current)setResult(response.data);
     }catch(e){
       if(sequence===requestSequence.current){setResult(null);setRequestError(errorMessage(e))}
     }finally{if(sequence===requestSequence.current)setLoading(false)}
   };
+  const search=(e:FormEvent)=>{e.preventDefault();void requestTrace(0)};
 
   const referencePairErrorActive=Boolean(validationError&&referencePairInvalid);
   const resultStatus=loading
@@ -181,7 +197,7 @@ export default function InventoryTraceability(){
             aria-describedby="traceability-warehouse-help"/>
         </UiToolbarField>
         <p id="traceability-warehouse-help" className="ui-muted-text">
-          Chỉ nhập ID kho để xem tồn kho hiện tại và các sự kiện gần nhất trong kho được cấp quyền. Kết quả tối đa 500 nhóm tồn.
+          Chỉ nhập ID kho để xem tồn kho hiện tại và sự kiện gần nhất của kho được cấp quyền. Có thể chuyển trang, tối đa 500 nhóm tồn mỗi trang.
         </p>
         <UiToolbarField label="ID sản phẩm">
           <input ref={productIdRef} type="number" min="1" value={form.productId} onChange={e=>updateField('productId',e.target.value)} inputMode="numeric"/>
@@ -220,7 +236,10 @@ export default function InventoryTraceability(){
         {validationError&&<p id="traceability-validation-error" role="alert">{validationError}</p>}
         <UiToolbarField label="Giới hạn sự kiện">
           <select aria-label="Giới hạn sự kiện truy vết" value={eventLimit} disabled={loading}
-            onChange={e=>setEventLimit(Number(e.target.value) as 50|100|200|500)}>
+            onChange={e=>{
+              setEventLimit(Number(e.target.value) as 50|100|200|500);
+              invalidateResults();
+            }}>
             <option value={50}>50 sự kiện</option>
             <option value={100}>100 sự kiện</option>
             <option value={200}>200 sự kiện</option>
@@ -235,7 +254,7 @@ export default function InventoryTraceability(){
     {result&&<div className="ui-stack">
       <UiCard title="Nhóm tồn kho hiện tại">
         {result.bucketsTruncated&&<p role="status" className="ui-muted-text">
-          Chỉ hiển thị 500 nhóm tồn đầu tiên. Vẫn còn dữ liệu khác; hãy lọc theo kho, sản phẩm, lô hoặc sê-ri.
+          Chỉ hiển thị 500 nhóm tồn của trang hiện tại. Vẫn còn dữ liệu khác; chọn “Trang sau” hoặc lọc thêm theo kho, sản phẩm, lô, sê-ri.
         </p>}
         <UiTableScroll><table aria-label="Nhóm tồn kho hiện tại phục vụ truy vết">
           <thead><tr><th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Sê-ri</th><th>Tồn thực tế</th><th>Đã giữ</th></tr></thead>
@@ -249,6 +268,15 @@ export default function InventoryTraceability(){
             </tr>)}
           </tbody>
         </table></UiTableScroll>
+        <nav aria-label="Phân trang nhóm tồn kho" className="ui-toolbar">
+          <button type="button" disabled={loading||bucketOffset===0}
+            onClick={()=>void requestTrace(bucketOffset-500)}>Trang trước</button>
+          <span aria-live="polite">Trang {Math.floor(bucketOffset/500)+1}</span>
+          <button type="button" disabled={loading||!result.bucketsTruncated||bucketOffset>=50_000}
+            onClick={()=>void requestTrace(bucketOffset+500)}>Trang sau</button>
+          {bucketOffset>=50_000&&result.bucketsTruncated&&
+            <span className="ui-muted-text">Đã tới giới hạn xem trang; hãy lọc chi tiết hơn.</span>}
+        </nav>
       </UiCard>
 
       <UiCard title="Dòng thời gian sổ cái bất biến">
