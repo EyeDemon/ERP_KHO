@@ -1,6 +1,26 @@
 # Quản lý giữ hàng Manual MVP
 
-Trạng thái hiện hành: **LOCAL OWNER-ACCEPTANCE REVIEW PASS**. PR #32 vẫn Draft; chưa ghi owner đã chấp nhận Manual MVP. Source/CI của successor commit được ghi trong PR body sau push; không gán CI 37935111638 của `d59a955d006fa86b6db0d443ad6fceccb5f607a7` cho fix mới. Base đã nghiệm thu vẫn `ae1f2c1c58197360a23d2d8dd2231ab600d7fa22`.
+Trạng thái local hiện hành: **LOCAL SUCCESSOR VERIFICATION PASS**. External CI/SonarCloud của HEAD cuối được đối chiếu trong PR body; không tự suy local PASS thành external PASS. PR #32 vẫn Draft; chưa ghi owner đã chấp nhận Manual MVP. Base đã nghiệm thu vẫn `ae1f2c1c58197360a23d2d8dd2231ab600d7fa22`.
+
+## SonarCloud và accessibility successor — 2026-10-10
+
+Official Sonar CLI 1.9.0, EU/organization `eyedemon`, authentication qua OS Keychain. Native PR analysis xác nhận HEAD `ac407d5707d0b4c267df0130cd0b4fc03f739af3`, nhận đủ 58 issues trong một trang. Exact file/rule/line/severity/message và review decisions: [SONARCLOUD_PR32_REVIEW.md](SONARCLOUD_PR32_REVIEW.md). Không đổi SonarCloud config, quality gate/exclusions/CI, không suppress và không ghi credential/token.
+
+Tại ac407d5, CI `37941467183` **SUCCESS**: Application 352/API 216/frontend 109; SonarCloud là check riêng, **FAIL** vì `javascript:S2871` tại runner line 100. Duplication hiện **2.8% PASS**, không dùng cảnh báo 3.1% lịch sử làm trạng thái hiện hành.
+
+Fix tối thiểu: sort HTTP statuses bằng numeric comparator và `new Error`; giữ cell semantics cho loading table bằng native `output` bên trong `td`. Không backend/model/migration/dependency/security-configuration change; không refactor authorization pipeline hoặc tạo abstraction chỉ để giảm complexity/duplication. Các maintainability recommendations còn OPEN được ghi riêng, không gọi là Critical security defects hoặc đã đóng.
+
+- Component precursor **1 FAIL / 8 skipped** chứng minh thiếu accessible cell trước sửa; focused successor **9/9 PASS**.
+- Frontend full **110/110 PASS**, 0 failed/skipped; lint/production build/dependency audit PASS, 0 vulnerabilities. Runner failure/ownership/redaction **18/18 PASS**.
+- Browser precursor `a1b88bc218e2489cb8dc75d8416d18d1`: **1 FAIL**, giữ nguyên. Assertion tìm cell theo accessible name không phù hợp Chromium: native output được expose là status nhưng không đưa tên vào cell. Static Chromium snapshot xác nhận `cell → status`; sửa locator kiểm tra đúng cell chứa status, không đổi application để khớp assertion.
+- Focused browser successor `919231a872e340c09d4aee72b6de2271`: **2/2 PASS**, normal login một lần/persona, unchanged rate limiter. **Production UI** create/release/loading: native cell/status bằng tiếng Việt, double-click một request, On Hand 200/reserved 15/ledger 0/audits 2/claims 2. **Browser-origin HTTP + SQL coordination/postconditions**: reserve 201/409, release 200/409, mỗi cặp pending ít nhất 250 ms; một effect/audit/claim mỗi winner, On Hand/ledger không đổi. Không gọi concurrency HTTP là UI workflow.
+- Run source association: HEAD ac407d5 + verified working-tree hashes, sau đó commit nguyên source. `StockReservations.tsx` SHA-256 `0bdebd91c830a5fdae931e444561f1c27ea06aeacf9da5a88fbe68bb279f0a6d`; Manual runner `467892cccc5f7b72fa5d6d232788d0b434aa6efb58a34f8de94208ce2a20911f`; backend filter vẫn `ce8ec1534e786eefd1e0b84bd74785a34d0b3ee4ada5697a93c6ca40f00f47fa`.
+- Không lặp local Application/API SQL hoặc bảy nhóm browser đã đủ evidence: backend/permission/state/snapshot/generation logic không đổi. Retained mounted/Viewer/replay evidence giữ source association cũ; chỉ loading markup và runner assertions có successor mới trên đây.
+- Cả hai fresh runs đã cleanup theo marker/process identity: exact databases absent, browser Closed=true, credential/profile/process/listener không còn; ERP_KHO ONLINE qua metadata only. Không truy cập business tables; ignored reports không stage.
+
+Ponytail review: **Lean already. Ship.** Đây là complexity assessment, không phải independent review hoặc production release approval. Final CI/SonarCloud read-back thuộc HEAD sau push ghi trong PR body; không tạo commit tài liệu chỉ để lặp CI.
+
+## Replay filtering acceptance — historical source-specific predecessor
 
 ## Nghiệm thu PR #32 — replay filtering successor, 2026-10-09
 

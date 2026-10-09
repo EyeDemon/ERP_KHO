@@ -47,7 +47,9 @@ export async function runManualReservationCases({run,actors,fixture:f,manualFixt
     return {hashes,actor:'Manager same browser session; Admin grant commands; database Viewer classification fixture',statuses:[201,200,201,200,201,201],postconditions:created,assertions:['cached create filters token after release revoke','regrant preserves original replay token/effect','Viewer filtering independent of explicit grants and stale JWT','cached response remains immutable','one reservation/audit/claim; physical stock/ledger unchanged'],setup:'database role change is SQL fixture setup, not a browser administration workflow'};
   });
   await run('Manual reservation UI create release','UI workflow + network count + SQL postconditions',async()=>{
-    const before=await state();await admin.page.goto(manifest.FrontendUrl+'/stock-reservations');
+    const before=await state(),loading=await captureOriginal(admin.page,'**/api/stock-reservations?*');
+    try {await admin.page.goto(manifest.FrontendUrl+'/stock-reservations');await loading.arrived;const cell=admin.page.getByRole('cell').filter({has:admin.page.getByRole('status')});assert.equal(await cell.getByRole('status').textContent(),'Đang tải giữ hàng...');loading.release();await loading.done;await quiesce(admin);}
+    finally {await loading.cleanup();}
     await admin.page.getByRole('button',{name:'Tạo giữ hàng',exact:true}).click();
     await admin.page.getByLabel('Kho',{exact:true}).selectOption(String(m.warehouse));await admin.page.getByLabel('Sản phẩm',{exact:true}).selectOption(String(m.product));await admin.page.getByLabel('Số lượng',{exact:true}).fill('20');
     const created=admin.page.waitForResponse(r=>r.url().endsWith('/api/stock-reservations')&&r.request().method()==='POST');
@@ -61,7 +63,7 @@ export async function runManualReservationCases({run,actors,fixture:f,manualFixt
     finally {await held.cleanup();manager.page.off('request',observe);}
     const after=await state();assert.equal(after.reserved-before.reserved,15);assert.equal(after.onHand,before.onHand);assert.equal(after.ledger,before.ledger);assert.equal(after.audits-before.audits,2);assert.equal(after.claims-before.claims,2);
     assert.equal(await manager.page.title(),'Giữ hàng — ERP KHO');
-    return {hashes,actor:'Admin creates, Manager releases through UI',statuses:[201,200],requestCount:requests,postconditions:after,assertions:['reservation does not reduce physical stock or create ledger','partial release exact quantity','double-click one request/effect','Vietnamese form and loading']};
+    return {hashes,actor:'Admin creates, Manager releases through UI',statuses:[201,200],requestCount:requests,postconditions:after,assertions:['reservation does not reduce physical stock or create ledger','partial release exact quantity','double-click one request/effect','Vietnamese form and loading','loading retains table cell with native status child']};
   });
   await run('Manual reservation Viewer stale JWT and safe errors','Browser-origin HTTP + UI observation + SQL postconditions',async()=>{
     const before=await state();const list=await request(viewer,'/api/stock-reservations');status(list,200);assertFiltered(list.data);assertFiltered(await read(uiId,viewer));
@@ -97,7 +99,7 @@ export async function runManualReservationCases({run,actors,fixture:f,manualFixt
     return {hashes,actor:'Manager same session; Admin grant/membership commands from browser',statuses:[200,200,409,403,404,200],postconditions:before,assertions:['successful terminal/partial replay exactly once','fingerprint mismatch and stale token','replay reauthorizes current permission and membership','no cached success on denial']};
   });
   await run('Manual reservation controlled reserve release concurrency','Browser-origin HTTP + owned SQL coordination/postconditions',async()=>{
-    async function race(mode,id,operations,expected){const lock=helper(manifestPath,mode,{id});await Promise.race([new Promise(resolve=>lock.child.stdout.once('data',text=>{assert(text.includes('LOCK_READY'));resolve();})),lock.completed.then(()=>{throw Error('Lock not observed');})]);let completed=0;const startedAt=new Date().toISOString();const pending=operations.map(op=>op().then(r=>{completed++;return r;}));await new Promise(resolve=>setTimeout(resolve,250));assert.equal(completed,0);await lock.completed;const responses=await Promise.all(pending);assert.deepEqual(responses.map(r=>r.status).sort(),expected);return {responses,startedAt,finishedAt:new Date().toISOString(),controlledPendingMs:250};}
+    async function race(mode,id,operations,expected){const lock=helper(manifestPath,mode,{id});await Promise.race([new Promise(resolve=>lock.child.stdout.once('data',text=>{assert(text.includes('LOCK_READY'));resolve();})),lock.completed.then(()=>{throw new Error('Lock not observed');})]);let completed=0;const startedAt=new Date().toISOString();const pending=operations.map(op=>op().then(r=>{completed++;return r;}));await new Promise(resolve=>setTimeout(resolve,250));assert.equal(completed,0);await lock.completed;const responses=await Promise.all(pending);assert.deepEqual(responses.map(r=>r.status).sort((a,b)=>a-b),expected);return {responses,startedAt,finishedAt:new Date().toISOString(),controlledPendingMs:250};}
     const before=await state();const available=100-before.reserved,quantity=Math.floor(available)-1;assert(quantity>1);
     const payload={warehouseId:m.warehouse,productId:m.product,quantity};
     const reserved=await race('HoldExportLocations',m.warehouse,[()=>request(manager,'/api/stock-reservations','POST',payload),()=>request(manager,'/api/stock-reservations','POST',payload)],[201,409]);

@@ -98,7 +98,7 @@ export default function StockReservations() {
     {notice && <p role="status">{notice}</p>}{error && !dialog && <div role="alert" className="reservation-error">{error}</div>}
     {busy && !dialog && <p role="status">Đang tải thông tin giữ hàng...</p>}
     <div className="reservation-table"><table><caption className="sr-only">Danh sách giữ hàng trong phạm vi kho được phép</caption><thead><tr><th>Mã giữ</th><th>Sản phẩm</th><th>Kho</th><th>Nguồn</th><th>Ban đầu</th><th>Còn giữ</th><th>Đơn vị</th><th>Hết hạn</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
-      {loading ? <tr><td colSpan={10} role="status">Đang tải giữ hàng...</td></tr> : !data.items.length ? <tr><td colSpan={10}>Chưa có giữ hàng phù hợp.</td></tr> : data.items.map(x => <tr key={x.id}>
+      {loading ? <tr><td colSpan={10}><output>Đang tải giữ hàng...</output></td></tr> : !data.items.length ? <tr><td colSpan={10}>Chưa có giữ hàng phù hợp.</td></tr> : data.items.map(x => <tr key={x.id}>
         <td>{x.reservationCode}</td><td>{x.productCode} — {x.productName}</td><td>{x.warehouseName}</td><td>{x.sourceType === 'Manual' ? 'Thủ công' : x.sourceType === 'ExportReceipt' ? 'Phiếu xuất' : 'Nguồn khác'}{x.sourceCode ? ' / ' + x.sourceCode : ''}</td>
         <td>{x.quantity}</td><td><strong>{x.remainingQuantity}</strong></td><td>{x.baseUomNameSnapshot || 'Chưa lưu đơn vị lịch sử'}</td><td>{new Date(x.expiresAt).toLocaleString('vi-VN')}</td><td>{statuses[x.status] || 'Trạng thái chưa xác định'}</td><td className="reservation-actions">
           <button disabled={busy} onClick={e => void open('detail', e.currentTarget, x)} aria-label={'Chi tiết ' + x.reservationCode}>Chi tiết</button>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
 import apiClient from '../services/apiClient';
@@ -15,6 +15,12 @@ beforeEach(()=>{vi.resetAllMocks();localStorage.clear();localStorage.setItem('ro
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 
 describe('quản lý giữ hàng Manual theo permission',()=>{
+  it('loading preserves table cell semantics and announces Vietnamese status',()=>{
+    get.mockReturnValue(new Promise(()=>{}));
+    const view=render(<StockReservations/>);
+    const cell=view.getByRole('cell',{name:'Đang tải giữ hàng...'});
+    expect(within(cell).getByRole('status').textContent).toBe('Đang tải giữ hàng...');
+  });
   it('reader loads without optional masters and never inherits Admin role mutation rights',async()=>{
     const view=render(<StockReservations/>);await view.findByText('GH-3');expect(get.mock.calls.map(x=>x[0])).toEqual(['/api/stock-reservations']);
     expect(view.queryByRole('button',{name:'Tạo giữ hàng'})).toBeNull();expect(view.queryByRole('button',{name:'Xử lý hết hạn'})).toBeNull();expect(view.queryByRole('button',{name:'Giải phóng GH-3'})).toBeNull();
