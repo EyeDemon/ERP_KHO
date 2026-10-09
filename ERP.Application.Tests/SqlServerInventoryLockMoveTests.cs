@@ -1035,7 +1035,9 @@ public sealed class SqlServerInventoryLockMoveTests
                 x.WarehouseId == fixture.WarehouseId);
             var secondPage = await query.TraceAsync(
                 warehouseId: fixture.WarehouseId, limit: 20, bucketOffset: 500);
-            secondPage.CurrentBuckets.Should().HaveCount(3);
+            // The fixture has one stock bucket plus 501 seeded buckets:
+            // page two contains exactly the two buckets after the first 500.
+            secondPage.CurrentBuckets.Should().HaveCount(2);
             secondPage.BucketsTruncated.Should().BeFalse();
             secondPage.CurrentBuckets.Should().Contain(x => x.LocationId == targetLocationId);
             var firstPageIds = byWarehouse.CurrentBuckets.Select(x => x.InventoryStockId).ToHashSet();
