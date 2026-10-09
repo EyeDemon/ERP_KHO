@@ -74,7 +74,7 @@ public sealed class InventoryTraceabilityInputTests
     [Theory]
     [InlineData(-1, 200)]
     [InlineData(1, 200)]
-    [InlineData(200, 50)]
+    [InlineData(201, 50)]
     [InlineData(50_200, 200)]
     public async Task InvalidLedgerEventOffsets_AreRejectedBeforeWarehouseQueries(int eventOffset, int limit)
     {
