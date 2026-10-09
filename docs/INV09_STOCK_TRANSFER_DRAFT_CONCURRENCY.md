@@ -26,3 +26,9 @@ Hai người mở cùng một phiếu Nháp. Khóa SQL chỉ tuần tự hóa l�
 - SQL Server integration: lỗi lưu audit phải rollback cả phiên bản lẫn dòng.
 - Vitest: PUT chứa revision và sau 409 sử dụng revision mới.
 - Chỉ CI đúng HEAD mới xác nhận kiểm thử; browser QA và staging backend/SQL thật là các cổng riêng. Notion chỉ đọc; PR Draft không merge khi thiếu nghiệm thu.
+
+## Kiểm thử CI 09/10 — ổn định thời gian tương tác
+
+- CI #638 (SHA `584c3148`) đạt Application SQL/API/lint, nhưng một Vitest trong `StockTransferCommandSafety.test.tsx` timeout ở giới hạn mặc định 5 giây trên Windows runner; 403/404 tests PASS. Không phát hiện assertion nghiệp vụ sai trong log, bài kiểm thử đã PASS ở checkpoint trước.
+- Tăng **riêng thời gian tối đa bài kiểm thử chỉnh sửa Nháp nhiều bước** lên 15 giây, giữ nguyên toàn bộ assertion: dữ liệu prefill từ API, `PUT` chứa `expectedDraftRevision`, idempotency gắn payload, không gọi POST, đóng editor và mở lại chi tiết. Không tăng timeout toàn suite, không bỏ/chỉnh assertion và không sửa nghiệp vụ production.
+- Bản sửa chỉ được chấp nhận khi CI HEAD kế tiếp PASS thực tế; không suy đoán hết flake. Browser QA và staging API/SQL vẫn là gate độc lập.

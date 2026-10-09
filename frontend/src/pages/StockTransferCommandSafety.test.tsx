@@ -100,7 +100,9 @@ describe('Stock transfer command consistency', () => {
     await waitFor(() => expect(view.queryByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' }))
       .toBeNull());
     expect(await view.findByRole('dialog', { name: 'TRF-807' })).toBeTruthy();
-  });
+  // Windows CI executes all UI tests under load; preserve every assertion but
+  // allow this multi-step dialog/PUT/refresh integration test adequate time.
+  }, 15000);
 
   it('keeps draft editor open after a network failure and reuses key only for identical retry', async () => {
     const draft = { ...transfer, status: 'Draft' };
