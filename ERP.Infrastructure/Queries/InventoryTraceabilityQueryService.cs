@@ -38,8 +38,11 @@ public sealed class InventoryTraceabilityQueryService(
         var hasReference = refType is not null || referenceId.HasValue;
         if (hasReference && (refType is null || !referenceId.HasValue))
             throw new BusinessRuleException("Loại tham chiếu và ID tham chiếu phải được nhập cùng nhau.");
-        if (!productId.HasValue && lot is null && serial is null && !hasReference)
-            throw new BusinessRuleException("Cần ít nhất Sản phẩm, Lô, Sê-ri hoặc Tham chiếu để truy vết.");
+        // A single explicit warehouse is a bounded, authorized inventory view.
+        // Never allow a completely empty query to fan out across all assigned
+        // warehouses: a product/identity/reference or warehouse is required.
+        if (!warehouseId.HasValue && !productId.HasValue && lot is null && serial is null && !hasReference)
+            throw new BusinessRuleException("Cần ít nhất Kho, Sản phẩm, Lô, Sê-ri hoặc Tham chiếu để truy vết.");
         limit = limit is < 1 or > 500 ? 200 : limit;
 
         var allowedWarehouseIds = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
@@ -143,8 +146,11 @@ public sealed class InventoryTraceabilityQueryService(
         if (lot is not null) stockQuery = stockQuery.Where(x => x.Lot != null && x.Lot.LotNumber == lot);
         if (serial is not null) stockQuery = stockQuery.Where(x => x.Serial != null && x.Serial.SerialNumber == serial);
 
-        if (!productId.HasValue && lot is null && serial is null)
+        if (hasReference && !productId.HasValue && lot is null && serial is null)
         {
+            // Reference-only searches must bind stock to identities in the
+            // referenced chain. Warehouse-only searches must NOT use recent
+            // event IDs: an older or never-posted product may still have stock.
             var eventIds = events.Select(x => x.TransactionId).ToArray();
             if (eventIds.Length == 0)
                 return new InventoryTraceabilityResultDto

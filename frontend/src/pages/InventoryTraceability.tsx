@@ -131,7 +131,7 @@ export default function InventoryTraceability(){
 
   const search=async(e:FormEvent)=>{
     e.preventDefault();setValidationError('');setRequestError('');
-    const hasIdentity=form.productId||form.lotNumber.trim()||form.serialNumber.trim();
+    const hasIdentity=form.warehouseId||form.productId||form.lotNumber.trim()||form.serialNumber.trim();
     const hasReference=form.referenceType.trim()&&form.referenceId;
     if(referencePairInvalid){
       setValidationError('Loại tham chiếu và ID tham chiếu phải được nhập cùng nhau.');
@@ -140,7 +140,7 @@ export default function InventoryTraceability(){
       return;
     }
     if(!hasIdentity&&!hasReference){
-      setValidationError('Nhập ít nhất Sản phẩm, Lô, Sê-ri hoặc Tham chiếu.');
+      setValidationError('Nhập ít nhất Kho, Sản phẩm, Lô, Sê-ri hoặc Tham chiếu.');
       productIdRef.current?.focus();
       return;
     }
@@ -172,13 +172,17 @@ export default function InventoryTraceability(){
 
   return <UiPage>
     <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Truy vết & phả hệ tồn kho"
-      description="Truy nhóm tồn hiện tại và dòng thời gian sổ cái bất biến theo Sản phẩm, Lô, Sê-ri hoặc chứng từ/tham chiếu trong phạm vi kho được phép."/>
+      description="Xem toàn bộ nhóm tồn của một kho được phép, hoặc truy theo sản phẩm, lô, sê-ri và chứng từ. Dòng thời gian sổ cái giữ nguyên lịch sử bất biến."/>
     {requestError&&<p role="alert">{requestError}</p>}
     <UiCard title="Điều kiện truy vết">
       <form onSubmit={search} className="ui-form-grid" aria-busy={loading}>
         <UiToolbarField label="ID kho (tùy chọn)">
-          <input type="number" min="1" value={form.warehouseId} onChange={e=>updateField('warehouseId',e.target.value)} inputMode="numeric"/>
+          <input type="number" min="1" value={form.warehouseId} onChange={e=>updateField('warehouseId',e.target.value)} inputMode="numeric"
+            aria-describedby="traceability-warehouse-help"/>
         </UiToolbarField>
+        <p id="traceability-warehouse-help" className="ui-muted-text">
+          Chỉ nhập ID kho để xem tồn kho hiện tại và các sự kiện gần nhất trong kho được cấp quyền. Kết quả tối đa 500 nhóm tồn.
+        </p>
         <UiToolbarField label="ID sản phẩm">
           <input ref={productIdRef} type="number" min="1" value={form.productId} onChange={e=>updateField('productId',e.target.value)} inputMode="numeric"/>
         </UiToolbarField>

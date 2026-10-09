@@ -136,6 +136,18 @@ describe('InventoryTraceability',()=>{
     expect(view.getByText('Chờ kiểm tra chất lượng')).toBeTruthy();
   });
 
+  it('allows an authorized warehouse-only overview without requiring a product or document',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID kho (tùy chọn)'),{target:{value:'1'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?warehouseId=1&limit=200'
+    ));
+    expect(await view.findByText('A01-R01-B01')).toBeTruthy();
+    expect(view.getByText(/Chỉ nhập ID kho để xem tồn kho hiện tại/)).toBeTruthy();
+  });
+
   it('requires at least identity or reference and focuses the primary identity field',()=>{
     const view=renderTrace();
     const productId=view.getByLabelText('ID sản phẩm');

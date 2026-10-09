@@ -39,6 +39,20 @@ public sealed class InventoryTraceabilityInputTests
     }
 
     [Fact]
+    public async Task CompletelyEmptySearchIsRejectedBeforeAnyWarehouseAccess()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var db = new ErpKhoDbContext(options);
+        var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+        var act = () => new InventoryTraceabilityQueryService(db, auth.Object).TraceAsync();
+
+        await act.Should().ThrowAsync<BusinessRuleException>()
+            .WithMessage("*Kho*");
+        auth.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task ReferenceTypeAndReferenceId_MustAppearTogether()
     {
         var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
