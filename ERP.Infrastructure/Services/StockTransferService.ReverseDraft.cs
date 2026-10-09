@@ -52,6 +52,7 @@ public sealed partial class StockTransferService
                 .OrderBy(x => x.ProductId).ToList();
             if (lines.Count == 0)
                 throw Conflict("Phiếu gốc không có số lượng thực nhận để điều chuyển ngược.");
+            await EnsureReverseDraftReceiptLedgerAsync(original, cancellationToken);
 
             var now = DateTime.UtcNow;
             var reverse = new StockTransfer

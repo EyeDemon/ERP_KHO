@@ -12,6 +12,7 @@ API bắt buộc `reasonCode` thuộc danh mục kiểm soát `GET /api/stock-tr
 - SQL Server transaction `Serializable` và `UPDLOCK, HOLDLOCK` trên chứng từ gốc bảo vệ cuộc đua tạo phiếu; endpoint có `IdempotentCommand`.
 - Người gọi phải có quyền cả kho nguồn và kho đích. Chứng từ ngược không thể được chỉnh sửa bằng API cập nhật phiếu nháp, nhằm giữ nguyên nguồn gốc và số lượng đã nhận.
 - Tạo Draft **không ghi tồn kho, không ghi InventoryTransactions**. Ledger cũ không thay đổi. Ledger mới chỉ được tạo bởi quy trình Dispatch/Receive hiện hữu.
+- Trước khi tạo Draft, đối chiếu **từng dòng** số lượng xuất/nhận của chứng từ với `TransferOut` tại kho nguồn và `TransferIn` tại kho đích trong immutable Ledger. Nếu thiếu, thừa hoặc sai số lượng thì từ chối và yêu cầu đối soát; không tạo Draft/Audit mới. Bài kiểm thử SQL Server dùng dữ liệu synthetic sai lệch xuất/nhận và trường hợp thực nhận một phần.
 - Lý do lưu tại `ReverseReasonCode`/`ReverseReason` trên chứng từ mới và `AuditLog`. Không backfill liên kết cho chứng từ lịch sử.
 - UI tiếng Việt dùng danh mục lý do từ API, khóa nút khi tải thất bại hoặc không có quyền, và mở phiếu Draft vừa tạo.
 
