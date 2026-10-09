@@ -96,13 +96,13 @@ public sealed class InventoryReversalTraceabilityControllerTests
             }]
         };
         trace.Setup(x => x.TraceAsync(7, null, null, null, null, null, 50,
-            It.IsAny<CancellationToken>(), 500, 0)).ReturnsAsync(response);
+            It.IsAny<CancellationToken>(), 500, 0, null)).ReturnsAsync(response);
         var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
 
         var result = await controller.Trace(7, null, null, null, null, null, 50, 500);
         Assert.Same(response, Assert.IsType<OkObjectResult>(result.Result).Value);
         trace.Verify(x => x.TraceAsync(7, null, null, null, null, null, 50,
-            It.IsAny<CancellationToken>(), 500, 0), Times.Once);
+            It.IsAny<CancellationToken>(), 500, 0, null), Times.Once);
         trace.VerifyNoOtherCalls();
         reversal.VerifyNoOtherCalls();
     }
@@ -114,14 +114,14 @@ public sealed class InventoryReversalTraceabilityControllerTests
         var trace = new Mock<IInventoryTraceabilityQueryService>(MockBehavior.Strict);
         var response = new InventoryTraceabilityResultDto();
         trace.Setup(x => x.TraceAsync(7, 9, "LOT-A", null, "StockTransfer", 42, 50,
-            It.IsAny<CancellationToken>(), 0, 0)).ReturnsAsync(response);
+            It.IsAny<CancellationToken>(), 0, 0, null)).ReturnsAsync(response);
         var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
 
         var result = await controller.Trace(7, 9, "LOT-A", null, "StockTransfer", 42, 50, 0);
 
         Assert.Same(response, Assert.IsType<OkObjectResult>(result.Result).Value);
         trace.Verify(x => x.TraceAsync(7, 9, "LOT-A", null, "StockTransfer", 42, 50,
-            It.IsAny<CancellationToken>(), 0, 0), Times.Once);
+            It.IsAny<CancellationToken>(), 0, 0, null), Times.Once);
         trace.VerifyNoOtherCalls();
         reversal.VerifyNoOtherCalls();
     }
@@ -133,14 +133,14 @@ public sealed class InventoryReversalTraceabilityControllerTests
         var trace = new Mock<IInventoryTraceabilityQueryService>(MockBehavior.Strict);
         var response = new InventoryTraceabilityResultDto();
         trace.Setup(x => x.TraceAsync(7, 9, null, null, null, null, 50,
-            It.IsAny<CancellationToken>(), 500, 100)).ReturnsAsync(response);
+            It.IsAny<CancellationToken>(), 500, 100, 777)).ReturnsAsync(response);
         var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
 
-        var result = await controller.Trace(7, 9, null, null, null, null, 50, 500, 100);
+        var result = await controller.Trace(7, 9, null, null, null, null, 50, 500, 100, 777);
 
         Assert.Same(response, Assert.IsType<OkObjectResult>(result.Result).Value);
         trace.Verify(x => x.TraceAsync(7, 9, null, null, null, null, 50,
-            It.IsAny<CancellationToken>(), 500, 100), Times.Once);
+            It.IsAny<CancellationToken>(), 500, 100, 777), Times.Once);
         trace.VerifyNoOtherCalls();
         reversal.VerifyNoOtherCalls();
     }

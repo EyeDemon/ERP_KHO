@@ -20,6 +20,7 @@ type Event={
 type Result={
   currentBuckets:Bucket[];
   events:Event[];
+  eventAnchorId?:number|null;
   eventsTruncated?:boolean;
   bucketsTruncated?:boolean;
 };
@@ -173,7 +174,7 @@ export default function InventoryTraceability(){
 
   const validPositiveId=(value:string)=>/^[1-9]\d*$/.test(value)&&Number.isSafeInteger(Number(value));
 
-  const requestTrace=async(offset:number,nextEventOffset=eventOffset)=>{
+  const requestTrace=async(offset:number,nextEventOffset=eventOffset,resetAnchor=false)=>{
     if(loading||offset<0||offset>50_000||offset%500!==0||
       nextEventOffset<0||nextEventOffset>50_000||nextEventOffset%eventLimit!==0)return;
     setValidationError('');setRequestError('');
@@ -200,6 +201,10 @@ export default function InventoryTraceability(){
       referenceIdRef.current?.focus();
       return;
     }
+    if(nextEventOffset>0 && (resetAnchor || result?.eventAnchorId==null)){
+      setRequestError('Thiếu mốc lịch sử. Vui lòng truy vết lại từ trang đầu.');
+      return;
+    }
     setResult(null);
     setBucketOffset(offset);
     setEventOffset(nextEventOffset);
@@ -216,13 +221,17 @@ export default function InventoryTraceability(){
       params.set('limit',String(eventLimit));
       if(offset>0)params.set('bucketOffset',String(offset));
       if(nextEventOffset>0)params.set('eventOffset',String(nextEventOffset));
+      // Keep the same ledger ID fence across event AND stock paging.
+      // A new search explicitly requests a fresh fence instead.
+      if(!resetAnchor && result?.eventAnchorId!=null)
+        params.set('eventAnchorId',String(result.eventAnchorId));
       const response=await apiClient.get<Result>('/api/inventory/traceability?'+params.toString());
       if(sequence===requestSequence.current)setResult(response.data);
     }catch(e){
       if(sequence===requestSequence.current){setResult(null);setRequestError(errorMessage(e))}
     }finally{if(sequence===requestSequence.current)setLoading(false)}
   };
-  const search=(e:FormEvent)=>{e.preventDefault();void requestTrace(0,0)};
+  const search=(e:FormEvent)=>{e.preventDefault();void requestTrace(0,0,true)};
 
   const referencePairErrorActive=Boolean(validationError&&referencePairInvalid);
   const resultStatus=loading
@@ -339,7 +348,7 @@ export default function InventoryTraceability(){
       </UiCard>
 
       <UiCard title="Dòng thời gian sổ cái bất biến">
-        <p className="ui-muted-text">Sự kiện đảo giao dịch là dấu mốc hiệu chỉnh, không xóa giao dịch gốc. Giao dịch gốc đã đảo được đánh dấu riêng.</p>
+        <p className="ui-muted-text">Sự kiện đảo giao dịch là dấu mốc hiệu chỉnh, không xóa giao dịch gốc. Lịch sử được cố định theo mốc lúc truy vết; chọn “Truy vết” để cập nhật sự kiện mới, tồn kho hiện tại vẫn được tải mới.</p>
         {result.eventsTruncated&&<p role="status" className="ui-muted-text">
           Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; dùng “Sự kiện sau” để xem trang kế tiếp hoặc thu hẹp điều kiện tìm kiếm.
         </p>}

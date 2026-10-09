@@ -10,6 +10,7 @@ vi.mock('../services/apiClient',()=>({default:{get:vi.fn()}}));
 vi.mock('../services/traceabilityWarehouses',()=>({getTraceabilityWarehouses:vi.fn()}));
 
 const result={
+  eventAnchorId:543,
   currentBuckets:[{
     inventoryStockId:51,productId:10,productCode:'SKU-10',productName:'Product 10',warehouseId:1,warehouseName:'DC HCM',
     locationId:7,locationCode:'A01-R01-B01',inventoryStatus:'Available',lotId:100,lotNumber:'LOT-A',
@@ -313,7 +314,7 @@ describe('InventoryTraceability',()=>{
     expect((view.getByRole('button',{name:'Trang trước'}) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(view.getByRole('button',{name:'Trang sau'}));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/traceability?warehouseId=1&limit=200&bucketOffset=500'
+      '/api/inventory/traceability?warehouseId=1&limit=200&bucketOffset=500&eventAnchorId=543'
     ));
     expect(await view.findByText('Z99')).toBeTruthy();
     expect(view.queryByText('A01-R01-B01')).toBeNull();
@@ -339,7 +340,7 @@ describe('InventoryTraceability',()=>{
     expect(await view.findByText('A01-R01-B01')).toBeTruthy();
     fireEvent.click(view.getByRole('button',{name:'Trang sau'}));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/traceability?warehouseId=1&limit=200&bucketOffset=500'
+      '/api/inventory/traceability?warehouseId=1&limit=200&bucketOffset=500&eventAnchorId=543'
     ));
     fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'88'}});
     await act(async()=>resolvePage({data:{...result,currentBuckets:[
@@ -369,7 +370,7 @@ describe('InventoryTraceability',()=>{
     expect((view.getByRole('button',{name:'Sự kiện trước'}) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(view.getByRole('button',{name:'Sự kiện sau'}));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/traceability?productId=10&limit=200&eventOffset=200'
+      '/api/inventory/traceability?productId=10&limit=200&eventOffset=200&eventAnchorId=543'
     ));
     expect(await view.findByText('Trang sự kiện 2')).toBeTruthy();
     expect((view.getByRole('button',{name:'Sự kiện sau'}) as HTMLButtonElement).disabled).toBe(true);
@@ -379,6 +380,38 @@ describe('InventoryTraceability',()=>{
     fireEvent.click(view.getByText('Truy vết'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
       '/api/inventory/traceability?productId=11&limit=200'
+    ));
+  });
+
+
+  it('fails closed when a legacy response has no ledger anchor for the next page',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,eventAnchorId:undefined,eventsTruncated:true
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    await view.findByText('Trang sự kiện 1');
+    fireEvent.click(view.getByRole('button',{name:'Sự kiện sau'}));
+    expect(view.getByRole('alert').textContent).toContain('Thiếu mốc lịch sử');
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the ledger anchor across stock paging but resets it for a new manual search',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,bucketsTruncated:true
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    await view.findByText('Trang 1');
+    fireEvent.click(view.getByRole('button',{name:'Trang sau'}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&limit=200&bucketOffset=500&eventAnchorId=543'
+    ));
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith(
+      '/api/inventory/traceability?productId=10&limit=200'
     ));
   });
 

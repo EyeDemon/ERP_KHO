@@ -38,7 +38,8 @@ public sealed class InventoryTraceabilityQueryService(
         int limit = 200,
         CancellationToken cancellationToken = default,
         int bucketOffset = 0,
-        int eventOffset = 0)
+        int eventOffset = 0,
+        int? eventAnchorId = null)
     {
         // A malformed positive-identifier filter must never be treated as an
         // empty search or silently widened to all accessible warehouses.
@@ -71,6 +72,11 @@ public sealed class InventoryTraceabilityQueryService(
         if (eventOffset < 0 || eventOffset > 50_000 || eventOffset % limit != 0)
             throw new BusinessRuleException("Trang sự kiện sổ cái không hợp lệ; hãy quay về trang đầu hoặc tải lại theo bước của giới hạn sự kiện.");
 
+        if (eventAnchorId is < 0)
+            throw new BusinessRuleException("Giá trị mốc sự kiện sổ cái không hợp lệ.");
+        if (eventOffset > 0 && !eventAnchorId.HasValue)
+            throw new BusinessRuleException("Thiếu mốc lịch sử khi chuyển trang sự kiện; hãy truy vết lại từ trang đầu.");
+
         var allowedWarehouseIds = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
         if (warehouseId.HasValue)
         {
@@ -86,6 +92,14 @@ public sealed class InventoryTraceabilityQueryService(
         if (serial is not null) eventQuery = eventQuery.Where(x => x.Serial != null && x.Serial.SerialNumber == serial);
         if (hasReference)
             eventQuery = eventQuery.Where(x => x.ReferenceType == refType && x.ReferenceId == referenceId);
+
+        // Stock-reference matching intentionally uses the full document history:
+        // anchoring the timeline must not hide live current-stock identities.
+        var referenceStockEvents = eventQuery;
+        // Identity IDs grow monotonically. New commits cannot shift older pages,
+        // even when a later transaction carries a backdated TransactionDate.
+        var anchorId = eventAnchorId ?? await eventQuery.MaxAsync(x => (int?)x.Id, cancellationToken) ?? 0;
+        eventQuery = eventQuery.Where(x => x.Id <= anchorId);
 
         // Read one extra event so the operator can distinguish a complete
         // history from a capped window without running a full COUNT query.
@@ -104,7 +118,7 @@ public sealed class InventoryTraceabilityQueryService(
         if (seedIds.Length > 0)
         {
             reversalMarkers = await ProjectEvents(context.InventoryTransactions.AsNoTracking()
-                    .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) &&
+                    .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) && x.Id <= anchorId &&
                                 (x.TransactionType == TransactionType.Reversal || x.ReversalOfTransactionId.HasValue) &&
                                 (seedIds.Contains(x.Id) ||
                                  (x.ReversalOfTransactionId.HasValue && seedIds.Contains(x.ReversalOfTransactionId.Value)) ||
@@ -127,7 +141,7 @@ public sealed class InventoryTraceabilityQueryService(
             if (chainIds.Count > seedIds.Length)
             {
                 var relatedEvents = await ProjectEvents(context.InventoryTransactions.AsNoTracking()
-                        .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) && chainIds.Contains(x.Id)))
+                        .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) && x.Id <= anchorId && chainIds.Contains(x.Id)))
                     .ToListAsync(cancellationToken);
                 foreach (var related in relatedEvents)
                     if (events.All(x => x.TransactionId != related.TransactionId))
@@ -181,7 +195,7 @@ public sealed class InventoryTraceabilityQueryService(
             // not the limited timeline window or expanded reversal markers.
             // Otherwise an older document line disappears from current stock
             // when the operator lowers the event limit.
-            var referencedIdentities = eventQuery;
+            var referencedIdentities = referenceStockEvents;
             stockQuery = stockQuery.Where(stock => referencedIdentities.Any(transaction =>
                 transaction.ProductId == stock.ProductId &&
                 transaction.WarehouseId == stock.WarehouseId &&
@@ -229,6 +243,7 @@ public sealed class InventoryTraceabilityQueryService(
         {
             CurrentBuckets = buckets,
             Events = events,
+            EventAnchorId = anchorId,
             EventsTruncated = eventsTruncated,
             BucketsTruncated = bucketsTruncated
         };

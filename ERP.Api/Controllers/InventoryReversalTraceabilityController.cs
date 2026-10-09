@@ -62,7 +62,8 @@ public sealed class InventoryReversalTraceabilityController(
         [FromQuery] int limit = 200,
         [FromQuery] int bucketOffset = 0,
         [FromQuery] int eventOffset = 0,
+        [FromQuery] int? eventAnchorId = null,
         CancellationToken cancellationToken = default) =>
         Ok(await traceabilityService.TraceAsync(
-            warehouseId, productId, lotNumber, serialNumber, referenceType, referenceId, limit, cancellationToken, bucketOffset, eventOffset));
+            warehouseId, productId, lotNumber, serialNumber, referenceType, referenceId, limit, cancellationToken, bucketOffset, eventOffset, eventAnchorId));
 }

@@ -66,6 +66,8 @@ public sealed class InventoryTraceabilityResultDto
     public IReadOnlyList<InventoryTraceabilityEventDto> Events { get; set; } = [];
     // These flags describe whether the initial chronological event window or
     // matching current-stock window was capped; reversal chain closure is retained.
+    // Stable transaction-ID fence for ledger pagination. Null for older clients only.
+    public int? EventAnchorId { get; set; }
     public bool EventsTruncated { get; set; }
     public bool BucketsTruncated { get; set; }
 }

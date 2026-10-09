@@ -1288,6 +1288,92 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+
+    [SqlServerFact]
+    public async Task Traceability_AnchorsLedgerPagesAcrossNewBackdatedAndRecentTransactions()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            const int referenceId = 876231;
+            await using (var seed = CreateContext())
+            {
+                var start = DateTime.UtcNow.AddDays(-10);
+                for (var i = 0; i < 45; i++)
+                    seed.InventoryTransactions.Add(new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.Move, Quantity = 1,
+                        ReferenceType = "TracePageAnchor", ReferenceId = referenceId,
+                        TransactionDate = start.AddMinutes(i)
+                    });
+                await seed.SaveChangesAsync();
+            }
+
+            await using var db = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                db, new WarehouseAuthorizationService(db, new CurrentUser(fixture.UserId)));
+            var first = await query.TraceAsync(warehouseId: fixture.WarehouseId,
+                referenceType: "TracePageAnchor", referenceId: referenceId, limit: 20);
+            first.EventAnchorId.Should().BeGreaterThan(0);
+            first.Events.Should().HaveCount(20);
+            first.EventsTruncated.Should().BeTrue();
+
+            var older = await query.TraceAsync(warehouseId: fixture.WarehouseId,
+                referenceType: "TracePageAnchor", referenceId: referenceId,
+                limit: 20, eventOffset: 20, eventAnchorId: first.EventAnchorId);
+            older.Events.Should().HaveCount(20);
+            var originalOlderIds = older.Events.Select(x => x.TransactionId).ToArray();
+
+            // Later commits must not shift the already-open 20-row ledger page,
+            // even if they carry an old business timestamp.
+            await using (var concurrentWriter = CreateContext())
+            {
+                concurrentWriter.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                    CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Move, Quantity = 1,
+                    ReferenceType = "TracePageAnchor", ReferenceId = referenceId,
+                    TransactionDate = DateTime.UtcNow.AddDays(1)
+                });
+                concurrentWriter.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                    CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Move, Quantity = 1,
+                    ReferenceType = "TracePageAnchor", ReferenceId = referenceId,
+                    TransactionDate = DateTime.UtcNow.AddDays(-30)
+                });
+                await concurrentWriter.SaveChangesAsync();
+            }
+
+            var stableOlder = await query.TraceAsync(warehouseId: fixture.WarehouseId,
+                referenceType: "TracePageAnchor", referenceId: referenceId,
+                limit: 20, eventOffset: 20, eventAnchorId: first.EventAnchorId);
+            stableOlder.EventAnchorId.Should().Be(first.EventAnchorId);
+            stableOlder.Events.Select(x => x.TransactionId).Should().Equal(originalOlderIds);
+            first.Events.Select(x => x.TransactionId)
+                .Intersect(stableOlder.Events.Select(x => x.TransactionId)).Should().BeEmpty();
+            var stableFirst = await query.TraceAsync(warehouseId: fixture.WarehouseId,
+                referenceType: "TracePageAnchor", referenceId: referenceId,
+                limit: 20, eventAnchorId: first.EventAnchorId);
+            stableFirst.Events.Select(x => x.TransactionId)
+                .Should().Equal(first.Events.Select(x => x.TransactionId));
+
+            var fresh = await query.TraceAsync(warehouseId: fixture.WarehouseId,
+                referenceType: "TracePageAnchor", referenceId: referenceId, limit: 20);
+            fresh.EventAnchorId.Should().BeGreaterThan(first.EventAnchorId!.Value);
+            fresh.Events.Select(x => x.TransactionId)
+                .Should().NotBeEquivalentTo(first.Events.Select(x => x.TransactionId));
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task ReversalReasonCode_ValidatesTypeAndPersistsWithLedgerAndAudit()
     {

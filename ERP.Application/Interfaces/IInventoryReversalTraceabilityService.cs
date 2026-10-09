@@ -36,5 +36,6 @@ public interface IInventoryTraceabilityQueryService
         int limit = 200,
         CancellationToken cancellationToken = default,
         int bucketOffset = 0,
-        int eventOffset = 0);
+        int eventOffset = 0,
+        int? eventAnchorId = null);
 }
