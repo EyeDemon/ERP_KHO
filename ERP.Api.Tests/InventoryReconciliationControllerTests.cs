@@ -17,11 +17,31 @@ namespace ERP.Api.Tests
     public class InventoryReconciliationControllerTests
     {
         [Fact]
-        public void Controller_AllowsAllAuthenticatedOperationalRoles()
+        public void Controller_RequiresAuthenticationAndInventoryLedgerPermission()
         {
             var attribute = typeof(InventoryReconciliationController).GetCustomAttribute<AuthorizeAttribute>();
             attribute.Should().NotBeNull();
-            attribute!.Roles.Should().Be(AppRoles.AllRoles);
+            attribute!.Roles.Should().BeNull();
+            var permission = typeof(InventoryReconciliationController)
+                .GetCustomAttribute<PermissionAuthorizeAttribute>();
+            permission.Should().NotBeNull();
+            permission!.Permission.Should().Be(AppPermissions.InventoryLedgerRead);
+        }
+
+        [Fact]
+        public async Task Warehouses_ReturnsOnlyAuthorizedSelectorData()
+        {
+            var mock = new Mock<IInventoryReconciliationQueryService>(MockBehavior.Strict);
+            IReadOnlyList<InventoryReconciliationWarehouseDto> expected =
+            [
+                new InventoryReconciliationWarehouseDto { Id = 7, Code = "W-7", Name = "Kho số 7" }
+            ];
+            mock.Setup(x => x.GetAccessibleWarehousesAsync()).ReturnsAsync(expected);
+            var result = await new InventoryReconciliationController(mock.Object).Warehouses();
+            var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+            ok.Value.Should().BeSameAs(expected);
+            mock.Verify(x => x.GetAccessibleWarehousesAsync(), Times.Once);
+            mock.VerifyNoOtherCalls();
         }
 
         [Fact]

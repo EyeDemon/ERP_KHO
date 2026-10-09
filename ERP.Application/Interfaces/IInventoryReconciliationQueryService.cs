@@ -6,6 +6,8 @@ namespace ERP.Application.Interfaces
 {
     public interface IInventoryReconciliationQueryService
     {
+        Task<IReadOnlyList<InventoryReconciliationWarehouseDto>> GetAccessibleWarehousesAsync();
+
         Task<PagedResult<InventoryReconciliationDto>> GetReconciliationsAsync(
             int? warehouseId,
             int? productId,

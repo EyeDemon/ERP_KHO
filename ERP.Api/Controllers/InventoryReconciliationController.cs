@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using ERP.Api.Authorization;
 using ERP.Application.Interfaces;
+using ERP.Application.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,7 +9,8 @@ namespace ERP.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = AppRoles.AllRoles)]
+    [Authorize]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
     public class InventoryReconciliationController : ControllerBase
     {
         private readonly IInventoryReconciliationQueryService _queryService;
@@ -17,6 +19,10 @@ namespace ERP.Api.Controllers
         {
             _queryService = queryService;
         }
+
+        [HttpGet("warehouses")]
+        public async Task<ActionResult<IReadOnlyList<InventoryReconciliationWarehouseDto>>> Warehouses()
+            => Ok(await _queryService.GetAccessibleWarehousesAsync());
 
         [HttpGet]
         public async Task<IActionResult> GetReconciliations(

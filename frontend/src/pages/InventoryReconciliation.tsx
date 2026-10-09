@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { isBlueprintDemoRuntime } from '../services/runtimeMode';
@@ -19,7 +19,8 @@ import './InventoryReconciliation.css';
 interface WarehouseOption {
   id: number;
   name: string;
-  isActive: boolean;
+  code?: string;
+  isActive?: boolean;
 }
 
 interface ReconciliationRow {
@@ -54,6 +55,9 @@ const numberFormat = new Intl.NumberFormat('vi-VN');
 export default function InventoryReconciliation() {
   const demoRuntime = isBlueprintDemoRuntime();
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+  const [warehouseError, setWarehouseError] = useState('');
+  const [filterError, setFilterError] = useState('');
+  const productInputRef = useRef<HTMLInputElement>(null);
   const [warehouseId, setWarehouseId] = useState('');
   const [productId, setProductId] = useState('');
   const [keyword, setKeyword] = useState('');
@@ -68,9 +72,27 @@ export default function InventoryReconciliation() {
       setWarehouses(demoReconciliationWarehouses);
       return;
     }
-    apiClient.get('/api/warehouses')
-      .then(response => setWarehouses((response.data as WarehouseOption[]).filter(item => item.isActive)))
-      .catch(() => setWarehouses([]));
+    let active = true;
+    apiClient.get('/api/InventoryReconciliation/warehouses')
+      .then(response => {
+        if (!active) return;
+        const list: unknown = response.data;
+        if (!Array.isArray(list) || !list.every(item =>
+          item && Number.isSafeInteger(item.id) && item.id > 0 &&
+          typeof item.name === 'string' && item.name.trim().length > 0 &&
+          typeof item.code === 'string' && item.code.trim().length > 0
+        ) || new Set(list.map(item => item.id)).size !== list.length) {
+          throw new Error('Danh sách kho đối chiếu không hợp lệ.');
+        }
+        setWarehouses(list as WarehouseOption[]);
+        setWarehouseError('');
+      })
+      .catch(() => {
+        if (!active) return;
+        setWarehouses([]);
+        setWarehouseError('Không thể tải danh sách kho được cấp quyền. Hãy thử lại hoặc liên hệ quản trị.');
+      });
+    return () => { active = false; };
   }, [demoRuntime]);
 
   useEffect(() => {
@@ -110,10 +132,15 @@ export default function InventoryReconciliation() {
         params.set('pageSize', String(pageSize));
         const response = await apiClient.get('/api/InventoryReconciliation?' + params.toString());
         if (active) setResult(response.data);
-      } catch {
+      } catch (cause) {
         if (active) {
           setResult(null);
-          setError('Không thể tải dữ liệu đối chiếu tồn kho. Hãy kiểm tra kết nối và thử lại.');
+          const code = (cause as { response?: { status?: number } })?.response?.status;
+          setError(code === 403
+            ? 'Bạn không có quyền xem sổ cái đối chiếu tồn kho.'
+            : code === 404
+              ? 'Không tìm thấy kho đối chiếu trong phạm vi được cấp quyền.'
+              : 'Không thể tải dữ liệu đối chiếu tồn kho. Hãy kiểm tra kết nối và thử lại.');
         }
       } finally {
         if (active) setLoading(false);
@@ -129,14 +156,22 @@ export default function InventoryReconciliation() {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    const value = productId.trim();
+    if (value && (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value)))) {
+      setFilterError('ID sản phẩm phải là số nguyên dương hợp lệ và an toàn.');
+      productInputRef.current?.focus();
+      return;
+    }
+    setFilterError('');
     setPage(1);
-    setApplied({ warehouseId, productId, keyword });
+    setApplied({ warehouseId, productId: value, keyword });
   };
 
   const reset = () => {
     setWarehouseId('');
     setProductId('');
     setKeyword('');
+    setFilterError('');
     setPage(1);
     setApplied({ warehouseId: '', productId: '', keyword: '' });
   };
@@ -160,16 +195,16 @@ export default function InventoryReconciliation() {
         <UiMetric value={numberFormat.format(absoluteDifference)} label="Độ lệch tuyệt đối" />
       </UiMetricGrid>
 
-      <form onSubmit={submit}>
+      <form noValidate onSubmit={submit}>
         <UiToolbar>
           <UiToolbarField label="Kho">
-            <select value={warehouseId} onChange={event => setWarehouseId(event.target.value)}>
+            <select value={warehouseId} onChange={event => setWarehouseId(event.target.value)} disabled={!!warehouseError}>
               <option value="">Tất cả kho được phép</option>
               {warehouses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </UiToolbarField>
           <UiToolbarField label="ID sản phẩm">
-            <input type="number" min="1" inputMode="numeric" value={productId} onChange={event => setProductId(event.target.value)} placeholder="VD: 1001" />
+            <input ref={productInputRef} type="text" inputMode="numeric" value={productId} onChange={event => setProductId(event.target.value)} placeholder="VD: 1001" aria-invalid={!!filterError} />
           </UiToolbarField>
           <UiToolbarField label="Mã / tên sản phẩm">
             <input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="Tìm theo mã hoặc tên" />
@@ -181,6 +216,8 @@ export default function InventoryReconciliation() {
         </UiToolbar>
       </form>
 
+      {warehouseError && <div role="alert">{warehouseError}</div>}
+      {filterError && <div role="alert">{filterError}</div>}
       {error && <div role="alert">{error}</div>}
 
       <UiCard title="Kết quả đối chiếu">

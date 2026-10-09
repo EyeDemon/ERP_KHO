@@ -5,6 +5,10 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Queries;
+using ERP.Application.Interfaces;
+using ERP.Application.Exceptions;
+using ERP.Domain.Exceptions;
+using Moq;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -63,6 +67,91 @@ namespace ERP.Application.Tests
 
             await context.SaveChangesAsync();
             return context;
+        }
+
+
+        [Theory]
+        [InlineData(0, null)]
+        [InlineData(-2, null)]
+        [InlineData(null, 0)]
+        [InlineData(null, -3)]
+        public async Task InvalidWarehouseOrProductId_IsRejectedBeforeAuthorization(
+            int? warehouseId, int? productId)
+        {
+            using var context = await GetDbContextAsync();
+            var authorization = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            var service = new InventoryReconciliationQueryService(context, authorization.Object);
+            var act = () => service.GetReconciliationsAsync(warehouseId, productId, null);
+            await act.Should().ThrowAsync<BusinessRuleException>()
+                .WithMessage("*ID*");
+            authorization.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task AssignedWarehouseOnly_IsAppliedToPairCountAndSecondPhaseData()
+        {
+            using var context = await GetDbContextAsync();
+            var authorization = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            authorization.Setup(x => x.GetAccessibleWarehouseIdsAsync(default))
+                .ReturnsAsync(new[] { 1 });
+            var service = new InventoryReconciliationQueryService(context, authorization.Object);
+
+            var result = await service.GetReconciliationsAsync(null, null, null);
+            result.Items.Should().OnlyContain(x => x.WarehouseId == 1);
+            result.TotalRecords.Should().Be(3);
+            result.Items.Single(x => x.ProductId == 1).CurrentQuantity.Should().Be(12);
+            result.Items.Single(x => x.ProductId == 1).ExpectedQuantity.Should().Be(12);
+            authorization.Verify(x => x.GetAccessibleWarehouseIdsAsync(default), Times.Once);
+            authorization.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task ExplicitUnassignedWarehouse_FailsClosedAsNotFound()
+        {
+            using var context = await GetDbContextAsync();
+            var authorization = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            authorization.Setup(x => x.EnsureWarehouseAccessAsync(2, default))
+                .ThrowsAsync(new NotFoundException("Không tìm thấy tài nguyên."));
+            var service = new InventoryReconciliationQueryService(context, authorization.Object);
+
+            var act = () => service.GetReconciliationsAsync(2, 1, null);
+            await act.Should().ThrowAsync<NotFoundException>();
+            authorization.Verify(x => x.EnsureWarehouseAccessAsync(2, default), Times.Once);
+            authorization.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task AuthorizedWarehouseSelector_ReturnsOnlyAssignedWarehouse()
+        {
+            using var context = await GetDbContextAsync();
+            var authorization = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            authorization.Setup(x => x.GetAccessibleWarehouseIdsAsync(default))
+                .ReturnsAsync(new[] { 1 });
+            var service = new InventoryReconciliationQueryService(context, authorization.Object);
+
+            var options = await service.GetAccessibleWarehousesAsync();
+            options.Should().ContainSingle();
+            options[0].Id.Should().Be(1);
+            options[0].Code.Should().Be("W1");
+            options[0].Name.Should().Be("Warehouse 1");
+            authorization.Verify(x => x.GetAccessibleWarehouseIdsAsync(default), Times.Once);
+        }
+
+        [Fact]
+        public async Task ExplicitAssignedWarehouse_ScopesBeforeReadingPairsAndTotals()
+        {
+            using var context = await GetDbContextAsync();
+            var authorization = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            authorization.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var service = new InventoryReconciliationQueryService(context, authorization.Object);
+
+            var data = await service.GetReconciliationsAsync(1, 1, null);
+            data.Items.Should().ContainSingle();
+            data.Items[0].WarehouseId.Should().Be(1);
+            data.Items[0].ExpectedQuantity.Should().Be(12);
+            authorization.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Once);
+            authorization.VerifyNoOtherCalls();
         }
 
         [Fact]

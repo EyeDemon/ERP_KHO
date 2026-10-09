@@ -1296,6 +1296,76 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+
+    [SqlServerFact]
+    public async Task Reconciliation_WarehouseScope_RejectsUnassignedPairsAndWarehouseSelector()
+    {
+        var fixture = await CreateFixtureAsync();
+        var hiddenId = 0;
+        try
+        {
+            await using (var seed = CreateContext())
+            {
+                var hidden = new Warehouse
+                {
+                    Code = "RECON-" + Guid.NewGuid().ToString("N")[..10],
+                    Name = "Kho ngoài phân quyền"
+                };
+                seed.Warehouses.Add(hidden);
+                await seed.SaveChangesAsync();
+                hiddenId = hidden.Id;
+                seed.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = hiddenId,
+                    CreatedBy = fixture.UserId,
+                    TransactionType = TransactionType.Import,
+                    InventoryStatus = InventoryStatus.Available,
+                    Quantity = 7m,
+                    TransactionDate = DateTime.UtcNow
+                });
+                await seed.SaveChangesAsync();
+            }
+
+            await using var read = CreateContext();
+            var service = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var options = await service.GetAccessibleWarehousesAsync();
+            options.Should().Contain(x => x.Id == fixture.WarehouseId);
+            options.Should().NotContain(x => x.Id == hiddenId);
+
+            var unfiltered = await service.GetReconciliationsAsync(
+                null, fixture.ProductId, null);
+            unfiltered.Items.Should().Contain(x => x.WarehouseId == fixture.WarehouseId);
+            unfiltered.Items.Should().OnlyContain(x => x.WarehouseId != hiddenId);
+            unfiltered.Items.Should().NotContain(x => x.WarehouseName == "Kho ngoài phân quyền");
+
+            var explicitAllowed = await service.GetReconciliationsAsync(
+                fixture.WarehouseId, fixture.ProductId, null);
+            explicitAllowed.Items.Should().ContainSingle(x =>
+                x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+
+            var forbidden = () => service.GetReconciliationsAsync(hiddenId, fixture.ProductId, null);
+            await forbidden.Should().ThrowAsync<NotFoundException>();
+
+            // Nonexistent warehouses must also fail closed, including when
+            // the caller has broad warehouse privileges.
+            var unknown = () => service.GetReconciliationsAsync(int.MaxValue, fixture.ProductId, null);
+            await unknown.Should().ThrowAsync<NotFoundException>();
+        }
+        finally
+        {
+            if (hiddenId > 0)
+            {
+                await using var clear = CreateContext();
+                await clear.InventoryTransactions
+                    .Where(x => x.WarehouseId == hiddenId).ExecuteDeleteAsync();
+                await clear.Warehouses.Where(x => x.Id == hiddenId).ExecuteDeleteAsync();
+            }
+            await CleanupAsync(fixture);
+        }
+    }
+
     [SqlServerFact]
     public async Task TraceabilityWarehouseChoices_ContainOnlyAssignedWarehouses()
     {

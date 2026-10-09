@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ERP.Application.Common;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Application.Exceptions;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,24 @@ namespace ERP.Infrastructure.Queries
             _warehouseAuthorization = warehouseAuthorization;
         }
 
+        // Return only warehouses the current user can reconcile. Unlike the
+        // generic warehouse master lookup, this endpoint never exposes other
+        // warehouses or requires broader master-data permissions.
+        public async Task<IReadOnlyList<InventoryReconciliationWarehouseDto>> GetAccessibleWarehousesAsync()
+        {
+            if (_warehouseAuthorization is null)
+                throw new InvalidOperationException("Thiếu dịch vụ phân quyền kho đối chiếu.");
+
+            var allowed = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
+            return await _context.Warehouses.AsNoTracking()
+                .Where(x => allowed.Contains(x.Id))
+                .OrderBy(x => x.Code).ThenBy(x => x.Id)
+                .Select(x => new InventoryReconciliationWarehouseDto
+                {
+                    Id = x.Id, Code = x.Code, Name = x.Name
+                }).ToListAsync();
+        }
+
         public async Task<PagedResult<InventoryReconciliationDto>> GetReconciliationsAsync(
             int? warehouseId,
             int? productId,
@@ -33,6 +52,11 @@ namespace ERP.Infrastructure.Queries
             int pageIndex = 1,
             int pageSize = 20)
         {
+            if (warehouseId is <= 0)
+                throw new BusinessRuleException("ID kho đối chiếu phải là số nguyên dương.");
+            if (productId is <= 0)
+                throw new BusinessRuleException("ID sản phẩm đối chiếu phải là số nguyên dương.");
+
             // Bound client pagination inputs before translating Skip/Take to SQL.
             var safePage = Math.Max(1, pageIndex);
             var safeSize = Math.Clamp(pageSize, 1, 100);
@@ -40,9 +64,20 @@ namespace ERP.Infrastructure.Queries
             var transactionQuery = _context.InventoryTransactions.AsNoTracking().Where(t => t.InventoryStatus == InventoryStatus.Available);
             if (_warehouseAuthorization is not null)
             {
-                var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
-                stockQuery = stockQuery.Where(s => allowedWarehouseIds.Contains(s.WarehouseId));
-                transactionQuery = transactionQuery.Where(t => allowedWarehouseIds.Contains(t.WarehouseId));
+                if (warehouseId.HasValue)
+                {
+                    // An unknown or unassigned warehouse is a 404, never a
+                    // success with an empty result that could hide access errors.
+                    await _warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value);
+                    stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                    transactionQuery = transactionQuery.Where(t => t.WarehouseId == warehouseId.Value);
+                }
+                else
+                {
+                    var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
+                    stockQuery = stockQuery.Where(s => allowedWarehouseIds.Contains(s.WarehouseId));
+                    transactionQuery = transactionQuery.Where(t => allowedWarehouseIds.Contains(t.WarehouseId));
+                }
             }
             var stockPairs = stockQuery.Select(s => new { s.ProductId, s.WarehouseId });
             var transPairs = transactionQuery.Select(t => new { t.ProductId, t.WarehouseId });
@@ -96,14 +131,15 @@ namespace ERP.Infrastructure.Queries
             var productIds = pagedPairs.Select(s => s.ProductId).Distinct().ToList();
             var warehouseIds = pagedPairs.Select(s => s.WarehouseId).Distinct().ToList();
 
-            var stocks = await _context.InventoryStocks
-                .AsNoTracking()
-                .Where(s => s.Status == InventoryStatus.Available && productIds.Contains(s.ProductId) && warehouseIds.Contains(s.WarehouseId))
+            // Reuse the already-authorized base query for both second-phase
+            // reads. The paged product/warehouse cross-product must not cause
+            // raw inventory from an unrelated warehouse to be materialized.
+            var stocks = await stockQuery
+                .Where(s => productIds.Contains(s.ProductId) && warehouseIds.Contains(s.WarehouseId))
                 .ToListAsync();
 
-            var transactions = await _context.InventoryTransactions
-                .AsNoTracking()
-                .Where(t => t.InventoryStatus == InventoryStatus.Available && productIds.Contains(t.ProductId) && warehouseIds.Contains(t.WarehouseId))
+            var transactions = await transactionQuery
+                .Where(t => productIds.Contains(t.ProductId) && warehouseIds.Contains(t.WarehouseId))
                 .GroupBy(t => new { t.ProductId, t.WarehouseId, t.TransactionType })
                 .Select(g => new 
                 {

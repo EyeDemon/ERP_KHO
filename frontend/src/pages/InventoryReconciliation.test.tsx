@@ -37,8 +37,8 @@ describe('InventoryReconciliation', () => {
 
   it('renders reconciliation rows and highlights mismatches', async () => {
     vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/warehouses') {
-        return Promise.resolve({ data: [{ id: 1, name: 'Kho HCM', isActive: true }] });
+      if (url === '/api/InventoryReconciliation/warehouses') {
+        return Promise.resolve({ data: [{ id: 1, code: 'HCM', name: 'Kho HCM' }] });
       }
       return Promise.resolve({
         data: {
@@ -77,10 +77,83 @@ describe('InventoryReconciliation', () => {
     expect(view.getByText('Độ lệch tuyệt đối').previousSibling?.textContent).toBe('2');
   });
 
+
+  it('loads only permission-scoped warehouses and never calls the generic warehouse directory',async()=>{
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')return Promise.resolve({data:[
+        {id:7,code:'W-7',name:'Kho được phân quyền'}
+      ]});
+      return Promise.resolve({data:{items:[],totalRecords:0,pageIndex:1,pageSize:20,totalPages:0}});
+    });
+    const view=render(<InventoryReconciliation />);
+    expect(await view.findByRole('option',{name:'Kho được phân quyền'})).toBeTruthy();
+    expect(view.queryByRole('option',{name:'Kho không được phân quyền'})).toBeNull();
+    expect(vi.mocked(apiClient.get).mock.calls.some(([url])=>url==='/api/warehouses')).toBe(false);
+    fireEvent.change(view.getByLabelText('Kho'),{target:{value:'7'}});
+    fireEvent.click(view.getByRole('button',{name:'Đối chiếu'}));
+    await waitFor(()=>expect(vi.mocked(apiClient.get).mock.calls.some(([url])=>
+      String(url).startsWith('/api/InventoryReconciliation?') &&
+      String(url).includes('warehouseId=7'))).toBe(true));
+  });
+
+  it('fails closed when authorized warehouse selector returns malformed or duplicate data',async()=>{
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')return Promise.resolve({data:[
+        {id:7,code:'W-7',name:'Kho 7'},
+        {id:7,code:'W-7',name:'Kho trùng ID'}
+      ]});
+      return Promise.resolve({data:{items:[],totalRecords:0,pageIndex:1,pageSize:20,totalPages:0}});
+    });
+    const view=render(<InventoryReconciliation />);
+    expect(await view.findByText(/Không thể tải danh sách kho được cấp quyền/)).toBeTruthy();
+    expect((view.getByLabelText('Kho') as HTMLSelectElement).disabled).toBe(true);
+    expect(view.queryByRole('option',{name:'Kho 7'})).toBeNull();
+  });
+
+  it('rejects malformed, fractional and unsafe product IDs before requesting a filtered report',async()=>{
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')return Promise.resolve({data:[]});
+      return Promise.resolve({data:{items:[],totalRecords:0,pageIndex:1,pageSize:20,totalPages:0}});
+    });
+    const view=render(<InventoryReconciliation />);
+    await waitFor(()=>expect(vi.mocked(apiClient.get).mock.calls.some(([url])=>
+      String(url).startsWith('/api/InventoryReconciliation?'))).toBe(true));
+    const product=view.getByLabelText('ID sản phẩm');
+    const initial=vi.mocked(apiClient.get).mock.calls.length;
+    for(const invalid of ['1.5','0','-1','9007199254740993','abc']){
+      fireEvent.change(product,{target:{value:invalid}});
+      fireEvent.click(view.getByRole('button',{name:'Đối chiếu'}));
+      expect(view.getByText('ID sản phẩm phải là số nguyên dương hợp lệ và an toàn.')).toBeTruthy();
+      expect(document.activeElement).toBe(product);
+      expect(vi.mocked(apiClient.get).mock.calls.length).toBe(initial);
+    }
+    fireEvent.change(product,{target:{value:'17'}});
+    fireEvent.click(view.getByRole('button',{name:'Đối chiếu'}));
+    await waitFor(()=>expect(vi.mocked(apiClient.get).mock.calls.some(([url])=>
+      String(url).includes('productId=17'))).toBe(true));
+    expect(view.queryByText('ID sản phẩm phải là số nguyên dương hợp lệ và an toàn.')).toBeNull();
+  });
+
+  it('shows permission-specific 403 and 404 fail-closed errors',async()=>{
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')return Promise.resolve({data:[]});
+      return Promise.reject({response:{status:403}});
+    });
+    const view=render(<InventoryReconciliation />);
+    expect(await view.findByText('Bạn không có quyền xem sổ cái đối chiếu tồn kho.')).toBeTruthy();
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')return Promise.resolve({data:[]});
+      return Promise.reject({response:{status:404}});
+    });
+    fireEvent.change(view.getByLabelText('Mã / tên sản phẩm'),{target:{value:'abc'}});
+    fireEvent.click(view.getByRole('button',{name:'Đối chiếu'}));
+    expect(await view.findByText('Không tìm thấy kho đối chiếu trong phạm vi được cấp quyền.')).toBeTruthy();
+  });
+
   it('applies warehouse and keyword filters to the reconciliation request', async () => {
     vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/warehouses') {
-        return Promise.resolve({ data: [{ id: 1, name: 'Kho HCM', isActive: true }] });
+      if (url === '/api/InventoryReconciliation/warehouses') {
+        return Promise.resolve({ data: [{ id: 1, code: 'HCM', name: 'Kho HCM' }] });
       }
       return Promise.resolve({ data: { items: [], totalRecords: 0, pageIndex: 1, pageSize: 20, totalPages: 0 } });
     });
