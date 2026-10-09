@@ -35,6 +35,13 @@ type ShipmentPickingEvidence={
   pickingTaskId:number;pickingTaskCode:string;pickingTaskLineId:number;
   allocationId:number;sourceLocationCode:string;pickedQuantity:number;
 };
+type ShipmentHuEvidence={
+  shipmentId:number;warehouseId:number;pickingTaskLineId:number;
+  rootHandlingUnitId:number;rootHandlingUnitCode:string;
+  contentHandlingUnitId:number;contentHandlingUnitCode:string;
+  contentHandlingUnitBarcode:string;parentHandlingUnitId?:number|null;
+  hierarchyPath:string;packedQuantity:number;
+};
 type Result={
   currentBuckets:Bucket[];
   events:Event[];
@@ -46,6 +53,8 @@ type Result={
   shipmentExposuresTruncated?:boolean;
   shipmentPickingEvidence?:ShipmentPickingEvidence[];
   shipmentPickingEvidenceTruncated?:boolean;
+  shipmentHuEvidence?:ShipmentHuEvidence[];
+  shipmentHuEvidenceTruncated?:boolean;
   eventAnchorId?:number|null;
   eventsTruncated?:boolean;
   bucketsTruncated?:boolean;
@@ -487,6 +496,35 @@ export default function InventoryTraceability(){
                   <td>{link.pickingTaskCode}<br/><small>Dòng #{link.pickingTaskLineId}</small></td>
                   <td>#{link.allocationId}<br/><small>{link.sourceLocationCode}</small></td>
                   <td>{link.pickedQuantity}</td>
+                </tr>)}
+            </tbody>
+          </table></UiTableScroll>
+        </UiCard>}
+
+
+      {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
+        <UiCard title="Chuỗi kiện HU của Shipment đã xuất">
+          <p className="ui-muted-text">
+            Chỉ hiển thị kiện đã đóng hàng theo dòng Picking và nối tới HU gốc thực sự gắn Shipment.
+            Mỗi chuỗi được đối chiếu cùng giao dịch SHIP, sản phẩm, vị trí, trạng thái và lô/sê-ri trong kho được phép.
+            Cấu trúc HU là trạng thái hiện tại, còn giao dịch SHIP được cố định theo mốc lịch sử.
+            Số lượng đã đóng không phải số lượng giao thành công hoặc hoàn trả.
+          </p>
+          {result.shipmentHuEvidenceTruncated&&<p role="status" className="ui-muted-text">
+            Dữ liệu kiện HU có giới hạn truy vết (100 dòng, tối đa 16 cấp cha). Hãy thu hẹp kho/lô/sê-ri; không coi danh sách này là đầy đủ để ra quyết định thu hồi.
+          </p>}
+          <UiTableScroll><table aria-label="Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri">
+            <thead><tr><th>Shipment</th><th>HU gốc</th><th>Chuỗi HU</th><th>Mã quét kiện chứa hàng</th><th>Dòng Picking</th><th>Đã đóng</th></tr></thead>
+            <tbody>{!result.shipmentHuEvidence?.length?
+              <tr><td colSpan={6} className="ui-empty-cell">Chưa xác minh được kiện HU gắn Shipment với sản phẩm/lô/sê-ri này.</td></tr>:
+              result.shipmentHuEvidence.map(hu=>
+                <tr key={hu.shipmentId+'-'+hu.contentHandlingUnitId+'-'+hu.pickingTaskLineId}>
+                  <td>#{hu.shipmentId}</td>
+                  <td><strong>{hu.rootHandlingUnitCode}</strong><br/><small>#{hu.rootHandlingUnitId}</small></td>
+                  <td>{hu.hierarchyPath}<br/><small>Kiện chứa hàng: #{hu.contentHandlingUnitId}</small></td>
+                  <td>{hu.contentHandlingUnitBarcode}</td>
+                  <td>#{hu.pickingTaskLineId}</td>
+                  <td>{hu.packedQuantity}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>

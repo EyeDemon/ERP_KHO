@@ -321,6 +321,8 @@ public sealed class InventoryTraceabilityQueryService(
         var shipmentExposuresTruncated = false;
         var shipmentPickingEvidence = new List<InventoryTraceabilityShipmentPickingEvidenceDto>();
         var shipmentPickingEvidenceTruncated = false;
+        var shipmentHuEvidence = new List<InventoryTraceabilityShipmentHuEvidenceDto>();
+        var shipmentHuEvidenceTruncated = false;
         if (productId.HasValue && (lot is not null || serial is not null) && !hasReference)
         {
             var shippedEvents = scopedLedger.Where(x =>
@@ -425,6 +427,159 @@ public sealed class InventoryTraceabilityQueryService(
                     .ToListAsync(cancellationToken);
                 shipmentPickingEvidenceTruncated = pickingWindow.Count > 100;
                 shipmentPickingEvidence = pickingWindow.Take(100).ToList();
+
+                // HU evidence requires actual packed content on a verified Picking
+                // line AND a chain of parent HUs ending at an assigned shipment
+                // root. A shared packing session by itself is not proof.
+                var verifiedLineIds = shipmentPickingEvidence
+                    .Select(x => x.PickingTaskLineId).Distinct().ToArray();
+                if (verifiedLineIds.Length > 0)
+                {
+                    var huWindow = await (
+                        from content in context.HandlingUnitContents.AsNoTracking()
+                        join hu in context.HandlingUnits.AsNoTracking()
+                            on content.HandlingUnitId equals hu.Id
+                        join packing in context.PackingSessions.AsNoTracking()
+                            on hu.PackingSessionId equals packing.Id
+                        join shipment in context.Shipments.AsNoTracking()
+                            on packing.Id equals shipment.PackingSessionId
+                        join line in context.PickingTaskLines.AsNoTracking()
+                            on content.PickingTaskLineId equals line.Id
+                        join allocation in context.StockAllocations.AsNoTracking()
+                            on line.AllocationId equals allocation.Id
+                        where shipmentIds.Contains(shipment.Id) &&
+                              verifiedLineIds.Contains(line.Id) &&
+                              allowedWarehouseIds.Contains(shipment.WarehouseId) &&
+                              shipment.WarehouseId == packing.WarehouseId &&
+                              shipment.WarehouseId == hu.WarehouseId &&
+                              shipment.WarehouseId == allocation.WarehouseId &&
+                              packing.PickingTaskId == line.PickingTaskId &&
+                              line.SourceLocationId == allocation.LocationId &&
+                              content.ProductId == productId.Value &&
+                              line.ProductId == productId.Value &&
+                              allocation.ProductId == productId.Value &&
+                              content.Quantity > 0 &&
+                              shippedEvents.Any(t =>
+                                  t.ReferenceId == shipment.Id &&
+                                  t.WarehouseId == shipment.WarehouseId &&
+                                  t.ProductId == allocation.ProductId &&
+                                  t.LocationId == allocation.LocationId &&
+                                  t.InventoryStatus == allocation.InventoryStatus &&
+                                  t.LotId == allocation.LotId &&
+                                  t.SerialId == allocation.SerialId)
+                        select new
+                        {
+                            ShipmentId = shipment.Id, shipment.WarehouseId,
+                            shipment.PackingSessionId,
+                            HandlingUnitId = hu.Id,
+                            PickingTaskLineId = line.Id,
+                            PackedQuantity = content.Quantity
+                        })
+                        .OrderByDescending(x => x.ShipmentId)
+                        .ThenBy(x => x.HandlingUnitId)
+                        .ThenBy(x => x.PickingTaskLineId)
+                        .Take(101)
+                        .ToListAsync(cancellationToken);
+
+                    // Every ancestor is read from authorized current-state HU
+                    // records. Limit depth to 16; never claim unverified deep
+                    // or cyclic chains to be loaded/shipped.
+                    var huNodes = new Dictionary<int,
+                        (int? ParentId, int PackingSessionId, int WarehouseId,
+                         string HuCode, string Barcode)>();
+                    var pendingHuIds = huWindow.Select(x => x.HandlingUnitId)
+                        .Distinct().ToArray();
+                    for (var depth = 0; depth < 16 && pendingHuIds.Length > 0; depth++)
+                    {
+                        var parents = await context.HandlingUnits.AsNoTracking()
+                            .Where(x => pendingHuIds.Contains(x.Id) &&
+                                        allowedWarehouseIds.Contains(x.WarehouseId))
+                            .Select(x => new
+                            {
+                                x.Id, x.ParentHandlingUnitId, x.PackingSessionId,
+                                x.WarehouseId, x.HuCode, x.Barcode
+                            })
+                            .ToListAsync(cancellationToken);
+                        foreach (var node in parents)
+                            huNodes[node.Id] = (node.ParentHandlingUnitId,
+                                node.PackingSessionId, node.WarehouseId,
+                                node.HuCode, node.Barcode);
+                        pendingHuIds = parents
+                            .Where(x => x.ParentHandlingUnitId.HasValue &&
+                                        !huNodes.ContainsKey(x.ParentHandlingUnitId.Value))
+                            .Select(x => x.ParentHandlingUnitId!.Value)
+                            .Distinct().ToArray();
+                    }
+
+                    var rootWindow = await (
+                        from link in context.ShipmentHandlingUnits.AsNoTracking()
+                        join shipment in context.Shipments.AsNoTracking()
+                            on link.ShipmentId equals shipment.Id
+                        join hu in context.HandlingUnits.AsNoTracking()
+                            on link.HandlingUnitId equals hu.Id
+                        where shipmentIds.Contains(shipment.Id) &&
+                              allowedWarehouseIds.Contains(shipment.WarehouseId) &&
+                              shipment.WarehouseId == hu.WarehouseId &&
+                              shipment.PackingSessionId == hu.PackingSessionId &&
+                              hu.ParentHandlingUnitId == null
+                        orderby link.ShipmentId, link.HandlingUnitId
+                        select new { link.ShipmentId, link.HandlingUnitId })
+                        .Take(2001)
+                        .ToListAsync(cancellationToken);
+                    var assignedRoots = rootWindow.Take(2000)
+                        .Select(x => (x.ShipmentId, x.HandlingUnitId))
+                        .ToHashSet();
+
+                    shipmentHuEvidenceTruncated = huWindow.Count > 100 ||
+                        pendingHuIds.Length > 0 || rootWindow.Count > 2000 ||
+                        shipmentPickingEvidenceTruncated ||
+                        shipmentExposuresTruncated;
+                    foreach (var record in huWindow.Take(100))
+                    {
+                        if (!shipmentPickingEvidence.Any(x =>
+                                x.ShipmentId == record.ShipmentId &&
+                                x.PickingTaskLineId == record.PickingTaskLineId))
+                            continue;
+
+                        var visited = new HashSet<int>();
+                        var chain = new List<(int Id, string Code, string Barcode)>();
+                        var cursor = record.HandlingUnitId;
+                        var valid = true;
+                        while (true)
+                        {
+                            if (!visited.Add(cursor) ||
+                                !huNodes.TryGetValue(cursor, out var node) ||
+                                node.WarehouseId != record.WarehouseId ||
+                                node.PackingSessionId != record.PackingSessionId)
+                            {
+                                valid = false;
+                                break;
+                            }
+                            chain.Add((cursor, node.HuCode, node.Barcode));
+                            if (!node.ParentId.HasValue) break;
+                            cursor = node.ParentId.Value;
+                        }
+                        if (!valid || chain.Count == 0 ||
+                            !assignedRoots.Contains((record.ShipmentId, chain[^1].Id)))
+                            continue;
+
+                        chain.Reverse();
+                        shipmentHuEvidence.Add(new InventoryTraceabilityShipmentHuEvidenceDto
+                        {
+                            ShipmentId = record.ShipmentId,
+                            WarehouseId = record.WarehouseId,
+                            PickingTaskLineId = record.PickingTaskLineId,
+                            RootHandlingUnitId = chain[0].Id,
+                            RootHandlingUnitCode = chain[0].Code,
+                            ContentHandlingUnitId = record.HandlingUnitId,
+                            ContentHandlingUnitCode = chain[^1].Code,
+                            ContentHandlingUnitBarcode = chain[^1].Barcode,
+                            ParentHandlingUnitId = chain.Count > 1 ? chain[^2].Id : null,
+                            HierarchyPath = string.Join(" → ", chain.Select(x => x.Code)),
+                            PackedQuantity = record.PackedQuantity
+                        });
+                    }
+                }
             }
 
         }
@@ -441,6 +596,8 @@ public sealed class InventoryTraceabilityQueryService(
             ShipmentExposuresTruncated = shipmentExposuresTruncated,
             ShipmentPickingEvidence = shipmentPickingEvidence,
             ShipmentPickingEvidenceTruncated = shipmentPickingEvidenceTruncated,
+            ShipmentHuEvidence = shipmentHuEvidence,
+            ShipmentHuEvidenceTruncated = shipmentHuEvidenceTruncated,
             EventAnchorId = anchorId,
             EventsTruncated = eventsTruncated,
             BucketsTruncated = bucketsTruncated

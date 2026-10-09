@@ -559,6 +559,64 @@ describe('InventoryTraceability',()=>{
     expect(view.queryByText(/Chỉ hiển thị 100 dòng Picking liên kết/)).toBeNull();
   });
 
+
+  it('shows actual HU root-child lineage for a tracked shipment lot without claiming delivery',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentHuEvidence:[{
+        shipmentId:42,warehouseId:1,pickingTaskLineId:17,
+        rootHandlingUnitId:100,rootHandlingUnitCode:'PALLET-100',
+        contentHandlingUnitId:101,contentHandlingUnitCode:'CARTON-101',
+        contentHandlingUnitBarcode:'BC-101',parentHandlingUnitId:100,
+        hierarchyPath:'PALLET-100 → CARTON-101',packedQuantity:10
+      }]
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Mã lô'),{target:{value:'LOT-A'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    const table=await view.findByRole('table',{name:'Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri'});
+    expect(table.textContent).toContain('PALLET-100 → CARTON-101');
+    expect(table.textContent).toContain('BC-101');
+    expect(table.textContent).toContain('17');
+    expect(table.textContent).toContain('10');
+    expect(view.getByText(/Số lượng đã đóng không phải số lượng giao thành công/)).toBeTruthy();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'
+    );
+  });
+
+  it('warns about truncated HU ancestry and clears it when reference scope changes',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentHuEvidence:[],shipmentHuEvidenceTruncated:true
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Số sê-ri'),{target:{value:'SER-01'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    expect(await view.findByText(/Dữ liệu kiện HU có giới hạn truy vết/)).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Loại tham chiếu'),{target:{value:'Shipment'}});
+    expect(view.queryByRole('table',{name:'Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri'})).toBeNull();
+    expect(view.queryByText(/Dữ liệu kiện HU có giới hạn truy vết/)).toBeNull();
+  });
+
+  it('does not expose HU hierarchy on a warehouse-only query',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentHuEvidence:[{
+        shipmentId:42,warehouseId:1,pickingTaskLineId:17,
+        rootHandlingUnitId:100,rootHandlingUnitCode:'PALLET-100',
+        contentHandlingUnitId:101,contentHandlingUnitCode:'CARTON-101',
+        contentHandlingUnitBarcode:'BC-101',hierarchyPath:'PALLET-100 → CARTON-101',
+        packedQuantity:10
+      }]
+    }} as never);
+    const view=renderTrace();
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    fireEvent.change(view.getByLabelText('Kho truy vết'),{target:{value:'1'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    await view.findByRole('table',{name:'Dòng thời gian sổ cái phục vụ truy vết'});
+    expect(view.queryByRole('table',{name:'Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri'})).toBeNull();
+  });
+
   it('can increase server event window to 500 without client-side truncation',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=renderTrace();

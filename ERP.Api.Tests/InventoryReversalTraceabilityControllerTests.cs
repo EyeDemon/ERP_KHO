@@ -177,7 +177,16 @@ public sealed class InventoryReversalTraceabilityControllerTests
                 PickingTaskLineId = 17, AllocationId = 18,
                 SourceLocationCode = "A-01", PickedQuantity = 10m
             }],
-            ShipmentPickingEvidenceTruncated = true
+            ShipmentPickingEvidenceTruncated = true,
+            ShipmentHuEvidence = [new InventoryTraceabilityShipmentHuEvidenceDto
+            {
+                ShipmentId = 42, WarehouseId = 7, PickingTaskLineId = 17,
+                RootHandlingUnitId = 100, RootHandlingUnitCode = "PALLET-100",
+                ContentHandlingUnitId = 101, ContentHandlingUnitCode = "CARTON-101",
+                ContentHandlingUnitBarcode = "BC-101", ParentHandlingUnitId = 100,
+                HierarchyPath = "PALLET-100 → CARTON-101", PackedQuantity = 10m
+            }],
+            ShipmentHuEvidenceTruncated = true
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(
@@ -199,6 +208,15 @@ public sealed class InventoryReversalTraceabilityControllerTests
         Assert.Equal(17, pick.GetProperty("pickingTaskLineId").GetInt32());
         Assert.Equal(18, pick.GetProperty("allocationId").GetInt32());
         Assert.Equal(10m, pick.GetProperty("pickedQuantity").GetDecimal());
+        Assert.True(root.GetProperty("shipmentHuEvidenceTruncated").GetBoolean());
+        var hu = Assert.Single(root.GetProperty("shipmentHuEvidence").EnumerateArray());
+        Assert.Equal(42, hu.GetProperty("shipmentId").GetInt32());
+        Assert.Equal(100, hu.GetProperty("rootHandlingUnitId").GetInt32());
+        Assert.Equal(101, hu.GetProperty("contentHandlingUnitId").GetInt32());
+        Assert.Equal(100, hu.GetProperty("parentHandlingUnitId").GetInt32());
+        Assert.Equal("PALLET-100 → CARTON-101", hu.GetProperty("hierarchyPath").GetString());
+        Assert.Equal("BC-101", hu.GetProperty("contentHandlingUnitBarcode").GetString());
+        Assert.Equal(10m, hu.GetProperty("packedQuantity").GetDecimal());
     }
 
     [Fact]

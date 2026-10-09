@@ -452,6 +452,21 @@ public sealed class SqlServerShipmentLoadingTests
             pickEvidence.PickedQuantity.Should().Be(10m);
             result.ShipmentPickingEvidenceTruncated.Should().BeFalse();
 
+            var huEvidence = result.ShipmentHuEvidence.Should().ContainSingle().Which;
+            huEvidence.ShipmentId.Should().Be(prepared.Prepared.ShipmentId);
+            huEvidence.WarehouseId.Should().Be(fixture.WarehouseId);
+            huEvidence.PickingTaskLineId.Should().Be(pickEvidence.PickingTaskLineId);
+            huEvidence.RootHandlingUnitId.Should().Be(prepared.Prepared.ParentHuId);
+            huEvidence.RootHandlingUnitCode.Should().Be("PARENT-" + fixture.Suffix);
+            huEvidence.ContentHandlingUnitId.Should().Be(prepared.Prepared.ChildHuId);
+            huEvidence.ContentHandlingUnitCode.Should().Be("CHILD-" + fixture.Suffix);
+            huEvidence.ContentHandlingUnitBarcode.Should().Be(prepared.Prepared.ChildHuBarcode);
+            huEvidence.ParentHandlingUnitId.Should().Be(prepared.Prepared.ParentHuId);
+            huEvidence.HierarchyPath.Should().Be(
+                "PARENT-" + fixture.Suffix + " → CHILD-" + fixture.Suffix);
+            huEvidence.PackedQuantity.Should().Be(10m);
+            result.ShipmentHuEvidenceTruncated.Should().BeFalse();
+
             // A forged shipment reference in the immutable ledger alone is
             // never sufficient proof that a canonical Shipment exists.
             await using (var orphan = CreateContext())
@@ -475,6 +490,42 @@ public sealed class SqlServerShipmentLoadingTests
             afterOrphan.ShipmentPickingEvidence.Should().ContainSingle();
             afterOrphan.ShipmentPickingEvidence[0].PickingTaskLineId.Should()
                 .Be(pickEvidence.PickingTaskLineId);
+            afterOrphan.ShipmentHuEvidence.Should().ContainSingle();
+            afterOrphan.ShipmentHuEvidence[0].RootHandlingUnitId.Should()
+                .Be(prepared.Prepared.ParentHuId);
+
+            // An unassigned root with otherwise matching packed Picking
+            // content is not proof that this HU boarded this Shipment.
+            await using (var orphanHuContext = CreateContext())
+            {
+                var stray = new HandlingUnit
+                {
+                    PackingSessionId = pickEvidence.PackingSessionId,
+                    WarehouseId = fixture.WarehouseId,
+                    HuCode = "STRAY-" + fixture.Suffix,
+                    Barcode = "STRAY-" + fixture.Suffix,
+                    Type = HandlingUnitType.Carton,
+                    Status = HandlingUnitStatus.Shipped,
+                    CreatedBy = fixture.UserId
+                };
+                orphanHuContext.HandlingUnits.Add(stray);
+                await orphanHuContext.SaveChangesAsync();
+                orphanHuContext.HandlingUnitContents.Add(new HandlingUnitContent
+                {
+                    HandlingUnitId = stray.Id,
+                    PickingTaskLineId = pickEvidence.PickingTaskLineId,
+                    ProductId = fixture.ProductId,
+                    Quantity = 1m,
+                    PackedBy = fixture.UserId
+                });
+                await orphanHuContext.SaveChangesAsync();
+            }
+            var afterStrayHu = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
+            afterStrayHu.ShipmentHuEvidence.Should().ContainSingle();
+            afterStrayHu.ShipmentHuEvidence[0].HierarchyPath.Should()
+                .Be(huEvidence.HierarchyPath);
+
             var anchored = await query.TraceAsync(
                 productId: fixture.ProductId, lotNumber: lotNumber,
                 limit: 20, eventAnchorId: result.EventAnchorId);
@@ -483,20 +534,26 @@ public sealed class SqlServerShipmentLoadingTests
             anchored.ShipmentPickingEvidence.Should().ContainSingle();
             anchored.ShipmentPickingEvidence[0].AllocationId.Should()
                 .Be(pickEvidence.AllocationId);
+            anchored.ShipmentHuEvidence.Should().ContainSingle();
+            anchored.ShipmentHuEvidence[0].ContentHandlingUnitId.Should()
+                .Be(prepared.Prepared.ChildHuId);
 
             var nonexistentLot = await query.TraceAsync(productId: fixture.ProductId,
                 lotNumber: lotNumber + "-other", limit: 20);
             nonexistentLot.ShipmentExposures.Should().BeEmpty();
             nonexistentLot.ShipmentPickingEvidence.Should().BeEmpty();
+            nonexistentLot.ShipmentHuEvidence.Should().BeEmpty();
             var untracked = await query.TraceAsync(
                 warehouseId: fixture.WarehouseId, limit: 20);
             untracked.ShipmentExposures.Should().BeEmpty();
             untracked.ShipmentPickingEvidence.Should().BeEmpty();
+            untracked.ShipmentHuEvidence.Should().BeEmpty();
             var exactDocument = await query.TraceAsync(
                 productId: fixture.ProductId, lotNumber: lotNumber,
                 referenceType: "Shipment", referenceId: prepared.Prepared.ShipmentId, limit: 20);
             exactDocument.ShipmentExposures.Should().BeEmpty();
             exactDocument.ShipmentPickingEvidence.Should().BeEmpty();
+            exactDocument.ShipmentHuEvidence.Should().BeEmpty();
 
             // Losing the warehouse assignment after displaying a result
             // must fail closed on the next query, including canonical links.

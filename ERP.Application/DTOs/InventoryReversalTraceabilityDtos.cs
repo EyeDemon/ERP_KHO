@@ -72,6 +72,8 @@ public sealed class InventoryTraceabilityResultDto
     public bool ShipmentExposuresTruncated { get; set; }
     public IReadOnlyList<InventoryTraceabilityShipmentPickingEvidenceDto> ShipmentPickingEvidence { get; set; } = [];
     public bool ShipmentPickingEvidenceTruncated { get; set; }
+    public IReadOnlyList<InventoryTraceabilityShipmentHuEvidenceDto> ShipmentHuEvidence { get; set; } = [];
+    public bool ShipmentHuEvidenceTruncated { get; set; }
     // These flags describe whether the initial chronological event window or
     // matching current-stock window was capped; reversal chain closure is retained.
     // Stable transaction-ID fence for ledger pagination. Null for older clients only.
@@ -123,6 +125,24 @@ public sealed class InventoryTraceabilityShipmentPickingEvidenceDto
     public int AllocationId { get; set; }
     public string SourceLocationCode { get; set; } = string.Empty;
     public decimal PickedQuantity { get; set; }
+}
+
+// Current HU ancestry validated against canonical ShipmentHandlingUnit roots,
+// packed Picking content, allocation identity and anchored SHIP ledger evidence.
+// Not historical owner/custody provenance or customer delivery confirmation.
+public sealed class InventoryTraceabilityShipmentHuEvidenceDto
+{
+    public int ShipmentId { get; set; }
+    public int WarehouseId { get; set; }
+    public int PickingTaskLineId { get; set; }
+    public int RootHandlingUnitId { get; set; }
+    public string RootHandlingUnitCode { get; set; } = string.Empty;
+    public int ContentHandlingUnitId { get; set; }
+    public string ContentHandlingUnitCode { get; set; } = string.Empty;
+    public string ContentHandlingUnitBarcode { get; set; } = string.Empty;
+    public int? ParentHandlingUnitId { get; set; }
+    public string HierarchyPath { get; set; } = string.Empty;
+    public decimal PackedQuantity { get; set; }
 }
 
 public sealed class InventoryTraceabilityRelatedDocumentDto
