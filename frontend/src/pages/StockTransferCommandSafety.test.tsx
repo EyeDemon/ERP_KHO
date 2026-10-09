@@ -46,6 +46,113 @@ describe('Stock transfer command consistency', () => {
     vi.restoreAllMocks();
   });
 
+  it('edits an ordinary draft with real PUT, prefilled lines and payload-scoped idempotency', async () => {
+    const draft = {
+      ...transfer, status: 'Draft', note: 'Phiếu ban đầu',
+      details: [{ ...transfer.details[0], requestedQuantity: 5, note: 'Dòng ban đầu' }],
+    };
+    get.mockImplementation(async url => {
+      if (url === '/api/stock-transfers') return { data: { items: [draft], totalPages: 1 } } as never;
+      if (url === '/api/stock-transfers/807') return { data: draft } as never;
+      if (url === '/api/warehouses') return {
+        data: [{ id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' }],
+      } as never;
+      if (url === '/api/products') return {
+        data: [{ id: 9, code: 'SKU-9', name: 'Sản phẩm' }],
+      } as never;
+      return { data: [] } as never;
+    });
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} } as never);
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
+
+    const dialog = view.getByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' });
+    expect((within(dialog).getByLabelText('Kho nguồn') as HTMLSelectElement).value).toBe('1');
+    expect((within(dialog).getByLabelText('Kho đích') as HTMLSelectElement).value).toBe('2');
+    expect((within(dialog).getByLabelText('Ghi chú điều chuyển') as HTMLTextAreaElement).value)
+      .toBe('Phiếu ban đầu');
+    expect((within(dialog).getByLabelText('Số lượng dòng 1') as HTMLInputElement).value)
+      .toBe('5');
+
+    fireEvent.change(within(dialog).getByLabelText('Số lượng dòng 1'), {
+      target: { value: '6' },
+    });
+    fireEvent.submit(dialog);
+
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith(
+      '/api/stock-transfers/807',
+      {
+        sourceWarehouseId: 1, destinationWarehouseId: 2, note: 'Phiếu ban đầu',
+        details: [{ productId: 9, quantity: 6, note: 'Dòng ban đầu' }],
+      },
+      expect.objectContaining({ headers: expect.objectContaining({
+        'Idempotency-Key': expect.any(String),
+      }) }),
+    ));
+    expect(post).not.toHaveBeenCalled();
+    await waitFor(() => expect(view.queryByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' }))
+      .toBeNull());
+    expect(await view.findByRole('dialog', { name: 'TRF-807' })).toBeTruthy();
+  });
+
+  it('keeps draft editor open after conflicting approval and reuses key only for identical retry', async () => {
+    const draft = { ...transfer, status: 'Draft' };
+    get.mockImplementation(async url => {
+      if (url === '/api/stock-transfers') return { data: { items: [draft], totalPages: 1 } } as never;
+      if (url === '/api/stock-transfers/807') return { data: draft } as never;
+      if (url === '/api/warehouses') return {
+        data: [{ id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' }],
+      } as never;
+      if (url === '/api/products') return {
+        data: [{ id: 9, code: 'SKU-9', name: 'Sản phẩm' }],
+      } as never;
+      return { data: [] } as never;
+    });
+    const put = vi.mocked(apiClient.put);
+    put.mockRejectedValueOnce({
+      response: { status: 409, data: { message: 'Phiếu đã được duyệt ở phiên khác.' } },
+    }).mockRejectedValueOnce({
+      response: { status: 409, data: { message: 'Phiếu đã được duyệt ở phiên khác.' } },
+    }).mockResolvedValueOnce({ data: {} } as never);
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    fireEvent.click(view.getByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
+    const dialog = view.getByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' });
+    fireEvent.submit(dialog);
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    await within(dialog).findByRole('alert');
+    expect(within(dialog).getByRole('alert').textContent).toContain('Phiếu đã được duyệt');
+    const first = (put.mock.calls[0][2] as { headers: Record<string,string> }).headers['Idempotency-Key'];
+    fireEvent.submit(dialog);
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    await within(dialog).findByRole('alert');
+    const retry = (put.mock.calls[1][2] as { headers: Record<string,string> }).headers['Idempotency-Key'];
+    expect(retry).toBe(first);
+    fireEvent.change(within(dialog).getByLabelText('Ghi chú điều chuyển'), {
+      target: { value: 'Thay đổi thông tin trước khi thử lại' },
+    });
+    fireEvent.submit(dialog);
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(3));
+    const modified = (put.mock.calls[2][2] as { headers: Record<string,string> }).headers['Idempotency-Key'];
+    expect(modified).not.toBe(first);
+  });
+
+  it('does not expose editing on an approved or reverse-document transfer', async () => {
+    const approved = { ...transfer, status: 'Approved' };
+    get.mockImplementation(async url => {
+      if (url === '/api/stock-transfers') return {
+        data: { items: [approved], totalPages: 1 },
+      } as never;
+      if (url === '/api/stock-transfers/807') return { data: approved } as never;
+      if (url === '/api/warehouses' || url === '/api/products') return { data: [] } as never;
+      return { data: [] } as never;
+    });
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    expect(view.queryByRole('button', { name: 'Chỉnh sửa phiếu nháp' })).toBeNull();
+  });
+
   it('retries an unchanged receive payload with the same key but uses a new key after editing quantities', async () => {
     post.mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
     const view = render(<StockTransfers />);

@@ -296,6 +296,11 @@ public sealed class SqlServerStockTransferTests
                     new UpdateStockTransferDto
                     {
                         SourceWarehouseId = fixture.SourceId, DestinationWarehouseId = fixture.DestinationId,
+                        Details = [new() { ProductId = fixture.ProductId, Quantity = 100_000_000_000_000m }]
+                    },
+                    new UpdateStockTransferDto
+                    {
+                        SourceWarehouseId = fixture.SourceId, DestinationWarehouseId = fixture.DestinationId,
                         Note = new string('x', 501),
                         Details = [new() { ProductId = fixture.ProductId, Quantity = 4 }]
                     },

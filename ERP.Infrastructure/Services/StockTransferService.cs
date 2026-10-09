@@ -221,7 +221,8 @@ public sealed partial class StockTransferService(
         if (!await context.Warehouses.AnyAsync(x => x.Id == request.DestinationWarehouseId, cancellationToken)) throw new BusinessRuleException("Kho đích không tồn tại.");
         if (request.Details == null || request.Details.Count == 0 ||
             request.Details.Any(x => x == null || x.ProductId <= 0 ||
-                x.Quantity <= 0 || decimal.Round(x.Quantity, 4) != x.Quantity))
+                x.Quantity <= 0 || x.Quantity >= 100_000_000_000_000m ||
+                decimal.Round(x.Quantity, 4) != x.Quantity))
             throw new BusinessRuleException("Phiếu phải có sản phẩm với số lượng dương và tối đa 4 chữ số thập phân.");
         if (request.Note?.Length > 500 || request.Details.Any(x => x.Note?.Length > 500))
             throw new BusinessRuleException("Ghi chú phiếu hoặc từng sản phẩm không được quá 500 ký tự.");
