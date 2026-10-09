@@ -108,6 +108,25 @@ public sealed class InventoryReversalTraceabilityControllerTests
     }
 
     [Fact]
+    public async Task CombinedReferenceTrace_ForwardsAllFiltersWithoutDroppingDocumentScope()
+    {
+        var reversal = new Mock<IInventoryReversalService>(MockBehavior.Strict);
+        var trace = new Mock<IInventoryTraceabilityQueryService>(MockBehavior.Strict);
+        var response = new InventoryTraceabilityResultDto();
+        trace.Setup(x => x.TraceAsync(7, 9, "LOT-A", null, "StockTransfer", 42, 50,
+            It.IsAny<CancellationToken>(), 0)).ReturnsAsync(response);
+        var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
+
+        var result = await controller.Trace(7, 9, "LOT-A", null, "StockTransfer", 42, 50, 0);
+
+        Assert.Same(response, Assert.IsType<OkObjectResult>(result.Result).Value);
+        trace.Verify(x => x.TraceAsync(7, 9, "LOT-A", null, "StockTransfer", 42, 50,
+            It.IsAny<CancellationToken>(), 0), Times.Once);
+        trace.VerifyNoOtherCalls();
+        reversal.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Warehouses_DelegatesToAuthorizedScopeService()
     {
         var reversal = new Mock<IInventoryReversalService>(MockBehavior.Strict);

@@ -168,6 +168,8 @@ export default function InventoryTraceability(){
     if(requestError)setRequestError('');
   };
 
+  const validPositiveId=(value:string)=>/^[1-9]\d*$/.test(value)&&Number.isSafeInteger(Number(value));
+
   const requestTrace=async(offset:number)=>{
     if(loading||offset<0||offset>50_000||offset%500!==0)return;
     setValidationError('');setRequestError('');
@@ -182,6 +184,16 @@ export default function InventoryTraceability(){
     if(!hasIdentity&&!hasReference){
       setValidationError('Nhập ít nhất Kho, Sản phẩm, Lô, Sê-ri hoặc Tham chiếu.');
       productIdRef.current?.focus();
+      return;
+    }
+    if(form.productId&&!validPositiveId(form.productId)){
+      setValidationError('ID sản phẩm phải là số nguyên dương hợp lệ.');
+      productIdRef.current?.focus();
+      return;
+    }
+    if(form.referenceId&&!validPositiveId(form.referenceId)){
+      setValidationError('ID tham chiếu phải là số nguyên dương hợp lệ.');
+      referenceIdRef.current?.focus();
       return;
     }
     setResult(null);
@@ -272,7 +284,7 @@ export default function InventoryTraceability(){
           />
         </UiToolbarField>
         <p id="traceability-reference-help" className="ui-muted-text">
-          Loại tham chiếu và ID tham chiếu là một cặp; nhập cả hai khi truy theo chứng từ.
+          Loại tham chiếu và ID tham chiếu là một cặp; nhập cả hai khi truy theo chứng từ. Kết hợp chứng từ với bộ lọc khác chỉ lấy nhóm tồn liên quan đến chứng từ đó, kể cả khi giới hạn sự kiện thấp.
         </p>
         {validationError&&<p id="traceability-validation-error" role="alert">{validationError}</p>}
         <UiToolbarField label="Giới hạn sự kiện">

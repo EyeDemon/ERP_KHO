@@ -225,6 +225,41 @@ describe('InventoryTraceability',()=>{
     expect(referenceId.getAttribute('aria-invalid')).toBeNull();
   });
 
+  it('keeps document identity when combining warehouse and product filters',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
+    const view=renderTrace();
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    fireEvent.change(view.getByLabelText('Kho truy vết'),{target:{value:'1'}});
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Loại tham chiếu'),{target:{value:'StockTransfer'}});
+    fireEvent.change(view.getByLabelText('ID tham chiếu'),{target:{value:'42'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?warehouseId=1&productId=10&referenceType=StockTransfer&referenceId=42&limit=200'
+    ));
+    expect(view.getByText(/Kết hợp chứng từ với bộ lọc khác chỉ lấy nhóm tồn liên quan/)).toBeTruthy();
+  });
+
+  it('rejects malformed or unsafe product and reference IDs before requesting SQL data',async()=>{
+    const view=renderTrace();
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    const product=view.getByLabelText('ID sản phẩm') as HTMLInputElement;
+    const reference=view.getByLabelText('ID tham chiếu') as HTMLInputElement;
+    fireEvent.change(product,{target:{value:'1.5'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    expect(view.getByRole('alert').textContent).toContain('ID sản phẩm phải là số nguyên dương');
+    expect(document.activeElement).toBe(product);
+    expect(apiClient.get).not.toHaveBeenCalled();
+
+    fireEvent.change(product,{target:{value:''}});
+    fireEvent.change(view.getByLabelText('Loại tham chiếu'),{target:{value:'StockTransfer'}});
+    fireEvent.change(reference,{target:{value:'9007199254740992'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    expect(view.getByRole('alert').textContent).toContain('ID tham chiếu phải là số nguyên dương');
+    expect(document.activeElement).toBe(reference);
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
+
   it('renders visible labels, current buckets and reversal-aware immutable timeline',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=renderTrace();

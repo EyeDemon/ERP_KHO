@@ -1057,6 +1057,87 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
     [SqlServerFact]
+    public async Task Traceability_ReferenceIdentityUsesFullHistoryAndIntersectsAllFilters()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            const int referenceId = 713;
+            await using (var seed = CreateContext())
+            {
+                seed.InventoryStocks.Add(new InventoryStock
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.DestinationLocationId,
+                    Status = InventoryStatus.Available,
+                    Quantity = 6m,
+                    ReservedQuantity = 0m
+                });
+
+                var start = DateTime.UtcNow.AddHours(-2);
+                for (var i = 0; i < 26; i++)
+                    seed.InventoryTransactions.Add(new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId,
+                        WarehouseId = fixture.WarehouseId,
+                        LocationId = i == 0 ? fixture.SourceLocationId : fixture.DestinationLocationId,
+                        LotId = i == 0 ? fixture.LotId : null,
+                        InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.Move,
+                        Quantity = 1m,
+                        ReferenceType = "TraceIdentityWindow",
+                        ReferenceId = referenceId,
+                        CreatedBy = fixture.UserId,
+                        TransactionDate = start.AddMinutes(i)
+                    });
+                await seed.SaveChangesAsync();
+            }
+
+            await using var db = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                db, new WarehouseAuthorizationService(db, new CurrentUser(fixture.UserId)));
+            var recent = await query.TraceAsync(
+                referenceType: "TraceIdentityWindow", referenceId: referenceId, limit: 20);
+
+            recent.Events.Should().HaveCount(20);
+            recent.EventsTruncated.Should().BeTrue();
+            recent.Events.Should().NotContain(x => x.LotId == fixture.LotId);
+            // The older lot-bearing document line must still identify its
+            // current bucket even though it is outside the event window.
+            recent.CurrentBuckets.Should().HaveCount(2);
+            recent.CurrentBuckets.Should().ContainSingle(x =>
+                x.LotId == fixture.LotId && x.LocationId == fixture.SourceLocationId);
+            recent.CurrentBuckets.Should().ContainSingle(x =>
+                x.LotId == null && x.LocationId == fixture.DestinationLocationId);
+
+            var combined = await query.TraceAsync(
+                warehouseId: fixture.WarehouseId, productId: fixture.ProductId,
+                referenceType: "TraceIdentityWindow", referenceId: referenceId, limit: 20);
+            combined.CurrentBuckets.Should().HaveCount(2);
+
+            var unknown = await query.TraceAsync(
+                warehouseId: fixture.WarehouseId, productId: fixture.ProductId,
+                referenceType: "TraceIdentityWindow", referenceId: referenceId + 1, limit: 20);
+            unknown.Events.Should().BeEmpty();
+            unknown.CurrentBuckets.Should().BeEmpty();
+
+            var lotNumber = await db.InventoryLots.Where(x => x.Id == fixture.LotId)
+                .Select(x => x.LotNumber).SingleAsync();
+            var lotOnly = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber,
+                referenceType: "TraceIdentityWindow", referenceId: referenceId, limit: 20);
+            lotOnly.CurrentBuckets.Should().ContainSingle(x => x.LotId == fixture.LotId);
+
+            var wrongLotReference = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber,
+                referenceType: "TraceIdentityWindow", referenceId: referenceId + 1, limit: 20);
+            wrongLotReference.CurrentBuckets.Should().BeEmpty();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task TraceabilityWarehouseChoices_ContainOnlyAssignedWarehouses()
     {
         var fixture = await CreateFixtureAsync();

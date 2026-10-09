@@ -42,3 +42,12 @@
 - Blueprint Vercel dùng **dữ liệu minh họa tách biệt**, chỉ trả GET `/api/inventory/traceability-warehouses` để bộ chọn kho có thể hiển thị. Không biến dữ liệu mẫu thành dữ liệu SQL thật.
 - Adapter truy vết của demo hỗ trợ lọc theo kho, tham chiếu, `limit`, `bucketOffset` và hai cờ `eventsTruncated`/`bucketsTruncated`; khi tìm theo kho không được loại các nhóm tồn chỉ vì thiếu giao dịch sổ cái mẫu.
 - POST/PUT/PATCH/DELETE trên Blueprint vẫn trả 405; mọi quyền, tồn kho và sổ cái thật phải được xác minh trên backend có xác thực và SQL staging riêng.
+
+## Khóa chặt định danh chứng từ khi kết hợp bộ lọc — 09/10/2026
+
+- Cặp `referenceType/referenceId` **luôn** được áp dụng như điều kiện giao với kho, sản phẩm, lô và sê-ri; không được bỏ lọc chứng từ chỉ vì có thêm điều kiện khác. Chứng từ không tồn tại trả nhóm tồn rỗng, kể cả khi sản phẩm đang có tồn.
+- Các định danh nhóm tồn liên quan chứng từ lấy từ **toàn bộ sự kiện trực tiếp của chứng từ trong phạm vi kho được cấp quyền**, không chỉ từ 20/50/200/500 sự kiện gần nhất của dòng thời gian. Cờ `eventsTruncated` chỉ phản ánh giới hạn lịch sử hiển thị, không được cắt nhóm tồn liên quan chứng từ.
+- Nhóm tồn được đối chiếu bằng sản phẩm/kho/lô/sê-ri, giữ khả năng truy vết hàng đã di chuyển vị trí; không suy ra nhóm tồn từ dấu đảo của chứng từ khác. Giới hạn 500 nhóm/trang và quyền kho vẫn do SQL áp dụng trước phân trang.
+- Frontend từ chối ID sản phẩm/tham chiếu không phải số nguyên dương an toàn trước khi gửi GET; thông báo lỗi tiếng Việt và đưa focus tới trường cần sửa.
+- Regression SQL: 26 sự kiện cùng chứng từ, sự kiện lô cũ nằm ngoài cửa sổ 20 vẫn tìm được nhóm tồn; kết hợp kho+sản phẩm+chứng từ hợp lệ và chứng từ không tồn tại; lọc lô+chứng từ. API xác minh chuyển đủ tham số; Vitest kiểm tra giao diện và ID sai.
+- Chưa nghiệm thu browser QA hoặc staging SQL/API thật; CI trên đúng HEAD là cổng riêng. Notion chỉ đọc.

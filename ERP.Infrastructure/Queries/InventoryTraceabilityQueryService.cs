@@ -166,23 +166,15 @@ public sealed class InventoryTraceabilityQueryService(
         if (lot is not null) stockQuery = stockQuery.Where(x => x.Lot != null && x.Lot.LotNumber == lot);
         if (serial is not null) stockQuery = stockQuery.Where(x => x.Serial != null && x.Serial.SerialNumber == serial);
 
-        if (hasReference && !productId.HasValue && lot is null && serial is null)
+        if (hasReference)
         {
-            // Reference-only searches must bind stock to identities in the
-            // referenced chain. Warehouse-only searches must NOT use recent
-            // event IDs: an older or never-posted product may still have stock.
-            var eventIds = events.Select(x => x.TransactionId).ToArray();
-            if (eventIds.Length == 0)
-                return new InventoryTraceabilityResultDto
-                {
-                    Events = events, EventsTruncated = eventsTruncated
-                };
-
-            // A reference trace must resolve exact stock identities BEFORE the
-            // 500-row response cap. Capping product-wide buckets first can hide
-            // the referenced lot/serial in a warehouse with many locations.
-            var referencedIdentities = context.InventoryTransactions.AsNoTracking()
-                .Where(x => allowedWarehouseIds.Contains(x.WarehouseId) && eventIds.Contains(x.Id));
+            // A document reference is an intersection with every other filter,
+            // never a hint that may be dropped when product/lot/serial is set.
+            // Use ALL direct reference events in the authorized warehouse scope,
+            // not the limited timeline window or expanded reversal markers.
+            // Otherwise an older document line disappears from current stock
+            // when the operator lowers the event limit.
+            var referencedIdentities = eventQuery;
             stockQuery = stockQuery.Where(stock => referencedIdentities.Any(transaction =>
                 transaction.ProductId == stock.ProductId &&
                 transaction.WarehouseId == stock.WarehouseId &&
