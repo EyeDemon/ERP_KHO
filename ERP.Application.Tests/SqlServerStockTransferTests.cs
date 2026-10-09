@@ -151,6 +151,66 @@ public sealed class SqlServerStockTransferTests
     }
 
     [SqlServerFact]
+    public async Task AmbientTransactionControlsTransferCreateAndApprovalWithoutPrematureCommit()
+    {
+        var fixture = await CreateFixtureAsync(10);
+        var note = "Phiếu thử rollback giao dịch ngoài " + Guid.NewGuid().ToString("N");
+        try
+        {
+            int rolledBackId;
+            await using (var db = CreateContext())
+            {
+                await using var outer = await db.Database.BeginTransactionAsync();
+                var createRequest = Request(fixture.SourceId, fixture.DestinationId,
+                    fixture.ProductId, 2);
+                createRequest.Note = note;
+                rolledBackId = (await CreateService(db, fixture.CreatorId)
+                    .CreateAsync(createRequest)).Id;
+                await outer.RollbackAsync();
+            }
+            await using (var verify = CreateContext())
+            {
+                (await verify.StockTransfers.CountAsync(x => x.Id == rolledBackId))
+                    .Should().Be(0);
+                (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                    x.EntityId == rolledBackId && x.Action == "StockTransfer.Created"))
+                    .Should().Be(0);
+            }
+
+            int id;
+            await using (var db = CreateContext())
+                id = (await CreateService(db, fixture.CreatorId)
+                    .CreateAsync(Request(fixture.SourceId, fixture.DestinationId,
+                        fixture.ProductId, 2))).Id;
+
+            await using (var db = CreateContext())
+            {
+                await using var outer = await db.Database.BeginTransactionAsync();
+                await CreateService(db, fixture.UserId).ApproveAsync(id);
+                await outer.RollbackAsync();
+            }
+            await using (var verify = CreateContext())
+            {
+                (await verify.StockTransfers.AsNoTracking().Where(x => x.Id == id)
+                    .Select(x => x.Status).SingleAsync()).Should().Be(StockTransferStatus.Draft);
+                (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                    x.EntityId == id && x.Action == "StockTransfer.Approved")).Should().Be(0);
+            }
+
+            await using (var db = CreateContext())
+                await CreateService(db, fixture.UserId).ApproveAsync(id);
+            await using (var verify = CreateContext())
+            {
+                (await verify.StockTransfers.AsNoTracking().Where(x => x.Id == id)
+                    .Select(x => x.Status).SingleAsync()).Should().Be(StockTransferStatus.Approved);
+                (await verify.AuditLogs.CountAsync(x => x.EntityName == "StockTransfer" &&
+                    x.EntityId == id && x.Action == "StockTransfer.Approved")).Should().Be(1);
+            }
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task ValidationRejectsSameWarehouseNonPositiveAndDuplicateProducts()
     {
         var fixture = await CreateFixtureAsync(10);
