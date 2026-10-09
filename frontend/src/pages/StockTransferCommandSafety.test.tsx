@@ -131,7 +131,9 @@ describe('Stock transfer command consistency', () => {
     const first = (put.mock.calls[0][2] as { headers: Record<string,string> }).headers['Idempotency-Key'];
     fireEvent.submit(dialog);
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
-    await within(dialog).findByRole('alert');
+    await waitFor(() => expect(
+      (within(dialog).getByRole('button', { name: 'Lưu thay đổi' }) as HTMLButtonElement).disabled
+    ).toBe(false));
     const retry = (put.mock.calls[1][2] as { headers: Record<string,string> }).headers['Idempotency-Key'];
     expect(retry).toBe(first);
     fireEvent.change(within(dialog).getByLabelText('Ghi chú điều chuyển'), {
