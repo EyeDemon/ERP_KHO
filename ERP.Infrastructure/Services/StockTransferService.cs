@@ -132,13 +132,16 @@ public sealed partial class StockTransferService(
     {
         EnsureWriteRole();
         var ownsTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
+        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
         try
         {
-            var entity = await GetScopedAsync(id, cancellationToken);
+            var entity = await GetLockedScopedAsync(id, cancellationToken);
             await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
+            if (entity.Status != StockTransferStatus.Approved)
+                throw Conflict("Phiếu không còn ở trạng thái có thể xuất kho.");
             var now = DateTime.UtcNow;
-            var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.Approved)
+            var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.Approved &&
+                x.SourceWarehouseId == entity.SourceWarehouseId && x.DestinationWarehouseId == entity.DestinationWarehouseId)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StockTransferStatus.InTransit).SetProperty(x => x.DispatchedBy, currentUser.UserId).SetProperty(x => x.DispatchedAt, now), cancellationToken);
             if (claimed != 1) throw Conflict("Phiếu không ở trạng thái có thể xuất kho hoặc đã được xử lý.");
             foreach (var line in entity.Details.OrderBy(x => x.ProductId))
@@ -161,15 +164,16 @@ public sealed partial class StockTransferService(
     {
         EnsureWriteRole();
         var ownsTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
+        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
         try
         {
-            var entity = await GetScopedAsync(id, cancellationToken);
+            var entity = await GetLockedScopedAsync(id, cancellationToken);
             await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
             if (entity.Status != StockTransferStatus.InTransit) throw Conflict("Phiếu không ở trạng thái có thể nhận hoặc đã được xử lý.");
             ValidateReceipt(entity, request);
             var now = DateTime.UtcNow;
-            var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.InTransit)
+            var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.InTransit &&
+                x.SourceWarehouseId == entity.SourceWarehouseId && x.DestinationWarehouseId == entity.DestinationWarehouseId)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StockTransferStatus.Received).SetProperty(x => x.ReceivedBy, currentUser.UserId).SetProperty(x => x.ReceivedAt, now), cancellationToken);
             if (claimed != 1) throw Conflict("Phiếu không ở trạng thái có thể nhận hoặc đã được xử lý.");
             foreach (var input in request.Details.OrderBy(x => x.ProductId))
@@ -299,6 +303,25 @@ WHEN NOT MATCHED THEN
         if (affected != 1) throw Conflict("Trạng thái phiếu đã thay đổi hoặc thao tác không hợp lệ.");
         await AuditAsync(entity, action, from, to, cancellationToken, now);
         if (context.Database.CurrentTransaction is null) context.ChangeTracker.Clear();
+    }
+
+    // Lock the same header row as Draft edits before reading posting lines.
+    // Caller owns a transaction to keep ledger and document version consistent.
+    private async Task<StockTransfer> GetLockedScopedAsync(int id, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Stock transfer posting requires a database transaction.");
+        var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        var locked = context.Database.IsSqlServer()
+            ? context.StockTransfers.FromSqlInterpolated(
+                $"SELECT * FROM dbo.StockTransfers WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}")
+            : context.StockTransfers.AsQueryable();
+        return await locked.Include(x => x.SourceWarehouse).Include(x => x.DestinationWarehouse)
+            .Include(x => x.Details).ThenInclude(x => x.Product)
+            .SingleOrDefaultAsync(x => x.Id == id &&
+                (allowed.Contains(x.SourceWarehouseId) || allowed.Contains(x.DestinationWarehouseId)),
+                cancellationToken)
+            ?? throw new NotFoundException("Không tìm thấy phiếu điều chuyển.");
     }
 
     private async Task<StockTransfer> GetScopedAsync(int id, CancellationToken cancellationToken)

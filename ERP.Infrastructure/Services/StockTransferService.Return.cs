@@ -1,3 +1,4 @@
+using System.Data;
 using ERP.Application.DTOs;
 using ERP.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -11,14 +12,15 @@ public sealed partial class StockTransferService
         EnsureWriteRole();
         var (reasonCode, reason) = ValidateReturnReason(request);
         var ownsTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
+        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
         try
         {
-            var entity = await GetScopedAsync(id, cancellationToken);
+            var entity = await GetLockedScopedAsync(id, cancellationToken);
             await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
             await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
             var originalOut = await ValidateReturnPostingAsync(entity, cancellationToken);
-            var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.InTransit)
+            var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.InTransit &&
+                x.SourceWarehouseId == entity.SourceWarehouseId && x.DestinationWarehouseId == entity.DestinationWarehouseId)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StockTransferStatus.Returned), cancellationToken);
             if (claimed != 1) throw Conflict("Phiếu đã được nhận hoặc hoàn trả bởi thao tác khác.");
             await PostReturnAsync(entity, originalOut, reasonCode, reason, DateTime.UtcNow, cancellationToken);
