@@ -85,7 +85,8 @@ describe('Stock transfer command consistency', () => {
     const receiveButton = await view.findByRole('button', { name: 'Xác nhận nhận' });
     fireEvent.change(view.getByLabelText('Thực nhận SKU-9'), { target: { value: '3' } });
     fireEvent.click(receiveButton);
-    expect(await view.findByRole('alert')).toHaveProperty('textContent',
+    expect(await within(view.getByRole('dialog', { name: 'TRF-807' })).findByRole('alert'))
+      .toHaveProperty('textContent',
       'Sản phẩm SKU-9: tổng thực nhận, thiếu và hỏng phải bằng số lượng đã xuất (5).');
     expect(post).not.toHaveBeenCalled();
     fireEvent.change(view.getByLabelText('Thiếu SKU-9'), { target: { value: '1' } });
@@ -121,7 +122,7 @@ describe('Stock transfer command consistency', () => {
     fireEvent.change(within(dialog).getByLabelText('Số lượng dòng 1'), { target: { value: '5' } });
     fireEvent.submit(dialog);
 
-    expect(await view.findByRole('alert')).toHaveProperty('textContent',
+    expect(await within(dialog).findByRole('alert')).toHaveProperty('textContent',
       'Phải chọn kho nguồn và kho đích hợp lệ.');
     expect(post).not.toHaveBeenCalled();
   });

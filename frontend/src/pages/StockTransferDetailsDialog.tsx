@@ -46,6 +46,7 @@ type Transfer = {
 
 type Props = {
   selected: Transfer;
+  error?: string;
   status: string;
   statusNames: string[];
   statusLabel: Record<string, string>;
@@ -64,7 +65,7 @@ type Props = {
 };
 
 export default function StockTransferDetailsDialog({
-  selected, status, statusNames, statusLabel, statusTone, canWrite, canReturn, canApprove, userId,
+  selected, error, status, statusNames, statusLabel, statusTone, canWrite, canReturn, canApprove, userId,
   actionInFlight, receive, setReceive, onClose, onAction, onReceive, onOpenTransfer,
 }: Props) {
   const canTrace = usePermission('inventory_traceability.read');
@@ -108,6 +109,7 @@ export default function StockTransferDetailsDialog({
                 </button>
               </div>
 
+              {error && <p role="alert" className="transfer-error">{error}</p>}
               <div className="timeline" aria-label="Tiến trình điều chuyển">
                 {['Draft', 'Approved', 'InTransit', 'Received', 'Completed'].map((name, index) => (
                   <div

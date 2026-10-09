@@ -284,7 +284,7 @@ export default function StockTransfers() {
           }
         />
 
-        {error && (
+        {error && !showCreate && !selected && (
           <div className="transfer-error" role="alert">
             <span>{error}</span>
             <button type="button" aria-label="Đóng thông báo lỗi" onClick={() => setError('')}>
@@ -413,6 +413,7 @@ export default function StockTransfers() {
                 </button>
               </div>
 
+              {error && <p role="alert" className="transfer-error">{error}</p>}
               <div className="warehouse-pair">
                 <label>
                   Kho nguồn
@@ -521,6 +522,7 @@ export default function StockTransfers() {
           <StockTransferDetailsDialog
             key={selected.id}
             selected={selected}
+            error={error}
             status={status}
             statusNames={statusNames}
             statusLabel={statusLabel}
