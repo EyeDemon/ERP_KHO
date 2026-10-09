@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation } from 'react-router-dom';
 import apiClient from '../services/apiClient';
+import { getTraceabilityWarehouses, type TraceabilityWarehouse } from '../services/traceabilityWarehouses';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
 
 type Bucket={
@@ -78,6 +79,10 @@ export default function InventoryTraceability(){
   const [loading,setLoading]=useState(false);
   const [eventLimit,setEventLimit]=useState<50|100|200|500>(200);
   const [bucketOffset,setBucketOffset]=useState(0);
+  const [warehouses,setWarehouses]=useState<TraceabilityWarehouse[]>([]);
+  const [warehousesLoading,setWarehousesLoading]=useState(true);
+  const [warehousesError,setWarehousesError]=useState('');
+  const warehouseRequestSequence=useRef(0);
   const [validationError,setValidationError]=useState('');
   const [requestError,setRequestError]=useState('');
   const productIdRef=useRef<HTMLInputElement>(null);
@@ -85,6 +90,28 @@ export default function InventoryTraceability(){
   const referenceIdRef=useRef<HTMLInputElement>(null);
   // One generation counter guards both automatic deep links and manual searches.
   const requestSequence=useRef(0);
+
+  const loadWarehouses=useCallback(async()=>{
+    const seq=++warehouseRequestSequence.current;
+    setWarehousesLoading(true);
+    setWarehousesError('');
+    try{
+      const accessible=await getTraceabilityWarehouses();
+      if(seq===warehouseRequestSequence.current)setWarehouses(accessible);
+    }catch{
+      if(seq===warehouseRequestSequence.current){
+        setWarehouses([]);
+        setWarehousesError('Không thể tải danh sách kho được phân quyền. Hãy thử lại.');
+      }
+    }finally{
+      if(seq===warehouseRequestSequence.current)setWarehousesLoading(false);
+    }
+  },[]);
+
+  useEffect(()=>{
+    void loadWarehouses();
+    return ()=>{warehouseRequestSequence.current+=1};
+  },[loadWarehouses]);
 
   useEffect(()=>{
     const sequence=++requestSequence.current;
@@ -192,13 +219,27 @@ export default function InventoryTraceability(){
     {requestError&&<p role="alert">{requestError}</p>}
     <UiCard title="Điều kiện truy vết">
       <form onSubmit={search} className="ui-form-grid" aria-busy={loading}>
-        <UiToolbarField label="ID kho (tùy chọn)">
-          <input type="number" min="1" value={form.warehouseId} onChange={e=>updateField('warehouseId',e.target.value)} inputMode="numeric"
-            aria-describedby="traceability-warehouse-help"/>
+        <UiToolbarField label="Kho truy vết">
+          <select aria-label="Kho truy vết" value={form.warehouseId}
+            disabled={warehousesLoading||Boolean(warehousesError)||warehouses.length===0}
+            aria-describedby="traceability-warehouse-help"
+            onChange={e=>updateField('warehouseId',e.target.value)}>
+            <option value="">Tất cả kho được phân quyền (cần thêm bộ lọc)</option>
+            {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}
+          </select>
         </UiToolbarField>
         <p id="traceability-warehouse-help" className="ui-muted-text">
-          Chỉ nhập ID kho để xem tồn kho hiện tại và sự kiện gần nhất của kho được cấp quyền. Có thể chuyển trang, tối đa 500 nhóm tồn mỗi trang.
+          Chọn một kho để xem toàn bộ tồn hiện tại và sự kiện gần nhất; 500 nhóm tồn mỗi trang. Để truy vết nhiều kho, cần nhập thêm sản phẩm, lô, sê-ri hoặc chứng từ.
         </p>
+        {warehousesLoading&&<p role="status" className="ui-muted-text">Đang tải kho được cấp quyền...</p>}
+        {warehousesError&&<div className="ui-stack">
+          <p role="alert">{warehousesError}</p>
+          <button type="button" onClick={()=>void loadWarehouses()}>Tải lại danh sách kho</button>
+        </div>}
+        {!warehousesLoading&&!warehousesError&&warehouses.length===0&&
+          <p role="status" className="ui-muted-text">
+            Chưa có kho được cấp quyền truy vết. Liên hệ quản trị để kiểm tra quyền truy cập.
+          </p>}
         <UiToolbarField label="ID sản phẩm">
           <input ref={productIdRef} type="number" min="1" value={form.productId} onChange={e=>updateField('productId',e.target.value)} inputMode="numeric"/>
         </UiToolbarField>
