@@ -33,6 +33,9 @@ namespace ERP.Infrastructure.Queries
             int pageIndex = 1,
             int pageSize = 20)
         {
+            // Bound client pagination inputs before translating Skip/Take to SQL.
+            var safePage = Math.Max(1, pageIndex);
+            var safeSize = Math.Clamp(pageSize, 1, 100);
             var stockQuery = _context.InventoryStocks.AsNoTracking().Where(s => s.Status == InventoryStatus.Available);
             var transactionQuery = _context.InventoryTransactions.AsNoTracking().Where(t => t.InventoryStatus == InventoryStatus.Available);
             if (_warehouseAuthorization is not null)
@@ -62,7 +65,7 @@ namespace ERP.Infrastructure.Queries
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
-                var lowerKeyword = keyword.ToLower();
+                var lowerKeyword = keyword.Trim().ToLowerInvariant();
                 query = query.Where(s => 
                     s.ProductCode.ToLower().Contains(lowerKeyword) || 
                     s.ProductName.ToLower().Contains(lowerKeyword));
@@ -70,10 +73,24 @@ namespace ERP.Infrastructure.Queries
 
             var totalRecords = await query.CountAsync();
 
+            // Count is Int32, so an offset at or beyond count is always an empty
+            // page. Avoid Int32 overflow/negative Skip for extreme page numbers.
+            var offset = ((long)safePage - 1) * safeSize;
+            if (offset >= totalRecords)
+            {
+                return new PagedResult<InventoryReconciliationDto>
+                {
+                    Items = [],
+                    TotalRecords = totalRecords,
+                    PageIndex = safePage,
+                    PageSize = safeSize
+                };
+            }
+
             var pagedPairs = await query
                 .OrderBy(s => s.WarehouseId).ThenBy(s => s.ProductId)
-                .Skip((pageIndex - 1) * pageSize)
-                .Take(pageSize)
+                .Skip(checked((int)offset))
+                .Take(safeSize)
                 .ToListAsync();
 
             var productIds = pagedPairs.Select(s => s.ProductId).Distinct().ToList();
@@ -148,8 +165,8 @@ namespace ERP.Infrastructure.Queries
             {
                 Items = results,
                 TotalRecords = totalRecords,
-                PageIndex = pageIndex,
-                PageSize = pageSize
+                PageIndex = safePage,
+                PageSize = safeSize
             };
         }
     }

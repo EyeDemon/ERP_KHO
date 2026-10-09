@@ -148,6 +148,11 @@ export default function InventoryReconciliation() {
         title="Đối chiếu tồn kho & ledger"
         description="So sánh operational balance với immutable ledger để phát hiện chênh lệch. Work center này chỉ đọc; mọi sửa sai phải đi qua transaction có kiểm soát."
       />
+      <p role="note" className="ui-muted-text">
+        Phạm vi hiện tại chỉ đối chiếu trạng thái AVAILABLE theo cặp kho / sản phẩm.
+        Chưa bao phủ toàn bộ Owner, Handling Unit, Reserved, Allocated hay quy trình khôi phục số dư có phê duyệt.
+        Kết quả này chỉ để phát hiện sai lệch, không tự động sửa Ledger hoặc Balance.
+      </p>
 
       <UiMetricGrid>
         <UiMetric value={numberFormat.format(result?.totalRecords ?? 0)} label="Cặp kho / sản phẩm" />

@@ -138,6 +138,39 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
+        public async Task GetReconciliationsAsync_ClampsInvalidPagingAndPreventsOffsetOverflow()
+        {
+            using var context = await GetDbContextAsync();
+            var service = new InventoryReconciliationQueryService(context);
+
+            var farPage = await service.GetReconciliationsAsync(
+                null, null, null, pageIndex: int.MaxValue, pageSize: int.MaxValue);
+            farPage.TotalRecords.Should().Be(5);
+            farPage.Items.Should().BeEmpty();
+            farPage.PageIndex.Should().Be(int.MaxValue);
+            farPage.PageSize.Should().Be(100);
+
+            var invalidPage = await service.GetReconciliationsAsync(
+                null, null, null, pageIndex: -200, pageSize: 0);
+            invalidPage.TotalRecords.Should().Be(5);
+            invalidPage.Items.Should().ContainSingle();
+            invalidPage.PageIndex.Should().Be(1);
+            invalidPage.PageSize.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task GetReconciliationsAsync_TrimsKeywordBeforeQuery()
+        {
+            using var context = await GetDbContextAsync();
+            var service = new InventoryReconciliationQueryService(context);
+
+            var result = await service.GetReconciliationsAsync(null, null, "  BeTa  ");
+
+            result.TotalRecords.Should().Be(2);
+            result.Items.Should().OnlyContain(row => row.ProductId == 2);
+        }
+
+        [Fact]
         public async Task GetReconciliationsAsync_FiltersByKeywordCorrectly_ProductCode()
         {
             using var context = await GetDbContextAsync();
