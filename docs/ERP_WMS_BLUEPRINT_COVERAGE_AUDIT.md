@@ -34,6 +34,15 @@ The blueprint registry has now been corrected in the same feature branch:
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
+## Kiểm tra production và giới hạn fixture — 2026-10-10
+
+- HEAD production hiện được xác minh là `7980d9c01c7d067e5a90ca37249a27394e3831bb`, Vercel `dpl_FUXLHmfScQrTza6Ncev3owtSaL8R` READY (sau PR #30 ngày 09/10); thay thế mốc production b9d926e ở mục lịch sử bên dưới.
+- Registry vẫn **179 capability = 33 live / 28 foundation / 72 planned / 46 optional**; INV-01 đến INV-11 giữ foundation.
+- Browser Use ngày 10/10 kiểm 29 route Real + 46 route capability Blueprint (không 404), tìm thấy redirect root về Blueprint do `frontend/vercel.json`; sửa trên PR #33 với kiểm thử và QA Preview.
+- Màn Blueprint Inventory Control, Capability INV-11 và Real Demo Reconciliation sử dụng **ba bộ fixture độc lập**. Số `0`, `12` và `6` không thể dùng làm bằng chứng Ledger/Balance mâu thuẫn của cùng một kho. Nguồn dữ liệu và cảnh báo được bổ sung trên UX; không chỉnh fixture hoặc database.
+- Notion #82 xác định Ledger là nguồn sự thật và đối chiếu phải theo cùng dimensions/snapshot; Notion chỉ đọc, không chỉnh sửa.
+- PR Inventory Control #31 và Manual Reservation #32 còn ở nhánh riêng, không cộng vào thống kê hệ thống thật đã phát hành.
+
 ## Đồng bộ sự thật hệ thống thật — 2026-10-08
 
 Đây là **mốc xác minh bản phát hành ngày 2026-10-08**, không phải bộ đếm SHA thay đổi tự động. Khi phát hành bản mới phải kiểm tra riêng HEAD nhánh tích hợp, CI và alias Vercel trước khi cập nhật mốc.

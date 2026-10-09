@@ -149,6 +149,14 @@ export default function InventoryReconciliation() {
         description="So sánh operational balance với immutable ledger để phát hiện chênh lệch. Work center này chỉ đọc; mọi sửa sai phải đi qua transaction có kiểm soát."
       />
 
+      {demoRuntime && (
+        <p role="note">
+          Đây là bộ dữ liệu đối chiếu mô phỏng riêng của giao diện Real trên Vercel,
+          không phải kết quả từ SQL Server thật. Số liệu này không cùng snapshot với
+          Work Center Inventory Control hoặc kịch bản INV-11 trong System Blueprint.
+        </p>
+      )}
+
       <UiMetricGrid>
         <UiMetric value={numberFormat.format(result?.totalRecords ?? 0)} label="Cặp kho / sản phẩm" />
         <UiMetric value={numberFormat.format(mismatchCount)} label="Mismatch trang hiện tại" />

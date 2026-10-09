@@ -141,6 +141,13 @@ const ModuleBlueprint = () => {
                 Bộ dữ liệu mô phỏng tại {workCenter ? localTime(workCenter.snapshotAt) : '—'} • Vai trò {mockDemo.selectedUser.name} • {mockDemo.allowedWarehouses.length} kho trong phạm vi.
                 Không gọi API thật và không thay đổi dữ liệu nghiệp vụ.
               </p>
+              {moduleKey === 'inventory-control' && (
+                <p role="note">
+                  Dữ liệu RECON-HCM-0930 là một kịch bản mô phỏng riêng tại mốc 02/10/2026.
+                  INV-11 có kịch bản chênh lệch độc lập; màn Đối chiếu tồn kho của Real demo sử dụng
+                  bộ dữ liệu mẫu khác. Không so sánh các số dư này như cùng một kết quả Ledger/Balance.
+                </p>
+              )
             </div>
             <button type="button" className="demo-primary" disabled title="Bộ dữ liệu mô phỏng chỉ đọc">Mô phỏng chỉ đọc</button>
           </div>

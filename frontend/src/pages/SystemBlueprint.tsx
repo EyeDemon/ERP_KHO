@@ -77,11 +77,12 @@ const SystemBlueprint = () => {
       </section>
 
       <section className="mock-dataset-summary">
-        <strong>Mốc triển khai đã xác minh:</strong>
+        <strong>Mốc production đã xác minh (ảnh chụp, không phải phiên bản Preview):</strong>
         <span>Nhánh: {blueprintProductionSnapshot.branch}</span>
         <span>Commit mốc: {blueprintProductionSnapshot.commit.slice(0, 12)}</span>
         <span>Triển khai: {blueprintProductionSnapshot.deployment}</span>
         <span>Xác minh: {blueprintProductionSnapshot.verifiedAt}</span>
+        <span>Mốc đã xác minh ngày 09/10/2026; bản Preview của nhánh khác có thể có commit mới hơn.</span>
         <span>Notion: tài liệu chuẩn • chỉ đọc</span>
       </section>
 
