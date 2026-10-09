@@ -28,7 +28,16 @@ public sealed class WarehouseAuthorizationService(
         if (!currentUser.IsAuthenticated)
             return false;
 
-        return currentUser.IsGlobalAdmin || await context.UserWarehouses.AsNoTracking()
+        if (warehouseId <= 0)
+            return false;
+
+        // Global admin bypasses membership, never resource existence.
+        // An unknown warehouse must fail closed like an unassigned one.
+        if (currentUser.IsGlobalAdmin)
+            return await context.Warehouses.AsNoTracking()
+                .AnyAsync(x => x.Id == warehouseId, cancellationToken);
+
+        return await context.UserWarehouses.AsNoTracking()
             .AnyAsync(x => x.UserId == currentUser.UserId && x.WarehouseId == warehouseId, cancellationToken);
     }
 
