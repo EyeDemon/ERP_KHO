@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Plus, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { currentUserId, usePermission } from '../services/authorization';
@@ -100,8 +100,13 @@ export default function StockTransfers() {
     Record<number, { receivedQuantity: number; missingQuantity: number; damagedQuantity: number }>
   >({});
   const [actionInFlight, setActionInFlight] = useState(false);
+  const [createInFlight, setCreateInFlight] = useState(false);
+  const actionInFlightRef = useRef(false);
+  const createInFlightRef = useRef(false);
+  const listRequestSequence = useRef(0);
 
   const load = async (requestedPage = page) => {
+    const requestSequence = ++listRequestSequence.current;
     setLoading(true);
     setError('');
     try {
@@ -111,14 +116,17 @@ export default function StockTransfers() {
         apiClient.get('/api/warehouses'),
         apiClient.get('/api/products'),
       ]);
+      if (requestSequence !== listRequestSequence.current) return;
       setItems(transfers.data.items);
       setTotalPages(transfers.data.totalPages || 1);
       setWarehouses(warehouseResult.data);
       setProducts(productResult.data);
     } catch (failure: any) {
-      setError(failure.response?.data?.message || 'Không thể tải dữ liệu điều chuyển.');
+      if (requestSequence === listRequestSequence.current) {
+        setError(failure.response?.data?.message || 'Không thể tải dữ liệu điều chuyển.');
+      }
     } finally {
-      setLoading(false);
+      if (requestSequence === listRequestSequence.current) setLoading(false);
     }
   };
 
@@ -156,6 +164,7 @@ export default function StockTransfers() {
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (createInFlightRef.current) return;
     if (sourceId === destinationId) return setError('Kho nguồn và kho đích phải khác nhau.');
     if (lines.some(line => !line.productId || Number(line.quantity) <= 0)) {
       return setError('Mỗi dòng phải có sản phẩm và số lượng lớn hơn 0.');
@@ -164,6 +173,8 @@ export default function StockTransfers() {
       return setError('Sản phẩm không được trùng dòng.');
     }
 
+    createInFlightRef.current = true;
+    setCreateInFlight(true);
     try {
       const payload = {
         sourceWarehouseId: sourceId,
@@ -184,15 +195,20 @@ export default function StockTransfers() {
       await load();
     } catch (failure: any) {
       setError(failure.response?.data?.message || 'Không thể tạo phiếu.');
+    } finally {
+      createInFlightRef.current = false;
+      setCreateInFlight(false);
     }
   };
 
   const act = async (action: string, body?: unknown) => {
-    if (!selected || !window.confirm(`Xác nhận thao tác ${action === 'return' ? 'hoàn trả về kho nguồn' : action === 'reverse-draft' ? 'lập phiếu điều chuyển ngược' : statusLabel[action] || action}?`)) return;
-    if (actionInFlight) return;
+    if (!selected || actionInFlightRef.current) return;
+    if (!window.confirm(`Xác nhận thao tác ${action === 'return' ? 'hoàn trả về kho nguồn' : action === 'reverse-draft' ? 'lập phiếu điều chuyển ngược' : statusLabel[action] || action}?`)) return;
 
+    actionInFlightRef.current = true;
     setActionInFlight(true);
-    const logicalAction = `transfer-${action}:${selected.id}${['return', 'reverse-draft'].includes(action) ? `:${JSON.stringify(body)}` : ''}`;
+    // Khóa idempotency gắn với toàn bộ payload, đặc biệt là số lượng thực nhận.
+    const logicalAction = `transfer-${action}:${selected.id}${body === undefined ? '' : `:${JSON.stringify(body)}`}`;
     try {
       const response = await apiClient.post(`/api/stock-transfers/${selected.id}/${action}`, body, {
         headers: idempotencyHeaders(logicalAction),
@@ -203,6 +219,7 @@ export default function StockTransfers() {
     } catch (failure: any) {
       setError(failure.response?.data?.message || 'Thao tác không thành công.');
     } finally {
+      actionInFlightRef.current = false;
       setActionInFlight(false);
     }
   };
@@ -357,7 +374,7 @@ export default function StockTransfers() {
             >
               <div className="dialog-title">
                 <h2 id="transfer-create-title">Tạo phiếu điều chuyển</h2>
-                <button type="button" aria-label="Đóng tạo phiếu" onClick={() => setShowCreate(false)}>
+                <button type="button" aria-label="Đóng tạo phiếu" disabled={createInFlight} onClick={() => setShowCreate(false)}>
                   <X aria-hidden="true" />
                 </button>
               </div>
@@ -453,8 +470,10 @@ export default function StockTransfers() {
               ))}
 
               <div className="dialog-actions">
-                <button type="button" onClick={() => setShowCreate(false)}>Đóng</button>
-                <button className="ui-primary-button" type="submit">Tạo phiếu</button>
+                <button type="button" disabled={createInFlight} onClick={() => setShowCreate(false)}>Đóng</button>
+                <button className="ui-primary-button" type="submit" disabled={createInFlight}>
+                  {createInFlight ? 'Đang tạo phiếu...' : 'Tạo phiếu'}
+                </button>
               </div>
             </form>
           </div>
