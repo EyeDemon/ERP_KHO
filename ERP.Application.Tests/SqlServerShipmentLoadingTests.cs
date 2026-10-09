@@ -386,6 +386,96 @@ public sealed class SqlServerShipmentLoadingTests
         finally { await CleanupAsync(fixture); }
     }
 
+
+    [SqlServerFact]
+    public async Task Traceability_TrackedShipmentExposure_UsesActualDispatchLedgerAndIgnoresOrphans()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            string lotNumber;
+            await using (var tracked = CreateContext())
+            {
+                var lot = new InventoryLot
+                {
+                    ProductId = fixture.ProductId,
+                    LotNumber = "SHIPLOT-" + fixture.Suffix,
+                    ReceivedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                };
+                tracked.InventoryLots.Add(lot);
+                await tracked.SaveChangesAsync();
+                lotNumber = lot.LotNumber;
+                var stock = await tracked.InventoryStocks.SingleAsync(x =>
+                    x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+                stock.LotId = lot.Id;
+                await tracked.SaveChangesAsync();
+            }
+
+            var prepared = await PrepareDispatchedShipmentAsync(fixture);
+            await using var verify = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                verify, new WarehouseAuthorizationService(verify, new CurrentUser(fixture.UserId)));
+
+            var posted = await verify.InventoryTransactions.AsNoTracking().SingleAsync(x =>
+                x.TransactionType == TransactionType.Ship &&
+                x.ReferenceType == "Shipment" && x.ReferenceId == prepared.Prepared.ShipmentId);
+            posted.LotId.Should().NotBeNull();
+            posted.Quantity.Should().Be(10m);
+
+            var result = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
+            var exposure = result.ShipmentExposures.Should().ContainSingle().Which;
+            exposure.ShipmentId.Should().Be(prepared.Prepared.ShipmentId);
+            exposure.WarehouseId.Should().Be(fixture.WarehouseId);
+            exposure.ShipmentCode.Should().NotBeNullOrWhiteSpace();
+            exposure.ShipmentStatus.Should().Be(nameof(ShipmentStatus.Dispatched));
+            exposure.DispatchedAt.Should().NotBeNull();
+            exposure.DispatchedQuantity.Should().Be(10m);
+            exposure.LedgerEventCount.Should().Be(1);
+            exposure.LastTransactionId.Should().Be(posted.Id);
+            result.ShipmentExposuresTruncated.Should().BeFalse();
+
+            // A forged shipment reference in the immutable ledger alone is
+            // never sufficient proof that a canonical Shipment exists.
+            await using (var orphan = CreateContext())
+            {
+                orphan.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.LocationId, LotId = posted.LotId,
+                    CreatedBy = fixture.UserId, TransactionType = TransactionType.Ship,
+                    InventoryStatus = InventoryStatus.Available, Quantity = 99,
+                    ReferenceType = "Shipment", ReferenceId = int.MaxValue,
+                    TransactionDate = DateTime.UtcNow
+                });
+                await orphan.SaveChangesAsync();
+            }
+
+            var afterOrphan = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
+            afterOrphan.ShipmentExposures.Should().ContainSingle();
+            afterOrphan.ShipmentExposures[0].DispatchedQuantity.Should().Be(10m);
+            var anchored = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber,
+                limit: 20, eventAnchorId: result.EventAnchorId);
+            anchored.ShipmentExposures.Should().ContainSingle();
+            anchored.ShipmentExposures[0].LastTransactionId.Should().Be(posted.Id);
+
+            var nonexistentLot = await query.TraceAsync(productId: fixture.ProductId,
+                lotNumber: lotNumber + "-other", limit: 20);
+            nonexistentLot.ShipmentExposures.Should().BeEmpty();
+            var untracked = await query.TraceAsync(
+                warehouseId: fixture.WarehouseId, limit: 20);
+            untracked.ShipmentExposures.Should().BeEmpty();
+            var exactDocument = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber,
+                referenceType: "Shipment", referenceId: prepared.Prepared.ShipmentId, limit: 20);
+            exactDocument.ShipmentExposures.Should().BeEmpty();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task PostDispatchDeliveryLifecycle_DoesNotChangeInventoryOrCreateSecondShipLedger()
     {
@@ -1062,6 +1152,7 @@ public sealed class SqlServerShipmentLoadingTests
             .ExecuteDeleteAsync();
         await db.ExportReceipts.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
+        await db.InventoryLots.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.UserWarehouses.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == fixture.ProductId).ExecuteDeleteAsync();
         await db.Units.Where(x => x.Id == fixture.UnitId).ExecuteDeleteAsync();

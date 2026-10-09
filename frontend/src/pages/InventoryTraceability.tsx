@@ -21,11 +21,17 @@ type RelatedDocument={
   warehouseId:number;warehouseName:string;referenceType:string;referenceId:number;
   eventCount:number;firstTransactionDate:string;lastTransactionDate:string;lastTransactionId:number;
 };
+type ShipmentExposure={
+  shipmentId:number;warehouseId:number;shipmentCode:string;shipmentStatus:string;
+  dispatchedAt?:string|null;dispatchedQuantity:number;ledgerEventCount:number;lastTransactionId:number;
+};
 type Result={
   currentBuckets:Bucket[];
   events:Event[];
   relatedDocuments?:RelatedDocument[];
   relatedDocumentsTruncated?:boolean;
+  shipmentExposures?:ShipmentExposure[];
+  shipmentExposuresTruncated?:boolean;
   eventAnchorId?:number|null;
   eventsTruncated?:boolean;
   bucketsTruncated?:boolean;
@@ -50,6 +56,13 @@ const transactionTypeLabel=(value:string)=>({
   StatusChange:'Đổi trạng thái',
   Move:'Di chuyển vị trí',
   Reversal:'Đảo giao dịch',
+}[value]??value);
+
+const shipmentStatusLabel=(value:string)=>({
+  Draft:'Nháp',Ready:'Sẵn sàng',Staging:'Chờ bốc hàng',Loading:'Đang bốc hàng',
+  Loaded:'Đã bốc hàng',Dispatched:'Đã xuất giao hàng',InTransit:'Đang vận chuyển',
+  Delivered:'Đã xác nhận giao',DeliveryFailed:'Giao không thành công',
+  Cancelled:'Đã hủy',ReturnToWarehouse:'Đang xử lý hoàn về kho',Completed:'Hoàn tất'
 }[value]??value);
 
 const referenceTypeLabel=(value:string)=>({
@@ -381,6 +394,33 @@ export default function InventoryTraceability(){
                   <td>{doc.eventCount}</td>
                   <td>{new Date(doc.firstTransactionDate).toLocaleString('vi-VN')}</td>
                   <td>{new Date(doc.lastTransactionDate).toLocaleString('vi-VN')}</td>
+                </tr>)}
+            </tbody>
+          </table></UiTableScroll>
+        </UiCard>}
+
+
+      {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
+        <UiCard title="Shipment cần rà soát khi thu hồi">
+          <p className="ui-muted-text">
+            Chỉ hiển thị chuyến hàng có giao dịch xuất giao thực tế (SHIP) khớp sản phẩm và lô/sê-ri.
+            Số lượng là tổng đã xuất, chưa trừ hàng hoàn; trạng thái giao hàng có thể thay đổi sau mốc lịch sử.
+            Danh sách này là dữ liệu hỗ trợ rà soát, không tự động thu hồi hoặc xác định người nhận cuối.
+          </p>
+          {result.shipmentExposuresTruncated&&<p role="status" className="ui-muted-text">
+            Đã đạt giới hạn 100 Shipment; hãy chọn một kho hoặc thu hẹp điều kiện để xem đầy đủ.
+          </p>}
+          <UiTableScroll><table aria-label="Shipment có giao dịch xuất giao cần rà soát">
+            <thead><tr><th>Mã Shipment</th><th>Trạng thái hiện tại</th><th>Xuất giao lúc</th><th>Đã xuất</th><th>Giao dịch sổ cái</th></tr></thead>
+            <tbody>{!result.shipmentExposures?.length?
+              <tr><td colSpan={5} className="ui-empty-cell">Không tìm thấy Shipment đã ghi nhận xuất giao trong phạm vi truy vết.</td></tr>:
+              result.shipmentExposures.map(shipment=>
+                <tr key={shipment.warehouseId+'-'+shipment.shipmentId}>
+                  <td><strong>{shipment.shipmentCode}</strong><br/><small>#{shipment.shipmentId} • Kho #{shipment.warehouseId}</small></td>
+                  <td><UiBadge>{shipmentStatusLabel(shipment.shipmentStatus)}</UiBadge></td>
+                  <td>{shipment.dispatchedAt?new Date(shipment.dispatchedAt).toLocaleString('vi-VN'):'—'}</td>
+                  <td>{shipment.dispatchedQuantity}</td>
+                  <td>{shipment.ledgerEventCount}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>

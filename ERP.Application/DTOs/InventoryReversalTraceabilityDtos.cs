@@ -66,6 +66,8 @@ public sealed class InventoryTraceabilityResultDto
     public IReadOnlyList<InventoryTraceabilityEventDto> Events { get; set; } = [];
     public IReadOnlyList<InventoryTraceabilityRelatedDocumentDto> RelatedDocuments { get; set; } = [];
     public bool RelatedDocumentsTruncated { get; set; }
+    public IReadOnlyList<InventoryTraceabilityShipmentExposureDto> ShipmentExposures { get; set; } = [];
+    public bool ShipmentExposuresTruncated { get; set; }
     // These flags describe whether the initial chronological event window or
     // matching current-stock window was capped; reversal chain closure is retained.
     // Stable transaction-ID fence for ledger pagination. Null for older clients only.
@@ -76,6 +78,19 @@ public sealed class InventoryTraceabilityResultDto
 
 // One authorized warehouse/document occurrence for an explicitly tracked
 // product+lot/serial. Do not mistake co-occurrence for causal custody links.
+// Read-only gross SHIP ledger evidence. It does not imply delivery or net returns.
+public sealed class InventoryTraceabilityShipmentExposureDto
+{
+    public int ShipmentId { get; set; }
+    public int WarehouseId { get; set; }
+    public string ShipmentCode { get; set; } = string.Empty;
+    public string ShipmentStatus { get; set; } = string.Empty;
+    public DateTime? DispatchedAt { get; set; }
+    public decimal DispatchedQuantity { get; set; }
+    public int LedgerEventCount { get; set; }
+    public int LastTransactionId { get; set; }
+}
+
 public sealed class InventoryTraceabilityRelatedDocumentDto
 {
     public int WarehouseId { get; set; }

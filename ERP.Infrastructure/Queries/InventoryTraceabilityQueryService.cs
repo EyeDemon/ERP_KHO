@@ -284,12 +284,72 @@ public sealed class InventoryTraceabilityQueryService(
             relatedDocuments = documentWindow.Take(100).ToList();
         }
 
+
+        // Gross dispatch impact is derived ONLY from committed SHIP ledger rows
+        // joined to the canonical Shipment in the same authorized warehouse.
+        // It is a read-only candidate view, not a return/POD/recall decision.
+        var shipmentExposures = new List<InventoryTraceabilityShipmentExposureDto>();
+        var shipmentExposuresTruncated = false;
+        if (productId.HasValue && (lot is not null || serial is not null) && !hasReference)
+        {
+            var shippedEvents = scopedLedger.Where(x =>
+                x.Id <= anchorId && x.ProductId == productId.Value &&
+                x.TransactionType == TransactionType.Ship &&
+                x.ReferenceType == "Shipment" && x.ReferenceId.HasValue);
+            if (lot is not null)
+                shippedEvents = shippedEvents.Where(x => x.Lot != null && x.Lot.LotNumber == lot);
+            if (serial is not null)
+                shippedEvents = shippedEvents.Where(x => x.Serial != null && x.Serial.SerialNumber == serial);
+
+            var exposureWindow = await (
+                from transaction in shippedEvents
+                join shipment in context.Shipments.AsNoTracking()
+                    on new { Id = transaction.ReferenceId, transaction.WarehouseId }
+                    equals new { Id = (int?)shipment.Id, shipment.WarehouseId }
+                group transaction by new
+                {
+                    shipment.Id, shipment.WarehouseId, shipment.ShipmentCode,
+                    shipment.Status, shipment.DispatchedAt
+                } into grouped
+                select new
+                {
+                    ShipmentId = grouped.Key.Id,
+                    grouped.Key.WarehouseId,
+                    grouped.Key.ShipmentCode,
+                    grouped.Key.Status,
+                    grouped.Key.DispatchedAt,
+                    DispatchedQuantity = grouped.Sum(x => x.Quantity),
+                    LedgerEventCount = grouped.Count(),
+                    LastTransactionId = grouped.Max(x => x.Id)
+                })
+                .OrderByDescending(x => x.LastTransactionId)
+                .ThenBy(x => x.WarehouseId)
+                .ThenBy(x => x.ShipmentId)
+                .Take(101)
+                .ToListAsync(cancellationToken);
+            shipmentExposuresTruncated = exposureWindow.Count > 100;
+            shipmentExposures = exposureWindow.Take(100)
+                .Select(x => new InventoryTraceabilityShipmentExposureDto
+                {
+                    ShipmentId = x.ShipmentId,
+                    WarehouseId = x.WarehouseId,
+                    ShipmentCode = x.ShipmentCode,
+                    ShipmentStatus = x.Status.ToString(),
+                    DispatchedAt = x.DispatchedAt,
+                    DispatchedQuantity = x.DispatchedQuantity,
+                    LedgerEventCount = x.LedgerEventCount,
+                    LastTransactionId = x.LastTransactionId
+                }).ToList();
+        }
+
         return new InventoryTraceabilityResultDto
         {
             CurrentBuckets = buckets,
             Events = events,
             RelatedDocuments = relatedDocuments,
             RelatedDocumentsTruncated = relatedDocumentsTruncated,
+            ShipmentExposures = shipmentExposures,
+            ShipmentExposuresTruncated = shipmentExposuresTruncated,
             EventAnchorId = anchorId,
             EventsTruncated = eventsTruncated,
             BucketsTruncated = bucketsTruncated

@@ -22,3 +22,11 @@
 - The SQL projection returns at most 100 groups, using a 101st sentinel for a visible truncation warning; no full COUNT and no schema migration.
 - Frontend renders an accessible Vietnamese table using the current production UI primitives; if the operator narrows to a specific document reference, the supplemental related-document table is suppressed so it cannot silently widen that explicit filter.
 - Coverage remains **foundation** until full Receipt→QC→Pick→Shipment→Return/Recall lineage, owner/HU identity, real browser QA and staging API/SQL evidence are complete.
+
+## INV-10 Shipment dispatch exposure for recall review (2026-10-09)
+- Additional read-only `shipmentExposures[]` and `shipmentExposuresTruncated` returned only for requests supplying both `productId` and a matching lot and/or serial, without a document-reference filter. Warehouse authorization and chosen-warehouse intersection remain mandatory.
+- SQL derives candidates strictly from posted `InventoryTransaction` rows with `TransactionType.Ship` and `ReferenceType="Shipment"`, joined to a **real Shipment in the same warehouse**; forged/orphan reference IDs cannot create exposure. Results are grouped per Shipment with gross shipped quantity, count of SHIP ledger rows, code, current status, dispatch time, and max transaction ID. Capped at 100 groups with a 101st sentinel; anchored by `eventAnchorId`.
+- This is an impact **review list**, not an automatic recall, net delivered quantity, proof-of-delivery determination, customer mapping, or an automatic inventory correction. Later returns and delivery state changes must be validated separately. Shipment status is a current value while the SHIP ledger history is anchored.
+- No schema migration or mutation permission needed; existing read permission and warehouse boundaries apply.
+- Verification: SQL Server real tracked-lot shipment dispatch + forged/orphan reference exclusion + anchor and filter isolation; frontend Vietnamese display, empty state, truncation, and explicit filter reset; API JSON contract.
+- Keep INV-10 as `foundation` pending canonical Receipt→QC→Move→Pick→Shipment→Return/Recall causal ancestry and real browser/staging SQL/API evidence.

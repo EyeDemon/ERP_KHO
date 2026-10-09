@@ -152,6 +152,38 @@ public sealed class InventoryReversalTraceabilityControllerTests
         reversal.VerifyNoOtherCalls();
     }
 
+
+    [Fact]
+    public void TraceResponse_ExposesReadOnlyShipmentImpactInVietnameseUiContract()
+    {
+        var response = new InventoryTraceabilityResultDto
+        {
+            EventAnchorId = 123,
+            ShipmentExposures =
+            [
+                new InventoryTraceabilityShipmentExposureDto
+                {
+                    ShipmentId = 42, WarehouseId = 7, ShipmentCode = "SHIP-42",
+                    ShipmentStatus = "Dispatched", DispatchedQuantity = 10,
+                    LedgerEventCount = 2, LastTransactionId = 123
+                }
+            ],
+            ShipmentExposuresTruncated = true
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            response, new System.Text.Json.JsonSerializerOptions(
+                System.Text.Json.JsonSerializerDefaults.Web));
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var root = document.RootElement;
+        Assert.Equal(123, root.GetProperty("eventAnchorId").GetInt32());
+        Assert.True(root.GetProperty("shipmentExposuresTruncated").GetBoolean());
+        var shipment = Assert.Single(root.GetProperty("shipmentExposures").EnumerateArray());
+        Assert.Equal("SHIP-42", shipment.GetProperty("shipmentCode").GetString());
+        Assert.Equal(10m, shipment.GetProperty("dispatchedQuantity").GetDecimal());
+        Assert.Equal(2, shipment.GetProperty("ledgerEventCount").GetInt32());
+    }
+
     [Fact]
     public async Task Warehouses_DelegatesToAuthorizedScopeService()
     {

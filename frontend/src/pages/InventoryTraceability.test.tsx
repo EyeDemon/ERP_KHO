@@ -468,6 +468,55 @@ describe('InventoryTraceability',()=>{
     expect(view.queryByRole('table',{name:'Chứng từ liên quan cùng lô hoặc sê-ri'})).toBeNull();
   });
 
+
+  it('shows SHIP evidence without implying completed recall or net delivered stock',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,
+      shipmentExposures:[{
+        shipmentId:42,warehouseId:1,shipmentCode:'SHIP-42',
+        shipmentStatus:'ReturnToWarehouse',
+        dispatchedAt:'2026-10-08T10:00:00Z',dispatchedQuantity:4,
+        ledgerEventCount:2,lastTransactionId:82
+      }]
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Mã lô'),{target:{value:'LOT-A'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    expect(await view.findByRole('table',{name:'Shipment có giao dịch xuất giao cần rà soát'})).toBeTruthy();
+    expect(view.getByText('SHIP-42')).toBeTruthy();
+    expect(view.getByText('Đang xử lý hoàn về kho')).toBeTruthy();
+    expect(view.getByText(/chưa trừ hàng hoàn/)).toBeTruthy();
+    expect(view.getByText(/không tự động thu hồi/)).toBeTruthy();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'
+    );
+  });
+
+  it('limits shipment recall candidates and invalidates them on reference filter changes',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentExposures:[],shipmentExposuresTruncated:true
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Số sê-ri'),{target:{value:'SER-A'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    expect(await view.findByText(/Đã đạt giới hạn 100 Shipment/)).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Loại tham chiếu'),{target:{value:'Shipment'}});
+    expect(view.queryByRole('table',{name:'Shipment có giao dịch xuất giao cần rà soát'})).toBeNull();
+    expect(view.queryByText(/Đã đạt giới hạn 100 Shipment/)).toBeNull();
+  });
+
+  it('does not show shipment recall candidates for warehouse-only searches',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{...result,shipmentExposures:[]}} as never);
+    const view=renderTrace();
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    fireEvent.change(view.getByLabelText('Kho truy vết'),{target:{value:'1'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    await view.findByRole('table',{name:'Dòng thời gian sổ cái phục vụ truy vết'});
+    expect(view.queryByRole('table',{name:'Shipment có giao dịch xuất giao cần rà soát'})).toBeNull();
+  });
+
   it('can increase server event window to 500 without client-side truncation',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=renderTrace();
