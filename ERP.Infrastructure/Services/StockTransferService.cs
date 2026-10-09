@@ -197,6 +197,13 @@ public sealed partial class StockTransferService(
                 decimal.Round(input.DamagedQuantity, 4) != input.DamagedQuantity)
                 throw new BusinessRuleException("Số lượng nhận, thiếu và hư hỏng phải không âm và có tối đa 4 chữ số thập phân.");
 
+            // Bound each part before summing to avoid overflow from malformed
+            // decimal payloads; the posted quantity uses decimal(18,4).
+            if (input.ReceivedQuantity > line.DispatchedQuantity ||
+                input.MissingQuantity > line.DispatchedQuantity ||
+                input.DamagedQuantity > line.DispatchedQuantity)
+                throw new BusinessRuleException("Số lượng thực nhận, thiếu hoặc hỏng không được vượt quá số đã xuất.");
+
             // Receiving is a terminal movement for each line, not a partial
             // receiving workflow. Every dispatched unit must be accounted for
             // as received, missing or damaged before the document leaves transit.

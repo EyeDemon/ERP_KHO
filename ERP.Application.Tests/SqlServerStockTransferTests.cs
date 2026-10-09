@@ -150,6 +150,7 @@ public sealed class SqlServerStockTransferTests
             // or damaged; they cannot disappear on Received/Completed.
             await RejectAndVerifyAsync(3, 0, 0);
             await RejectAndVerifyAsync(7, 0, 2);
+            await RejectAndVerifyAsync(decimal.MaxValue, 0, 0);
             await RejectAndVerifyAsync(-1, 9, 0);
             await RejectAndVerifyAsync(7.00001m, 0.99999m, 0);
 
