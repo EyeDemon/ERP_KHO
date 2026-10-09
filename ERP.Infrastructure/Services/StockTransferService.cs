@@ -295,7 +295,14 @@ EXEC @lockResult = sys.sp_getapplock
     @LockOwner = 'Transaction',
     @LockTimeout = 15000;
 IF @lockResult < 0
-    THROW 51032, 'Khong the khoa o ton kho de nhan dieu chuyen.', 1;", cancellationToken);
+BEGIN
+    -- Preserve the SQL lock return code (-1 timeout, -3 deadlock victim,
+    -- etc.) so an operator can diagnose contention without assuming that
+    -- every lock failure is a deadlock.
+    DECLARE @lockMessage nvarchar(2048) =
+        CONCAT(N'Không thể khóa ô tồn kho điều chuyển. Mã khóa SQL: ', @lockResult);
+    THROW 51032, @lockMessage, 1;
+END;", cancellationToken);
 
         await context.Database.ExecuteSqlInterpolatedAsync($@"
 MERGE INTO InventoryStocks WITH (HOLDLOCK) AS target
