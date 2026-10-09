@@ -467,6 +467,63 @@ public sealed class SqlServerStockTransferTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task FourIndependentReceiptsIntoMissingCanonicalBucketAreSerializedWithoutDuplicateLedger()
+    {
+        var fixture = await CreateFixtureAsync(20);
+        try
+        {
+            var ids = new List<int>();
+            await using (var setup = CreateContext())
+            {
+                // Force the absent-row upsert path which previously produced a
+                // SERIALIZABLE range-lock conversion deadlock on the same bucket.
+                await setup.InventoryStocks.Where(x => x.ProductId == fixture.ProductId &&
+                    x.WarehouseId == fixture.DestinationId).ExecuteDeleteAsync();
+                var maker = CreateService(setup, fixture.CreatorId);
+                var checker = CreateService(setup, fixture.UserId);
+                for (var i = 0; i < 4; i++)
+                {
+                    var id = (await maker.CreateAsync(
+                        Request(fixture.SourceId, fixture.DestinationId, fixture.ProductId, 3))).Id;
+                    await checker.ApproveAsync(id);
+                    await checker.DispatchAsync(id);
+                    ids.Add(id);
+                }
+            }
+
+            async Task PostReceiptAsync(int transferId)
+            {
+                await using var receive = CreateContext();
+                await CreateService(receive, fixture.UserId).ReceiveAsync(transferId,
+                    new ReceiveStockTransferDto { Details = [new()
+                    {
+                        ProductId = fixture.ProductId,
+                        ReceivedQuantity = 3
+                    }] });
+            }
+
+            await Task.WhenAll(ids.Select(PostReceiptAsync));
+            await using var verify = CreateContext();
+            (await StockAsync(verify, fixture.ProductId, fixture.SourceId)).Should().Be(8);
+            (await StockAsync(verify, fixture.ProductId, fixture.DestinationId)).Should().Be(12);
+            (await verify.InventoryTransactions.CountAsync(x =>
+                x.ReferenceType == "StockTransfer" && x.ReferenceId.HasValue &&
+                ids.Contains(x.ReferenceId.Value) && x.TransactionType == TransactionType.TransferIn))
+                .Should().Be(4);
+            (await verify.AuditLogs.CountAsync(x =>
+                x.EntityName == "StockTransfer" && ids.Contains(x.EntityId) &&
+                x.Action == "StockTransfer.Received")).Should().Be(4);
+            (await verify.StockTransfers.CountAsync(x =>
+                ids.Contains(x.Id) && x.Status == StockTransferStatus.Received)).Should().Be(4);
+            (await verify.InventoryStocks.CountAsync(x =>
+                x.ProductId == fixture.ProductId &&
+                x.WarehouseId == fixture.DestinationId &&
+                x.Status == 0)).Should().Be(1);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     private sealed class ChangeWarehouseAfterScopeCheck(
         IWarehouseAuthorizationService inner, int transferId, int sourceId, int destinationId)
         : IWarehouseAuthorizationService

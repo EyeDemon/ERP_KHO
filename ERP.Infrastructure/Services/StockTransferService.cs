@@ -271,6 +271,25 @@ public sealed partial class StockTransferService(
     {
         var locationId = await context.WarehouseLocations.Where(x => x.WarehouseId == warehouseId && x.Code == "LEGACY" && x.IsSystemManaged && x.IsActive && !x.IsBlocked && x.IsPickable).Select(x => x.Id).SingleOrDefaultAsync(cancellationToken);
         if (locationId == 0) throw new BusinessRuleException("Kho đích chưa có vị trí tương thích để nhận điều chuyển.");
+        if (context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Nhận hoặc hoàn trả điều chuyển phải nằm trong giao dịch SQL.");
+
+        // Serialize just this canonical stock bucket across different transfer
+        // documents. Without an application lock, two SERIALIZABLE transactions
+        // can both take compatible range-read locks on a missing destination row
+        // and then deadlock when MERGE converts them to write locks (SQL 1205).
+        // The lock is held until the caller commits/rolls back ledger + audit.
+        var bucketLock = $"ERP:TransferStock:{productId}:{warehouseId}:{locationId}:0";
+        await context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {bucketLock},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+    THROW 51032, 'Khong the khoa o ton kho de nhan dieu chuyen.', 1;", cancellationToken);
+
         await context.Database.ExecuteSqlInterpolatedAsync($@"
 MERGE INTO InventoryStocks WITH (HOLDLOCK) AS target
 USING (SELECT {productId} AS ProductId, {warehouseId} AS WarehouseId, {locationId} AS LocationId, {quantity} AS Quantity, {now} AS LastUpdated, 0 AS Status) AS source
