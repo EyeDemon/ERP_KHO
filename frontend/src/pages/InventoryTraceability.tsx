@@ -230,7 +230,7 @@ export default function InventoryTraceability(){
       description="Xem toàn bộ nhóm tồn của một kho được phép, hoặc truy theo sản phẩm, lô, sê-ri và chứng từ. Dòng thời gian sổ cái giữ nguyên lịch sử bất biến."/>
     {requestError&&<p role="alert">{requestError}</p>}
     <UiCard title="Điều kiện truy vết">
-      <form onSubmit={search} className="ui-form-grid" aria-busy={loading}>
+      <form onSubmit={search} noValidate className="ui-form-grid" aria-busy={loading}>
         <UiToolbarField label="Kho truy vết">
           <select aria-label="Kho truy vết" value={form.warehouseId}
             disabled={warehousesLoading||Boolean(warehousesError)||warehouses.length===0}
