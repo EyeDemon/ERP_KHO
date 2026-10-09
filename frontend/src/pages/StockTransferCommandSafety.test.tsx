@@ -72,6 +72,52 @@ describe('Stock transfer command consistency', () => {
     });
   });
 
+  it('rejects programmatic create without both authorized warehouse choices', async () => {
+    const view = render(<StockTransfers />);
+    await view.findByText('TRF-807');
+    fireEvent.click(view.getByRole('button', { name: 'Tạo phiếu' }));
+    const dialog = view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' });
+
+    fireEvent.change(within(dialog).getByLabelText('Kho đích'), { target: { value: '2' } });
+    fireEvent.change(within(dialog).getByLabelText('Sản phẩm dòng 1'), { target: { value: '9' } });
+    fireEvent.change(within(dialog).getByLabelText('Số lượng dòng 1'), { target: { value: '5' } });
+    fireEvent.submit(dialog);
+
+    expect(await view.findByRole('alert')).toHaveProperty('textContent',
+      'Phải chọn kho nguồn và kho đích hợp lệ.');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('clears an outdated destination when source changes', async () => {
+    const view = render(<StockTransfers />);
+    await view.findByText('TRF-807');
+    fireEvent.click(view.getByRole('button', { name: 'Tạo phiếu' }));
+    const dialog = view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' });
+    const source = within(dialog).getByLabelText('Kho nguồn') as HTMLSelectElement;
+    const destination = within(dialog).getByLabelText('Kho đích') as HTMLSelectElement;
+
+    fireEvent.change(source, { target: { value: '1' } });
+    fireEvent.change(destination, { target: { value: '2' } });
+    expect(destination.value).toBe('2');
+    fireEvent.change(source, { target: { value: '2' } });
+    expect(destination.value).toBe('');
+    expect(within(dialog).queryByRole('option', { name: 'Kho đích' })).toBeNull();
+  });
+
+  it('rejects a create with no detail lines before sending an API command', async () => {
+    const view = render(<StockTransfers />);
+    await view.findByText('TRF-807');
+    fireEvent.click(view.getByRole('button', { name: 'Tạo phiếu' }));
+    const dialog = view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' });
+    fireEvent.change(within(dialog).getByLabelText('Kho nguồn'), { target: { value: '1' } });
+    fireEvent.change(within(dialog).getByLabelText('Kho đích'), { target: { value: '2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa dòng 1' }));
+    fireEvent.submit(dialog);
+    expect(await view.findByRole('alert')).toHaveProperty('textContent',
+      'Mỗi dòng phải có sản phẩm và số lượng lớn hơn 0.');
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it('submits create only once while the first request is unresolved', async () => {
     let resolveCreate!: (response: unknown) => void;
     post.mockReturnValue(new Promise(resolve => { resolveCreate = resolve; }) as never);
@@ -110,12 +156,12 @@ describe('Stock transfer command consistency', () => {
     fireEvent.submit(dialog);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     await view.findByRole('alert');
-    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Tạo phiếu' })).toBeEnabled());
+    await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Tạo phiếu' }) as HTMLButtonElement).disabled).toBe(false));
     const firstKey = (post.mock.calls[0][2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
 
     fireEvent.submit(dialog);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Tạo phiếu' })).toBeEnabled());
+    await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Tạo phiếu' }) as HTMLButtonElement).disabled).toBe(false));
     const retryKey = (post.mock.calls[1][2] as { headers: Record<string, string> }).headers['Idempotency-Key'];
     expect(retryKey).toBe(firstKey);
 

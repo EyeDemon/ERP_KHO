@@ -170,8 +170,15 @@ export default function StockTransfers() {
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     if (createInFlightRef.current) return;
+    // Fail closed even on programmatic submit (which bypasses native required inputs).
+    if (!sourceId || !destinationId ||
+        !warehouses.some(warehouse => warehouse.id === sourceId) ||
+        !warehouses.some(warehouse => warehouse.id === destinationId))
+      return setError('Phải chọn kho nguồn và kho đích hợp lệ.');
     if (sourceId === destinationId) return setError('Kho nguồn và kho đích phải khác nhau.');
-    if (lines.some(line => !line.productId || Number(line.quantity) <= 0)) {
+    if (lines.length === 0 || lines.some(line =>
+      !line.productId || !products.some(product => product.id === line.productId) ||
+      !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0)) {
       return setError('Mỗi dòng phải có sản phẩm và số lượng lớn hơn 0.');
     }
     if (new Set(lines.map(line => line.productId)).size !== lines.length) {
@@ -391,7 +398,11 @@ export default function StockTransfers() {
                     aria-label="Kho nguồn"
                     required
                     value={sourceId}
-                    onChange={event => setSourceId(Number(event.target.value) || '')}
+                    onChange={event => {
+                      const nextSource = Number(event.target.value) || '';
+                      if (nextSource !== sourceId) setDestinationId('');
+                      setSourceId(nextSource);
+                    }}
                   >
                     <option value="">Chọn kho</option>
                     {warehouses.map(warehouse => (
