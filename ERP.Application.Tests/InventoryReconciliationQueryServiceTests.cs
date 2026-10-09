@@ -422,6 +422,9 @@ namespace ERP.Application.Tests
             var query = new InventoryReconciliationQueryService(db, auth.Object);
             var result = await query.GetInvestigationAsync(1, 1);
             result.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+            var unknown = result.Events.Single(x => x.TransactionType ==
+                nameof(TransactionType.TransferAdjustment));
+            unknown.SignedQuantity.Should().BeNull();
             result.ExpectedQuantity.Should().Be(12m); // classified portion only
             result.UnclassifiedLedgerEventCount.Should().Be(1);
             result.AllStatusExpectedQuantity.Should().BeNull();

@@ -284,7 +284,12 @@ namespace ERP.Infrastructure.Queries
                         SerialId = x.SerialId,
                         SerialNumber = x.SerialNumber,
                         Quantity = x.Quantity,
-                        SignedQuantity = x.TransactionType.ApplySign(x.Quantity),
+                        // An unmapped legacy event is visible as evidence,
+                        // but it must never be given a fabricated zero sign.
+                        SignedQuantity = x.Quantity < 0m ||
+                            x.TransactionType == TransactionType.TransferAdjustment ||
+                            !Enum.IsDefined(x.TransactionType)
+                            ? null : x.TransactionType.ApplySign(x.Quantity),
                         ReferenceType = x.ReferenceType,
                         ReferenceId = x.ReferenceId,
                         TransactionDate = x.TransactionDate

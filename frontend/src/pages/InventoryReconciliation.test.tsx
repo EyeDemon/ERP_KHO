@@ -380,10 +380,10 @@ describe('InventoryReconciliation', () => {
         return Promise.resolve({data:{
           warehouseId:1,productId:10,isReadOnly:true,eventAnchorId:80,
           eventCount:1,bucketCount:0,eventsTruncated:false,bucketsTruncated:false,
-          events:[{transactionId:80,transactionType:'Import',signedQuantity:1}],
+          events:[{transactionId:80,transactionType:'TransferAdjustment',signedQuantity:null}],
           buckets:[],allStatusCurrentQuantity:1,allStatusReservedQuantity:0,
           allStatusExpectedQuantity:null,allStatusDifference:null,
-          unclassifiedLedgerEventCount:2,
+          unclassifiedLedgerEventCount:2,availableLedgerExpectedIsPartial:true,
           statusBreakdown:[{status:'QcHold',currentQuantity:1,
             reservedQuantity:0,bucketCount:1,directLedgerNetQuantity:0,
             statusChangeInQuantity:0,statusChangeOutQuantity:0,
@@ -398,11 +398,15 @@ describe('InventoryReconciliation', () => {
     const view=render(<InventoryReconciliation />);
     await view.findByText('SKU-010');
     fireEvent.click(view.getByRole('button',{name:'Xem bằng chứng SKU-010 tại Kho HCM'}));
-    const warning=await view.findByRole('alert');
-    expect(warning.textContent).toContain('Có 2 giao dịch Ledger');
-    expect(warning.textContent).toContain('Không thể kết luận');
+    const warnings=await view.findAllByRole('alert');
+    const warningText=warnings.map(x=>x.textContent).join(' ');
+    expect(warningText).toContain('Có 2 giao dịch Ledger');
+    expect(warningText).toContain('Không thể kết luận');
+    expect(warningText).toContain('Tổng Ledger AVAILABLE');
     const table=view.getByRole('table',{name:'Đối chiếu từng trạng thái tồn kho theo Ledger'});
     expect(table.textContent).toContain('Chưa xác định');
+    expect(view.getByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'}).textContent)
+      .toContain('Chưa xác định');
     expect(view.getByText('Tổng Ledger các trạng thái (tham khảo)')).toBeTruthy();
   });
 

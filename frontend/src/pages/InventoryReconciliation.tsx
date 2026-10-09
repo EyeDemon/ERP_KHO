@@ -65,7 +65,7 @@ interface InvestigationEvent {
   locationId?: number | null; locationCode?: string | null;
   lotId?: number | null; lotNumber?: string | null;
   serialId?: number | null; serialNumber?: string | null;
-  quantity: number; signedQuantity: number;
+  quantity: number; signedQuantity: number | null;
   referenceType?: string | null; referenceId?: number | null;
   transactionDate: string;
 }
@@ -540,7 +540,7 @@ export default function InventoryReconciliation() {
                     <td>#{e.transactionId}</td><td>{e.transactionType}</td>
                     <td>{e.locationCode ?? '—'}</td>
                     <td>{e.lotNumber ?? '—'} / {e.serialNumber ?? '—'}</td>
-                    <td>{numberFormat.format(e.signedQuantity)}</td>
+                    <td>{e.signedQuantity == null ? 'Chưa xác định' : numberFormat.format(e.signedQuantity)}</td>
                     <td>{e.referenceType ?? '—'}{e.referenceId != null ? ` #${e.referenceId}` : ''}</td>
                   </tr>)}
                 </tbody>

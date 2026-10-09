@@ -81,6 +81,11 @@ namespace ERP.Api.Tests
                 {
                     TransactionId = 32, TransactionType = "Import",
                     Quantity = 11, SignedQuantity = 11
+                },
+                new InventoryReconciliationEvidenceEventDto
+                {
+                    TransactionId = 31, TransactionType = "TransferAdjustment",
+                    Quantity = 2, SignedQuantity = null
                 }]
             };
             mock.Setup(x => x.GetInvestigationAsync(7, 17, 32, 50, 20))
@@ -105,6 +110,10 @@ namespace ERP.Api.Tests
             status.GetProperty("statusChangeInQuantity").GetDecimal().Should().Be(3m);
             status.GetProperty("expectedQuantity").GetDecimal().Should().Be(3m);
             status.GetProperty("difference").GetDecimal().Should().Be(0m);
+            var unknownEvent = json.GetProperty("events").EnumerateArray()
+                .Single(e => e.GetProperty("transactionType").GetString() == "TransferAdjustment");
+            unknownEvent.GetProperty("signedQuantity").ValueKind.Should().Be(
+                System.Text.Json.JsonValueKind.Null);
         }
 
         [Fact]

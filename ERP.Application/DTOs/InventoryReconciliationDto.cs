@@ -83,7 +83,9 @@ namespace ERP.Application.DTOs
         public int? SerialId { get; set; }
         public string? SerialNumber { get; set; }
         public decimal Quantity { get; set; }
-        public decimal SignedQuantity { get; set; }
+        // Null means the transaction type has no validated sign mapping.
+        // Never confuse unknown with the legitimate zero sign of Move/Reversal.
+        public decimal? SignedQuantity { get; set; }
         public string? ReferenceType { get; set; }
         public int? ReferenceId { get; set; }
         public DateTime TransactionDate { get; set; }

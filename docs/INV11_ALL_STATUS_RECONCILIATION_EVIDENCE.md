@@ -30,3 +30,9 @@ Mốc triển khai: 10/10/2026. Phạm vi PR #31 Draft. Đây là phần mở r�
 ## Chưa xong
 
 Phân trang bucket theo từng status/location/lot/serial với snapshot nhất quán; owner/HU custody, full historical provenance, controlled remediation và approval, INV-09 native document reversals, Return/Recall và nghiệm thu trình duyệt/staging. INV-11 vẫn `foundation`.
+
+## Sửa hồi quy CI sau batch đầu tiên
+
+- CI đầu tiên (run 37964881907) FAIL 1/530 Application tests ở trường hợp `TransferAdjustment` trong trang Ledger `AVAILABLE`: phần tổng hợp đã đánh dấu partial, nhưng DTO event chi tiết vẫn gọi `ApplySign` và ném `ArgumentOutOfRangeException`.
+- Đã xử lý tận gốc bằng cách đổi `SignedQuantity` của event sang `decimal?`: với loại không có quy tắc dấu hoặc số lượng âm, trả **null** và hiển thị **Chưa xác định**, không gán 0 vì Move/Reversal hợp lệ mới có dấu 0. Bổ sung regression InMemory, API camelCase/null và Vitest, giữ nguyên Ledger bất biến.
+- Chỉ đánh dấu batch PASS sau CI của commit sửa lỗi, không lấy kết quả Vercel READY hoặc các bước test đã PASS của commit thất bại để thay thế.
