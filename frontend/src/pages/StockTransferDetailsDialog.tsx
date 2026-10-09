@@ -59,6 +59,7 @@ type Props = {
   receive: Record<number, { receivedQuantity: number; missingQuantity: number; damagedQuantity: number }>;
   setReceive: (value: Record<number, { receivedQuantity: number; missingQuantity: number; damagedQuantity: number }>) => void;
   onClose: () => void;
+  onEdit?: (transfer: Transfer) => void;
   onAction: (action: string, body?: unknown) => Promise<void>;
   onReceive: () => Promise<void>;
   onOpenTransfer: (id: number) => Promise<void>;
@@ -66,7 +67,7 @@ type Props = {
 
 export default function StockTransferDetailsDialog({
   selected, error, status, statusNames, statusLabel, statusTone, canWrite, canReturn, canApprove, userId,
-  actionInFlight, receive, setReceive, onClose, onAction, onReceive, onOpenTransfer,
+  actionInFlight, receive, setReceive, onClose, onEdit, onAction, onReceive, onOpenTransfer,
 }: Props) {
   const canTrace = usePermission('inventory_traceability.read');
   const inRouter = useInRouterContext();
@@ -294,6 +295,12 @@ export default function StockTransferDetailsDialog({
                 </p>
               )}
               <div className="dialog-actions">
+                {onEdit && canWrite && status === 'Draft' && !selected.reverseOfTransferId && (
+                  <button type="button" disabled={actionInFlight} className="ui-primary-button"
+                    onClick={() => onEdit(selected)}>
+                    Chỉnh sửa phiếu nháp
+                  </button>
+                )}
                 {canWrite && ['Draft', 'Approved'].includes(status) && (
                   <button type="button" disabled={actionInFlight} className="danger" onClick={() => void onAction('cancel')}>
                     Hủy phiếu

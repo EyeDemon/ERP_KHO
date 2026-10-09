@@ -12,6 +12,8 @@ Nháp/Đã duyệt → Hủy
 - Phiếu đã xuất kho không thể bị hủy như phiếu nháp. Hoàn trả khi **chưa nhận** phải đi qua lệnh `return`, tạo giao dịch hoàn kho nguồn và liên kết với chứng từ xuất gốc, không xóa sổ cái.
 - Khi **đã nhận hoặc hoàn tất**, việc đưa hàng về kho nguồn phải tạo **phiếu điều chuyển ngược mới**, rồi duyệt, xuất và nhận theo quy trình thường.
 - Các thao tác ghi sử dụng Idempotency-Key; backend kiểm tra quyền kho và trạng thái authoritative.
+- **Chỉnh sửa phiếu Nháp** trực tiếp tại màn chi tiết: sửa kho, số lượng, ghi chú qua `PUT /api/stock-transfers/{id}`, cùng khóa idempotency gắn với mã phiếu và nội dung payload; biểu mẫu cho phép sửa trước khi duyệt và tải lại chi tiết sau lưu.
+- Backend giữ khóa `UPDLOCK, HOLDLOCK` của phiếu trong giao dịch `Serializable` trước khi xác thực `Draft` và thay thế các dòng, không để phê duyệt đồng thời chen vào giữa. Từ chối phiếu đã duyệt/xuất hoặc phiếu điều chuyển ngược; dữ liệu sai phải rollback đầy đủ. Dữ liệu lịch sử posted không được sửa.
 
 ## Đối soát khi nhận
 

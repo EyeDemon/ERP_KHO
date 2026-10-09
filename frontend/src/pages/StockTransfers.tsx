@@ -40,6 +40,7 @@ type Transfer = {
   destinationWarehouseName: string;
   status: string | number;
   note?: string;
+  reverseOfTransferId?: number | null;
   createdBy: number;
   createdAt: string;
   approvedAt?: string;
@@ -84,6 +85,9 @@ export default function StockTransfers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+  const draftDialogRef = useRef<HTMLFormElement>(null);
   const [sourceId, setSourceId] = useState<number | ''>('');
   const [destinationId, setDestinationId] = useState<number | ''>('');
   const [note, setNote] = useState('');
@@ -167,6 +171,43 @@ export default function StockTransfers() {
     }
   };
 
+  const openNewDraft = () => {
+    setEditingId(null);
+    setSourceId('');
+    setDestinationId('');
+    setNote('');
+    setLines([{ productId: '', quantity: '', note: '' }]);
+    setError('');
+    setShowCreate(true);
+  };
+
+  const openDraftEditor = (transfer: Transfer) => {
+    if (!canWrite || normalizeStatus(transfer.status) !== 'Draft' || transfer.reverseOfTransferId) return;
+    detailRequestSequence.current += 1;
+    setEditingId(transfer.id);
+    setSourceId(transfer.sourceWarehouseId);
+    setDestinationId(transfer.destinationWarehouseId);
+    setNote(transfer.note ?? '');
+    setLines(transfer.details.map(line => ({
+      productId: line.productId, quantity: line.requestedQuantity, note: line.note ?? '',
+    })));
+    setError('');
+    setSelected(null);
+    setShowCreate(true);
+  };
+
+  const closeDraftEditor = () => {
+    if (createInFlightRef.current) return;
+    setShowCreate(false);
+    setEditingId(null);
+    setError('');
+    createButtonRef.current?.focus();
+  };
+
+  useEffect(() => {
+    if (showCreate) draftDialogRef.current?.querySelector('select')?.focus();
+  }, [showCreate]);
+
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     if (createInFlightRef.current) return;
@@ -181,6 +222,13 @@ export default function StockTransfers() {
       !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0)) {
       return setError('Mỗi dòng phải có sản phẩm và số lượng lớn hơn 0.');
     }
+    if (lines.some(line =>
+      Number(line.quantity) >= 100_000_000_000_000 ||
+      Math.abs(Number(line.quantity) * 10_000 - Math.round(Number(line.quantity) * 10_000)) > 0.000001 ||
+      line.note.length > 500
+    ) || note.length > 500) {
+      return setError('Số lượng tối đa 4 chữ số thập phân; ghi chú không quá 500 ký tự.');
+    }
     if (new Set(lines.map(line => line.productId)).size !== lines.length) {
       return setError('Sản phẩm không được trùng dòng.');
     }
@@ -194,19 +242,30 @@ export default function StockTransfers() {
         note,
         details: lines,
       };
-      const action = `transfer-create:${JSON.stringify(payload)}`;
-      await apiClient.post('/api/stock-transfers', payload, {
-        headers: idempotencyHeaders(action),
-      });
+      const editId = editingId;
+      const action = `transfer-${editId === null ? 'create' : 'update:' + editId}:${JSON.stringify(payload)}`;
+      if (editId === null) {
+        await apiClient.post('/api/stock-transfers', payload, {
+          headers: idempotencyHeaders(action),
+        });
+      } else {
+        await apiClient.put(`/api/stock-transfers/${editId}`, payload, {
+          headers: idempotencyHeaders(action),
+        });
+      }
       completeIdempotentAction(action);
       setShowCreate(false);
+      setEditingId(null);
+      createButtonRef.current?.focus();
       setLines([{ productId: '', quantity: '', note: '' }]);
       setSourceId('');
       setDestinationId('');
       setNote('');
       await load();
+      if (editId !== null) await openDetail(editId);
     } catch (failure: any) {
-      setError(failure.response?.data?.message || 'Không thể tạo phiếu.');
+      setError(failure.response?.data?.message ||
+        (editingId === null ? 'Không thể tạo phiếu.' : 'Không thể cập nhật phiếu; hãy kiểm tra trạng thái mới nhất.'));
     } finally {
       createInFlightRef.current = false;
       setCreateInFlight(false);
@@ -277,7 +336,7 @@ export default function StockTransfers() {
           description="Theo dõi hàng từ kho nguồn, duyệt xuất, trạng thái đang vận chuyển đến khi kho đích xác nhận và hoàn tất."
           actions={
             canWrite ? (
-              <button type="button" className="ui-primary-button" onClick={() => setShowCreate(true)}>
+              <button type="button" ref={createButtonRef} className="ui-primary-button" onClick={openNewDraft}>
                 <Plus size={17} aria-hidden="true" /> Tạo phiếu
               </button>
             ) : undefined
@@ -400,15 +459,22 @@ export default function StockTransfers() {
         {showCreate && (
           <div className="transfer-modal" role="presentation">
             <form
+              ref={draftDialogRef}
               className="transfer-dialog"
               role="dialog"
               aria-modal="true"
               aria-labelledby="transfer-create-title"
               onSubmit={create}
+              onKeyDown={event => {
+                if (event.key === 'Escape' && !createInFlight) {
+                  event.stopPropagation();
+                  closeDraftEditor();
+                }
+              }}
             >
               <div className="dialog-title">
-                <h2 id="transfer-create-title">Tạo phiếu điều chuyển</h2>
-                <button type="button" aria-label="Đóng tạo phiếu" disabled={createInFlight} onClick={() => setShowCreate(false)}>
+                <h2 id="transfer-create-title">{editingId === null ? 'Tạo phiếu điều chuyển' : 'Chỉnh sửa phiếu nháp'}</h2>
+                <button type="button" aria-label="Đóng tạo phiếu" disabled={createInFlight} onClick={closeDraftEditor}>
                   <X aria-hidden="true" />
                 </button>
               </div>
@@ -420,6 +486,7 @@ export default function StockTransfers() {
                   <select
                     aria-label="Kho nguồn"
                     required
+                    disabled={createInFlight}
                     value={sourceId}
                     onChange={event => {
                       const nextSource = Number(event.target.value) || '';
@@ -439,6 +506,7 @@ export default function StockTransfers() {
                   <select
                     aria-label="Kho đích"
                     required
+                    disabled={createInFlight}
                     value={destinationId}
                     onChange={event => setDestinationId(Number(event.target.value) || '')}
                   >
@@ -454,13 +522,15 @@ export default function StockTransfers() {
 
               <label>
                 Ghi chú
-                <textarea aria-label="Ghi chú điều chuyển" value={note} onChange={event => setNote(event.target.value)} />
+                <textarea aria-label="Ghi chú điều chuyển" maxLength={500} disabled={createInFlight}
+                  value={note} onChange={event => setNote(event.target.value)} />
               </label>
 
               <div className="line-header">
                 <h3>Sản phẩm</h3>
                 <button
                   type="button"
+                  disabled={createInFlight}
                   onClick={() => setLines([...lines, { productId: '', quantity: '', note: '' }])}
                 >
                   <Plus size={16} aria-hidden="true" /> Thêm dòng
@@ -472,6 +542,7 @@ export default function StockTransfers() {
                   <select
                     aria-label={`Sản phẩm dòng ${index + 1}`}
                     required
+                    disabled={createInFlight}
                     value={line.productId}
                     onChange={event => {
                       const next = [...lines];
@@ -490,6 +561,7 @@ export default function StockTransfers() {
                     type="number"
                     min="0.0001"
                     step="0.0001"
+                    disabled={createInFlight}
                     placeholder="Số lượng"
                     value={line.quantity}
                     onChange={event => {
@@ -501,6 +573,7 @@ export default function StockTransfers() {
                   <button
                     type="button"
                     aria-label={`Xóa dòng ${index + 1}`}
+                    disabled={createInFlight}
                     onClick={() => setLines(lines.filter((_, rowIndex) => rowIndex !== index))}
                   >
                     <X size={17} aria-hidden="true" />
@@ -509,9 +582,10 @@ export default function StockTransfers() {
               ))}
 
               <div className="dialog-actions">
-                <button type="button" disabled={createInFlight} onClick={() => setShowCreate(false)}>Đóng</button>
+                <button type="button" disabled={createInFlight} onClick={closeDraftEditor}>Đóng</button>
                 <button className="ui-primary-button" type="submit" disabled={createInFlight}>
-                  {createInFlight ? 'Đang tạo phiếu...' : 'Tạo phiếu'}
+                  {createInFlight ? (editingId === null ? 'Đang tạo phiếu...' : 'Đang lưu thay đổi...') :
+                    (editingId === null ? 'Tạo phiếu' : 'Lưu thay đổi')}
                 </button>
               </div>
             </form>
@@ -534,7 +608,8 @@ export default function StockTransfers() {
             actionInFlight={actionInFlight}
             receive={receive}
             setReceive={setReceive}
-            onClose={() => { detailRequestSequence.current += 1; setSelected(null); }}
+            onClose={() => { detailRequestSequence.current += 1; setSelected(null); setError(''); }}
+            onEdit={openDraftEditor}
             onAction={act}
             onReceive={submitReceive} onOpenTransfer={openDetail}
           />
