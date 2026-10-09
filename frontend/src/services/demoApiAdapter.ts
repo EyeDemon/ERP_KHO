@@ -411,10 +411,14 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       const referenceId = Number(params.get('referenceId') ?? 0);
       const limit = Math.min(500, Math.max(1, Number(params.get('limit') ?? 200)));
       const bucketOffset = Number(params.get('bucketOffset') ?? 0);
+      const eventOffset = Number(params.get('eventOffset') ?? 0);
       const hasReference = Boolean(referenceType && referenceId);
       if (!Number.isSafeInteger(bucketOffset) || bucketOffset < 0 ||
           bucketOffset > 50000 || bucketOffset % 500 !== 0)
         return fail(config, 400, 'Trang nhóm tồn không hợp lệ.');
+      if (!Number.isSafeInteger(eventOffset) || eventOffset < 0 ||
+          eventOffset > 50000 || eventOffset % limit !== 0)
+        return fail(config, 400, 'Trang sự kiện sổ cái không hợp lệ.');
       if (Boolean(referenceType) !== Boolean(referenceId))
         return fail(config, 400, 'Loại tham chiếu và ID tham chiếu phải được nhập cùng nhau.');
       if (!warehouseId && !productId && !lotNumber && !serialNumber && !hasReference)
@@ -429,17 +433,15 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         && (!serialNumber || (item.serialNumber ?? '').toLowerCase() === serialNumber)
         && (!hasReference || (item.referenceType === referenceType && item.referenceId === referenceId))
       ).sort((a,b)=>new Date(b.transactionDate).getTime()-new Date(a.transactionDate).getTime()||b.id-a.id);
-      const eventsTruncated = matchingEvents.length > limit;
-      const events = matchingEvents.slice(0, limit);
+      const eventsTruncated = matchingEvents.length > eventOffset + limit;
+      const events = matchingEvents.slice(eventOffset, eventOffset + limit);
       const reversed = new Set(demoInventoryTransactions
         .filter(item => item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal' && typeof item.referenceId === 'number')
         .map(item => item.referenceId as number));
-      // Only reference-based searches with no stock identity restrict current
-      // inventory by matching event identities. Warehouse-only is independent
-      // of event recency, including serial/lot stock with no ledger events.
-      const referenceOnly = hasReference && !productId && !lotNumber && !serialNumber;
+      // Document scope intersects every stock filter. Use all direct matching
+      // document events, never just the paged ledger window.
       const matchedIdentity = (bucket: (typeof demoInventoryBuckets)[number]) =>
-        events.some(event =>
+        matchingEvents.some(event =>
           event.productId===bucket.productId && event.warehouseId===bucket.warehouseId
           && (event.lotId??null)===(bucket.lotId??null)
           && (event.serialId??null)===(bucket.serialId??null));
@@ -448,7 +450,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         && (!productId || item.productId === productId)
         && (!lotNumber || (item.lotNumber ?? '').toLowerCase() === lotNumber)
         && (!serialNumber || (item.serialNumber ?? '').toLowerCase() === serialNumber)
-        && (!referenceOnly || matchedIdentity(item))
+        && (!hasReference || matchedIdentity(item))
       ).sort((a,b)=>
         a.productCode.localeCompare(b.productCode) ||
         a.warehouseId-b.warehouseId ||

@@ -71,6 +71,27 @@ public sealed class InventoryTraceabilityInputTests
         auth.VerifyNoOtherCalls();
     }
 
+    [Theory]
+    [InlineData(-1, 200)]
+    [InlineData(1, 200)]
+    [InlineData(200, 50)]
+    [InlineData(50_200, 200)]
+    public async Task InvalidLedgerEventOffsets_AreRejectedBeforeWarehouseQueries(int eventOffset, int limit)
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var db = new ErpKhoDbContext(options);
+        var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+        var query = new InventoryTraceabilityQueryService(db, auth.Object);
+
+        var act = () => query.TraceAsync(
+            warehouseId: 9, limit: limit, eventOffset: eventOffset);
+
+        await act.Should().ThrowAsync<BusinessRuleException>()
+            .WithMessage("*Trang sự kiện sổ cái*");
+        auth.VerifyNoOtherCalls();
+    }
+
     [Fact]
     public async Task ReferenceTypeAndReferenceId_MustAppearTogether()
     {

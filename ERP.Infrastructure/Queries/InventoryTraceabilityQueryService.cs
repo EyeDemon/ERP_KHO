@@ -37,7 +37,8 @@ public sealed class InventoryTraceabilityQueryService(
         int? referenceId = null,
         int limit = 200,
         CancellationToken cancellationToken = default,
-        int bucketOffset = 0)
+        int bucketOffset = 0,
+        int eventOffset = 0)
     {
         // A malformed positive-identifier filter must never be treated as an
         // empty search or silently widened to all accessible warehouses.
@@ -64,6 +65,11 @@ public sealed class InventoryTraceabilityQueryService(
         if (!warehouseId.HasValue && !productId.HasValue && lot is null && serial is null && !hasReference)
             throw new BusinessRuleException("Cần ít nhất Kho, Sản phẩm, Lô, Sê-ri hoặc Tham chiếu để truy vết.");
         limit = limit is < 1 or > 500 ? 200 : limit;
+        // Ledger history is paged independently of the current-stock buckets.
+        // Limit changes reset the page; reject misaligned/oversized offsets
+        // before the first warehouse authorization or SQL query.
+        if (eventOffset < 0 || eventOffset > 50_000 || eventOffset % limit != 0)
+            throw new BusinessRuleException("Trang sự kiện sổ cái không hợp lệ; hãy quay về trang đầu hoặc tải lại theo bước của giới hạn sự kiện.");
 
         var allowedWarehouseIds = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
         if (warehouseId.HasValue)
@@ -86,6 +92,7 @@ public sealed class InventoryTraceabilityQueryService(
         var eventWindow = await ProjectEvents(eventQuery)
             .OrderByDescending(x => x.TransactionDate)
             .ThenByDescending(x => x.TransactionId)
+            .Skip(eventOffset)
             .Take(limit + 1)
             .ToListAsync(cancellationToken);
         var eventsTruncated = eventWindow.Count > limit;

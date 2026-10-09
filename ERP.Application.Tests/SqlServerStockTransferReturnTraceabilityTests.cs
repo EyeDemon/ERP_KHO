@@ -41,6 +41,32 @@ public sealed class SqlServerStockTransferReturnTraceabilityTests
     }
 
     [SqlServerFact]
+    public async Task OlderLedgerPagePreservesInverseLinkWithoutRepeatingTheDirectWindow()
+    {
+        await using var fixture = await StockTransferReturnFixture.CreateAsync();
+        var id = await fixture.DispatchAsync();
+        await using (var db = StockTransferReturnFixture.Db())
+            await fixture.Service(db, fixture.Checker).ReturnAsync(id, Reason());
+
+        await using var verify = StockTransferReturnFixture.Db();
+        var auth = new Mock<ERP.Application.Interfaces.IWarehouseAuthorizationService>();
+        auth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<int> { fixture.Source, fixture.Destination });
+        var service = new InventoryTraceabilityQueryService(verify, auth.Object);
+        var first = await service.TraceAsync(referenceType: "StockTransfer", referenceId: id, limit: 1);
+        var older = await service.TraceAsync(referenceType: "StockTransfer", referenceId: id, limit: 1, eventOffset: 1);
+
+        first.EventsTruncated.Should().BeTrue();
+        older.EventsTruncated.Should().BeFalse();
+        first.Events.Select(x => x.TransactionId).Should().BeEquivalentTo(
+            older.Events.Select(x => x.TransactionId));
+        var outbound = older.Events.Single(x => x.TransactionType == nameof(TransactionType.TransferOut));
+        var inverse = older.Events.Single(x => x.TransactionType == nameof(TransactionType.TransferIn));
+        inverse.ReversalOfTransactionId.Should().Be(outbound.TransactionId);
+        outbound.IsReversed.Should().BeTrue();
+    }
+
+    [SqlServerFact]
     public async Task LegacyReferenceMarkerBlocksNativeReturn()
     {
         await using var f = await StockTransferReturnFixture.CreateAsync();

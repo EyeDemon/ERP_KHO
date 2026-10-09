@@ -355,6 +355,33 @@ describe('InventoryTraceability',()=>{
     expect(view.getByText('Trang 1')).toBeTruthy();
   });
 
+  it('paginates older ledger history while retaining stock filters and resets after a new search',async()=>{
+    const older={...result,events:[{...result.events[0],transactionId:91,transactionDate:'2026-09-01T00:00:00Z'}],eventsTruncated:false};
+    vi.mocked(apiClient.get).mockImplementation(async url=>
+      String(url).includes('eventOffset=200')
+        ? {data:older} as never
+        : {data:{...result,eventsTruncated:true}} as never
+    );
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    await view.findByText('Trang sự kiện 1');
+    expect((view.getByRole('button',{name:'Sự kiện trước'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(view.getByRole('button',{name:'Sự kiện sau'}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&limit=200&eventOffset=200'
+    ));
+    expect(await view.findByText('Trang sự kiện 2')).toBeTruthy();
+    expect((view.getByRole('button',{name:'Sự kiện sau'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(view.getByRole('button',{name:'Sự kiện trước'}));
+    await view.findByText('Trang sự kiện 1');
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'11'}});
+    fireEvent.click(view.getByText('Truy vết'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=11&limit=200'
+    ));
+  });
+
   it('can increase server event window to 500 without client-side truncation',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=renderTrace();

@@ -79,6 +79,7 @@ export default function InventoryTraceability(){
   const [loading,setLoading]=useState(false);
   const [eventLimit,setEventLimit]=useState<50|100|200|500>(200);
   const [bucketOffset,setBucketOffset]=useState(0);
+  const [eventOffset,setEventOffset]=useState(0);
   const [warehouses,setWarehouses]=useState<TraceabilityWarehouse[]>([]);
   const [warehousesLoading,setWarehousesLoading]=useState(true);
   const [warehousesError,setWarehousesError]=useState('');
@@ -116,6 +117,7 @@ export default function InventoryTraceability(){
   useEffect(()=>{
     const sequence=++requestSequence.current;
     setBucketOffset(0);
+    setEventOffset(0);
     if(!linkedDocument){
       // A route transition back to an unfiltered trace view must not leave
       // the previous document or warehouse filters visible as current data.
@@ -157,6 +159,7 @@ export default function InventoryTraceability(){
     // paging must never reuse stale query conditions.
     requestSequence.current+=1;
     setBucketOffset(0);
+    setEventOffset(0);
     setResult(null);
     setLoading(false);
   };
@@ -170,8 +173,9 @@ export default function InventoryTraceability(){
 
   const validPositiveId=(value:string)=>/^[1-9]\d*$/.test(value)&&Number.isSafeInteger(Number(value));
 
-  const requestTrace=async(offset:number)=>{
-    if(loading||offset<0||offset>50_000||offset%500!==0)return;
+  const requestTrace=async(offset:number,nextEventOffset=eventOffset)=>{
+    if(loading||offset<0||offset>50_000||offset%500!==0||
+      nextEventOffset<0||nextEventOffset>50_000||nextEventOffset%eventLimit!==0)return;
     setValidationError('');setRequestError('');
     const hasIdentity=form.warehouseId||form.productId||form.lotNumber.trim()||form.serialNumber.trim();
     const hasReference=form.referenceType.trim()&&form.referenceId;
@@ -198,6 +202,7 @@ export default function InventoryTraceability(){
     }
     setResult(null);
     setBucketOffset(offset);
+    setEventOffset(nextEventOffset);
     setLoading(true);
     const sequence=++requestSequence.current;
     try{
@@ -210,13 +215,14 @@ export default function InventoryTraceability(){
       if(form.referenceId)params.set('referenceId',form.referenceId);
       params.set('limit',String(eventLimit));
       if(offset>0)params.set('bucketOffset',String(offset));
+      if(nextEventOffset>0)params.set('eventOffset',String(nextEventOffset));
       const response=await apiClient.get<Result>('/api/inventory/traceability?'+params.toString());
       if(sequence===requestSequence.current)setResult(response.data);
     }catch(e){
       if(sequence===requestSequence.current){setResult(null);setRequestError(errorMessage(e))}
     }finally{if(sequence===requestSequence.current)setLoading(false)}
   };
-  const search=(e:FormEvent)=>{e.preventDefault();void requestTrace(0)};
+  const search=(e:FormEvent)=>{e.preventDefault();void requestTrace(0,0)};
 
   const referencePairErrorActive=Boolean(validationError&&referencePairInvalid);
   const resultStatus=loading
@@ -335,7 +341,7 @@ export default function InventoryTraceability(){
       <UiCard title="Dòng thời gian sổ cái bất biến">
         <p className="ui-muted-text">Sự kiện đảo giao dịch là dấu mốc hiệu chỉnh, không xóa giao dịch gốc. Giao dịch gốc đã đảo được đánh dấu riêng.</p>
         {result.eventsTruncated&&<p role="status" className="ui-muted-text">
-          Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; hãy tăng giới hạn hoặc thu hẹp điều kiện tìm kiếm.
+          Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; dùng “Sự kiện sau” để xem trang kế tiếp hoặc thu hẹp điều kiện tìm kiếm.
         </p>}
         <UiTableScroll><table aria-label="Dòng thời gian sổ cái phục vụ truy vết">
           <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Sản phẩm</th><th>Vị trí / Trạng thái</th><th>Lô / Sê-ri</th><th>Số lượng</th><th>Tham chiếu</th><th>Chuỗi đảo giao dịch</th><th>Người thực hiện / Ghi chú</th></tr></thead>
@@ -361,6 +367,15 @@ export default function InventoryTraceability(){
             </tr>)}
           </tbody>
         </table></UiTableScroll>
+        <nav aria-label="Phân trang sự kiện sổ cái" className="ui-toolbar">
+          <button type="button" disabled={loading||eventOffset===0}
+            onClick={()=>void requestTrace(bucketOffset,eventOffset-eventLimit)}>Sự kiện trước</button>
+          <span aria-live="polite">Trang sự kiện {Math.floor(eventOffset/eventLimit)+1}</span>
+          <button type="button" disabled={loading||!result.eventsTruncated||eventOffset>=50_000}
+            onClick={()=>void requestTrace(bucketOffset,eventOffset+eventLimit)}>Sự kiện sau</button>
+          {eventOffset>=50_000&&result.eventsTruncated&&
+            <span className="ui-muted-text">Đã đến giới hạn xem lịch sử; hãy lọc thêm để thu hẹp kết quả.</span>}
+        </nav>
       </UiCard>
     </div>}
   </UiPage>;

@@ -166,6 +166,24 @@ describe('Blueprint demo API adapter', () => {
     expect((second.data as typeof page).bucketsTruncated).toBe(false);
   });
 
+  it('paginates demo ledger events independently and refuses invalid event offsets',async()=>{
+    const firstUrl=request('/api/inventory/traceability?warehouseId=1&limit=1');
+    const first=(await createBlueprintDemoApiAdapter(firstUrl)(firstUrl)).data as {
+      events:Array<{transactionId:number}>;eventsTruncated:boolean;currentBuckets:unknown[];
+    };
+    const secondUrl=request('/api/inventory/traceability?warehouseId=1&limit=1&eventOffset=1');
+    const second=(await createBlueprintDemoApiAdapter(secondUrl)(secondUrl)).data as typeof first;
+    expect(first.events).toHaveLength(1);
+    expect(second.events).toHaveLength(1);
+    expect(second.events[0].transactionId).not.toBe(first.events[0].transactionId);
+    expect(second.currentBuckets).toEqual(first.currentBuckets);
+    for(const bad of ['-1','3','50500']){
+      const config=request('/api/inventory/traceability?warehouseId=1&limit=2&eventOffset='+bad);
+      await expect(createBlueprintDemoApiAdapter(config)(config))
+        .rejects.toMatchObject({response:{status:400}});
+    }
+  });
+
   it('does not expand stock to all warehouse buckets for an unknown trace reference',async()=>{
     const config=request('/api/inventory/traceability?warehouseId=1&referenceType=StockTransfer&referenceId=9999');
     const result=await createBlueprintDemoApiAdapter(config)(config);

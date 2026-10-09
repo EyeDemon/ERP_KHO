@@ -51,3 +51,13 @@
 - Frontend từ chối ID sản phẩm/tham chiếu không phải số nguyên dương an toàn trước khi gửi GET; thông báo lỗi tiếng Việt và đưa focus tới trường cần sửa.
 - Regression SQL: 26 sự kiện cùng chứng từ, sự kiện lô cũ nằm ngoài cửa sổ 20 vẫn tìm được nhóm tồn; kết hợp kho+sản phẩm+chứng từ hợp lệ và chứng từ không tồn tại; lọc lô+chứng từ. API xác minh chuyển đủ tham số; Vitest kiểm tra giao diện và ID sai.
 - Chưa nghiệm thu browser QA hoặc staging SQL/API thật; CI trên đúng HEAD là cổng riêng. Notion chỉ đọc.
+
+## Phân trang lịch sử sổ cái — 09/10/2026
+
+- API đọc `GET /api/inventory/traceability` nhận thêm `eventOffset` (mặc định 0) độc lập với `bucketOffset`. Mỗi trang truy hồi `limit` giao dịch trực tiếp theo `TransactionDate DESC, TransactionId DESC`, đọc thêm 1 để xác định còn sự kiện cũ hơn.
+- Chỉ chấp nhận `eventOffset` từ 0 tới 50.000 và chia hết cho `limit` hiệu lực (mặc định 200, tối đa 500); lỗi offset phải dừng **trước** truy vấn quyền kho và SQL.
+- Bổ sung điều hướng `Sự kiện trước / Sự kiện sau`, đặt lại trang khi tìm điều kiện mới hoặc chuyển deep link; phản hồi muộn không được ghi đè kết quả mới. Dữ liệu lịch sử và nhóm tồn phân trang độc lập.
+- Khi một trang chứa dấu đảo/giao dịch gốc, tiếp tục ghép các sự kiện liên kết từ ledger được phân quyền, ngay cả khi chúng nằm ngoài cửa sổ trang; vì vậy số sự kiện trả có thể vượt `limit` mà không biểu thị một trang vô hạn.
+- Demo Vercel vẫn chỉ đọc. Lọc nhóm tồn theo chứng từ sử dụng toàn bộ sự kiện trực tiếp khớp chứng từ trước phân trang, không phụ thuộc `eventOffset` và không mở rộng điều kiện kho/sản phẩm/lô/sê-ri.
+- Regression: SQL Server trang cũ hơn vẫn ghép đúng giao dịch hoàn trả có `ReversalOfTransactionId`; backend từ chối offset không hợp lệ trước tra cứu quyền; API truyền đủ 2 offset; Vitest kiểm tra chuyển trang/quay lại, demo các trang không trùng và offset không hợp lệ.
+- Chưa có phả hệ hoàn chỉnh Receipt → QC → Move → Pick → Shipment/Return/Recall hoặc nghiệm thu staging SQL/API và browser E2E, do đó INV-10 tiếp tục `foundation`; Notion chỉ đọc.
