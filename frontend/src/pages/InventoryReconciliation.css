@@ -8,3 +8,8 @@
 .reconciliation-empty{text-align:center!important;color:var(--ui-muted);padding:24px!important}
 .reconciliation-pagination{display:flex;align-items:center;justify-content:center;gap:var(--ui-space-2);margin-top:var(--ui-space-3);color:var(--ui-muted);font-size:12px}
 @media(max-width:768px){.reconciliation-filter-actions{width:100%}.reconciliation-filter-actions button{flex:1}}
+
+/* Keep the wide reconciliation table within its own scroll region on narrow screens. */
+.production-ui .ui-page:has(.reconciliation-filter-actions){min-width:0;grid-template-columns:minmax(0,1fr)}
+.production-ui .ui-page:has(.reconciliation-filter-actions) .ui-card{min-width:0}
+.production-ui .ui-page:has(.reconciliation-filter-actions) .ui-table-scroll{max-width:100%}
