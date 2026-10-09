@@ -40,7 +40,7 @@ type Transfer = {
   destinationWarehouseName: string;
   status: string | number;
   note?: string;
-  reverseOfTransferId?: number | null;
+  reverseOfTransferId?: number;
   createdBy: number;
   createdAt: string;
   approvedAt?: string;
@@ -545,9 +545,8 @@ export default function StockTransfers() {
                     disabled={createInFlight}
                     value={line.productId}
                     onChange={event => {
-                      const next = [...lines];
-                      next[index].productId = Number(event.target.value) || '';
-                      setLines(next);
+                      setLines(lines.map((entry, row) =>
+                        row === index ? { ...entry, productId: Number(event.target.value) || '' } : entry));
                     }}
                   >
                     <option value="">Chọn sản phẩm</option>
@@ -565,10 +564,18 @@ export default function StockTransfers() {
                     placeholder="Số lượng"
                     value={line.quantity}
                     onChange={event => {
-                      const next = [...lines];
-                      next[index].quantity = Number(event.target.value) || '';
-                      setLines(next);
+                      setLines(lines.map((entry, row) =>
+                        row === index ? { ...entry, quantity: Number(event.target.value) || '' } : entry));
                     }}
+                  />
+                  <input
+                    aria-label={`Ghi chú dòng ${index + 1}`}
+                    placeholder="Ghi chú dòng (không bắt buộc)"
+                    maxLength={500}
+                    disabled={createInFlight}
+                    value={line.note}
+                    onChange={event => setLines(lines.map((entry, row) =>
+                      row === index ? { ...entry, note: event.target.value } : entry))}
                   />
                   <button
                     type="button"

@@ -74,9 +74,14 @@ describe('Stock transfer command consistency', () => {
       .toBe('Phiếu ban đầu');
     expect((within(dialog).getByLabelText('Số lượng dòng 1') as HTMLInputElement).value)
       .toBe('5');
+    expect((within(dialog).getByLabelText('Ghi chú dòng 1') as HTMLInputElement).value)
+      .toBe('Dòng ban đầu');
 
     fireEvent.change(within(dialog).getByLabelText('Số lượng dòng 1'), {
       target: { value: '6' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Ghi chú dòng 1'), {
+      target: { value: 'Đã chỉnh sửa ghi chú dòng' },
     });
     fireEvent.submit(dialog);
 
@@ -84,7 +89,7 @@ describe('Stock transfer command consistency', () => {
       '/api/stock-transfers/807',
       {
         sourceWarehouseId: 1, destinationWarehouseId: 2, note: 'Phiếu ban đầu',
-        details: [{ productId: 9, quantity: 6, note: 'Dòng ban đầu' }],
+        details: [{ productId: 9, quantity: 6, note: 'Đã chỉnh sửa ghi chú dòng' }],
       },
       expect.objectContaining({ headers: expect.objectContaining({
         'Idempotency-Key': expect.any(String),
@@ -136,6 +141,28 @@ describe('Stock transfer command consistency', () => {
     await waitFor(() => expect(put).toHaveBeenCalledTimes(3));
     const modified = (put.mock.calls[2][2] as { headers: Record<string,string> }).headers['Idempotency-Key'];
     expect(modified).not.toBe(first);
+  });
+
+  it('closes draft editing with Escape and returns keyboard focus to the new-document action', async () => {
+    const draft = { ...transfer, status: 'Draft' };
+    get.mockImplementation(async url => {
+      if (url === '/api/stock-transfers') return { data: { items: [draft], totalPages: 1 } } as never;
+      if (url === '/api/stock-transfers/807') return { data: draft } as never;
+      if (url === '/api/warehouses') return { data: [
+        { id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' },
+      ] } as never;
+      if (url === '/api/products') return { data: [
+        { id: 9, code: 'SKU-9', name: 'Sản phẩm' },
+      ] } as never;
+      return { data: [] } as never;
+    });
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    fireEvent.click(view.getByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
+    const dialog = view.getByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' });
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(view.queryByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' })).toBeNull();
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'Tạo phiếu' }));
   });
 
   it('does not expose editing on an approved or reverse-document transfer', async () => {
