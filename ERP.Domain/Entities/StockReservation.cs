@@ -11,6 +11,11 @@ public class StockReservation
     public decimal Quantity { get; set; }
     public decimal ConsumedQuantity { get; set; }
     public decimal ReleasedQuantity { get; set; }
+    public int? BaseUomIdSnapshot { get; set; }
+    public string? BaseUomCodeSnapshot { get; set; }
+    public string? BaseUomNameSnapshot { get; set; }
+    public int? BaseUomPrecisionSnapshot { get; set; }
+    public byte[] RowVersion { get; set; } = [];
     public StockReservationStatus Status { get; set; }
     public string SourceType { get; set; } = string.Empty;
     public int? SourceId { get; set; }

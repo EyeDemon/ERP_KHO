@@ -53,6 +53,7 @@ public sealed class IdempotentCommandFilter(
         metadata.RequestFingerprint = fingerprint;
         await using var transaction = await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
         await AuthorizeExportAsync(actionContext, userId, keyHash, fingerprint);
+        await AuthorizeReservationAsync(actionContext, userId, keyHash, fingerprint);
         var record = new IdempotencyRecord
         {
             UserId = userId, CommandScope = commandScope, KeyHash = keyHash,
@@ -118,7 +119,7 @@ public sealed class IdempotentCommandFilter(
 
         var statusCode = ResultStatus(executed.Result);
         if (statusCode >= 500 || statusCode is 401 or 403 or 404 ||
-            (commandScope.StartsWith("ExportReceipt.", StringComparison.Ordinal) && statusCode >= 400))
+            ((commandScope.StartsWith("ExportReceipt.", StringComparison.Ordinal) || commandScope.StartsWith("StockReservation.", StringComparison.Ordinal)) && statusCode >= 400))
         {
             await transaction.RollbackAsync(CancellationToken.None);
             context.ChangeTracker.Clear();
@@ -144,6 +145,46 @@ public sealed class IdempotentCommandFilter(
     {
         foreach (var warehouseId in new[] { record.WarehouseId, record.SourceWarehouseId, record.DestinationWarehouseId }.Where(x => x.HasValue).Select(x => x!.Value).Distinct())
             await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, token);
+        // Bulk expiry can affect more warehouses than the three single-resource scope columns.
+        if (record.CommandScope == "StockReservation.Expire")
+        {
+            var warehouses = await context.AuditLogs.AsNoTracking().Where(x => x.CorrelationId == record.CorrelationId && x.Action == "StockReservation.Released" && x.WarehouseId != null)
+                .Select(x => x.WarehouseId!.Value).Distinct().ToListAsync(token);
+            foreach (var id in warehouses) await warehouseAuthorization.EnsureWarehouseAccessAsync(id, token);
+        }
+    }
+
+    private async Task AuthorizeReservationAsync(ActionExecutingContext action, int actor, string keyHash, string fingerprint)
+    {
+        if (!commandScope.StartsWith("StockReservation.", StringComparison.Ordinal)) return;
+        var token = action.HttpContext.RequestAborted;
+        if (commandScope == "StockReservation.Create")
+        {
+            var request = (ERP.Application.DTOs.CreateStockReservationDto)action.ActionArguments["request"]!;
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(request.WarehouseId, token);
+            return;
+        }
+        if (commandScope != "StockReservation.Release") return;
+        var id = (int)action.ActionArguments["id"]!;
+        if (context.Database.IsSqlServer())
+            await context.Database.SqlQuery<int>($"SELECT Id AS Value FROM StockReservations WITH (UPDLOCK,HOLDLOCK) WHERE Id={id}").ToListAsync(token);
+        var reservation = await context.StockReservations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token)
+            ?? throw new NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(reservation.WarehouseId, token);
+        if (reservation.SourceType != "Manual") throw new ERP.Domain.Exceptions.ConcurrencyException("Giữ hàng của phiếu xuất chỉ được xử lý qua phiếu xuất.");
+        var existing = await context.IdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == actor && x.CommandScope == commandScope && x.KeyHash == keyHash, token);
+        if (existing is not null)
+        {
+            if (existing.RequestFingerprint != fingerprint || existing.Status != IdempotencyStatus.Completed)
+                throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+            return; // The original token may now be stale; successful replay still reauthorizes scope and capability.
+        }
+        var dto = (ERP.Application.DTOs.ReleaseStockReservationDto)action.ActionArguments["request"]!;
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(dto.RowVersion ?? ""); }
+        catch (FormatException) { throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại."); }
+        if (bytes.Length != 8 || !bytes.SequenceEqual(reservation.RowVersion) || reservation.Status is not ERP.Domain.Enums.StockReservationStatus.Active and not ERP.Domain.Enums.StockReservationStatus.PartiallyConsumed)
+            throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
     }
 
     private async Task AuthorizeExportAsync(ActionExecutingContext action, int actor, string keyHash, string fingerprint)

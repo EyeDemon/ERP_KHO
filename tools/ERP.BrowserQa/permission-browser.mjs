@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
 import { runOutboundCases } from './outbound-browser.mjs';
+import { runManualReservationCases } from './manual-reservation-browser.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -72,6 +73,7 @@ async function main(manifestPath) {
   manifest.SourceHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
   const selected = process.argv.includes('--case') ? new RegExp(process.argv[process.argv.indexOf('--case') + 1], 'i') : null;
   const mounted = selected?.test('Mounted receipt list/detail/print late responses');
+  const manual = selected?.test('Manual reservation UI create release');
   const outbound = selected?.test('Outbound UI reserve dispatch') || selected?.test('Outbound mounted late list detail print') || selected?.test('Outbound Approval Center independent grants nonzero count and isolation') || selected?.test('Outbound print keyboard accessibility');
   const evidence = { sourceHead: manifest.SourceHead, runnerSha256: createHash('sha256').update(await readFile(fileURLToPath(import.meta.url))).digest('hex'), fixtureSha256: createHash('sha256').update(await readFile(path.join(here, 'permission-fixtures.sql'))).digest('hex'), runId: manifest.RunId, runnerVersion: version, selection: selected?.source || 'all', logins: [], cases: [], requests: [] };
   const reportPath = path.join(manifest.ArtifactRoot, 'permission-browser-evidence.json');
@@ -97,7 +99,7 @@ async function main(manifestPath) {
       evidence.cases.push(safeEvidence({ name, classification, status: 'PASS', started, finished: new Date().toISOString(), ...result }));
       console.log(`PASS: ${name}`);
     } catch (error) {
-      evidence.cases.push({ name, classification, status: 'FAIL', started, finished: new Date().toISOString(), assertionLocation: String(error.stack).split('\n').find(x => /(?:permission|outbound)-browser\.mjs:/.test(x))?.match(/(?:permission|outbound)-browser\.mjs:\d+:\d+/)?.[0], diagnosticHash: createHash('sha256').update(String(error.message)).digest('hex').slice(0, 12), ...(error.pendingPaths ? { pendingPaths: error.pendingPaths } : {}) });
+      evidence.cases.push({ name, classification, status: 'FAIL', started, finished: new Date().toISOString(), assertionLocation: String(error.stack).split('\n').find(x => /(?:permission|outbound|manual-reservation)-browser\.mjs:/.test(x))?.match(/(?:permission|outbound|manual-reservation)-browser\.mjs:\d+:\d+/)?.[0], diagnosticHash: createHash('sha256').update(String(error.message)).digest('hex').slice(0, 12), ...(error.pendingPaths ? { pendingPaths: error.pendingPaths } : {}) });
       process.exitCode = 1; console.error(`FAIL: ${name}; assertions stopped for this case; independent cases continue.`);
     }
     await save();
@@ -129,6 +131,7 @@ async function main(manifestPath) {
     currentCase = 'startup fixture';
     const fixture = await sql(await readFile(path.join(here, 'permission-fixtures.sql'), 'utf8'));
     const outboundFixture = outbound ? await sql(await readFile(path.join(here, 'outbound-fixtures.sql'), 'utf8')) : null;
+    const manualFixture = manual ? await sql(await readFile(path.join(here, 'manual-reservation-fixtures.sql'), 'utf8')) : null;
     currentCase = 'startup Chromium';
     server = await playwright.chromium.launchServer({ headless: true, host: '127.0.0.1' });
     browser = await playwright.chromium.connect(server.wsEndpoint());
@@ -160,7 +163,7 @@ async function main(manifestPath) {
       });
       page.setDefaultTimeout(10000);
       if (mounted && persona === 'reader') actor.initialList = await captureOriginal(page, '**/api/importreceipts');
-      await page.goto(manifest.FrontendUrl + (outbound && persona === 'reader' ? '/e2e/mounted-exports.html#/login' : mounted && persona === 'reader' ? '/e2e/mounted-receipts.html#/login' : '/login'));
+      await page.goto(manifest.FrontendUrl + (manual && persona === 'reader' ? '/e2e/mounted-reservations.html#/login' : outbound && persona === 'reader' ? '/e2e/mounted-exports.html#/login' : mounted && persona === 'reader' ? '/e2e/mounted-receipts.html#/login' : '/login'));
       assert.equal(await page.title(), 'Quản lý kho ERP');
       assert.equal(await page.getByLabel('Tên đăng nhập').getAttribute('autocomplete'), 'username');
       assert.equal(await page.getByLabel('Mật khẩu').getAttribute('autocomplete'), 'current-password');
@@ -178,6 +181,8 @@ async function main(manifestPath) {
     const admin = actors.admin, manager = actors.manager, viewer = actors.viewer, reader = actors.reader;
     if (outbound) await runOutboundCases({ run, actors, fixture, outboundFixture, sql, grant, fetchFromBrowser, expectStatus,
       manifest, helper, manifestPath, captureOriginal, quiesce });
+    if (manual) await runManualReservationCases({ run, actors, fixture, manualFixture, sql, grant, fetchFromBrowser, expectStatus,
+      manifest, helper, manifestPath, captureOriginal, quiesce, assertFiltered });
     await run('Conditional QC partial/final/approval/replay', 'UI workflow + browser HTTP + SQL postconditions', async () => {
       const qc = await sql(`
         SET NOCOUNT ON; BEGIN TRAN;

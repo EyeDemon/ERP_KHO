@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const resources: Record<string, string> = {
+  reservation: 'giữ hàng',
   approval: 'phê duyệt chứng từ', export_receipt: 'phiếu xuất kho', receipt: 'phiếu nhập', quality_inspection: 'kiểm tra chất lượng', quality_disposition: 'kết quả kiểm tra chất lượng',
   receiving_discrepancy: 'sai lệch nhận hàng', putaway: 'cất hàng', location: 'vị trí kho', warehouse: 'kho hàng',
   product: 'sản phẩm', product_category: 'danh mục sản phẩm', product_barcode: 'mã vạch sản phẩm', product_uom: 'đơn vị quy đổi sản phẩm',
@@ -9,7 +10,7 @@ const resources: Record<string, string> = {
 };
 const actions: Record<string, string> = { read: 'Xem', create: 'Tạo', update: 'Cập nhật', deactivate: 'Ngừng sử dụng', manage: 'Quản lý',
   dispatch: 'Xác nhận xuất kho cho', cancel: 'Hủy', receive: 'Nhận hàng trên', complete: 'Hoàn tất', post: 'Ghi nhận tồn kho từ', execute: 'Thực hiện',
-  approve: 'Phê duyệt', reject: 'Từ chối', submit: 'Gửi xử lý', resolve: 'Xử lý', assign: 'Phân công' };
+  approve: 'Phê duyệt', reject: 'Từ chối', submit: 'Gửi xử lý', resolve: 'Xử lý', assign: 'Phân công', release: 'Giải phóng và xử lý hết hạn' };
 export const permissionLabel = (code: string) => {
   if (code === 'permission.assign') return 'Cấp và thu hồi quyền truy cập';
   const [resource, action] = code.split('.');

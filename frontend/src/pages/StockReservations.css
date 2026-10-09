@@ -14,4 +14,12 @@
 .reservation-status.consumed { color: #12653a; background: #d9f5e6; }
 .reservation-error { color: #a61b1b; background: #fff0f0; padding: 10px; margin: 10px 0; }
 .reservations footer { justify-content: center; margin-top: 14px; }
+.reservation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.reservation-actions button { min-height: 44px; }
+.reservation-form { display: grid; gap: 12px; margin: 16px 0; }
+.reservation-form label, .reservation-form > div { display: grid; gap: 6px; }
+.reservation-form input, .reservation-form select, .reservation-form textarea { min-height: 44px; padding: 8px; font: inherit; border: 1px solid #aeb8c2; border-radius: 6px; }
+.reservations button { min-height: 44px; touch-action: manipulation; }
+.reservations button:disabled { cursor: default; opacity: .6; }
+.reservations button:focus-visible, .reservation-form :focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
 @media (max-width: 720px) { .reservations header { align-items: flex-start; flex-direction: column; } .reservation-table { max-width: calc(100vw - 32px); } }

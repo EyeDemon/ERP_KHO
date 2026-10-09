@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ERP.Application.DTOs;
 
 public class CreateStockReservationDto
@@ -10,6 +12,7 @@ public class CreateStockReservationDto
 
 public class ReleaseStockReservationDto
 {
+    public string? RowVersion { get; set; }
     public decimal? Quantity { get; set; }
     public string Reason { get; set; } = string.Empty;
 }
@@ -33,6 +36,12 @@ public class StockReservationDto
     public string? SourceCode { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
+    public int? BaseUomIdSnapshot { get; set; }
+    public string? BaseUomCodeSnapshot { get; set; }
+    public string? BaseUomNameSnapshot { get; set; }
+    public int? BaseUomPrecisionSnapshot { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RowVersion { get; set; }
 }
 
 public class StockReservationPageDto
