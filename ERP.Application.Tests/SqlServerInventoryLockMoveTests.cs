@@ -1025,6 +1025,49 @@ public sealed class SqlServerInventoryLockMoveTests
             var allBuckets = await query.TraceAsync(productId: fixture.ProductId, limit: 20);
             allBuckets.CurrentBuckets.Should().HaveCount(500);
             allBuckets.BucketsTruncated.Should().BeTrue();
+            // A warehouse overview covers all current bucket identities and
+            // is intentionally NOT restricted to recent ledger event IDs.
+            var byWarehouse = await query.TraceAsync(
+                warehouseId: fixture.WarehouseId, limit: 20);
+            byWarehouse.CurrentBuckets.Should().HaveCount(500);
+            byWarehouse.BucketsTruncated.Should().BeTrue();
+            byWarehouse.CurrentBuckets.Should().OnlyContain(x =>
+                x.WarehouseId == fixture.WarehouseId);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
+    public async Task Traceability_WarehouseOnlyIncludesUnchangedStockWithoutAnyLedgerEvents()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            // The current stock remains even without a recent matching
+            // ledger history; deriving stock buckets from events would
+            // incorrectly return an empty warehouse inventory snapshot.
+            await using (var seed = CreateContext())
+                await seed.InventoryTransactions.Where(x =>
+                    x.ProductId == fixture.ProductId &&
+                    x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+
+            await using var queryDb = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                queryDb, new WarehouseAuthorizationService(queryDb, new CurrentUser(fixture.UserId)));
+
+            var overview = await query.TraceAsync(warehouseId: fixture.WarehouseId, limit: 20);
+            overview.Events.Should().BeEmpty();
+            overview.EventsTruncated.Should().BeFalse();
+            overview.CurrentBuckets.Should().NotBeEmpty();
+            overview.CurrentBuckets.Should().OnlyContain(x =>
+                x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+            overview.CurrentBuckets.Sum(x => x.OnHandQuantity).Should().Be(10);
+            overview.BucketsTruncated.Should().BeFalse();
+
+            // The explicit single-warehouse scope must be enforced before
+            // inventory or ledger results from other warehouses are returned.
+            var denied = () => query.TraceAsync(warehouseId: int.MaxValue, limit: 20);
+            await denied.Should().ThrowAsync<NotFoundException>();
         }
         finally { await CleanupAsync(fixture); }
     }
