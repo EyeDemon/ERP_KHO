@@ -44,6 +44,12 @@ public sealed class InventoryReversalTraceabilityController(
         CancellationToken cancellationToken) =>
         Ok(await reversalService.ReverseAsync(request, cancellationToken));
 
+    [HttpGet("traceability-warehouses")]
+    [PermissionAuthorize(AppPermissions.InventoryTraceabilityRead)]
+    public async Task<ActionResult<IReadOnlyList<InventoryReversalWarehouseDto>>> TraceabilityWarehouses(
+        CancellationToken cancellationToken = default) =>
+        Ok(await traceabilityService.GetAccessibleWarehousesAsync(cancellationToken));
+
     [HttpGet("traceability")]
     [PermissionAuthorize(AppPermissions.InventoryTraceabilityRead)]
     public async Task<ActionResult<InventoryTraceabilityResultDto>> Trace(

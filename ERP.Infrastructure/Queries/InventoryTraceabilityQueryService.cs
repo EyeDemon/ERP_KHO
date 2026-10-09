@@ -13,6 +13,21 @@ public sealed class InventoryTraceabilityQueryService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization) : IInventoryTraceabilityQueryService
 {
+    public async Task<IReadOnlyList<InventoryReversalWarehouseDto>> GetAccessibleWarehousesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var accessible = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        return await context.Warehouses.AsNoTracking()
+            .Where(x => accessible.Contains(x.Id))
+            .OrderBy(x => x.Code).ThenBy(x => x.Id)
+            .Select(x => new InventoryReversalWarehouseDto
+            {
+                Id = x.Id,
+                Code = x.Code,
+                Name = x.Name
+            }).ToListAsync(cancellationToken);
+    }
+
     public async Task<InventoryTraceabilityResultDto> TraceAsync(
         int? warehouseId = null,
         int? productId = null,

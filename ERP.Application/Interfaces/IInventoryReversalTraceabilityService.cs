@@ -23,6 +23,9 @@ public interface IInventoryReversalService
 
 public interface IInventoryTraceabilityQueryService
 {
+    Task<IReadOnlyList<InventoryReversalWarehouseDto>> GetAccessibleWarehousesAsync(
+        CancellationToken cancellationToken = default);
+
     Task<InventoryTraceabilityResultDto> TraceAsync(
         int? warehouseId = null,
         int? productId = null,

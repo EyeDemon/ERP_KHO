@@ -1057,6 +1057,43 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
     [SqlServerFact]
+    public async Task TraceabilityWarehouseChoices_ContainOnlyAssignedWarehouses()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            int otherWarehouseId;
+            await using (var setup = CreateContext())
+            {
+                var other = new Warehouse
+                {
+                    Code = "UNASSIGNED-" + Guid.NewGuid().ToString("N")[..10],
+                    Name = "Kho không được phân quyền"
+                };
+                setup.Warehouses.Add(other);
+                await setup.SaveChangesAsync();
+                otherWarehouseId = other.Id;
+            }
+            try
+            {
+                await using var queryDb = CreateContext();
+                var service = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                    queryDb, new WarehouseAuthorizationService(queryDb, new CurrentUser(fixture.UserId)));
+                var warehouses = await service.GetAccessibleWarehousesAsync();
+                warehouses.Should().ContainSingle(x => x.Id == fixture.WarehouseId);
+                warehouses.Should().NotContain(x => x.Id == otherWarehouseId);
+                warehouses.Should().OnlyContain(x => x.Id == fixture.WarehouseId);
+            }
+            finally
+            {
+                await using var cleanup = CreateContext();
+                await cleanup.Warehouses.Where(x => x.Id == otherWarehouseId).ExecuteDeleteAsync();
+            }
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task Traceability_WarehouseOnlyIncludesUnchangedStockWithoutAnyLedgerEvents()
     {
         var fixture = await CreateFixtureAsync();

@@ -57,6 +57,32 @@ public sealed class InventoryReversalTraceabilityControllerTests
     }
 
     [Fact]
+    public async Task TraceabilityWarehouses_UsesTheTracePermissionScopedQueryNotReversalLedger()
+    {
+        var reversal = new Mock<IInventoryReversalService>(MockBehavior.Strict);
+        var trace = new Mock<IInventoryTraceabilityQueryService>(MockBehavior.Strict);
+        IReadOnlyList<InventoryReversalWarehouseDto> permitted =
+        [
+            new() { Id = 2, Code = "KHO-02", Name = "Kho miền Nam" }
+        ];
+        trace.Setup(x => x.GetAccessibleWarehousesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(permitted);
+        var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
+
+        var result = await controller.TraceabilityWarehouses();
+        Assert.Same(permitted, Assert.IsType<OkObjectResult>(result.Result).Value);
+        trace.Verify(x => x.GetAccessibleWarehousesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        trace.VerifyNoOtherCalls();
+        reversal.VerifyNoOtherCalls();
+
+        var method = typeof(InventoryReversalTraceabilityController)
+            .GetMethod(nameof(InventoryReversalTraceabilityController.TraceabilityWarehouses))!;
+        var permission = Assert.Single(method.GetCustomAttributes(
+            typeof(ERP.Api.Authorization.PermissionAuthorizeAttribute), inherit: false));
+        Assert.NotNull(permission);
+    }
+
+    [Fact]
     public async Task WarehouseOnlyTrace_ForwardsExplicitScopeWithoutBroadeningToAllWarehouses()
     {
         var reversal = new Mock<IInventoryReversalService>(MockBehavior.Strict);
