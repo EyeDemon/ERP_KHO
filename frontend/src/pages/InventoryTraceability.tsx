@@ -42,6 +42,11 @@ type ShipmentHuEvidence={
   contentHandlingUnitBarcode:string;parentHandlingUnitId?:number|null;
   hierarchyPath:string;packedQuantity:number;
 };
+type ShipmentExportSource={
+  shipmentId:number;shipmentCode:string;warehouseId:number;pickingTaskId:number;
+  exportReceiptId:number;exportReceiptCode:string;
+  exportReceiptDispatchedAt?:string|null;exportReceiptProductQuantity:number;
+};
 type Result={
   currentBuckets:Bucket[];
   events:Event[];
@@ -55,6 +60,8 @@ type Result={
   shipmentPickingEvidenceTruncated?:boolean;
   shipmentHuEvidence?:ShipmentHuEvidence[];
   shipmentHuEvidenceTruncated?:boolean;
+  shipmentExportSources?:ShipmentExportSource[];
+  shipmentExportSourcesTruncated?:boolean;
   eventAnchorId?:number|null;
   eventsTruncated?:boolean;
   bucketsTruncated?:boolean;
@@ -525,6 +532,34 @@ export default function InventoryTraceability(){
                   <td>{hu.contentHandlingUnitBarcode}</td>
                   <td>#{hu.pickingTaskLineId}</td>
                   <td>{hu.packedQuantity}</td>
+                </tr>)}
+            </tbody>
+          </table></UiTableScroll>
+        </UiCard>}
+
+
+      {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
+        <UiCard title="Phiếu xuất kho nguồn của Shipment">
+          <p className="ui-muted-text">
+            Liên kết chứng từ thật: Shipment và Picking cùng tham chiếu phiếu xuất đã chuyển trạng thái xuất giao,
+            có dòng sản phẩm khớp và giao dịch SHIP trong kho được phép.
+            Số lượng trên phiếu xuất tính theo sản phẩm, không phân chia theo lô/sê-ri;
+            đây không phải bằng chứng lô hàng bắt nguồn từ phiếu nhập nào hoặc đã giao thành công.
+          </p>
+          {result.shipmentExportSourcesTruncated&&<p role="status" className="ui-muted-text">
+            Danh sách chứng từ xuất nguồn chưa đầy đủ vì giới hạn 100 Shipment; hãy thu hẹp kho hoặc mã lô/sê-ri.
+          </p>}
+          <UiTableScroll><table aria-label="Liên kết Shipment Picking với phiếu xuất kho nguồn">
+            <thead><tr><th>Shipment</th><th>Phiếu xuất nguồn</th><th>Picking</th><th>Phiếu đã xuất lúc</th><th>Số lượng sản phẩm trên phiếu</th></tr></thead>
+            <tbody>{!result.shipmentExportSources?.length?
+              <tr><td colSpan={5} className="ui-empty-cell">Chưa xác minh được phiếu xuất kho nguồn phù hợp trong phạm vi truy vết.</td></tr>:
+              result.shipmentExportSources.map(source=>
+                <tr key={source.warehouseId+'-'+source.shipmentId+'-'+source.exportReceiptId}>
+                  <td><strong>{source.shipmentCode}</strong><br/><small>#{source.shipmentId} • Kho #{source.warehouseId}</small></td>
+                  <td><strong>{source.exportReceiptCode}</strong><br/><small>#{source.exportReceiptId}</small></td>
+                  <td>#{source.pickingTaskId}</td>
+                  <td>{source.exportReceiptDispatchedAt?new Date(source.exportReceiptDispatchedAt).toLocaleString('vi-VN'):'—'}</td>
+                  <td>{source.exportReceiptProductQuantity}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>

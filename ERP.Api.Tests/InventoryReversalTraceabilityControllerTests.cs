@@ -186,7 +186,15 @@ public sealed class InventoryReversalTraceabilityControllerTests
                 ContentHandlingUnitBarcode = "BC-101", ParentHandlingUnitId = 100,
                 HierarchyPath = "PALLET-100 → CARTON-101", PackedQuantity = 10m
             }],
-            ShipmentHuEvidenceTruncated = true
+            ShipmentHuEvidenceTruncated = true,
+            ShipmentExportSources = [new InventoryTraceabilityShipmentExportSourceDto
+            {
+                ShipmentId = 42, ShipmentCode = "SHIP-42", WarehouseId = 7,
+                PickingTaskId = 16, ExportReceiptId = 30,
+                ExportReceiptCode = "PX-30", ExportReceiptProductQuantity = 10m,
+                ExportReceiptDispatchedAt = new DateTime(2026, 10, 9, 7, 0, 0, DateTimeKind.Utc)
+            }],
+            ShipmentExportSourcesTruncated = true
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(
@@ -217,6 +225,16 @@ public sealed class InventoryReversalTraceabilityControllerTests
         Assert.Equal("PALLET-100 → CARTON-101", hu.GetProperty("hierarchyPath").GetString());
         Assert.Equal("BC-101", hu.GetProperty("contentHandlingUnitBarcode").GetString());
         Assert.Equal(10m, hu.GetProperty("packedQuantity").GetDecimal());
+        Assert.True(root.GetProperty("shipmentExportSourcesTruncated").GetBoolean());
+        var outbound = Assert.Single(root.GetProperty("shipmentExportSources").EnumerateArray());
+        Assert.Equal(42, outbound.GetProperty("shipmentId").GetInt32());
+        Assert.Equal(7, outbound.GetProperty("warehouseId").GetInt32());
+        Assert.Equal(16, outbound.GetProperty("pickingTaskId").GetInt32());
+        Assert.Equal(30, outbound.GetProperty("exportReceiptId").GetInt32());
+        Assert.Equal("PX-30", outbound.GetProperty("exportReceiptCode").GetString());
+        Assert.Equal(10m, outbound.GetProperty("exportReceiptProductQuantity").GetDecimal());
+        Assert.NotEqual(System.Text.Json.JsonValueKind.Null,
+            outbound.GetProperty("exportReceiptDispatchedAt").ValueKind);
     }
 
     [Fact]

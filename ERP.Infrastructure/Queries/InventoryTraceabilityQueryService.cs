@@ -323,6 +323,8 @@ public sealed class InventoryTraceabilityQueryService(
         var shipmentPickingEvidenceTruncated = false;
         var shipmentHuEvidence = new List<InventoryTraceabilityShipmentHuEvidenceDto>();
         var shipmentHuEvidenceTruncated = false;
+        var shipmentExportSources = new List<InventoryTraceabilityShipmentExportSourceDto>();
+        var shipmentExportSourcesTruncated = false;
         if (productId.HasValue && (lot is not null || serial is not null) && !hasReference)
         {
             var shippedEvents = scopedLedger.Where(x =>
@@ -380,6 +382,54 @@ public sealed class InventoryTraceabilityQueryService(
             var shipmentIds = shipmentExposures.Select(x => x.ShipmentId).ToArray();
             if (shipmentIds.Length > 0)
             {
+                // A canonical outbound document link is proven by BOTH source
+                // IDs on Shipment and Picking, a dispatched ExportReceipt in
+                // the same authorized warehouse, its real product detail,
+                // and the anchored SHIP ledger already used for shipmentIds.
+                // ExportReceipt detail is product-level, never lot provenance.
+                var sources = await (
+                    from shipment in context.Shipments.AsNoTracking()
+                    join packing in context.PackingSessions.AsNoTracking()
+                        on shipment.PackingSessionId equals packing.Id
+                    join picking in context.PickingTasks.AsNoTracking()
+                        on packing.PickingTaskId equals picking.Id
+                    join exportReceipt in context.ExportReceipts.AsNoTracking()
+                        on new { Id = shipment.SourceId, shipment.WarehouseId }
+                        equals new { Id = (int?)exportReceipt.Id, exportReceipt.WarehouseId }
+                    where shipmentIds.Contains(shipment.Id) &&
+                          allowedWarehouseIds.Contains(shipment.WarehouseId) &&
+                          shipment.SourceType == "ExportReceipt" &&
+                          picking.SourceType == "ExportReceipt" &&
+                          picking.SourceId == shipment.SourceId &&
+                          shipment.WarehouseId == packing.WarehouseId &&
+                          shipment.WarehouseId == picking.WarehouseId &&
+                          exportReceipt.Status == ReceiptStatus.Dispatched &&
+                          exportReceipt.DispatchedAt.HasValue &&
+                          context.ExportReceiptDetails.Any(d =>
+                              d.ExportReceiptId == exportReceipt.Id &&
+                              d.ProductId == productId.Value && d.Quantity > 0)
+                    select new InventoryTraceabilityShipmentExportSourceDto
+                    {
+                        ShipmentId = shipment.Id,
+                        ShipmentCode = shipment.ShipmentCode,
+                        WarehouseId = shipment.WarehouseId,
+                        PickingTaskId = picking.Id,
+                        ExportReceiptId = exportReceipt.Id,
+                        ExportReceiptCode = exportReceipt.Code,
+                        ExportReceiptDispatchedAt = exportReceipt.DispatchedAt,
+                        ExportReceiptProductQuantity = context.ExportReceiptDetails
+                            .Where(d => d.ExportReceiptId == exportReceipt.Id &&
+                                        d.ProductId == productId.Value)
+                            .Sum(d => d.Quantity)
+                    })
+                    .OrderByDescending(x => x.ShipmentId)
+                    .ThenBy(x => x.ExportReceiptId)
+                    .Take(101)
+                    .ToListAsync(cancellationToken);
+                shipmentExportSourcesTruncated =
+                    sources.Count > 100 || shipmentExposuresTruncated;
+                shipmentExportSources = sources.Take(100).ToList();
+
                 var pickingWindow = await (
                     from shipment in context.Shipments.AsNoTracking()
                     join packing in context.PackingSessions.AsNoTracking()
@@ -598,6 +648,8 @@ public sealed class InventoryTraceabilityQueryService(
             ShipmentPickingEvidenceTruncated = shipmentPickingEvidenceTruncated,
             ShipmentHuEvidence = shipmentHuEvidence,
             ShipmentHuEvidenceTruncated = shipmentHuEvidenceTruncated,
+            ShipmentExportSources = shipmentExportSources,
+            ShipmentExportSourcesTruncated = shipmentExportSourcesTruncated,
             EventAnchorId = anchorId,
             EventsTruncated = eventsTruncated,
             BucketsTruncated = bucketsTruncated

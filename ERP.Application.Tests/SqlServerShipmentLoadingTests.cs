@@ -467,6 +467,66 @@ public sealed class SqlServerShipmentLoadingTests
             huEvidence.PackedQuantity.Should().Be(10m);
             result.ShipmentHuEvidenceTruncated.Should().BeFalse();
 
+            // ExportReceipt is a documented outbound business source, not a
+            // claim that a product/lot came from an inbound receipt.
+            var exportDoc = await verify.Shipments.AsNoTracking()
+                .Where(x => x.Id == prepared.Prepared.ShipmentId)
+                .Select(x => new { x.SourceId, x.SourceType }).SingleAsync();
+            exportDoc.SourceType.Should().Be("ExportReceipt");
+            exportDoc.SourceId.Should().NotBeNull();
+            var source = result.ShipmentExportSources.Should().ContainSingle().Which;
+            source.ShipmentId.Should().Be(prepared.Prepared.ShipmentId);
+            source.ShipmentCode.Should().Be(exposure.ShipmentCode);
+            source.WarehouseId.Should().Be(fixture.WarehouseId);
+            source.PickingTaskId.Should().Be(pickEvidence.PickingTaskId);
+            source.ExportReceiptId.Should().Be(exportDoc.SourceId!.Value);
+            source.ExportReceiptCode.Should().StartWith("EXP-");
+            source.ExportReceiptDispatchedAt.Should().NotBeNull();
+            source.ExportReceiptProductQuantity.Should().Be(10m);
+            result.ShipmentExportSourcesTruncated.Should().BeFalse();
+
+            // An altered Picking source reference must fail closed even
+            // though the shipment and SHIP ledger still exist.
+            await using (var mismatch = CreateContext())
+            {
+                var picking = await mismatch.PickingTasks.SingleAsync(
+                    x => x.Id == pickEvidence.PickingTaskId);
+                picking.SourceId = int.MaxValue;
+                await mismatch.SaveChangesAsync();
+            }
+            var inconsistentSource = await query.TraceAsync(productId: fixture.ProductId,
+                lotNumber: lotNumber, limit: 20);
+            inconsistentSource.ShipmentExportSources.Should().BeEmpty();
+            inconsistentSource.ShipmentExposures.Should().ContainSingle();
+            await using (var restore = CreateContext())
+            {
+                var picking = await restore.PickingTasks.SingleAsync(
+                    x => x.Id == pickEvidence.PickingTaskId);
+                picking.SourceId = source.ExportReceiptId;
+                await restore.SaveChangesAsync();
+            }
+
+            // Receipt status is a separate persisted business gate. A legacy
+            // or corrupted non-dispatched source cannot be represented as
+            // canonical dispatched provenance just because IDs match.
+            await using (var mismatch = CreateContext())
+            {
+                var receipt = await mismatch.ExportReceipts.SingleAsync(
+                    x => x.Id == source.ExportReceiptId);
+                receipt.Status = ReceiptStatus.Approved;
+                await mismatch.SaveChangesAsync();
+            }
+            var unpostedSource = await query.TraceAsync(productId: fixture.ProductId,
+                lotNumber: lotNumber, limit: 20);
+            unpostedSource.ShipmentExportSources.Should().BeEmpty();
+            await using (var restore = CreateContext())
+            {
+                var receipt = await restore.ExportReceipts.SingleAsync(
+                    x => x.Id == source.ExportReceiptId);
+                receipt.Status = ReceiptStatus.Dispatched;
+                await restore.SaveChangesAsync();
+            }
+
             // A forged shipment reference in the immutable ledger alone is
             // never sufficient proof that a canonical Shipment exists.
             await using (var orphan = CreateContext())
@@ -487,6 +547,9 @@ public sealed class SqlServerShipmentLoadingTests
                 productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
             afterOrphan.ShipmentExposures.Should().ContainSingle();
             afterOrphan.ShipmentExposures[0].DispatchedQuantity.Should().Be(10m);
+            afterOrphan.ShipmentExportSources.Should().ContainSingle();
+            afterOrphan.ShipmentExportSources[0].ExportReceiptId.Should()
+                .Be(source.ExportReceiptId);
             afterOrphan.ShipmentPickingEvidence.Should().ContainSingle();
             afterOrphan.ShipmentPickingEvidence[0].PickingTaskLineId.Should()
                 .Be(pickEvidence.PickingTaskLineId);
@@ -531,6 +594,9 @@ public sealed class SqlServerShipmentLoadingTests
                 limit: 20, eventAnchorId: result.EventAnchorId);
             anchored.ShipmentExposures.Should().ContainSingle();
             anchored.ShipmentExposures[0].LastTransactionId.Should().Be(posted.Id);
+            anchored.ShipmentExportSources.Should().ContainSingle();
+            anchored.ShipmentExportSources[0].PickingTaskId.Should()
+                .Be(source.PickingTaskId);
             anchored.ShipmentPickingEvidence.Should().ContainSingle();
             anchored.ShipmentPickingEvidence[0].AllocationId.Should()
                 .Be(pickEvidence.AllocationId);
@@ -543,17 +609,20 @@ public sealed class SqlServerShipmentLoadingTests
             nonexistentLot.ShipmentExposures.Should().BeEmpty();
             nonexistentLot.ShipmentPickingEvidence.Should().BeEmpty();
             nonexistentLot.ShipmentHuEvidence.Should().BeEmpty();
+            nonexistentLot.ShipmentExportSources.Should().BeEmpty();
             var untracked = await query.TraceAsync(
                 warehouseId: fixture.WarehouseId, limit: 20);
             untracked.ShipmentExposures.Should().BeEmpty();
             untracked.ShipmentPickingEvidence.Should().BeEmpty();
             untracked.ShipmentHuEvidence.Should().BeEmpty();
+            untracked.ShipmentExportSources.Should().BeEmpty();
             var exactDocument = await query.TraceAsync(
                 productId: fixture.ProductId, lotNumber: lotNumber,
                 referenceType: "Shipment", referenceId: prepared.Prepared.ShipmentId, limit: 20);
             exactDocument.ShipmentExposures.Should().BeEmpty();
             exactDocument.ShipmentPickingEvidence.Should().BeEmpty();
             exactDocument.ShipmentHuEvidence.Should().BeEmpty();
+            exactDocument.ShipmentExportSources.Should().BeEmpty();
 
             // Losing the warehouse assignment after displaying a result
             // must fail closed on the next query, including canonical links.

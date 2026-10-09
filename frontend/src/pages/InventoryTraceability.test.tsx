@@ -617,6 +617,62 @@ describe('InventoryTraceability',()=>{
     expect(view.queryByRole('table',{name:'Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri'})).toBeNull();
   });
 
+
+  it('shows a real exported source document without claiming inbound lot origin',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentExportSources:[{
+        shipmentId:42,shipmentCode:'SHIP-42',warehouseId:1,pickingTaskId:16,
+        exportReceiptId:30,exportReceiptCode:'PX-30',
+        exportReceiptDispatchedAt:'2026-10-09T07:00:00Z',
+        exportReceiptProductQuantity:10
+      }]
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Mã lô'),{target:{value:'LOT-A'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    const table=await view.findByRole('table',{name:'Liên kết Shipment Picking với phiếu xuất kho nguồn'});
+    expect(table.textContent).toContain('SHIP-42');
+    expect(table.textContent).toContain('PX-30');
+    expect(table.textContent).toContain('16');
+    expect(table.textContent).toContain('10');
+    expect(view.getByText(/không phân chia theo lô\/sê-ri/)).toBeTruthy();
+    expect(view.getByText(/không phải bằng chứng lô hàng bắt nguồn từ phiếu nhập/)).toBeTruthy();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'
+    );
+  });
+
+  it('alerts for truncated export-source evidence and hides it on reference filter',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentExportSources:[],shipmentExportSourcesTruncated:true
+    }} as never);
+    const view=renderTrace();
+    fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
+    fireEvent.change(view.getByLabelText('Số sê-ri'),{target:{value:'SER-A'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    expect(await view.findByText(/Danh sách chứng từ xuất nguồn chưa đầy đủ/)).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Loại tham chiếu'),{target:{value:'Shipment'}});
+    expect(view.queryByRole('table',{name:'Liên kết Shipment Picking với phiếu xuất kho nguồn'})).toBeNull();
+    expect(view.queryByText(/Danh sách chứng từ xuất nguồn chưa đầy đủ/)).toBeNull();
+  });
+
+  it('does not expose export-source documents on a warehouse-only search',async()=>{
+    vi.mocked(apiClient.get).mockResolvedValue({data:{
+      ...result,shipmentExportSources:[{
+        shipmentId:42,shipmentCode:'SHIP-42',warehouseId:1,pickingTaskId:16,
+        exportReceiptId:30,exportReceiptCode:'PX-30',
+        exportReceiptProductQuantity:10
+      }]
+    }} as never);
+    const view=renderTrace();
+    await view.findByRole('option',{name:'HCM — Kho TP.HCM'});
+    fireEvent.change(view.getByLabelText('Kho truy vết'),{target:{value:'1'}});
+    fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
+    await view.findByRole('table',{name:'Dòng thời gian sổ cái phục vụ truy vết'});
+    expect(view.queryByRole('table',{name:'Liên kết Shipment Picking với phiếu xuất kho nguồn'})).toBeNull();
+  });
+
   it('can increase server event window to 500 without client-side truncation',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:result} as never);
     const view=renderTrace();

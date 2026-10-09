@@ -74,6 +74,8 @@ public sealed class InventoryTraceabilityResultDto
     public bool ShipmentPickingEvidenceTruncated { get; set; }
     public IReadOnlyList<InventoryTraceabilityShipmentHuEvidenceDto> ShipmentHuEvidence { get; set; } = [];
     public bool ShipmentHuEvidenceTruncated { get; set; }
+    public IReadOnlyList<InventoryTraceabilityShipmentExportSourceDto> ShipmentExportSources { get; set; } = [];
+    public bool ShipmentExportSourcesTruncated { get; set; }
     // These flags describe whether the initial chronological event window or
     // matching current-stock window was capped; reversal chain closure is retained.
     // Stable transaction-ID fence for ledger pagination. Null for older clients only.
@@ -143,6 +145,21 @@ public sealed class InventoryTraceabilityShipmentHuEvidenceDto
     public int? ParentHandlingUnitId { get; set; }
     public string HierarchyPath { get; set; } = string.Empty;
     public decimal PackedQuantity { get; set; }
+}
+
+// Proven outbound document chain: Shipment + Picking both reference the
+// same dispatched ExportReceipt in the authorized warehouse; receipt detail
+// contains the product but has no lot/serial provenance.
+public sealed class InventoryTraceabilityShipmentExportSourceDto
+{
+    public int ShipmentId { get; set; }
+    public string ShipmentCode { get; set; } = string.Empty;
+    public int WarehouseId { get; set; }
+    public int PickingTaskId { get; set; }
+    public int ExportReceiptId { get; set; }
+    public string ExportReceiptCode { get; set; } = string.Empty;
+    public DateTime? ExportReceiptDispatchedAt { get; set; }
+    public decimal ExportReceiptProductQuantity { get; set; }
 }
 
 public sealed class InventoryTraceabilityRelatedDocumentDto
