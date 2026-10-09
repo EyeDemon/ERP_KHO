@@ -119,7 +119,7 @@ public sealed class SqlServerStockTransferTests
                 await operations.DispatchAsync(id);
             }
 
-            async Task RejectAndVerifyAsync(decimal received, decimal missing, decimal damaged)
+            async Task RejectAndVerifyAsync(decimal received, decimal missing, decimal damaged, string? note = null)
             {
                 await using (var db = CreateContext())
                 {
@@ -131,7 +131,8 @@ public sealed class SqlServerStockTransferTests
                                 ProductId = fixture.ProductId,
                                 ReceivedQuantity = received,
                                 MissingQuantity = missing,
-                                DamagedQuantity = damaged
+                                DamagedQuantity = damaged,
+                                Note = note
                             }]
                         });
                     await act.Should().ThrowAsync<BusinessRuleException>();
@@ -151,8 +152,27 @@ public sealed class SqlServerStockTransferTests
             await RejectAndVerifyAsync(3, 0, 0);
             await RejectAndVerifyAsync(7, 0, 2);
             await RejectAndVerifyAsync(decimal.MaxValue, 0, 0);
+            await RejectAndVerifyAsync(8, 0, 0, new string('X', 501));
             await RejectAndVerifyAsync(-1, 9, 0);
             await RejectAndVerifyAsync(7.00001m, 0.99999m, 0);
+
+            foreach (var malformed in new[]
+            {
+                new ReceiveStockTransferDto { Details = null! },
+                new ReceiveStockTransferDto { Details = [null!] }
+            })
+            {
+                await using (var db = CreateContext())
+                {
+                    var act = () => CreateService(db, fixture.UserId).ReceiveAsync(id, malformed);
+                    await act.Should().ThrowAsync<BusinessRuleException>();
+                }
+                await using var verify = CreateContext();
+                (await verify.StockTransfers.SingleAsync(x => x.Id == id)).Status
+                    .Should().Be(StockTransferStatus.InTransit);
+                (await verify.InventoryTransactions.CountAsync(x => x.ReferenceType == "StockTransfer" &&
+                    x.ReferenceId == id && x.TransactionType == TransactionType.TransferIn)).Should().Be(0);
+            }
 
             await using (var db = CreateContext())
                 await CreateService(db, fixture.UserId).ReceiveAsync(id,

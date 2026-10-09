@@ -186,11 +186,15 @@ public sealed partial class StockTransferService(
 
     private static void ValidateReceipt(StockTransfer entity, ReceiveStockTransferDto request)
     {
-        if (request.Details.Count != entity.Details.Count || request.Details.Select(x => x.ProductId).Distinct().Count() != entity.Details.Count)
+        if (request.Details is null || request.Details.Any(x => x is null) ||
+            request.Details.Count != entity.Details.Count ||
+            request.Details.Select(x => x.ProductId).Distinct().Count() != entity.Details.Count)
             throw new BusinessRuleException("Phải khai báo kết quả nhận cho từng sản phẩm đúng một lần.");
         foreach (var input in request.Details)
         {
             var line = entity.Details.SingleOrDefault(x => x.ProductId == input.ProductId) ?? throw new BusinessRuleException("Sản phẩm không thuộc phiếu.");
+            if (input.Note?.Length > 500)
+                throw new BusinessRuleException("Ghi chú nhận hàng không được quá 500 ký tự.");
             if (input.ReceivedQuantity < 0 || input.MissingQuantity < 0 || input.DamagedQuantity < 0 ||
                 decimal.Round(input.ReceivedQuantity, 4) != input.ReceivedQuantity ||
                 decimal.Round(input.MissingQuantity, 4) != input.MissingQuantity ||
