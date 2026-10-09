@@ -21,7 +21,8 @@ public sealed class InventoryTraceabilityQueryService(
         string? referenceType = null,
         int? referenceId = null,
         int limit = 200,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int bucketOffset = 0)
     {
         // A malformed positive-identifier filter must never be treated as an
         // empty search or silently widened to all accessible warehouses.
@@ -31,6 +32,10 @@ public sealed class InventoryTraceabilityQueryService(
             throw new BusinessRuleException("ID sản phẩm truy vết phải là số nguyên dương.");
         if (referenceId is <= 0)
             throw new BusinessRuleException("ID tham chiếu truy vết phải là số nguyên dương.");
+        // The stock window advances by 500 rows. Reject negative, unaligned
+        // and excessive offsets before any warehouse query is executed.
+        if (bucketOffset < 0 || bucketOffset > 50_000 || bucketOffset % 500 != 0)
+            throw new BusinessRuleException("Trang nhóm tồn không hợp lệ; vui lòng tải lại trang đầu hoặc dùng bước 500 nhóm.");
 
         var lot = string.IsNullOrWhiteSpace(lotNumber) ? null : lotNumber.Trim();
         var serial = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber.Trim();
@@ -180,6 +185,7 @@ public sealed class InventoryTraceabilityQueryService(
             .ThenBy(x => x.Id)
             // Stable ordering when multiple lot/serial statuses share a location.
             // Include one sentinel bucket for accurate truncation feedback.
+            .Skip(bucketOffset)
             .Take(501)
             .Select(x => new InventoryTraceabilityBucketDto
             {

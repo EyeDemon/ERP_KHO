@@ -69,13 +69,13 @@ public sealed class InventoryReversalTraceabilityControllerTests
             }]
         };
         trace.Setup(x => x.TraceAsync(7, null, null, null, null, null, 50,
-            It.IsAny<CancellationToken>())).ReturnsAsync(response);
+            It.IsAny<CancellationToken>(), 500)).ReturnsAsync(response);
         var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
 
-        var result = await controller.Trace(7, null, null, null, null, null, 50);
+        var result = await controller.Trace(7, null, null, null, null, null, 50, 500);
         Assert.Same(response, Assert.IsType<OkObjectResult>(result.Result).Value);
         trace.Verify(x => x.TraceAsync(7, null, null, null, null, null, 50,
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<CancellationToken>(), 500), Times.Once);
         trace.VerifyNoOtherCalls();
         reversal.VerifyNoOtherCalls();
     }

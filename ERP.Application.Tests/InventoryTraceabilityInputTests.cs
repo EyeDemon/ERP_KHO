@@ -52,6 +52,25 @@ public sealed class InventoryTraceabilityInputTests
         auth.VerifyNoOtherCalls();
     }
 
+    [Theory]
+    [InlineData(-500)]
+    [InlineData(10)]
+    [InlineData(50_500)]
+    public async Task InvalidStockPageOffsets_AreRejectedBeforeWarehouseQueries(int bucketOffset)
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var db = new ErpKhoDbContext(options);
+        var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+        var query = new InventoryTraceabilityQueryService(db, auth.Object);
+        var act = () => query.TraceAsync(
+            warehouseId: 9, bucketOffset: bucketOffset);
+
+        await act.Should().ThrowAsync<BusinessRuleException>()
+            .WithMessage("*Trang nhóm tồn*");
+        auth.VerifyNoOtherCalls();
+    }
+
     [Fact]
     public async Task ReferenceTypeAndReferenceId_MustAppearTogether()
     {

@@ -31,5 +31,6 @@ public interface IInventoryTraceabilityQueryService
         string? referenceType = null,
         int? referenceId = null,
         int limit = 200,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        int bucketOffset = 0);
 }
