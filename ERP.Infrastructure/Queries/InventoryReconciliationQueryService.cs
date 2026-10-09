@@ -313,7 +313,10 @@ namespace ERP.Infrastructure.Queries
             var safePage = Math.Max(1, pageIndex);
             var safeSize = Math.Clamp(pageSize, 1, 100);
             var stockQuery = _context.InventoryStocks.AsNoTracking().Where(s => s.Status == InventoryStatus.Available);
-            var transactionQuery = _context.InventoryTransactions.AsNoTracking().Where(t => t.InventoryStatus == InventoryStatus.Available);
+            // Include every status: StatusChange leaving AVAILABLE is
+            // recorded against its destination status. Unknown events in
+            // this warehouse/product cannot be assumed to be harmless.
+            var transactionQuery = _context.InventoryTransactions.AsNoTracking();
             if (_warehouseAuthorization is not null)
             {
                 if (warehouseId.HasValue)
@@ -392,13 +395,18 @@ namespace ERP.Infrastructure.Queries
 
             var transactions = await transactionQuery
                 .Where(t => productIds.Contains(t.ProductId) && warehouseIds.Contains(t.WarehouseId))
-                .GroupBy(t => new { t.ProductId, t.WarehouseId, t.TransactionType })
-                .Select(g => new 
+                .GroupBy(t => new
                 {
-                    g.Key.ProductId,
-                    g.Key.WarehouseId,
-                    g.Key.TransactionType,
-                    TotalQuantity = g.Sum(t => t.Quantity)
+                    t.ProductId, t.WarehouseId, t.TransactionType,
+                    t.InventoryStatus, t.FromInventoryStatus, t.ToInventoryStatus
+                })
+                .Select(g => new
+                {
+                    g.Key.ProductId, g.Key.WarehouseId, g.Key.TransactionType,
+                    g.Key.InventoryStatus, g.Key.FromInventoryStatus, g.Key.ToInventoryStatus,
+                    TotalQuantity = g.Sum(t => t.Quantity),
+                    EventCount = g.Count(),
+                    NegativeQuantityEvents = g.Count(t => t.Quantity < 0m)
                 })
                 .ToListAsync();
 
@@ -413,7 +421,8 @@ namespace ERP.Infrastructure.Queries
                     .ToList();
 
                 decimal Total(TransactionType type) => stockTransactions
-                    .Where(t => t.TransactionType == type)
+                    .Where(t => t.InventoryStatus == InventoryStatus.Available &&
+                                t.TransactionType == type)
                     .Sum(t => t.TotalQuantity);
 
                 var importQuantity = Total(TransactionType.Import);
@@ -422,12 +431,50 @@ namespace ERP.Infrastructure.Queries
                 var transferOutQuantity = Total(TransactionType.TransferOut);
                 var adjustmentIncreaseQuantity = Total(TransactionType.AdjustmentIncrease);
                 var adjustmentDecreaseQuantity = Total(TransactionType.AdjustmentDecrease);
+                var statusChangeIn = stockTransactions
+                    .Where(t => t.TransactionType == TransactionType.StatusChange &&
+                                t.ToInventoryStatus == InventoryStatus.Available)
+                    .Sum(t => t.TotalQuantity);
+                var statusChangeOut = stockTransactions
+                    .Where(t => t.TransactionType == TransactionType.StatusChange &&
+                                t.FromInventoryStatus == InventoryStatus.Available)
+                    .Sum(t => t.TotalQuantity);
 
-                var expectedQuantity = stockTransactions.Sum(t =>
-                    t.TransactionType.ApplySign(t.TotalQuantity));
-
-                decimal difference = currentQuantity - expectedQuantity;
-                string status = difference == 0 ? "Match" : "Mismatch";
+                // Reject incomplete history at pair level rather than silently
+                // mapping TransferAdjustment or a malformed StatusChange to zero.
+                // Count negative individual rows before grouping: positive and
+                // negative rows could otherwise cancel in SQL SUM.
+                var unclassifiedCount = stockTransactions.Sum(t =>
+                {
+                    if (t.NegativeQuantityEvents > 0 ||
+                        !Enum.IsDefined(t.InventoryStatus) ||
+                        !Enum.IsDefined(t.TransactionType) ||
+                        t.TransactionType == TransactionType.TransferAdjustment)
+                        return t.EventCount;
+                    if (t.TransactionType != TransactionType.StatusChange)
+                        return 0;
+                    return t.TotalQuantity <= 0m ||
+                           t.FromInventoryStatus is not { } from ||
+                           t.ToInventoryStatus is not { } to ||
+                           from == to || t.InventoryStatus != to ||
+                           !Enum.IsDefined(from) || !Enum.IsDefined(to)
+                        ? t.EventCount : 0;
+                });
+                decimal? expectedQuantity = unclassifiedCount > 0 ? null :
+                    stockTransactions.Sum(t =>
+                    {
+                        if (t.TransactionType == TransactionType.StatusChange)
+                            return (t.ToInventoryStatus == InventoryStatus.Available
+                                    ? t.TotalQuantity : 0m) -
+                                   (t.FromInventoryStatus == InventoryStatus.Available
+                                    ? t.TotalQuantity : 0m);
+                        return t.InventoryStatus == InventoryStatus.Available
+                            ? t.TransactionType.ApplySign(t.TotalQuantity) : 0m;
+                    });
+                decimal? difference = expectedQuantity.HasValue
+                    ? currentQuantity - expectedQuantity.Value : null;
+                string status = !difference.HasValue ? "Indeterminate" :
+                    difference.Value == 0m ? "Match" : "Mismatch";
 
                 return new InventoryReconciliationDto
                 {
@@ -439,6 +486,9 @@ namespace ERP.Infrastructure.Queries
                     CurrentQuantity = currentQuantity,
                     ExpectedQuantity = expectedQuantity,
                     Difference = difference,
+                    UnclassifiedLedgerEventCount = unclassifiedCount,
+                    StatusChangeInQuantity = statusChangeIn,
+                    StatusChangeOutQuantity = statusChangeOut,
                     ImportQuantity = importQuantity,
                     ExportQuantity = exportQuantity,
                     TransferInQuantity = transferInQuantity,

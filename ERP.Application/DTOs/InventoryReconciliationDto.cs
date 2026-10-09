@@ -99,8 +99,13 @@ namespace ERP.Application.DTOs
         public int WarehouseId { get; set; }
         public string WarehouseName { get; set; } = string.Empty;
         public decimal CurrentQuantity { get; set; }
-        public decimal ExpectedQuantity { get; set; }
-        public decimal Difference { get; set; }
+        // Unsupported or malformed history makes a pair indeterminate;
+        // nullable values serialize as JSON null, never invented zero.
+        public decimal? ExpectedQuantity { get; set; }
+        public decimal? Difference { get; set; }
+        public int UnclassifiedLedgerEventCount { get; set; }
+        public decimal StatusChangeInQuantity { get; set; }
+        public decimal StatusChangeOutQuantity { get; set; }
         public decimal ImportQuantity { get; set; }
         public decimal ExportQuantity { get; set; }
         public decimal TransferInQuantity { get; set; }

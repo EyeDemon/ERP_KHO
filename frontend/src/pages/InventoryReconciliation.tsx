@@ -30,8 +30,11 @@ interface ReconciliationRow {
   warehouseId: number;
   warehouseName: string;
   currentQuantity: number;
-  expectedQuantity: number;
-  difference: number;
+  expectedQuantity: number | null;
+  difference: number | null;
+  unclassifiedLedgerEventCount?: number;
+  statusChangeInQuantity?: number;
+  statusChangeOutQuantity?: number;
   importQuantity: number;
   exportQuantity: number;
   transferInQuantity: number;
@@ -297,8 +300,10 @@ export default function InventoryReconciliation() {
   };
 
   const currentRows = result?.items ?? [];
-  const mismatchCount = currentRows.filter(row => row.status !== 'Match').length;
-  const absoluteDifference = currentRows.reduce((sum, row) => sum + Math.abs(row.difference), 0);
+  const mismatchCount = currentRows.filter(row => row.status === 'Mismatch').length;
+  const indeterminateCount = currentRows.filter(row => row.status === 'Indeterminate').length;
+  const absoluteDifference = currentRows.reduce((sum, row) =>
+    sum + (row.difference == null ? 0 : Math.abs(row.difference)), 0);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -338,7 +343,8 @@ export default function InventoryReconciliation() {
       <UiMetricGrid>
         <UiMetric value={numberFormat.format(result?.totalRecords ?? 0)} label="Cặp kho / sản phẩm" />
         <UiMetric value={numberFormat.format(mismatchCount)} label="Mismatch trang hiện tại" />
-        <UiMetric value={numberFormat.format(absoluteDifference)} label="Độ lệch tuyệt đối" />
+        <UiMetric value={numberFormat.format(indeterminateCount)} label="Chưa xác định trang hiện tại" />
+        <UiMetric value={numberFormat.format(absoluteDifference)} label="Độ lệch đã xác định" />
       </UiMetricGrid>
 
       <form noValidate onSubmit={submit}>
@@ -389,25 +395,29 @@ export default function InventoryReconciliation() {
                   <tr><td colSpan={8} className="reconciliation-empty">Không có dữ liệu phù hợp. Hãy thay đổi bộ lọc và thử lại.</td></tr>
                 ) : currentRows.map(row => {
                   const matches = row.status === 'Match';
+                  const indeterminate = row.status === 'Indeterminate' ||
+                    row.expectedQuantity == null || row.difference == null;
                   return (
-                    <tr key={row.warehouseId + '-' + row.productId} className={matches ? undefined : 'reconciliation-mismatch'}>
+                    <tr key={row.warehouseId + '-' + row.productId}
+                      className={indeterminate ? 'reconciliation-indeterminate' : matches ? undefined : 'reconciliation-mismatch'}>
                       <td>{row.warehouseName}</td>
                       <td>
                         <strong>{row.productCode}</strong>
                         <span className="reconciliation-product-name">{row.productName}</span>
                       </td>
                       <td>{numberFormat.format(row.currentQuantity)}</td>
-                      <td>{numberFormat.format(row.expectedQuantity)}</td>
-                      <td className={row.difference === 0 ? 'reconciliation-difference-zero' : 'reconciliation-difference-alert'}>
-                        {numberFormat.format(row.difference)}
+                      <td>{row.expectedQuantity == null ? 'Chưa xác định' : numberFormat.format(row.expectedQuantity)}</td>
+                      <td className={indeterminate ? undefined : row.difference === 0 ? 'reconciliation-difference-zero' : 'reconciliation-difference-alert'}>
+                        {row.difference == null ? 'Chưa xác định' : numberFormat.format(row.difference)}
                       </td>
-                      <td><UiBadge tone={matches ? 'success' : 'danger'}>{matches ? 'Khớp' : 'Lệch'}</UiBadge></td>
+                      <td><UiBadge tone={indeterminate ? 'warning' : matches ? 'success' : 'danger'}>{indeterminate ? 'Chưa xác định' : matches ? 'Khớp' : 'Lệch'}</UiBadge></td>
                       <td>
                         <div className="reconciliation-movement">
                           <span>Nhập +{numberFormat.format(row.importQuantity)}</span>
                           <span>Xuất -{numberFormat.format(row.exportQuantity)}</span>
                           <span>Chuyển +{numberFormat.format(row.transferInQuantity)} / -{numberFormat.format(row.transferOutQuantity)}</span>
                           <span>Điều chỉnh +{numberFormat.format(row.adjustmentIncreaseQuantity)} / -{numberFormat.format(row.adjustmentDecreaseQuantity)}</span>
+                           <span>Đổi trạng thái +{numberFormat.format(row.statusChangeInQuantity ?? 0)} / -{numberFormat.format(row.statusChangeOutQuantity ?? 0)}</span>
                         </div>
                       </td>
                       <td>

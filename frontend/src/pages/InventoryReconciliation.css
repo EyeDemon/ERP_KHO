@@ -21,3 +21,6 @@
   .production-ui .ui-page:has(.reconciliation-table) .ui-toolbar-group{min-width:0;flex:1 1 100%}
   .production-ui .ui-page:has(.reconciliation-table) .ui-toolbar-group :is(input,select){min-width:0;max-width:100%}
 }
+
+/* Unknown historical sign is not a numeric stock mismatch. */
+.reconciliation-indeterminate td{background:var(--ui-warning-soft)}

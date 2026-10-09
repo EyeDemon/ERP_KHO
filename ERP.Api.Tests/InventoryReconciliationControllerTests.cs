@@ -117,6 +117,36 @@ namespace ERP.Api.Tests
         }
 
         [Fact]
+        public async Task Reconciliation_UnknownHistory_SerializesNullableExpectedAndDifference()
+        {
+            var dto = new InventoryReconciliationDto
+            {
+                ProductId = 11, WarehouseId = 7, CurrentQuantity = 10m,
+                ExpectedQuantity = null, Difference = null,
+                UnclassifiedLedgerEventCount = 2, Status = "Indeterminate",
+                StatusChangeOutQuantity = 3m
+            };
+            var mock = new Mock<IInventoryReconciliationQueryService>(MockBehavior.Strict);
+            mock.Setup(x => x.GetReconciliationsAsync(7, 11, null, 1, 20))
+                .ReturnsAsync(new PagedResult<InventoryReconciliationDto>
+                {
+                    Items = [dto], TotalRecords = 1, PageIndex = 1, PageSize = 20
+                });
+            var response = await new InventoryReconciliationController(mock.Object)
+                .GetReconciliations(7, 11, null);
+            var ok = response.Should().BeOfType<OkObjectResult>().Subject;
+            var page = ok.Value.Should().BeOfType<PagedResult<InventoryReconciliationDto>>().Subject;
+            var json = System.Text.Json.JsonSerializer.SerializeToElement(page.Items[0],
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+            json.GetProperty("expectedQuantity").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+            json.GetProperty("difference").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+            json.GetProperty("status").GetString().Should().Be("Indeterminate");
+            json.GetProperty("unclassifiedLedgerEventCount").GetInt32().Should().Be(2);
+            json.GetProperty("statusChangeOutQuantity").GetDecimal().Should().Be(3m);
+            mock.VerifyAll();
+        }
+
+        [Fact]
         public async Task GetReconciliations_ReturnsOkResult_WithPagedResult()
         {
             var mockQueryService = new Mock<IInventoryReconciliationQueryService>();

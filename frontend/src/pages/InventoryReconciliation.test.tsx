@@ -74,7 +74,7 @@ describe('InventoryReconciliation', () => {
     expect(await view.findByText('SKU-010')).toBeTruthy();
     expect(view.getByText('Lệch')).toBeTruthy();
     expect(view.getByText('Mismatch trang hiện tại').previousSibling?.textContent).toBe('1');
-    expect(view.getByText('Độ lệch tuyệt đối').previousSibling?.textContent).toBe('2');
+    expect(view.getByText('Độ lệch đã xác định').previousSibling?.textContent).toBe('2');
   });
 
 
@@ -490,4 +490,26 @@ describe('InventoryReconciliation', () => {
       expect(urls.some(url => url.includes('warehouseId=1') && url.includes('keyword=milk') && url.includes('page=1'))).toBe(true);
     });
   });
+  it('does not count unknown ledger history as a mismatch or a numeric zero', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : { items: [{
+            productId: 1, productCode: 'QA-UNKNOWN', productName: 'Hàng thử',
+            warehouseId: 1, warehouseName: 'Kho thử', currentQuantity: 6,
+            expectedQuantity: null, difference: null, status: 'Indeterminate',
+            unclassifiedLedgerEventCount: 1, statusChangeOutQuantity: 4,
+            importQuantity: 10, exportQuantity: 0, transferInQuantity: 0,
+            transferOutQuantity: 0, adjustmentIncreaseQuantity: 0,
+            adjustmentDecreaseQuantity: 0,
+          }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText('QA-UNKNOWN')).toBeTruthy();
+    expect(view.getAllByText('Chưa xác định').length).toBeGreaterThanOrEqual(3);
+    expect(view.getByText('Mismatch trang hiện tại').previousSibling?.textContent).toBe('0');
+    expect(view.getByText('Chưa xác định trang hiện tại').previousSibling?.textContent).toBe('1');
+    expect(view.getByText('Độ lệch đã xác định').previousSibling?.textContent).toBe('0');
+    expect(view.getByText('Đổi trạng thái +0 / -4')).toBeTruthy();
+  });
+
 });
