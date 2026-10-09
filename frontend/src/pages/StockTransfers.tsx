@@ -236,7 +236,7 @@ export default function StockTransfers() {
     }
   };
 
-  const submitReceive = () => {
+  const submitReceive = async (): Promise<void> => {
     if (!selected || actionInFlightRef.current) return;
     // Match SQL decimal(18,4) precisely enough for browser number inputs.
     // Never allow a terminal receive that leaves transit quantity unclassified.
@@ -259,7 +259,7 @@ export default function StockTransfers() {
       }
     }
     setError('');
-    void act('receive', {
+    await act('receive', {
       details: selected.details.map(line => ({
         productId: line.productId, ...receive[line.productId],
       })),
