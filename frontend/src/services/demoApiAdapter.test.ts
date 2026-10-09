@@ -136,6 +136,48 @@ describe('Blueprint demo API adapter', () => {
     }));
   });
 
+  it('exposes a separate read-only warehouse list for the blueprint traceability selector',async()=>{
+    const choiceConfig=request('/api/inventory/traceability-warehouses');
+    const response=await createBlueprintDemoApiAdapter(choiceConfig)(choiceConfig);
+    const options=response.data as Array<{id:number;code:string;name:string}>;
+    expect(options.length).toBeGreaterThan(0);
+    expect(options.every(item=>item.id>0 && item.code && item.name)).toBe(true);
+    const mutation=request('/api/inventory/traceability-warehouses','post');
+    await expect(createBlueprintDemoApiAdapter(mutation)(mutation)).rejects.toMatchObject({
+      response:{status:405}
+    });
+  });
+
+  it('keeps warehouse-only demo stock independent from ledger recency and supports empty next page',async()=>{
+    const firstConfig=request('/api/inventory/traceability?warehouseId=1&limit=1');
+    const first=await createBlueprintDemoApiAdapter(firstConfig)(firstConfig);
+    const page=first.data as {
+      currentBuckets:Array<{inventoryStockId:number}>;
+      events:Array<{transactionId:number}>;
+      eventsTruncated:boolean;bucketsTruncated:boolean;
+    };
+    expect(page.events).toHaveLength(1);
+    expect(page.eventsTruncated).toBe(true);
+    expect(page.currentBuckets.some(item=>item.inventoryStockId===7003)).toBe(true);
+    expect(page.bucketsTruncated).toBe(false);
+    const secondConfig=request('/api/inventory/traceability?warehouseId=1&limit=1&bucketOffset=500');
+    const second=await createBlueprintDemoApiAdapter(secondConfig)(secondConfig);
+    expect((second.data as typeof page).currentBuckets).toHaveLength(0);
+    expect((second.data as typeof page).bucketsTruncated).toBe(false);
+  });
+
+  it('does not expand stock to all warehouse buckets for an unknown trace reference',async()=>{
+    const config=request('/api/inventory/traceability?warehouseId=1&referenceType=StockTransfer&referenceId=9999');
+    const result=await createBlueprintDemoApiAdapter(config)(config);
+    const data=result.data as {events:unknown[];currentBuckets:unknown[]};
+    expect(data.events).toHaveLength(0);
+    expect(data.currentBuckets).toHaveLength(0);
+    const invalid=request('/api/inventory/traceability?warehouseId=1&bucketOffset=30');
+    await expect(createBlueprintDemoApiAdapter(invalid)(invalid)).rejects.toMatchObject({
+      response:{status:400}
+    });
+  });
+
   it('does not expose WH-02 pseudo-backend reads', async () => {
     for (const url of [
       '/api/warehouses/1/structure',

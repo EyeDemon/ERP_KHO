@@ -323,6 +323,11 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     if (path === '/api/inventory/reversal-warehouses') {
       return ok(config, demoWarehouses.map(item => ({ id: item.id, code: item.code, name: item.name })));
     }
+    if (path === '/api/inventory/traceability-warehouses') {
+      // Blueprint only: read-only example data. Real mode uses the protected
+      // inventory_traceability.read API + current user's warehouse membership.
+      return ok(config, demoWarehouses.map(item => ({ id: item.id, code: item.code, name: item.name })));
+    }
     if (path === '/api/inventory/reversal-candidates') {
       const warehouseId = Number(params.get('warehouseId') ?? 0);
       const transactionId = Number(params.get('transactionId') ?? 0);
@@ -400,42 +405,71 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     if (path === '/api/inventory/traceability') {
       const warehouseId = Number(params.get('warehouseId') ?? 0);
       const productId = Number(params.get('productId') ?? 0);
-      const lotNumber = (params.get('lotNumber') ?? '').toLowerCase();
-      const serialNumber = (params.get('serialNumber') ?? '').toLowerCase();
-      const referenceType = params.get('referenceType');
+      const lotNumber = (params.get('lotNumber') ?? '').trim().toLowerCase();
+      const serialNumber = (params.get('serialNumber') ?? '').trim().toLowerCase();
+      const referenceType = params.get('referenceType')?.trim() ?? '';
       const referenceId = Number(params.get('referenceId') ?? 0);
       const limit = Math.min(500, Math.max(1, Number(params.get('limit') ?? 200)));
+      const bucketOffset = Number(params.get('bucketOffset') ?? 0);
       const hasReference = Boolean(referenceType && referenceId);
-      const events = demoInventoryTransactions.filter(item =>
+      if (!Number.isSafeInteger(bucketOffset) || bucketOffset < 0 ||
+          bucketOffset > 50000 || bucketOffset % 500 !== 0)
+        return fail(config, 400, 'Trang nhóm tồn không hợp lệ.');
+      if (Boolean(referenceType) !== Boolean(referenceId))
+        return fail(config, 400, 'Loại tham chiếu và ID tham chiếu phải được nhập cùng nhau.');
+      if (!warehouseId && !productId && !lotNumber && !serialNumber && !hasReference)
+        return fail(config, 400, 'Cần ít nhất Kho, Sản phẩm, Lô, Sê-ri hoặc Tham chiếu.');
+      if (warehouseId && !demoWarehouses.some(item=>item.id===warehouseId))
+        return fail(config, 404, 'Không tìm thấy kho trong dữ liệu mô phỏng.');
+
+      const matchingEvents = demoInventoryTransactions.filter(item =>
         (!warehouseId || item.warehouseId === warehouseId)
         && (!productId || item.productId === productId)
         && (!lotNumber || (item.lotNumber ?? '').toLowerCase() === lotNumber)
         && (!serialNumber || (item.serialNumber ?? '').toLowerCase() === serialNumber)
         && (!hasReference || (item.referenceType === referenceType && item.referenceId === referenceId))
-      ).slice(0, limit);
-      const reversed = new Set(events
+      ).sort((a,b)=>new Date(b.transactionDate).getTime()-new Date(a.transactionDate).getTime()||b.id-a.id);
+      const eventsTruncated = matchingEvents.length > limit;
+      const events = matchingEvents.slice(0, limit);
+      const reversed = new Set(demoInventoryTransactions
         .filter(item => item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal' && typeof item.referenceId === 'number')
         .map(item => item.referenceId as number));
-      const productIds = new Set(events.map(item => item.productId));
-      const currentBuckets = demoInventoryBuckets.filter(item =>
+      // Only reference-based searches with no stock identity restrict current
+      // inventory by matching event identities. Warehouse-only is independent
+      // of event recency, including serial/lot stock with no ledger events.
+      const referenceOnly = hasReference && !productId && !lotNumber && !serialNumber;
+      const matchedIdentity = (bucket: (typeof demoInventoryBuckets)[number]) =>
+        events.some(event =>
+          event.productId===bucket.productId && event.warehouseId===bucket.warehouseId
+          && (event.lotId??null)===(bucket.lotId??null)
+          && (event.serialId??null)===(bucket.serialId??null));
+      const matchedBuckets = demoInventoryBuckets.filter(item =>
         (!warehouseId || item.warehouseId === warehouseId)
         && (!productId || item.productId === productId)
         && (!lotNumber || (item.lotNumber ?? '').toLowerCase() === lotNumber)
         && (!serialNumber || (item.serialNumber ?? '').toLowerCase() === serialNumber)
-        && (productId || lotNumber || serialNumber || productIds.has(item.productId))
-      ).map(item => ({
-        ...item,
-        inventoryStatus: item.status,
-      }));
+        && (!referenceOnly || matchedIdentity(item))
+      ).sort((a,b)=>
+        a.productCode.localeCompare(b.productCode) ||
+        a.warehouseId-b.warehouseId ||
+        (a.locationId??0)-(b.locationId??0) ||
+        a.status.localeCompare(b.status) ||
+        (a.lotId??0)-(b.lotId??0) ||
+        (a.serialId??0)-(b.serialId??0) ||
+        a.inventoryStockId-b.inventoryStockId);
+      const currentPage=matchedBuckets.slice(bucketOffset,bucketOffset+501);
       return ok(config, {
-        currentBuckets,
-        events: events.map(item => ({
+        currentBuckets:currentPage.slice(0,500).map(item=>({
+          ...item,inventoryStatus:item.status,
+        })),
+        bucketsTruncated:currentPage.length>500,
+        eventsTruncated,
+        events:events.map(item=>({
           ...item,
-          transactionId: item.id,
-          reversalOfTransactionId: item.transactionType === 'Reversal' && item.referenceType === 'InventoryReversal'
-            ? item.referenceId
-            : null,
-          isReversed: reversed.has(item.id),
+          transactionId:item.id,
+          reversalOfTransactionId:item.transactionType==='Reversal' && item.referenceType==='InventoryReversal'
+            ? item.referenceId : null,
+          isReversed:reversed.has(item.id),
         })),
       });
     }
