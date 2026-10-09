@@ -174,6 +174,11 @@ public sealed class InventoryTraceabilityQueryService(
             .OrderBy(x => x.Product.Code)
             .ThenBy(x => x.WarehouseId)
             .ThenBy(x => x.LocationId)
+            .ThenBy(x => x.Status)
+            .ThenBy(x => x.LotId)
+            .ThenBy(x => x.SerialId)
+            .ThenBy(x => x.Id)
+            // Stable ordering when multiple lot/serial statuses share a location.
             // Include one sentinel bucket for accurate truncation feedback.
             .Take(501)
             .Select(x => new InventoryTraceabilityBucketDto

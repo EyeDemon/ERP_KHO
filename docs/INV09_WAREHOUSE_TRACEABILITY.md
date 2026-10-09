@@ -13,7 +13,7 @@
 - **Tra theo chứng từ mà không chọn sản phẩm/lô/sê-ri:** chỉ lấy nhóm tồn khớp chính xác định danh từ các sự kiện tham chiếu (sản phẩm/kho/lô/sê-ri), áp dụng điều kiện trước khi giới hạn kết quả SQL. Khi không có sự kiện tham chiếu thì không đoán ra tồn kho liên quan.
 - **Tra theo sản phẩm/lô/sê-ri:** giữ bộ lọc hiện hành và quyền kho.
 - Sự kiện gần nhất bị giới hạn bởi tham số `limit` (mặc định 200, tối đa 500); chuỗi đảo liên quan vẫn được nối khi cần để không đứt phả hệ.
-- Nhóm tồn hiện tại giới hạn **500** dòng, đọc 501 để bật `bucketsTruncated`; giao diện cảnh báo rõ, không biến danh sách 500 thành tuyên bố toàn bộ kho đã được xem.
+- Nhóm tồn hiện tại giới hạn **500** dòng, đọc 501 để bật `bucketsTruncated`; sắp xếp xác định theo sản phẩm, kho, vị trí, trạng thái, lô, sê-ri và ID tồn kho trước khi giới hạn. Kết hợp kho và tham chiếu không tồn tại trả rỗng thay vì mở rộng tới toàn bộ kho; giao diện cảnh báo rõ, không biến danh sách 500 thành tuyên bố toàn bộ kho đã được xem.
 - Không cộng số lượng hoặc sửa sổ cái trong API này: toàn bộ thao tác **read-only**.
 
 ## Kiểm thử và nghiệm thu

@@ -1033,6 +1033,15 @@ public sealed class SqlServerInventoryLockMoveTests
             byWarehouse.BucketsTruncated.Should().BeTrue();
             byWarehouse.CurrentBuckets.Should().OnlyContain(x =>
                 x.WarehouseId == fixture.WarehouseId);
+
+            // A nonexistent document must NOT broaden the stock query to all
+            // current buckets merely because the warehouse is valid.
+            var unknownReference = await query.TraceAsync(
+                warehouseId: fixture.WarehouseId,
+                referenceType: "ReferenceBucketLimit", referenceId: 999, limit: 20);
+            unknownReference.Events.Should().BeEmpty();
+            unknownReference.CurrentBuckets.Should().BeEmpty();
+            unknownReference.BucketsTruncated.Should().BeFalse();
         }
         finally { await CleanupAsync(fixture); }
     }
