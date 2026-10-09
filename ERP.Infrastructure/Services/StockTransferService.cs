@@ -168,7 +168,7 @@ public sealed partial class StockTransferService(
     {
         EnsureWriteRole();
         var ownsTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
         try
         {
             var entity = await GetLockedScopedAsync(id, cancellationToken);
