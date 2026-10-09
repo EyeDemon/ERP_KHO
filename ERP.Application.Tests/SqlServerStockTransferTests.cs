@@ -588,6 +588,83 @@ public sealed class SqlServerStockTransferTests
     }
 
     [SqlServerFact]
+    public async Task DispatchMustRollbackEarlierProductWhenLaterLineHasNoAvailableStock()
+    {
+        var fixture = await CreateFixtureAsync(10);
+        var secondProductId = 0;
+        try
+        {
+            await using (var setup = CreateContext())
+            {
+                var second = new Product
+                {
+                    Code = "TP2" + Guid.NewGuid().ToString("N")[..10],
+                    Name = "Sản phẩm thiếu tồn",
+                    UnitId = fixture.UnitId
+                };
+                setup.Products.Add(second);
+                await setup.SaveChangesAsync();
+                secondProductId = second.Id;
+            }
+
+            int transferId;
+            await using (var createDb = CreateContext())
+            {
+                var dto = new CreateStockTransferDto
+                {
+                    SourceWarehouseId = fixture.SourceId,
+                    DestinationWarehouseId = fixture.DestinationId,
+                    Details =
+                    [
+                        new() { ProductId = fixture.ProductId, Quantity = 3 },
+                        new() { ProductId = secondProductId, Quantity = 1 }
+                    ]
+                };
+                transferId = (await CreateService(createDb, fixture.CreatorId)
+                    .CreateAsync(dto)).Id;
+                await CreateService(createDb, fixture.UserId).ApproveAsync(transferId);
+            }
+
+            await using (var postingDb = CreateContext())
+            {
+                var act = () => CreateService(postingDb, fixture.UserId)
+                    .DispatchAsync(transferId);
+                await act.Should().ThrowAsync<ConcurrencyException>()
+                    .WithMessage("*Không đủ tồn kho*");
+            }
+
+            await using var verify = CreateContext();
+            (await StockAsync(verify, fixture.ProductId, fixture.SourceId)).Should().Be(10);
+            (await StockAsync(verify, fixture.ProductId, fixture.DestinationId)).Should().Be(0);
+            (await verify.StockTransfers.AsNoTracking()
+                .Where(x => x.Id == transferId).Select(x => x.Status)
+                .SingleAsync()).Should().Be(StockTransferStatus.Approved);
+            (await verify.StockTransferDetails.AsNoTracking()
+                .Where(x => x.StockTransferId == transferId)
+                .Select(x => x.DispatchedQuantity).ToListAsync())
+                .Should().OnlyContain(quantity => quantity == 0);
+            (await verify.InventoryTransactions.CountAsync(x =>
+                x.ReferenceType == "StockTransfer" && x.ReferenceId == transferId &&
+                x.TransactionType == TransactionType.TransferOut)).Should().Be(0);
+            (await verify.AuditLogs.CountAsync(x =>
+                x.EntityName == "StockTransfer" && x.EntityId == transferId &&
+                x.Action == "StockTransfer.Dispatched")).Should().Be(0);
+        }
+        finally
+        {
+            if (secondProductId > 0)
+            {
+                await using var cleanupOther = CreateContext();
+                await cleanupOther.StockTransferDetails
+                    .Where(x => x.ProductId == secondProductId).ExecuteDeleteAsync();
+                await cleanupOther.Products.Where(x => x.Id == secondProductId)
+                    .ExecuteDeleteAsync();
+            }
+            await CleanupAsync(fixture);
+        }
+    }
+
+    [SqlServerFact]
     public async Task ApprovalHeaderLockPreventsConcurrentDraftWarehouseRewrite()
     {
         var fixture = await CreateFixtureAsync(10);
