@@ -314,6 +314,98 @@ describe('InventoryReconciliation', () => {
     expect(view.queryByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'})).toBeNull();
   });
 
+
+  it('shows all eight statuses and accounts for source and destination of QC status change',async()=>{
+    const breakdown=[
+      {status:'Available',currentQuantity:7,reservedQuantity:2,bucketCount:1,
+        directLedgerNetQuantity:10,statusChangeInQuantity:0,
+        statusChangeOutQuantity:3,expectedQuantity:7,difference:0},
+      {status:'QcHold',currentQuantity:3,reservedQuantity:0,bucketCount:1,
+        directLedgerNetQuantity:0,statusChangeInQuantity:3,
+        statusChangeOutQuantity:0,expectedQuantity:3,difference:0},
+      ...['Quarantine','Damaged','Rejected','Blocked','Expired','RecallBlocked'].map(status=>({
+        status,currentQuantity:0,reservedQuantity:0,bucketCount:0,
+        directLedgerNetQuantity:0,statusChangeInQuantity:0,
+        statusChangeOutQuantity:0,expectedQuantity:0,difference:0
+      }))
+    ];
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({data:[{id:1,code:'HCM',name:'Kho HCM'}]});
+      if(url.startsWith('/api/InventoryReconciliation/investigation?'))
+        return Promise.resolve({data:{
+          warehouseId:1,productId:10,warehouseName:'Kho HCM',
+          productCode:'SKU-010',productName:'Sản phẩm test',
+          eventAnchorId:12,eventCount:1,bucketCount:1,
+          currentQuantity:7,expectedQuantity:10,difference:-3,
+          allStatusCurrentQuantity:10,allStatusReservedQuantity:2,
+          allStatusExpectedQuantity:10,allStatusDifference:0,
+          unclassifiedLedgerEventCount:0,statusBreakdown:breakdown,isReadOnly:true,
+          eventsTruncated:false,bucketsTruncated:false,
+          events:[{transactionId:11,transactionType:'Import',signedQuantity:10}],
+          buckets:[{inventoryStockId:22,quantity:7,reservedQuantity:2}]
+        }});
+      return Promise.resolve({data:{items:[{
+        productId:10,productCode:'SKU-010',productName:'Sản phẩm test',
+        warehouseId:1,warehouseName:'Kho HCM',currentQuantity:7,
+        expectedQuantity:10,difference:-3,status:'Mismatch',
+        importQuantity:10,exportQuantity:0,transferInQuantity:0,
+        transferOutQuantity:0,adjustmentIncreaseQuantity:0,
+        adjustmentDecreaseQuantity:0
+      }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}});
+    });
+    const view=render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button',{name:'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    const table=await view.findByRole('table',{name:'Đối chiếu từng trạng thái tồn kho theo Ledger'});
+    expect(table.querySelectorAll('tbody tr').length).toBe(8);
+    expect(table.textContent).toContain('Khả dụng');
+    expect(table.textContent).toContain('Chờ kiểm định');
+    expect(table.textContent).toContain('Khóa thu hồi');
+    const rows=Array.from(table.querySelectorAll('tbody tr'));
+    const available=rows.find(row=>row.textContent?.includes('Khả dụng'));
+    const hold=rows.find(row=>row.textContent?.includes('Chờ kiểm định'));
+    expect(available?.textContent).toContain('-3');
+    expect(hold?.textContent).toContain('+3');
+    expect(view.getByText(/Đổi trạng thái trừ ở nguồn/i)).toBeTruthy();
+    expect(view.getByText(/số lệch chỉ phục vụ điều tra/)).toBeTruthy();
+    expect(view.getByText('Tổng tồn mọi trạng thái')).toBeTruthy();
+  });
+
+  it('marks historical unclassifiable ledger as unknown instead of a repair amount',async()=>{
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({data:[]});
+      if(url.startsWith('/api/InventoryReconciliation/investigation?'))
+        return Promise.resolve({data:{
+          warehouseId:1,productId:10,isReadOnly:true,eventAnchorId:80,
+          eventCount:1,bucketCount:0,eventsTruncated:false,bucketsTruncated:false,
+          events:[{transactionId:80,transactionType:'Import',signedQuantity:1}],
+          buckets:[],allStatusCurrentQuantity:1,allStatusReservedQuantity:0,
+          allStatusExpectedQuantity:null,allStatusDifference:null,
+          unclassifiedLedgerEventCount:2,
+          statusBreakdown:[{status:'QcHold',currentQuantity:1,
+            reservedQuantity:0,bucketCount:1,directLedgerNetQuantity:0,
+            statusChangeInQuantity:0,statusChangeOutQuantity:0,
+            expectedQuantity:null,difference:null}]
+        }});
+      return Promise.resolve({data:{items:[{
+        productId:10,productCode:'SKU-010',productName:'Sản phẩm test',
+        warehouseId:1,warehouseName:'Kho HCM',currentQuantity:0,
+        expectedQuantity:1,difference:-1,status:'Mismatch'
+      }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}});
+    });
+    const view=render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button',{name:'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    const warning=await view.findByRole('alert');
+    expect(warning.textContent).toContain('Có 2 giao dịch Ledger');
+    expect(warning.textContent).toContain('Không thể kết luận');
+    const table=view.getByRole('table',{name:'Đối chiếu từng trạng thái tồn kho theo Ledger'});
+    expect(table.textContent).toContain('Chưa xác định');
+    expect(view.getByText('Tổng Ledger các trạng thái (tham khảo)')).toBeTruthy();
+  });
+
   it('does not call real investigation API on blueprint demo',async()=>{
     vi.mocked(isBlueprintDemoRuntime).mockReturnValue(true);
     const view=render(<InventoryReconciliation />);

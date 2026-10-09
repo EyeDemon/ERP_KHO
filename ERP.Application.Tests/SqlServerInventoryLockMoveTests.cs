@@ -1367,6 +1367,103 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
 
+
+    [SqlServerFact]
+    public async Task ReconciliationInvestigation_StatusChange_TracksAllStatusesWithoutDoubleCounting()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var seed = CreateContext())
+            {
+                seed.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.SourceLocationId,
+                    LotId = fixture.LotId,
+                    CreatedBy = fixture.UserId,
+                    InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Import,
+                    Quantity = 10m, TransactionDate = DateTime.UtcNow
+                });
+                await seed.SaveChangesAsync();
+            }
+            // Exercise the real production status mutation and immutable
+            // StatusChange ledger, rather than synthesizing both projection
+            // rows in the test.
+            await using (var changeDb = CreateContext())
+            {
+                var user = new CurrentUser(fixture.UserId);
+                var service = new InventoryStatusService(changeDb,
+                    new WarehouseAuthorizationService(changeDb, user), user);
+                await service.ChangeAsync(new()
+                {
+                    InventoryStockId = fixture.SourceStockId, Quantity = 3m,
+                    ToStatus = "QC_HOLD", Reason = "INV-11 kiểm tra dòng trạng thái"
+                });
+            }
+
+            await using var read = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var evidence = await query.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId);
+            evidence.StatusBreakdown.Should().HaveCount(8);
+            evidence.UnclassifiedLedgerEventCount.Should().Be(0);
+            evidence.AllStatusCurrentQuantity.Should().Be(10m);
+            evidence.AllStatusReservedQuantity.Should().Be(0m);
+            evidence.AllStatusExpectedQuantity.Should().Be(10m);
+            evidence.AllStatusDifference.Should().Be(0m);
+            var available = evidence.StatusBreakdown.Single(s =>
+                s.Status == nameof(InventoryStatus.Available));
+            available.CurrentQuantity.Should().Be(7m);
+            available.DirectLedgerNetQuantity.Should().Be(10m);
+            available.StatusChangeOutQuantity.Should().Be(3m);
+            available.ExpectedQuantity.Should().Be(7m);
+            available.Difference.Should().Be(0m);
+            var qc = evidence.StatusBreakdown.Single(s =>
+                s.Status == nameof(InventoryStatus.QcHold));
+            qc.CurrentQuantity.Should().Be(3m);
+            qc.BucketCount.Should().Be(1);
+            qc.StatusChangeInQuantity.Should().Be(3m);
+            qc.ExpectedQuantity.Should().Be(3m);
+            qc.Difference.Should().Be(0m);
+            evidence.EventCount.Should().Be(1);
+            evidence.Events.Should().ContainSingle(x => x.TransactionType == "Import");
+            var anchoredId = evidence.EventAnchorId;
+
+            // Unknown historic type with no canonical sign cannot silently
+            // count as zero and yield a false "matched" status report.
+            await using (var legacy = CreateContext())
+            {
+                legacy.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                    CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.TransferAdjustment,
+                    Quantity = 2m, TransactionDate = DateTime.UtcNow.AddYears(-5)
+                });
+                await legacy.SaveChangesAsync();
+            }
+            var oldAnchor = await query.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId, anchoredId);
+            oldAnchor.UnclassifiedLedgerEventCount.Should().Be(0);
+            oldAnchor.AllStatusExpectedQuantity.Should().Be(10m);
+            oldAnchor.LedgerHasEventsAfterAnchor.Should().BeTrue();
+
+            var updated = await query.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId);
+            updated.UnclassifiedLedgerEventCount.Should().Be(1);
+            updated.AllStatusExpectedQuantity.Should().BeNull();
+            updated.AllStatusDifference.Should().BeNull();
+            updated.StatusBreakdown.Should().OnlyContain(s =>
+                s.ExpectedQuantity == null && s.Difference == null);
+            updated.AllStatusCurrentQuantity.Should().Be(10m);
+            updated.EventAnchorId.Should().BeGreaterThan(anchoredId);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task ReconciliationInvestigation_RealLedgerBucketEvidence_IsAuthorizedBoundedAndAnchored()
     {

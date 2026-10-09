@@ -41,6 +41,18 @@ interface ReconciliationRow {
   status: string;
 }
 
+interface StatusEvidence {
+  status: string; currentQuantity: number; reservedQuantity: number;
+  bucketCount: number; directLedgerNetQuantity: number;
+  statusChangeInQuantity: number; statusChangeOutQuantity: number;
+  expectedQuantity?: number | null; difference?: number | null;
+}
+const statusLabels: Record<string,string> = {
+  Available:'Khả dụng', QcHold:'Chờ kiểm định', Quarantine:'Cách ly',
+  Damaged:'Hư hỏng', Rejected:'Từ chối', Blocked:'Bị khóa',
+  Expired:'Hết hạn', RecallBlocked:'Khóa thu hồi',
+};
+
 interface InvestigationBucket {
   inventoryStockId: number;
   locationId?: number | null; locationCode?: string | null;
@@ -65,6 +77,10 @@ interface Investigation {
   ledgerHasEventsAfterAnchor?:boolean;
   eventsTruncated:boolean; bucketsTruncated:boolean;
   currentQuantity:number; expectedQuantity:number; difference:number;
+  allStatusCurrentQuantity?:number; allStatusReservedQuantity?:number;
+  allStatusExpectedQuantity?:number|null; allStatusDifference?:number|null;
+  unclassifiedLedgerEventCount?:number; statusBreakdown?:StatusEvidence[];
+  availableLedgerExpectedIsPartial?:boolean;
   isReadOnly:boolean; buckets:InvestigationBucket[]; events:InvestigationEvent[];
 }
 interface PagedResult<T> {
@@ -442,6 +458,12 @@ export default function InventoryReconciliation() {
                 onClick={() => void loadInvestigation(investigation.warehouseId, investigation.productId)}>
                 Làm mới mốc Ledger
               </button>
+              {investigation.availableLedgerExpectedIsPartial && (
+                <p role="alert">
+                  Ledger AVAILABLE có giao dịch chưa xác định được chiều tăng/giảm.
+                  Tổng Ledger AVAILABLE và chênh lệch bên dưới chỉ là một phần, không dùng để sửa tồn.
+                </p>
+              )}
               <UiMetricGrid>
                 <UiMetric label="Số dư hiện tại" value={numberFormat.format(investigation.currentQuantity)} />
                 <UiMetric label="Ledger đến mốc" value={numberFormat.format(investigation.expectedQuantity)} />
@@ -452,6 +474,50 @@ export default function InventoryReconciliation() {
                   Bằng chứng đã giới hạn ({investigation.events.length}/{investigation.eventCount} sự kiện,
                   {investigation.buckets.length}/{investigation.bucketCount} bucket). Không coi danh sách này là toàn bộ hồ sơ.
                 </p>
+              )}
+
+              {Array.isArray(investigation.statusBreakdown) && (
+                <>
+                  <h3>Đối chiếu theo 8 trạng thái tồn kho</h3>
+                  <p className="ui-muted-text">
+                    Dòng Ledger nhập/xuất được tính có dấu theo trạng thái; đổi trạng thái trừ ở nguồn,
+                    cộng ở đích và không thay đổi tổng tồn toàn kho. Dữ liệu hiện tại có thể đã biến động
+                    sau mốc #{investigation.eventAnchorId}; số lệch chỉ phục vụ điều tra, không phải lệnh sửa tồn.
+                  </p>
+                  {(investigation.unclassifiedLedgerEventCount ?? 0) > 0 && (
+                    <p role="alert">
+                      Có {investigation.unclassifiedLedgerEventCount} giao dịch Ledger thiếu hoặc không hỗ trợ
+                      phân loại trạng thái. Không thể kết luận số dư kỳ vọng hay chênh lệch theo từng trạng thái;
+                      cần xác minh dữ liệu gốc trước khi sửa tồn.
+                    </p>
+                  )}
+                  <UiMetricGrid>
+                    <UiMetric label="Tổng tồn mọi trạng thái" value={numberFormat.format(investigation.allStatusCurrentQuantity ?? 0)} />
+                    <UiMetric label="Tổng đang giữ mọi trạng thái" value={numberFormat.format(investigation.allStatusReservedQuantity ?? 0)} />
+                    <UiMetric label="Tổng Ledger các trạng thái (tham khảo)"
+                      value={investigation.allStatusExpectedQuantity == null ? 'Chưa xác định' : numberFormat.format(investigation.allStatusExpectedQuantity)} />
+                  </UiMetricGrid>
+                  <UiTableScroll><table aria-label="Đối chiếu từng trạng thái tồn kho theo Ledger">
+                    <thead><tr>
+                      <th>Trạng thái</th><th>Bucket</th><th>Tồn hiện tại</th><th>Đang giữ</th>
+                      <th>Ledger nhập/xuất ròng</th><th>Chuyển trạng thái vào</th>
+                      <th>Chuyển trạng thái ra</th><th>Ledger dự kiến</th><th>Lệch tham khảo</th>
+                    </tr></thead>
+                    <tbody>{investigation.statusBreakdown.map(status=>
+                      <tr key={status.status}>
+                        <td><strong>{statusLabels[status.status] ?? status.status}</strong></td>
+                        <td>{status.bucketCount}</td>
+                        <td>{numberFormat.format(status.currentQuantity)}</td>
+                        <td>{numberFormat.format(status.reservedQuantity)}</td>
+                        <td>{numberFormat.format(status.directLedgerNetQuantity)}</td>
+                        <td>+{numberFormat.format(status.statusChangeInQuantity)}</td>
+                        <td>-{numberFormat.format(status.statusChangeOutQuantity)}</td>
+                        <td>{status.expectedQuantity == null ? 'Chưa xác định' : numberFormat.format(status.expectedQuantity)}</td>
+                        <td>{status.difference == null ? 'Chưa xác định' : numberFormat.format(status.difference)}</td>
+                      </tr>)}
+                    </tbody>
+                  </table></UiTableScroll>
+                </>
               )}
               <h3>Bucket tồn AVAILABLE hiện tại ({investigation.bucketCount})</h3>
               <UiTableScroll><table aria-label="Bucket tồn phục vụ điều tra chênh lệch">

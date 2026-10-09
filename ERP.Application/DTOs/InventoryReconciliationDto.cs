@@ -29,9 +29,34 @@ namespace ERP.Application.DTOs
         public decimal CurrentQuantity { get; set; }
         public decimal ExpectedQuantity { get; set; }
         public decimal Difference { get; set; }
+        public bool AvailableLedgerExpectedIsPartial { get; set; }
         public bool IsReadOnly { get; set; } = true;
+        // All-status evidence is independently aggregated from the same
+        // authorized warehouse/product and immutable Ledger anchor.
+        // Unsupported historical events make expected totals indeterminate,
+        // never a zero-valued "repair" proposal.
+        public decimal AllStatusCurrentQuantity { get; set; }
+        public decimal AllStatusReservedQuantity { get; set; }
+        public decimal? AllStatusExpectedQuantity { get; set; }
+        public decimal? AllStatusDifference { get; set; }
+        public int UnclassifiedLedgerEventCount { get; set; }
+        public IReadOnlyList<InventoryReconciliationStatusEvidenceDto> StatusBreakdown { get; set; } = [];
         public IReadOnlyList<InventoryReconciliationEvidenceEventDto> Events { get; set; } = [];
         public IReadOnlyList<InventoryReconciliationEvidenceBucketDto> Buckets { get; set; } = [];
+    }
+
+    public sealed class InventoryReconciliationStatusEvidenceDto
+    {
+        public string Status { get; set; } = string.Empty;
+        public decimal CurrentQuantity { get; set; }
+        public decimal ReservedQuantity { get; set; }
+        public int BucketCount { get; set; }
+        public decimal DirectLedgerNetQuantity { get; set; }
+        public decimal StatusChangeInQuantity { get; set; }
+        public decimal StatusChangeOutQuantity { get; set; }
+        // Null when any relevant Ledger event cannot be classified safely.
+        public decimal? ExpectedQuantity { get; set; }
+        public decimal? Difference { get; set; }
     }
 
     public sealed class InventoryReconciliationEvidenceBucketDto

@@ -83,22 +83,110 @@ namespace ERP.Infrastructure.Queries
             var stocks = _context.InventoryStocks.AsNoTracking()
                 .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId &&
                             x.Status == InventoryStatus.Available);
-            var ledger = _context.InventoryTransactions.AsNoTracking()
-                .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId &&
-                            x.InventoryStatus == InventoryStatus.Available);
+            var allStatusStocks = _context.InventoryStocks.AsNoTracking()
+                .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId);
+            var allStatusLedger = _context.InventoryTransactions.AsNoTracking()
+                .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId);
+            var ledger = allStatusLedger.Where(x => x.InventoryStatus == InventoryStatus.Available);
 
-            // Immutable monotonically increasing transaction IDs: a returned
-            // anchor never expands because newer events were appended.
-            var anchor = eventAnchorId ?? await ledger.MaxAsync(x => (int?)x.Id) ?? 0;
+            // Use the warehouse/product-wide high-water mark, not just AVAILABLE,
+            // so a later QC/Quarantine status event cannot be silently excluded.
+            var anchor = eventAnchorId ?? await allStatusLedger.MaxAsync(x => (int?)x.Id) ?? 0;
+            var anchoredAllStatusLedger = allStatusLedger.Where(x => x.Id <= anchor);
             var anchoredLedger = ledger.Where(x => x.Id <= anchor);
-            // Detect an out-of-date anchor without including later events
-            // in its totals or pages. Reauthorize on every request.
-            var hasNewEvents = await ledger.AnyAsync(x => x.Id > anchor);
+            // Recheck within the authorized scope on each page request.
+            var hasNewEvents = await allStatusLedger.AnyAsync(x => x.Id > anchor);
 
             var bucketCount = await stocks.CountAsync();
             var eventCount = await anchoredLedger.CountAsync();
-            if (bucketCount == 0 && eventCount == 0)
+
+            // SQL aggregation bounds materialization to the status enum, rather
+            // than loading all bucket rows or all transaction history.
+            var stockGroups = await allStatusStocks
+                .GroupBy(x => x.Status)
+                .Select(g => new
+                {
+                    Status = g.Key, Quantity = g.Sum(x => x.Quantity),
+                    Reserved = g.Sum(x => x.ReservedQuantity), Buckets = g.Count()
+                }).ToListAsync();
+            var ledgerGroups = await anchoredAllStatusLedger
+                .GroupBy(x => new
+                {
+                    x.InventoryStatus, x.TransactionType,
+                    x.FromInventoryStatus, x.ToInventoryStatus
+                })
+                .Select(g => new
+                {
+                    g.Key.InventoryStatus, g.Key.TransactionType,
+                    g.Key.FromInventoryStatus, g.Key.ToInventoryStatus,
+                    Quantity = g.Sum(x => x.Quantity), Events = g.Count()
+                }).ToListAsync();
+            if (stockGroups.Count == 0 && ledgerGroups.Count == 0)
                 throw new NotFoundException("Không có bucket hoặc sự kiện sổ cái cho kho và sản phẩm này.");
+
+            var byStatus = Enum.GetValues<InventoryStatus>()
+                .ToDictionary(status => status,
+                    status => new InventoryReconciliationStatusEvidenceDto
+                    {
+                        Status = status.ToString()
+                    });
+            foreach (var stockGroup in stockGroups)
+            {
+                if (!byStatus.TryGetValue(stockGroup.Status, out var entry))
+                    throw new BusinessRuleException("Tồn kho có trạng thái chưa được hệ thống hỗ trợ.");
+                entry.CurrentQuantity = stockGroup.Quantity;
+                entry.ReservedQuantity = stockGroup.Reserved;
+                entry.BucketCount = stockGroup.Buckets;
+            }
+
+            // A StatusChange moves quantity between statuses, but has no effect
+            // on total warehouse on-hand. Move/Reversal are zero-sum markers.
+            // TransferAdjustment is not signed in the canonical mapper; an
+            // incomplete/unknown legacy event poisons expected totals instead
+            // of being silently treated as zero.
+            var unclassifiedCount = 0;
+            foreach (var group in ledgerGroups)
+            {
+                if (group.TransactionType == TransactionType.StatusChange)
+                {
+                    if (group.FromInventoryStatus is not { } from ||
+                        group.ToInventoryStatus is not { } to ||
+                        from == to || group.InventoryStatus != to ||
+                        !byStatus.ContainsKey(from) || !byStatus.ContainsKey(to) ||
+                        group.Quantity <= 0m)
+                    {
+                        unclassifiedCount += group.Events;
+                        continue;
+                    }
+                    byStatus[from].StatusChangeOutQuantity += group.Quantity;
+                    byStatus[to].StatusChangeInQuantity += group.Quantity;
+                    continue;
+                }
+                if (!byStatus.TryGetValue(group.InventoryStatus, out var current) ||
+                    group.Quantity < 0m ||
+                    group.TransactionType == TransactionType.TransferAdjustment ||
+                    !Enum.IsDefined(group.TransactionType))
+                {
+                    unclassifiedCount += group.Events;
+                    continue;
+                }
+                current.DirectLedgerNetQuantity +=
+                    group.TransactionType.ApplySign(group.Quantity);
+            }
+            var comparable = unclassifiedCount == 0;
+            foreach (var row in byStatus.Values)
+            {
+                if (!comparable) continue;
+                row.ExpectedQuantity = row.DirectLedgerNetQuantity +
+                    row.StatusChangeInQuantity - row.StatusChangeOutQuantity;
+                row.Difference = row.CurrentQuantity - row.ExpectedQuantity.Value;
+            }
+            var statusBreakdown = byStatus.Values.ToList();
+            var allStatusCurrent = statusBreakdown.Sum(x => x.CurrentQuantity);
+            var allStatusReserved = statusBreakdown.Sum(x => x.ReservedQuantity);
+            decimal? allStatusExpected = comparable
+                ? statusBreakdown.Sum(x => x.ExpectedQuantity!.Value)
+                : null;
 
             var currentQuantity = await stocks.SumAsync(x => (decimal?)x.Quantity) ?? 0m;
             // Compute the signed quantity from a small bounded transaction-type
@@ -107,7 +195,17 @@ namespace ERP.Infrastructure.Queries
                 .GroupBy(x => x.TransactionType)
                 .Select(x => new { Type = x.Key, Quantity = x.Sum(t => t.Quantity) })
                 .ToListAsync();
-            var expectedQuantity = grouped.Sum(x => x.Type.ApplySign(x.Quantity));
+            // Legacy TransferAdjustment does not have a canonical sign.
+            // Never crash the investigation or silently present the partial
+            // AVAILABLE sum as complete when such an event is encountered.
+            var availableLedgerExpectedIsPartial = grouped.Any(x =>
+                x.Quantity < 0m || x.Type == TransactionType.TransferAdjustment ||
+                !Enum.IsDefined(x.Type));
+            var expectedQuantity = grouped
+                .Where(x => x.Quantity >= 0m &&
+                    x.Type != TransactionType.TransferAdjustment &&
+                    Enum.IsDefined(x.Type))
+                .Sum(x => x.Type.ApplySign(x.Quantity));
 
             var buckets = await stocks
                 .OrderBy(x => x.Id)
@@ -162,6 +260,15 @@ namespace ERP.Infrastructure.Queries
                 CurrentQuantity = currentQuantity,
                 ExpectedQuantity = expectedQuantity,
                 Difference = currentQuantity - expectedQuantity,
+                AvailableLedgerExpectedIsPartial = availableLedgerExpectedIsPartial,
+                AllStatusCurrentQuantity = allStatusCurrent,
+                AllStatusReservedQuantity = allStatusReserved,
+                AllStatusExpectedQuantity = allStatusExpected,
+                AllStatusDifference = allStatusExpected.HasValue
+                    ? allStatusCurrent - allStatusExpected.Value
+                    : null,
+                UnclassifiedLedgerEventCount = unclassifiedCount,
+                StatusBreakdown = statusBreakdown,
                 EventsTruncated = hasOlderEvents,
                 BucketsTruncated = buckets.Count > 100,
                 Buckets = buckets.Take(100).ToList(),

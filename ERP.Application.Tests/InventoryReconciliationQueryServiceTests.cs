@@ -307,6 +307,175 @@ namespace ERP.Application.Tests
             auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(5));
         }
 
+
+        [Fact]
+        public async Task Investigation_AllStatusChangeConservesWarehouseTotal_AndScopesEachStatus()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var available = await db.InventoryStocks.SingleAsync(x =>
+                x.ProductId == 1 && x.WarehouseId == 1);
+            available.Quantity = 9m;
+            db.InventoryStocks.Add(new InventoryStock
+            {
+                ProductId = 1, WarehouseId = 1, Status = InventoryStatus.QcHold,
+                Quantity = 3m, ReservedQuantity = 0m
+            });
+            db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                ProductId = 1, WarehouseId = 1,
+                TransactionType = TransactionType.StatusChange,
+                InventoryStatus = InventoryStatus.QcHold,
+                FromInventoryStatus = InventoryStatus.Available,
+                ToInventoryStatus = InventoryStatus.QcHold,
+                Quantity = 3m,
+                TransactionDate = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var evidence = await query.GetInvestigationAsync(1, 1);
+            evidence.StatusBreakdown.Should().HaveCount(8);
+            evidence.AllStatusCurrentQuantity.Should().Be(12m);
+            evidence.AllStatusExpectedQuantity.Should().Be(12m);
+            evidence.AllStatusDifference.Should().Be(0m);
+            evidence.UnclassifiedLedgerEventCount.Should().Be(0);
+            evidence.EventCount.Should().Be(6); // AVAILABLE legacy event page remains separate
+            evidence.Events.Should().OnlyContain(x => x.TransactionType != "StatusChange");
+
+            var nowAvailable = evidence.StatusBreakdown.Single(x =>
+                x.Status == nameof(InventoryStatus.Available));
+            nowAvailable.CurrentQuantity.Should().Be(9m);
+            nowAvailable.DirectLedgerNetQuantity.Should().Be(12m);
+            nowAvailable.StatusChangeOutQuantity.Should().Be(3m);
+            nowAvailable.StatusChangeInQuantity.Should().Be(0m);
+            nowAvailable.ExpectedQuantity.Should().Be(9m);
+            nowAvailable.Difference.Should().Be(0m);
+            var hold = evidence.StatusBreakdown.Single(x =>
+                x.Status == nameof(InventoryStatus.QcHold));
+            hold.CurrentQuantity.Should().Be(3m);
+            hold.StatusChangeInQuantity.Should().Be(3m);
+            hold.ExpectedQuantity.Should().Be(3m);
+            hold.Difference.Should().Be(0m);
+            evidence.StatusBreakdown.Where(x =>
+                x.Status != nameof(InventoryStatus.Available) &&
+                x.Status != nameof(InventoryStatus.QcHold))
+                .Should().OnlyContain(x => x.CurrentQuantity == 0 && x.ExpectedQuantity == 0);
+
+            // All eight statuses are scoped to warehouse 1. Warehouse 2 data
+            // must not contaminate a warehouse-specific result for product 1.
+            evidence.AllStatusCurrentQuantity.Should().Be(12m);
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Once);
+        }
+
+
+        [Fact]
+        public async Task Investigation_NonAvailableOnlyPair_IsVisibleAndReconciled()
+        {
+            using var db = await GetDbContextAsync();
+            db.Products.Add(new Product { Id = 4, Code = "P4", Name = "QC-only" });
+            db.InventoryStocks.Add(new InventoryStock
+            {
+                ProductId = 4, WarehouseId = 1, Status = InventoryStatus.QcHold,
+                Quantity = 5m
+            });
+            db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                ProductId = 4, WarehouseId = 1,
+                InventoryStatus = InventoryStatus.QcHold,
+                TransactionType = TransactionType.Import,
+                Quantity = 5m, TransactionDate = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var result = await query.GetInvestigationAsync(1, 4);
+            result.BucketCount.Should().Be(0);
+            result.EventCount.Should().Be(0);
+            result.Events.Should().BeEmpty();
+            result.AllStatusCurrentQuantity.Should().Be(5m);
+            result.AllStatusExpectedQuantity.Should().Be(5m);
+            result.AllStatusDifference.Should().Be(0m);
+            result.StatusBreakdown.Single(x => x.Status == "QcHold")
+                .ExpectedQuantity.Should().Be(5m);
+        }
+
+        [Fact]
+        public async Task Investigation_UnsupportedAvailableLedger_DoesNotThrowOrProposeRepair()
+        {
+            using var db = await GetDbContextAsync();
+            db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                ProductId = 1, WarehouseId = 1,
+                InventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.TransferAdjustment,
+                Quantity = 3m, TransactionDate = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var result = await query.GetInvestigationAsync(1, 1);
+            result.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+            result.ExpectedQuantity.Should().Be(12m); // classified portion only
+            result.UnclassifiedLedgerEventCount.Should().Be(1);
+            result.AllStatusExpectedQuantity.Should().BeNull();
+            result.AllStatusDifference.Should().BeNull();
+            result.StatusBreakdown.Should().OnlyContain(x => x.ExpectedQuantity == null);
+        }
+
+        [Fact]
+        public async Task Investigation_UnclassifiedLegacyStatusEvents_DoNotInventExpectedBalance()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var original = await query.GetInvestigationAsync(1, 1);
+
+            db.InventoryTransactions.AddRange(
+                new InventoryTransaction
+                {
+                    ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.TransferAdjustment,
+                    Quantity = 4m, TransactionDate = DateTime.UtcNow.AddYears(-4)
+                },
+                new InventoryTransaction
+                {
+                    ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.StatusChange,
+                    ToInventoryStatus = InventoryStatus.QcHold,
+                    FromInventoryStatus = null,
+                    Quantity = 2m, TransactionDate = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+
+            var stale = await query.GetInvestigationAsync(1, 1, original.EventAnchorId);
+            stale.UnclassifiedLedgerEventCount.Should().Be(0);
+            stale.AllStatusExpectedQuantity.Should().Be(12m);
+            stale.LedgerHasEventsAfterAnchor.Should().BeTrue();
+
+            var fresh = await query.GetInvestigationAsync(1, 1);
+            fresh.UnclassifiedLedgerEventCount.Should().Be(2);
+            fresh.AvailableLedgerExpectedIsPartial.Should().BeFalse();
+            fresh.AllStatusExpectedQuantity.Should().BeNull();
+            fresh.AllStatusDifference.Should().BeNull();
+            fresh.StatusBreakdown.Should().HaveCount(8);
+            fresh.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
+            fresh.AllStatusCurrentQuantity.Should().Be(12m);
+            fresh.EventAnchorId.Should().BeGreaterThan(original.EventAnchorId);
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(3));
+        }
+
         [Fact]
         public async Task Investigation_EmptyPairOrMissingProduct_FailsClosed()
         {

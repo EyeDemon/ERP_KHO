@@ -66,7 +66,17 @@ namespace ERP.Api.Tests
                 LedgerHasEventsAfterAnchor = true,
                 CurrentQuantity = 9, ExpectedQuantity = 11, Difference = -2,
                 BucketCount = 1, EventCount = 2, EventsTruncated = false,
-                IsReadOnly = true,
+                IsReadOnly = true, AvailableLedgerExpectedIsPartial = true,
+                AllStatusCurrentQuantity = 12m, AllStatusReservedQuantity = 2m,
+                AllStatusExpectedQuantity = 12m, AllStatusDifference = 0m,
+                UnclassifiedLedgerEventCount = 0,
+                StatusBreakdown = [new InventoryReconciliationStatusEvidenceDto
+                {
+                    Status = "QcHold", CurrentQuantity = 3m, ReservedQuantity = 0m,
+                    BucketCount = 1, DirectLedgerNetQuantity = 0m,
+                    StatusChangeInQuantity = 3m, StatusChangeOutQuantity = 0m,
+                    ExpectedQuantity = 3m, Difference = 0m
+                }],
                 Events = [new InventoryReconciliationEvidenceEventDto
                 {
                     TransactionId = 32, TransactionType = "Import",
@@ -86,6 +96,15 @@ namespace ERP.Api.Tests
             json.GetProperty("eventBeforeId").GetInt32().Should().Be(20);
             json.GetProperty("nextEventBeforeId").GetInt32().Should().Be(18);
             json.GetProperty("ledgerHasEventsAfterAnchor").GetBoolean().Should().BeTrue();
+            json.GetProperty("allStatusCurrentQuantity").GetDecimal().Should().Be(12m);
+            json.GetProperty("allStatusExpectedQuantity").GetDecimal().Should().Be(12m);
+            json.GetProperty("unclassifiedLedgerEventCount").GetInt32().Should().Be(0);
+            json.GetProperty("availableLedgerExpectedIsPartial").GetBoolean().Should().BeTrue();
+            var status = json.GetProperty("statusBreakdown").EnumerateArray().Single();
+            status.GetProperty("status").GetString().Should().Be("QcHold");
+            status.GetProperty("statusChangeInQuantity").GetDecimal().Should().Be(3m);
+            status.GetProperty("expectedQuantity").GetDecimal().Should().Be(3m);
+            status.GetProperty("difference").GetDecimal().Should().Be(0m);
         }
 
         [Fact]
