@@ -231,6 +231,50 @@ describe('Stock transfer command consistency', () => {
     expect(apiClient.put).toHaveBeenCalledTimes(1);
   });
 
+  it('rotates a rejected edit key only after refreshing the conflicted document', async () => {
+    const draft = { ...transfer, status: 'Draft' };
+    get.mockImplementation(async url => {
+      if (url === '/api/stock-transfers') return {
+        data: { items: [draft], totalPages: 1 },
+      } as never;
+      if (url === '/api/stock-transfers/807') return { data: draft } as never;
+      if (url === '/api/warehouses') return { data: [
+        { id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' },
+      ] } as never;
+      if (url === '/api/products') return { data: [
+        { id: 9, code: 'SKU-9', name: 'Sản phẩm' },
+      ] } as never;
+      return { data: [] } as never;
+    });
+    const put = vi.mocked(apiClient.put);
+    put.mockRejectedValueOnce({
+      response: { status: 409, data: { message: 'Dữ liệu đã thay đổi.' } },
+    }).mockResolvedValueOnce({ data: {} } as never);
+
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Chỉnh sửa phiếu nháp' }));
+    const editor = view.getByRole('dialog', { name: 'Chỉnh sửa phiếu nháp' });
+    fireEvent.submit(editor);
+    await within(editor).findByRole('alert');
+    const rejectedKey = (put.mock.calls[0][2] as { headers: Record<string, string> })
+      .headers['Idempotency-Key'];
+    expect((within(editor).getByRole('button', { name: 'Lưu thay đổi' }) as HTMLButtonElement)
+      .disabled).toBe(true);
+    fireEvent.submit(editor);
+    expect(put).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(within(editor).getByRole('button', { name: 'Tải lại phiên bản mới' }));
+    await waitFor(() => expect(
+      (within(editor).getByRole('button', { name: 'Lưu thay đổi' }) as HTMLButtonElement).disabled
+    ).toBe(false));
+    fireEvent.submit(editor);
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    const refreshedKey = (put.mock.calls[1][2] as { headers: Record<string, string> })
+      .headers['Idempotency-Key'];
+    expect(refreshedKey).not.toBe(rejectedKey);
+  });
+
   it('closes draft editing with Escape and returns keyboard focus to the new-document action', async () => {
     const draft = { ...transfer, status: 'Draft' };
     get.mockImplementation(async url => {

@@ -264,17 +264,17 @@ export default function StockTransfers() {
       return setError('Sản phẩm không được trùng dòng.');
     }
 
+    const payload = {
+      sourceWarehouseId: sourceId,
+      destinationWarehouseId: destinationId,
+      note,
+      details: lines,
+    };
+    const editId = editingId;
+    const action = `transfer-${editId === null ? 'create' : 'update:' + editId}:${JSON.stringify(payload)}`;
     createInFlightRef.current = true;
     setCreateInFlight(true);
     try {
-      const payload = {
-        sourceWarehouseId: sourceId,
-        destinationWarehouseId: destinationId,
-        note,
-        details: lines,
-      };
-      const editId = editingId;
-      const action = `transfer-${editId === null ? 'create' : 'update:' + editId}:${JSON.stringify(payload)}`;
       if (editId === null) {
         await apiClient.post('/api/stock-transfers', payload, {
           headers: idempotencyHeaders(action),
@@ -296,7 +296,12 @@ export default function StockTransfers() {
       await load();
       if (editId !== null) await openDetail(editId);
     } catch (failure: any) {
-      if (editingId !== null && failure.response?.status === 409) setDraftConflict(true);
+      if (editId !== null && failure.response?.status === 409) {
+        // The server rejected this version. Do not reuse a possibly cached
+        // idempotency response after the operator reloads current data.
+        completeIdempotentAction(action);
+        setDraftConflict(true);
+      }
       setError(failure.response?.data?.message ||
         (editingId === null ? 'Không thể tạo phiếu.' : 'Không thể cập nhật phiếu; hãy kiểm tra trạng thái mới nhất.'));
     } finally {
