@@ -73,6 +73,12 @@ describe('Stock transfer command consistency', () => {
     });
   });
 
+  it('explains receive reconciliation in Vietnamese before the operator posts', async () => {
+    const view = render(<StockTransfers />);
+    fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));
+    expect(await view.findByText(/thực nhận \+ thiếu \+ hỏng phải đúng bằng số đã xuất/)).toBeTruthy();
+  });
+
   it('rejects a short receive without posting a command, then permits a fully reconciled receipt', async () => {
     const view = render(<StockTransfers />);
     fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-807' }));

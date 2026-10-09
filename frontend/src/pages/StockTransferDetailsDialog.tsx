@@ -126,6 +126,12 @@ export default function StockTransferDetailsDialog({
                 <strong>{selected.destinationWarehouseName}</strong>
               </p>
 
+              {status === 'InTransit' && (
+                <p className="ui-muted-text">
+                  Đối soát từng sản phẩm: thực nhận + thiếu + hỏng phải đúng bằng số đã xuất.
+                  Nếu không nhận đủ hàng, hãy ghi rõ phần thiếu hoặc hỏng trước khi xác nhận.
+                </p>
+              )}
               <UiTableScroll>
                 <table aria-label={`Chi tiết điều chuyển ${selected.code}`}>
                   <thead>
