@@ -30,8 +30,10 @@ namespace ERP.Api.Controllers
         public async Task<ActionResult<InventoryReconciliationInvestigationDto>> Investigation(
             [FromQuery] int warehouseId, [FromQuery] int productId,
             [FromQuery] int? eventAnchorId = null, [FromQuery] int limit = 50,
-            [FromQuery] int? eventBeforeId = null)
-            => Ok(await _queryService.GetInvestigationAsync(warehouseId, productId, eventAnchorId, limit, eventBeforeId));
+            [FromQuery] int? eventBeforeId = null, [FromQuery] int? bucketAnchorId = null,
+            [FromQuery] int? bucketAfterId = null)
+            => Ok(await _queryService.GetInvestigationAsync(warehouseId, productId, eventAnchorId, limit,
+                eventBeforeId, bucketAnchorId, bucketAfterId));
 
         [HttpGet]
         public async Task<IActionResult> GetReconciliations(

@@ -16,6 +16,13 @@ namespace ERP.Application.DTOs
         public string ProductName { get; set; } = string.Empty;
         public int WarehouseId { get; set; }
         public string WarehouseName { get; set; } = string.Empty;
+        // Bucket IDs are keyset-paged independently of Ledger events. This
+        // high-water ID excludes newly inserted buckets, but quantities and
+        // statuses remain CURRENT reads, not a transactionally frozen snapshot.
+        public int BucketAnchorId { get; set; }
+        public int? BucketAfterId { get; set; }
+        public int? NextBucketAfterId { get; set; }
+        public bool BucketHasRowsAfterAnchor { get; set; }
         public int EventAnchorId { get; set; }
         // Cursor excludes the named ID (strict less-than); every query is
         // independently authorized within an exact warehouse/product scope.

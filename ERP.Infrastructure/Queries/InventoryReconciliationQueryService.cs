@@ -48,7 +48,8 @@ namespace ERP.Infrastructure.Queries
 
         public async Task<InventoryReconciliationInvestigationDto> GetInvestigationAsync(
             int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
-            int? eventBeforeId = null)
+            int? eventBeforeId = null, int? bucketAnchorId = null,
+            int? bucketAfterId = null)
         {
             if (warehouseId <= 0 || productId <= 0)
                 throw new BusinessRuleException("ID kho và ID sản phẩm phải là số nguyên dương.");
@@ -59,6 +60,11 @@ namespace ERP.Infrastructure.Queries
             if (eventBeforeId.HasValue && (eventBeforeId.Value <= 0 ||
                 !eventAnchorId.HasValue || eventBeforeId.Value > eventAnchorId.Value))
                 throw new BusinessRuleException("Phân trang sự kiện yêu cầu ID trước hợp lệ và mốc sổ cái cố định.");
+            if (bucketAnchorId is < 0)
+                throw new BusinessRuleException("Mốc ID bucket tồn không hợp lệ.");
+            if (bucketAfterId.HasValue && (bucketAfterId.Value <= 0 ||
+                !bucketAnchorId.HasValue || bucketAfterId.Value >= bucketAnchorId.Value))
+                throw new BusinessRuleException("Phân trang bucket yêu cầu ID sau hợp lệ và mốc bucket cố định.");
             if (_warehouseAuthorization is null)
                 throw new InvalidOperationException("Thiếu dịch vụ phân quyền kho đối chiếu.");
 
@@ -97,7 +103,13 @@ namespace ERP.Infrastructure.Queries
             // Recheck within the authorized scope on each page request.
             var hasNewEvents = await allStatusLedger.AnyAsync(x => x.Id > anchor);
 
-            var bucketCount = await stocks.CountAsync();
+            // Use a monotonically increasing identity cursor instead of OFFSET.
+            // This bounds new bucket INSERTs, but does not freeze mutable stock
+            // quantities/statuses across requests. Every page rechecks access.
+            var bucketAnchor = bucketAnchorId ?? await stocks.MaxAsync(x => (int?)x.Id) ?? 0;
+            var anchoredStocks = stocks.Where(x => x.Id <= bucketAnchor);
+            var bucketCount = await anchoredStocks.CountAsync();
+            var bucketHasRowsAfterAnchor = await stocks.AnyAsync(x => x.Id > bucketAnchor);
             var eventCount = await anchoredLedger.CountAsync();
 
             // SQL aggregation bounds materialization to the status enum, rather
@@ -207,7 +219,10 @@ namespace ERP.Infrastructure.Queries
                     Enum.IsDefined(x.Type))
                 .Sum(x => x.Type.ApplySign(x.Quantity));
 
-            var buckets = await stocks
+            var bucketPage = bucketAfterId.HasValue
+                ? anchoredStocks.Where(x => x.Id > bucketAfterId.Value)
+                : anchoredStocks;
+            var buckets = await bucketPage
                 .OrderBy(x => x.Id)
                 .Take(101)
                 .Select(x => new InventoryReconciliationEvidenceBucketDto
@@ -252,6 +267,10 @@ namespace ERP.Infrastructure.Queries
                 ProductCode = product.Code,
                 ProductName = product.Name,
                 EventAnchorId = anchor,
+                BucketAnchorId = bucketAnchor,
+                BucketAfterId = bucketAfterId,
+                NextBucketAfterId = buckets.Count > 100 ? buckets[99].InventoryStockId : null,
+                BucketHasRowsAfterAnchor = bucketHasRowsAfterAnchor,
                 EventBeforeId = eventBeforeId,
                 NextEventBeforeId = hasOlderEvents && page.Count > 0 ? page[^1].Id : null,
                 LedgerHasEventsAfterAnchor = hasNewEvents,

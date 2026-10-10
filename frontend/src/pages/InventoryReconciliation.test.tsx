@@ -202,6 +202,104 @@ describe('InventoryReconciliation', () => {
   });
 
 
+  it('loads 102 bucket evidence rows in two keyset pages while keeping the Ledger anchor', async () => {
+    const pageOneBuckets = Array.from({ length: 100 }, (_, i) => ({
+      inventoryStockId: i + 1, quantity: 1, reservedQuantity: 0,
+    }));
+    const evidence = {
+      warehouseId: 1, warehouseName: 'Kho HCM', productId: 10,
+      productCode: 'SKU-010', productName: 'Sản phẩm test',
+      eventAnchorId: 72, eventCount: 1, bucketCount: 102,
+      bucketAnchorId: 102, bucketHasRowsAfterAnchor: false,
+      currentQuantity: 102, expectedQuantity: 102, difference: 0,
+      isReadOnly: true, eventsTruncated: false,
+      events: [{transactionId: 72, transactionType: 'Import', quantity: 102, signedQuantity: 102}],
+    };
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({ data: [{id: 1, code: 'HCM', name: 'Kho HCM'}] });
+      if (url.startsWith('/api/InventoryReconciliation/investigation?')) {
+        const params = new URL(url, 'https://qa.invalid').searchParams;
+        if (params.get('bucketAfterId') === '100') return Promise.resolve({data: {
+          ...evidence, bucketAfterId: 100, nextBucketAfterId: null,
+          bucketHasRowsAfterAnchor: true, bucketsTruncated: false,
+          buckets: [{inventoryStockId: 101, quantity: 1, reservedQuantity: 0},
+                    {inventoryStockId: 102, quantity: 1, reservedQuantity: 0}],
+        }});
+        return Promise.resolve({data: {
+          ...evidence, bucketAfterId: null, nextBucketAfterId: 100,
+          bucketsTruncated: true, buckets: pageOneBuckets,
+        }});
+      }
+      return Promise.resolve({data: {items: [{
+        productId: 10, productCode: 'SKU-010', productName: 'Sản phẩm test',
+        warehouseId: 1, warehouseName: 'Kho HCM', currentQuantity: 102,
+        expectedQuantity: 102, difference: 0, status: 'Match',
+      }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1}});
+    });
+    const view = render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button', {name: 'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    await view.findByText(/Trang bucket 1/);
+    expect((view.getByRole('button', {name: 'Bucket trước'}) as HTMLButtonElement).disabled).toBe(true);
+    const firstTable = view.getByRole('table', {name: 'Bucket tồn phục vụ điều tra chênh lệch'});
+    expect(firstTable.querySelectorAll('tbody tr')).toHaveLength(100);
+    expect(firstTable.textContent).toContain('#100');
+
+    fireEvent.click(view.getByRole('button', {name: 'Bucket sau'}));
+    await view.findByText(/Trang bucket 2/);
+    const secondTable = view.getByRole('table', {name: 'Bucket tồn phục vụ điều tra chênh lệch'});
+    expect(secondTable.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(secondTable.textContent).toContain('#101');
+    expect(secondTable.textContent).toContain('#102');
+    expect(secondTable.textContent).not.toContain('#100');
+    expect((view.getByRole('button', {name: 'Bucket sau'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(view.getByText(/Đã xuất hiện bucket mới sau mốc ID #102/)).toBeTruthy();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/InventoryReconciliation/investigation?warehouseId=1&productId=10&limit=50&eventAnchorId=72&bucketAnchorId=102&bucketAfterId=100'
+    );
+
+    fireEvent.click(view.getByRole('button', {name: 'Bucket trước'}));
+    await view.findByText(/Trang bucket 1/);
+    expect(view.getByRole('table', {name: 'Bucket tồn phục vụ điều tra chênh lệch'})
+      .querySelectorAll('tbody tr')).toHaveLength(100);
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/InventoryReconciliation/investigation?warehouseId=1&productId=10&limit=50&eventAnchorId=72&bucketAnchorId=102'
+    );
+  });
+
+  it('discards bucket evidence if warehouse access is revoked on the second page', async () => {
+    const all = Array.from({length: 100}, (_, i) => ({
+      inventoryStockId: i + 1, quantity: 1, reservedQuantity: 0,
+    }));
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({data: [{id: 1, code: 'HCM', name: 'Kho HCM'}]});
+      if (url.includes('bucketAfterId=100')) return Promise.reject({response: {status: 404}});
+      if (url.startsWith('/api/InventoryReconciliation/investigation?'))
+        return Promise.resolve({data: {
+          warehouseId: 1, warehouseName: 'Kho HCM', productId: 10,
+          productCode: 'SKU-010', productName: 'Sản phẩm test',
+          eventAnchorId: 72, eventCount: 0, bucketAnchorId: 101, bucketCount: 101,
+          currentQuantity: 101, expectedQuantity: 0, difference: 101,
+          isReadOnly: true, eventsTruncated: false, events: [],
+          bucketsTruncated: true, nextBucketAfterId: 100, buckets: all,
+        }});
+      return Promise.resolve({data: {items: [{
+        productId: 10, productCode: 'SKU-010', productName: 'Sản phẩm test',
+        warehouseId: 1, warehouseName: 'Kho HCM', currentQuantity: 101,
+        expectedQuantity: 0, difference: 101, status: 'Mismatch',
+      }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1}});
+    });
+    const view = render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button', {name: 'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    await view.findByText(/Trang bucket 1/);
+    fireEvent.click(view.getByRole('button', {name: 'Bucket sau'}));
+    expect(await view.findByText('Không tìm thấy bằng chứng trong kho được cấp quyền.')).toBeTruthy();
+    expect(view.queryByRole('table', {name: 'Bucket tồn phục vụ điều tra chênh lệch'})).toBeNull();
+  });
+
   it('pages anchored Ledger events in both directions without offsets or duplicate IDs',async()=>{
     const evidence={
       warehouseId:1,warehouseName:'Kho HCM',productId:10,

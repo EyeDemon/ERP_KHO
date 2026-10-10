@@ -76,6 +76,8 @@ interface Investigation {
   warehouseId:number; warehouseName:string; productId:number;
   productCode:string; productName:string; eventAnchorId:number;
   eventCount:number; bucketCount:number;
+  bucketAnchorId?:number; bucketAfterId?:number|null; nextBucketAfterId?:number|null;
+  bucketHasRowsAfterAnchor?:boolean;
   eventBeforeId?:number|null; nextEventBeforeId?:number|null;
   ledgerHasEventsAfterAnchor?:boolean;
   eventsTruncated:boolean; bucketsTruncated:boolean;
@@ -118,6 +120,8 @@ export default function InventoryReconciliation() {
   // page is null; previous pages can be safely reloaded with the same anchor.
   const [eventPageCursors, setEventPageCursors] = useState<(number | null)[]>([null]);
   const [eventPageIndex, setEventPageIndex] = useState(0);
+  const [bucketPageCursors, setBucketPageCursors] = useState<(number | null)[]>([null]);
+  const [bucketPageIndex, setBucketPageIndex] = useState(0);
   const investigationGeneration = useRef(0);
   const investigationTrigger = useRef<HTMLButtonElement | null>(null);
 
@@ -213,12 +217,16 @@ export default function InventoryReconciliation() {
     setInvestigating(false);
     setEventPageCursors([null]);
     setEventPageIndex(0);
+    setBucketPageCursors([null]);
+    setBucketPageIndex(0);
     return () => { investigationGeneration.current += 1; };
   }, [applied, page]);
 
   const loadInvestigation = async (
     warehouse: number, product: number, anchor?: number, before?: number,
     targetPage = 0, cursors: (number | null)[] = [null],
+    bucketAnchor?: number, bucketAfter?: number,
+    targetBucketPage = 0, bucketCursors: (number | null)[] = [null],
   ) => {
     if (demoRuntime) return;
     const generation = ++investigationGeneration.current;
@@ -233,6 +241,8 @@ export default function InventoryReconciliation() {
       });
       if (anchor !== undefined) params.set('eventAnchorId', String(anchor));
       if (before !== undefined) params.set('eventBeforeId', String(before));
+      if (bucketAnchor !== undefined) params.set('bucketAnchorId', String(bucketAnchor));
+      if (bucketAfter !== undefined) params.set('bucketAfterId', String(bucketAfter));
       const response = await apiClient.get('/api/InventoryReconciliation/investigation?' + params.toString());
       if (generation !== investigationGeneration.current) return;
       const evidence = response.data as Investigation;
@@ -241,6 +251,14 @@ export default function InventoryReconciliation() {
           !Number.isSafeInteger(evidence.eventAnchorId) || evidence.eventAnchorId < 0 ||
           (anchor !== undefined && evidence.eventAnchorId !== anchor) ||
           (before !== undefined && evidence.eventBeforeId !== before) ||
+          (bucketAnchor !== undefined && evidence.bucketAnchorId !== bucketAnchor) ||
+          (bucketAfter !== undefined && evidence.bucketAfterId !== bucketAfter) ||
+          (evidence.bucketAnchorId !== undefined &&
+            (!Number.isSafeInteger(evidence.bucketAnchorId) || evidence.bucketAnchorId < 0)) ||
+          (evidence.nextBucketAfterId != null &&
+            (!Number.isSafeInteger(evidence.nextBucketAfterId) ||
+             evidence.nextBucketAfterId <= 0 || !evidence.bucketsTruncated ||
+             evidence.buckets[evidence.buckets.length - 1]?.inventoryStockId !== evidence.nextBucketAfterId)) ||
           !Array.isArray(evidence.buckets) || !Array.isArray(evidence.events) ||
           evidence.events.some((e, i) =>
             !Number.isSafeInteger(e.transactionId) || e.transactionId <= 0 ||
@@ -256,6 +274,8 @@ export default function InventoryReconciliation() {
       setInvestigation(evidence);
       setEventPageCursors(cursors);
       setEventPageIndex(targetPage);
+      setBucketPageCursors(bucketCursors);
+      setBucketPageIndex(targetBucketPage);
     } catch (cause) {
       if (generation !== investigationGeneration.current) return;
       const status = (cause as { response?: { status?: number } })?.response?.status;
@@ -280,12 +300,35 @@ export default function InventoryReconciliation() {
       if (!investigation.eventsTruncated || !Number.isSafeInteger(next) || !next || next <= 0) return;
       const cursors = [...eventPageCursors.slice(0, eventPageIndex + 1), next];
       void loadInvestigation(investigation.warehouseId, investigation.productId,
-        investigation.eventAnchorId, next, eventPageIndex + 1, cursors);
+        investigation.eventAnchorId, next, eventPageIndex + 1, cursors,
+        investigation.bucketAnchorId, bucketPageCursors[bucketPageIndex] ?? undefined,
+        bucketPageIndex, bucketPageCursors);
     } else if (eventPageIndex > 0) {
       const index = eventPageIndex - 1;
       const before = eventPageCursors[index] ?? undefined;
       void loadInvestigation(investigation.warehouseId, investigation.productId,
-        investigation.eventAnchorId, before, index, eventPageCursors);
+        investigation.eventAnchorId, before, index, eventPageCursors,
+        investigation.bucketAnchorId, bucketPageCursors[bucketPageIndex] ?? undefined,
+        bucketPageIndex, bucketPageCursors);
+    }
+  };
+
+  const changeBucketPage = (direction: 'next' | 'previous') => {
+    if (!investigation || investigating || investigation.bucketAnchorId === undefined) return;
+    const eventBefore = eventPageCursors[eventPageIndex] ?? undefined;
+    if (direction === 'next') {
+      const next = investigation.nextBucketAfterId;
+      if (!investigation.bucketsTruncated || !Number.isSafeInteger(next) || !next || next <= 0) return;
+      const cursors = [...bucketPageCursors.slice(0, bucketPageIndex + 1), next];
+      void loadInvestigation(investigation.warehouseId, investigation.productId,
+        investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
+        investigation.bucketAnchorId, next, bucketPageIndex + 1, cursors);
+    } else if (bucketPageIndex > 0) {
+      const index = bucketPageIndex - 1;
+      const after = bucketPageCursors[index] ?? undefined;
+      void loadInvestigation(investigation.warehouseId, investigation.productId,
+        investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
+        investigation.bucketAnchorId, after, index, bucketPageCursors);
     }
   };
 
@@ -296,6 +339,8 @@ export default function InventoryReconciliation() {
     setInvestigating(false);
     setEventPageCursors([null]);
     setEventPageIndex(0);
+    setBucketPageCursors([null]);
+    setBucketPageIndex(0);
     investigationTrigger.current?.focus();
   };
 
@@ -538,6 +583,12 @@ export default function InventoryReconciliation() {
                 </>
               )}
               <h3>Bucket tồn AVAILABLE hiện tại ({investigation.bucketCount})</h3>
+              {investigation.bucketHasRowsAfterAnchor && (
+                <p role="status" className="ui-muted-text">
+                  Đã xuất hiện bucket mới sau mốc ID #{investigation.bucketAnchorId}.
+                  Phân trang đang giữ mốc cũ; chọn Làm mới mốc Ledger để bắt đầu lại.
+                </p>
+              )}
               <UiTableScroll><table aria-label="Bucket tồn phục vụ điều tra chênh lệch">
                 <thead><tr><th>ID bucket</th><th>Vị trí</th><th>Lô</th><th>Sê-ri</th><th>Tồn</th><th>Đã giữ</th></tr></thead>
                 <tbody>{investigation.buckets.length === 0?
@@ -549,6 +600,14 @@ export default function InventoryReconciliation() {
                   </tr>)}
                 </tbody>
               </table></UiTableScroll>
+              <nav className="reconciliation-pagination" aria-label="Phân trang bucket tồn">
+                <button type="button" disabled={investigating || bucketPageIndex === 0}
+                  onClick={() => changeBucketPage('previous')}>Bucket trước</button>
+                <span>Trang bucket {bucketPageIndex + 1} — tối đa 100 bucket/trang, tổng {investigation.bucketCount}</span>
+                <button type="button"
+                  disabled={investigating || !investigation.bucketsTruncated || !investigation.nextBucketAfterId}
+                  onClick={() => changeBucketPage('next')}>Bucket sau</button>
+              </nav>
               <h3>Sự kiện Ledger AVAILABLE ({investigation.eventCount})</h3>
               <UiTableScroll><table aria-label="Sự kiện Ledger phục vụ điều tra chênh lệch">
                 <thead><tr><th>ID giao dịch</th><th>Loại</th><th>Vị trí</th><th>Lô/sê-ri</th><th>Số lượng có dấu</th><th>Chứng từ</th></tr></thead>

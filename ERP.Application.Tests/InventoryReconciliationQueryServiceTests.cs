@@ -308,6 +308,96 @@ namespace ERP.Application.Tests
         }
 
 
+        [Theory]
+        [InlineData(-1, null)]
+        [InlineData(null, 1)]
+        [InlineData(0, 1)]
+        [InlineData(100, -1)]
+        [InlineData(100, 0)]
+        [InlineData(100, 100)]
+        [InlineData(100, 101)]
+        public async Task Investigation_InvalidBucketCursor_IsDeniedBeforeAuthorization(
+            int? bucketAnchorId, int? bucketAfterId)
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var act = () => service.GetInvestigationAsync(
+                1, 1, bucketAnchorId: bucketAnchorId, bucketAfterId: bucketAfterId);
+            await act.Should().ThrowAsync<BusinessRuleException>();
+            auth.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task Investigation_BucketKeysetPagesAcrossHundredWithoutLeakingNewRows()
+        {
+            using var db = await GetDbContextAsync();
+            // One seeded bucket plus 105 distinct IDs.
+            for (var i = 0; i < 105; i++)
+                db.InventoryStocks.Add(new InventoryStock
+                {
+                    Id = 1000 + i, ProductId = 1, WarehouseId = 1,
+                    Status = InventoryStatus.Available, Quantity = 1m
+                });
+            await db.SaveChangesAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+
+            var first = await service.GetInvestigationAsync(1, 1);
+            first.BucketAnchorId.Should().Be(1104);
+            first.BucketAfterId.Should().BeNull();
+            first.BucketCount.Should().Be(106);
+            first.Buckets.Should().HaveCount(100);
+            first.BucketsTruncated.Should().BeTrue();
+            first.NextBucketAfterId.Should().Be(first.Buckets.Last().InventoryStockId);
+            first.Buckets.Select(x => x.InventoryStockId).Should().BeInAscendingOrder();
+
+            db.InventoryStocks.Add(new InventoryStock
+            {
+                Id = 1200, ProductId = 1, WarehouseId = 1,
+                Status = InventoryStatus.Available, Quantity = 99m
+            });
+            await db.SaveChangesAsync();
+
+            var second = await service.GetInvestigationAsync(
+                1, 1, first.EventAnchorId, bucketAnchorId: first.BucketAnchorId,
+                bucketAfterId: first.NextBucketAfterId);
+            second.BucketAnchorId.Should().Be(first.BucketAnchorId);
+            second.BucketAfterId.Should().Be(first.NextBucketAfterId);
+            second.BucketHasRowsAfterAnchor.Should().BeTrue();
+            second.BucketCount.Should().Be(106);
+            second.Buckets.Should().HaveCount(6);
+            second.BucketsTruncated.Should().BeFalse();
+            second.NextBucketAfterId.Should().BeNull();
+            second.Buckets.Select(x => x.InventoryStockId).Should().OnlyContain(id => id <= 1104);
+            first.Buckets.Select(x => x.InventoryStockId)
+                .Intersect(second.Buckets.Select(x => x.InventoryStockId))
+                .Should().BeEmpty();
+
+            var refreshed = await service.GetInvestigationAsync(1, 1);
+            refreshed.BucketCount.Should().Be(107);
+            refreshed.BucketAnchorId.Should().Be(1200);
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(3));
+        }
+
+        [Fact]
+        public async Task Investigation_BucketSecondPageRechecksWarehouseAuthorization()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.SetupSequence(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask)
+                .ThrowsAsync(new NotFoundException("Kho không thuộc quyền."));
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var first = await service.GetInvestigationAsync(1, 1);
+            var denied = () => service.GetInvestigationAsync(1, 1,
+                first.EventAnchorId, bucketAnchorId: 9, bucketAfterId: 1);
+            await denied.Should().ThrowAsync<NotFoundException>();
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(2));
+        }
+
         [Fact]
         public async Task Investigation_AllStatusChangeConservesWarehouseTotal_AndScopesEachStatus()
         {
