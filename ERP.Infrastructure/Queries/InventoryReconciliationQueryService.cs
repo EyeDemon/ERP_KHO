@@ -259,11 +259,21 @@ namespace ERP.Infrastructure.Queries
                 x.Type == TransactionType.TransferAdjustment || !Enum.IsDefined(x.Type));
             // A mixed-sign group is partial in its entirety: never let a
             // negative historical row disappear into a positive SUM.
-            var expectedQuantity = grouped
+            var legacyClassifiedQuantity = grouped
                 .Where(x => x.NegativeQuantityEvents == 0 &&
                     x.Type != TransactionType.TransferAdjustment &&
                     Enum.IsDefined(x.Type))
                 .Sum(x => x.Type.ApplySign(x.Quantity));
+            // A valid StatusChange is recorded on the destination bucket, not
+            // on its AVAILABLE source. Grouping only transactions whose
+            // InventoryStatus=Available silently loses that outbound transfer.
+            // Reuse the canonical all-status projection when ALL Ledger events
+            // can be classified, so the AVAILABLE detail, its status breakdown,
+            // and the summary list agree. Preserve the documented legacy
+            // classified-only partial number when history is unclassifiable.
+            var expectedQuantity = comparable
+                ? byStatus[InventoryStatus.Available].ExpectedQuantity!.Value
+                : legacyClassifiedQuantity;
 
             var bucketPage = bucketAfterId.HasValue
                 ? anchoredStocks.Where(x => x.Id > bucketAfterId.Value)

@@ -1422,6 +1422,12 @@ public sealed class SqlServerInventoryLockMoveTests
             available.StatusChangeOutQuantity.Should().Be(3m);
             available.ExpectedQuantity.Should().Be(7m);
             available.Difference.Should().Be(0m);
+            // The AVAILABLE headline must agree with the per-status result;
+            // the old legacy sum wrongly reported 10 and phantom -3 here.
+            evidence.CurrentQuantity.Should().Be(7m);
+            evidence.ExpectedQuantity.Should().Be(7m);
+            evidence.Difference.Should().Be(0m);
+            evidence.AvailableLedgerExpectedIsPartial.Should().BeFalse();
             var qc = evidence.StatusBreakdown.Single(s =>
                 s.Status == nameof(InventoryStatus.QcHold));
             qc.CurrentQuantity.Should().Be(3m);

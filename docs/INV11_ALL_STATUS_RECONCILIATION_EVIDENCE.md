@@ -78,3 +78,10 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - Frontend hiển thị badge tiếng Việt trong hồ sơ chi tiết; nếu tổng chênh lệch bằng 0 trong khi hai trạng thái lệch bù trừ, có cảnh báo rõ ràng và yêu cầu xem từng trạng thái. Kiểm tra fail-closed không chấp nhận server tuyên bố `Match` khi bảng từng trạng thái thực tế có chênh lệch.
 - Nếu Ledger không thể phân loại, kết luận `Indeterminate`, không đưa ra khuyến nghị sửa tồn. Đây là bằng chứng read-only với bucket hiện tại khác snapshot mốc Ledger; các con số vẫn chỉ phục vụ điều tra.
 - Regression: InMemory và SQL Server chứng minh cặp QC/Quarantine lệch đối ứng có tổng 0; Vitest kiểm tra cảnh báo và payload khai sai trạng thái. Không thay đổi schema hoặc mutation, không sửa Notion/Production.
+
+## Đồng bộ AVAILABLE chi tiết với chuyển trạng thái Ledger (2026-10-10)
+
+- Trước đây hồ sơ điều tra lấy `AVAILABLE.ExpectedQuantity` từ chỉ các giao dịch `InventoryStatus=Available`, rồi gọi `ApplySign(StatusChange)=0`. StatusChange rời AVAILABLE được ghi tại trạng thái đích, nên biến động `-3` bị bỏ sót và tạo chênh lệch AVAILABLE giả, mâu thuẫn với `StatusBreakdown` và danh sách tổng quan.
+- Khi toàn bộ Ledger đến mốc đã phân loại an toàn, headline `AVAILABLE · Ledger đến mốc` nay tái sử dụng Expected đã cộng/trừ chuyển trạng thái của `StatusBreakdown[Available]`. Bao gồm chiều từ AVAILABLE sang QC và từ QC trở lại AVAILABLE; cùng một anchor, không thêm query tải toàn bộ Ledger.
+- Khi có sự kiện chưa hỗ trợ, giữ `legacyClassifiedQuantity` chỉ để tham khảo và cờ `AvailableLedgerExpectedIsPartial` theo logic hiện hữu; `allStatusExpected/ allStatusDifference` là null, `Indeterminate`. Không coi con số một phần là đề xuất chỉnh tồn.
+- Regression InMemory outbound+inbound `StatusChange`, SQL Server thật dùng service đổi trạng thái, Vitest hiển thị AVAILABLE nhất quán. Không thay đổi schema, Ledger, quyền kho hoặc Notion.

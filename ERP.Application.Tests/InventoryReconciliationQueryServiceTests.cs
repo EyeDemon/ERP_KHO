@@ -586,6 +586,10 @@ namespace ERP.Application.Tests
             nowAvailable.StatusChangeInQuantity.Should().Be(0m);
             nowAvailable.ExpectedQuantity.Should().Be(9m);
             nowAvailable.Difference.Should().Be(0m);
+            evidence.CurrentQuantity.Should().Be(9m);
+            evidence.ExpectedQuantity.Should().Be(9m);
+            evidence.Difference.Should().Be(0m);
+            evidence.AvailableLedgerExpectedIsPartial.Should().BeFalse();
             var hold = evidence.StatusBreakdown.Single(x =>
                 x.Status == nameof(InventoryStatus.QcHold));
             hold.CurrentQuantity.Should().Be(3m);
@@ -609,6 +613,45 @@ namespace ERP.Application.Tests
             auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(2));
         }
 
+
+
+        [Fact]
+        public async Task Investigation_InboundStatusChangeToAvailable_UpdatesAvailableHeadlineAndStatusBreakdown()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var available = await db.InventoryStocks.SingleAsync(x =>
+                x.ProductId == 1 && x.WarehouseId == 1);
+            available.Quantity = 15m;
+            db.InventoryStocks.Add(new InventoryStock
+            {
+                ProductId = 1, WarehouseId = 1, Status = InventoryStatus.QcHold,
+                Quantity = 0m, ReservedQuantity = 0m
+            });
+            db.InventoryTransactions.AddRange(
+                new InventoryTransaction { ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.Import, Quantity = 3m },
+                new InventoryTransaction { ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.Available,
+                    FromInventoryStatus = InventoryStatus.QcHold,
+                    ToInventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.StatusChange, Quantity = 3m });
+            await db.SaveChangesAsync();
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var evidence = await service.GetInvestigationAsync(1, 1);
+            evidence.UnclassifiedLedgerEventCount.Should().Be(0);
+            evidence.CurrentQuantity.Should().Be(15m);
+            evidence.ExpectedQuantity.Should().Be(15m);
+            evidence.Difference.Should().Be(0m);
+            evidence.StatusBreakdown.Single(x => x.Status == nameof(InventoryStatus.Available))
+                .ExpectedQuantity.Should().Be(15m);
+            evidence.StatusBreakdown.Single(x => x.Status == nameof(InventoryStatus.QcHold))
+                .ExpectedQuantity.Should().Be(0m);
+            evidence.AllStatusStatus.Should().Be("Match");
+        }
 
         [Fact]
         public async Task Investigation_NonAvailableOnlyPair_IsVisibleAndReconciled()
@@ -708,6 +751,7 @@ namespace ERP.Application.Tests
             var fresh = await query.GetInvestigationAsync(1, 1);
             fresh.UnclassifiedLedgerEventCount.Should().Be(2);
             fresh.AvailableLedgerExpectedIsPartial.Should().BeFalse();
+            fresh.ExpectedQuantity.Should().Be(12m); // still a legacy classified-only subset
             fresh.AllStatusExpectedQuantity.Should().BeNull();
             fresh.AllStatusDifference.Should().BeNull();
             fresh.AllStatusStatus.Should().Be("Indeterminate");

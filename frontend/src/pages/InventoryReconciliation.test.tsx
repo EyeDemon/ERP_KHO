@@ -794,7 +794,7 @@ describe('InventoryReconciliation', () => {
           warehouseId:1,productId:10,warehouseName:'Kho HCM',
           productCode:'SKU-010',productName:'Sản phẩm test',
           eventAnchorId:12,eventCount:1,bucketCount:1,
-          currentQuantity:7,expectedQuantity:10,difference:-3,
+          currentQuantity:7,expectedQuantity:7,difference:0,
           allStatusCurrentQuantity:10,allStatusReservedQuantity:2,
           allStatusExpectedQuantity:10,allStatusDifference:0,
           unclassifiedLedgerEventCount:0,statusBreakdown:breakdown,isReadOnly:true,
@@ -827,6 +827,8 @@ describe('InventoryReconciliation', () => {
     expect(view.getByText(/Đổi trạng thái trừ ở nguồn/i)).toBeTruthy();
     expect(view.getByText(/số lệch chỉ phục vụ điều tra/)).toBeTruthy();
     expect(view.getByText('Tổng tồn mọi trạng thái')).toBeTruthy();
+    expect(view.getByText('AVAILABLE · Ledger đến mốc').nextSibling?.textContent).toBe('7');
+    expect(view.getByText('AVAILABLE · Chênh lệch tham khảo').nextSibling?.textContent).toBe('0');
   });
 
   it('marks historical unclassifiable ledger as unknown instead of a repair amount',async()=>{
