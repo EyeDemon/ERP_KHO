@@ -100,6 +100,75 @@ interface PagedResult<T> {
 const pageSize = 20;
 const numberFormat = new Intl.NumberFormat('vi-VN');
 
+// A malformed report must never masquerade as a verified inventory match.
+// The authoritative permission check remains on the API; this is a UI
+// fail-closed guard against inconsistent or crossed-scope response payloads.
+const isFiniteQuantity = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+const isNullableQuantity = (value: unknown): value is number | null =>
+  value === null || isFiniteQuantity(value);
+
+const isValidReconciliationPage = (
+  payload: unknown, requestedPage: number, requestedWarehouse: string, requestedProduct: string,
+): payload is PagedResult<ReconciliationRow> => {
+  if (!payload || typeof payload !== 'object') return false;
+  const data = payload as PagedResult<unknown>;
+  if (!Array.isArray(data.items) ||
+      !Number.isSafeInteger(data.totalRecords) || data.totalRecords < 0 ||
+      data.pageIndex !== requestedPage || data.pageSize !== pageSize ||
+      !Number.isSafeInteger(data.totalPages) ||
+      data.totalPages !== Math.ceil(data.totalRecords / pageSize) ||
+      data.items.length > pageSize || data.items.length > data.totalRecords) return false;
+
+  const seen = new Set<string>();
+  for (const candidate of data.items) {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const row = candidate as ReconciliationRow;
+    if (!Number.isSafeInteger(row.warehouseId) || row.warehouseId <= 0 ||
+        !Number.isSafeInteger(row.productId) || row.productId <= 0 ||
+        typeof row.warehouseName !== 'string' || !row.warehouseName.trim() ||
+        typeof row.productCode !== 'string' || !row.productCode.trim() ||
+        typeof row.productName !== 'string' || !row.productName.trim() ||
+        !isFiniteQuantity(row.currentQuantity) ||
+        !isNullableQuantity(row.expectedQuantity) || !isNullableQuantity(row.difference) ||
+        (requestedWarehouse !== '' && row.warehouseId !== Number(requestedWarehouse)) ||
+        (requestedProduct !== '' && row.productId !== Number(requestedProduct)) ||
+        (row.unclassifiedLedgerEventCount !== undefined &&
+          (!Number.isSafeInteger(row.unclassifiedLedgerEventCount) ||
+            row.unclassifiedLedgerEventCount < 0))) return false;
+
+    const key = row.warehouseId + ':' + row.productId;
+    if (seen.has(key)) return false;
+    seen.add(key);
+
+    if (row.status === 'Indeterminate') {
+      if (row.expectedQuantity !== null || row.difference !== null) return false;
+    } else {
+      if ((row.status !== 'Match' && row.status !== 'Mismatch') ||
+          row.expectedQuantity === null || row.difference === null ||
+          (row.unclassifiedLedgerEventCount ?? 0) > 0 ||
+          (row.status === 'Match' && row.difference !== 0) ||
+          (row.status === 'Mismatch' && row.difference === 0)) return false;
+      // Allow only binary floating-point rounding of JSON decimal quantities.
+      const tolerance = Number.EPSILON * 8 * Math.max(
+        1, Math.abs(row.currentQuantity), Math.abs(row.expectedQuantity),
+      );
+      if (Math.abs((row.currentQuantity - row.expectedQuantity) - row.difference) > tolerance)
+        return false;
+    }
+
+    // Optional in older read models; if present they must never format as NaN.
+    const movements = [
+      row.importQuantity, row.exportQuantity, row.transferInQuantity,
+      row.transferOutQuantity, row.adjustmentIncreaseQuantity,
+      row.adjustmentDecreaseQuantity, row.statusChangeInQuantity, row.statusChangeOutQuantity,
+    ];
+    if (movements.some(value => value !== undefined && !isFiniteQuantity(value))) return false;
+  }
+  return true;
+};
+
 export default function InventoryReconciliation() {
   const demoRuntime = isBlueprintDemoRuntime();
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
@@ -190,12 +259,18 @@ export default function InventoryReconciliation() {
         params.set('page', String(page));
         params.set('pageSize', String(pageSize));
         const response = await apiClient.get('/api/InventoryReconciliation?' + params.toString());
-        if (active) setResult(response.data);
+        if (active) {
+          if (!isValidReconciliationPage(response.data, page, applied.warehouseId, applied.productId))
+            throw new Error('INVALID_RECONCILIATION_RESPONSE');
+          setResult(response.data);
+        }
       } catch (cause) {
         if (active) {
           setResult(null);
           const code = (cause as { response?: { status?: number } })?.response?.status;
-          setError(code === 403
+          setError(cause instanceof Error && cause.message === 'INVALID_RECONCILIATION_RESPONSE'
+            ? 'Máy chủ trả dữ liệu đối chiếu không hợp lệ. Không sử dụng dữ liệu này để điều chỉnh tồn kho.'
+            : code === 403
             ? 'Bạn không có quyền xem sổ cái đối chiếu tồn kho.'
             : code === 404
               ? 'Không tìm thấy kho đối chiếu trong phạm vi được cấp quyền.'

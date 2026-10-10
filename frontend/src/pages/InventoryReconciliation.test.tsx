@@ -82,6 +82,65 @@ describe('InventoryReconciliation', () => {
   });
 
 
+  it.each([
+    ['phạm vi kho không khớp', { warehouseId: 9 }],
+    ['tuyên bố Khớp sai', { status: 'Match' }],
+    ['Ledger chưa phân loại nhưng được báo Khớp', {
+      status: 'Match', currentQuantity: 12, expectedQuantity: 12, difference: 0,
+      unclassifiedLedgerEventCount: 2,
+    }],
+    ['số lượng không hữu hạn', { currentQuantity: Infinity }],
+  ])('không hiển thị bằng chứng đối chiếu không hợp lệ: %s', async (_scenario, patch) => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({ data: [{ id: 1, code: 'HCM', name: 'Kho HCM' }] });
+      return Promise.resolve({ data: {
+        items: [{
+          productId: 10, productCode: 'SKU-UNTRUSTED', productName: 'Hàng thử',
+          warehouseId: 1, warehouseName: 'Kho HCM',
+          currentQuantity: 12, expectedQuantity: 10, difference: 2,
+          status: 'Mismatch', importQuantity: 10, exportQuantity: 0,
+          transferInQuantity: 0, transferOutQuantity: 0,
+          adjustmentIncreaseQuantity: 0, adjustmentDecreaseQuantity: 0,
+          ...patch,
+        }],
+        totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1,
+      } });
+    });
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText(/Máy chủ trả dữ liệu đối chiếu không hợp lệ/)).toBeTruthy();
+    expect(view.queryByText('SKU-UNTRUSTED')).toBeNull();
+    expect(view.queryByRole('button', { name: /Xem bằng chứng SKU-UNTRUSTED/ })).toBeNull();
+  });
+
+  it('chặn kết quả phân trang giả hoặc lặp cặp kho-sản phẩm và chỉ khôi phục khi tải nguồn mới hợp lệ', async () => {
+    let valid = false;
+    const item = {
+      productId: 10, productCode: 'SKU-VALID', productName: 'Hàng thử',
+      warehouseId: 1, warehouseName: 'Kho HCM',
+      currentQuantity: 12, expectedQuantity: 10, difference: 2,
+      status: 'Mismatch', importQuantity: 10, exportQuantity: 0,
+      transferInQuantity: 0, transferOutQuantity: 0,
+      adjustmentIncreaseQuantity: 0, adjustmentDecreaseQuantity: 0,
+    };
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({ data: [{ id: 1, code: 'HCM', name: 'Kho HCM' }] });
+      return Promise.resolve({ data: valid
+        ? { items: [item], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 }
+        : { items: [item, item], totalRecords: 2, pageIndex: 1, pageSize: 20, totalPages: 1 },
+      });
+    });
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText(/Máy chủ trả dữ liệu đối chiếu không hợp lệ/)).toBeTruthy();
+    expect(view.queryByText('SKU-VALID')).toBeNull();
+    valid = true;
+    fireEvent.change(view.getByLabelText('Mã / tên sản phẩm'), { target: { value: 'SKU' } });
+    fireEvent.click(view.getByRole('button', { name: 'Đối chiếu' }));
+    expect(await view.findByText('SKU-VALID')).toBeTruthy();
+    expect(view.queryByText(/Máy chủ trả dữ liệu đối chiếu không hợp lệ/)).toBeNull();
+  });
+
   it('loads only permission-scoped warehouses and never calls the generic warehouse directory',async()=>{
     vi.mocked(apiClient.get).mockImplementation((url:string)=>{
       if(url==='/api/InventoryReconciliation/warehouses')return Promise.resolve({data:[

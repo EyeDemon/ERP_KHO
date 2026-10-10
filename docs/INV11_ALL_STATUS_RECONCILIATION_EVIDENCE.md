@@ -43,3 +43,10 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - Event keyset `Id < eventBeforeId` và `Id <= eventAnchorId` chạy SQL trên đúng kho/sản phẩm/trạng thái; mỗi trang **ủy quyền lại kho** trước mọi dữ liệu. Trạng thái đầu vào dạng số, không đúng tên chuẩn, sai hoa/thường bị chặn.
 - Bằng chứng `StatusChange` hỏng nguồn/đích/quantity vẫn hiển thị `signedQuantity: null` thay vì giá trị 0 giả. Ứng dụng React từ chối phản hồi trả sai `eventStatus`/scope, reset event cursor khi đổi lịch sử trạng thái, nhưng giữ nguyên trang bucket.
 - API/SQL/Vitest và Chromium QA trên môi trường SQL cô lập là điều kiện để checkpoint PASS; **remote authenticated staging chưa có hạ tầng**, do đó không coi phần này là production live.
+
+## Guard danh sách tổng quan — fail-closed (tiếp nối PR #31)
+
+- Trước khi hiển thị dữ liệu `GET /api/InventoryReconciliation`, frontend kiểm tra cấu trúc phân trang, ID/scope kho và sản phẩm theo bộ lọc, cặp trùng, số hữu hạn, và nhất quán `Match / Mismatch / Indeterminate` cùng `Difference`.
+- Nếu server trả dữ liệu không hợp lệ, xóa danh sách và số liệu tổng trang, hiển thị lỗi tiếng Việt, chặn đường vào hồ sơ điều tra cũ. Không chuẩn hóa một kết quả sai thành số 0 hoặc `Match`.
+- Guard phía trình duyệt không thay thế authorization/backend SQL; đây là xử lý an toàn trường hợp API bị sai schema hoặc scope. Regression Vitest tập trung vào scope, trạng thái giả, Ledger chưa phân loại, số không hữu hạn, dữ liệu trùng và lần tải hồi phục. Không có mutation SQL, Ledger, dữ liệu mô phỏng hay Notion.
+- Mọi build/CI/browser QA phải gắn đúng SHA successor. Remote staging có API/SQL và quyền thật vẫn là điều kiện riêng để đóng PR.
