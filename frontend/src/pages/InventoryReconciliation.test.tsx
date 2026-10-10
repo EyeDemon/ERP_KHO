@@ -827,8 +827,8 @@ describe('InventoryReconciliation', () => {
     expect(view.getByText(/Đổi trạng thái trừ ở nguồn/i)).toBeTruthy();
     expect(view.getByText(/số lệch chỉ phục vụ điều tra/)).toBeTruthy();
     expect(view.getByText('Tổng tồn mọi trạng thái')).toBeTruthy();
-    expect(view.getByText('AVAILABLE · Ledger đến mốc').nextSibling?.textContent).toBe('7');
-    expect(view.getByText('AVAILABLE · Chênh lệch tham khảo').nextSibling?.textContent).toBe('0');
+    expect(view.getByText('AVAILABLE · Ledger đến mốc').previousSibling?.textContent).toBe('7');
+    expect(view.getByText('AVAILABLE · Chênh lệch tham khảo').previousSibling?.textContent).toBe('0');
   });
 
   it('marks historical unclassifiable ledger as unknown instead of a repair amount',async()=>{
