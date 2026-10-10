@@ -108,6 +108,13 @@ describe('InventoryReconciliation', () => {
       } });
     });
     const view = render(<InventoryReconciliation />);
+    // Cross-warehouse evidence can be rejected against an explicitly
+    // requested warehouse; an unfiltered report has no selected scope.
+    if (_scenario === 'phạm vi kho không khớp') {
+      await view.findByRole('option', { name: 'Kho HCM' });
+      fireEvent.change(view.getByLabelText('Kho'), { target: { value: '1' } });
+      fireEvent.click(view.getByRole('button', { name: 'Đối chiếu' }));
+    }
     expect(await view.findByText(/Máy chủ trả dữ liệu đối chiếu không hợp lệ/)).toBeTruthy();
     expect(view.queryByText('SKU-UNTRUSTED')).toBeNull();
     expect(view.queryByRole('button', { name: /Xem bằng chứng SKU-UNTRUSTED/ })).toBeNull();
