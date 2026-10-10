@@ -1,0 +1,42 @@
+name: PR33 Playwright Preview QA
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - feature/erp-wms-complete-ui-blueprint
+    paths:
+      - '.github/workflows/preview-playwright.yml'
+      - 'frontend/e2e/blueprint-preview.spec.mjs'
+      - 'frontend/src/layouts/MainLayout.css'
+      - 'frontend/src/pages/InventoryReconciliation.css'
+      - 'frontend/src/pages/InventoryReconciliation.tsx'
+      - 'frontend/src/pages/SystemBlueprint.tsx'
+
+permissions:
+  contents: read
+
+jobs:
+  preview-browser:
+    if: github.event.pull_request.number == 33
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install isolated Playwright QA dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify live PR Preview with Chromium
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: https://erp-wms-blueprint-demo-git-part-syste-b0b8f5-bayuuandree99-8132.vercel.app
+          CI: 'true'
+        run: npx playwright test e2e/blueprint-preview.spec.mjs --browser=chromium --workers=1 --retries=0 --reporter=line
