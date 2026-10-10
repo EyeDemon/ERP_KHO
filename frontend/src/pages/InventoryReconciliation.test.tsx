@@ -384,6 +384,96 @@ describe('InventoryReconciliation', () => {
     expect(view.queryByRole('table',{name:'Bucket tồn phục vụ điều tra chênh lệch'})).toBeNull();
   });
 
+  it('paginates signed source and destination status-change Ledger independently from bucket status',async()=>{
+    const base={
+      warehouseId:1,warehouseName:'Kho HCM',productId:10,
+      productCode:'SKU-010',productName:'Sản phẩm test',eventAnchorId:72,
+      bucketStatus:'Available',bucketCount:1,bucketAnchorId:20,bucketsTruncated:false,
+      buckets:[{inventoryStockId:20,quantity:7,reservedQuantity:0}],
+      currentQuantity:7,expectedQuantity:10,difference:-3,
+      isReadOnly:true,eventsTruncated:false,
+    };
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({data:[{id:1,code:'HCM',name:'Kho HCM'}]});
+      if(url.startsWith('/api/InventoryReconciliation/investigation?')){
+        const p=new URL(url,'https://qa.invalid').searchParams;
+        const status=p.get('eventStatus')??'Available';
+        if(status==='QcHold')return Promise.resolve({data:{
+          ...base,eventStatus:'QcHold',eventCount:1,
+          events:[{transactionId:72,transactionType:'StatusChange',
+            inventoryStatus:'QcHold',fromInventoryStatus:'Available',
+            toInventoryStatus:'QcHold',signedQuantity:3,quantity:3}]
+        }});
+        if(status==='Quarantine')return Promise.resolve({data:{
+          ...base,eventStatus:'Quarantine',eventCount:0,events:[]
+        }});
+        return Promise.resolve({data:{
+          ...base,eventStatus:'Available',eventCount:2,
+          events:[
+            {transactionId:72,transactionType:'StatusChange',inventoryStatus:'QcHold',
+              fromInventoryStatus:'Available',toInventoryStatus:'QcHold',
+              signedQuantity:-3,quantity:3},
+            {transactionId:70,transactionType:'Import',inventoryStatus:'Available',
+              signedQuantity:10,quantity:10}]
+        }});
+      }
+      return Promise.resolve({data:{items:[{
+        productId:10,productCode:'SKU-010',productName:'Sản phẩm test',
+        warehouseId:1,warehouseName:'Kho HCM',currentQuantity:7,
+        expectedQuantity:10,difference:-3,status:'Mismatch'
+      }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}});
+    });
+    const view=render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button',{name:'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    await view.findByRole('heading',{name:'Sự kiện Ledger Khả dụng (2)'});
+    const original=view.getByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'});
+    expect(original.textContent).toContain('-3');
+    const select=view.getByLabelText('Trạng thái Ledger cần xem') as HTMLSelectElement;
+    expect(select.options.length).toBe(8);
+    fireEvent.change(select,{target:{value:'QcHold'}});
+    await view.findByRole('heading',{name:'Sự kiện Ledger Chờ kiểm định (1)'});
+    expect(view.getByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'}).textContent)
+      .toContain('3');
+    expect(view.getByRole('heading',{name:'Bucket tồn Khả dụng hiện tại (1)'})).toBeTruthy();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/InventoryReconciliation/investigation?warehouseId=1&productId=10&limit=50&eventAnchorId=72&bucketAnchorId=20&eventStatus=QcHold'
+    );
+    fireEvent.change(view.getByLabelText('Trạng thái Ledger cần xem'),{target:{value:'Quarantine'}});
+    await view.findByRole('heading',{name:'Sự kiện Ledger Cách ly (0)'});
+    fireEvent.change(view.getByLabelText('Trạng thái Ledger cần xem'),{target:{value:'Available'}});
+    await view.findByRole('heading',{name:'Sự kiện Ledger Khả dụng (2)'});
+    expect(view.getByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'}).textContent)
+      .toContain('-3');
+  });
+
+  it('rejects a Ledger event response that belongs to another status',async()=>{
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/InventoryReconciliation/warehouses')
+        return Promise.resolve({data:[{id:1,code:'HCM',name:'Kho HCM'}]});
+      if(url.startsWith('/api/InventoryReconciliation/investigation?'))return Promise.resolve({data:{
+        warehouseId:1,productId:10,warehouseName:'Kho HCM',
+        productCode:'SKU-010',productName:'Sản phẩm test',isReadOnly:true,
+        eventAnchorId:72,eventStatus:'Available',eventCount:0,
+        bucketCount:1,bucketAnchorId:22,bucketsTruncated:false,
+        eventsTruncated:false,events:[],buckets:[{inventoryStockId:22,quantity:7}]
+      }});
+      return Promise.resolve({data:{items:[{
+        productId:10,productCode:'SKU-010',productName:'Sản phẩm test',
+        warehouseId:1,warehouseName:'Kho HCM',currentQuantity:7,
+        expectedQuantity:7,difference:0,status:'Match'
+      }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}});
+    });
+    const view=render(<InventoryReconciliation />);
+    await view.findByText('SKU-010');
+    fireEvent.click(view.getByRole('button',{name:'Xem bằng chứng SKU-010 tại Kho HCM'}));
+    await view.findByRole('heading',{name:'Sự kiện Ledger Khả dụng (0)'});
+    fireEvent.change(view.getByLabelText('Trạng thái Ledger cần xem'),{target:{value:'QcHold'}});
+    expect(await view.findByText('Không thể tải bằng chứng điều tra. Hãy thử lại.')).toBeTruthy();
+    expect(view.queryByRole('table',{name:'Sự kiện Ledger phục vụ điều tra chênh lệch'})).toBeNull();
+  });
+
   it('pages anchored Ledger events in both directions without offsets or duplicate IDs',async()=>{
     const evidence={
       warehouseId:1,warehouseName:'Kho HCM',productId:10,

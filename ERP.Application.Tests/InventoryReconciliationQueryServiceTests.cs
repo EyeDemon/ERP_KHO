@@ -455,6 +455,88 @@ namespace ERP.Application.Tests
             auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(2));
         }
 
+        [Theory]
+        [InlineData("")]
+        [InlineData("available")]
+        [InlineData("1")]
+        [InlineData("QcHold ")]
+        [InlineData("NotAStatus")]
+        public async Task Investigation_RejectsUnknownEventScopeBeforeAuthorization(string status)
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var call = () => service.GetInvestigationAsync(1, 1, eventStatus: status);
+            await call.Should().ThrowAsync<BusinessRuleException>();
+            auth.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task Investigation_EventPagesIncludeStatusChangeInBothScopesAndReauthorize()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.SetupSequence(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask)
+                .Returns(Task.CompletedTask)
+                .Returns(Task.CompletedTask)
+                .Returns(Task.CompletedTask)
+                .ThrowsAsync(new NotFoundException("Kho không thuộc quyền."));
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            db.InventoryTransactions.AddRange(
+                new InventoryTransaction {
+                    ProductId = 1, WarehouseId = 1, InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.StatusChange,
+                    FromInventoryStatus = InventoryStatus.Available,
+                    ToInventoryStatus = InventoryStatus.QcHold, Quantity = 3m
+                },
+                new InventoryTransaction {
+                    ProductId = 1, WarehouseId = 1, InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.Import, Quantity = 4m
+                },
+                new InventoryTransaction {
+                    ProductId = 1, WarehouseId = 1, InventoryStatus = InventoryStatus.Quarantine,
+                    TransactionType = TransactionType.StatusChange,
+                    FromInventoryStatus = InventoryStatus.QcHold,
+                    ToInventoryStatus = InventoryStatus.Quarantine, Quantity = 2m
+                });
+            await db.SaveChangesAsync();
+
+            var qc = await service.GetInvestigationAsync(1, 1, limit: 2, eventStatus: "QcHold");
+            qc.EventStatus.Should().Be("QcHold");
+            qc.EventCount.Should().Be(3);
+            qc.Events.Should().HaveCount(2);
+            qc.EventsTruncated.Should().BeTrue();
+            qc.Events.Select(x => x.SignedQuantity).Should().Equal(-2m, 4m);
+            qc.Events[0].FromInventoryStatus.Should().Be("QcHold");
+            qc.Events[0].ToInventoryStatus.Should().Be("Quarantine");
+
+            var previous = await service.GetInvestigationAsync(1, 1, qc.EventAnchorId,
+                limit: 2, eventBeforeId: qc.NextEventBeforeId, eventStatus: "QcHold");
+            previous.Events.Should().ContainSingle(x => x.TransactionType == "StatusChange" &&
+                x.SignedQuantity == 3m && x.FromInventoryStatus == "Available");
+            previous.EventsTruncated.Should().BeFalse();
+            previous.EventAnchorId.Should().Be(qc.EventAnchorId);
+            qc.Events.Select(x => x.TransactionId).Intersect(previous.Events.Select(x => x.TransactionId))
+                .Should().BeEmpty();
+
+            var available = await service.GetInvestigationAsync(1, 1, qc.EventAnchorId,
+                eventStatus: "Available");
+            available.Events.Should().ContainSingle(x => x.TransactionType == "StatusChange" &&
+                x.SignedQuantity == -3m && x.ToInventoryStatus == "QcHold");
+
+            var quarantine = await service.GetInvestigationAsync(1, 1, qc.EventAnchorId,
+                eventStatus: "Quarantine");
+            quarantine.EventCount.Should().Be(1);
+            quarantine.Events.Should().ContainSingle(x => x.TransactionType == "StatusChange" &&
+                x.SignedQuantity == 2m && x.FromInventoryStatus == "QcHold");
+
+            var denied = () => service.GetInvestigationAsync(1, 1, qc.EventAnchorId,
+                eventStatus: "QcHold");
+            await denied.Should().ThrowAsync<NotFoundException>();
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(5));
+        }
+
         [Fact]
         public async Task Investigation_AllStatusChangeConservesWarehouseTotal_AndScopesEachStatus()
         {
@@ -489,8 +571,11 @@ namespace ERP.Application.Tests
             evidence.AllStatusExpectedQuantity.Should().Be(12m);
             evidence.AllStatusDifference.Should().Be(0m);
             evidence.UnclassifiedLedgerEventCount.Should().Be(0);
-            evidence.EventCount.Should().Be(6); // AVAILABLE legacy event page remains separate
-            evidence.Events.Should().OnlyContain(x => x.TransactionType != "StatusChange");
+            evidence.EventStatus.Should().Be("Available");
+            evidence.EventCount.Should().Be(7); // Includes status change outgoing from Available.
+            evidence.Events.Should().ContainSingle(x => x.TransactionType == "StatusChange" &&
+                x.SignedQuantity == -3m && x.FromInventoryStatus == "Available" &&
+                x.ToInventoryStatus == "QcHold");
 
             var nowAvailable = evidence.StatusBreakdown.Single(x =>
                 x.Status == nameof(InventoryStatus.Available));

@@ -1428,8 +1428,13 @@ public sealed class SqlServerInventoryLockMoveTests
             qc.StatusChangeInQuantity.Should().Be(3m);
             qc.ExpectedQuantity.Should().Be(3m);
             qc.Difference.Should().Be(0m);
-            evidence.EventCount.Should().Be(1);
-            evidence.Events.Should().ContainSingle(x => x.TransactionType == "Import");
+            evidence.EventStatus.Should().Be("Available");
+            evidence.EventCount.Should().Be(2);
+            evidence.Events.Should().ContainSingle(x => x.TransactionType == "Import" &&
+                x.SignedQuantity == 10m);
+            evidence.Events.Should().ContainSingle(x => x.TransactionType == "StatusChange" &&
+                x.SignedQuantity == -3m && x.FromInventoryStatus == "Available" &&
+                x.ToInventoryStatus == "QcHold");
             var anchoredId = evidence.EventAnchorId;
 
             // Real SQL projection after a production status-change service:
@@ -1453,6 +1458,23 @@ public sealed class SqlServerInventoryLockMoveTests
             emptyQuarantine.BucketCount.Should().Be(0);
             emptyQuarantine.BucketAnchorId.Should().Be(0);
             emptyQuarantine.Buckets.Should().BeEmpty();
+
+            // SQL translation and actual status mutation: source appears with
+            // negative sign, destination with positive sign, once per history.
+            var qcHistory = await query.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId, anchoredId,
+                eventStatus: nameof(InventoryStatus.QcHold));
+            qcHistory.EventStatus.Should().Be(nameof(InventoryStatus.QcHold));
+            qcHistory.EventCount.Should().Be(1);
+            qcHistory.Events.Should().ContainSingle(x =>
+                x.TransactionType == "StatusChange" && x.SignedQuantity == 3m &&
+                x.FromInventoryStatus == "Available" && x.ToInventoryStatus == "QcHold");
+            qcHistory.EventAnchorId.Should().Be(anchoredId);
+            var quarantineHistory = await query.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId, anchoredId,
+                eventStatus: nameof(InventoryStatus.Quarantine));
+            quarantineHistory.EventCount.Should().Be(0);
+            quarantineHistory.Events.Should().BeEmpty();
 
             // Unknown historic type with no canonical sign cannot silently
             // count as zero and yield a false "matched" status report.

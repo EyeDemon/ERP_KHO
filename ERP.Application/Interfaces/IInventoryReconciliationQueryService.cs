@@ -11,7 +11,8 @@ namespace ERP.Application.Interfaces
         Task<InventoryReconciliationInvestigationDto> GetInvestigationAsync(
             int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
             int? eventBeforeId = null, int? bucketAnchorId = null,
-            int? bucketAfterId = null, string bucketStatus = "Available");
+            int? bucketAfterId = null, string bucketStatus = "Available",
+            string eventStatus = "Available");
 
         Task<PagedResult<InventoryReconciliationDto>> GetReconciliationsAsync(
             int? warehouseId,

@@ -25,6 +25,8 @@ namespace ERP.Application.DTOs
         public int? BucketAfterId { get; set; }
         public int? NextBucketAfterId { get; set; }
         public bool BucketHasRowsAfterAnchor { get; set; }
+        // Chosen status of the immutable Ledger history, independent of bucket scope.
+        public string EventStatus { get; set; } = "Available";
         public int EventAnchorId { get; set; }
         // Cursor excludes the named ID (strict less-than); every query is
         // independently authorized within an exact warehouse/product scope.
@@ -84,6 +86,9 @@ namespace ERP.Application.DTOs
     public sealed class InventoryReconciliationEvidenceEventDto
     {
         public int TransactionId { get; set; }
+        public string InventoryStatus { get; set; } = string.Empty;
+        public string? FromInventoryStatus { get; set; }
+        public string? ToInventoryStatus { get; set; }
         public string TransactionType { get; set; } = string.Empty;
         public int? LocationId { get; set; }
         public string? LocationCode { get; set; }

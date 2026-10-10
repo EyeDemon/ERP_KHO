@@ -49,7 +49,8 @@ namespace ERP.Infrastructure.Queries
         public async Task<InventoryReconciliationInvestigationDto> GetInvestigationAsync(
             int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
             int? eventBeforeId = null, int? bucketAnchorId = null,
-            int? bucketAfterId = null, string bucketStatus = "Available")
+            int? bucketAfterId = null, string bucketStatus = "Available",
+            string eventStatus = "Available")
         {
             if (warehouseId <= 0 || productId <= 0)
                 throw new BusinessRuleException("ID kho và ID sản phẩm phải là số nguyên dương.");
@@ -71,6 +72,10 @@ namespace ERP.Infrastructure.Queries
                 !Enum.IsDefined(selectedBucketStatus) ||
                 !string.Equals(selectedBucketStatus.ToString(), bucketStatus, StringComparison.Ordinal))
                 throw new BusinessRuleException("Trạng thái bucket tồn không hợp lệ.");
+            if (!Enum.TryParse<InventoryStatus>(eventStatus, out var selectedEventStatus) ||
+                !Enum.IsDefined(selectedEventStatus) ||
+                !string.Equals(selectedEventStatus.ToString(), eventStatus, StringComparison.Ordinal))
+                throw new BusinessRuleException("Trạng thái lịch sử Ledger không hợp lệ.");
             if (_warehouseAuthorization is null)
                 throw new InvalidOperationException("Thiếu dịch vụ phân quyền kho đối chiếu.");
 
@@ -101,6 +106,15 @@ namespace ERP.Infrastructure.Queries
             var allStatusLedger = _context.InventoryTransactions.AsNoTracking()
                 .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId);
             var ledger = allStatusLedger.Where(x => x.InventoryStatus == InventoryStatus.Available);
+            // A validated status transfer contributes in both directions:
+            // source (-quantity) and destination (+quantity). Preserve malformed
+            // transfers as visible unknown-sign evidence in any recorded scope.
+            var selectedEventLedger = allStatusLedger.Where(x =>
+                x.TransactionType == TransactionType.StatusChange
+                    ? x.InventoryStatus == selectedEventStatus ||
+                      x.FromInventoryStatus == selectedEventStatus ||
+                      x.ToInventoryStatus == selectedEventStatus
+                    : x.InventoryStatus == selectedEventStatus);
 
             // Use the warehouse/product-wide high-water mark, not just AVAILABLE,
             // so a later QC/Quarantine status event cannot be silently excluded.
@@ -117,7 +131,7 @@ namespace ERP.Infrastructure.Queries
             var anchoredStocks = selectedStatusStocks.Where(x => x.Id <= bucketAnchor);
             var bucketCount = await anchoredStocks.CountAsync();
             var bucketHasRowsAfterAnchor = await selectedStatusStocks.AnyAsync(x => x.Id > bucketAnchor);
-            var eventCount = await anchoredLedger.CountAsync();
+            var eventCount = await selectedEventLedger.CountAsync(x => x.Id <= anchor);
 
             // SQL aggregation bounds materialization to the status enum, rather
             // than loading all bucket rows or all transaction history.
@@ -247,15 +261,17 @@ namespace ERP.Infrastructure.Queries
 
             // Stable keyset paging: never use TransactionDate (backdatable)
             // or Skip/Take offsets (new rows can shift boundaries).
+            var selectedAnchoredEvents = selectedEventLedger.Where(x => x.Id <= anchor);
             var pageLedger = eventBeforeId.HasValue
-                ? anchoredLedger.Where(x => x.Id < eventBeforeId.Value)
-                : anchoredLedger;
+                ? selectedAnchoredEvents.Where(x => x.Id < eventBeforeId.Value)
+                : selectedAnchoredEvents;
             var rawEvents = await pageLedger
                 .OrderByDescending(x => x.Id)
                 .Take(limit + 1)
                 .Select(x => new
                 {
-                    x.Id, x.TransactionType, x.LocationId,
+                    x.Id, x.TransactionType, x.InventoryStatus,
+                    x.FromInventoryStatus, x.ToInventoryStatus, x.LocationId,
                     LocationCode = x.Location != null ? x.Location.Code : null,
                     x.LotId, LotNumber = x.Lot != null ? x.Lot.LotNumber : null,
                     x.SerialId, SerialNumber = x.Serial != null ? x.Serial.SerialNumber : null,
@@ -274,6 +290,7 @@ namespace ERP.Infrastructure.Queries
                 ProductCode = product.Code,
                 ProductName = product.Name,
                 EventAnchorId = anchor,
+                EventStatus = selectedEventStatus.ToString(),
                 BucketStatus = selectedBucketStatus.ToString(),
                 BucketAnchorId = bucketAnchor,
                 BucketAfterId = bucketAfterId,
@@ -304,6 +321,9 @@ namespace ERP.Infrastructure.Queries
                     {
                         TransactionId = x.Id,
                         TransactionType = x.TransactionType.ToString(),
+                        InventoryStatus = x.InventoryStatus.ToString(),
+                        FromInventoryStatus = x.FromInventoryStatus?.ToString(),
+                        ToInventoryStatus = x.ToInventoryStatus?.ToString(),
                         LocationId = x.LocationId,
                         LocationCode = x.LocationCode,
                         LotId = x.LotId,
@@ -316,7 +336,16 @@ namespace ERP.Infrastructure.Queries
                         SignedQuantity = x.Quantity < 0m ||
                             x.TransactionType == TransactionType.TransferAdjustment ||
                             !Enum.IsDefined(x.TransactionType)
-                            ? null : x.TransactionType.ApplySign(x.Quantity),
+                            ? null : x.TransactionType == TransactionType.StatusChange
+                                ? x.Quantity <= 0m ||
+                                  x.FromInventoryStatus is not { } from ||
+                                  x.ToInventoryStatus is not { } to ||
+                                  from == to || !Enum.IsDefined(from) ||
+                                  !Enum.IsDefined(to) || x.InventoryStatus != to
+                                    ? null : selectedEventStatus == to
+                                        ? x.Quantity : selectedEventStatus == from
+                                            ? -x.Quantity : null
+                                : x.TransactionType.ApplySign(x.Quantity),
                         ReferenceType = x.ReferenceType,
                         ReferenceId = x.ReferenceId,
                         TransactionDate = x.TransactionDate

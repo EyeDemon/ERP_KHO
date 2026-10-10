@@ -69,6 +69,7 @@ interface InvestigationEvent {
   lotId?: number | null; lotNumber?: string | null;
   serialId?: number | null; serialNumber?: string | null;
   quantity: number; signedQuantity: number | null;
+  inventoryStatus?: string; fromInventoryStatus?: string | null; toInventoryStatus?: string | null;
   referenceType?: string | null; referenceId?: number | null;
   transactionDate: string;
 }
@@ -78,7 +79,7 @@ interface Investigation {
   eventCount:number; bucketCount:number;
   bucketAnchorId?:number; bucketAfterId?:number|null; nextBucketAfterId?:number|null;
   bucketHasRowsAfterAnchor?:boolean; bucketStatus?: string;
-  eventBeforeId?:number|null; nextEventBeforeId?:number|null;
+  eventStatus?:string; eventBeforeId?:number|null; nextEventBeforeId?:number|null;
   ledgerHasEventsAfterAnchor?:boolean;
   eventsTruncated:boolean; bucketsTruncated:boolean;
   currentQuantity:number; expectedQuantity:number; difference:number;
@@ -227,7 +228,7 @@ export default function InventoryReconciliation() {
     targetPage = 0, cursors: (number | null)[] = [null],
     bucketAnchor?: number, bucketAfter?: number,
     targetBucketPage = 0, bucketCursors: (number | null)[] = [null],
-    bucketStatus = 'Available',
+    bucketStatus = 'Available', eventStatus = 'Available',
   ) => {
     if (demoRuntime) return;
     const generation = ++investigationGeneration.current;
@@ -245,6 +246,7 @@ export default function InventoryReconciliation() {
       if (bucketAnchor !== undefined) params.set('bucketAnchorId', String(bucketAnchor));
       if (bucketAfter !== undefined) params.set('bucketAfterId', String(bucketAfter));
       if (bucketStatus !== 'Available') params.set('bucketStatus', bucketStatus);
+      if (eventStatus !== 'Available') params.set('eventStatus', eventStatus);
       const response = await apiClient.get('/api/InventoryReconciliation/investigation?' + params.toString());
       if (generation !== investigationGeneration.current) return;
       const evidence = response.data as Investigation;
@@ -257,6 +259,8 @@ export default function InventoryReconciliation() {
           (bucketAfter !== undefined && evidence.bucketAfterId !== bucketAfter) ||
           (bucketStatus !== 'Available' && evidence.bucketStatus !== bucketStatus) ||
           (evidence.bucketStatus !== undefined && evidence.bucketStatus !== bucketStatus) ||
+          (eventStatus !== 'Available' && evidence.eventStatus !== eventStatus) ||
+          (evidence.eventStatus !== undefined && evidence.eventStatus !== eventStatus) ||
           (evidence.bucketAnchorId !== undefined &&
             (!Number.isSafeInteger(evidence.bucketAnchorId) || evidence.bucketAnchorId < 0)) ||
           (evidence.nextBucketAfterId != null &&
@@ -265,6 +269,9 @@ export default function InventoryReconciliation() {
              evidence.buckets[evidence.buckets.length - 1]?.inventoryStockId !== evidence.nextBucketAfterId)) ||
           !Array.isArray(evidence.buckets) || !Array.isArray(evidence.events) ||
           evidence.events.some((e, i) =>
+            (e.inventoryStatus !== undefined && e.inventoryStatus !== eventStatus &&
+              !(e.transactionType === 'StatusChange' &&
+                (e.fromInventoryStatus === eventStatus || e.toInventoryStatus === eventStatus))) ||
             !Number.isSafeInteger(e.transactionId) || e.transactionId <= 0 ||
             e.transactionId > evidence.eventAnchorId ||
             (before !== undefined && e.transactionId >= before) ||
@@ -306,14 +313,16 @@ export default function InventoryReconciliation() {
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, next, eventPageIndex + 1, cursors,
         investigation.bucketAnchorId, bucketPageCursors[bucketPageIndex] ?? undefined,
-        bucketPageIndex, bucketPageCursors, investigation.bucketStatus ?? 'Available');
+        bucketPageIndex, bucketPageCursors, investigation.bucketStatus ?? 'Available',
+        investigation.eventStatus ?? 'Available');
     } else if (eventPageIndex > 0) {
       const index = eventPageIndex - 1;
       const before = eventPageCursors[index] ?? undefined;
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, before, index, eventPageCursors,
         investigation.bucketAnchorId, bucketPageCursors[bucketPageIndex] ?? undefined,
-        bucketPageIndex, bucketPageCursors, investigation.bucketStatus ?? 'Available');
+        bucketPageIndex, bucketPageCursors, investigation.bucketStatus ?? 'Available',
+        investigation.eventStatus ?? 'Available');
     }
   };
 
@@ -327,14 +336,14 @@ export default function InventoryReconciliation() {
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
         investigation.bucketAnchorId, next, bucketPageIndex + 1, cursors,
-        investigation.bucketStatus ?? 'Available');
+        investigation.bucketStatus ?? 'Available', investigation.eventStatus ?? 'Available');
     } else if (bucketPageIndex > 0) {
       const index = bucketPageIndex - 1;
       const after = bucketPageCursors[index] ?? undefined;
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
         investigation.bucketAnchorId, after, index, bucketPageCursors,
-        investigation.bucketStatus ?? 'Available');
+        investigation.bucketStatus ?? 'Available', investigation.eventStatus ?? 'Available');
     }
   };
 
@@ -346,7 +355,20 @@ export default function InventoryReconciliation() {
     const eventBefore = eventPageCursors[eventPageIndex] ?? undefined;
     void loadInvestigation(investigation.warehouseId, investigation.productId,
       investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
-      undefined, undefined, 0, [null], status);
+      undefined, undefined, 0, [null], status,
+      investigation.eventStatus ?? 'Available');
+  };
+
+  const changeEventStatus = (status: string) => {
+    if (!investigation || investigating || !(status in statusLabels) ||
+        status === (investigation.eventStatus ?? 'Available')) return;
+    // Event pages use their own keyset. A new status must reset eventBefore,
+    // but preserve the warehouse-product Ledger high-water and bucket page.
+    const bucketAfter = bucketPageCursors[bucketPageIndex] ?? undefined;
+    void loadInvestigation(investigation.warehouseId, investigation.productId,
+      investigation.eventAnchorId, undefined, 0, [null],
+      investigation.bucketAnchorId, bucketAfter, bucketPageIndex, bucketPageCursors,
+      investigation.bucketStatus ?? 'Available', status);
   };
 
   const closeInvestigation = () => {
@@ -609,7 +631,7 @@ export default function InventoryReconciliation() {
                   <option key={status} value={status}>{label}</option>)}
               </select>
               <p className="ui-muted-text">Bucket là số dư hiện tại theo trạng thái đã chọn;
-                các sự kiện Ledger bên dưới vẫn chỉ thuộc AVAILABLE.
+                các sự kiện Ledger bên dưới có bộ lọc riêng theo trạng thái.
                 Đổi trạng thái bucket không thay đổi mốc Ledger đã chọn.</p>
               {investigation.bucketHasRowsAfterAnchor && (
                 <p role="status" className="ui-muted-text">
@@ -620,7 +642,7 @@ export default function InventoryReconciliation() {
               <UiTableScroll><table aria-label="Bucket tồn phục vụ điều tra chênh lệch">
                 <thead><tr><th>ID bucket</th><th>Vị trí</th><th>Lô</th><th>Sê-ri</th><th>Tồn</th><th>Đã giữ</th></tr></thead>
                 <tbody>{investigation.buckets.length === 0?
-                  <tr><td colSpan={6}>Không có bucket AVAILABLE.</td></tr>:
+                  <tr><td colSpan={6}>Không có bucket {statusLabels[investigation.bucketStatus ?? 'Available']}.</td></tr>:
                   investigation.buckets.map(b=><tr key={b.inventoryStockId}>
                     <td>#{b.inventoryStockId}</td><td>{b.locationCode ?? '—'}</td>
                     <td>{b.lotNumber ?? '—'}</td><td>{b.serialNumber ?? '—'}</td>
@@ -636,13 +658,29 @@ export default function InventoryReconciliation() {
                   disabled={investigating || !investigation.bucketsTruncated || !investigation.nextBucketAfterId}
                   onClick={() => changeBucketPage('next')}>Bucket sau</button>
               </nav>
-              <h3>Sự kiện Ledger AVAILABLE ({investigation.eventCount})</h3>
+              <h3>Sự kiện Ledger {statusLabels[investigation.eventStatus ?? 'Available'] ?? 'không xác định'} ({investigation.eventCount})</h3>
+              <label htmlFor="investigation-event-status">Trạng thái Ledger cần xem</label>
+              <select id="investigation-event-status" value={investigation.eventStatus ?? 'Available'}
+                disabled={investigating} onChange={event => changeEventStatus(event.target.value)}>
+                {Object.entries(statusLabels).map(([status,label]) =>
+                  <option key={status} value={status}>{label}</option>)}
+              </select>
+              <p className="ui-muted-text">Giao dịch đổi trạng thái xuất hiện ở lịch sử nguồn (âm)
+                và lịch sử đích (dương), nhưng chỉ tính một lần trong tổng tồn mọi trạng thái.
+                Lịch sử cố định theo ID Ledger; bucket/số dư hiện tại không phải snapshot lịch sử.</p>
               <UiTableScroll><table aria-label="Sự kiện Ledger phục vụ điều tra chênh lệch">
                 <thead><tr><th>ID giao dịch</th><th>Loại</th><th>Vị trí</th><th>Lô/sê-ri</th><th>Số lượng có dấu</th><th>Chứng từ</th></tr></thead>
                 <tbody>{investigation.events.length === 0?
                   <tr><td colSpan={6}>Không có sự kiện Ledger tại mốc này.</td></tr>:
                   investigation.events.map(e=><tr key={e.transactionId}>
-                    <td>#{e.transactionId}</td><td>{e.transactionType}</td>
+                    <td>#{e.transactionId}</td><td>{e.transactionType}
+                      {e.transactionType === 'StatusChange' && (
+                        <span className="reconciliation-product-name">
+                          {statusLabels[e.fromInventoryStatus ?? ''] ?? 'Không rõ'} →
+                          {statusLabels[e.toInventoryStatus ?? ''] ?? 'Không rõ'}
+                        </span>
+                      )}
+                    </td>
                     <td>{e.locationCode ?? '—'}</td>
                     <td>{e.lotNumber ?? '—'} / {e.serialNumber ?? '—'}</td>
                     <td>{e.signedQuantity == null ? 'Chưa xác định' : numberFormat.format(e.signedQuantity)}</td>
