@@ -1634,8 +1634,14 @@ public sealed class SqlServerInventoryLockMoveTests
             evidence.Buckets.Should().ContainSingle(x => x.Quantity == 10m &&
                 x.InventoryStockId == fixture.SourceStockId);
             evidence.AllStatusCurrentQuantity.Should().Be(10m);
-            evidence.AllStatusExpectedQuantity.Should().Be(0m);
-            evidence.AllStatusDifference.Should().Be(10m);
+            evidence.HistoryInsufficientForNonAvailableStock.Should().BeTrue();
+            evidence.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+            evidence.UnclassifiedLedgerEventCount.Should().Be(0);
+            evidence.AllStatusExpectedQuantity.Should().BeNull();
+            evidence.AllStatusDifference.Should().BeNull();
+            evidence.AllStatusStatus.Should().Be("Indeterminate");
+            evidence.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
         }
         finally { await CleanupAsync(fixture); }
     }

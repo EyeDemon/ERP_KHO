@@ -92,6 +92,7 @@ interface Investigation {
   allStatusStatus?: 'Match' | 'Mismatch' | 'Indeterminate';
   unclassifiedLedgerEventCount?:number; statusBreakdown?:StatusEvidence[];
   availableLedgerExpectedIsPartial?:boolean;
+  historyInsufficientForNonAvailableStock?: boolean;
   isReadOnly:boolean; buckets:InvestigationBucket[]; events:InvestigationEvent[];
 }
 interface PagedResult<T> {
@@ -371,6 +372,12 @@ export default function InventoryReconciliation() {
           evidence.productId !== product || evidence.isReadOnly !== true ||
           (evidence.allStatusStatus !== undefined &&
             evidence.allStatusStatus !== detailVerdict) ||
+          (evidence.historyInsufficientForNonAvailableStock === true &&
+            (detailVerdict !== 'Indeterminate' ||
+              evidence.availableLedgerExpectedIsPartial !== true ||
+              (evidence.unclassifiedLedgerEventCount ?? 0) !== 0 ||
+              (evidence.allStatusExpectedQuantity ?? null) !== null ||
+              (evidence.allStatusDifference ?? null) !== null)) ||
           !Number.isSafeInteger(evidence.eventAnchorId) || evidence.eventAnchorId < 0 ||
           (anchor !== undefined && evidence.eventAnchorId !== anchor) ||
           (before !== undefined && evidence.eventBeforeId !== before) ||
@@ -729,6 +736,13 @@ export default function InventoryReconciliation() {
                     cộng ở đích và không thay đổi tổng tồn toàn kho. Dữ liệu hiện tại có thể đã biến động
                     sau mốc #{investigation.eventAnchorId}; số lệch chỉ phục vụ điều tra, không phải lệnh sửa tồn.
                   </p>
+                  {investigation.historyInsufficientForNonAvailableStock && (
+                    <p role="alert">
+                      Có tồn kho ngoài trạng thái Khả dụng nhưng không tìm thấy lịch sử Ledger đến mốc
+                      đối chiếu. Không thể xác nhận tồn dự kiến hoặc mức lệch cần xử lý;
+                      cần đối chiếu chứng từ và lịch sử phát sinh trước khi điều chỉnh tồn kho.
+                    </p>
+                  )}
                   {(investigation.unclassifiedLedgerEventCount ?? 0) > 0 && (
                     <p role="alert">
                       Có {investigation.unclassifiedLedgerEventCount} giao dịch Ledger thiếu hoặc không hỗ trợ

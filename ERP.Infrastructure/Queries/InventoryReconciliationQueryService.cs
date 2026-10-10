@@ -220,7 +220,16 @@ namespace ERP.Infrastructure.Queries
                 current.DirectLedgerNetQuantity +=
                     group.TransactionType.ApplySign(group.Quantity);
             }
-            var comparable = unclassifiedCount == 0;
+            // A legacy QC/Quarantine-only stock pair with NO Ledger rows is
+            // evidence of an incomplete history, not evidence of a known
+            // zero expected balance. Keep the same fail-closed verdict as
+            // the all-status summary list, including for pinned old anchors.
+            var historyInsufficientForNonAvailableStock =
+                ledgerGroups.Count == 0 && stockGroups.Any(x =>
+                    x.Status != InventoryStatus.Available && x.Buckets > 0) &&
+                !stockGroups.Any(x => x.Status == InventoryStatus.Available);
+            var comparable = unclassifiedCount == 0 &&
+                !historyInsufficientForNonAvailableStock;
             foreach (var row in byStatus.Values)
             {
                 if (!comparable) continue;
@@ -254,9 +263,9 @@ namespace ERP.Infrastructure.Queries
             // Legacy TransferAdjustment does not have a canonical sign.
             // Never crash the investigation or silently present the partial
             // AVAILABLE sum as complete when such an event is encountered.
-            var availableLedgerExpectedIsPartial = grouped.Any(x =>
-                x.NegativeQuantityEvents > 0 ||
-                x.Type == TransactionType.TransferAdjustment || !Enum.IsDefined(x.Type));
+            var availableLedgerExpectedIsPartial = historyInsufficientForNonAvailableStock ||
+                grouped.Any(x => x.NegativeQuantityEvents > 0 ||
+                    x.Type == TransactionType.TransferAdjustment || !Enum.IsDefined(x.Type));
             // A mixed-sign group is partial in its entirety: never let a
             // negative historical row disappear into a positive SUM.
             var legacyClassifiedQuantity = grouped
@@ -340,6 +349,7 @@ namespace ERP.Infrastructure.Queries
                 ExpectedQuantity = expectedQuantity,
                 Difference = currentQuantity - expectedQuantity,
                 AvailableLedgerExpectedIsPartial = availableLedgerExpectedIsPartial,
+                HistoryInsufficientForNonAvailableStock = historyInsufficientForNonAvailableStock,
                 AllStatusCurrentQuantity = allStatusCurrent,
                 AllStatusReservedQuantity = allStatusReserved,
                 AllStatusStatus = allStatusStatus,

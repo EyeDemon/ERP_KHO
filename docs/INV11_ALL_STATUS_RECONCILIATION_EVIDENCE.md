@@ -85,3 +85,10 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - Khi toàn bộ Ledger đến mốc đã phân loại an toàn, headline `AVAILABLE · Ledger đến mốc` nay tái sử dụng Expected đã cộng/trừ chuyển trạng thái của `StatusBreakdown[Available]`. Bao gồm chiều từ AVAILABLE sang QC và từ QC trở lại AVAILABLE; cùng một anchor, không thêm query tải toàn bộ Ledger.
 - Khi có sự kiện chưa hỗ trợ, giữ `legacyClassifiedQuantity` chỉ để tham khảo và cờ `AvailableLedgerExpectedIsPartial` theo logic hiện hữu; `allStatusExpected/ allStatusDifference` là null, `Indeterminate`. Không coi con số một phần là đề xuất chỉnh tồn.
 - Regression InMemory outbound+inbound `StatusChange`, SQL Server thật dùng service đổi trạng thái, Vitest hiển thị AVAILABLE nhất quán. Không thay đổi schema, Ledger, quyền kho hoặc Notion.
+
+## Cặp QC/Quarantine thiếu Ledger: đồng bộ danh sách và hồ sơ điều tra
+
+- Nếu chỉ tồn bucket ngoài `Available`, không có bucket `Available` và **không có Ledger đến mốc**, không được suy luận Ledger dự kiến bằng 0 như một tổng đối chiếu hoàn chỉnh. Danh sách INV-11 vốn trả `Indeterminate` trong trường hợp này; hồ sơ chi tiết giờ cũng trả `allStatusStatus=Indeterminate`, `allStatusExpectedQuantity/allStatusDifference=null` và toàn bộ Expected/Difference của 8 trạng thái là null.
+- Hồ sơ chi tiết bổ sung `historyInsufficientForNonAvailableStock=true`, phân biệt thiếu hẳn lịch sử với các giao dịch sai loại (`unclassifiedLedgerEventCount=0`). UI hiển thị cảnh báo tiếng Việt và yêu cầu xác minh chứng từ trước khi sửa tồn; response mâu thuẫn bị chặn fail-closed.
+- Trường hợp QC-only **có** Ledger import hợp lệ vẫn đối chiếu bình thường. Ledger anchor cũ và những sự kiện mới sau anchor không được tự suy diễn thành kỳ vọng bằng 0. Chỉ số AVAILABLE legacy 0 còn được hiển thị kèm `availableLedgerExpectedIsPartial=true`; không có API sửa tồn hoặc rebuild.
+- Regression InMemory, SQL Server thật và Vitest kiểm tra kết luận thiếu Ledger, bảng 8 trạng thái, quyền kho và dữ liệu API mâu thuẫn. Không thay đổi schema, tồn kho Production, Notion hoặc phép ủy quyền.

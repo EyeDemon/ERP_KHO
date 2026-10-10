@@ -41,6 +41,9 @@ namespace ERP.Application.DTOs
         public decimal ExpectedQuantity { get; set; }
         public decimal Difference { get; set; }
         public bool AvailableLedgerExpectedIsPartial { get; set; }
+        // Distinguish missing non-AVAILABLE Ledger from malformed events:
+        // both prevent a trusted conclusion, but require different follow-up.
+        public bool HistoryInsufficientForNonAvailableStock { get; set; }
         public bool IsReadOnly { get; set; } = true;
         // All-status evidence is independently aggregated from the same
         // authorized warehouse/product and immutable Ledger anchor.

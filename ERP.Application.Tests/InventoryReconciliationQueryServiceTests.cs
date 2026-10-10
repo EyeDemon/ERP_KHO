@@ -680,6 +680,7 @@ namespace ERP.Application.Tests
             result.EventCount.Should().Be(0);
             result.Events.Should().BeEmpty();
             result.AllStatusCurrentQuantity.Should().Be(5m);
+            result.HistoryInsufficientForNonAvailableStock.Should().BeFalse();
             result.AllStatusExpectedQuantity.Should().Be(5m);
             result.AllStatusDifference.Should().Be(0m);
             result.StatusBreakdown.Single(x => x.Status == "QcHold")
@@ -925,8 +926,14 @@ namespace ERP.Application.Tests
             var investigation = await service.GetInvestigationAsync(1, 4,
                 bucketStatus: nameof(InventoryStatus.QcHold));
             investigation.AllStatusCurrentQuantity.Should().Be(5m);
-            investigation.AllStatusExpectedQuantity.Should().Be(0m);
-            investigation.AllStatusDifference.Should().Be(5m);
+            investigation.HistoryInsufficientForNonAvailableStock.Should().BeTrue();
+            investigation.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+            investigation.UnclassifiedLedgerEventCount.Should().Be(0);
+            investigation.AllStatusExpectedQuantity.Should().BeNull();
+            investigation.AllStatusDifference.Should().BeNull();
+            investigation.AllStatusStatus.Should().Be("Indeterminate");
+            investigation.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
             investigation.Buckets.Should().ContainSingle(x => x.Quantity == 5m);
             authorization.Verify(x => x.GetAccessibleWarehouseIdsAsync(default), Times.Once);
             authorization.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Once);

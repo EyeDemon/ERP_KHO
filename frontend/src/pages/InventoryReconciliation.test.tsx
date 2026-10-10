@@ -772,6 +772,90 @@ describe('InventoryReconciliation', () => {
     expect(view.queryByRole('table',{name:'Đối chiếu từng trạng thái tồn kho theo Ledger'})).toBeNull();
   });
 
+
+  it('explains missing Ledger for a QC-only bucket instead of showing a synthetic correction amount', async () => {
+    const breakdown = Object.keys({
+      Available: true, QcHold: true, Quarantine: true, Damaged: true,
+      Rejected: true, Blocked: true, Expired: true, RecallBlocked: true,
+    }).map(status => ({
+      status, currentQuantity: status === 'QcHold' ? 5 : 0,
+      expectedQuantity: null, difference: null, reservedQuantity: 0,
+      bucketCount: status === 'QcHold' ? 1 : 0,
+      directLedgerNetQuantity: 0, statusChangeInQuantity: 0, statusChangeOutQuantity: 0,
+    }));
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : url.includes('/investigation?')
+          ? { warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+            productCode: 'SKU-QC-NO-LEDGER', productName: 'Tồn QC cũ',
+            eventAnchorId: 0, eventCount: 0, bucketCount: 0, events: [], buckets: [],
+            eventsTruncated: false, bucketsTruncated: false, isReadOnly: true,
+            currentQuantity: 0, expectedQuantity: 0, difference: 0,
+            availableLedgerExpectedIsPartial: true,
+            historyInsufficientForNonAvailableStock: true,
+            allStatusCurrentQuantity: 5, allStatusReservedQuantity: 0,
+            allStatusExpectedQuantity: null, allStatusDifference: null,
+            allStatusStatus: 'Indeterminate', unclassifiedLedgerEventCount: 0,
+            statusBreakdown: breakdown }
+          : { items: [{ warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+            productCode: 'SKU-QC-NO-LEDGER', productName: 'Tồn QC cũ',
+            currentQuantity: 0, expectedQuantity: null, difference: null, status: 'Indeterminate',
+            allStatusCurrentQuantity: 5, allStatusExpectedQuantity: null,
+            allStatusDifference: null, allStatusStatus: 'Indeterminate',
+            unclassifiedLedgerEventCount: 0, importQuantity: 0, exportQuantity: 0,
+            transferInQuantity: 0, transferOutQuantity: 0,
+            adjustmentIncreaseQuantity: 0, adjustmentDecreaseQuantity: 0,
+          }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    await view.findByText('SKU-QC-NO-LEDGER');
+    fireEvent.click(view.getByRole('button', {
+      name: 'Xem bằng chứng SKU-QC-NO-LEDGER tại Kho thử',
+    }));
+    expect(await view.findByText(/không tìm thấy lịch sử Ledger đến mốc/)).toBeTruthy();
+    expect(view.getByText('Tổng Ledger các trạng thái (tham khảo)').previousSibling?.textContent)
+      .toBe('Chưa xác định');
+    const breakdownTable = view.getByRole('table', {
+      name: 'Đối chiếu từng trạng thái tồn kho theo Ledger',
+    });
+    expect(breakdownTable.textContent).toContain('Chưa xác định');
+  });
+
+  it('refuses missing-Ledger reason paired with an invented completed reconciliation', async () => {
+    const statuses = ['Available', 'QcHold', 'Quarantine', 'Damaged', 'Rejected',
+      'Blocked', 'Expired', 'RecallBlocked'];
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : url.includes('/investigation?')
+          ? { warehouseId: 1, productId: 10, eventAnchorId: 0,
+            eventCount: 0, bucketCount: 0, events: [], buckets: [],
+            eventsTruncated: false, bucketsTruncated: false, isReadOnly: true,
+            historyInsufficientForNonAvailableStock: true,
+            availableLedgerExpectedIsPartial: false, unclassifiedLedgerEventCount: 0,
+            allStatusExpectedQuantity: 0, allStatusDifference: 0, allStatusStatus: 'Match',
+            statusBreakdown: statuses.map(status => ({
+              status, currentQuantity: 0, expectedQuantity: 0, difference: 0,
+              reservedQuantity: 0, bucketCount: 0, directLedgerNetQuantity: 0,
+              statusChangeInQuantity: 0, statusChangeOutQuantity: 0,
+            })),
+          }
+          : { items: [{ warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+            productCode: 'SKU-UNSAFE', productName: 'Không hợp lệ',
+            currentQuantity: 0, expectedQuantity: 0, difference: 0, status: 'Match',
+            importQuantity: 0, exportQuantity: 0, transferInQuantity: 0,
+            transferOutQuantity: 0, adjustmentIncreaseQuantity: 0,
+            adjustmentDecreaseQuantity: 0,
+          }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    await view.findByText('SKU-UNSAFE');
+    fireEvent.click(view.getByRole('button', { name: 'Xem bằng chứng SKU-UNSAFE tại Kho thử' }));
+    expect(await view.findByText('Không thể tải bằng chứng điều tra. Hãy thử lại.')).toBeTruthy();
+    expect(view.queryByRole('table', {
+      name: 'Đối chiếu từng trạng thái tồn kho theo Ledger',
+    })).toBeNull();
+  });
+
   it('shows all eight statuses and accounts for source and destination of QC status change',async()=>{
     const breakdown=[
       {status:'Available',currentQuantity:7,reservedQuantity:2,bucketCount:1,
