@@ -75,7 +75,9 @@ test('PR33: reconciliation layout, table scroll and usable mobile nav', async ({
       expect(m.leadingWidth, 'Title row must not collapse to zero width').toBeGreaterThan(100);
       await page.locator('.mobile-nav-toggle').click();
       await expect(page.locator('.mobile-nav-toggle')).toHaveAttribute('aria-expanded', 'true');
-      await page.locator('.mobile-nav-toggle').click();
+      // The open drawer/backdrop intentionally intercepts the original topbar toggle.
+      // Close with the drawer's own accessible button, not by clicking through the overlay.
+      await page.locator('.sidebar-mobile-close').click();
       await expect(page.locator('.mobile-nav-toggle')).toHaveAttribute('aria-expanded', 'false');
     }
     console.log('PR33 viewport metrics', JSON.stringify(m));
