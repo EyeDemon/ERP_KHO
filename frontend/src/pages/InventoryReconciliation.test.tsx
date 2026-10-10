@@ -40,6 +40,49 @@ describe('InventoryReconciliation', () => {
   });
 
 
+
+  it('shows missing-Ledger reason in the list even with an empty AVAILABLE placeholder', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : { items: [{
+          warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+          productCode: 'SKU-ZERO-AVAILABLE', productName: 'Hàng QC cũ',
+          currentQuantity: 0, expectedQuantity: null, difference: null,
+          status: 'Indeterminate', allStatusCurrentQuantity: 5,
+          allStatusExpectedQuantity: null, allStatusDifference: null,
+          allStatusStatus: 'Indeterminate',
+          historyInsufficientForNonAvailableStock: true,
+          unclassifiedLedgerEventCount: 0, importQuantity: 0, exportQuantity: 0,
+          transferInQuantity: 0, transferOutQuantity: 0,
+          adjustmentIncreaseQuantity: 0, adjustmentDecreaseQuantity: 0,
+        }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText('SKU-ZERO-AVAILABLE')).toBeTruthy();
+    expect(view.getByText(/Thiếu lịch sử Ledger — cần đối chiếu chứng từ/)).toBeTruthy();
+  });
+
+  it('rejects missing-history flag contradicted by a definite API verdict', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : { items: [{
+          warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+          productCode: 'SKU-UNTRUSTED', productName: 'Không hợp lệ',
+          currentQuantity: 0, expectedQuantity: 0, difference: 0,
+          status: 'Match', allStatusCurrentQuantity: 5,
+          allStatusExpectedQuantity: 0, allStatusDifference: 5,
+          allStatusStatus: 'Mismatch',
+          historyInsufficientForNonAvailableStock: true,
+          unclassifiedLedgerEventCount: 0, importQuantity: 0, exportQuantity: 0,
+          transferInQuantity: 0, transferOutQuantity: 0,
+          adjustmentIncreaseQuantity: 0, adjustmentDecreaseQuantity: 0,
+        }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText(/Máy chủ trả dữ liệu đối chiếu không hợp lệ/)).toBeTruthy();
+    expect(view.queryByText('SKU-UNTRUSTED')).toBeNull();
+  });
+
   it('shows status mismatch even though AVAILABLE and grand total both match', async () => {
     vi.mocked(apiClient.get).mockImplementation((url: string) =>
       Promise.resolve({ data: url.endsWith('/warehouses')

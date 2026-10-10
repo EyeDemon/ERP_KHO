@@ -36,6 +36,7 @@ interface ReconciliationRow {
   allStatusExpectedQuantity?: number | null;
   allStatusDifference?: number | null;
   allStatusStatus?: 'Match' | 'Mismatch' | 'Indeterminate';
+  historyInsufficientForNonAvailableStock?: boolean;
   unclassifiedLedgerEventCount?: number;
   statusChangeInQuantity?: number;
   statusChangeOutQuantity?: number;
@@ -142,12 +143,20 @@ const isValidReconciliationPage = (
         (requestedProduct !== '' && row.productId !== Number(requestedProduct)) ||
         (row.unclassifiedLedgerEventCount !== undefined &&
           (!Number.isSafeInteger(row.unclassifiedLedgerEventCount) ||
-            row.unclassifiedLedgerEventCount < 0))) return false;
+            row.unclassifiedLedgerEventCount < 0)) ||
+        (row.historyInsufficientForNonAvailableStock !== undefined &&
+          typeof row.historyInsufficientForNonAvailableStock !== 'boolean')) return false;
 
     const key = row.warehouseId + ':' + row.productId;
     if (seen.has(key)) return false;
     seen.add(key);
 
+    if (row.historyInsufficientForNonAvailableStock === true &&
+        (row.status !== 'Indeterminate' ||
+          (row.unclassifiedLedgerEventCount ?? 0) !== 0 ||
+          row.allStatusStatus !== 'Indeterminate' ||
+          row.allStatusExpectedQuantity !== null ||
+          row.allStatusDifference !== null)) return false;
     if (row.status === 'Indeterminate') {
       if (row.expectedQuantity !== null || row.difference !== null) return false;
     } else {
@@ -650,6 +659,9 @@ export default function InventoryReconciliation() {
                               : numberFormat.format(row.allStatusExpectedQuantity)}</span>
                             <span>Chênh lệch tổng: {row.allStatusDifference == null ? 'Chưa xác định'
                               : numberFormat.format(row.allStatusDifference)}</span>
+                            {row.historyInsufficientForNonAvailableStock && (
+                              <span>Thiếu lịch sử Ledger — cần đối chiếu chứng từ</span>
+                            )}
                           </div>
                         ) : <span className="ui-muted-text">Chưa có đối chiếu 8 trạng thái</span>}
                       </td>

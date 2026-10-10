@@ -92,3 +92,9 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - Hồ sơ chi tiết bổ sung `historyInsufficientForNonAvailableStock=true`, phân biệt thiếu hẳn lịch sử với các giao dịch sai loại (`unclassifiedLedgerEventCount=0`). UI hiển thị cảnh báo tiếng Việt và yêu cầu xác minh chứng từ trước khi sửa tồn; response mâu thuẫn bị chặn fail-closed.
 - Trường hợp QC-only **có** Ledger import hợp lệ vẫn đối chiếu bình thường. Ledger anchor cũ và những sự kiện mới sau anchor không được tự suy diễn thành kỳ vọng bằng 0. Chỉ số AVAILABLE legacy 0 còn được hiển thị kèm `availableLedgerExpectedIsPartial=true`; không có API sửa tồn hoặc rebuild.
 - Regression InMemory, SQL Server thật và Vitest kiểm tra kết luận thiếu Ledger, bảng 8 trạng thái, quyền kho và dữ liệu API mâu thuẫn. Không thay đổi schema, tồn kho Production, Notion hoặc phép ủy quyền.
+
+## Zero-quantity AVAILABLE placeholder does not establish a Ledger history
+
+- A warehouse/product pair with a zero-quantity `Available` bucket and physical QC/Quarantine buckets but no Ledger is still missing history. Presence of the AVAILABLE bucket ID must not turn `Indeterminate` into a manufactured completed reconciliation. Summary list and detailed investigation now check nonzero AVAILABLE **quantity**, not mere bucket presence.
+- Read-only list DTO exposes `historyInsufficientForNonAvailableStock` to explain the verdict in Vietnamese (“Thiếu lịch sử Ledger — cần đối chiếu chứng từ”). The frontend fail-closed guard rejects any declared missing-history flag with a definite Match/Mismatch or non-null expected/difference. Older demo payloads remain backward compatible.
+- InMemory and SQL Server integration regressions cover the no-ledger QC-only pair before and after creation of an empty AVAILABLE bucket; Vitest covers the visible reason and contradictory API claim. This does not change transactional inventory engines, SQL schema, or Notion. Snapshot/staging acceptance is still outstanding.

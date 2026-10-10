@@ -129,6 +129,8 @@ namespace ERP.Application.DTOs
         public decimal? AllStatusExpectedQuantity { get; set; }
         public decimal? AllStatusDifference { get; set; }
         public string AllStatusStatus { get; set; } = "Indeterminate";
+        // Missing non-AVAILABLE Ledger history is distinct from invalid events.
+        public bool HistoryInsufficientForNonAvailableStock { get; set; }
         public int UnclassifiedLedgerEventCount { get; set; }
         public decimal StatusChangeInQuantity { get; set; }
         public decimal StatusChangeOutQuantity { get; set; }

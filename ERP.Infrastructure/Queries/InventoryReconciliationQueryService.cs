@@ -227,7 +227,7 @@ namespace ERP.Infrastructure.Queries
             var historyInsufficientForNonAvailableStock =
                 ledgerGroups.Count == 0 && stockGroups.Any(x =>
                     x.Status != InventoryStatus.Available && x.Buckets > 0) &&
-                !stockGroups.Any(x => x.Status == InventoryStatus.Available);
+                !stockGroups.Any(x => x.Status == InventoryStatus.Available && x.Quantity != 0m);
             var comparable = unclassifiedCount == 0 &&
                 !historyInsufficientForNonAvailableStock;
             foreach (var row in byStatus.Values)
@@ -582,7 +582,8 @@ namespace ERP.Infrastructure.Queries
                 // with read-only investigation available for all statuses.
                 var lacksLedgerForOtherStatusOnly =
                     pairStocks.Any(s => s.Status != InventoryStatus.Available) &&
-                    !pairStocks.Any(s => s.Status == InventoryStatus.Available) &&
+                    !pairStocks.Any(s => s.Status == InventoryStatus.Available &&
+                        s.Quantity != 0m) &&
                     stockTransactions.Count == 0;
                 decimal? expectedQuantity =
                     unclassifiedCount > 0 || lacksLedgerForOtherStatusOnly ? null :
@@ -645,6 +646,7 @@ namespace ERP.Infrastructure.Queries
                     AllStatusExpectedQuantity = allStatusExpected,
                     AllStatusDifference = allStatusDifference,
                     AllStatusStatus = allStatusStatus,
+                    HistoryInsufficientForNonAvailableStock = lacksLedgerForOtherStatusOnly,
                     UnclassifiedLedgerEventCount = unclassifiedCount,
                     StatusChangeInQuantity = statusChangeIn,
                     StatusChangeOutQuantity = statusChangeOut,

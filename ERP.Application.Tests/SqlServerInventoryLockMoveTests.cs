@@ -1642,6 +1642,33 @@ public sealed class SqlServerInventoryLockMoveTests
             evidence.AllStatusStatus.Should().Be("Indeterminate");
             evidence.StatusBreakdown.Should().OnlyContain(x =>
                 x.ExpectedQuantity == null && x.Difference == null);
+
+            // A zero-quantity AVAILABLE placeholder must not authorize a
+            // computed Ledger zero for unrelated QC inventory.
+            await using (var extra = CreateContext())
+            {
+                extra.InventoryStocks.Add(new InventoryStock
+                {
+                    ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                    Status = InventoryStatus.Available, Quantity = 0m
+                });
+                await extra.SaveChangesAsync();
+            }
+            var second = (await service.GetReconciliationsAsync(
+                fixture.WarehouseId, fixture.ProductId, null))
+                .Items.Should().ContainSingle().Subject;
+            second.HistoryInsufficientForNonAvailableStock.Should().BeTrue();
+            second.Status.Should().Be("Indeterminate");
+            second.AllStatusStatus.Should().Be("Indeterminate");
+            second.ExpectedQuantity.Should().BeNull();
+            second.AllStatusExpectedQuantity.Should().BeNull();
+            var detailsAfter = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId,
+                bucketStatus: nameof(InventoryStatus.QcHold));
+            detailsAfter.HistoryInsufficientForNonAvailableStock.Should().BeTrue();
+            detailsAfter.AllStatusStatus.Should().Be("Indeterminate");
+            detailsAfter.AllStatusExpectedQuantity.Should().BeNull();
         }
         finally { await CleanupAsync(fixture); }
     }

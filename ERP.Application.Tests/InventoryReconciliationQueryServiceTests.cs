@@ -915,6 +915,7 @@ namespace ERP.Application.Tests
             qc.ExpectedQuantity.Should().BeNull();
             qc.Difference.Should().BeNull();
             qc.Status.Should().Be("Indeterminate");
+            qc.HistoryInsufficientForNonAvailableStock.Should().BeTrue();
             qc.AllStatusStatus.Should().Be("Indeterminate");
             qc.AllStatusCurrentQuantity.Should().Be(5m);
             qc.AllStatusExpectedQuantity.Should().BeNull();
@@ -937,6 +938,43 @@ namespace ERP.Application.Tests
             investigation.Buckets.Should().ContainSingle(x => x.Quantity == 5m);
             authorization.Verify(x => x.GetAccessibleWarehouseIdsAsync(default), Times.Once);
             authorization.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Once);
+        }
+
+
+        [Fact]
+        public async Task Reconciliation_QcStockWithZeroAvailableBucketAndNoLedger_IsIndeterminate()
+        {
+            using var db = await GetDbContextAsync();
+            db.Products.Add(new Product { Id = 4, Code = "P4", Name = "Old QC inventory" });
+            db.InventoryStocks.AddRange(
+                new InventoryStock { ProductId = 4, WarehouseId = 1,
+                    Status = InventoryStatus.Available, Quantity = 0m },
+                new InventoryStock { ProductId = 4, WarehouseId = 1,
+                    Status = InventoryStatus.QcHold, Quantity = 5m });
+            await db.SaveChangesAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var row = (await query.GetReconciliationsAsync(1, 4, null))
+                .Items.Should().ContainSingle().Subject;
+            row.CurrentQuantity.Should().Be(0m);
+            row.AllStatusCurrentQuantity.Should().Be(5m);
+            row.HistoryInsufficientForNonAvailableStock.Should().BeTrue();
+            row.UnclassifiedLedgerEventCount.Should().Be(0);
+            row.Status.Should().Be("Indeterminate");
+            row.AllStatusStatus.Should().Be("Indeterminate");
+            row.ExpectedQuantity.Should().BeNull();
+            row.AllStatusExpectedQuantity.Should().BeNull();
+            var detail = await query.GetInvestigationAsync(1, 4,
+                bucketStatus: nameof(InventoryStatus.QcHold));
+            detail.HistoryInsufficientForNonAvailableStock.Should().BeTrue();
+            detail.AllStatusStatus.Should().Be("Indeterminate");
+            detail.AllStatusExpectedQuantity.Should().BeNull();
+            detail.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
+            detail.Buckets.Should().ContainSingle(x => x.Quantity == 5m);
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(2));
         }
 
         [Fact]
