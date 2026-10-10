@@ -43,3 +43,38 @@ jobs:
           PLAYWRIGHT_BASE_URL: https://erp-wms-blueprint-demo-git-part-syste-b0b8f5-bayuuandree99-8132.vercel.app
           CI: 'true'
         run: npx playwright test e2e/blueprint-preview.spec.mjs --browser=chromium --workers=1 --retries=0 --reporter=line
+      - name: Diagnose SonarCloud PR issue metadata (unauthenticated, read-only)
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          url = 'https://sonarcloud.io/api/issues/search?' + urllib.parse.urlencode({
+              'componentKeys': 'EyeDemon_ERP_KHO',
+              'pullRequest': '33',
+              'issueStatuses': 'OPEN,CONFIRMED',
+              'ps': '100',
+          })
+          try:
+              with urllib.request.urlopen(urllib.request.Request(url, headers={'Accept': 'application/json'}), timeout=15) as response:
+                  data = json.load(response)
+          except urllib.error.HTTPError as error:
+              print('SONAR_ISSUES_READ_UNAVAILABLE: HTTP', error.code)
+          except (OSError, ValueError) as error:
+              print('SONAR_ISSUES_READ_UNAVAILABLE:', type(error).__name__)
+          else:
+              print('SONAR_ISSUES_COUNT:', data.get('total', 'unknown'))
+              for issue in data.get('issues', []):
+                  print(json.dumps({
+                      'rule': issue.get('rule'),
+                      'type': issue.get('type'),
+                      'severity': issue.get('severity'),
+                      'message': issue.get('message'),
+                      'component': issue.get('component'),
+                      'line': issue.get('line'),
+                  }, ensure_ascii=False))
+          PY
