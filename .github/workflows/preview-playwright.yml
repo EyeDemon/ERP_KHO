@@ -56,7 +56,6 @@ jobs:
           url = 'https://sonarcloud.io/api/issues/search?' + urllib.parse.urlencode({
               'componentKeys': 'EyeDemon_ERP_KHO',
               'pullRequest': '33',
-              'issueStatuses': 'OPEN,CONFIRMED',
               'ps': '100',
           })
           try:
