@@ -19,6 +19,8 @@ namespace ERP.Application.DTOs
         // Bucket IDs are keyset-paged independently of Ledger events. This
         // high-water ID excludes newly inserted buckets, but quantities and
         // statuses remain CURRENT reads, not a transactionally frozen snapshot.
+        // Current-state bucket evidence is explicitly scoped to one status.
+        public string BucketStatus { get; set; } = "Available";
         public int BucketAnchorId { get; set; }
         public int? BucketAfterId { get; set; }
         public int? NextBucketAfterId { get; set; }

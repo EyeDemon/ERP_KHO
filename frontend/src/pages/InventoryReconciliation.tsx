@@ -77,7 +77,7 @@ interface Investigation {
   productCode:string; productName:string; eventAnchorId:number;
   eventCount:number; bucketCount:number;
   bucketAnchorId?:number; bucketAfterId?:number|null; nextBucketAfterId?:number|null;
-  bucketHasRowsAfterAnchor?:boolean;
+  bucketHasRowsAfterAnchor?:boolean; bucketStatus?: string;
   eventBeforeId?:number|null; nextEventBeforeId?:number|null;
   ledgerHasEventsAfterAnchor?:boolean;
   eventsTruncated:boolean; bucketsTruncated:boolean;
@@ -227,6 +227,7 @@ export default function InventoryReconciliation() {
     targetPage = 0, cursors: (number | null)[] = [null],
     bucketAnchor?: number, bucketAfter?: number,
     targetBucketPage = 0, bucketCursors: (number | null)[] = [null],
+    bucketStatus = 'Available',
   ) => {
     if (demoRuntime) return;
     const generation = ++investigationGeneration.current;
@@ -243,6 +244,7 @@ export default function InventoryReconciliation() {
       if (before !== undefined) params.set('eventBeforeId', String(before));
       if (bucketAnchor !== undefined) params.set('bucketAnchorId', String(bucketAnchor));
       if (bucketAfter !== undefined) params.set('bucketAfterId', String(bucketAfter));
+      if (bucketStatus !== 'Available') params.set('bucketStatus', bucketStatus);
       const response = await apiClient.get('/api/InventoryReconciliation/investigation?' + params.toString());
       if (generation !== investigationGeneration.current) return;
       const evidence = response.data as Investigation;
@@ -253,6 +255,8 @@ export default function InventoryReconciliation() {
           (before !== undefined && evidence.eventBeforeId !== before) ||
           (bucketAnchor !== undefined && evidence.bucketAnchorId !== bucketAnchor) ||
           (bucketAfter !== undefined && evidence.bucketAfterId !== bucketAfter) ||
+          (bucketStatus !== 'Available' && evidence.bucketStatus !== bucketStatus) ||
+          (evidence.bucketStatus !== undefined && evidence.bucketStatus !== bucketStatus) ||
           (evidence.bucketAnchorId !== undefined &&
             (!Number.isSafeInteger(evidence.bucketAnchorId) || evidence.bucketAnchorId < 0)) ||
           (evidence.nextBucketAfterId != null &&
@@ -302,14 +306,14 @@ export default function InventoryReconciliation() {
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, next, eventPageIndex + 1, cursors,
         investigation.bucketAnchorId, bucketPageCursors[bucketPageIndex] ?? undefined,
-        bucketPageIndex, bucketPageCursors);
+        bucketPageIndex, bucketPageCursors, investigation.bucketStatus ?? 'Available');
     } else if (eventPageIndex > 0) {
       const index = eventPageIndex - 1;
       const before = eventPageCursors[index] ?? undefined;
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, before, index, eventPageCursors,
         investigation.bucketAnchorId, bucketPageCursors[bucketPageIndex] ?? undefined,
-        bucketPageIndex, bucketPageCursors);
+        bucketPageIndex, bucketPageCursors, investigation.bucketStatus ?? 'Available');
     }
   };
 
@@ -322,14 +326,27 @@ export default function InventoryReconciliation() {
       const cursors = [...bucketPageCursors.slice(0, bucketPageIndex + 1), next];
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
-        investigation.bucketAnchorId, next, bucketPageIndex + 1, cursors);
+        investigation.bucketAnchorId, next, bucketPageIndex + 1, cursors,
+        investigation.bucketStatus ?? 'Available');
     } else if (bucketPageIndex > 0) {
       const index = bucketPageIndex - 1;
       const after = bucketPageCursors[index] ?? undefined;
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
-        investigation.bucketAnchorId, after, index, bucketPageCursors);
+        investigation.bucketAnchorId, after, index, bucketPageCursors,
+        investigation.bucketStatus ?? 'Available');
     }
+  };
+
+  const changeBucketStatus = (status: string) => {
+    if (!investigation || investigating || !(status in statusLabels) ||
+        status === (investigation.bucketStatus ?? 'Available')) return;
+    // Preserve the independent Ledger anchor/page, reset the bucket cursor
+    // because it belongs to a different inventory status scope.
+    const eventBefore = eventPageCursors[eventPageIndex] ?? undefined;
+    void loadInvestigation(investigation.warehouseId, investigation.productId,
+      investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
+      undefined, undefined, 0, [null], status);
   };
 
   const closeInvestigation = () => {
@@ -582,7 +599,18 @@ export default function InventoryReconciliation() {
                   </table></UiTableScroll>
                 </>
               )}
-              <h3>Bucket tồn AVAILABLE hiện tại ({investigation.bucketCount})</h3>
+              <h3>Bucket tồn {statusLabels[investigation.bucketStatus ?? 'Available'] ?? 'không xác định'} hiện tại ({investigation.bucketCount})</h3>
+              <label htmlFor="investigation-bucket-status">Trạng thái bucket cần xem</label>
+              <select id="investigation-bucket-status"
+                value={investigation.bucketStatus ?? 'Available'}
+                disabled={investigating}
+                onChange={event => changeBucketStatus(event.target.value)}>
+                {Object.entries(statusLabels).map(([status, label]) =>
+                  <option key={status} value={status}>{label}</option>)}
+              </select>
+              <p className="ui-muted-text">Bucket là số dư hiện tại theo trạng thái đã chọn;
+                các sự kiện Ledger bên dưới vẫn chỉ thuộc AVAILABLE.
+                Đổi trạng thái bucket không thay đổi mốc Ledger đã chọn.</p>
               {investigation.bucketHasRowsAfterAnchor && (
                 <p role="status" className="ui-muted-text">
                   Đã xuất hiện bucket mới sau mốc ID #{investigation.bucketAnchorId}.

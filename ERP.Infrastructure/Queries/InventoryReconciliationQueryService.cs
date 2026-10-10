@@ -49,7 +49,7 @@ namespace ERP.Infrastructure.Queries
         public async Task<InventoryReconciliationInvestigationDto> GetInvestigationAsync(
             int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
             int? eventBeforeId = null, int? bucketAnchorId = null,
-            int? bucketAfterId = null)
+            int? bucketAfterId = null, string bucketStatus = "Available")
         {
             if (warehouseId <= 0 || productId <= 0)
                 throw new BusinessRuleException("ID kho và ID sản phẩm phải là số nguyên dương.");
@@ -65,6 +65,12 @@ namespace ERP.Infrastructure.Queries
             if (bucketAfterId.HasValue && (bucketAfterId.Value <= 0 ||
                 !bucketAnchorId.HasValue || bucketAfterId.Value >= bucketAnchorId.Value))
                 throw new BusinessRuleException("Phân trang bucket yêu cầu ID sau hợp lệ và mốc bucket cố định.");
+            // Named canonical enum values only: no numeric status injection or
+            // silently widened scope before checking warehouse authorization.
+            if (!Enum.TryParse<InventoryStatus>(bucketStatus, out var selectedBucketStatus) ||
+                !Enum.IsDefined(selectedBucketStatus) ||
+                !string.Equals(selectedBucketStatus.ToString(), bucketStatus, StringComparison.Ordinal))
+                throw new BusinessRuleException("Trạng thái bucket tồn không hợp lệ.");
             if (_warehouseAuthorization is null)
                 throw new InvalidOperationException("Thiếu dịch vụ phân quyền kho đối chiếu.");
 
@@ -91,6 +97,7 @@ namespace ERP.Infrastructure.Queries
                             x.Status == InventoryStatus.Available);
             var allStatusStocks = _context.InventoryStocks.AsNoTracking()
                 .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId);
+            var selectedStatusStocks = allStatusStocks.Where(x => x.Status == selectedBucketStatus);
             var allStatusLedger = _context.InventoryTransactions.AsNoTracking()
                 .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId);
             var ledger = allStatusLedger.Where(x => x.InventoryStatus == InventoryStatus.Available);
@@ -106,10 +113,10 @@ namespace ERP.Infrastructure.Queries
             // Use a monotonically increasing identity cursor instead of OFFSET.
             // This bounds new bucket INSERTs, but does not freeze mutable stock
             // quantities/statuses across requests. Every page rechecks access.
-            var bucketAnchor = bucketAnchorId ?? await stocks.MaxAsync(x => (int?)x.Id) ?? 0;
-            var anchoredStocks = stocks.Where(x => x.Id <= bucketAnchor);
+            var bucketAnchor = bucketAnchorId ?? await selectedStatusStocks.MaxAsync(x => (int?)x.Id) ?? 0;
+            var anchoredStocks = selectedStatusStocks.Where(x => x.Id <= bucketAnchor);
             var bucketCount = await anchoredStocks.CountAsync();
-            var bucketHasRowsAfterAnchor = await stocks.AnyAsync(x => x.Id > bucketAnchor);
+            var bucketHasRowsAfterAnchor = await selectedStatusStocks.AnyAsync(x => x.Id > bucketAnchor);
             var eventCount = await anchoredLedger.CountAsync();
 
             // SQL aggregation bounds materialization to the status enum, rather
@@ -267,6 +274,7 @@ namespace ERP.Infrastructure.Queries
                 ProductCode = product.Code,
                 ProductName = product.Name,
                 EventAnchorId = anchor,
+                BucketStatus = selectedBucketStatus.ToString(),
                 BucketAnchorId = bucketAnchor,
                 BucketAfterId = bucketAfterId,
                 NextBucketAfterId = buckets.Count > 100 ? buckets[99].InventoryStockId : null,

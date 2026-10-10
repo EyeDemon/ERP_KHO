@@ -63,7 +63,7 @@ namespace ERP.Api.Tests
             {
                 WarehouseId = 7, ProductId = 17, EventAnchorId = 32,
                 EventBeforeId = 20, NextEventBeforeId = 18,
-                BucketAnchorId = 100, BucketAfterId = 20, NextBucketAfterId = 24,
+                BucketStatus = "QcHold", BucketAnchorId = 100, BucketAfterId = 20, NextBucketAfterId = 24,
                 BucketHasRowsAfterAnchor = true, BucketsTruncated = true,
                 LedgerHasEventsAfterAnchor = true,
                 CurrentQuantity = 9, ExpectedQuantity = 11, Difference = -2,
@@ -90,17 +90,18 @@ namespace ERP.Api.Tests
                     Quantity = 2, SignedQuantity = null
                 }]
             };
-            mock.Setup(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20))
+            mock.Setup(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20, "QcHold"))
                 .ReturnsAsync(result);
             var response = await new InventoryReconciliationController(mock.Object)
-                .Investigation(7, 17, 32, 50, 20, 100, 20);
+                .Investigation(7, 17, 32, 50, 20, 100, 20, "QcHold");
             var ok = response.Result.Should().BeOfType<OkObjectResult>().Subject;
             ok.Value.Should().BeSameAs(result);
-            mock.Verify(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20), Times.Once);
+            mock.Verify(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20, "QcHold"), Times.Once);
             mock.VerifyNoOtherCalls();
             var json = System.Text.Json.JsonSerializer.SerializeToElement(result,
                 new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
             json.GetProperty("eventBeforeId").GetInt32().Should().Be(20);
+            json.GetProperty("bucketStatus").GetString().Should().Be("QcHold");
             json.GetProperty("bucketAnchorId").GetInt32().Should().Be(100);
             json.GetProperty("bucketAfterId").GetInt32().Should().Be(20);
             json.GetProperty("nextBucketAfterId").GetInt32().Should().Be(24);

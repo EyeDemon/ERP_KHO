@@ -1432,6 +1432,28 @@ public sealed class SqlServerInventoryLockMoveTests
             evidence.Events.Should().ContainSingle(x => x.TransactionType == "Import");
             var anchoredId = evidence.EventAnchorId;
 
+            // Real SQL projection after a production status-change service:
+            // bucket evidence must be independently queryable in QC_HOLD.
+            var qcBuckets = await query.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId, anchoredId,
+                bucketStatus: nameof(InventoryStatus.QcHold));
+            qcBuckets.BucketStatus.Should().Be(nameof(InventoryStatus.QcHold));
+            qcBuckets.BucketCount.Should().Be(1);
+            qcBuckets.Buckets.Should().ContainSingle(x =>
+                x.Quantity == 3m && x.LocationId == fixture.SourceLocationId &&
+                x.LotId == fixture.LotId);
+            qcBuckets.BucketAnchorId.Should().Be(qcBuckets.Buckets[0].InventoryStockId);
+            qcBuckets.EventAnchorId.Should().Be(anchoredId);
+            qcBuckets.Events.Select(x => x.TransactionId)
+                .Should().Equal(evidence.Events.Select(x => x.TransactionId));
+            var emptyQuarantine = await query.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId, anchoredId,
+                bucketStatus: nameof(InventoryStatus.Quarantine));
+            emptyQuarantine.BucketStatus.Should().Be(nameof(InventoryStatus.Quarantine));
+            emptyQuarantine.BucketCount.Should().Be(0);
+            emptyQuarantine.BucketAnchorId.Should().Be(0);
+            emptyQuarantine.Buckets.Should().BeEmpty();
+
             // Unknown historic type with no canonical sign cannot silently
             // count as zero and yield a false "matched" status report.
             await using (var legacy = CreateContext())

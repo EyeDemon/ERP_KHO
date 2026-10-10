@@ -328,6 +328,63 @@ namespace ERP.Application.Tests
             auth.VerifyNoOtherCalls();
         }
 
+        [Theory]
+        [InlineData("")]
+        [InlineData("available")]
+        [InlineData("1")]
+        [InlineData("QcHold ")]
+        [InlineData("Unknown")]
+        public async Task Investigation_RejectsInvalidBucketStatusBeforeAuthorization(string status)
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var call = () => query.GetInvestigationAsync(1, 1, bucketStatus: status);
+            await call.Should().ThrowAsync<BusinessRuleException>();
+            auth.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task Investigation_SelectedStatusReturnsOnlyItsOwnBucketsAndCursor()
+        {
+            using var db = await GetDbContextAsync();
+            db.InventoryStocks.AddRange(
+                new InventoryStock { Id = 1000, WarehouseId = 1, ProductId = 1,
+                    Status = InventoryStatus.QcHold, Quantity = 3m },
+                new InventoryStock { Id = 1001, WarehouseId = 1, ProductId = 1,
+                    Status = InventoryStatus.Quarantine, Quantity = 4m });
+            await db.SaveChangesAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+
+            var available = await query.GetInvestigationAsync(1, 1);
+            available.BucketStatus.Should().Be("Available");
+            available.BucketCount.Should().Be(1);
+            var qc = await query.GetInvestigationAsync(1, 1, available.EventAnchorId,
+                bucketStatus: "QcHold");
+            qc.BucketStatus.Should().Be("QcHold");
+            qc.BucketCount.Should().Be(1);
+            qc.BucketAnchorId.Should().Be(1000);
+            qc.Buckets.Should().ContainSingle(x => x.InventoryStockId == 1000);
+            qc.Buckets.Should().OnlyContain(x => x.Quantity == 3m);
+            qc.EventAnchorId.Should().Be(available.EventAnchorId);
+            qc.Events.Select(x => x.TransactionId).Should()
+                .Equal(available.Events.Select(x => x.TransactionId));
+
+            var quarantine = await query.GetInvestigationAsync(1, 1,
+                available.EventAnchorId, bucketStatus: "Quarantine");
+            quarantine.BucketStatus.Should().Be("Quarantine");
+            quarantine.Buckets.Should().ContainSingle(x => x.InventoryStockId == 1001);
+            var empty = await query.GetInvestigationAsync(1, 1,
+                available.EventAnchorId, bucketStatus: "RecallBlocked");
+            empty.BucketCount.Should().Be(0);
+            empty.BucketAnchorId.Should().Be(0);
+            empty.Buckets.Should().BeEmpty();
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(4));
+        }
+
         [Fact]
         public async Task Investigation_BucketKeysetPagesAcrossHundredWithoutLeakingNewRows()
         {
