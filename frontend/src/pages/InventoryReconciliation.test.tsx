@@ -30,7 +30,7 @@ describe('InventoryReconciliation', () => {
     expect(await view.findByText('SKU-1001')).toBeTruthy();
     expect(view.getByText('Đối chiếu tồn kho & ledger')).toBeTruthy();
     expect(view.getByText(/chỉ đọc/)).toBeTruthy();
-    expect(view.getByText(/Phạm vi hiện tại chỉ đối chiếu trạng thái AVAILABLE/)).toBeTruthy();
+    expect(view.getByText(/Danh sách hiển thị riêng số liệu AVAILABLE và kết luận đối chiếu cả 8 trạng thái/)).toBeTruthy();
     expect(view.getAllByText('Lệch').length).toBeGreaterThan(0);
     expect(view.getAllByRole('note').some(note =>
       note.textContent?.includes('không phải kết quả từ SQL Server thật')
