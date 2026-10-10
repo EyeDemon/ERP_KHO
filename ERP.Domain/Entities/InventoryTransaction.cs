@@ -24,6 +24,8 @@ public class InventoryTransaction
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
     public int CreatedBy { get; set; }
     public string? Note { get; set; }
+    // Present on reversal markers only; legacy history stays null.
+    public string? ReasonCode { get; set; }
 
     // Navigation
     public Product Product { get; set; } = null!;

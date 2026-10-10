@@ -133,3 +133,62 @@ jobs:
     - name: Build Frontend
       working-directory: ./frontend
       run: npm run build
+
+    # Browser QA is part of the existing build-and-test job: a failed, skipped
+    # or missing real Chromium run leaves the same CI status red. JSDOM tests
+    # and a Vercel READY response cannot substitute for these interactions.
+    - name: Prepare real browser QA runtime
+      shell: pwsh
+      timeout-minutes: 12
+      run: |
+        $ErrorActionPreference = 'Stop'
+        dotnet tool install --global dotnet-ef --version '10.*'
+        if ($LASTEXITCODE -ne 0) { throw 'dotnet-ef 10 installation failed.' }
+        $env:PATH += ';' + (Join-Path $env:USERPROFILE '.dotnet/tools')
+        $folder = Join-Path $env:RUNNER_TEMP 'erp-kho-browserqa'
+        npm install --prefix $folder --no-save --package-lock=false --ignore-scripts playwright@1.62.1
+        if ($LASTEXITCODE -ne 0) { throw 'Pinned Playwright installation failed.' }
+        $module = Join-Path $folder 'node_modules/playwright/index.js'
+        if (!(Test-Path $module)) { throw 'Pinned Playwright module unavailable.' }
+        node (Join-Path $folder 'node_modules/playwright/cli.js') install chromium
+        if ($LASTEXITCODE -ne 0) { throw 'Chromium installation failed.' }
+
+    - name: Mandatory interactive Chromium browser QA (INV-11)
+      shell: pwsh
+      timeout-minutes: 30
+      env:
+        ERP_KHO_SQLSERVER_ADMIN_CONNECTION: ${{ env.ERP_KHO_CI_SQLSERVER_SOURCE }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $env:PATH += ';' + (Join-Path $env:USERPROFILE '.dotnet/tools')
+        $folder = Join-Path $env:RUNNER_TEMP 'erp-kho-browserqa'
+        $env:ERP_KHO_PLAYWRIGHT_MODULE = Join-Path $folder 'node_modules/playwright/index.js'
+        $runId = [guid]::NewGuid().ToString('N')
+        $manifest = Join-Path 'TestResults/BrowserQA' "$runId/manifest.json"
+        try {
+          & ./tools/ERP.BrowserQa/Start-BrowserQa.ps1 -RunId $runId | Out-Null
+          node tools/ERP.BrowserQa/permission-browser.mjs --manifest $manifest --case '^INV-11 interactive reconciliation and unauthorized route$'
+          if ($LASTEXITCODE -ne 0) { throw 'Mandatory interactive browser QA failed.' }
+          $evidenceFile = Join-Path "TestResults/BrowserQA/$runId" 'permission-browser-evidence.json'
+          if (!(Test-Path $evidenceFile)) { throw 'Browser evidence missing.' }
+          $evidence = Get-Content $evidenceFile -Raw | ConvertFrom-Json
+          if ($evidence.sourceHead -ne $env:GITHUB_SHA) { throw 'Browser QA ran on a different commit.' }
+          if ($evidence.cases.Count -ne 1 -or $evidence.cases[0].status -ne 'PASS' -or
+              $evidence.cases[0].name -ne 'INV-11 interactive reconciliation and unauthorized route') {
+            throw 'Mandatory browser UI case is missing, skipped, or not PASS.'
+          }
+          Write-Output "Chromium interaction gate passed on exact HEAD $($evidence.sourceHead.Substring(0,8))."
+        } finally {
+          if (Test-Path $manifest) {
+            & ./tools/ERP.BrowserQa/Stop-BrowserQa.ps1 -ManifestPath $manifest
+          }
+        }
+
+    - name: Upload sanitized browser QA evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: mandatory-inv11-browser-qa
+        path: TestResults/BrowserQA/*/permission-browser-evidence.json
+        if-no-files-found: warn
+        retention-days: 14

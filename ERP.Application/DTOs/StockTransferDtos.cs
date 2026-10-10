@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ERP.Domain.Enums;
 
 namespace ERP.Application.DTOs;
@@ -17,7 +18,12 @@ public class CreateStockTransferDto
     public List<StockTransferDetailInputDto> Details { get; set; } = [];
 }
 
-public sealed class UpdateStockTransferDto : CreateStockTransferDto;
+public sealed class UpdateStockTransferDto : CreateStockTransferDto
+{
+    // JSON callers must send this field. The default supports existing in-process clients.
+    [JsonRequired]
+    public int ExpectedDraftRevision { get; set; } = 1;
+}
 
 public sealed class ReceiveStockTransferLineDto
 {
@@ -33,6 +39,18 @@ public sealed class ReceiveStockTransferDto
     public List<ReceiveStockTransferLineDto> Details { get; set; } = [];
 }
 
+public sealed class ReturnStockTransferDto
+{
+    public string? ReasonCode { get; set; }
+    public string? Reason { get; set; }
+}
+
+public sealed class CreateReverseStockTransferDto
+{
+    public string? ReasonCode { get; set; }
+    public string? Reason { get; set; }
+}
+
 public sealed class StockTransferDetailDto
 {
     public int ProductId { get; set; }
@@ -43,7 +61,7 @@ public sealed class StockTransferDetailDto
     public decimal ReceivedQuantity { get; set; }
     public decimal MissingQuantity { get; set; }
     public decimal DamagedQuantity { get; set; }
-    public decimal InTransitQuantity => DispatchedQuantity - ReceivedQuantity;
+    public decimal InTransitQuantity { get; set; }
     public string? Note { get; set; }
 }
 
@@ -56,6 +74,7 @@ public sealed class StockTransferDto
     public int DestinationWarehouseId { get; set; }
     public string DestinationWarehouseName { get; set; } = string.Empty;
     public StockTransferStatus Status { get; set; }
+    public int DraftRevision { get; set; }
     public string? Note { get; set; }
     public int CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -64,6 +83,12 @@ public sealed class StockTransferDto
     public DateTime? ReceivedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime? CancelledAt { get; set; }
+    public string? ReturnReasonCode { get; set; }
+    public string? ReturnReason { get; set; }
+    public int? ReverseOfTransferId { get; set; }
+    public int? ReverseTransferId { get; set; }
+    public string? ReverseReasonCode { get; set; }
+    public string? ReverseReason { get; set; }
     public List<StockTransferDetailDto> Details { get; set; } = [];
 }
 

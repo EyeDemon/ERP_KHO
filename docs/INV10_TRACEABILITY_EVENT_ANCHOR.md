@@ -1,0 +1,38 @@
+# INV-10 — Stable Ledger History Paging (Draft PR #31, 2026-10-09)
+
+## Contract
+- `GET /api/inventory/traceability` returns `eventAnchorId`: highest ledger transaction ID across the **authorized warehouse scope** at the beginning of a new query (before product/lot/serial/reference filters); `0` represents an empty ledger.
+- The UI forwards that same ID on ledger and bucket page navigation and drops it only on a **new** search/filter change.
+- Requests with `eventOffset > 0` require `eventAnchorId`. Negative anchors are rejected before querying warehouse permissions or SQL; zero is a valid empty anchor.
+- The anchor uses the full authorized warehouse scope because an existing reversal or corrective transaction can use another reference type and a higher ID than its original. Filtering the anchor by document reference would silently truncate an already-committed reversal chain.
+- Authorized event timeline, reversal markers and related ledger rows are limited to `InventoryTransaction.Id <= eventAnchorId`. A newer event with an older `TransactionDate` cannot shift the current history window.
+- **Current stock remains live**. Reference-to-stock matching uses all authorized direct document events, not only the anchored timeline window; it still intersects product, warehouse, lot and serial filters.
+- All data remains restricted by `IWarehouseAuthorizationService`; there is no user-supplied warehouse expansion, ledger mutation or schema migration.
+
+## Verification required
+- Application input tests: missing/negative anchor is rejected before scoped DB access.
+- SQL Server integration: original page 1/page 2 stable after inserting two transactions (one backdated); fresh search sees newly committed transactions; filtered direct references still return full committed reversal chains at the first load.
+- API contract and UI Vitest: anchor forwarded and preserved for page navigation; absent anchor refuses unsafe later pages; new searches reset anchor.
+- CI and Vercel Preview do not substitute for real browser QA and SQL/API staging signoff. Keep PR Draft.
+
+## INV-10 next slice: identity-linked document occurrences (2026-10-09)
+- `TraceAsync` now adds `relatedDocuments[]` and `relatedDocumentsTruncated` only for searches with an explicit positive `productId` and a nonempty `lotNumber` and/or `serialNumber`, **without** an explicit document reference filter.
+- Group direct immutable ledger transactions by `WarehouseId + ReferenceType + ReferenceId`, with first/last activity and event counts. These are co-occurrences, **not** proven custody, causal, owner/HU genealogy or a recall decision.
+- Scope always uses authorized warehouse IDs, matching the requested warehouse when supplied. Product/lot/serial filters are intersections. All returned document events are bounded by the same ledger `eventAnchorId`; a new query obtains a new anchor.
+- The SQL projection returns at most 100 groups, using a 101st sentinel for a visible truncation warning; no full COUNT and no schema migration.
+- Frontend renders an accessible Vietnamese table using the current production UI primitives; if the operator narrows to a specific document reference, the supplemental related-document table is suppressed so it cannot silently widen that explicit filter.
+- Coverage remains **foundation** until full Receipt→QC→Pick→Shipment→Return/Recall lineage, owner/HU identity, real browser QA and staging API/SQL evidence are complete.
+
+## INV-10 Shipment dispatch exposure for recall review (2026-10-09)
+- Additional read-only `shipmentExposures[]` and `shipmentExposuresTruncated` returned only for requests supplying both `productId` and a matching lot and/or serial, without a document-reference filter. Warehouse authorization and chosen-warehouse intersection remain mandatory.
+- SQL derives candidates strictly from posted `InventoryTransaction` rows with `TransactionType.Ship` and `ReferenceType="Shipment"`, joined to a **real Shipment in the same warehouse**; forged/orphan reference IDs cannot create exposure. Results are grouped per Shipment with gross shipped quantity, count of SHIP ledger rows, code, current status, dispatch time, and max transaction ID. Capped at 100 groups with a 101st sentinel; anchored by `eventAnchorId`.
+- This is an impact **review list**, not an automatic recall, net delivered quantity, proof-of-delivery determination, customer mapping, or an automatic inventory correction. Later returns and delivery state changes must be validated separately. Shipment status is a current value while the SHIP ledger history is anchored.
+- No schema migration or mutation permission needed; existing read permission and warehouse boundaries apply.
+- Verification: SQL Server real tracked-lot shipment dispatch + forged/orphan reference exclusion + anchor and filter isolation; frontend Vietnamese display, empty state, truncation, and explicit filter reset; API JSON contract.
+- Keep INV-10 as `foundation` pending canonical Receipt→QC→Move→Pick→Shipment→Return/Recall causal ancestry and real browser/staging SQL/API evidence.
+
+## SQL integration fixture correction (CI 37920211055)
+- The new real dispatch scenario inserts a tracked-lot inventory stock before creating picking/allocation.
+- The shared test helper now scans the **exact LotNumber / SerialNumber returned by the assigned PickingTaskLine** when present. Existing untracked scenarios continue passing null, so no production scan validation is weakened.
+- Root cause from failed Application integration: `PICK_WRONG_LOT` because the previous fixture omitted LotNumber. The corrected fixture exercises the actual canonical tracking contract.
+- Production PickingService and shipment dispatch rules remain unchanged. Rerun on the next commit is required to establish PASS.

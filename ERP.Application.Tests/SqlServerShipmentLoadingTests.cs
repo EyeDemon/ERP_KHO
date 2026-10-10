@@ -386,6 +386,258 @@ public sealed class SqlServerShipmentLoadingTests
         finally { await CleanupAsync(fixture); }
     }
 
+
+    [SqlServerFact]
+    public async Task Traceability_TrackedShipmentExposure_UsesActualDispatchLedgerAndIgnoresOrphans()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            string lotNumber;
+            await using (var tracked = CreateContext())
+            {
+                var lot = new InventoryLot
+                {
+                    ProductId = fixture.ProductId,
+                    LotNumber = "SHIPLOT-" + fixture.Suffix,
+                    ReceivedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                };
+                tracked.InventoryLots.Add(lot);
+                await tracked.SaveChangesAsync();
+                lotNumber = lot.LotNumber;
+                var stock = await tracked.InventoryStocks.SingleAsync(x =>
+                    x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+                stock.LotId = lot.Id;
+                await tracked.SaveChangesAsync();
+            }
+
+            var prepared = await PrepareDispatchedShipmentAsync(fixture);
+            await using var verify = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
+                verify, new WarehouseAuthorizationService(verify, new CurrentUser(fixture.UserId)));
+
+            var posted = await verify.InventoryTransactions.AsNoTracking().SingleAsync(x =>
+                x.TransactionType == TransactionType.Ship &&
+                x.ReferenceType == "Shipment" && x.ReferenceId == prepared.Prepared.ShipmentId);
+            posted.LotId.Should().NotBeNull();
+            posted.Quantity.Should().Be(10m);
+
+            var result = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
+            var exposure = result.ShipmentExposures.Should().ContainSingle().Which;
+            exposure.ShipmentId.Should().Be(prepared.Prepared.ShipmentId);
+            exposure.WarehouseId.Should().Be(fixture.WarehouseId);
+            exposure.ShipmentCode.Should().NotBeNullOrWhiteSpace();
+            exposure.ShipmentStatus.Should().Be(nameof(ShipmentStatus.Dispatched));
+            exposure.DispatchedAt.Should().NotBeNull();
+            exposure.DispatchedQuantity.Should().Be(10m);
+            exposure.LedgerEventCount.Should().Be(1);
+            exposure.LastTransactionId.Should().Be(posted.Id);
+            result.ShipmentExposuresTruncated.Should().BeFalse();
+
+            // Linked records must be the canonical Shipment -> Packing ->
+            // Picking -> Allocation chain and the same SHIP ledger bucket.
+            var pickEvidence = result.ShipmentPickingEvidence.Should().ContainSingle().Which;
+            pickEvidence.ShipmentId.Should().Be(prepared.Prepared.ShipmentId);
+            pickEvidence.ShipmentCode.Should().Be(exposure.ShipmentCode);
+            pickEvidence.WarehouseId.Should().Be(fixture.WarehouseId);
+            pickEvidence.PackingSessionId.Should().BeGreaterThan(0);
+            pickEvidence.PackingSessionCode.Should().NotBeNullOrWhiteSpace();
+            pickEvidence.PickingTaskId.Should().BeGreaterThan(0);
+            pickEvidence.PickingTaskCode.Should().NotBeNullOrWhiteSpace();
+            pickEvidence.PickingTaskLineId.Should().BeGreaterThan(0);
+            pickEvidence.AllocationId.Should().BeGreaterThan(0);
+            pickEvidence.SourceLocationCode.Should().Be(fixture.LocationCode);
+            pickEvidence.PickedQuantity.Should().Be(10m);
+            result.ShipmentPickingEvidenceTruncated.Should().BeFalse();
+
+            var huEvidence = result.ShipmentHuEvidence.Should().ContainSingle().Which;
+            huEvidence.ShipmentId.Should().Be(prepared.Prepared.ShipmentId);
+            huEvidence.WarehouseId.Should().Be(fixture.WarehouseId);
+            huEvidence.PickingTaskLineId.Should().Be(pickEvidence.PickingTaskLineId);
+            huEvidence.RootHandlingUnitId.Should().Be(prepared.Prepared.ParentHuId);
+            huEvidence.RootHandlingUnitCode.Should().Be("PARENT-" + fixture.Suffix);
+            huEvidence.ContentHandlingUnitId.Should().Be(prepared.Prepared.ChildHuId);
+            huEvidence.ContentHandlingUnitCode.Should().Be("CHILD-" + fixture.Suffix);
+            huEvidence.ContentHandlingUnitBarcode.Should().Be(prepared.Prepared.ChildHuBarcode);
+            huEvidence.ParentHandlingUnitId.Should().Be(prepared.Prepared.ParentHuId);
+            huEvidence.HierarchyPath.Should().Be(
+                "PARENT-" + fixture.Suffix + " → CHILD-" + fixture.Suffix);
+            huEvidence.PackedQuantity.Should().Be(10m);
+            result.ShipmentHuEvidenceTruncated.Should().BeFalse();
+
+            // ExportReceipt is a documented outbound business source, not a
+            // claim that a product/lot came from an inbound receipt.
+            var exportDoc = await verify.Shipments.AsNoTracking()
+                .Where(x => x.Id == prepared.Prepared.ShipmentId)
+                .Select(x => new { x.SourceId, x.SourceType }).SingleAsync();
+            exportDoc.SourceType.Should().Be("ExportReceipt");
+            exportDoc.SourceId.Should().NotBeNull();
+            var source = result.ShipmentExportSources.Should().ContainSingle().Which;
+            source.ShipmentId.Should().Be(prepared.Prepared.ShipmentId);
+            source.ShipmentCode.Should().Be(exposure.ShipmentCode);
+            source.WarehouseId.Should().Be(fixture.WarehouseId);
+            source.PickingTaskId.Should().Be(pickEvidence.PickingTaskId);
+            source.ExportReceiptId.Should().Be(exportDoc.SourceId!.Value);
+            source.ExportReceiptCode.Should().StartWith("EXP-");
+            source.ExportReceiptDispatchedAt.Should().NotBeNull();
+            source.ExportReceiptProductQuantity.Should().Be(10m);
+            result.ShipmentExportSourcesTruncated.Should().BeFalse();
+
+            // An altered Picking source reference must fail closed even
+            // though the shipment and SHIP ledger still exist.
+            await using (var mismatch = CreateContext())
+            {
+                var picking = await mismatch.PickingTasks.SingleAsync(
+                    x => x.Id == pickEvidence.PickingTaskId);
+                picking.SourceId = int.MaxValue;
+                await mismatch.SaveChangesAsync();
+            }
+            var inconsistentSource = await query.TraceAsync(productId: fixture.ProductId,
+                lotNumber: lotNumber, limit: 20);
+            inconsistentSource.ShipmentExportSources.Should().BeEmpty();
+            inconsistentSource.ShipmentExposures.Should().ContainSingle();
+            await using (var restore = CreateContext())
+            {
+                var picking = await restore.PickingTasks.SingleAsync(
+                    x => x.Id == pickEvidence.PickingTaskId);
+                picking.SourceId = source.ExportReceiptId;
+                await restore.SaveChangesAsync();
+            }
+
+            // Receipt status is a separate persisted business gate. A legacy
+            // or corrupted non-dispatched source cannot be represented as
+            // canonical dispatched provenance just because IDs match.
+            await using (var mismatch = CreateContext())
+            {
+                var receipt = await mismatch.ExportReceipts.SingleAsync(
+                    x => x.Id == source.ExportReceiptId);
+                receipt.Status = ReceiptStatus.Approved;
+                await mismatch.SaveChangesAsync();
+            }
+            var unpostedSource = await query.TraceAsync(productId: fixture.ProductId,
+                lotNumber: lotNumber, limit: 20);
+            unpostedSource.ShipmentExportSources.Should().BeEmpty();
+            await using (var restore = CreateContext())
+            {
+                var receipt = await restore.ExportReceipts.SingleAsync(
+                    x => x.Id == source.ExportReceiptId);
+                receipt.Status = ReceiptStatus.Dispatched;
+                await restore.SaveChangesAsync();
+            }
+
+            // A forged shipment reference in the immutable ledger alone is
+            // never sufficient proof that a canonical Shipment exists.
+            await using (var orphan = CreateContext())
+            {
+                orphan.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                    LocationId = fixture.LocationId, LotId = posted.LotId,
+                    CreatedBy = fixture.UserId, TransactionType = TransactionType.Ship,
+                    InventoryStatus = InventoryStatus.Available, Quantity = 99,
+                    ReferenceType = "Shipment", ReferenceId = int.MaxValue,
+                    TransactionDate = DateTime.UtcNow
+                });
+                await orphan.SaveChangesAsync();
+            }
+
+            var afterOrphan = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
+            afterOrphan.ShipmentExposures.Should().ContainSingle();
+            afterOrphan.ShipmentExposures[0].DispatchedQuantity.Should().Be(10m);
+            afterOrphan.ShipmentExportSources.Should().ContainSingle();
+            afterOrphan.ShipmentExportSources[0].ExportReceiptId.Should()
+                .Be(source.ExportReceiptId);
+            afterOrphan.ShipmentPickingEvidence.Should().ContainSingle();
+            afterOrphan.ShipmentPickingEvidence[0].PickingTaskLineId.Should()
+                .Be(pickEvidence.PickingTaskLineId);
+            afterOrphan.ShipmentHuEvidence.Should().ContainSingle();
+            afterOrphan.ShipmentHuEvidence[0].RootHandlingUnitId.Should()
+                .Be(prepared.Prepared.ParentHuId);
+
+            // An unassigned root with otherwise matching packed Picking
+            // content is not proof that this HU boarded this Shipment.
+            await using (var orphanHuContext = CreateContext())
+            {
+                var stray = new HandlingUnit
+                {
+                    PackingSessionId = pickEvidence.PackingSessionId,
+                    WarehouseId = fixture.WarehouseId,
+                    HuCode = "STRAY-" + fixture.Suffix,
+                    Barcode = "STRAY-" + fixture.Suffix,
+                    Type = HandlingUnitType.Carton,
+                    Status = HandlingUnitStatus.Shipped,
+                    CreatedBy = fixture.UserId
+                };
+                orphanHuContext.HandlingUnits.Add(stray);
+                await orphanHuContext.SaveChangesAsync();
+                orphanHuContext.HandlingUnitContents.Add(new HandlingUnitContent
+                {
+                    HandlingUnitId = stray.Id,
+                    PickingTaskLineId = pickEvidence.PickingTaskLineId,
+                    ProductId = fixture.ProductId,
+                    Quantity = 1m,
+                    PackedBy = fixture.UserId
+                });
+                await orphanHuContext.SaveChangesAsync();
+            }
+            var afterStrayHu = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber, limit: 20);
+            afterStrayHu.ShipmentHuEvidence.Should().ContainSingle();
+            afterStrayHu.ShipmentHuEvidence[0].HierarchyPath.Should()
+                .Be(huEvidence.HierarchyPath);
+
+            var anchored = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber,
+                limit: 20, eventAnchorId: result.EventAnchorId);
+            anchored.ShipmentExposures.Should().ContainSingle();
+            anchored.ShipmentExposures[0].LastTransactionId.Should().Be(posted.Id);
+            anchored.ShipmentExportSources.Should().ContainSingle();
+            anchored.ShipmentExportSources[0].PickingTaskId.Should()
+                .Be(source.PickingTaskId);
+            anchored.ShipmentPickingEvidence.Should().ContainSingle();
+            anchored.ShipmentPickingEvidence[0].AllocationId.Should()
+                .Be(pickEvidence.AllocationId);
+            anchored.ShipmentHuEvidence.Should().ContainSingle();
+            anchored.ShipmentHuEvidence[0].ContentHandlingUnitId.Should()
+                .Be(prepared.Prepared.ChildHuId);
+
+            var nonexistentLot = await query.TraceAsync(productId: fixture.ProductId,
+                lotNumber: lotNumber + "-other", limit: 20);
+            nonexistentLot.ShipmentExposures.Should().BeEmpty();
+            nonexistentLot.ShipmentPickingEvidence.Should().BeEmpty();
+            nonexistentLot.ShipmentHuEvidence.Should().BeEmpty();
+            nonexistentLot.ShipmentExportSources.Should().BeEmpty();
+            var untracked = await query.TraceAsync(
+                warehouseId: fixture.WarehouseId, limit: 20);
+            untracked.ShipmentExposures.Should().BeEmpty();
+            untracked.ShipmentPickingEvidence.Should().BeEmpty();
+            untracked.ShipmentHuEvidence.Should().BeEmpty();
+            untracked.ShipmentExportSources.Should().BeEmpty();
+            var exactDocument = await query.TraceAsync(
+                productId: fixture.ProductId, lotNumber: lotNumber,
+                referenceType: "Shipment", referenceId: prepared.Prepared.ShipmentId, limit: 20);
+            exactDocument.ShipmentExposures.Should().BeEmpty();
+            exactDocument.ShipmentPickingEvidence.Should().BeEmpty();
+            exactDocument.ShipmentHuEvidence.Should().BeEmpty();
+            exactDocument.ShipmentExportSources.Should().BeEmpty();
+
+            // Losing the warehouse assignment after displaying a result
+            // must fail closed on the next query, including canonical links.
+            await using (var revoke = CreateContext())
+                await revoke.UserWarehouses.Where(x =>
+                    x.UserId == fixture.UserId &&
+                    x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+            var denied = () => query.TraceAsync(
+                warehouseId: fixture.WarehouseId, productId: fixture.ProductId,
+                lotNumber: lotNumber, limit: 20, eventAnchorId: result.EventAnchorId);
+            await denied.Should().ThrowAsync<ERP.Application.Exceptions.NotFoundException>();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task PostDispatchDeliveryLifecycle_DoesNotChangeInventoryOrCreateSecondShipLedger()
     {
@@ -836,6 +1088,8 @@ public sealed class SqlServerShipmentLoadingTests
                 TaskLineId = started.Lines.Single().Id,
                 LocationBarcode = fixture.LocationCode,
                 ProductBarcode = fixture.ProductCode,
+                LotNumber = started.Lines.Single().LotNumber,
+                SerialNumber = started.Lines.Single().SerialNumber,
                 Quantity = 10,
                 RowVersion = started.RowVersion!
             });
@@ -1062,6 +1316,7 @@ public sealed class SqlServerShipmentLoadingTests
             .ExecuteDeleteAsync();
         await db.ExportReceipts.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
         await db.InventoryStocks.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
+        await db.InventoryLots.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.UserWarehouses.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
         await db.Products.Where(x => x.Id == fixture.ProductId).ExecuteDeleteAsync();
         await db.Units.Where(x => x.Id == fixture.UnitId).ExecuteDeleteAsync();

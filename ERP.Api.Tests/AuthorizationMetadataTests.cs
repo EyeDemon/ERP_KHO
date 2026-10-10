@@ -333,6 +333,9 @@ namespace ERP.Api.Tests
         }
 
         [Theory]
+        [InlineData("ReversalReasons", AppPermissions.InventoryLedgerRead)]
+        [InlineData("ReversalWarehouses", AppPermissions.InventoryLedgerRead)]
+        [InlineData("Candidates", AppPermissions.InventoryLedgerRead)]
         [InlineData("Reverse", AppPermissions.InventoryReversalCreate)]
         [InlineData("Trace", AppPermissions.InventoryTraceabilityRead)]
         public void InventoryReversalTraceabilityEndpoints_RequireExactCapability(string methodName, string permission)
