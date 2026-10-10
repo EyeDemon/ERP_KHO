@@ -479,6 +479,23 @@
     font-size: 10px;
   }
 
+  /* Keep the full demo warning readable without widening narrow mobile viewports. */
+  .topbar-actions {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .runtime-badge {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+  }
+
+  .topbar-title {
+    overflow-wrap: anywhere;
+  }
+
   .app-content {
     padding: 12px;
   }
