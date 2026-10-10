@@ -472,6 +472,7 @@
 
   .topbar-title {
     font-size: 15px;
+    overflow-wrap: anywhere;
   }
 
   .runtime-badge,
@@ -507,10 +508,6 @@
     white-space: normal;
     overflow-wrap: anywhere;
     line-height: 1.35;
-  }
-
-  .topbar-title {
-    overflow-wrap: anywhere;
   }
 
   .app-content {
