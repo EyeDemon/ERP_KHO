@@ -64,3 +64,10 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - Khi một cặp **chỉ có bucket ngoài AVAILABLE và không có lịch sử Ledger**, kết quả AVAILABLE tổng quan là `Indeterminate` với Expected/Difference `null`, **không** giả tạo `Match` từ phép tính 0−0. `UnclassifiedLedgerEventCount=0` vẫn có thể xảy ra: thiếu Ledger khác với Ledger không phân loại được.
 - Phép cộng tồn AVAILABLE của trang chuyển sang `GROUP BY` SQL theo đúng cặp kho/sản phẩm, có đếm bucket theo AVAILABLE và trạng thái khác; không materialize toàn bộ bucket lên server. Áp dụng `GetAccessibleWarehouseIdsAsync` hoặc `EnsureWarehouseAccessAsync` **trước** tất cả truy vấn stock và ledger; không mở quyền kho.
 - Regression InMemory kiểm tra hiển thị, liên kết điều tra và kho bị cấm; SQL Server integration kiểm tra cặp legacy chỉ có QC stock sau phép đổi trạng thái trong fixture. Không sửa Ledger/Balance production, không rebuild và không cập nhật Notion.
+
+## INV-11 — Kết luận toàn bộ 8 trạng thái tại danh sách (10/10/2026)
+
+- Kết quả tổng quan có `allStatusCurrentQuantity`, `allStatusExpectedQuantity`, `allStatusDifference` và `allStatusStatus`, độc lập với cột legacy AVAILABLE. Chỉ `Match` khi từng trạng thái đối chiếu khớp; tổng toàn kho bằng nhau không đủ (QC +1 và Quarantine -1 vẫn `Mismatch`).
+- SQL aggregate buckets theo cặp kho–sản phẩm–trạng thái, có ủy quyền kho và giới hạn trang; Ledger nhóm SQL theo loại/trạng thái/nguồn-đích, StatusChange giảm ở nguồn và tăng ở đích, không double count. Không tải tất cả bucket.
+- Các lịch sử chưa phân loại, trạng thái stock không hỗ trợ hoặc chỉ có bucket ngoài AVAILABLE nhưng không có Ledger phải là `Indeterminate`, Expected/Difference là null. Giao diện tiếng Việt hiển thị nhãn AVAILABLE riêng với kết luận 8 trạng thái, có kiểm tra JSON fail-closed.
+- Cảnh báo: SQL Ledger và tồn hiện tại không cùng snapshot; đây là công cụ **chỉ đọc** để điều tra, không phê duyệt điều chỉnh hay tự động rebuild. Regression in-memory, SQL Server và Vitest bao gồm tổng 0 nhưng hai trạng thái lệch bù trừ; Notion và dữ liệu production không bị sửa.

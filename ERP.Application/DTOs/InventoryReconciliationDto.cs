@@ -117,6 +117,12 @@ namespace ERP.Application.DTOs
         // nullable values serialize as JSON null, never invented zero.
         public decimal? ExpectedQuantity { get; set; }
         public decimal? Difference { get; set; }
+        // All eight statuses, independent of legacy AVAILABLE summary.
+        // A zero grand-total difference does NOT mean each status matches.
+        public decimal AllStatusCurrentQuantity { get; set; }
+        public decimal? AllStatusExpectedQuantity { get; set; }
+        public decimal? AllStatusDifference { get; set; }
+        public string AllStatusStatus { get; set; } = "Indeterminate";
         public int UnclassifiedLedgerEventCount { get; set; }
         public decimal StatusChangeInQuantity { get; set; }
         public decimal StatusChangeOutQuantity { get; set; }

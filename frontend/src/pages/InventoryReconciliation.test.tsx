@@ -39,6 +39,47 @@ describe('InventoryReconciliation', () => {
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
+
+  it('shows status mismatch even though AVAILABLE and grand total both match', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : { items: [{
+          warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+          productCode: 'SKU-OFFSET', productName: 'Sản phẩm bù trừ',
+          currentQuantity: 10, expectedQuantity: 10, difference: 0,
+          status: 'Match', allStatusCurrentQuantity: 14,
+          allStatusExpectedQuantity: 14, allStatusDifference: 0,
+          allStatusStatus: 'Mismatch', importQuantity: 10, exportQuantity: 0,
+          transferInQuantity: 0, transferOutQuantity: 0,
+          adjustmentIncreaseQuantity: 0, adjustmentDecreaseQuantity: 0,
+        }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText('SKU-OFFSET')).toBeTruthy();
+    expect(view.getByText('Lệch theo trạng thái')).toBeTruthy();
+    expect(view.getByText('Lệch 8 trạng thái trang hiện tại').previousSibling?.textContent).toBe('1');
+    expect(view.getByText('Chênh lệch tổng: 0')).toBeTruthy();
+  });
+
+  it('rejects contradictory eight-status totals from API', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : { items: [{
+          warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+          productCode: 'SKU-BAD', productName: 'Không hợp lệ',
+          currentQuantity: 10, expectedQuantity: 10, difference: 0,
+          status: 'Match', allStatusCurrentQuantity: 14,
+          allStatusExpectedQuantity: 12, allStatusDifference: 0,
+          allStatusStatus: 'Match', importQuantity: 10, exportQuantity: 0,
+          transferInQuantity: 0, transferOutQuantity: 0,
+          adjustmentIncreaseQuantity: 0, adjustmentDecreaseQuantity: 0,
+        }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText(/Máy chủ trả dữ liệu đối chiếu không hợp lệ/)).toBeTruthy();
+    expect(view.queryByText('SKU-BAD')).toBeNull();
+  });
+
   it('renders reconciliation rows and highlights mismatches', async () => {
     vi.mocked(apiClient.get).mockImplementation((url: string) => {
       if (url === '/api/InventoryReconciliation/warehouses') {

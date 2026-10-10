@@ -471,13 +471,11 @@ namespace ERP.Infrastructure.Queries
             // results are bounded by the current page's product/warehouse sets.
             var stocks = await allStatusStockQuery
                 .Where(s => productIds.Contains(s.ProductId) && warehouseIds.Contains(s.WarehouseId))
-                .GroupBy(s => new { s.ProductId, s.WarehouseId })
+                .GroupBy(s => new { s.ProductId, s.WarehouseId, s.Status })
                 .Select(g => new
                 {
-                    g.Key.ProductId, g.Key.WarehouseId,
-                    AvailableQuantity = g.Sum(s => s.Status == InventoryStatus.Available ? s.Quantity : 0m),
-                    AvailableBuckets = g.Count(s => s.Status == InventoryStatus.Available),
-                    OtherStatusBuckets = g.Count(s => s.Status != InventoryStatus.Available)
+                    g.Key.ProductId, g.Key.WarehouseId, g.Key.Status,
+                    Quantity = g.Sum(s => s.Quantity), Buckets = g.Count()
                 }).ToListAsync();
 
             var transactions = await transactionQuery
@@ -500,9 +498,12 @@ namespace ERP.Infrastructure.Queries
 
             var results = pagedPairs.Select(pair => 
             {
-                var stock = stocks.SingleOrDefault(s =>
-                    s.ProductId == pair.ProductId && s.WarehouseId == pair.WarehouseId);
-                var currentQuantity = stock?.AvailableQuantity ?? 0m;
+                var pairStocks = stocks.Where(s =>
+                    s.ProductId == pair.ProductId && s.WarehouseId == pair.WarehouseId).ToList();
+                var currentQuantity = pairStocks.Where(s => s.Status == InventoryStatus.Available)
+                    .Sum(s => s.Quantity);
+                var allStatusCurrent = pairStocks.Sum(s => s.Quantity);
+                var invalidStockStatus = pairStocks.Any(s => !Enum.IsDefined(s.Status));
 
                 var stockTransactions = transactions
                     .Where(t => t.ProductId == pair.ProductId && t.WarehouseId == pair.WarehouseId)
@@ -554,8 +555,8 @@ namespace ERP.Infrastructure.Queries
                 // 0 - 0 = 0. Preserve it in the report as Indeterminate,
                 // with read-only investigation available for all statuses.
                 var lacksLedgerForOtherStatusOnly =
-                    (stock?.OtherStatusBuckets ?? 0) > 0 &&
-                    (stock?.AvailableBuckets ?? 0) == 0 &&
+                    pairStocks.Any(s => s.Status != InventoryStatus.Available) &&
+                    !pairStocks.Any(s => s.Status == InventoryStatus.Available) &&
                     stockTransactions.Count == 0;
                 decimal? expectedQuantity =
                     unclassifiedCount > 0 || lacksLedgerForOtherStatusOnly ? null :
@@ -574,6 +575,36 @@ namespace ERP.Infrastructure.Queries
                 string status = !difference.HasValue ? "Indeterminate" :
                     difference.Value == 0m ? "Match" : "Mismatch";
 
+                // Per-status matching is essential: two discrepant status
+                // buckets can cancel in the warehouse-wide numeric total.
+                decimal? allStatusExpected = null;
+                decimal? allStatusDifference = null;
+                var allStatusStatus = "Indeterminate";
+                if (unclassifiedCount == 0 && !invalidStockStatus &&
+                    !lacksLedgerForOtherStatusOnly)
+                {
+                    var expectedByStatus = Enum.GetValues<InventoryStatus>()
+                        .ToDictionary(state => state, _ => 0m);
+                    foreach (var entry in stockTransactions)
+                    {
+                        if (entry.TransactionType == TransactionType.StatusChange)
+                        {
+                            expectedByStatus[entry.FromInventoryStatus!.Value] -= entry.TotalQuantity;
+                            expectedByStatus[entry.ToInventoryStatus!.Value] += entry.TotalQuantity;
+                        }
+                        else
+                        {
+                            expectedByStatus[entry.InventoryStatus] +=
+                                entry.TransactionType.ApplySign(entry.TotalQuantity);
+                        }
+                    }
+                    allStatusExpected = expectedByStatus.Values.Sum();
+                    allStatusDifference = allStatusCurrent - allStatusExpected.Value;
+                    allStatusStatus = expectedByStatus.Any(entry =>
+                        entry.Value != pairStocks.Where(s => s.Status == entry.Key)
+                            .Sum(s => s.Quantity)) ? "Mismatch" : "Match";
+                }
+
                 return new InventoryReconciliationDto
                 {
                     ProductId = pair.ProductId,
@@ -584,6 +615,10 @@ namespace ERP.Infrastructure.Queries
                     CurrentQuantity = currentQuantity,
                     ExpectedQuantity = expectedQuantity,
                     Difference = difference,
+                    AllStatusCurrentQuantity = allStatusCurrent,
+                    AllStatusExpectedQuantity = allStatusExpected,
+                    AllStatusDifference = allStatusDifference,
+                    AllStatusStatus = allStatusStatus,
                     UnclassifiedLedgerEventCount = unclassifiedCount,
                     StatusChangeInQuantity = statusChangeIn,
                     StatusChangeOutQuantity = statusChangeOut,

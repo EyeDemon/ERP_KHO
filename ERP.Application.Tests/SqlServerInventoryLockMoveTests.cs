@@ -1618,6 +1618,8 @@ public sealed class SqlServerInventoryLockMoveTests
             row.ExpectedQuantity.Should().BeNull();
             row.Difference.Should().BeNull();
             row.Status.Should().Be("Indeterminate");
+            row.AllStatusStatus.Should().Be("Indeterminate");
+            row.AllStatusExpectedQuantity.Should().BeNull();
 
             var evidence = await service.GetInvestigationAsync(
                 fixture.WarehouseId, fixture.ProductId,
@@ -1627,6 +1629,54 @@ public sealed class SqlServerInventoryLockMoveTests
             evidence.AllStatusCurrentQuantity.Should().Be(10m);
             evidence.AllStatusExpectedQuantity.Should().Be(0m);
             evidence.AllStatusDifference.Should().Be(10m);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+
+    [SqlServerFact]
+    public async Task Reconciliation_SqlAllStatusDetectsOffsettingQcAndQuarantineDifferences()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var seed = CreateContext())
+            {
+                seed.InventoryStocks.AddRange(
+                    new InventoryStock { ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        Status = InventoryStatus.QcHold, Quantity = 3m },
+                    new InventoryStock { ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        Status = InventoryStatus.Quarantine, Quantity = 1m });
+                seed.InventoryTransactions.AddRange(
+                    new InventoryTransaction { ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.Import, Quantity = 10m },
+                    new InventoryTransaction { ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.QcHold,
+                        TransactionType = TransactionType.Import, Quantity = 2m },
+                    new InventoryTransaction { ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Quarantine,
+                        TransactionType = TransactionType.Import, Quantity = 2m });
+                await seed.SaveChangesAsync();
+            }
+            await using var read = CreateContext();
+            var query = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var row = (await query.GetReconciliationsAsync(fixture.WarehouseId, fixture.ProductId, null))
+                .Items.Should().ContainSingle().Subject;
+            row.Status.Should().Be("Match");
+            row.AllStatusCurrentQuantity.Should().Be(14m);
+            row.AllStatusExpectedQuantity.Should().Be(14m);
+            row.AllStatusDifference.Should().Be(0m);
+            row.AllStatusStatus.Should().Be("Mismatch");
+            var details = await query.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId);
+            details.AllStatusDifference.Should().Be(0m);
+            details.StatusBreakdown.Single(x => x.Status == nameof(InventoryStatus.QcHold))
+                .Difference.Should().Be(1m);
+            details.StatusBreakdown.Single(x => x.Status == nameof(InventoryStatus.Quarantine))
+                .Difference.Should().Be(-1m);
         }
         finally { await CleanupAsync(fixture); }
     }

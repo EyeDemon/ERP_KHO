@@ -599,7 +599,13 @@ namespace ERP.Application.Tests
             // All eight statuses are scoped to warehouse 1. Warehouse 2 data
             // must not contaminate a warehouse-specific result for product 1.
             evidence.AllStatusCurrentQuantity.Should().Be(12m);
-            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Once);
+            var summary = (await query.GetReconciliationsAsync(1, 1, null))
+                .Items.Should().ContainSingle().Subject;
+            summary.AllStatusCurrentQuantity.Should().Be(12m);
+            summary.AllStatusExpectedQuantity.Should().Be(12m);
+            summary.AllStatusDifference.Should().Be(0m);
+            summary.AllStatusStatus.Should().Be("Match");
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(2));
         }
 
 
@@ -862,6 +868,9 @@ namespace ERP.Application.Tests
             qc.ExpectedQuantity.Should().BeNull();
             qc.Difference.Should().BeNull();
             qc.Status.Should().Be("Indeterminate");
+            qc.AllStatusStatus.Should().Be("Indeterminate");
+            qc.AllStatusCurrentQuantity.Should().Be(5m);
+            qc.AllStatusExpectedQuantity.Should().BeNull();
             qc.UnclassifiedLedgerEventCount.Should().Be(0);
 
             // It is still reachable through the read-only detail flow.
@@ -898,6 +907,29 @@ namespace ERP.Application.Tests
             page.Items.Should().OnlyContain(x => x.WarehouseId == 1);
             page.Items.Should().NotContain(x => x.ProductId == 4);
             authorization.Verify(x => x.GetAccessibleWarehouseIdsAsync(default), Times.Once);
+        }
+
+
+        [Fact]
+        public async Task GetReconciliations_AllStatusDetectsOffsettingQcQuarantineDifference()
+        {
+            using var db = await GetDbContextAsync();
+            db.InventoryStocks.AddRange(
+                new InventoryStock { ProductId = 1, WarehouseId = 1, Status = InventoryStatus.QcHold, Quantity = 3m },
+                new InventoryStock { ProductId = 1, WarehouseId = 1, Status = InventoryStatus.Quarantine, Quantity = 1m });
+            db.InventoryTransactions.AddRange(
+                new InventoryTransaction { ProductId = 1, WarehouseId = 1, InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.Import, Quantity = 2m },
+                new InventoryTransaction { ProductId = 1, WarehouseId = 1, InventoryStatus = InventoryStatus.Quarantine,
+                    TransactionType = TransactionType.Import, Quantity = 2m });
+            await db.SaveChangesAsync();
+            var row = (await new InventoryReconciliationQueryService(db)
+                .GetReconciliationsAsync(1, 1, null)).Items.Should().ContainSingle().Subject;
+            row.Status.Should().Be("Match");
+            row.AllStatusCurrentQuantity.Should().Be(16m);
+            row.AllStatusExpectedQuantity.Should().Be(16m);
+            row.AllStatusDifference.Should().Be(0m);
+            row.AllStatusStatus.Should().Be("Mismatch");
         }
 
         [Fact]

@@ -32,6 +32,10 @@ interface ReconciliationRow {
   currentQuantity: number;
   expectedQuantity: number | null;
   difference: number | null;
+  allStatusCurrentQuantity?: number;
+  allStatusExpectedQuantity?: number | null;
+  allStatusDifference?: number | null;
+  allStatusStatus?: 'Match' | 'Mismatch' | 'Indeterminate';
   unclassifiedLedgerEventCount?: number;
   statusChangeInQuantity?: number;
   statusChangeOutQuantity?: number;
@@ -156,6 +160,29 @@ const isValidReconciliationPage = (
       );
       if (Math.abs((row.currentQuantity - row.expectedQuantity) - row.difference) > tolerance)
         return false;
+    }
+
+    // Older demo fixtures omit all-status totals. A partial new response,
+    // inconsistent summary, or false Match must fail closed.
+    const allFields = [row.allStatusCurrentQuantity, row.allStatusExpectedQuantity,
+      row.allStatusDifference, row.allStatusStatus];
+    if (allFields.some(value => value !== undefined)) {
+      if (allFields.some(value => value === undefined) ||
+          !isFiniteQuantity(row.allStatusCurrentQuantity) ||
+          !isNullableQuantity(row.allStatusExpectedQuantity) ||
+          !isNullableQuantity(row.allStatusDifference) ||
+          !['Match', 'Mismatch', 'Indeterminate'].includes(row.allStatusStatus ?? '') ||
+          ((row.allStatusStatus === 'Indeterminate') !==
+            (row.allStatusExpectedQuantity === null && row.allStatusDifference === null)) ||
+          (row.allStatusStatus === 'Match' && row.allStatusDifference !== 0) ||
+          ((row.unclassifiedLedgerEventCount ?? 0) > 0 &&
+            row.allStatusStatus !== 'Indeterminate')) return false;
+      if (row.allStatusExpectedQuantity != null && row.allStatusDifference != null) {
+        const tolerance = Number.EPSILON * 8 * Math.max(
+          1, Math.abs(row.allStatusCurrentQuantity), Math.abs(row.allStatusExpectedQuantity));
+        if (Math.abs((row.allStatusCurrentQuantity - row.allStatusExpectedQuantity) -
+            row.allStatusDifference) > tolerance) return false;
+      }
     }
 
     // Optional in older read models; if present they must never format as NaN.
@@ -494,7 +521,8 @@ export default function InventoryReconciliation() {
         description="So sánh operational balance với immutable ledger để phát hiện chênh lệch. Work center này chỉ đọc; mọi sửa sai phải đi qua transaction có kiểm soát."
       />
       <p role="note" className="ui-muted-text">
-        Phạm vi hiện tại chỉ đối chiếu trạng thái AVAILABLE theo cặp kho / sản phẩm.
+        Danh sách hiển thị riêng số liệu AVAILABLE và kết luận đối chiếu cả 8 trạng thái.
+        Tồn hiện tại không phải cùng snapshot với Ledger, nên kết quả chỉ dùng điều tra.
         Chưa bao phủ toàn bộ Owner, Handling Unit, Reserved, Allocated hay quy trình khôi phục số dư có phê duyệt.
         Kết quả này chỉ để phát hiện sai lệch, không tự động sửa Ledger hoặc Balance.
       </p>
@@ -512,6 +540,9 @@ export default function InventoryReconciliation() {
         <UiMetric value={numberFormat.format(mismatchCount)} label="Mismatch trang hiện tại" />
         <UiMetric value={numberFormat.format(indeterminateCount)} label="Chưa xác định trang hiện tại" />
         <UiMetric value={numberFormat.format(absoluteDifference)} label="Độ lệch đã xác định" />
+        {!demoRuntime && <UiMetric
+          value={numberFormat.format(currentRows.filter(row => row.allStatusStatus === 'Mismatch').length)}
+          label="Lệch 8 trạng thái trang hiện tại" />}
       </UiMetricGrid>
 
       <form noValidate onSubmit={submit}>
@@ -552,21 +583,25 @@ export default function InventoryReconciliation() {
                   <th>Tồn hiện tại</th>
                   <th>Ledger kỳ vọng</th>
                   <th>Chênh lệch</th>
-                  <th>Trạng thái</th>
+                  <th>Trạng thái AVAILABLE</th>
+                  <th>Đối chiếu 8 trạng thái</th>
                   <th>Thành phần biến động</th>
                   <th>Bằng chứng</th>
                 </tr>
               </thead>
               <tbody>
                 {currentRows.length === 0 ? (
-                  <tr><td colSpan={8} className="reconciliation-empty">Không có dữ liệu phù hợp. Hãy thay đổi bộ lọc và thử lại.</td></tr>
+                  <tr><td colSpan={9} className="reconciliation-empty">Không có dữ liệu phù hợp. Hãy thay đổi bộ lọc và thử lại.</td></tr>
                 ) : currentRows.map(row => {
                   const matches = row.status === 'Match';
                   const indeterminate = row.status === 'Indeterminate' ||
                     row.expectedQuantity == null || row.difference == null;
                   return (
                     <tr key={row.warehouseId + '-' + row.productId}
-                      className={indeterminate ? 'reconciliation-indeterminate' : matches ? undefined : 'reconciliation-mismatch'}>
+                      className={indeterminate || row.allStatusStatus === 'Indeterminate'
+                        ? 'reconciliation-indeterminate'
+                        : !matches || row.allStatusStatus === 'Mismatch'
+                          ? 'reconciliation-mismatch' : undefined}>
                       <td>{row.warehouseName}</td>
                       <td>
                         <strong>{row.productCode}</strong>
@@ -578,6 +613,22 @@ export default function InventoryReconciliation() {
                         {row.difference == null ? 'Chưa xác định' : numberFormat.format(row.difference)}
                       </td>
                       <td><UiBadge tone={indeterminate ? 'warning' : matches ? 'success' : 'danger'}>{indeterminate ? 'Chưa xác định' : matches ? 'Khớp' : 'Lệch'}</UiBadge></td>
+                      <td>
+                        {row.allStatusStatus ? (
+                          <div className="reconciliation-movement">
+                            <UiBadge tone={row.allStatusStatus === 'Indeterminate' ? 'warning'
+                              : row.allStatusStatus === 'Match' ? 'success' : 'danger'}>
+                              {row.allStatusStatus === 'Indeterminate' ? 'Chưa xác định'
+                                : row.allStatusStatus === 'Match' ? 'Khớp tất cả' : 'Lệch theo trạng thái'}
+                            </UiBadge>
+                            <span>Tồn: {numberFormat.format(row.allStatusCurrentQuantity ?? 0)}</span>
+                            <span>Ledger: {row.allStatusExpectedQuantity == null ? 'Chưa xác định'
+                              : numberFormat.format(row.allStatusExpectedQuantity)}</span>
+                            <span>Chênh lệch tổng: {row.allStatusDifference == null ? 'Chưa xác định'
+                              : numberFormat.format(row.allStatusDifference)}</span>
+                          </div>
+                        ) : <span className="ui-muted-text">Chưa có đối chiếu 8 trạng thái</span>}
+                      </td>
                       <td>
                         <div className="reconciliation-movement">
                           <span>Nhập +{numberFormat.format(row.importQuantity)}</span>
