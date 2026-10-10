@@ -81,8 +81,9 @@ namespace ERP.Api.Tests
                 }],
                 Events = [new InventoryReconciliationEvidenceEventDto
                 {
-                    TransactionId = 32, TransactionType = "Import",
-                    Quantity = 11, SignedQuantity = 11
+                    TransactionId = 32, TransactionType = "StatusChange",
+                    InventoryStatus = "Quarantine", FromInventoryStatus = "QcHold",
+                    ToInventoryStatus = "Quarantine", Quantity = 11, SignedQuantity = 11
                 },
                 new InventoryReconciliationEvidenceEventDto
                 {
@@ -118,6 +119,12 @@ namespace ERP.Api.Tests
             status.GetProperty("statusChangeInQuantity").GetDecimal().Should().Be(3m);
             status.GetProperty("expectedQuantity").GetDecimal().Should().Be(3m);
             status.GetProperty("difference").GetDecimal().Should().Be(0m);
+            var transfer = json.GetProperty("events").EnumerateArray()
+                .Single(e => e.GetProperty("transactionType").GetString() == "StatusChange");
+            transfer.GetProperty("inventoryStatus").GetString().Should().Be("Quarantine");
+            transfer.GetProperty("fromInventoryStatus").GetString().Should().Be("QcHold");
+            transfer.GetProperty("toInventoryStatus").GetString().Should().Be("Quarantine");
+            transfer.GetProperty("signedQuantity").GetDecimal().Should().Be(11m);
             var unknownEvent = json.GetProperty("events").EnumerateArray()
                 .Single(e => e.GetProperty("transactionType").GetString() == "TransferAdjustment");
             unknownEvent.GetProperty("signedQuantity").ValueKind.Should().Be(

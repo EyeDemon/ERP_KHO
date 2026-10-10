@@ -567,9 +567,9 @@ export default function InventoryReconciliation() {
                 </p>
               )}
               <UiMetricGrid>
-                <UiMetric label="Số dư hiện tại" value={numberFormat.format(investigation.currentQuantity)} />
-                <UiMetric label="Ledger đến mốc" value={numberFormat.format(investigation.expectedQuantity)} />
-                <UiMetric label="Chênh lệch tham khảo" value={numberFormat.format(investigation.difference)} />
+                <UiMetric label="AVAILABLE · Số dư hiện tại" value={numberFormat.format(investigation.currentQuantity)} />
+                <UiMetric label="AVAILABLE · Ledger đến mốc" value={numberFormat.format(investigation.expectedQuantity)} />
+                <UiMetric label="AVAILABLE · Chênh lệch tham khảo" value={numberFormat.format(investigation.difference)} />
               </UiMetricGrid>
               {(investigation.eventsTruncated || investigation.bucketsTruncated) && (
                 <p role="status" className="ui-muted-text">

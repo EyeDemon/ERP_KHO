@@ -228,6 +228,44 @@ async function main(manifestPath) {
         assert.match(await table.innerText(), /Khả dụng/);
         assert.match(await table.innerText(), /Chờ kiểm định/);
         assert.equal(await page.getByRole('button', { name: 'Sự kiện mới hơn' }).isDisabled(), true);
+
+        // Exercise BOTH new read-only status scopes against real ASP.NET/SQL
+        // under the authenticated Chromium session. They are independent and
+        // must preserve the same warehouse/product Ledger high-water ID.
+        const holdEventsResponse = page.waitForResponse(r =>
+          /\/api\/InventoryReconciliation\/investigation\?/i.test(r.url()) &&
+          new URL(r.url()).searchParams.get('eventStatus') === 'QcHold' &&
+          r.request().method() === 'GET');
+        await page.getByLabel('Trạng thái Ledger cần xem').selectOption('QcHold');
+        const holdEvents = await holdEventsResponse;
+        assert.equal(holdEvents.status(), 200, 'QC_HOLD history remains authorized');
+        const holdHistory = await holdEvents.json();
+        assert.equal(holdHistory.eventStatus, 'QcHold', 'History query is status-scoped');
+        assert.equal(holdHistory.bucketStatus, 'Available', 'Ledger selector does not change bucket status');
+        assert.equal(holdHistory.eventAnchorId, payload.eventAnchorId, 'Immutable Ledger anchor is preserved');
+        await page.getByRole('heading', { name: /Sự kiện Ledger Chờ kiểm định/ }).waitFor();
+
+        const holdBucketsResponse = page.waitForResponse(r =>
+          /\/api\/InventoryReconciliation\/investigation\?/i.test(r.url()) &&
+          new URL(r.url()).searchParams.get('bucketStatus') === 'QcHold' &&
+          new URL(r.url()).searchParams.get('eventStatus') === 'QcHold' &&
+          r.request().method() === 'GET');
+        await page.getByLabel('Trạng thái bucket cần xem').selectOption('QcHold');
+        const holdBuckets = await holdBucketsResponse;
+        assert.equal(holdBuckets.status(), 200, 'QC_HOLD bucket query remains authorized');
+        const holdSnapshot = await holdBuckets.json();
+        assert.equal(holdSnapshot.bucketStatus, 'QcHold', 'Bucket scope matches selection');
+        assert.equal(holdSnapshot.eventStatus, 'QcHold', 'Bucket selector does not change Ledger status');
+        assert.equal(holdSnapshot.eventAnchorId, payload.eventAnchorId, 'Bucket switch keeps Ledger anchor');
+        await page.getByRole('heading', { name: /Bucket tồn Chờ kiểm định hiện tại/ }).waitFor();
+        const restoreEvents = page.waitForResponse(r =>
+          /\/api\/InventoryReconciliation\/investigation\?/i.test(r.url()) &&
+          new URL(r.url()).searchParams.get('bucketStatus') === 'QcHold' &&
+          !new URL(r.url()).searchParams.has('eventStatus'));
+        await page.getByLabel('Trạng thái Ledger cần xem').selectOption('Available');
+        assert.equal((await restoreEvents).status(), 200, 'Can return to AVAILABLE Ledger');
+        await page.getByRole('heading', { name: /Sự kiện Ledger Khả dụng/ }).waitFor();
+
         await page.getByRole('button', { name: 'Đóng hồ sơ' }).click();
         assert.equal(await table.count(), 0, 'Close removes private evidence');
         assert.equal(await trigger.evaluate(el => el === document.activeElement), true,
@@ -265,6 +303,7 @@ async function main(manifestPath) {
             'invalid ID validation and focus',
             'authorized warehouse/product evidence via real API',
             'eight rendered inventory status rows',
+            'independent authorized QC_HOLD Ledger/bucket selections preserve event anchor',
             'read-only data and close/focus restore',
             'receipt-only role blocked by UI route and API HTTP 403',
             'no page exceptions',
@@ -272,7 +311,7 @@ async function main(manifestPath) {
           ],
           actor: 'Admin and receipt-only reader on isolated SQL Server',
           statuses: [200, 403],
-          browserInteractions: 14
+          browserInteractions: 17
         };
       } finally {
         page.off('pageerror', observeError);
