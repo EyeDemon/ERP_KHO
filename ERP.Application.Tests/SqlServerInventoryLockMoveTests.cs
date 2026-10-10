@@ -1591,6 +1591,46 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+
+    [SqlServerFact]
+    public async Task Reconciliation_QcOnlyLegacyStockWithoutLedger_AppearsInListAndNotAsMatch()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var update = CreateContext())
+            {
+                var stock = await update.InventoryStocks.SingleAsync(x => x.Id == fixture.SourceStockId);
+                stock.Status = InventoryStatus.QcHold;
+                await update.SaveChangesAsync();
+            }
+            await using var read = CreateContext();
+            var authorization = new WarehouseAuthorizationService(
+                read, new CurrentUser(fixture.UserId));
+            var service = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, authorization);
+            var list = await service.GetReconciliationsAsync(
+                fixture.WarehouseId, fixture.ProductId, null);
+            var row = list.Items.Should().ContainSingle().Subject;
+            row.WarehouseId.Should().Be(fixture.WarehouseId);
+            row.ProductId.Should().Be(fixture.ProductId);
+            row.CurrentQuantity.Should().Be(0m);
+            row.ExpectedQuantity.Should().BeNull();
+            row.Difference.Should().BeNull();
+            row.Status.Should().Be("Indeterminate");
+
+            var evidence = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId,
+                bucketStatus: nameof(InventoryStatus.QcHold));
+            evidence.Buckets.Should().ContainSingle(x => x.Quantity == 10m &&
+                x.InventoryStockId == fixture.SourceStockId);
+            evidence.AllStatusCurrentQuantity.Should().Be(10m);
+            evidence.AllStatusExpectedQuantity.Should().Be(0m);
+            evidence.AllStatusDifference.Should().Be(10m);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task ReconciliationInvestigation_RealLedgerBucketEvidence_IsAuthorizedBoundedAndAnchored()
     {

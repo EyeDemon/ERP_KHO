@@ -837,6 +837,69 @@ namespace ERP.Application.Tests
             await missingProduct.Should().ThrowAsync<NotFoundException>();
         }
 
+
+        [Fact]
+        public async Task GetReconciliationsAsync_QcOnlyStockWithoutLedger_IsVisibleButNotFalselyMatched()
+        {
+            using var db = await GetDbContextAsync();
+            db.Products.Add(new Product { Id = 4, Code = "P4", Name = "QC legacy stock" });
+            db.InventoryStocks.Add(new InventoryStock
+            {
+                ProductId = 4, WarehouseId = 1,
+                Status = InventoryStatus.QcHold, Quantity = 5m
+            });
+            await db.SaveChangesAsync();
+
+            var authorization = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            authorization.Setup(x => x.GetAccessibleWarehouseIdsAsync(default))
+                .ReturnsAsync(new[] { 1 });
+            var service = new InventoryReconciliationQueryService(db, authorization.Object);
+
+            var page = await service.GetReconciliationsAsync(null, null, null);
+            page.TotalRecords.Should().Be(4);
+            var qc = page.Items.Single(x => x.ProductId == 4 && x.WarehouseId == 1);
+            qc.CurrentQuantity.Should().Be(0m);
+            qc.ExpectedQuantity.Should().BeNull();
+            qc.Difference.Should().BeNull();
+            qc.Status.Should().Be("Indeterminate");
+            qc.UnclassifiedLedgerEventCount.Should().Be(0);
+
+            // It is still reachable through the read-only detail flow.
+            authorization.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var investigation = await service.GetInvestigationAsync(1, 4,
+                bucketStatus: nameof(InventoryStatus.QcHold));
+            investigation.AllStatusCurrentQuantity.Should().Be(5m);
+            investigation.AllStatusExpectedQuantity.Should().Be(0m);
+            investigation.AllStatusDifference.Should().Be(5m);
+            investigation.Buckets.Should().ContainSingle(x => x.Quantity == 5m);
+            authorization.Verify(x => x.GetAccessibleWarehouseIdsAsync(default), Times.Once);
+            authorization.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetReconciliationsAsync_NonAvailableOnlyPairsRespectWarehouseAuthorization()
+        {
+            using var db = await GetDbContextAsync();
+            db.Products.Add(new Product { Id = 4, Code = "P4", Name = "Restricted legacy" });
+            db.InventoryStocks.Add(new InventoryStock
+            {
+                ProductId = 4, WarehouseId = 2,
+                Status = InventoryStatus.Quarantine, Quantity = 7m
+            });
+            await db.SaveChangesAsync();
+
+            var authorization = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            authorization.Setup(x => x.GetAccessibleWarehouseIdsAsync(default))
+                .ReturnsAsync(new[] { 1 });
+            var service = new InventoryReconciliationQueryService(db, authorization.Object);
+            var page = await service.GetReconciliationsAsync(null, null, null);
+            page.TotalRecords.Should().Be(3);
+            page.Items.Should().OnlyContain(x => x.WarehouseId == 1);
+            page.Items.Should().NotContain(x => x.ProductId == 4);
+            authorization.Verify(x => x.GetAccessibleWarehouseIdsAsync(default), Times.Once);
+        }
+
         [Fact]
         public async Task GetReconciliationsAsync_CalculatesCorrectExpectedQuantity()
         {

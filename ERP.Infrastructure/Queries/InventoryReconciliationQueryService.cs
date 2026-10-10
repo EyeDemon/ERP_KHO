@@ -388,7 +388,10 @@ namespace ERP.Infrastructure.Queries
             // Bound client pagination inputs before translating Skip/Take to SQL.
             var safePage = Math.Max(1, pageIndex);
             var safeSize = Math.Clamp(pageSize, 1, 100);
-            var stockQuery = _context.InventoryStocks.AsNoTracking().Where(s => s.Status == InventoryStatus.Available);
+            // Discover pairs from ALL stock statuses, including legacy QC-only
+            // buckets with no Ledger. Restrict AVAILABLE only when computing
+            // the legacy summary balance, never when choosing visible pairs.
+            var allStatusStockQuery = _context.InventoryStocks.AsNoTracking();
             // Include every status: StatusChange leaving AVAILABLE is
             // recorded against its destination status. Unknown events in
             // this warehouse/product cannot be assumed to be harmless.
@@ -400,17 +403,18 @@ namespace ERP.Infrastructure.Queries
                     // An unknown or unassigned warehouse is a 404, never a
                     // success with an empty result that could hide access errors.
                     await _warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value);
-                    stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                    allStatusStockQuery = allStatusStockQuery.Where(s => s.WarehouseId == warehouseId.Value);
                     transactionQuery = transactionQuery.Where(t => t.WarehouseId == warehouseId.Value);
                 }
                 else
                 {
                     var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
-                    stockQuery = stockQuery.Where(s => allowedWarehouseIds.Contains(s.WarehouseId));
+                    allStatusStockQuery = allStatusStockQuery.Where(s => allowedWarehouseIds.Contains(s.WarehouseId));
                     transactionQuery = transactionQuery.Where(t => allowedWarehouseIds.Contains(t.WarehouseId));
                 }
             }
-            var stockPairs = stockQuery.Select(s => new { s.ProductId, s.WarehouseId });
+            var stockQuery = allStatusStockQuery.Where(s => s.Status == InventoryStatus.Available);
+            var stockPairs = allStatusStockQuery.Select(s => new { s.ProductId, s.WarehouseId });
             var transPairs = transactionQuery.Select(t => new { t.ProductId, t.WarehouseId });
 
             var allPairsQuery = stockPairs.Union(transPairs);
@@ -462,12 +466,19 @@ namespace ERP.Infrastructure.Queries
             var productIds = pagedPairs.Select(s => s.ProductId).Distinct().ToList();
             var warehouseIds = pagedPairs.Select(s => s.WarehouseId).Distinct().ToList();
 
-            // Reuse the already-authorized base query for both second-phase
-            // reads. The paged product/warehouse cross-product must not cause
-            // raw inventory from an unrelated warehouse to be materialized.
-            var stocks = await stockQuery
+            // Aggregate in SQL instead of materializing every physical bucket.
+            // The authorization filter applies before BOTH phases. Grouped
+            // results are bounded by the current page's product/warehouse sets.
+            var stocks = await allStatusStockQuery
                 .Where(s => productIds.Contains(s.ProductId) && warehouseIds.Contains(s.WarehouseId))
-                .ToListAsync();
+                .GroupBy(s => new { s.ProductId, s.WarehouseId })
+                .Select(g => new
+                {
+                    g.Key.ProductId, g.Key.WarehouseId,
+                    AvailableQuantity = g.Sum(s => s.Status == InventoryStatus.Available ? s.Quantity : 0m),
+                    AvailableBuckets = g.Count(s => s.Status == InventoryStatus.Available),
+                    OtherStatusBuckets = g.Count(s => s.Status != InventoryStatus.Available)
+                }).ToListAsync();
 
             var transactions = await transactionQuery
                 .Where(t => productIds.Contains(t.ProductId) && warehouseIds.Contains(t.WarehouseId))
@@ -489,9 +500,9 @@ namespace ERP.Infrastructure.Queries
 
             var results = pagedPairs.Select(pair => 
             {
-                var currentQuantity = stocks
-                    .Where(s => s.ProductId == pair.ProductId && s.WarehouseId == pair.WarehouseId)
-                    .Sum(s => s.Quantity);
+                var stock = stocks.SingleOrDefault(s =>
+                    s.ProductId == pair.ProductId && s.WarehouseId == pair.WarehouseId);
+                var currentQuantity = stock?.AvailableQuantity ?? 0m;
 
                 var stockTransactions = transactions
                     .Where(t => t.ProductId == pair.ProductId && t.WarehouseId == pair.WarehouseId)
@@ -538,7 +549,16 @@ namespace ERP.Infrastructure.Queries
                     // when other positive rows hide them in an aggregate.
                     return t.NonPositiveQuantityEvents;
                 });
-                decimal? expectedQuantity = unclassifiedCount > 0 ? null :
+                // A non-AVAILABLE-only legacy stock pair without any Ledger
+                // cannot be certified as an AVAILABLE Match just because
+                // 0 - 0 = 0. Preserve it in the report as Indeterminate,
+                // with read-only investigation available for all statuses.
+                var lacksLedgerForOtherStatusOnly =
+                    (stock?.OtherStatusBuckets ?? 0) > 0 &&
+                    (stock?.AvailableBuckets ?? 0) == 0 &&
+                    stockTransactions.Count == 0;
+                decimal? expectedQuantity =
+                    unclassifiedCount > 0 || lacksLedgerForOtherStatusOnly ? null :
                     stockTransactions.Sum(t =>
                     {
                         if (t.TransactionType == TransactionType.StatusChange)

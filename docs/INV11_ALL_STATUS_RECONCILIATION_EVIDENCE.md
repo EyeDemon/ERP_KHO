@@ -57,3 +57,10 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - Nếu thấy các bản ghi này, toàn bộ kết quả Expected/Difference theo 8 trạng thái được đánh dấu `null` (chưa xác định); danh sách tổng quan trả `Indeterminate`. `UnclassifiedLedgerEventCount` chỉ tính số bản ghi có dấu sai, không đếm nhầm các bản ghi hợp lệ cùng nhóm.
 - Tổng Legacy AVAILABLE là dữ liệu tham khảo từng phần; không được tính nhóm hỗn hợp số âm/dương như đã phân loại. `AvailableLedgerExpectedIsPartial=true` cảnh báo nguồn không đủ tin cậy, không tạo đề xuất sửa tồn.
 - Regression gồm SQL Server thật, InMemory và kiểm tra cả danh sách + bằng chứng có anchor. Không thêm mutation, sửa Ledger, SQL schema/migration hoặc Notion. Vercel demo không được coi là chứng cứ staging thật.
+
+## INV-11 — Hiển thị cặp chỉ có tồn QC/Quarantine không có Ledger
+
+- Tổng quan phải lấy cặp kho–sản phẩm từ **tất cả 8 trạng thái** InventoryStocks cùng Ledger, không chỉ AVAILABLE. Các cặp legacy chỉ có bucket `QcHold`/`Quarantine` và không có sự kiện phải xuất hiện trong phân trang.
+- Khi một cặp **chỉ có bucket ngoài AVAILABLE và không có lịch sử Ledger**, kết quả AVAILABLE tổng quan là `Indeterminate` với Expected/Difference `null`, **không** giả tạo `Match` từ phép tính 0−0. `UnclassifiedLedgerEventCount=0` vẫn có thể xảy ra: thiếu Ledger khác với Ledger không phân loại được.
+- Phép cộng tồn AVAILABLE của trang chuyển sang `GROUP BY` SQL theo đúng cặp kho/sản phẩm, có đếm bucket theo AVAILABLE và trạng thái khác; không materialize toàn bộ bucket lên server. Áp dụng `GetAccessibleWarehouseIdsAsync` hoặc `EnsureWarehouseAccessAsync` **trước** tất cả truy vấn stock và ledger; không mở quyền kho.
+- Regression InMemory kiểm tra hiển thị, liên kết điều tra và kho bị cấm; SQL Server integration kiểm tra cặp legacy chỉ có QC stock sau phép đổi trạng thái trong fixture. Không sửa Ledger/Balance production, không rebuild và không cập nhật Notion.
