@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 jobs:
   preview-browser:
@@ -76,4 +77,43 @@ jobs:
                       'component': issue.get('component'),
                       'line': issue.get('line'),
                   }, ensure_ascii=False))
+          PY
+      - name: Diagnose SonarCloud GitHub check annotations (read-only)
+        if: always()
+        shell: bash
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.error, urllib.request
+          root = 'https://api.github.com/repos/' + os.environ['GH_REPOSITORY']
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': 'Bearer ' + os.environ['GH_READ_TOKEN'],
+              'X-GitHub-Api-Version': '2022-11-28',
+          }
+          def get(path):
+              req = urllib.request.Request(root + path, headers=headers)
+              with urllib.request.urlopen(req, timeout=15) as response:
+                  return json.load(response)
+          try:
+              checks = get('/commits/' + os.environ['PR_HEAD_SHA'] + '/check-runs?per_page=100')
+              sonar = [c for c in checks.get('check_runs', []) if c.get('name') == 'SonarCloud Code Analysis']
+              print('SONAR_GITHUB_CHECKS:', len(sonar))
+              for check in sonar:
+                  print('SONAR_GITHUB_STATUS:', check.get('status'), check.get('conclusion'))
+                  data = get('/check-runs/' + str(check['id']) + '/annotations?per_page=100')
+                  print('SONAR_GITHUB_ANNOTATIONS:', len(data))
+                  for issue in data:
+                      print('SONAR_GITHUB_ANNOTATION:', json.dumps({
+                          'path': issue.get('path'),
+                          'line': issue.get('start_line'),
+                          'level': issue.get('annotation_level'),
+                          'title': issue.get('title'),
+                          'message': issue.get('message'),
+                      }, ensure_ascii=False))
+          except (urllib.error.HTTPError, urllib.error.URLError, ValueError) as error:
+              print('SONAR_GITHUB_READ_BLOCKED:', type(error).__name__, getattr(error, 'code', ''))
           PY
