@@ -60,6 +60,7 @@ public class GlobalExceptionHandlingMiddleware
         {
             Success = false,
             Message = publicMessage,
+            Code = exception.Data["ErrorCode"] as string,
             StatusCode = statusCode,
             Detail = statusCode == (int)HttpStatusCode.InternalServerError ? null : publicMessage
         };

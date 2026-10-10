@@ -1,0 +1,124 @@
+import type { BlueprintModule } from './erpWmsBlueprint';
+
+export type CanonicalDocRepresentation = 'Capability-linked' | 'Platform / Governance';
+
+export interface CanonicalDocumentationRow {
+  spec: number;
+  title: string;
+  displayTitle: string;
+  category: string;
+  representation: CanonicalDocRepresentation;
+  capabilityIds: string[];
+}
+
+const canonicalSpecCatalog = `1	Business Rules & State Machine Specification\n2	Database Specification & DBML\n3	REST API & Backend Contract Specification\n4	Backend Architecture & Source Code Structure\n5	Implementation Blueprint & Codex Master Plan\n6	Test Strategy, QA Matrix & Production Readiness Checklist\n7	DevOps, CI/CD & Deployment Architecture\n8	Security, RBAC & Audit Specification\n9	Integration Architecture & Event Catalog\n10	Observability & Operations Runbook\n11	Backup, Disaster Recovery & Business Continuity\n12	Frontend & Mobile Technical Specification\n13	Reporting & Analytics Data Specification\n14	Data Migration & Go-Live Cutover Plan\n15	Architecture Decision Records (ADR)\n16	Data Dictionary & Table Catalog\n17	Permission Registry & Authorization Matrix\n18	Error Code Registry\n19	Domain Event & Integration Event Registry\n20	Configuration, Feature Flag & Reason Code Catalog\n21	API Examples & Integration Payload Cookbook\n22	Release Management & Production Deployment Checklist\n23	Production Operations Runbook & Incident Procedures\n24	Database Index, Query & Performance Catalog\n25	API Endpoint–Permission–State Matrix\n26	Test Case Catalog & Traceability Matrix\n27	Codex Execution Backlog & Feature Delivery Contract\n28	Inventory Engine Implementation Specification\n29	Inventory Ledger Posting Algorithm & Balance Projection\n30	Reservation & Allocation Engine Specification\n31	Inventory Concurrency, Locking & Idempotency Specification\n32	Reversal & Corrective Transaction Engine Specification\n33	SQL Server Migration & Inventory Core Rollout Plan\n34	Goods Receipt Posting & Inbound Execution Specification\n35	Putaway Engine & Location Assignment Specification\n36	Picking & Short Pick Resolution Engine Specification\n37	Handling Unit, Packing & Consolidation Engine Specification\n38	Shipment Loading, Dispatch & POD Specification\n39	Warehouse Transfer & In-Transit Inventory Specification\n40	Cycle Count & Inventory Adjustment Specification\n41	Inventory Status, QC Hold & Quarantine Specification\n42	Scrap, Disposal & Damaged Inventory Specification\n43	Customer Returns, RMA & Disposition Specification\n44	Replenishment & Min-Max Planning Specification\n45	Wave, Batch & Cluster Picking Specification\n46	Dock, Yard & Receiving Appointment Management Specification\n47	Cross-Docking Execution Specification\n48	Recall, Lot/Serial Traceability & Genealogy Specification\n49	Slotting Optimization & Storage Strategy Specification\n50	Task Interleaving, Labor & Shift Management Specification\n51	Business Rules Engine & Workflow Configuration Specification\n52	Kitting, Bundling & Assembly Execution Specification\n53	Value Added Services (VAS) Specification\n54	3PL & Multi-Owner Inventory Specification\n55	Consignment Inventory Specification\n56	Warehouse Billing & Charge Engine Specification\n57	Supplier Performance & Procurement Quality Specification\n58	Carrier Management & Shipment Tracking Specification\n59	Equipment & Material Handling Asset Management Specification\n60	Warehouse Calendar, Shift Capacity & Operational Planning Specification\n61	Notification, Alert & Escalation Engine Specification\n62	Document, Attachment & Evidence Management Specification\n63	Import, Export & Data Quality Framework Specification\n64	Label, GS1 & Print Architecture Specification\n65	Barcode & Scanning Standard Specification\n66	Mobile Offline, Retry & Synchronization Engine Specification\n67	Warehouse Map, Heatmap & Spatial Visualization Specification\n68	Dashboard & KPI Semantic Catalog\n69	Number Sequence & Document Numbering Engine Specification\n70	Approval Workflow Engine Specification\n71	Exception Management & Resolution Workflow Specification\n72	Backorder, Order Release & Cancellation Specification\n73	Inventory Ownership & Reclassification Specification\n74	Proof of Delivery, Delivery Failure & Shipment Completion Specification\n75	Integration Error Center & Retry Operations Specification\n76	Data Import Center & Controlled Bulk Operations Specification\n77	Inventory Freeze, Stock Lock & Operational Hold Engine Specification\n78	Expiry, Shelf-Life & FEFO Control Specification\n79	Recall Execution & Containment Workflow Specification\n80	Warehouse Task Engine & Work Queue Specification\n81	Labor Productivity, Operational SLA & Workforce KPI Catalog\n82	Inventory Snapshot, Reconciliation & Integrity Monitoring Specification\n83	Audit Retention, Compliance & Evidence Governance Specification\n84	Master Data Governance & Stewardship Specification\n85	Warehouse Location Capacity & Storage Constraint Engine Specification\n86	Advanced Allocation Policy & Inventory Selection Strategy Specification\n87	Order Priority, Fulfillment & Service-Level Policy Specification\n88	Inventory Availability Engine Specification\n89	ATP, CTP & Promise Date Specification\n90	Dock-to-Stock SLA & Receiving Performance Specification\n91	Order Cycle-Time & Fulfillment Analytics Specification\n92	Exception SLA, Escalation & Aging Policy Specification\n93	Data Archival, Partitioning & Historical Retention Strategy\n94	Caching Strategy & Read Model Consistency Specification\n95	Enterprise Search Architecture Specification\n96	File, Object Storage & Retention Lifecycle Specification\n97	API Rate Limiting, Abuse Protection & Request Governance Specification\n98	Feature Flag Governance & Safe Rollout Specification\n99	Multi-Company, Tenant Isolation & Data Segmentation Architecture\n100	Canonical Domain Model Specification\n101	Command, Query & Handler Catalog\n102	Repository, Unit of Work & Persistence Contract\n103	Background Worker & Asynchronous Processing Architecture\n104	Scheduler & Recurring Job Engine Specification\n105	System Bootstrap, Seed Data & Environment Initialization Specification\n106	API Versioning & Backward Compatibility Specification\n107	Event Schema Governance & Compatibility Specification\n108	Database Connection, Transaction & Resilience Specification\n109	Distributed Coordination & Locking Strategy Specification\n110	Health, Readiness & Liveness Endpoint Specification\n111	Secrets, Configuration Security & Environment Boundary Specification\n112	Authentication & Token Lifecycle Specification\n113	Session & Device Security Specification\n114	Webhook Security & Delivery Verification Specification\n115	Encryption, Key Management & Cryptographic Boundary Specification\n116	Data Classification, PII & Sensitive Data Handling Specification\n117	Security Threat Model & Abuse Case Catalog\n118	Performance & Capacity Model Specification\n119	Load, Stress & Soak Test Specification\n120	SQL Deadlock, Lock Ordering & Transaction Discipline Standard\n121	Observability Alert Catalog & Operational Threshold Specification\n122	SLO, SLA & Error Budget Framework\n123	Production Capacity, Scaling & Saturation Playbook\n124	Feature Dependency Map & Delivery Sequencing Specification\n125	Deployment Topology & Runtime Architecture Specification\n126	Environment Parity & Configuration Drift Standard\n127	Production Data Correction & Controlled Repair Framework\n128	Support & Administrative Tooling Specification\n129	Technical Debt Register & Architecture Fitness Function Catalog\n130	Architecture Review Checklist & Technical Governance Standard\n131	Code Review Standard & Pull Request Quality Gate\n132	Definition of Ready & Definition of Done Standard\n133	Engineering Release Evidence & Traceability Standard\n134	Production Readiness Review Template\n135	System Go-Live Acceptance Criteria & Launch Control Plan\n136	UAT Master Plan & Business Acceptance Strategy\n137	Role-Based UAT Script Catalog\n138	Training, SOP & Operational Enablement Framework\n139	Go-Live Hypercare Operations Plan\n140	Post-Go-Live Inventory Reconciliation & Verification Plan\n141	30/60/90-Day Stabilization & Optimization Plan\n142	Disaster Recovery Drill & Validation Plan\n143	Backup Restore Validation & Recovery Point Specification\n144	Failover, Failback & Service Recovery Procedure\n145	Business Continuity & Degraded Operation Mode Specification\n146	Offline Warehouse Operations & Deferred Synchronization Specification\n147	Recovery Reconciliation & Warehouse Reopening Procedure\n148	Warehouse Opening & Closing Procedure\n149	End-of-Day Processing & Operational Close Specification\n150	Period Close, Inventory Cutoff & Accounting Interface Specification\n151	Operational Reconciliation Dashboard Specification\n152	Data Integrity Repair Jobs & Projection Rebuild Specification\n153	Production Support Escalation & Ownership Matrix\n154	Inventory Costing Interface Specification\n155	Financial Reconciliation Specification\n156	Tax & Accounting Boundary Specification\n157	Intercompany & Inter-Warehouse Transfer Accounting Boundary\n158	Multi-Currency & Inventory Valuation Boundary Specification\n159	Finance Integration Error & Period Reconciliation Specification\n160	Purchase Order Integration Specification\n161	Sales Order Integration Specification\n162	ERP Master Data Synchronization Specification\n163	E-commerce & OMS Integration Specification\n164	Carrier & TMS Integration Specification\n165	EDI & External Partner API Integration Standard\n166	Webhook & Event Delivery Operations Specification\n167	Integration Contract Testing Specification\n168	API Gateway & Edge Architecture Specification\n169	Batch, File & Scheduled Integration Framework Specification\n170	External Partner Integration Onboarding Checklist\n171	Integration Reconciliation Dashboard & Control Specification\n172	Inventory Valuation Event Specification\n173	Warehouse Billing Reconciliation Specification\n174	Customer & Supplier SLA Contract Specification\n175	Operational Calendar Exception Specification\n176	Global Timezone, Business Date & Clock Standard\n177	Localization & Internationalization Architecture\n178	Multi-Warehouse Network Planning Specification\n179	Network Inventory Balancing Engine Specification\n180	Inter-Warehouse Replenishment Planning Specification\n181	Order Routing & Fulfillment Node Selection Specification\n182	Network Inventory Visibility & Global Availability Specification\n183	Distributed Warehouse Control Tower Specification\n184	Forecast & Demand Signal Integration Specification\n185	Safety Stock & Reorder Policy Engine Specification\n186	ABC/XYZ Inventory Classification Specification\n187	Slow-Moving, Non-Moving & Dead Stock Specification\n188	Inventory Optimization Policy Specification\n189	Network Rebalancing Simulation Specification\n190	Demand Forecast Accuracy & Bias Measurement Specification\n191	Replenishment Exception Management Specification\n192	Procurement Suggestion Engine Specification\n193	Inventory Risk Scoring Specification\n194	Warehouse Capacity Forecasting Specification\n195	Executive Supply Chain Control Tower KPI Specification\n196	Supplier Lead-Time Intelligence Specification\n197	Purchase Expedite & Defer Recommendation Specification\n198	Demand Spike & Anomaly Detection Specification\n199	Inventory Allocation Fairness Policy Specification\n200	Service-Level Segmentation Specification\n201	Scenario Planning & What-if Simulation Specification\n202	Automation Decision Boundary & Human-in-the-Loop Standard\n203	Decision Policy Registry & Version Governance Specification\n204	AI/ML Model Governance for WMS Decision Support\n205	Data Lineage, Metric Lineage & Semantic Traceability Specification\n206	Data Quality Scorecard & Governance Specification\n207	Reference Architecture Conformance Matrix\n208	Cross-Document Traceability Matrix\n209	Master Glossary & Ubiquitous Language\n210	System Capability Map & Module Ownership Specification\n211	Product Roadmap, Capability Maturity & Release Wave Plan\n212	Remaining Implementation Gap Register & Completion Criteria\n213	Documentation Governance, Review & Change Management Standard\n214	Master Technical Documentation Index & Reading Guide\n215	Frontend Architecture & Application Shell Specification\n216	UX Information Architecture & Navigation Specification\n217	ERP/WMS Design System & Visual Language Specification\n218	Desktop Screen Template & Interaction Pattern Catalog\n219	Data Table, Filter, Search & Bulk Action UX Specification\n220	Form, Validation & Transaction Entry UX Specification\n221	Workflow, Status, Approval & Exception UX Specification\n222	Inventory Visualization & Traceability UX Specification\n223	Mobile WMS Scan-First UX Specification\n224	Responsive, Accessibility & Internationalization UX Standard\n225	Frontend Permission, Security & Sensitive Action UX Specification\n226	Frontend Error, Concurrency, Idempotency & Recovery UX Specification\n227	Dashboard, KPI & Operational Analytics UX Specification\n228	UX Specification by Core Business Flow\n229	Screen Inventory & Coverage Matrix\n230	UX Writing, Labels, Terminology & Vietnamese Content Standard\n231	Frontend Performance & Large Dataset UX Specification\n232	Frontend Testing, Visual QA & Browser Regression Specification\n233	Figma Handoff, Component Mapping & Design-to-Code Standard\n234	UX/UI Definition of Ready, Definition of Done & Review Checklist\n235	Warehouse Automation, WCS/WES & Robotics Integration Specification\n236	RFID, IoT Sensor & Real-Time Capture Specification\n237	Voice Picking, Pick-to-Light & Assisted Picking Specification\n238	Cartonization, Cubing, Dimension & Packing Optimization Specification\n239	Load Planning, Trailer Utilization & Dock Loading Optimization Specification\n240	Hazardous Materials, Dangerous Goods & Restricted Storage Specification\n241	Cold Chain, Temperature-Controlled Inventory & Excursion Management Specification\n242	Catch Weight, Variable Weight & Dual-UOM Inventory Specification\n243	Kitting, Bundling, Assembly & De-kitting Specification\n244	Value-Added Services (VAS) Execution Specification\n245	Consignment, Vendor-Owned & Customer-Owned Inventory Specification\n246	3PL Customer Contract, Rating & Warehouse Billing Specification\n247	Returns Disposition, Refurbishment & Reverse Logistics Specification\n248	Yard Gate, Driver, Vehicle & Check-In/Check-Out Specification\n249	Warehouse Safety, Ergonomics & Operational Risk Control Specification\n250	Data Warehouse, BI Export & Analytical Platform Architecture\n251	CDC, Data Replication & Read Replica Specification\n252	Schema Migration, Zero-Downtime Compatibility & Database Evolution Standard\n253	API SDK, Client Contract & Frontend Data Access Standard\n254	Feature Telemetry, Product Analytics & UX Measurement Specification\n255	Browser, Device, Scanner & Peripheral Compatibility Matrix\n256	Localization Pack, Units, Locale & Regional Format Governance\n257	Legal Hold, eDiscovery & Regulatory Evidence Handling Specification\n258	Privacy Request & Data Subject Handling Boundary Specification\n259	Vendor, Dependency & Open-Source Governance Specification\n260	SBOM, Software Supply Chain & Artifact Provenance Specification\n261	Penetration Testing, Vulnerability Management & Security Verification Standard\n262	Chaos Engineering, Resilience Verification & Failure Injection Standard\n263	Performance Budget by Screen, API & Mobile Workflow Specification\n264	Tenant Provisioning, Company Onboarding & Warehouse Setup Runbook\n265	Warehouse Decommissioning, Tenant Offboarding & Data Exit Runbook\n266	Product Requirements Document (PRD) Standard & Feature Discovery Template\n267	Persona, Role, Job-to-be-Done & Operational Context Catalog\n268	User Journey, Service Blueprint & Cross-Channel Experience Specification\n269	UX Research, Usability Testing & Design Validation Standard\n270	Design Token, Component API & Storybook Governance Specification\n271	Notification Center, Inbox & Actionable Alert UX Specification\n272	Offline UX Conflict Resolution & Deferred Command Experience Specification\n273	Accessibility Conformance & Assistive Technology Test Catalog\n274	Enterprise Audit of Screen-to-API-to-Permission-to-State Coverage Matrix\n275	Final Documentation Coverage Audit & Completeness Register\n276	Administrative Console & Configuration UX Specification\n277	Warehouse Site Commissioning & Go-Live Readiness Specification\n278	Release Communication, Change Adoption & Operator Enablement Specification\n279	Identity Federation, SSO & Enterprise Access Integration Specification\n280	Evidence Export, Audit Package & Compliance Reporting Specification\n281	Manual Contingency Forms & Post-Outage Reconciliation Procedure\n282	UX Governance & Screen Matrix 229 Master Handoff Specification`;
+
+const parseCanonicalSpecTitles = (catalog: string): Record<number, string> => {
+  const entries = catalog.split('\n').map((row) => {
+    const separator = row.indexOf('\t');
+    if (separator <= 0) throw new Error('Invalid canonical specification catalog row.');
+
+    const spec = Number(row.slice(0, separator));
+    const title = row.slice(separator + 1).trim();
+    if (!Number.isInteger(spec) || spec < 1 || !title) {
+      throw new Error('Invalid canonical specification catalog value.');
+    }
+
+    return [spec, title] as const;
+  });
+
+  if (entries.length !== 282 || new Set(entries.map(([spec]) => spec)).size !== entries.length) {
+    throw new Error('Canonical specification catalog must contain 282 unique specs.');
+  }
+
+  return Object.fromEntries(entries);
+};
+
+export const canonicalSpecTitles = parseCanonicalSpecTitles(canonicalSpecCatalog);
+
+const localizedCanonicalSpecTitles: Partial<Record<number, string>> = {
+  1: 'Đặc tả quy tắc nghiệp vụ & máy trạng thái',
+  2: 'Đặc tả cơ sở dữ liệu & DBML',
+  3: 'Đặc tả REST API & hợp đồng backend',
+  5: 'Bản thiết kế triển khai & kế hoạch tổng thể Codex',
+  6: 'Chiến lược kiểm thử, ma trận QA & danh sách kiểm mức sẵn sàng production',
+  8: 'Đặc tả bảo mật, RBAC & kiểm toán',
+  16: 'Từ điển dữ liệu & danh mục bảng',
+  17: 'Sổ đăng ký quyền & ma trận phân quyền',
+  18: 'Sổ đăng ký mã lỗi',
+  27: 'Backlog thực thi Codex & hợp đồng bàn giao chức năng',
+  28: 'Đặc tả triển khai bộ máy tồn kho',
+  29: 'Thuật toán ghi sổ tồn kho & dự phóng số dư',
+  30: 'Đặc tả bộ máy giữ hàng & phân bổ',
+  31: 'Đặc tả đồng thời, khóa & idempotency tồn kho',
+  32: 'Đặc tả bộ máy đảo giao dịch & hiệu chỉnh',
+  40: 'Đặc tả kiểm kê chu kỳ & điều chỉnh tồn kho',
+  41: 'Đặc tả trạng thái tồn kho, giữ QC & cách ly',
+  48: 'Đặc tả thu hồi, truy vết Lô/Sê-ri & phả hệ',
+  77: 'Đặc tả đóng băng, khóa tồn kho & giữ vận hành',
+  78: 'Đặc tả hạn dùng, thời hạn sử dụng & FEFO',
+  79: 'Đặc tả thực thi thu hồi & khoanh vùng',
+  82: 'Đặc tả ảnh chụp tồn kho, đối chiếu & giám sát toàn vẹn',
+  88: 'Đặc tả bộ máy tính khả dụng tồn kho',
+  127: 'Khung sửa dữ liệu production có kiểm soát',
+  128: 'Đặc tả công cụ hỗ trợ & quản trị',
+  211: 'Lộ trình sản phẩm, mức trưởng thành capability & kế hoạch đợt phát hành',
+  214: 'Chỉ mục tài liệu kỹ thuật tổng & hướng dẫn đọc',
+  215: 'Đặc tả kiến trúc frontend & khung ứng dụng',
+  217: 'Đặc tả hệ thống thiết kế ERP/WMS & ngôn ngữ trực quan',
+  222: 'Đặc tả UX trực quan hóa & truy vết tồn kho',
+  223: 'Đặc tả UX WMS di động ưu tiên quét',
+  224: 'Tiêu chuẩn UX responsive, accessibility & quốc tế hóa',
+  229: 'Ma trận màn hình & độ phủ',
+  230: 'Tiêu chuẩn nội dung tiếng Việt, nhãn & thuật ngữ UX',
+  234: 'Danh sách kiểm Definition of Ready / Definition of Done & rà soát UX/UI',
+  275: 'Sổ đăng ký kiểm toán độ phủ & tính đầy đủ tài liệu cuối',
+  282: 'Đặc tả quản trị UX & bàn giao Ma trận màn hình 229',
+};
+
+const displayTitleForSpec = (spec: number) =>
+  localizedCanonicalSpecTitles[spec] ?? `Tài liệu kỹ thuật chuẩn số ${spec}`;
+
+const categoryForSpec = (spec: number) => {
+  if (spec <= 33) return 'Foundation / Core Design';
+  if (spec <= 95) return 'WMS Domain';
+  if (spec <= 129) return 'Platform Architecture';
+  if (spec <= 159) return 'Delivery / Operations / Finance';
+  if (spec <= 177) return 'Integration';
+  if (spec <= 214) return 'Planning / Governance';
+  if (spec <= 234) return 'Frontend / UX';
+  if (spec <= 250) return 'Advanced WMS / Data';
+  return 'Platform / Product Governance';
+};
+
+const referencedSpecs = (value: string) =>
+  Array.from(new Set((value.match(/\d+/g) ?? []).map(Number)));
+
+export const getCanonicalDocumentationRegister = (modules: BlueprintModule[]): CanonicalDocumentationRow[] => {
+  const owners = new Map<number, string[]>();
+
+  for (const module of modules) {
+    for (const capability of module.capabilities) {
+      for (const spec of referencedSpecs(capability.spec)) {
+        const ids = owners.get(spec) ?? [];
+        if (!ids.includes(capability.id)) ids.push(capability.id);
+        owners.set(spec, ids);
+      }
+    }
+  }
+
+  return Object.entries(canonicalSpecTitles)
+    .map(([spec, title]) => {
+      const numericSpec = Number(spec);
+      const capabilityIds = owners.get(numericSpec) ?? [];
+      return {
+        spec: numericSpec,
+        title,
+        displayTitle: displayTitleForSpec(numericSpec),
+        category: categoryForSpec(numericSpec),
+        representation: capabilityIds.length > 0 ? 'Capability-linked' as const : 'Platform / Governance' as const,
+        capabilityIds,
+      };
+    })
+    .sort((a, b) => a.spec - b.spec);
+};

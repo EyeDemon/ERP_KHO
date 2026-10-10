@@ -13,10 +13,10 @@ namespace ERP.Api.Tests
         [Fact]
         public void MigratedHttpActionsHaveCataloguedPermissionsWithoutRoleAlternatives()
         {
-            var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController),
+            var controllers = new[] { typeof(ImportReceiptsController), typeof(PutawayTasksController), typeof(PurchaseOrdersController), typeof(AsnsController),
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
-                typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
+                typeof(BusinessPartnersController), typeof(ExportReceiptsController), typeof(StockAllocationsController), typeof(PickingTasksController), typeof(PackingSessionsController), typeof(HandlingUnitsController), typeof(ShipmentsController), typeof(SalesOrdersController), typeof(BackordersController), typeof(InventoryControlController), typeof(InventoryReversalTraceabilityController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
                 typeof(PermissionsController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
@@ -129,32 +129,225 @@ namespace ERP.Api.Tests
         }
 
         [Fact]
-        public void ExportReceiptsController_Get_RequiresAllRoles()
+        public void ExportReceiptsController_UsesExactCapabilityPermissions()
         {
-            var classAttr = typeof(ExportReceiptsController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
-        }
+            var expected = new Dictionary<string, string[]>
+            {
+                ["GetAll"] = [AppPermissions.ExportReceiptRead],
+                ["GetById"] = [AppPermissions.ExportReceiptRead],
+                ["Create"] = [AppPermissions.ExportReceiptCreate],
+                ["Cancel"] = [AppPermissions.ExportReceiptCancel],
+                ["ApproveAndReserve"] = [AppPermissions.ExportReceiptApprove],
+                ["ApproveAndDispatch"] = [AppPermissions.ExportReceiptApprove, AppPermissions.ExportReceiptDispatch],
+                ["Dispatch"] = [AppPermissions.ExportReceiptDispatch],
+                ["Approve"] = [AppPermissions.ExportReceiptApprove],
+                ["SetCustomer"] = [AppPermissions.ExportReceiptUpdate, AppPermissions.PartnerRead],
+            };
 
-        [Fact]
-        public void ExportReceiptsController_CreateCancel_RequiresAdminManagerOrStaff()
-        {
-            var createMethod = typeof(ExportReceiptsController).GetMethod("Create");
-            var cancelMethod = typeof(ExportReceiptsController).GetMethod("Cancel");
-
-            createMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
-            cancelMethod!.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be(AppRoles.AdminManagerOrStaff);
+            typeof(ExportReceiptsController).GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().BeNull();
+            foreach (var (methodName, permissions) in expected)
+            {
+                var grants = typeof(ExportReceiptsController).GetMethod(methodName)!
+                    .GetCustomAttributes<PermissionAuthorizeAttribute>()
+                    .Select(x => x.Permission)
+                    .ToArray();
+                grants.Should().BeEquivalentTo(permissions, $"ExportReceiptsController.{methodName}");
+                typeof(ExportReceiptsController).GetMethod(methodName)!
+                    .GetCustomAttributes<AuthorizeAttribute>()
+                    .Should().OnlyContain(x => string.IsNullOrEmpty(x.Roles) && string.IsNullOrEmpty(x.Policy));
+            }
         }
 
         [Theory]
-        [InlineData(typeof(ExportReceiptsController), "Approve")]
-        [InlineData(typeof(ExportReceiptsController), "ApproveAndReserve")]
-        [InlineData(typeof(ExportReceiptsController), "ApproveAndDispatch")]
         [InlineData(typeof(StocktakesController), "Approve")]
         [InlineData(typeof(StockTransfersController), "Approve")]
-        public void ApprovalEndpoints_RequireCheckerPolicy(Type controllerType, string methodName)
+        public void LegacyApprovalEndpoints_StillRequireCheckerPolicy(Type controllerType, string methodName)
         {
             controllerType.GetMethod(methodName)!
                 .GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(ApprovalPolicies.Checker);
+        }
+
+        [Theory]
+        [InlineData(typeof(PurchaseOrdersController), "List", AppPermissions.PurchaseOrderRead)]
+        [InlineData(typeof(PurchaseOrdersController), "Detail", AppPermissions.PurchaseOrderRead)]
+        [InlineData(typeof(PurchaseOrdersController), "Create", AppPermissions.PurchaseOrderCreate)]
+        [InlineData(typeof(PurchaseOrdersController), "Update", AppPermissions.PurchaseOrderUpdate)]
+        [InlineData(typeof(PurchaseOrdersController), "Open", AppPermissions.PurchaseOrderRelease)]
+        [InlineData(typeof(PurchaseOrdersController), "Close", AppPermissions.PurchaseOrderClose)]
+        [InlineData(typeof(PurchaseOrdersController), "Cancel", AppPermissions.PurchaseOrderCancel)]
+        [InlineData(typeof(AsnsController), "List", AppPermissions.AsnRead)]
+        [InlineData(typeof(AsnsController), "Detail", AppPermissions.AsnRead)]
+        [InlineData(typeof(AsnsController), "Create", AppPermissions.AsnCreate)]
+        [InlineData(typeof(AsnsController), "Update", AppPermissions.AsnUpdate)]
+        [InlineData(typeof(AsnsController), "Confirm", AppPermissions.AsnConfirm)]
+        [InlineData(typeof(AsnsController), "MarkInTransit", AppPermissions.AsnUpdate)]
+        [InlineData(typeof(AsnsController), "Arrive", AppPermissions.AsnReceive)]
+        [InlineData(typeof(AsnsController), "StartReceiving", AppPermissions.AsnReceive)]
+        [InlineData(typeof(AsnsController), "Complete", AppPermissions.AsnReceive)]
+        [InlineData(typeof(AsnsController), "Cancel", AppPermissions.AsnCancel)]
+        public void InboundPlanningEndpoints_RequireExactCapability(Type controllerType, string methodName, string permission)
+        {
+            controllerType.GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("List", AppPermissions.PutawayRead)]
+        [InlineData("Detail", AppPermissions.PutawayRead)]
+        [InlineData("Destinations", AppPermissions.PutawayRead)]
+        [InlineData("Assign", AppPermissions.PutawayAssign)]
+        [InlineData("Start", AppPermissions.PutawayExecute)]
+        [InlineData("Move", AppPermissions.PutawayExecute)]
+        [InlineData("Exception", AppPermissions.PutawayExecute)]
+        [InlineData("Resume", AppPermissions.PutawayExecute)]
+        [InlineData("Cancel", AppPermissions.PutawayCancel)]
+        public void PutawayEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(PutawayTasksController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("List", AppPermissions.PickingRead)]
+        [InlineData("Get", AppPermissions.PickingRead)]
+        [InlineData("Assign", AppPermissions.PickingAssign)]
+        [InlineData("Start", AppPermissions.PickingExecute)]
+        [InlineData("Pick", AppPermissions.PickingExecute)]
+        [InlineData("ReportShortPick", AppPermissions.PickingShortPick)]
+        [InlineData("ResolveShortPick", AppPermissions.PickingShortPick)]
+        [InlineData("OverrideShortPick", AppPermissions.PickingOverride)]
+        [InlineData("Complete", AppPermissions.PickingExecute)]
+        public void PickingEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(PickingTasksController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("List", AppPermissions.PackingRead)]
+        [InlineData("Get", AppPermissions.PackingRead)]
+        [InlineData("Create", AppPermissions.PackingExecute)]
+        [InlineData("CreateHandlingUnit", AppPermissions.HandlingUnitCreate)]
+        [InlineData("Pack", AppPermissions.PackingExecute)]
+        [InlineData("CloseHandlingUnit", AppPermissions.PackingExecute)]
+        [InlineData("CancelHandlingUnit", AppPermissions.HandlingUnitModify)]
+        [InlineData("NestHandlingUnit", AppPermissions.HandlingUnitModify)]
+        [InlineData("UnnestHandlingUnit", AppPermissions.HandlingUnitModify)]
+        [InlineData("Complete", AppPermissions.PackingExecute)]
+        [InlineData("Close", AppPermissions.PackingExecute)]
+        [InlineData("Cancel", AppPermissions.PackingExecute)]
+        public void PackingEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(PackingSessionsController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Fact]
+        public void HandlingUnitReadController_RequiresExactCapability()
+        {
+            typeof(HandlingUnitsController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.HandlingUnitRead);
+        }
+
+        [Theory]
+        [InlineData("List", AppPermissions.ShipmentRead)]
+        [InlineData("Get", AppPermissions.ShipmentRead)]
+        [InlineData("Tracking", AppPermissions.ShipmentRead)]
+        [InlineData("Stage", AppPermissions.ShipmentStage)]
+        [InlineData("Dispatch", AppPermissions.ShipmentDispatch)]
+        [InlineData("MarkInTransit", AppPermissions.ShipmentUpdate)]
+        [InlineData("ConfirmDelivery", AppPermissions.ShipmentConfirmDelivery)]
+        [InlineData("DeliveryFailed", AppPermissions.ShipmentUpdate)]
+        [InlineData("RetryDelivery", AppPermissions.ShipmentUpdate)]
+        [InlineData("ReturnInitiate", AppPermissions.ShipmentUpdate)]
+        [InlineData("Complete", AppPermissions.ShipmentUpdate)]
+        public void ShipmentEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(ShipmentsController).GetMethod(methodName)!
+                .GetCustomAttributes<PermissionAuthorizeAttribute>()
+                .Select(x => x.Permission)
+                .Should().Contain(permission);
+        }
+
+        [Theory]
+        [InlineData("StartLoading")]
+        [InlineData("LoadHandlingUnit")]
+        [InlineData("CompleteLoading")]
+        public void ShipmentLoadingEndpoints_RequireShipmentLoadAndLoadingExecute(string methodName)
+        {
+            typeof(ShipmentsController).GetMethod(methodName)!
+                .GetCustomAttributes<PermissionAuthorizeAttribute>()
+                .Select(x => x.Permission)
+                .Should().BeEquivalentTo(AppPermissions.ShipmentLoad, AppPermissions.LoadingExecute);
+        }
+
+        [Theory]
+        [InlineData(typeof(SalesOrdersController), "List", AppPermissions.SalesOrderRead)]
+        [InlineData(typeof(SalesOrdersController), "Get", AppPermissions.SalesOrderRead)]
+        [InlineData(typeof(SalesOrdersController), "Create", AppPermissions.SalesOrderCreate)]
+        [InlineData(typeof(SalesOrdersController), "Hold", AppPermissions.SalesOrderHold)]
+        [InlineData(typeof(SalesOrdersController), "Release", AppPermissions.SalesOrderRelease)]
+        [InlineData(typeof(SalesOrdersController), "Cancel", AppPermissions.SalesOrderCancel)]
+        [InlineData(typeof(BackordersController), "List", AppPermissions.BackorderRead)]
+        [InlineData(typeof(BackordersController), "Get", AppPermissions.BackorderRead)]
+        [InlineData(typeof(BackordersController), "Reallocate", AppPermissions.BackorderManage)]
+        [InlineData(typeof(BackordersController), "Cancel", AppPermissions.BackorderManage)]
+        public void DemandAndBackorderEndpoints_RequireExactCapability(
+            Type controllerType,
+            string methodName,
+            string permission)
+        {
+            controllerType.GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("GetInventoryIdentities", AppPermissions.ReceiptRead)]
+        [InlineData("SetInventoryIdentities", AppPermissions.ReceiptUpdate)]
+        public void ImportReceiptInventoryIdentityEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(ImportReceiptsController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("GetStatuses", AppPermissions.InventoryRead)]
+        [InlineData("GetBuckets", AppPermissions.InventoryRead)]
+        [InlineData("Change", AppPermissions.InventoryStatusChangeCreate)]
+        public void InventoryStatusEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(InventoryStatusController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("Locks", AppPermissions.InventoryLockRead)]
+        [InlineData("Lock", AppPermissions.InventoryLockRead)]
+        [InlineData("CreateLock", AppPermissions.InventoryLockManage)]
+        [InlineData("ReleaseLock", AppPermissions.InventoryLockManage)]
+        [InlineData("Move", AppPermissions.InventoryMovementCreate)]
+        public void InventoryControlEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(InventoryControlController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Theory]
+        [InlineData("Reverse", AppPermissions.InventoryReversalCreate)]
+        [InlineData("Trace", AppPermissions.InventoryTraceabilityRead)]
+        public void InventoryReversalTraceabilityEndpoints_RequireExactCapability(string methodName, string permission)
+        {
+            typeof(InventoryReversalTraceabilityController).GetMethod(methodName)!
+                .GetCustomAttribute<PermissionAuthorizeAttribute>()!.Permission.Should().Be(permission);
+        }
+
+        [Fact]
+        public void InventoryReadControllers_UseCanonicalCapabilities()
+        {
+            typeof(InventoryStocksController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.InventoryRead);
+            typeof(InventoryTransactionsController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.InventoryLedgerRead);
         }
 
         [Fact]

@@ -1,4 +1,5 @@
 using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -20,6 +21,7 @@ public class StockReservationsController(IStockReservationService service) : Con
 
     [HttpPost]
     [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+    [IdempotentCommand("InventoryReservation.Create")]
     public async Task<ActionResult<StockReservationDto>> Create(CreateStockReservationDto request, CancellationToken cancellationToken)
     {
         var result = await service.CreateAsync(request, cancellationToken);

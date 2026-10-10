@@ -17,6 +17,10 @@ public class ImportReceiptConfiguration : IEntityTypeConfiguration<ImportReceipt
         builder.Property(x => x.SupplierCodeSnapshot).HasMaxLength(50);
         builder.Property(x => x.SupplierNameSnapshot).HasMaxLength(200);
         builder.HasOne(x => x.Supplier).WithMany(x => x.ImportReceipts).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.PurchaseOrder).WithMany().HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Asn).WithMany().HasForeignKey(x => x.AsnId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.AsnId).IsUnique().HasFilter("[AsnId] IS NOT NULL AND [Status] <> 2");
+        builder.HasIndex(x => x.PurchaseOrderId);
 
         builder.HasOne(x => x.Warehouse)
                .WithMany(w => w.ImportReceipts)

@@ -20,7 +20,7 @@ export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose 
   const partner = kind === 'import'
     ? receipt.supplierCode && receipt.supplierName ? `${receipt.supplierCode} - ${receipt.supplierName}` : 'Chưa ghi nhận'
     : receipt.customerCode && receipt.customerName ? `${receipt.customerCode} - ${receipt.customerName}` : 'Chưa ghi nhận';
-  const statusBanner = ({ Draft: 'BẢN NHÁP — CHƯA DUYỆT', Cancelled: 'ĐÃ HỦY', Approved: 'Đã duyệt',
+  const statusBanner = ({ Draft: 'BẢN NHÁP — CHƯA DUYỆT', Cancelled: 'ĐÃ HỦY', Approved: kind === 'export' ? 'Đã duyệt và giữ hàng' : 'Đã duyệt',
     Dispatched: 'Đã xuất kho', Received: 'Đã nhận — chưa ghi tồn', ReadyToPost: 'Sẵn sàng ghi nhận tồn kho',
     Posted: 'Đã ghi nhận tồn kho', QcPending: 'Chờ kết quả kiểm tra chất lượng', QcCompleted: 'Kiểm tra chất lượng đã hoàn tất — chờ duyệt',
     DiscrepancyPending: 'Chờ xử lý sai lệch', DiscrepancySubmitted: 'Đã gửi xử lý sai lệch', DiscrepancyPendingApproval: 'Chờ duyệt sai lệch',

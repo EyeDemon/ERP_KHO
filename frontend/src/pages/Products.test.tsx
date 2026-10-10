@@ -6,7 +6,7 @@ import apiClient from '../services/apiClient';
 
 vi.mock('../services/apiClient', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 
-const product = { id: 1, code: 'P001', name: 'Sản phẩm', unitId: 1, unitName: 'Cái', categoryId: null, barcodes: [{ id: 2, productId: 1, value: '001Ab' }], isActive: true };
+const product = { id: 1, code: 'P001', name: 'Sản phẩm', storageClass: 'AMBIENT', unitWeightKg: 0.5, unitVolumeM3: 0.002, unitPalletEquivalent: 0.02, trackingType: 'Lot', expiryControl: true, shelfLifeDays: 180, unitId: 1, unitName: 'Cái', categoryId: null, barcodes: [{ id: 2, productId: 1, value: '001Ab' }], isActive: true };
 
 describe('Products category and barcode UI (mocked API)', () => {
   afterEach(cleanup);
@@ -52,9 +52,9 @@ describe('Products category and barcode UI (mocked API)', () => {
   it('searches and edits a category without allowing its code to change', async () => {
     const category = { id: 3, code: 'CAT', name: 'Danh mục cũ', isActive: true };
     vi.mocked(apiClient.get).mockImplementation(async (url) => ({ data: url === '/api/products' ? [product] : url === '/api/units' ? [{ id: 1, code: 'EA', name: 'Cái', isActive: true }] : url === '/api/product-categories' ? [category] : [] }));
-    const view = render(<Products />); await view.findByRole('button', { name: 'Sửa danh mục' });
+    const view = render(<Products />); await view.findByRole('button', { name: /Sửa danh mục/ });
     fireEvent.change(view.getByLabelText('Tìm danh mục'), { target: { value: 'cat' } });
-    fireEvent.click(view.getByText('Sửa danh mục'));
+    fireEvent.click(view.getByRole('button', { name: /Sửa danh mục/ }));
     expect((view.getByPlaceholderText('Mã danh mục') as HTMLInputElement).disabled).toBe(true);
     fireEvent.change(view.getByPlaceholderText('Tên danh mục'), { target: { value: 'Danh mục mới' } });
     fireEvent.submit(view.getByText('Lưu danh mục').closest('form')!);
@@ -71,6 +71,58 @@ describe('Products category and barcode UI (mocked API)', () => {
     fireEvent.submit(form); fireEvent.submit(form);
     expect(apiClient.post).toHaveBeenCalledTimes(1); finish();
     await waitFor(() => expect(view.queryByText('Đang xử lý...')).toBeNull());
+  });
+
+  it('submits the explicit storage profile on product update', async () => {
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} } as never);
+    const view = render(<Products />); await view.findByText('P001');
+    fireEvent.click(view.getByText('Sửa'));
+    fireEvent.change(view.getByLabelText('Storage Class sản phẩm'), { target: { value: 'chilled' } });
+    fireEvent.change(view.getByLabelText('Trọng lượng đơn vị kg'), { target: { value: '1.25' } });
+    fireEvent.submit(view.getByText('Lưu').closest('form')!);
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/products/1', expect.objectContaining({
+      updateStorageProfile: true,
+      storageClass: 'CHILLED',
+      unitWeightKg: 1.25,
+      unitVolumeM3: 0.002,
+      unitPalletEquivalent: 0.02,
+    })));
+  });
+
+  it('submits canonical lot serial expiry tracking policy on product update', async () => {
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} } as never);
+    const view = render(<Products />); await view.findByText('P001');
+    fireEvent.click(view.getByText('Sửa'));
+    expect((view.getByLabelText('Tracking Type sản phẩm') as HTMLSelectElement).value).toBe('Lot');
+    expect((view.getByLabelText('Kiểm soát hạn dùng') as HTMLInputElement).checked).toBe(true);
+    expect((view.getByLabelText('Shelf Life Days') as HTMLInputElement).value).toBe('180');
+
+    fireEvent.change(view.getByLabelText('Tracking Type sản phẩm'), { target: { value: 'Serial' } });
+    fireEvent.change(view.getByLabelText('Shelf Life Days'), { target: { value: '365' } });
+    fireEvent.submit(view.getByText('Lưu').closest('form')!);
+
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/products/1', expect.objectContaining({
+      updateTrackingPolicy: true,
+      trackingType: 'Serial',
+      expiryControl: true,
+      shelfLifeDays: 365,
+    })));
+  });
+
+  it('clears expiry policy when tracking is disabled', async () => {
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} } as never);
+    const view = render(<Products />); await view.findByText('P001');
+    fireEvent.click(view.getByText('Sửa'));
+    fireEvent.change(view.getByLabelText('Tracking Type sản phẩm'), { target: { value: 'None' } });
+    expect((view.getByLabelText('Kiểm soát hạn dùng') as HTMLInputElement).checked).toBe(false);
+    expect((view.getByLabelText('Shelf Life Days') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.submit(view.getByText('Lưu').closest('form')!);
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/products/1', expect.objectContaining({
+      updateTrackingPolicy: true,
+      trackingType: 'None',
+      expiryControl: false,
+      shelfLifeDays: null,
+    })));
   });
 
   it('product update does not expose category or barcode management', async () => {

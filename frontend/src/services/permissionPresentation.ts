@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const resources: Record<string, string> = {
   approval: 'phê duyệt phiếu nhập', receipt: 'phiếu nhập', quality_inspection: 'kiểm tra chất lượng', quality_disposition: 'kết quả kiểm tra chất lượng',
-  receiving_discrepancy: 'sai lệch nhận hàng', putaway: 'cất hàng', location: 'vị trí kho', warehouse: 'kho hàng',
+  receiving_discrepancy: 'sai lệch nhận hàng', putaway: 'cất hàng', location: 'vị trí kho', warehouse: 'kho hàng', warehouse_zone: 'cấu trúc khu vực kho',
   product: 'sản phẩm', product_category: 'danh mục sản phẩm', product_barcode: 'mã vạch sản phẩm', product_uom: 'đơn vị quy đổi sản phẩm',
   uom: 'đơn vị tính', partner: 'đối tác', reason_code: 'mã lý do', quality_policy: 'chính sách chất lượng',
   receiving_tolerance_policy: 'chính sách dung sai nhận hàng', permission: 'quyền truy cập', role: 'vai trò', user: 'người dùng', user_warehouse: 'phạm vi kho của người dùng',

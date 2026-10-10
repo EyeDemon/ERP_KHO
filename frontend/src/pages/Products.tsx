@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { hasPermission, usePermission } from '../services/authorization';
 import { categoryChanged, categoryRequest, normalizeBarcodeInput } from './productCatalog';
 import { permissionError } from '../services/permissionPresentation';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 interface Barcode { id: number; productId: number; value: string }
 interface Category { id: number; code: string; name: string; isActive: boolean }
 interface Unit { id: number; code: string; name: string; isActive: boolean }
-interface Product { id: number; code: string; name: string; description?: string; unitId: number; unitName?: string; categoryId?: number | null; categoryName?: string | null; barcodes: Barcode[]; isActive: boolean }
+interface Product { id: number; code: string; name: string; description?: string; storageClass?: string | null; unitWeightKg?: number | null; unitVolumeM3?: number | null; unitPalletEquivalent?: number | null; trackingType?: 'None' | 'Lot' | 'Serial'; expiryControl?: boolean; shelfLifeDays?: number | null; unitId: number; unitName?: string; categoryId?: number | null; categoryName?: string | null; barcodes: Barcode[]; isActive: boolean }
 const messageOf = permissionError;
 const PAGE_SIZE = 10;
 
@@ -30,7 +32,7 @@ const Products = () => {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState({ code: '', name: '', description: '', unitId: 0, categoryId: '' as number | '', isActive: true });
+  const [form, setForm] = useState({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', trackingType: 'None' as 'None' | 'Lot' | 'Serial', expiryControl: false, shelfLifeDays: '', unitId: 0, categoryId: '' as number | '', isActive: true });
   const [categoryForm, setCategoryForm] = useState({ code: '', name: '' });
   const [categorySearch, setCategorySearch] = useState('');
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -62,16 +64,28 @@ const Products = () => {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visibleProducts = useMemo(() => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [filtered, currentPage]);
   useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
-  const createMode = () => { setEditing(null); setForm({ code: '', name: '', description: '', unitId: units[0]?.id || 0, categoryId: '', isActive: true }); };
-  const editMode = (p: Product) => { setEditing(p); setForm({ code: p.code, name: p.name, description: p.description || '', unitId: p.unitId, categoryId: p.categoryId || '', isActive: p.isActive }); setBarcode(''); };
+  const createMode = () => { setEditing(null); setForm({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', trackingType: 'None', expiryControl: false, shelfLifeDays: '', unitId: units[0]?.id || 0, categoryId: '', isActive: true }); };
+  const editMode = (p: Product) => { setEditing(p); setForm({ code: p.code, name: p.name, description: p.description || '', storageClass: p.storageClass || '', unitWeightKg: p.unitWeightKg?.toString() || '', unitVolumeM3: p.unitVolumeM3?.toString() || '', unitPalletEquivalent: p.unitPalletEquivalent?.toString() || '', trackingType: p.trackingType || 'None', expiryControl: p.expiryControl || false, shelfLifeDays: p.shelfLifeDays?.toString() || '', unitId: p.unitId, categoryId: p.categoryId || '', isActive: p.isActive }); setBarcode(''); };
+  const nullableNumber = (value: string) => value.trim() === '' ? null : Number(value);
+  const storageProfile = () => ({
+    storageClass: form.storageClass.trim() || null,
+    unitWeightKg: nullableNumber(form.unitWeightKg),
+    unitVolumeM3: nullableNumber(form.unitVolumeM3),
+    unitPalletEquivalent: nullableNumber(form.unitPalletEquivalent),
+  });
+  const trackingPolicy = () => ({
+    trackingType: form.trackingType,
+    expiryControl: form.expiryControl,
+    shelfLifeDays: form.expiryControl ? nullableNumber(form.shelfLifeDays) : null,
+  });
 
   const saveProduct = async (e: React.FormEvent) => {
     e.preventDefault(); if (editing ? !canManage : !canCreate) return; await mutate(async () => {
       try {
       if (editing) {
-        await apiClient.put(`/api/products/${editing.id}`, { name: form.name, description: form.description || null, unitId: form.unitId, isActive: form.isActive });
+        await apiClient.put(`/api/products/${editing.id}`, { name: form.name, description: form.description || null, unitId: form.unitId, isActive: form.isActive, updateStorageProfile: true, updateTrackingPolicy: true, ...storageProfile(), ...trackingPolicy() });
         if (categoryChanged(editing.categoryId, form.categoryId)) await apiClient.put(`/api/products/${editing.id}/category`, categoryRequest(form.categoryId));
-      } else await apiClient.post('/api/products', { ...form, description: form.description || null, ...categoryRequest(form.categoryId) });
+      } else await apiClient.post('/api/products', { code: form.code, name: form.name, description: form.description || null, unitId: form.unitId, ...storageProfile(), ...trackingPolicy(), ...categoryRequest(form.categoryId) });
       setNotice('Đã lưu sản phẩm.'); createMode(); await load();
       } catch (e) { setError(messageOf(e, 'Không thể lưu sản phẩm.')); }
     });
@@ -94,22 +108,142 @@ const Products = () => {
   const deleteProduct = async (id: number) => { if (!canDeactivate || !window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return; await mutate(async () => { try { await apiClient.delete(`/api/products/${id}`); setNotice('Đã xóa sản phẩm.'); await load(); } catch (e) { setError(messageOf(e, 'Không thể xóa sản phẩm.')); } }); };
   const lookup = async (e: React.FormEvent) => { e.preventDefault(); setError(''); setNotice(''); try { const p = (await apiClient.get('/api/product-barcodes/lookup', { params: { value: scan } })).data as Product; setSearch(p.code); setNotice(`Mã vạch thuộc sản phẩm ${p.code} – ${p.name}.`); } catch (e) { setSearch(''); setError(messageOf(e, 'Không tìm thấy mã vạch.')); } };
 
-  return <div><h2>Quản lý sản phẩm</h2>
-    {notice && <p style={{ color: 'green' }}>{notice}</p>}{error && <p role="alert" style={{ color: 'red' }}>{error}</p>}{mutating && <p role="status">Đang xử lý...</p>}
-    <form onSubmit={lookup}><input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" /><button>Tra mã vạch</button></form>
-    <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Tìm mã, tên hoặc mã vạch" />
-    {canManageCategories && <section><h3>Danh mục sản phẩm</h3><input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" /><form onSubmit={addCategory}><input value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required /><input value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required /><button disabled={mutating}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>{editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }}>Hủy sửa danh mục</button>}</form><ul>{categories.filter(c => { const q=categorySearch.trim().toLowerCase(); return !q || c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q); }).map(c => <li key={c.id}>{c.code} – {c.name} ({c.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}) <button disabled={mutating} onClick={() => editCategory(c)}>Sửa danh mục</button> <button disabled={mutating} onClick={() => toggleCategory(c)}>{c.isActive ? 'Ngừng' : 'Kích hoạt'}</button> <button disabled={mutating} onClick={() => deleteCategory(c.id)}>Xóa</button></li>)}</ul></section>}
-    {(editing ? canManage : canCreate) && <form onSubmit={saveProduct} style={{ display: 'grid', gap: 8, maxWidth: 620 }}><h3>{editing ? `Sửa ${editing.code}` : 'Thêm sản phẩm'}</h3>
-      <input value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã sản phẩm" disabled={!!editing} required /><input value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên sản phẩm" required /><textarea value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="Mô tả" />
-      <select value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required><option value={0}>Chọn đơn vị</option>{units.filter(x => x.isActive).map(x => <option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}</select>
-      <select disabled={!canReadCategories} aria-label="Danh mục" value={form.categoryId} onChange={e => setForm(x => ({ ...x, categoryId: e.target.value ? Number(e.target.value) : '' }))}><option value="">Không có danh mục</option>{categories.filter(c => c.isActive || c.id === editing?.categoryId).map(c => <option key={c.id} value={c.id}>{c.code} – {c.name}{c.isActive ? '' : ' (ngừng hoạt động)'}</option>)}</select>
-      {editing && <label><input type="checkbox" checked={form.isActive} onChange={e => setForm(x => ({ ...x, isActive: e.target.checked }))} /> Hoạt động</label>}<div><button>Lưu</button> {editing && <button type="button" onClick={createMode}>Hủy sửa</button>}</div>
+  return <UiPage>
+    <UiPageHeader
+      eyebrow="Dữ liệu nền"
+      title="Sản phẩm"
+      description="Quản lý SKU, danh mục, đơn vị tính và barcode. Tìm kiếm và tra mã vạch dùng cùng dữ liệu sản phẩm."
+    />
 
-    </form>}
-      {editing && canManageBarcodes && <fieldset><legend>Mã vạch</legend>{editing.barcodes?.map(b => <span key={b.id}>{b.value} <button type="button" onClick={() => deleteBarcode(b.id)}>×</button> </span>)}<div><input aria-label="Mã vạch mới" value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={64} placeholder="Mã vạch mới" /><button type="button" onClick={addBarcode}>Thêm mã vạch</button></div></fieldset>}
+    {notice && <p role="status" className="ui-success-text">{notice}</p>}
+    {error && <p role="alert">{error}</p>}
+    {mutating && <p role="status">Đang xử lý...</p>}
 
-    {loading ? <p>Đang tải...</p> : <table><thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th />}</tr></thead><tbody>{visibleProducts.map(p => <tr key={p.id}><td>{p.code}</td><td>{p.name}</td><td>{p.categoryName || '—'}</td><td>{p.unitName || p.unitId}</td><td>{p.barcodes?.map(b => b.value).join(', ') || '—'}</td><td>{p.isActive ? 'Hoạt động' : 'Khóa'}</td>{(canManage || canManageBarcodes || canDeactivate) && <td>{(canManage || canManageBarcodes) && <button onClick={() => editMode(p)}>Sửa</button>} {canDeactivate && <button onClick={() => deleteProduct(p.id)}>Xóa</button>}</td>}</tr>)}</tbody></table>}
-    <div><button disabled={currentPage === 1} onClick={() => setCurrentPage(x => x - 1)}>Trước</button> Trang {currentPage}/{totalPages} <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(x => x + 1)}>Sau</button></div>
-  </div>;
+    <UiToolbar>
+      <UiToolbarField label="Tra mã vạch">
+        <form onSubmit={lookup} className="ui-inline">
+          <input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" />
+          <button type="submit">Tra mã vạch</button>
+        </form>
+      </UiToolbarField>
+      <UiToolbarField label="Tìm sản phẩm">
+        <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Mã, tên hoặc mã vạch" />
+      </UiToolbarField>
+      <div className="ui-muted-text ui-auto-actions">
+        {filtered.length} sản phẩm • Trang {currentPage}/{totalPages}
+      </div>
+    </UiToolbar>
+
+    {canManageCategories && <UiCard title="Danh mục sản phẩm">
+      <div className="ui-stack">
+        <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" />
+        <form onSubmit={addCategory} className="ui-inline-wrap">
+          <input value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
+          <input value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required />
+          <button type="submit" disabled={mutating}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>
+          {editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }}>Hủy sửa</button>}
+        </form>
+        <div className="ui-stack">
+          {categories.filter(category => {
+            const q = categorySearch.trim().toLowerCase();
+            return !q || category.code.toLowerCase().includes(q) || category.name.toLowerCase().includes(q);
+          }).map(category => (
+            <div key={category.id} className="ui-divider-row">
+              <strong>{category.code}</strong>
+              <span>{category.name}</span>
+              <UiBadge tone={category.isActive ? 'success' : 'neutral'}>{category.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge>
+              <div className="ui-inline-actions ui-auto-actions">
+                <button type="button" aria-label={`Sửa danh mục ${category.code}`} disabled={mutating} onClick={() => editCategory(category)}>Sửa</button>
+                <button type="button" aria-label={`${category.isActive ? 'Ngừng' : 'Kích hoạt'} danh mục ${category.code}`} disabled={mutating} onClick={() => toggleCategory(category)}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
+                <button type="button" aria-label={`Xóa danh mục ${category.code}`} disabled={mutating} onClick={() => deleteCategory(category.id)}>Xóa</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </UiCard>}
+
+    {(editing ? canManage : canCreate) && <UiCard title={editing ? `Sửa ${editing.code}` : 'Thêm sản phẩm'}>
+      <form onSubmit={saveProduct} className="ui-form-grid">
+        <input aria-label="Mã sản phẩm" value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã sản phẩm" disabled={!!editing} required />
+        <input aria-label="Tên sản phẩm" value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên sản phẩm" required />
+        <textarea aria-label="Mô tả sản phẩm" value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="Mô tả" rows={3} />
+        <input aria-label="Storage Class sản phẩm" value={form.storageClass} onChange={e => setForm(x => ({ ...x, storageClass: e.target.value.toUpperCase() }))} placeholder="Storage Class, ví dụ AMBIENT" maxLength={32} />
+        <input aria-label="Trọng lượng đơn vị kg" type="number" min="0.000001" step="0.000001" value={form.unitWeightKg} onChange={e => setForm(x => ({ ...x, unitWeightKg: e.target.value }))} placeholder="kg / base unit" />
+        <input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="m³ / base unit" />
+        <input aria-label="Pallet-equivalent đơn vị" type="number" min="0.00000001" step="0.00000001" value={form.unitPalletEquivalent} onChange={e => setForm(x => ({ ...x, unitPalletEquivalent: e.target.value }))} placeholder="Pallet-equivalent / base unit" />
+        <label>
+          Tracking Type
+          <select aria-label="Tracking Type sản phẩm" value={form.trackingType} onChange={e => {
+            const trackingType = e.target.value as 'None' | 'Lot' | 'Serial';
+            setForm(x => ({ ...x, trackingType, expiryControl: trackingType === 'None' ? false : x.expiryControl, shelfLifeDays: trackingType === 'None' ? '' : x.shelfLifeDays }));
+          }}>
+            <option value="None">Không theo Lot/Serial</option>
+            <option value="Lot">Theo Lot</option>
+            <option value="Serial">Theo Serial</option>
+          </select>
+        </label>
+        <label className="ui-checkbox-label">
+          <input aria-label="Kiểm soát hạn dùng" type="checkbox" checked={form.expiryControl} disabled={form.trackingType === 'None'} onChange={e => setForm(x => ({ ...x, expiryControl: e.target.checked, shelfLifeDays: e.target.checked ? x.shelfLifeDays : '' }))} />
+          Kiểm soát hạn dùng
+        </label>
+        <input aria-label="Shelf Life Days" type="number" min="1" step="1" disabled={!form.expiryControl} value={form.shelfLifeDays} onChange={e => setForm(x => ({ ...x, shelfLifeDays: e.target.value }))} placeholder="Shelf life (ngày), tùy chọn" />
+        <select aria-label="Đơn vị tính" value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required>
+          <option value={0}>Chọn đơn vị</option>
+          {units.filter(item => item.isActive).map(item => <option key={item.id} value={item.id}>{item.code} – {item.name}</option>)}
+        </select>
+        <select disabled={!canReadCategories} aria-label="Danh mục" value={form.categoryId} onChange={e => setForm(x => ({ ...x, categoryId: e.target.value ? Number(e.target.value) : '' }))}>
+          <option value="">Không có danh mục</option>
+          {categories.filter(category => category.isActive || category.id === editing?.categoryId).map(category => <option key={category.id} value={category.id}>{category.code} – {category.name}{category.isActive ? '' : ' (ngừng hoạt động)'}</option>)}
+        </select>
+        {editing && <label className="ui-checkbox-label"><input type="checkbox" checked={form.isActive} onChange={e => setForm(x => ({ ...x, isActive: e.target.checked }))} /> Hoạt động</label>}
+        <div className="ui-inline-actions">
+          <button type="submit">Lưu</button>
+          {editing && <button type="button" onClick={createMode}>Hủy sửa</button>}
+        </div>
+      </form>
+    </UiCard>}
+
+    {editing && canManageBarcodes && <UiCard title="Mã vạch">
+      <div className="ui-inline-wrap">
+        {editing.barcodes?.map(item => <UiBadge key={item.id}>{item.value} <button type="button" aria-label={'Xóa mã vạch ' + item.value} onClick={() => deleteBarcode(item.id)} className="ui-badge-remove"><X size={14} aria-hidden="true" /></button></UiBadge>)}
+      </div>
+      <div className="ui-inline-wrap">
+        <input aria-label="Mã vạch mới" value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={64} placeholder="Mã vạch mới" />
+        <button type="button" onClick={addBarcode}>Thêm mã vạch</button>
+      </div>
+    </UiCard>}
+
+    <UiCard title="Danh sách sản phẩm">
+      {loading ? <p role="status">Đang tải sản phẩm...</p> : <table>
+        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Storage profile</th><th>Tracking</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th>Thao tác</th>}</tr></thead>
+        <tbody>
+          {visibleProducts.length === 0
+            ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 9 : 8} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
+            : visibleProducts.map(product => <tr key={product.id}>
+                <td><strong>{product.code}</strong></td>
+                <td>{product.name}</td>
+                <td>{product.categoryName || '—'}</td>
+                <td>{product.unitName || product.unitId}</td>
+                <td><strong>{product.storageClass || '—'}</strong><br /><small>{product.unitWeightKg != null ? product.unitWeightKg + ' kg' : '—'} • {product.unitVolumeM3 != null ? product.unitVolumeM3 + ' m³' : '—'} • {product.unitPalletEquivalent != null ? product.unitPalletEquivalent + ' pallet-eq' : '—'}</small></td>
+                <td><strong>{product.trackingType || 'None'}</strong><br /><small>{product.expiryControl ? `Expiry${product.shelfLifeDays ? ` • ${product.shelfLifeDays} ngày` : ''}` : 'Không kiểm soát hạn dùng'}</small></td>
+                <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>
+                <td><UiBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Hoạt động' : 'Khóa'}</UiBadge></td>
+                {(canManage || canManageBarcodes || canDeactivate) && <td>
+                  <div className="ui-inline-actions">
+                    {(canManage || canManageBarcodes) && <button onClick={() => editMode(product)}>Sửa</button>}
+                    {canDeactivate && <button onClick={() => deleteProduct(product.id)}>Xóa</button>}
+                  </div>
+                </td>}
+              </tr>)}
+        </tbody>
+      </table>}
+      <div className="ui-pagination">
+        <button disabled={currentPage === 1} onClick={() => setCurrentPage(value => value - 1)}>Trước</button>
+        <span>Trang {currentPage}/{totalPages}</span>
+        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(value => value + 1)}>Sau</button>
+      </div>
+    </UiCard>
+  </UiPage>;
 };
 export default Products;

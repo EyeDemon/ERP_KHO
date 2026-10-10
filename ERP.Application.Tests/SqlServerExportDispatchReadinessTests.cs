@@ -51,6 +51,18 @@ public sealed class SqlServerExportDispatchReadinessTests
         (await ScalarAsync(context,
             "SELECT COUNT(*) FROM sys.indexes WHERE name = 'IX_InventoryTransactions_ExportReceiptReference' AND object_id = OBJECT_ID('InventoryTransactions')"))
             .Should().Be(1);
+        (await ScalarAsync(context,
+            """
+            SELECT COUNT(*)
+            FROM sys.indexes i
+            JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+            JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+            WHERE i.name = 'IX_InventoryTransactions_ExportReceiptReference'
+              AND i.object_id = OBJECT_ID('InventoryTransactions')
+              AND ic.key_ordinal > 0
+              AND c.name = 'LocationId'
+            """))
+            .Should().Be(1, "export ledger idempotency must permit one row per physical location");
     }
 
     private static async Task<int> ScalarAsync(ErpKhoDbContext context, string sql)

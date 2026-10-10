@@ -80,6 +80,24 @@ namespace ERP.Api.Controllers
             return Ok(new { message = "Đã ghi nhận disposition QC; tồn kho chưa thay đổi" });
         }
 
+        [HttpGet("{id:int}/inventory-identities")]
+        [PermissionAuthorize(AppPermissions.ReceiptRead)]
+        public async Task<IActionResult> GetInventoryIdentities(int id, CancellationToken token)
+            => Ok(await _importReceiptService.GetInventoryIdentitiesAsync(id, token));
+
+        [HttpPost("{id:int}/inventory-identities")]
+        [IdempotentCommand("ImportReceipt.InventoryIdentity.Set")]
+        [PermissionAuthorize(AppPermissions.ReceiptUpdate)]
+        public async Task<IActionResult> SetInventoryIdentities(
+            int id,
+            [FromBody] ERP.Application.DTOs.SetImportReceiptInventoryIdentitiesDto dto,
+            CancellationToken token)
+        {
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
+            return Ok(await _importReceiptService.SetInventoryIdentitiesAsync(id, dto, userId, token));
+        }
+
         [HttpPost("{id}/post")]
         [IdempotentCommand("ImportReceipt.Post")]
         [PermissionAuthorize(AppPermissions.ReceiptPost)]

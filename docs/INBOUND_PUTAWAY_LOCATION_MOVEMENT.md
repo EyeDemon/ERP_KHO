@@ -39,3 +39,12 @@ Cleanup của Browser Run đã marker-verify và xóa database owned, credential
 Browser QA phát hiện và sửa hai production defect: PutawayService từng mở transaction lồng với idempotency middleware; service nay tái sử dụng ambient transaction. Frontend từng giữ logical idempotency key sau mutation thành công; nay giải phóng key sau success. Hai fix có runnable regression tests.
 
 Deferred: lot/serial/HU, weight/volume capacity, optimization/scoring, wave/routing, native/offline mobile, reverse completed movement, generic location transfer và advanced rule engine.
+
+
+## Permission/presentation regression fix — 2026-10-05
+
+Owner audit sau WH-06 phát hiện frontend hiện hành đã gom ba capability `putaway.assign`, `putaway.execute` và `putaway.cancel` thành một gate `putaway.execute`, trong khi API và permission registry vẫn tách độc lập. Fix này khôi phục đúng capability boundary ở UI: phân công chỉ theo `putaway.assign`, thực thi theo `putaway.execute`, hủy trước movement theo `putaway.cancel`. API regression test khóa exact action-to-permission mapping để tránh lệch lại.
+
+Header Cất hàng cũng được đưa về presentation contract tiếng Việt, không hiển thị các từ kỹ thuật `Inbound`, `putaway`, `location` hoặc `exception handling` trong mô tả người dùng. Không thay đổi inventory movement, balance, Receipt POST, migration hoặc SQL semantics trong fix này.
+
+Verification gate của fix là PR CI đầy đủ; không merge nếu backend, SQL, Application/API tests, frontend lint/tests/build chưa xanh.

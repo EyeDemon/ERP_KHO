@@ -10,7 +10,7 @@ public class StockReservationConfiguration : IEntityTypeConfiguration<StockReser
     {
         builder.ToTable("StockReservations", t =>
         {
-            t.HasCheckConstraint("CK_StockReservations_Quantity", "[Quantity] > 0 AND [ConsumedQuantity] >= 0 AND [ReleasedQuantity] >= 0 AND [ConsumedQuantity] + [ReleasedQuantity] <= [Quantity]");
+            t.HasCheckConstraint("CK_StockReservations_Quantity", "[Quantity] > 0 AND [ConsumedQuantity] >= 0 AND [ReleasedQuantity] >= 0 AND [AllocatedQuantity] >= 0 AND [ConsumedQuantity] + [ReleasedQuantity] <= [Quantity] AND [AllocatedQuantity] <= [Quantity] - [ConsumedQuantity] - [ReleasedQuantity]");
             t.HasCheckConstraint("CK_StockReservations_Expiry", "[ExpiresAt] > [CreatedAt]");
         });
         builder.HasKey(x => x.Id);
@@ -21,6 +21,8 @@ public class StockReservationConfiguration : IEntityTypeConfiguration<StockReser
         builder.Property(x => x.Quantity).HasPrecision(18, 4);
         builder.Property(x => x.ConsumedQuantity).HasPrecision(18, 4);
         builder.Property(x => x.ReleasedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.AllocatedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.AllocationVersion).IsConcurrencyToken();
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.HasIndex(x => x.ReservationCode).IsUnique();
         builder.HasIndex(x => new { x.ProductId, x.WarehouseId, x.Status, x.ExpiresAt });

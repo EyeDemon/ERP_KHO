@@ -23,7 +23,7 @@ describe('quản trị quyền truy cập', () => {
   it('hiển thị danh mục bằng tiếng Việt cho người chỉ có quyền đọc', async () => {
     setCurrentPermissions(['permission.read']);
     const view = render(<Permissions />);
-    expect(await view.findByRole('list', { name: 'Danh mục quyền truy cập' })).toBeTruthy();
+    expect(await view.findByRole('table', { name: 'Danh mục quyền truy cập' })).toBeTruthy();
     expect(view.container.textContent).not.toContain('product_category.manage');
     expect(view.queryByText('Cấp quyền')).toBeNull();
     expect(get).not.toHaveBeenCalledWith('/api/permissions/roles');

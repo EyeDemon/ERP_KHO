@@ -11,3 +11,73 @@ body {
 *, *::before, *::after {
   box-sizing: inherit;
 }
+
+.login-page,
+.public-state {
+  min-height: 100vh;
+  background: var(--ui-background);
+  color: var(--ui-foreground);
+}
+
+.login-page {
+  display: grid;
+  place-items: center;
+  padding: var(--ui-space-5);
+}
+
+.login-card {
+  width: min(420px, 100%);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  padding: var(--ui-space-6);
+}
+
+.login-heading {
+  margin-bottom: var(--ui-space-5);
+}
+
+.login-heading h1 {
+  margin: 4px 0 6px;
+}
+
+.login-heading p {
+  margin: 0;
+}
+
+.login-form {
+  display: grid;
+  gap: var(--ui-space-4);
+}
+
+.login-form button {
+  width: 100%;
+}
+
+.public-state {
+  display: grid;
+  place-items: start center;
+  padding: 64px var(--ui-space-5) var(--ui-space-5);
+}
+
+.public-state .ui-page {
+  width: min(720px, 100%);
+}
+
+.public-state-link {
+  display: inline-flex;
+  margin-top: var(--ui-space-3);
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .login-page,
+  .public-state {
+    padding-left: var(--ui-space-3);
+    padding-right: var(--ui-space-3);
+  }
+
+  .login-card {
+    padding: var(--ui-space-5);
+  }
+}

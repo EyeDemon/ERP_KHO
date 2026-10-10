@@ -1,0 +1,532 @@
+.app-shell {
+  display: flex;
+  min-height: 100dvh;
+  background: #F8FAFC;
+  color: #0F172A;
+  font-family: Inter, "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1200;
+  transform: translateY(-160%);
+  background: #FFFFFF;
+  color: #0F172A;
+  border: 2px solid #334155;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.app-sidebar {
+  width: 250px;
+  flex: 0 0 250px;
+  height: 100dvh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  background: #0F172A;
+  color: #FFFFFF;
+  border-right: 1px solid #1E293B;
+  padding: 20px 16px;
+  z-index: 300;
+}
+
+.app-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-brand {
+  margin: 0;
+  color: #FFFFFF;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.app-brand-context {
+  color: #94A3B8;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 5px 0 18px;
+}
+
+.sidebar-back-link,
+.blueprint-entry-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  color: #CBD5E1;
+  text-decoration: none;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sidebar-back-link:hover,
+.blueprint-entry-link:hover {
+  background: #1E293B;
+  color: #FFFFFF;
+}
+
+.blueprint-entry-link {
+  color: #A7F3D0;
+  margin-bottom: 8px;
+}
+
+.sidebar-section-label {
+  margin: 15px 9px 6px;
+  color: #94A3B8;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.sidebar-nav {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar-nav-item {
+  margin: 3px 0;
+}
+
+.sidebar-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  color: #CBD5E1;
+  text-decoration: none;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.sidebar-nav-link:hover {
+  background: #1E293B;
+  color: #FFFFFF;
+}
+
+.sidebar-nav-link.active {
+  background: #334155;
+  color: #FFFFFF;
+  font-weight: 650;
+}
+
+.sidebar-nav-link.accent {
+  color: #A7F3D0;
+  font-weight: 650;
+}
+
+.sidebar-nav-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.app-main-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-topbar {
+  min-height: 72px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E6E8EA;
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.topbar-leading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+  flex: 1;
+}
+
+.mobile-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  background: #FFFFFF;
+  color: #334155;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.topbar-page-meta {
+  min-width: 0;
+}
+
+.topbar-eyebrow {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.topbar-title {
+  color: #0F172A;
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.topbar-description {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 2px;
+  max-width: 75ch;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.runtime-badge,
+.blueprint-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.runtime-badge {
+  color: #78350F;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+}
+
+.blueprint-badge {
+  color: #4338CA;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+}
+
+.topbar-context-text {
+  color: #64748B;
+  font-size: 12px;
+}
+
+.persona-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.persona-control select {
+  min-height: 36px;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  background: #FFFFFF;
+  color: #0F172A;
+  padding: 0 8px;
+  font: inherit;
+}
+
+.logout-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: #F2F3F4;
+  border-color: #E6E8EA;
+}
+
+.app-content {
+  padding: 20px;
+  flex: 1;
+  min-width: 0;
+  background: #F8FAFC;
+}
+
+.app-content:focus {
+  outline: none;
+}
+
+.demo-runtime-banner {
+  max-width: 1440px;
+  margin: 0 auto 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 8px;
+  color: #78350F;
+}
+
+.demo-runtime-copy {
+  min-width: 260px;
+  flex: 1;
+}
+
+.demo-runtime-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.demo-runtime-title {
+  color: #451A03;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 3px;
+}
+
+.demo-runtime-detail {
+  color: #78350F;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+  max-width: 80ch;
+}
+
+.demo-runtime-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.demo-runtime-actions a {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+
+.demo-runtime-actions a:hover {
+  background: #F2F3F4;
+}
+
+.sidebar-mobile-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: #1E293B;
+  color: #FFFFFF;
+  cursor: pointer;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+.app-shell a:focus-visible,
+.app-shell button:focus-visible,
+.app-shell select:focus-visible {
+  outline: 3px solid #334155;
+  outline-offset: 2px;
+}
+
+@media (max-width: 1024px) {
+  .app-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform 150ms ease;
+    box-shadow: none;
+  }
+
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .mobile-nav-toggle,
+  .sidebar-mobile-close {
+    display: inline-flex;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 250;
+    border: 0;
+    background: rgba(15, 23, 42, .48);
+    cursor: pointer;
+  }
+
+  .app-topbar {
+    padding-inline: 16px;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-topbar {
+    align-items: flex-start;
+    min-height: 64px;
+  }
+
+  .topbar-leading {
+    align-items: flex-start;
+  }
+
+  .topbar-description {
+    font-size: 13px;
+  }
+
+  .topbar-actions {
+    gap: 6px;
+  }
+
+  .topbar-context-text {
+    display: none;
+  }
+
+  .demo-runtime-banner {
+    align-items: flex-start;
+  }
+
+  .demo-runtime-actions {
+    width: 100%;
+  }
+
+  .demo-runtime-actions a {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-topbar {
+    padding: 8px 12px;
+  }
+
+  .topbar-eyebrow,
+  .topbar-description {
+    display: none;
+  }
+
+  .topbar-title {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+
+  .runtime-badge,
+  .blueprint-badge {
+    font-size: 10px;
+  }
+
+  /* On narrow demo screens, place the long runtime warning below the nav/title row. */
+  .app-topbar:has(.runtime-badge) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .app-topbar:has(.runtime-badge) .topbar-leading,
+  .app-topbar:has(.runtime-badge) .topbar-actions {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .app-topbar:has(.runtime-badge) .topbar-actions {
+    justify-content: flex-start;
+  }
+
+  /* Keep the full demo warning readable without widening narrow mobile viewports. */
+  .topbar-actions {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .runtime-badge {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+  }
+
+  .app-content {
+    padding: 12px;
+  }
+
+  .app-sidebar {
+    width: min(86vw, 300px);
+    flex-basis: auto;
+  }
+
+  .persona-control > span:last-child {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar,
+  .sidebar-nav-link {
+    transition: none;
+  }
+}

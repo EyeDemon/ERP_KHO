@@ -124,6 +124,10 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IBusinessPartnerService, E
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IWarehouseRepository, ERP.Infrastructure.Repositories.WarehouseRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseService, ERP.Application.Services.WarehouseService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseCalendarService, ERP.Infrastructure.Services.WarehouseCalendarService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IDockYardService, ERP.Infrastructure.Services.DockYardService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInboundPlanningService, ERP.Infrastructure.Services.InboundPlanningService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptInboundPlanningIntegration, ERP.Infrastructure.Services.ReceiptInboundPlanningIntegration>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IUnitRepository, ERP.Infrastructure.Repositories.UnitRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IUnitService, ERP.Application.Services.UnitService>();
@@ -135,6 +139,8 @@ builder.Services.AddScoped<ERP.Domain.Interfaces.IStocktakeRepository, ERP.Infra
 builder.Services.AddScoped<ERP.Application.Interfaces.IStocktakeService, ERP.Application.Services.StocktakeService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IImportReceiptRepository, ERP.Infrastructure.Repositories.ImportReceiptRepository>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.ReceiptInventoryIdentityService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptInventoryIdentityService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ReceiptInventoryIdentityService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IImportReceiptService, ERP.Application.Services.ImportReceiptService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IUnitOfWork, ERP.Infrastructure.Repositories.UnitOfWork>();
@@ -146,6 +152,13 @@ builder.Services.AddScoped<ERP.Domain.Interfaces.IReportRepository, ERP.Infrastr
 builder.Services.AddScoped<ERP.Application.Interfaces.IReportService, ERP.Application.Services.ReportService>();
 
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryQueryService, ERP.Infrastructure.Queries.InventoryQueryService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryStatusService, ERP.Infrastructure.Services.InventoryStatusService>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.InventoryLockService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryLockService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.InventoryLockService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryLockEvaluator>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.InventoryLockService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryMovementService, ERP.Infrastructure.Services.InventoryMovementService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryReversalService, ERP.Infrastructure.Services.InventoryReversalService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryTraceabilityQueryService, ERP.Infrastructure.Queries.InventoryTraceabilityQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryTransactionQueryService, ERP.Infrastructure.Queries.InventoryTransactionQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryReconciliationQueryService, ERP.Infrastructure.Queries.InventoryReconciliationQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStocktakeQueryService, ERP.Infrastructure.Queries.StocktakeQueryService>();
@@ -167,6 +180,24 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IUserSessionService, ERP.I
 builder.Services.AddScoped<ERP.Application.Interfaces.IAccessTokenSessionValidator, ERP.Infrastructure.Services.AccessTokenSessionValidator>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockTransferService, ERP.Infrastructure.Services.StockTransferService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockReservationService, ERP.Infrastructure.Services.StockReservationService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IStockAllocationService, ERP.Infrastructure.Services.StockAllocationService>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.PickingTaskIntegration>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPickingTaskIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PickingTaskIntegration>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PickingService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPickingService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PickingService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IPickingDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PickingService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PackingSessionIntegration>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingSessionIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingSessionIntegration>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PackingService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.ShipmentIntegration>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentIntegration>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.ShipmentService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.SalesOrderBackorderService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ISalesOrderBackorderService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.SalesOrderBackorderService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();

@@ -1,5 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { beginPermissionRefresh, setCurrentPermissions } from './authorization';
+import { isBlueprintDemoRuntime } from './runtimeMode';
+import { createBlueprintDemoApiAdapter } from './demoApiAdapter';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://localhost:7198';
 let accessToken: string | null = null;
@@ -48,6 +50,9 @@ const clearAuthentication = (): void => {
 };
 
 apiClient.interceptors.request.use((config) => {
+  if (isBlueprintDemoRuntime()) {
+    config.adapter = createBlueprintDemoApiAdapter(config);
+  }
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
   return config;
 });

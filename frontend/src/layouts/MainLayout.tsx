@@ -1,16 +1,118 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { LogOut } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Boxes,
+  CheckCircle,
+  Circle,
+  Clipboard,
+  ClipboardCheck,
+  Database,
+  FlaskConical,
+  Gauge,
+  Handshake,
+  Home,
+  Layers3,
+  Lock,
+  LogOut,
+  Menu,
+  MapPinned,
+  Map as MapIcon,
+  Package,
+  PackageCheck,
+  PackageOpen,
+  Repeat2,
+  Ruler,
+  Scale,
+  Search,
+  ShoppingCart,
+  Shield,
+  Warehouse,
+  Truck,
+  X,
+} from 'lucide-react';
 import apiClient, { logout } from '../services/apiClient';
-import { canViewApprovals, canViewStocktakes, hasPermission, beginPermissionRefresh, setCurrentPermissions, usePermissionSet } from '../services/authorization';
+import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
+import { mockUsers } from '../mocks/erpWmsMockData';
+import { useMockDemo } from '../context/MockDemoContext';
+import {
+  beginPermissionRefresh,
+  canViewApprovals,
+  canViewStocktakes,
+  hasPermission,
+  setCurrentPermissions,
+  usePermissionSet,
+} from '../services/authorization';
+import { blueprintDemoReadPermissions, isBlueprintDemoRuntime } from '../services/runtimeMode';
+import {
+  productionNavigation,
+  productionSections,
+  resolveProductionPage,
+  type ProductionNavItem,
+} from '../config/productionNavigation';
+import './MainLayout.css';
+
+const productionIcons: Record<string, LucideIcon> = {
+  '/': Home,
+  '/products': Package,
+  '/warehouses': Warehouse,
+  '/warehouse-structure': MapPinned,
+  '/warehouse-map': MapIcon,
+  '/warehouse-calendar': ClipboardCheck,
+  '/dock-yard': Truck,
+  '/units': Ruler,
+  '/business-partners': Handshake,
+  '/purchase-orders': ShoppingCart,
+  '/asns': PackageCheck,
+  '/import-receipts': Clipboard,
+  '/putaway-tasks': PackageOpen,
+  '/export-receipts': Package,
+  '/stock-reservations': Lock,
+  '/stock-allocations': Layers3,
+  '/picking-tasks': ClipboardCheck,
+  '/packing-sessions': PackageCheck,
+  '/shipments': Truck,
+  '/backorders': ShoppingCart,
+  '/inventory': Boxes,
+  '/inventory-locks': Lock,
+  '/inventory-movements': Repeat2,
+  '/inventory-reconciliation': Scale,
+  '/stocktakes': ClipboardCheck,
+  '/stock-transfers': Repeat2,
+  '/approvals': CheckCircle,
+  '/permissions': Shield,
+};
+
+const blueprintIcons: Record<string, LucideIcon> = {
+  '/system-blueprint': Layers3,
+  '/system-blueprint/search': Search,
+  '/system-blueprint/coverage': Gauge,
+  '/system-blueprint/mock-data': Database,
+  '/system-blueprint/scenarios': FlaskConical,
+};
 
 const MainLayout = () => {
   usePermissionSet();
   const { pathname } = useLocation();
+  const blueprintMode = pathname.startsWith('/system-blueprint');
+  const demoRuntime = isBlueprintDemoRuntime();
+  const mockDemo = useMockDemo();
+  const pageMeta = blueprintMode ? undefined : resolveProductionPage(pathname);
+  const mainRef = useRef<HTMLElement>(null);
+  const previousPathRef = useRef(pathname);
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
   useEffect(() => {
     let active = true;
     const revision = beginPermissionRefresh();
+
+    if (blueprintMode || demoRuntime) {
+      setCurrentPermissions(demoRuntime ? [...blueprintDemoReadPermissions] : [], revision);
+      setIdentityState('ready');
+      return () => { active = false; };
+    }
+
     setIdentityState('loading');
     apiClient.get('/api/auth/me').then(response => {
       if (!active) return;
@@ -22,44 +124,230 @@ const MainLayout = () => {
       setIdentityState('error');
     });
     return () => { active = false; };
+  }, [blueprintMode, demoRuntime, pathname]);
+
+  useEffect(() => {
+    const label = blueprintMode ? 'Bản đồ hệ thống' : (pageMeta?.label ?? 'ERP WMS');
+    document.title = label + ' • ERP WMS';
+  }, [blueprintMode, pageMeta?.label]);
+
+  useEffect(() => {
+    if (previousPathRef.current !== pathname) {
+      setMobileNavOpen(false);
+      mainRef.current?.focus();
+      previousPathRef.current = pathname;
+    }
   }, [pathname]);
-  const showStocktakes = canViewStocktakes();
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileNavOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileNavOpen]);
+
+  const showStocktakes = demoRuntime || canViewStocktakes();
+  const canShowProductionItem = (item: ProductionNavItem) => {
+    if (item.permission) return hasPermission(item.permission);
+    if (item.access === 'stocktake') return showStocktakes;
+    if (item.access === 'approvals') return canViewApprovals();
+    return true;
+  };
+
+  const navLink = (
+    to: string,
+    label: string,
+    options: { accent?: boolean; icon?: LucideIcon } = {},
+  ) => {
+    const active = pathname === to || (to !== '/system-blueprint' && pathname.startsWith(to + '/'));
+    const Icon = options.icon ?? Circle;
+
+    return (
+      <li className="sidebar-nav-item" key={to}>
+        <Link
+          to={to}
+          className={'sidebar-nav-link' + (active ? ' active' : '') + (options.accent ? ' accent' : '')}
+          aria-current={active ? 'page' : undefined}
+        >
+          <Icon className="sidebar-nav-icon" aria-hidden="true" />
+          <span>{label}</span>
+        </Link>
+      </li>
+    );
+  };
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Arial, sans-serif' }}>
-      {/* Sidebar */}
-      <aside style={{ width: '250px', backgroundColor: '#2c3e50', color: 'white', padding: '20px' }}>
-        <h2>ERP KHO</h2>
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          <li style={{ margin: '10px 0' }}><Link to="/" style={{ color: 'white', textDecoration: 'none' }}>Tổng quan</Link></li>
-          {hasPermission('product.read') && <li style={{ margin: '10px 0' }}><Link to="/products" style={{ color: 'white', textDecoration: 'none' }}>Sản phẩm</Link></li>}
-          {hasPermission('warehouse.read') && <li style={{ margin: '10px 0' }}><Link to="/warehouses" style={{ color: 'white', textDecoration: 'none' }}>Kho hàng</Link></li>}
-          {hasPermission('uom.read') && <li style={{ margin: '10px 0' }}><Link to="/units" style={{ color: 'white', textDecoration: 'none' }}>Đơn vị tính</Link></li>}
-          {hasPermission('partner.read') && <li style={{ margin: '10px 0' }}><Link to="/business-partners" style={{ color: 'white', textDecoration: 'none' }}>Đối tác</Link></li>}
-          {hasPermission('receipt.read') && <li style={{ margin: '10px 0' }}><Link to="/import-receipts" style={{ color: 'white', textDecoration: 'none' }}>Phiếu nhập kho</Link></li>}
-          <li style={{ margin: '10px 0' }}><Link to="/export-receipts" style={{ color: 'white', textDecoration: 'none' }}>Phiếu xuất kho</Link></li>
-          <li style={{ margin: '10px 0' }}><Link to="/inventory" style={{ color: 'white', textDecoration: 'none' }}>Tồn kho</Link></li>
-          {hasPermission('putaway.read') && <li style={{ margin: '10px 0' }}><Link to="/putaway-tasks" style={{ color: 'white', textDecoration: 'none' }}>Cất hàng</Link></li>}
-          {showStocktakes && <li style={{ margin: '10px 0' }}><Link to="/stocktakes" style={{ color: 'white', textDecoration: 'none' }}>Kiểm kê kho</Link></li>}
-          <li style={{ margin: '10px 0' }}><Link to="/stock-transfers" style={{ color: 'white', textDecoration: 'none' }}>Điều chuyển kho</Link></li>
-          <li style={{ margin: '10px 0' }}><Link to="/stock-reservations" style={{ color: 'white', textDecoration: 'none' }}>Giữ hàng</Link></li>
-          {canViewApprovals() && <li style={{ margin: '10px 0' }}><Link to="/approvals" style={{ color: 'white', textDecoration: 'none' }}>Phê duyệt</Link></li>}
-          {hasPermission('permission.read') && <li><Link to="/permissions" style={{ color: 'white' }}>Quản trị quyền truy cập</Link></li>}
-        </ul>
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Đóng menu điều hướng"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      <aside id="system-sidebar" className={'app-sidebar' + (mobileNavOpen ? ' open' : '')} aria-label="Điều hướng hệ thống">
+        <div className="app-sidebar-header">
+          <h2 className="app-brand">ERP WMS</h2>
+          <button type="button" className="sidebar-mobile-close" aria-label="Đóng menu điều hướng" onClick={() => setMobileNavOpen(false)}>
+            <X aria-hidden="true" />
+          </button>
+        </div>
+        <div className="app-brand-context">
+          {blueprintMode ? 'Bản thiết kế hệ thống / Mô phỏng' : 'Hệ thống quản lý kho'}
+        </div>
+
+        {blueprintMode ? (
+          <>
+            <Link to="/" className="sidebar-back-link">
+              <Home className="sidebar-nav-icon" aria-hidden="true" />
+              <span>Quay lại hệ thống thật</span>
+            </Link>
+
+            <div className="sidebar-section-label">Công cụ bản thiết kế</div>
+            <nav aria-label="Công cụ bản thiết kế">
+              <ul className="sidebar-nav">
+                {navLink('/system-blueprint', 'Bản đồ tổng thể', { accent: true, icon: blueprintIcons['/system-blueprint'] })}
+                {navLink('/system-blueprint/search', 'Tìm kiếm toàn hệ thống', { icon: blueprintIcons['/system-blueprint/search'] })}
+                {navLink('/system-blueprint/coverage', 'Độ phủ & mức sẵn sàng', { icon: blueprintIcons['/system-blueprint/coverage'] })}
+                {navLink('/system-blueprint/mock-data', 'Phòng dữ liệu mô phỏng', { icon: blueprintIcons['/system-blueprint/mock-data'] })}
+                {navLink('/system-blueprint/scenarios', 'Phòng kịch bản chuẩn', { icon: blueprintIcons['/system-blueprint/scenarios'] })}
+              </ul>
+            </nav>
+
+            <div className="sidebar-section-label">17 nhóm phân hệ</div>
+            <nav aria-label="Bản thiết kế theo phân hệ">
+              <ul className="sidebar-nav">
+                {erpWmsBlueprint.map((module) => navLink('/system-blueprint/' + module.key, module.name, { icon: Circle }))}
+              </ul>
+            </nav>
+          </>
+        ) : (
+          <>
+            <Link to="/system-blueprint" className="blueprint-entry-link">
+              <Layers3 className="sidebar-nav-icon" aria-hidden="true" />
+              <span>Bản đồ hệ thống</span>
+            </Link>
+
+            <nav aria-label="Điều hướng nghiệp vụ">
+              {productionSections.map((section) => {
+                const items = productionNavigation.filter((item) => item.section === section && canShowProductionItem(item));
+                if (items.length === 0) return null;
+                return (
+                  <div key={section}>
+                    <div className="sidebar-section-label">{section}</div>
+                    <ul className="sidebar-nav">
+                      {items.map((item) => navLink(item.path, item.label, { icon: productionIcons[item.path] }))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </nav>
+          </>
+        )}
       </aside>
 
-      {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <header style={{ height: '60px', backgroundColor: '#ecf0f1', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'flex-end' }}>
-          <span style={{ marginRight: '12px' }}>{localStorage.getItem('username') || 'Người dùng'}</span>
-          <button type="button" onClick={() => void logout()} title="Đăng xuất" aria-label="Đăng xuất" style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: '8px' }}>
-            <LogOut size={20} />
-          </button>
+      <div className="app-main-column">
+        <header className="app-topbar">
+          <div className="topbar-leading">
+            <button
+              type="button"
+              className="mobile-nav-toggle"
+              aria-label={mobileNavOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'}
+              aria-expanded={mobileNavOpen}
+              aria-controls="system-sidebar"
+              onClick={() => setMobileNavOpen(value => !value)}
+            >
+              {mobileNavOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+            </button>
+
+            {!blueprintMode && pageMeta && (
+              <div className="topbar-page-meta">
+                <div className="topbar-eyebrow">{pageMeta.section}</div>
+                <div className="topbar-title">{pageMeta.label}</div>
+                <div className="topbar-description">{pageMeta.description}</div>
+              </div>
+            )}
+
+            {blueprintMode && (
+              <>
+                <span className="blueprint-badge">MÔ PHỎNG • CHỈ ĐỌC</span>
+                <label className="persona-control">
+                  <span>Vai trò mô phỏng</span>
+                  <select
+                    aria-label="Vai trò mô phỏng"
+                    value={mockDemo.selectedUserCode}
+                    onChange={(event) => mockDemo.setSelectedUserCode(event.target.value)}
+                  >
+                    {mockUsers.map((user) => (
+                      <option key={user.code} value={user.code}>{user.name} • {user.role}</option>
+                    ))}
+                  </select>
+                  <span>{mockDemo.allowedWarehouses.length} kho trong phạm vi</span>
+                </label>
+              </>
+            )}
+          </div>
+
+          <div className="topbar-actions">
+            {blueprintMode ? (
+              <span className="topbar-context-text">Môi trường bản thiết kế</span>
+            ) : demoRuntime ? (
+              <>
+                <span className="runtime-badge">MÔI TRƯỜNG MÔ PHỎNG • PHÍA MÁY CHỦ MÔ PHỎNG</span>
+                <span className="topbar-context-text">Giao diện hệ thống thật</span>
+              </>
+            ) : (
+              <>
+                <span className="topbar-context-text">{localStorage.getItem('username') || 'Người dùng'}</span>
+                <button
+                  type="button"
+                  onClick={() => void logout()}
+                  title="Đăng xuất"
+                  aria-label="Đăng xuất"
+                  className="logout-button"
+                >
+                  <LogOut size={20} aria-hidden="true" />
+                </button>
+              </>
+            )}
+          </div>
         </header>
-        
-        <main style={{ padding: '20px', flex: 1, backgroundColor: '#f4f6f8' }}>
-          {identityState === 'loading' ? <p role="status">Đang xác minh quyền truy cập...</p>
-            : identityState === 'error' ? <p role="alert">Không thể xác minh quyền truy cập. Vui lòng tải lại.</p>
-              : <Outlet />}
+
+        <main
+          id="main-content"
+          ref={mainRef}
+          tabIndex={-1}
+          className={(blueprintMode ? '' : 'production-ui ') + 'app-content'}
+        >
+          {demoRuntime && !blueprintMode && (
+            <section role="note" className="demo-runtime-banner" aria-label="Thông tin môi trường demo">
+              <div className="demo-runtime-copy">
+                <div className="demo-runtime-kicker">Bản mô phỏng Vercel • Chỉ đọc</div>
+                <div className="demo-runtime-title">Giao diện hệ thống thật đang chạy với bộ chuyển đổi API mô phỏng, chưa phải môi trường máy chủ thử nghiệm.</div>
+                <div className="demo-runtime-detail">
+                  GET dùng dữ liệu mô phỏng có kiểm soát; POST/PUT/DELETE bị chặn với mã 405 và dữ liệu không được lưu sau phiên kiểm thử.
+                </div>
+              </div>
+              <div className="demo-runtime-actions">
+                <Link to="/system-blueprint">Mở bản đồ hệ thống</Link>
+                <Link to="/system-blueprint/coverage">Độ phủ & mức sẵn sàng</Link>
+              </div>
+            </section>
+          )}
+
+          {identityState === 'loading' ? (
+            <p role="status">Đang xác minh quyền truy cập...</p>
+          ) : identityState === 'error' ? (
+            <p role="alert">Không thể xác minh quyền truy cập. Vui lòng tải lại.</p>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
     </div>

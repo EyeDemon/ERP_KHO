@@ -17,6 +17,8 @@ public class ImportReceipt
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ApprovedAt { get; set; }
     public int? SupplierId { get; set; }
+    public int? PurchaseOrderId { get; set; }
+    public int? AsnId { get; set; }
     public string? SupplierCodeSnapshot { get; set; }
     public string? SupplierNameSnapshot { get; set; }
 
@@ -25,6 +27,8 @@ public class ImportReceipt
     public User CreatedByUser { get; set; } = null!;
     public User? ApprovedByUser { get; set; }
     public BusinessPartner? Supplier { get; set; }
+    public PurchaseOrder? PurchaseOrder { get; set; }
+    public Asn? Asn { get; set; }
     public ICollection<ImportReceiptDetail> Details { get; set; } = new List<ImportReceiptDetail>();
     public ICollection<ReceivingDiscrepancy> Discrepancies { get; set; } = new List<ReceivingDiscrepancy>();
 }

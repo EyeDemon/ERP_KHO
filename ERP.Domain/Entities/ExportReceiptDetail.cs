@@ -8,6 +8,10 @@ public class ExportReceiptDetail
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public string? Note { get; set; }
+    public int? BaseUomIdSnapshot { get; set; }
+    public string? BaseUomCodeSnapshot { get; set; }
+    public string? BaseUomNameSnapshot { get; set; }
+    public int? BaseUomDecimalPlacesSnapshot { get; set; }
 
     // Navigation
     public ExportReceipt ExportReceipt { get; set; } = null!;

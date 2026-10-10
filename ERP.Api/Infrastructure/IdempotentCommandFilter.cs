@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -50,7 +51,9 @@ public sealed class IdempotentCommandFilter(
         var fingerprint = Fingerprint(commandScope, actionContext.ActionArguments);
         metadata.IdempotencyKeyHash = keyHash;
         metadata.RequestFingerprint = fingerprint;
-        await using var transaction = await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
+        await using var transaction = RequiresSerializableIsolation(commandScope)
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, actionContext.HttpContext.RequestAborted)
+            : await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
         var record = new IdempotencyRecord
         {
             UserId = userId, CommandScope = commandScope, KeyHash = keyHash,
@@ -181,6 +184,24 @@ public sealed class IdempotentCommandFilter(
     }
 
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    public static bool RequiresSerializableIsolation(string scope) =>
+        scope is "DockYard.Appointment.CheckIn" or "DockYard.Appointment.AssignDock"
+        || scope.StartsWith("InventoryAllocation.", StringComparison.Ordinal)
+        || scope.StartsWith("Picking.", StringComparison.Ordinal)
+        || scope.StartsWith("Packing.", StringComparison.Ordinal)
+        || scope.StartsWith("HandlingUnit.", StringComparison.Ordinal)
+        || scope.StartsWith("Shipment.", StringComparison.Ordinal)
+        || scope.StartsWith("SalesOrder.", StringComparison.Ordinal)
+        || scope.StartsWith("ExportReceipt.", StringComparison.Ordinal)
+        || scope.StartsWith("Backorder.", StringComparison.Ordinal)
+        || scope.StartsWith("ImportReceipt.InventoryIdentity.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryStatus.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryLock.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryMovement.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryReversal.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryReservation.", StringComparison.Ordinal)
+        || scope.StartsWith("Putaway.Move", StringComparison.Ordinal);
     private static bool IsUniqueViolation(DbUpdateException ex)
     {
         if (ex.InnerException is SqlException { Number: 2601 or 2627 }) return true;

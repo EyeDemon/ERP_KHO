@@ -25,6 +25,15 @@ namespace ERP.Application.Validators
             RuleFor(x => x.Description)
                 .MaximumLength(500).WithMessage("Mô tả không được vượt quá 500 ký tự")
                 .When(x => !string.IsNullOrEmpty(x.Description));
+
+            RuleFor(x => x.StorageClass)
+                .MaximumLength(32)
+                .Matches("^[A-Za-z0-9_-]+$")
+                .When(x => !string.IsNullOrWhiteSpace(x.StorageClass))
+                .WithMessage("Storage Class chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.");
+            RuleFor(x => x.UnitWeightKg).GreaterThan(0).When(x => x.UnitWeightKg.HasValue);
+            RuleFor(x => x.UnitVolumeM3).GreaterThan(0).When(x => x.UnitVolumeM3.HasValue);
+            RuleFor(x => x.UnitPalletEquivalent).GreaterThan(0).When(x => x.UnitPalletEquivalent.HasValue);
         }
     }
 }

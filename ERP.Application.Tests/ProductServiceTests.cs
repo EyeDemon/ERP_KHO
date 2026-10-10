@@ -76,6 +76,58 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
+        public async Task Storage_profile_create_and_update_are_explicit_and_normalized()
+        {
+            var dto = new CreateProductDto
+            {
+                Code = "CAP-01",
+                Name = "Capacity product",
+                StorageClass = " ambient ",
+                UnitWeightKg = 1.25m,
+                UnitVolumeM3 = 0.01m,
+                UnitPalletEquivalent = 0.05m
+            };
+            _mockRepo.Setup(r => r.ExistsByCodeAsync("CAP-01", null, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+            Product? captured = null;
+            _catalog.Setup(r => r.AddProductAsync(It.IsAny<Product>(), It.IsAny<CancellationToken>()))
+                .Callback<Product, CancellationToken>((p, _) => { p.Id = 7; captured = p; })
+                .ReturnsAsync((Product p, CancellationToken _) => p);
+            _mockRepo.Setup(r => r.GetByIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(() => captured);
+
+            var created = await _service.CreateProductAsync(dto, "user");
+            created.StorageClass.Should().Be("AMBIENT");
+            created.UnitWeightKg.Should().Be(1.25m);
+
+            await _service.UpdateProductAsync(7, new UpdateProductDto
+            {
+                Name = "Capacity product",
+                UnitId = 1,
+                IsActive = true,
+                UpdateStorageProfile = true,
+                StorageClass = " chilled ",
+                UnitWeightKg = 2m,
+                UnitVolumeM3 = 0.02m,
+                UnitPalletEquivalent = 0.1m
+            }, "user");
+
+            captured!.StorageClass.Should().Be("CHILLED");
+            captured.UnitWeightKg.Should().Be(2m);
+            _mockRepo.Verify(r => r.UpdateAsync(captured, It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task Legacy_update_preserves_storage_profile_when_flag_is_absent()
+        {
+            var product = new Product { Id = 8, Code = "P8", StorageClass = "AMBIENT", UnitWeightKg = 1.5m };
+            _mockRepo.Setup(r => r.GetByIdAsync(8, It.IsAny<CancellationToken>())).ReturnsAsync(product);
+
+            await _service.UpdateProductAsync(8, new UpdateProductDto { Name = "Mới", UnitId = 2, IsActive = true }, "user");
+
+            product.StorageClass.Should().Be("AMBIENT");
+            product.UnitWeightKg.Should().Be(1.5m);
+        }
+
+        [Fact]
         public async Task CreateProduct_WithDuplicateCode_ThrowsBusinessRuleException()
         {
             // Arrange

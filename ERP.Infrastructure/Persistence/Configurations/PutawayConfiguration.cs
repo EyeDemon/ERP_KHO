@@ -9,8 +9,10 @@ public sealed class WarehouseLocationConfiguration : IEntityTypeConfiguration<Wa
     public void Configure(EntityTypeBuilder<WarehouseLocation> b)
     {
         b.ToTable("WarehouseLocations");
-        b.HasKey(x => x.Id); b.Property(x => x.Code).HasMaxLength(64); b.Property(x => x.Name).HasMaxLength(200); b.Property(x => x.RowVersion).IsRowVersion();
+        b.HasKey(x => x.Id); b.Property(x => x.Code).HasMaxLength(64); b.Property(x => x.Name).HasMaxLength(200); b.Property(x => x.StructurePath).HasMaxLength(160); b.Property(x => x.StorageClass).HasMaxLength(32); b.Property(x => x.MaxWeightKg).HasPrecision(18,6); b.Property(x => x.MaxVolumeM3).HasPrecision(18,8); b.Property(x => x.MaxPalletEquivalent).HasPrecision(18,8); b.Property(x => x.MapX).HasPrecision(5,2); b.Property(x => x.MapY).HasPrecision(5,2); b.Property(x => x.MapWidth).HasPrecision(5,2); b.Property(x => x.MapHeight).HasPrecision(5,2); b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
+        b.HasIndex(x => new { x.WarehouseId, x.StructurePath });
+        b.HasIndex(x => new { x.WarehouseId, x.StorageClass });
         b.HasOne(x => x.Warehouse).WithMany(x => x.Locations).HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
     }
 }
@@ -45,12 +47,15 @@ public sealed class InventoryLocationMovementConfiguration : IEntityTypeConfigur
     public void Configure(EntityTypeBuilder<InventoryLocationMovement> b)
     {
         b.ToTable("InventoryLocationMovements");
-        b.HasKey(x => x.Id); b.Property(x => x.BaseQuantity).HasPrecision(18,4); b.Property(x => x.EnteredQuantity).HasPrecision(18,4); b.Property(x => x.EnteredUnitCode).HasMaxLength(32);
+        b.HasKey(x => x.Id); b.Property(x => x.BaseQuantity).HasPrecision(18,4); b.Property(x => x.EnteredQuantity).HasPrecision(18,4); b.Property(x => x.EnteredUnitCode).HasMaxLength(32); b.Property(x => x.ReferenceType).HasMaxLength(50);
         b.HasIndex(x => new { x.PutawayTaskItemId, x.CreatedAt });
+        b.HasIndex(x => new { x.ReferenceType, x.ReferenceId });
         b.HasOne<WarehouseLocation>().WithMany().HasForeignKey(x => x.FromLocationId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<WarehouseLocation>().WithMany().HasForeignKey(x => x.ToLocationId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Warehouse>().WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<InventoryLot>().WithMany().HasForeignKey(x => x.LotId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<InventorySerial>().WithMany().HasForeignKey(x => x.SerialId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<PutawayTask>().WithMany().HasForeignKey(x => x.PutawayTaskId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<PutawayTaskItem>().WithMany().HasForeignKey(x => x.PutawayTaskItemId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<ImportReceipt>().WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);

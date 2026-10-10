@@ -1,6 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
+import {
+  UiBadge,
+  UiCard,
+  UiMetric,
+  UiMetricGrid,
+  UiPage,
+  UiPageHeader,
+  UiTableScroll,
+  UiToolbar,
+  UiToolbarField,
+} from '../ui/ProductionUi';
 
 interface Unit {
   id: number;
@@ -9,305 +20,292 @@ interface Unit {
   isActive: boolean;
 }
 
+type UnitForm = {
+  id?: number;
+  code: string;
+  name: string;
+  isActive: boolean;
+};
+
 const PAGE_SIZE = 10;
+
+const messageOf = (failure: unknown, fallback: string) => {
+  const response = failure as { response?: { data?: { message?: string } } };
+  return response.response?.data?.message || fallback;
+};
+
+const emptyForm = (): UnitForm => ({
+  code: '',
+  name: '',
+  isActive: true,
+});
 
 const Units = () => {
   const canManage = usePermission('uom.manage');
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
-  // Search and Pagination
-  const [searchTerm, setSearchTerm] = useState('');
+  const [success, setSuccess] = useState('');
+  const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-
-  // Form State
   const [showForm, setShowForm] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<Partial<Unit>>({
-    code: '',
-    name: '',
-    isActive: true
-  });
+  const [form, setForm] = useState<UnitForm>(emptyForm);
   const [formError, setFormError] = useState('');
-  const [formLoading, setFormLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const fetchUnits = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await apiClient.get('/api/units');
-      setUnits(res.data);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi tải danh sách đơn vị tính');
+      const response = await apiClient.get('/api/units');
+      setUnits(response.data);
+    } catch (failure) {
+      setError(messageOf(failure, 'Không thể tải danh sách đơn vị tính.'));
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchUnits();
   }, []);
 
-  // Filter and Paginate
-  const filteredUnits = useMemo(() => {
-    if (!searchTerm) return units;
-    const lowerTerm = searchTerm.toLowerCase();
-    return units.filter(
-      u => u.code.toLowerCase().includes(lowerTerm) || u.name.toLowerCase().includes(lowerTerm)
-    );
-  }, [units, searchTerm]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredUnits.length / PAGE_SIZE));
-  
-  // Empty page protection
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [totalPages, currentPage]);
+    void load();
+  }, [load]);
 
-  const paginatedUnits = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredUnits.slice(start, start + PAGE_SIZE);
-  }, [filteredUnits, currentPage]);
+  const filtered = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('vi');
+    if (!query) return units;
+    return units.filter((unit) =>
+      [unit.code, unit.name].join(' ').toLocaleLowerCase('vi').includes(query)
+    );
+  }, [search, units]);
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(1); // Reset page on search
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const page = Math.min(currentPage, totalPages);
+  const paginated = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
+
+  useEffect(() => {
+    if (currentPage !== page) setCurrentPage(page);
+  }, [currentPage, page]);
+
+  const activeCount = units.filter((unit) => unit.isActive).length;
+  const editing = form.id !== undefined;
+
+  const openCreate = () => {
+    setForm(emptyForm());
+    setFormError('');
+    setSuccess('');
+    setShowForm(true);
   };
 
-  const handleAddNew = () => {
-    setIsEditing(false);
-    setFormData({
-      code: '',
-      name: '',
-      isActive: true
+  const openEdit = (unit: Unit) => {
+    setForm({
+      id: unit.id,
+      code: unit.code,
+      name: unit.name,
+      isActive: unit.isActive,
     });
     setFormError('');
+    setSuccess('');
     setShowForm(true);
-    setSuccessMsg('');
   };
 
-  const handleEdit = (unit: Unit) => {
-    setIsEditing(true);
-    setFormData({ ...unit });
-    setFormError('');
-    setShowForm(true);
-    setSuccessMsg('');
-  };
-
-  const handleCancelForm = () => {
+  const closeForm = () => {
+    if (saving) return;
     setShowForm(false);
     setFormError('');
   };
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
-    const finalValue = type === 'checkbox' ? checked : value;
-    setFormData(prev => ({ ...prev, [name]: finalValue }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (saving) return;
     setFormError('');
-    setSuccessMsg('');
+    setSuccess('');
 
-    if (!formData.code || !formData.code.trim()) {
+    const code = form.code.trim();
+    const name = form.name.trim();
+    if (!code) {
       setFormError('Mã đơn vị tính không được để trống.');
       return;
     }
-    if (!formData.name || !formData.name.trim()) {
+    if (!name) {
       setFormError('Tên đơn vị tính không được để trống.');
       return;
     }
 
-    setFormLoading(true);
+    setSaving(true);
     try {
-      if (isEditing && formData.id) {
-        const updatePayload = {
-          name: formData.name,
-          isActive: formData.isActive
-        };
-        await apiClient.put(`/api/units/${formData.id}`, updatePayload);
-        setSuccessMsg('Cập nhật đơn vị tính thành công.');
+      if (editing && form.id !== undefined) {
+        await apiClient.put(`/api/units/${form.id}`, {
+          name,
+          isActive: form.isActive,
+        });
+        setSuccess('Cập nhật đơn vị tính thành công.');
       } else {
-        const createPayload = {
-          code: formData.code,
-          name: formData.name
-        };
-        await apiClient.post('/api/units', createPayload);
-        setSuccessMsg('Thêm mới đơn vị tính thành công.');
+        await apiClient.post('/api/units', {
+          code,
+          name,
+        });
+        setSuccess('Thêm đơn vị tính thành công.');
       }
       setShowForm(false);
       setCurrentPage(1);
-      fetchUnits();
-    } catch (err: any) {
-      setFormError(err.response?.data?.message || 'Lỗi khi lưu đơn vị tính.');
+      await load();
+    } catch (failure) {
+      setFormError(messageOf(failure, 'Không thể lưu đơn vị tính.'));
     } finally {
-      setFormLoading(false);
+      setSaving(false);
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Bạn có chắc muốn xóa đơn vị tính này?')) return;
-    setSuccessMsg('');
+  const remove = async (unit: Unit) => {
+    if (!canManage || !window.confirm(`Bạn có chắc muốn xóa đơn vị tính ${unit.code}?`)) return;
     setError('');
+    setSuccess('');
     try {
-      await apiClient.delete(`/api/units/${id}`);
-      setSuccessMsg('Xóa đơn vị tính thành công.');
+      await apiClient.delete(`/api/units/${unit.id}`);
+      setSuccess('Xóa đơn vị tính thành công.');
       setCurrentPage(1);
-      fetchUnits();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi xóa đơn vị tính');
+      await load();
+    } catch (failure) {
+      setError(messageOf(failure, 'Không thể xóa đơn vị tính.'));
     }
   };
 
   return (
-    <div>
-      <h2>Quản lý danh mục Đơn vị tính</h2>
-      
-      {successMsg && <div style={{ color: 'green', marginBottom: '10px' }}>{successMsg}</div>}
-      {error && (
-        <div style={{ color: 'red', marginBottom: '10px' }}>
-          {error} <button onClick={fetchUnits} style={{cursor: 'pointer'}}>Thử lại</button>
-        </div>
-      )}
+    <UiPage>
+      <UiPageHeader
+        eyebrow="Dữ liệu nền"
+        title="Đơn vị tính"
+        description="Quản lý mã và tên đơn vị tính dùng trong chứng từ, tồn kho và quy đổi số lượng."
+        actions={canManage ? <button type="button" className="ui-primary-button" onClick={openCreate}>Thêm đơn vị</button> : undefined}
+      />
 
-      {!showForm ? (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
-            <input 
-              type="text" 
-              placeholder="Tìm kiếm theo mã hoặc tên..." 
-              value={searchTerm}
-              onChange={handleSearchChange}
-              style={{ padding: '8px', minWidth: '200px', flex: '1', maxWidth: '300px' }}
-            />
-            {canManage && <button onClick={handleAddNew} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}>Thêm mới</button>}
-          </div>
+      {success && <p role="status" className="ui-success-text">{success}</p>}
+      {error && <p role="alert">{error} <button type="button" onClick={() => void load()}>Thử lại</button></p>}
 
-          {loading ? (
-            <div>Đang tải...</div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã ĐVT</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Tên ĐVT</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
-                    {canManage && <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>}
+      <UiMetricGrid>
+        <UiMetric value={units.length} label="Tổng đơn vị tính" />
+        <UiMetric value={activeCount} label="Đang hoạt động" />
+        <UiMetric value={filtered.length} label="Kết quả hiện tại" />
+      </UiMetricGrid>
+
+      <UiToolbar>
+        <UiToolbarField label="Tìm đơn vị tính">
+          <input
+            aria-label="Tìm đơn vị tính"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Mã hoặc tên đơn vị"
+          />
+        </UiToolbarField>
+        <div className="ui-muted-text ui-auto-actions">Trang {page}/{totalPages} • {filtered.length} đơn vị</div>
+      </UiToolbar>
+
+      {loading ? (
+        <p role="status">Đang tải danh sách đơn vị tính...</p>
+      ) : (
+        <UiCard title="Danh sách đơn vị tính">
+          <UiTableScroll>
+            <table aria-label="Danh sách đơn vị tính">
+              <thead>
+                <tr>
+                  <th>Mã ĐVT</th>
+                  <th>Tên đơn vị</th>
+                  <th>Trạng thái</th>
+                  {canManage && <th>Thao tác</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.map((unit) => (
+                  <tr key={unit.id}>
+                    <td><strong>{unit.code}</strong></td>
+                    <td>{unit.name}</td>
+                    <td><UiBadge tone={unit.isActive ? 'success' : 'neutral'}>{unit.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
+                    {canManage && <td>
+                      <div className="ui-inline-actions">
+                        <button type="button" aria-label={`Sửa đơn vị ${unit.code}`} onClick={() => openEdit(unit)}>Sửa</button>
+                        <button type="button" aria-label={`Xóa đơn vị ${unit.code}`} onClick={() => void remove(unit)}>Xóa</button>
+                      </div>
+                    </td>}
                   </tr>
-                </thead>
-                <tbody>
-                  {paginatedUnits.map(u => (
-                    <tr key={u.id}>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{u.code}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7', wordBreak: 'break-word', maxWidth: '300px' }}>{u.name}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{u.isActive ? 'Hoạt động' : 'Khóa'}</td>
-                      {canManage && <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
-                        <button onClick={() => handleEdit(u)} style={{ marginRight: '10px', cursor: 'pointer' }}>Sửa</button>
-                        <button onClick={() => handleDelete(u.id)} style={{ color: 'red', cursor: 'pointer' }}>Xóa</button>
-                      </td>}
-                    </tr>
-                  ))}
-                  {filteredUnits.length === 0 && (
-                    <tr>
-                      <td colSpan={canManage ? 4 : 3} style={{ textAlign: 'center', padding: '20px' }}>
-                        {units.length === 0 ? 'Chưa có đơn vị tính nào' : 'Không tìm thấy đơn vị tính nào phù hợp'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <button 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(1)}
-                  >
-                    &laquo; Đầu
-                  </button>
-                  <button 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => prev - 1)}
-                  >
-                    &lsaquo; Trước
-                  </button>
-                  <span>Trang {currentPage} / {totalPages}</span>
-                  <button 
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                  >
-                    Sau &rsaquo;
-                  </button>
-                  <button 
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(totalPages)}
-                  >
-                    Cuối &raquo;
-                  </button>
-                </div>
-              )}
+                ))}
+                {paginated.length === 0 && (
+                  <tr>
+                    <td className="ui-empty-cell" colSpan={canManage ? 4 : 3}>
+                      {units.length === 0 ? 'Chưa có đơn vị tính nào.' : 'Không tìm thấy đơn vị tính phù hợp.'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </UiTableScroll>
+
+          {totalPages > 1 && (
+            <div className="ui-pagination" aria-label="Phân trang đơn vị tính">
+              <button type="button" disabled={page === 1} onClick={() => setCurrentPage(1)}>Đầu</button>
+              <button type="button" disabled={page === 1} onClick={() => setCurrentPage((value) => Math.max(1, value - 1))}>Trước</button>
+              <span>Trang {page} / {totalPages}</span>
+              <button type="button" disabled={page === totalPages} onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))}>Sau</button>
+              <button type="button" disabled={page === totalPages} onClick={() => setCurrentPage(totalPages)}>Cuối</button>
             </div>
           )}
-        </>
-      ) : (
-        <div style={{ border: '1px solid #bdc3c7', padding: '20px', borderRadius: '4px', maxWidth: '600px' }}>
-          <h3>{isEditing ? 'Sửa đơn vị tính' : 'Thêm mới đơn vị tính'}</h3>
-          {formError && <div style={{ color: 'red', marginBottom: '15px' }}>{formError}</div>}
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Mã đơn vị tính <span style={{ color: 'red' }}>*</span></label>
-              <input 
-                type="text" 
-                name="code" 
-                value={formData.code || ''} 
-                onChange={handleFormChange}
-                style={{ width: '100%', padding: '8px', boxSizing: 'border-box', backgroundColor: isEditing ? '#f2f2f2' : '#fff' }}
-                disabled={formLoading || isEditing}
+        </UiCard>
+      )}
+
+      {showForm && canManage && (
+        <UiCard title={editing ? `Sửa đơn vị ${form.code}` : 'Thêm đơn vị tính'}>
+          <form className="ui-form-grid" onSubmit={save}>
+            {formError && <p role="alert">{formError}</p>}
+
+            <label className="ui-stack">
+              <span>Mã đơn vị tính *</span>
+              <input
+                aria-label="Mã đơn vị tính"
+                value={form.code}
+                onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
+                disabled={saving || editing}
+                maxLength={50}
+                required
               />
-            </div>
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Tên đơn vị tính <span style={{ color: 'red' }}>*</span></label>
-              <input 
-                type="text" 
-                name="name" 
-                value={formData.name || ''} 
-                onChange={handleFormChange}
-                style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-                disabled={formLoading}
+            </label>
+
+            <label className="ui-stack">
+              <span>Tên đơn vị tính *</span>
+              <input
+                aria-label="Tên đơn vị tính"
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                disabled={saving}
+                maxLength={200}
+                required
               />
-            </div>
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  name="isActive" 
-                  checked={formData.isActive || false}
-                  onChange={handleFormChange}
-                  disabled={formLoading}
-                  style={{ marginRight: '8px' }}
+            </label>
+
+            {editing && (
+              <label className="ui-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+                  disabled={saving}
                 />
-                Trạng thái hoạt động
+                Đơn vị đang hoạt động
               </label>
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" disabled={formLoading} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#2ecc71', color: '#fff', border: 'none', borderRadius: '4px' }}>
-                {formLoading ? 'Đang lưu...' : 'Lưu'}
-              </button>
-              <button type="button" onClick={handleCancelForm} disabled={formLoading} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                Hủy
-              </button>
+            )}
+
+            <div className="ui-inline-actions">
+              <button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu đơn vị'}</button>
+              <button type="button" disabled={saving} onClick={closeForm}>Hủy</button>
             </div>
           </form>
-        </div>
+        </UiCard>
       )}
-    </div>
+    </UiPage>
   );
 };
 

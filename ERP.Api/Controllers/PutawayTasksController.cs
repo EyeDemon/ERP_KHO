@@ -10,9 +10,13 @@ namespace ERP.Api.Controllers;
 [ApiController, Route("api/putaway-tasks"), Authorize]
 public sealed class PutawayTasksController(IPutawayService service) : ControllerBase
 {
+    [HttpGet("location-warehouses"),PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationWarehouses(CancellationToken ct)=>Ok(await service.ListLocationWarehousesAsync(ct));
     [HttpGet("locations"),PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> Locations([FromQuery]int warehouseId,CancellationToken ct)=>Ok(await service.ListLocationsAsync(warehouseId,ct));
+    [HttpGet("location-capacity"),PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationCapacity([FromQuery]int warehouseId,CancellationToken ct)=>Ok(await service.ListLocationCapacitiesAsync(warehouseId,ct));
+    [HttpGet("location-map"),PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationMap([FromQuery]int warehouseId,CancellationToken ct)=>Ok(await service.GetWarehouseMapAsync(warehouseId,ct));
     [HttpPost("locations"),PermissionAuthorize(AppPermissions.LocationManage)] public async Task<IActionResult> CreateLocation(CreateWarehouseLocationDto dto,CancellationToken ct)=>Ok(await service.CreateLocationAsync(dto,ct));
     [HttpPut("locations/{locationId:int}"),PermissionAuthorize(AppPermissions.LocationManage)] public async Task<IActionResult> UpdateLocation(int locationId,UpdateWarehouseLocationDto dto,CancellationToken ct)=>Ok(await service.UpdateLocationAsync(locationId,dto,ct));
+    [HttpPut("locations/{locationId:int}/layout"),PermissionAuthorize(AppPermissions.LocationManage)] public async Task<IActionResult> UpdateLocationLayout(int locationId,UpdateWarehouseLocationLayoutDto dto,CancellationToken ct)=>Ok(await service.UpdateLocationLayoutAsync(locationId,dto,ct));
     [HttpGet,PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> List(CancellationToken ct)=>Ok(await service.ListAsync(ct));
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetAsync(id,ct));
     [HttpGet("{id:int}/items/{itemId:int}/destinations"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Destinations(int id,int itemId,CancellationToken ct)=>Ok(await service.GetDestinationsAsync(id,itemId,ct));

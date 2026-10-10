@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ERP.Domain.Enums;
 
 namespace ERP.Application.DTOs
@@ -38,8 +39,13 @@ namespace ERP.Application.DTOs
         public string? ProductName { get; set; }
         public string? UnitName { get; set; }
         public decimal Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? UnitPrice { get; set; }
         public string? Note { get; set; }
+        public int? BaseUomIdSnapshot { get; set; }
+        public string? BaseUomCodeSnapshot { get; set; }
+        public string? BaseUomNameSnapshot { get; set; }
+        public int? BaseUomDecimalPlacesSnapshot { get; set; }
         public decimal? AvailableQuantity { get; set; }
     }
     public class CreateExportReceiptDto
