@@ -12,6 +12,8 @@ on:
       - 'frontend/src/layouts/MainLayout.css'
       - 'frontend/src/pages/InventoryReconciliation.css'
       - 'frontend/src/pages/InventoryReconciliation.tsx'
+      - 'frontend/src/pages/InventoryReversals.tsx'
+      - 'frontend/src/pages/InventoryTraceability.tsx'
       - 'frontend/src/pages/SystemBlueprint.tsx'
 
 permissions:
@@ -19,7 +21,7 @@ permissions:
 
 jobs:
   preview-browser:
-    if: github.event.pull_request.number == 33
+    if: github.event.pull_request.number == 33 || github.event.pull_request.number == 31
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -40,6 +42,6 @@ jobs:
       - name: Verify live PR Preview with Chromium
         working-directory: frontend
         env:
-          PLAYWRIGHT_BASE_URL: https://erp-wms-blueprint-demo-git-part-syste-b0b8f5-bayuuandree99-8132.vercel.app
+          PLAYWRIGHT_BASE_URL: ${{ github.event.pull_request.number == 31 && 'https://erp-wms-blueprint-demo-git-part-inven-d4882a-bayuuandree99-8132.vercel.app' || 'https://erp-wms-blueprint-demo-git-part-syste-b0b8f5-bayuuandree99-8132.vercel.app' }}
           CI: 'true'
         run: ./node_modules/.bin/playwright test e2e/blueprint-preview.spec.mjs --browser=chromium --workers=1 --retries=0 --reporter=line
