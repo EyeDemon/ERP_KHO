@@ -31,6 +31,8 @@ describe('InventoryReconciliation', () => {
     expect(view.getByText('Đối chiếu tồn kho & ledger')).toBeTruthy();
     expect(view.getByText(/chỉ đọc/)).toBeTruthy();
     expect(view.getAllByText('Lệch').length).toBeGreaterThan(0);
+    expect(view.getByRole('note').textContent).toContain('không phải kết quả từ SQL Server thật');
+    expect(view.getByRole('note').textContent).toContain('INV-11');
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 

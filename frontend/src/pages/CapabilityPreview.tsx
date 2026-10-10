@@ -104,6 +104,16 @@ const CapabilityPreview = () => {
         )}
       </section>
 
+      {capability.id === 'INV-11' && (
+        <section className="capability-panel" aria-label="Nguồn dữ liệu mô phỏng INV-11">
+          <p role="note">
+            Số liệu đối chiếu INV-11 là kịch bản minh họa độc lập của Blueprint.
+            Không phải số dư Ledger/Balance thời gian thực và không dùng để đối chiếu trực tiếp
+            với bản ghi RECON-HCM-0930 hoặc màn Real demo.
+          </p>
+        </section>
+      )}
+
       {module.flow && (
         <section className="capability-panel">
           <div className="capability-panel-title"><Workflow size={18} /><h2>Luồng nghiệp vụ liên quan</h2></div>

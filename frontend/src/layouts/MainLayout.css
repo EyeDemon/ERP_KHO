@@ -472,11 +472,42 @@
 
   .topbar-title {
     font-size: 15px;
+    overflow-wrap: anywhere;
   }
 
   .runtime-badge,
   .blueprint-badge {
     font-size: 10px;
+  }
+
+  /* On narrow demo screens, place the long runtime warning below the nav/title row. */
+  .app-topbar:has(.runtime-badge) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .app-topbar:has(.runtime-badge) .topbar-leading,
+  .app-topbar:has(.runtime-badge) .topbar-actions {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .app-topbar:has(.runtime-badge) .topbar-actions {
+    justify-content: flex-start;
+  }
+
+  /* Keep the full demo warning readable without widening narrow mobile viewports. */
+  .topbar-actions {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .runtime-badge {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
   }
 
   .app-content {

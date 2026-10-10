@@ -4,6 +4,17 @@
 
 Tài liệu mô tả các màn hình mô phỏng để đối chiếu nghiệp vụ. **Mô phỏng không phải là bằng chứng chức năng đã triển khai.** Trạng thái triển khai được quản lý trong `frontend/src/config/erpWmsBlueprint.ts`, đối chiếu với mã nguồn nhánh `feature/erp-wms-complete-ui-blueprint` và bản phát hành production đã xác minh. Notion là nguồn tài liệu chuẩn, chỉ đọc và không chỉnh sửa.
 
+## Đối chiếu ảnh chụp mô phỏng — 10/10/2026
+
+Ba màn hình dưới đây có **bộ fixture độc lập** để minh họa các trường hợp nghiệp vụ, không lấy cùng một snapshot SQL:
+- Blueprint Inventory Control Work Center: `mockWorkCenters['inventory-control']` trong `erpWmsMockData.ts`, mốc `2026-10-02T09:30:00Z`. Record `RECON-HCM-0930` minh họa trường hợp không lệch (0).
+- Capability Preview `INV-11`: kịch bản Ledger `128.442` và Balance `128.430`, chênh lệch `12`. Đây không phải cùng dữ liệu của Work Center.
+- Màn Real Demo `/inventory-reconciliation`: `inventoryReconciliationDemo.ts`, 3 cặp kho/sản phẩm, 2 dòng lệch `+2` và `-4` (tổng tuyệt đối `6`). Demo chỉ đọc, không đại diện SQL staging/production.
+
+Không sửa các fixture để làm số liệu bằng nhau, không tuyên bố ba kết quả là đối chiếu cùng thời điểm. Bản thiết kế ghi rõ nguồn mô phỏng và chỉ dùng Ledger/Balance API/SQL có kiểm chứng làm bằng chứng nghiệp vụ.
+
+**Mốc production đã xác minh ngày 09/10/2026:** nhánh `feature/erp-wms-complete-ui-blueprint`, commit `7980d9c01c7d067e5a90ca37249a27394e3831bb`, Vercel deployment `dpl_FUXLHmfScQrTza6Ncev3owtSaL8R` READY. Đây là mốc production trước khi PR sửa UX tiếp theo được hợp nhất; không phải SHA Preview.
+
 ## Các chức năng đã có nền tảng trên hệ thống thật
 
 - **INV-01 — Trình duyệt tồn kho:** Tra cứu nhóm tồn, lượng thực tế/đã giữ/khả dụng; trạng thái `foundation`.

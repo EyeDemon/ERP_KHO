@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { blueprintProductionSnapshot, erpWmsBlueprint } from './erpWmsBlueprint';
 
 describe('ERP WMS blueprint registry', () => {
-  it('ghi nhận đúng mốc sản xuất đã kiểm chứng sau PR #29', () => {
-    expect(blueprintProductionSnapshot.commit).toBe('b9d926ef8d068b57d7ec26e7148e031a685fe477');
-    expect(blueprintProductionSnapshot.deploymentId).toBe('dpl_Ha1vNBRkxFyhuHp3tk3BkvS4AeYS');
+  it('ghi nhận đúng mốc production đã kiểm chứng sau PR #30', () => {
+    expect(blueprintProductionSnapshot.commit).toBe('7980d9c01c7d067e5a90ca37249a27394e3831bb');
+    expect(blueprintProductionSnapshot.deploymentId).toBe('dpl_FUXLHmfScQrTza6Ncev3owtSaL8R');
     expect(blueprintProductionSnapshot.deployment).toBe('erp-wms-blueprint-demo.vercel.app');
     expect(blueprintProductionSnapshot.notionPolicy).toBe('canonical-read-only');
   });
