@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/preview-playwright.yml'
       - 'frontend/e2e/blueprint-preview.spec.mjs'
+      - 'frontend/package.json'
       - 'frontend/src/layouts/MainLayout.css'
       - 'frontend/src/pages/InventoryReconciliation.css'
       - 'frontend/src/pages/InventoryReconciliation.tsx'
