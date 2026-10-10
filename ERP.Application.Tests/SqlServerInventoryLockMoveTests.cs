@@ -1575,6 +1575,126 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
     [SqlServerFact]
+    public async Task ReconciliationInvestigation_SqlBucketKeyset_TraversesHundredAndRechecksGrant()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            // Distinct real SQL Server locations are essential: the canonical
+            // stock bucket index rejects duplicate warehouse/product/status/
+            // location/lot/serial keys, unlike the InMemory provider.
+            await using (var seed = CreateContext())
+            {
+                var suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+                var locations = Enumerable.Range(1, 104)
+                    .Select(n => new WarehouseLocation
+                    {
+                        WarehouseId = fixture.WarehouseId,
+                        Code = $"BKP{suffix}{n:D3}",
+                        Name = $"Reconciliation keyset bucket {n}",
+                        LocationType = WarehouseLocationType.Legacy,
+                        IsActive = true,
+                        CreatedBy = fixture.UserId
+                    }).ToArray();
+                seed.WarehouseLocations.AddRange(locations);
+                await seed.SaveChangesAsync();
+                seed.InventoryStocks.AddRange(locations.Select(location => new InventoryStock
+                {
+                    WarehouseId = fixture.WarehouseId,
+                    ProductId = fixture.ProductId,
+                    LocationId = location.Id,
+                    LotId = fixture.LotId,
+                    Status = InventoryStatus.Available,
+                    Quantity = 1m,
+                    ReservedQuantity = 0m
+                }));
+                await seed.SaveChangesAsync();
+            }
+
+            await using var read = CreateContext();
+            var service = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var first = await service.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId);
+            first.BucketCount.Should().Be(105);
+            first.Buckets.Should().HaveCount(100);
+            first.BucketsTruncated.Should().BeTrue();
+            first.NextBucketAfterId.Should().Be(first.Buckets.Last().InventoryStockId);
+            first.Buckets.Select(x => x.InventoryStockId).Should().BeInAscendingOrder();
+            first.Buckets.Should().OnlyContain(x => x.LotId == fixture.LotId &&
+                x.LocationId.HasValue && !string.IsNullOrWhiteSpace(x.LocationCode));
+            first.BucketHasRowsAfterAnchor.Should().BeFalse();
+
+            int lateBucketId;
+            await using (var insert = CreateContext())
+            {
+                var location = new WarehouseLocation
+                {
+                    WarehouseId = fixture.WarehouseId,
+                    Code = "BKPLATE" + Guid.NewGuid().ToString("N")[..10],
+                    Name = "Inserted after bucket anchor",
+                    LocationType = WarehouseLocationType.Legacy,
+                    IsActive = true,
+                    CreatedBy = fixture.UserId
+                };
+                insert.WarehouseLocations.Add(location);
+                await insert.SaveChangesAsync();
+                var lateBucket = new InventoryStock
+                {
+                    WarehouseId = fixture.WarehouseId,
+                    ProductId = fixture.ProductId,
+                    LocationId = location.Id,
+                    LotId = fixture.LotId,
+                    Status = InventoryStatus.Available,
+                    Quantity = 99m
+                };
+                insert.InventoryStocks.Add(lateBucket);
+                await insert.SaveChangesAsync();
+                lateBucketId = lateBucket.Id;
+            }
+
+            var second = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId, first.EventAnchorId,
+                bucketAnchorId: first.BucketAnchorId,
+                bucketAfterId: first.NextBucketAfterId);
+            second.BucketAnchorId.Should().Be(first.BucketAnchorId);
+            second.BucketAfterId.Should().Be(first.NextBucketAfterId);
+            second.BucketCount.Should().Be(105);
+            second.Buckets.Should().HaveCount(5);
+            second.BucketsTruncated.Should().BeFalse();
+            second.NextBucketAfterId.Should().BeNull();
+            second.BucketHasRowsAfterAnchor.Should().BeTrue();
+            second.Buckets.Select(x => x.InventoryStockId).Should()
+                .OnlyContain(id => id <= first.BucketAnchorId && id != lateBucketId);
+            first.Buckets.Select(x => x.InventoryStockId)
+                .Intersect(second.Buckets.Select(x => x.InventoryStockId))
+                .Should().BeEmpty();
+
+            // Changing pages must never alter the immutable Ledger anchor.
+            second.EventAnchorId.Should().Be(first.EventAnchorId);
+            second.Events.Select(x => x.TransactionId)
+                .Should().Equal(first.Events.Select(x => x.TransactionId));
+
+            var refreshed = await service.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId);
+            refreshed.BucketCount.Should().Be(106);
+            refreshed.BucketAnchorId.Should().Be(lateBucketId);
+            refreshed.BucketHasRowsAfterAnchor.Should().BeFalse();
+
+            await using (var revoke = CreateContext())
+                await revoke.UserWarehouses.Where(x =>
+                    x.UserId == fixture.UserId && x.WarehouseId == fixture.WarehouseId)
+                    .ExecuteDeleteAsync();
+
+            // The already-open investigation's next SQL page must reauthorize.
+            var denied = () => service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId, first.EventAnchorId,
+                bucketAnchorId: first.BucketAnchorId,
+                bucketAfterId: first.NextBucketAfterId);
+            await denied.Should().ThrowAsync<NotFoundException>();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
+    [SqlServerFact]
     public async Task TraceabilityWarehouseChoices_ContainOnlyAssignedWarehouses()
     {
         var fixture = await CreateFixtureAsync();
