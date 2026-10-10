@@ -1630,7 +1630,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 var location = new WarehouseLocation
                 {
                     WarehouseId = fixture.WarehouseId,
-                    Code = "BKPLATE" + Guid.NewGuid().ToString("N")[..10],
+                    Code = "BKPLATE" + Guid.NewGuid().ToString("N")[..10].ToUpperInvariant(),
                     Name = "Inserted after bucket anchor",
                     LocationType = WarehouseLocationType.Legacy,
                     IsActive = true,
