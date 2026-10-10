@@ -12,6 +12,8 @@ describe('SystemBlueprint', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     expect(view.getByText('Bản đồ chức năng ERP/WMS hoàn chỉnh')).toBeTruthy();
     expect(view.getByText(`${mockRecordCount}`)).toBeTruthy();
+    expect(view.getByText(/Commit mốc: 7980d9c01c7d/)).toBeTruthy();
+    expect(view.getByText(/ảnh chụp, không phải phiên bản Preview/)).toBeTruthy();
     expect(view.getAllByText('Nhập kho').length).toBeGreaterThan(0);
     expect(view.getAllByText('Xuất kho').length).toBeGreaterThan(0);
     expect(view.getAllByText('WMS di động').length).toBeGreaterThan(0);

@@ -23,9 +23,10 @@ export interface BlueprintModule {
 
 export const blueprintProductionSnapshot = {
   branch: 'feature/erp-wms-complete-ui-blueprint',
-  commit: '297b52865bac4fa785847d678280282a4663588b',
+  commit: '7980d9c01c7d067e5a90ca37249a27394e3831bb',
   deployment: 'erp-wms-blueprint-demo.vercel.app',
-  verifiedAt: '2026-10-08',
+  deploymentId: 'dpl_FUXLHmfScQrTza6Ncev3owtSaL8R',
+  verifiedAt: '2026-10-09',
   notionPolicy: 'canonical-read-only',
 } as const;
 

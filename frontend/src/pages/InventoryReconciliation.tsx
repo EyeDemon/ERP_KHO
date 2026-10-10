@@ -340,6 +340,14 @@ export default function InventoryReconciliation() {
         Kết quả này chỉ để phát hiện sai lệch, không tự động sửa Ledger hoặc Balance.
       </p>
 
+      {demoRuntime && (
+        <p role="note" className="ui-muted-text">
+          Đây là bộ dữ liệu đối chiếu mô phỏng riêng của giao diện Real trên Vercel,
+          không phải kết quả từ SQL Server thật. Số liệu này không cùng snapshot với
+          Work Center Inventory Control hoặc kịch bản INV-11 trong System Blueprint.
+        </p>
+      )}
+
       <UiMetricGrid>
         <UiMetric value={numberFormat.format(result?.totalRecords ?? 0)} label="Cặp kho / sản phẩm" />
         <UiMetric value={numberFormat.format(mismatchCount)} label="Mismatch trang hiện tại" />

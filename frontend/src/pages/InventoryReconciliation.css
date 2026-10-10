@@ -11,7 +11,7 @@
 
 /* Keep wide ledger/evidence tables inside their own horizontal scroller.
    Browser Use found a 693px document at a 390px viewport (QA-11). */
-.production-ui .ui-page:has(.reconciliation-table){width:100%;min-width:0;max-width:100%}
+.production-ui .ui-page:has(.reconciliation-table){width:100%;min-width:0;max-width:100%;grid-template-columns:minmax(0,1fr)}
 .production-ui .ui-page:has(.reconciliation-table)>*{min-width:0;max-width:100%}
 .production-ui .ui-page:has(.reconciliation-table) .ui-card{min-width:0;max-width:100%}
 .production-ui .ui-page:has(.reconciliation-table) .ui-table-scroll{min-width:0;max-width:100%;overflow-x:auto}

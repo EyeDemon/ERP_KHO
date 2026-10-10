@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { erpWmsBlueprint } from './erpWmsBlueprint';
+import { blueprintProductionSnapshot, erpWmsBlueprint } from './erpWmsBlueprint';
 
 describe('ERP WMS blueprint registry', () => {
+  it('ghi nhận đúng mốc production đã kiểm chứng sau PR #30', () => {
+    expect(blueprintProductionSnapshot.commit).toBe('7980d9c01c7d067e5a90ca37249a27394e3831bb');
+    expect(blueprintProductionSnapshot.deploymentId).toBe('dpl_FUXLHmfScQrTza6Ncev3owtSaL8R');
+    expect(blueprintProductionSnapshot.deployment).toBe('erp-wms-blueprint-demo.vercel.app');
+    expect(blueprintProductionSnapshot.notionPolicy).toBe('canonical-read-only');
+  });
+
   it('keeps the complete module and capability registry unique', () => {
     expect(erpWmsBlueprint).toHaveLength(17);
     const moduleKeys = erpWmsBlueprint.map((module) => module.key);

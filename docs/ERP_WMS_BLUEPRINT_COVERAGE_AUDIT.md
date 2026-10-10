@@ -34,15 +34,24 @@ The blueprint registry has now been corrected in the same feature branch:
 
 The findings below remain the rationale/history for those corrections and for later structured metadata work.
 
+## Kiểm tra production và giới hạn fixture — 2026-10-10
+
+- HEAD production hiện được xác minh là `7980d9c01c7d067e5a90ca37249a27394e3831bb`, Vercel `dpl_FUXLHmfScQrTza6Ncev3owtSaL8R` READY (sau PR #30 ngày 09/10); thay thế mốc production b9d926e ở mục lịch sử bên dưới.
+- Registry vẫn **179 capability = 33 live / 28 foundation / 72 planned / 46 optional**; INV-01 đến INV-11 giữ foundation.
+- Browser Use ngày 10/10 kiểm 29 route Real + 46 route capability Blueprint (không 404), tìm thấy redirect root về Blueprint do `frontend/vercel.json`; sửa trên PR #33 với kiểm thử và QA Preview.
+- Màn Blueprint Inventory Control, Capability INV-11 và Real Demo Reconciliation sử dụng **ba bộ fixture độc lập**. Số `0`, `12` và `6` không thể dùng làm bằng chứng Ledger/Balance mâu thuẫn của cùng một kho. Nguồn dữ liệu và cảnh báo được bổ sung trên UX; không chỉnh fixture hoặc database.
+- Notion #82 xác định Ledger là nguồn sự thật và đối chiếu phải theo cùng dimensions/snapshot; Notion chỉ đọc, không chỉnh sửa.
+- PR Inventory Control #31 và Manual Reservation #32 còn ở nhánh riêng, không cộng vào thống kê hệ thống thật đã phát hành.
+
 ## Đồng bộ sự thật hệ thống thật — 2026-10-08
 
-Đây là mốc kiểm chứng trạng thái triển khai hiện tại của bản thiết kế hệ thống.
+Đây là **mốc xác minh bản phát hành ngày 2026-10-08**, không phải bộ đếm SHA thay đổi tự động. Khi phát hành bản mới phải kiểm tra riêng HEAD nhánh tích hợp, CI và alias Vercel trước khi cập nhật mốc.
 
 **Nguồn sự thật triển khai**
 - Nhánh tích hợp: `feature/erp-wms-complete-ui-blueprint`.
-- Commit hệ thống thật đã xác minh: `297b52865bac4fa785847d678280282a4663588b`.
+- Commit nền tảng hệ thống thật đã xác minh: `b9d926ef8d068b57d7ec26e7148e031a685fe477` (PR #29).
 - Alias hệ thống thật trên Vercel: `erp-wms-blueprint-demo.vercel.app`.
-- Bản triển khai Vercel: `dpl_ADqrgZByknUrgTovTxtDMiRBY2DJ`, trạng thái READY, môi trường đích `production`; Git SHA khớp chính xác commit đã phát hành nền tảng INV-09/INV-10.
+- Bản triển khai Vercel: `dpl_Ha1vNBRkxFyhuHp3tk3BkvS4AeYS`, trạng thái READY, môi trường đích `production`; Git SHA khớp chính xác commit hợp nhất PR #29.
 - Notion tiếp tục là tài liệu nghiệp vụ/kiến trúc chuẩn và **chỉ đọc trong lần đồng bộ này**. Không chỉnh sửa Notion để làm cho mức triển khai có vẻ hoàn thiện hơn thực tế.
 
 **Ảnh chụp registry**
@@ -58,9 +67,15 @@ The findings below remain the rationale/history for those corrections and for la
 - `planned`: có thể đã có mô phỏng/đặc tả nhưng chưa phát hành triển khai hệ thống thật.
 - `optional`: chức năng nâng cao/có điều kiện, không phải cam kết triển khai ngay.
 
+**Đối chiếu sau hợp nhất PR #29**
+- Mã nguồn nhánh tích hợp và Vercel production khớp commit `b9d926ef8d068b57d7ec26e7148e031a685fe477` tại thời điểm xác minh.
+- CI sau hợp nhất #575 thành công (kiểm tra .NET, SQL Server, Application/API, lint, kiểm thử và build frontend).
+- Các đường dẫn `/inventory-reversals`, `/inventory-traceability`, `/system-blueprint` trả mã HTTP 200 từ alias production và trang chủ có `lang="vi"`. Đây là bằng chứng đường dẫn và gói frontend, **không phải** bằng chứng đã tương tác đầy đủ với API khi đăng nhập.
+- Trạng thái INV-09/INV-10 giữ `foundation` với khoảng trống chuẩn đã liệt kê; không nâng lên `live` chỉ vì có route/mô phỏng.
+
 **Thực tế hệ thống thật của Xuất kho**
 - OUT-01 ExportReceipt MVP và OUT-02 Reservation tiếp tục là `live`.
-- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder và OUT-10 Shipment Tracking / POD / Delivery Failure đã có nền tảng hệ thống thật thật và tiếp tục là `foundation` cho tới khi các khoảng trống chuẩn được liệt kê được đóng.
+- OUT-03 Allocation, OUT-05 Picking, OUT-06 Packing, OUT-07 Staging & Loading, OUT-08 Shipment Dispatch, OUT-09 Backorder và OUT-10 Shipment Tracking / POD / Delivery Failure đã có nền tảng hệ thống thật và tiếp tục là `foundation` cho tới khi các khoảng trống chuẩn được liệt kê được đóng.
 - OUT-04 Wave / Batch / Cluster tiếp tục là `optional`.
 
 **Thực tế hệ thống thật của Kiểm soát tồn kho**

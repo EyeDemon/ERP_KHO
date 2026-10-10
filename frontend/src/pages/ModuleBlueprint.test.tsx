@@ -79,6 +79,14 @@ describe('ModuleBlueprint mock work center', () => {
     expect(warehouse.getByText('Mô phỏng chuyên biệt').getAttribute('href')).toBe('/system-blueprint/warehouse-structure/WH-02/workbench');
   });
 
+  it('warns that Inventory Control Blueprint fixtures are independent from INV-11 and Real demo', () => {
+    const view = renderModule('inventory-control');
+    const note = view.getByRole('note');
+    expect(note.textContent).toContain('RECON-HCM-0930');
+    expect(note.textContent).toContain('INV-11');
+    expect(note.textContent).toContain('Real demo');
+  });
+
   it('shows a safe not-found state for an unknown module', () => {
     const view = renderModule('does-not-exist');
     expect(view.getByText('Không tìm thấy phân hệ')).toBeTruthy();
