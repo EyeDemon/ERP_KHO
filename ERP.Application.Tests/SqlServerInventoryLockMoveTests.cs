@@ -1414,6 +1414,7 @@ public sealed class SqlServerInventoryLockMoveTests
             evidence.AllStatusReservedQuantity.Should().Be(0m);
             evidence.AllStatusExpectedQuantity.Should().Be(10m);
             evidence.AllStatusDifference.Should().Be(0m);
+            evidence.AllStatusStatus.Should().Be("Match");
             var available = evidence.StatusBreakdown.Single(s =>
                 s.Status == nameof(InventoryStatus.Available));
             available.CurrentQuantity.Should().Be(7m);
@@ -1673,6 +1674,7 @@ public sealed class SqlServerInventoryLockMoveTests
             row.AllStatusStatus.Should().Be("Mismatch");
             var details = await query.GetInvestigationAsync(fixture.WarehouseId, fixture.ProductId);
             details.AllStatusDifference.Should().Be(0m);
+            details.AllStatusStatus.Should().Be("Mismatch");
             details.StatusBreakdown.Single(x => x.Status == nameof(InventoryStatus.QcHold))
                 .Difference.Should().Be(1m);
             details.StatusBreakdown.Single(x => x.Status == nameof(InventoryStatus.Quarantine))

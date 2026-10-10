@@ -71,3 +71,10 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - SQL aggregate buckets theo cặp kho–sản phẩm–trạng thái, có ủy quyền kho và giới hạn trang; Ledger nhóm SQL theo loại/trạng thái/nguồn-đích, StatusChange giảm ở nguồn và tăng ở đích, không double count. Không tải tất cả bucket.
 - Các lịch sử chưa phân loại, trạng thái stock không hỗ trợ hoặc chỉ có bucket ngoài AVAILABLE nhưng không có Ledger phải là `Indeterminate`, Expected/Difference là null. Giao diện tiếng Việt hiển thị nhãn AVAILABLE riêng với kết luận 8 trạng thái, có kiểm tra JSON fail-closed.
 - Cảnh báo: SQL Ledger và tồn hiện tại không cùng snapshot; đây là công cụ **chỉ đọc** để điều tra, không phê duyệt điều chỉnh hay tự động rebuild. Regression in-memory, SQL Server và Vitest bao gồm tổng 0 nhưng hai trạng thái lệch bù trừ; Notion và dữ liệu production không bị sửa.
+
+## Kết luận tám trạng thái trong hồ sơ điều tra (2026-10-10)
+
+- `GET /api/InventoryReconciliation/investigation` bổ sung `allStatusStatus = Match|Mismatch|Indeterminate`, tính từ chênh lệch của **từng** dòng `StatusBreakdown`, không lấy dấu `allStatusDifference`. QC +1 và Quarantine -1 có thể tạo tổng 0 nhưng vẫn là `Mismatch`.
+- Frontend hiển thị badge tiếng Việt trong hồ sơ chi tiết; nếu tổng chênh lệch bằng 0 trong khi hai trạng thái lệch bù trừ, có cảnh báo rõ ràng và yêu cầu xem từng trạng thái. Kiểm tra fail-closed không chấp nhận server tuyên bố `Match` khi bảng từng trạng thái thực tế có chênh lệch.
+- Nếu Ledger không thể phân loại, kết luận `Indeterminate`, không đưa ra khuyến nghị sửa tồn. Đây là bằng chứng read-only với bucket hiện tại khác snapshot mốc Ledger; các con số vẫn chỉ phục vụ điều tra.
+- Regression: InMemory và SQL Server chứng minh cặp QC/Quarantine lệch đối ứng có tổng 0; Vitest kiểm tra cảnh báo và payload khai sai trạng thái. Không thay đổi schema hoặc mutation, không sửa Notion/Production.

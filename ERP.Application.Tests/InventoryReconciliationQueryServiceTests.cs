@@ -570,6 +570,7 @@ namespace ERP.Application.Tests
             evidence.AllStatusCurrentQuantity.Should().Be(12m);
             evidence.AllStatusExpectedQuantity.Should().Be(12m);
             evidence.AllStatusDifference.Should().Be(0m);
+            evidence.AllStatusStatus.Should().Be("Match");
             evidence.UnclassifiedLedgerEventCount.Should().Be(0);
             evidence.EventStatus.Should().Be("Available");
             evidence.EventCount.Should().Be(7); // Includes status change outgoing from Available.
@@ -709,6 +710,7 @@ namespace ERP.Application.Tests
             fresh.AvailableLedgerExpectedIsPartial.Should().BeFalse();
             fresh.AllStatusExpectedQuantity.Should().BeNull();
             fresh.AllStatusDifference.Should().BeNull();
+            fresh.AllStatusStatus.Should().Be("Indeterminate");
             fresh.StatusBreakdown.Should().HaveCount(8);
             fresh.StatusBreakdown.Should().OnlyContain(x =>
                 x.ExpectedQuantity == null && x.Difference == null);
@@ -909,6 +911,37 @@ namespace ERP.Application.Tests
             authorization.Verify(x => x.GetAccessibleWarehouseIdsAsync(default), Times.Once);
         }
 
+
+
+        [Fact]
+        public async Task Investigation_AllStatusVerdictDetectsOffsettingStatusDifference()
+        {
+            using var db = await GetDbContextAsync();
+            db.InventoryStocks.AddRange(
+                new InventoryStock { ProductId = 1, WarehouseId = 1,
+                    Status = InventoryStatus.QcHold, Quantity = 3m },
+                new InventoryStock { ProductId = 1, WarehouseId = 1,
+                    Status = InventoryStatus.Quarantine, Quantity = 1m });
+            db.InventoryTransactions.AddRange(
+                new InventoryTransaction { ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.Import, Quantity = 2m },
+                new InventoryTransaction { ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.Quarantine,
+                    TransactionType = TransactionType.Import, Quantity = 2m });
+            await db.SaveChangesAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var detail = await new InventoryReconciliationQueryService(db, auth.Object)
+                .GetInvestigationAsync(1, 1);
+            detail.AllStatusCurrentQuantity.Should().Be(16m);
+            detail.AllStatusExpectedQuantity.Should().Be(16m);
+            detail.AllStatusDifference.Should().Be(0m);
+            detail.AllStatusStatus.Should().Be("Mismatch");
+            detail.StatusBreakdown.Single(x => x.Status == "QcHold").Difference.Should().Be(1m);
+            detail.StatusBreakdown.Single(x => x.Status == "Quarantine").Difference.Should().Be(-1m);
+        }
 
         [Fact]
         public async Task GetReconciliations_AllStatusDetectsOffsettingQcQuarantineDifference()

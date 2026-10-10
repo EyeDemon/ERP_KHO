@@ -48,6 +48,9 @@ namespace ERP.Application.DTOs
         // never a zero-valued "repair" proposal.
         public decimal AllStatusCurrentQuantity { get; set; }
         public decimal AllStatusReservedQuantity { get; set; }
+        // Separate eight-status verdict. A zero grand-total difference can
+        // conceal offsetting QC and Quarantine mismatches.
+        public string AllStatusStatus { get; set; } = "Indeterminate";
         public decimal? AllStatusExpectedQuantity { get; set; }
         public decimal? AllStatusDifference { get; set; }
         public int UnclassifiedLedgerEventCount { get; set; }

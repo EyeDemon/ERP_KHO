@@ -234,6 +234,11 @@ namespace ERP.Infrastructure.Queries
             decimal? allStatusExpected = comparable
                 ? statusBreakdown.Sum(x => x.ExpectedQuantity!.Value)
                 : null;
+            // The verdict is per status, not merely the sign of the total.
+            // Legacy stock-only QC pairs are still visible as discrepancies
+            // against a missing Ledger; no automatic repair is authorized.
+            var allStatusStatus = !comparable ? "Indeterminate" :
+                statusBreakdown.Any(x => x.Difference != 0m) ? "Mismatch" : "Match";
 
             var currentQuantity = await stocks.SumAsync(x => (decimal?)x.Quantity) ?? 0m;
             // Compute the signed quantity from a small bounded transaction-type
@@ -327,6 +332,7 @@ namespace ERP.Infrastructure.Queries
                 AvailableLedgerExpectedIsPartial = availableLedgerExpectedIsPartial,
                 AllStatusCurrentQuantity = allStatusCurrent,
                 AllStatusReservedQuantity = allStatusReserved,
+                AllStatusStatus = allStatusStatus,
                 AllStatusExpectedQuantity = allStatusExpected,
                 AllStatusDifference = allStatusExpected.HasValue
                     ? allStatusCurrent - allStatusExpected.Value

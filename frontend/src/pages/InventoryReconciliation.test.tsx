@@ -698,6 +698,80 @@ describe('InventoryReconciliation', () => {
   });
 
 
+
+  it('shows detailed status mismatch when offsetting QC and Quarantine differences sum to zero', async () => {
+    const details = ['Available', 'QcHold', 'Quarantine', 'Damaged', 'Rejected', 'Blocked',
+      'Expired', 'RecallBlocked'].map(status => {
+      const currentQuantity = status === 'Available' ? 10 : status === 'QcHold' ? 3 :
+        status === 'Quarantine' ? 1 : 0;
+      const expectedQuantity = status === 'Available' ? 10 :
+        status === 'QcHold' || status === 'Quarantine' ? 2 : 0;
+      return { status, currentQuantity, expectedQuantity,
+        difference: currentQuantity - expectedQuantity, reservedQuantity: 0,
+        bucketCount: 0, directLedgerNetQuantity: expectedQuantity,
+        statusChangeInQuantity: 0, statusChangeOutQuantity: 0 };
+    });
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{id: 1, code: 'W1', name: 'Kho thử'}]
+        : url.includes('/investigation?')
+          ? {warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+            productCode: 'SKU-OFFSET', productName: 'Kiểm thử bù trừ',
+            eventAnchorId: 10, eventCount: 0, bucketCount: 0, events: [], buckets: [],
+            eventsTruncated: false, bucketsTruncated: false, isReadOnly: true,
+            currentQuantity: 10, expectedQuantity: 10, difference: 0,
+            allStatusCurrentQuantity: 14, allStatusExpectedQuantity: 14,
+            allStatusDifference: 0, allStatusStatus: 'Mismatch', statusBreakdown: details}
+          : {items: [{warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+            productCode: 'SKU-OFFSET', productName: 'Kiểm thử bù trừ',
+            currentQuantity: 10, expectedQuantity: 10, difference: 0, status: 'Match',
+            allStatusCurrentQuantity: 14, allStatusExpectedQuantity: 14,
+            allStatusDifference: 0, allStatusStatus: 'Mismatch',
+            importQuantity: 10, exportQuantity: 0, transferInQuantity: 0,
+            transferOutQuantity: 0, adjustmentIncreaseQuantity: 0,
+            adjustmentDecreaseQuantity: 0
+          }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1} }));
+    const view = render(<InventoryReconciliation />);
+    await view.findByText('SKU-OFFSET');
+    fireEvent.click(view.getByRole('button', {name: 'Xem bằng chứng SKU-OFFSET tại Kho thử'}));
+    expect(await view.findByText(/Lệch dù tổng bằng 0/)).toBeTruthy();
+    const badges = view.getAllByText('Lệch theo trạng thái');
+    expect(badges).toHaveLength(2);
+    const table = view.getByRole('table', {name:'Đối chiếu từng trạng thái tồn kho theo Ledger'});
+    expect(table.textContent).toContain('Chờ kiểm định');
+    expect(table.textContent).toContain('Cách ly');
+  });
+
+  it('rejects a false Match verdict in the detailed eight-status evidence', async () => {
+    const details = ['Available', 'QcHold', 'Quarantine', 'Damaged', 'Rejected', 'Blocked',
+      'Expired', 'RecallBlocked'].map(status => ({
+      status, currentQuantity: status === 'QcHold' ? 1 : 0, expectedQuantity: 0,
+      difference: status === 'QcHold' ? 1 : 0, reservedQuantity: 0, bucketCount: 0,
+      directLedgerNetQuantity: 0, statusChangeInQuantity: 0, statusChangeOutQuantity: 0
+    }));
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : url.includes('/investigation?')
+          ? {warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+            productCode: 'SKU-FAKE', productName: 'Kiểm thử',
+            eventAnchorId: 10, eventCount: 0, bucketCount: 0,
+            events: [], buckets: [], isReadOnly: true,
+            currentQuantity: 0, expectedQuantity: 0, difference: 0,
+            allStatusStatus: 'Match', allStatusCurrentQuantity: 1,
+            allStatusExpectedQuantity: 0, allStatusDifference: 1,
+            statusBreakdown: details}
+          : {items:[{warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+            productCode: 'SKU-FAKE', productName: 'Kiểm thử',
+            currentQuantity: 0, expectedQuantity: 0, difference: 0, status: 'Match'}],
+            totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1} }));
+    const view = render(<InventoryReconciliation />);
+    await view.findByText('SKU-FAKE');
+    fireEvent.click(view.getByRole('button', {name:'Xem bằng chứng SKU-FAKE tại Kho thử'}));
+    expect(await view.findByText('Không thể tải bằng chứng điều tra. Hãy thử lại.')).toBeTruthy();
+    expect(view.queryByRole('table',{name:'Đối chiếu từng trạng thái tồn kho theo Ledger'})).toBeNull();
+  });
+
   it('shows all eight statuses and accounts for source and destination of QC status change',async()=>{
     const breakdown=[
       {status:'Available',currentQuantity:7,reservedQuantity:2,bucketCount:1,

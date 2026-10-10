@@ -89,6 +89,7 @@ interface Investigation {
   currentQuantity:number; expectedQuantity:number; difference:number;
   allStatusCurrentQuantity?:number; allStatusReservedQuantity?:number;
   allStatusExpectedQuantity?:number|null; allStatusDifference?:number|null;
+  allStatusStatus?: 'Match' | 'Mismatch' | 'Indeterminate';
   unclassifiedLedgerEventCount?:number; statusBreakdown?:StatusEvidence[];
   availableLedgerExpectedIsPartial?:boolean;
   isReadOnly:boolean; buckets:InvestigationBucket[]; events:InvestigationEvent[];
@@ -352,8 +353,24 @@ export default function InventoryReconciliation() {
       const response = await apiClient.get('/api/InventoryReconciliation/investigation?' + params.toString());
       if (generation !== investigationGeneration.current) return;
       const evidence = response.data as Investigation;
+      const detailVerdict = Array.isArray(evidence?.statusBreakdown) &&
+        evidence.statusBreakdown.length === Object.keys(statusLabels).length &&
+        new Set(evidence.statusBreakdown.map(s => s.status)).size ===
+          Object.keys(statusLabels).length &&
+        evidence.statusBreakdown.every(s =>
+          s.status in statusLabels && isFiniteQuantity(s.currentQuantity) &&
+          isNullableQuantity(s.expectedQuantity) && isNullableQuantity(s.difference) &&
+          (s.difference === null || (s.expectedQuantity !== null &&
+            Math.abs((s.currentQuantity - (s.expectedQuantity ?? 0)) - s.difference) <=
+              Number.EPSILON * 8 * Math.max(1, Math.abs(s.currentQuantity),
+                Math.abs(s.expectedQuantity ?? 0))))) ?
+          (evidence.statusBreakdown.some(s => s.difference === null) ? 'Indeterminate' :
+            evidence.statusBreakdown.some(s => s.difference !== 0) ? 'Mismatch' : 'Match')
+          : null;
       if (!evidence || evidence.warehouseId !== warehouse ||
           evidence.productId !== product || evidence.isReadOnly !== true ||
+          (evidence.allStatusStatus !== undefined &&
+            evidence.allStatusStatus !== detailVerdict) ||
           !Number.isSafeInteger(evidence.eventAnchorId) || evidence.eventAnchorId < 0 ||
           (anchor !== undefined && evidence.eventAnchorId !== anchor) ||
           (before !== undefined && evidence.eventBeforeId !== before) ||
@@ -719,6 +736,24 @@ export default function InventoryReconciliation() {
                       cần xác minh dữ liệu gốc trước khi sửa tồn.
                     </p>
                   )}
+                  {investigation.allStatusStatus && (
+                    <p role="status">
+                      Kết luận 8 trạng thái:{' '}
+                      <UiBadge tone={investigation.allStatusStatus === 'Indeterminate' ? 'warning'
+                        : investigation.allStatusStatus === 'Match' ? 'success' : 'danger'}>
+                        {investigation.allStatusStatus === 'Indeterminate' ? 'Chưa xác định'
+                          : investigation.allStatusStatus === 'Match' ? 'Khớp tất cả'
+                            : 'Lệch theo trạng thái'}
+                      </UiBadge>
+                    </p>
+                  )}
+                  {investigation.allStatusStatus === 'Mismatch' &&
+                    investigation.allStatusDifference === 0 && (
+                      <p role="alert">
+                        Lệch dù tổng bằng 0: các trạng thái tồn kho có chênh lệch bù trừ.
+                        Kiểm tra từng dòng trạng thái bên dưới; không tự điều chỉnh tồn kho.
+                      </p>
+                    )}
                   <UiMetricGrid>
                     <UiMetric label="Tổng tồn mọi trạng thái" value={numberFormat.format(investigation.allStatusCurrentQuantity ?? 0)} />
                     <UiMetric label="Tổng đang giữ mọi trạng thái" value={numberFormat.format(investigation.allStatusReservedQuantity ?? 0)} />
