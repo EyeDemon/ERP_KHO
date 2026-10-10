@@ -711,6 +711,118 @@ namespace ERP.Application.Tests
             auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(3));
         }
 
+
+        [Fact]
+        public async Task Investigation_MixedSignGroupsFailClosedEvenWhenSqlSumCancelsThem()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var anchor = (await query.GetInvestigationAsync(1, 1)).EventAnchorId;
+
+            // Positive and malformed negative have the same grouping keys.
+            // Aggregating first previously hid the invalid row entirely.
+            db.InventoryTransactions.AddRange(
+                new InventoryTransaction
+                {
+                    ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Import,
+                    Quantity = 6m, TransactionDate = DateTime.UtcNow
+                },
+                new InventoryTransaction
+                {
+                    ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Import,
+                    Quantity = -6m, TransactionDate = DateTime.UtcNow
+                },
+                new InventoryTransaction
+                {
+                    ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.Import,
+                    Quantity = 2m, TransactionDate = DateTime.UtcNow
+                },
+                new InventoryTransaction
+                {
+                    ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.Import,
+                    Quantity = -2m, TransactionDate = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+
+            var anchored = await query.GetInvestigationAsync(1, 1, anchor);
+            anchored.UnclassifiedLedgerEventCount.Should().Be(0);
+            anchored.AllStatusExpectedQuantity.Should().Be(12m);
+            anchored.LedgerHasEventsAfterAnchor.Should().BeTrue();
+
+            var evidence = await query.GetInvestigationAsync(1, 1,
+                eventStatus: nameof(InventoryStatus.QcHold));
+            evidence.UnclassifiedLedgerEventCount.Should().Be(2);
+            evidence.AllStatusExpectedQuantity.Should().BeNull();
+            evidence.AllStatusDifference.Should().BeNull();
+            evidence.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
+            evidence.EventCount.Should().Be(2);
+            evidence.Events.Single(x => x.Quantity == -2m).SignedQuantity.Should().BeNull();
+            evidence.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+            // The legacy AVAILABLE summary must not include a mixed-sign group.
+            evidence.ExpectedQuantity.Should().Be(2m);
+            // Fixture AVAILABLE base consists of multiple canonical signed
+            // movements; only the invalid new import group is excluded.
+            var list = await query.GetReconciliationsAsync(1, 1, null);
+            var row = list.Items.Should().ContainSingle().Subject;
+            row.UnclassifiedLedgerEventCount.Should().Be(2);
+            row.ExpectedQuantity.Should().BeNull();
+            row.Difference.Should().BeNull();
+            row.Status.Should().Be("Indeterminate");
+        }
+
+        [Fact]
+        public async Task Investigation_ZeroStatusTransferHiddenInsidePositiveGroupIsUnknown()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            db.InventoryTransactions.AddRange(
+                new InventoryTransaction
+                {
+                    ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.QcHold,
+                    FromInventoryStatus = InventoryStatus.Available,
+                    ToInventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.StatusChange,
+                    Quantity = 4m, TransactionDate = DateTime.UtcNow
+                },
+                new InventoryTransaction
+                {
+                    ProductId = 1, WarehouseId = 1,
+                    InventoryStatus = InventoryStatus.QcHold,
+                    FromInventoryStatus = InventoryStatus.Available,
+                    ToInventoryStatus = InventoryStatus.QcHold,
+                    TransactionType = TransactionType.StatusChange,
+                    Quantity = 0m, TransactionDate = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var evidence = await query.GetInvestigationAsync(1, 1,
+                eventStatus: nameof(InventoryStatus.QcHold));
+            evidence.UnclassifiedLedgerEventCount.Should().Be(1);
+            evidence.AllStatusExpectedQuantity.Should().BeNull();
+            evidence.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
+            evidence.Events.Single(x => x.Quantity == 0m).SignedQuantity.Should().BeNull();
+            var row = (await query.GetReconciliationsAsync(1, 1, null))
+                .Items.Should().ContainSingle().Subject;
+            row.UnclassifiedLedgerEventCount.Should().Be(1);
+            row.Status.Should().Be("Indeterminate");
+        }
+
         [Fact]
         public async Task Investigation_EmptyPairOrMissingProduct_FailsClosed()
         {

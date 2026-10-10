@@ -50,3 +50,10 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - Nếu server trả dữ liệu không hợp lệ, xóa danh sách và số liệu tổng trang, hiển thị lỗi tiếng Việt, chặn đường vào hồ sơ điều tra cũ. Không chuẩn hóa một kết quả sai thành số 0 hoặc `Match`.
 - Guard phía trình duyệt không thay thế authorization/backend SQL; đây là xử lý an toàn trường hợp API bị sai schema hoặc scope. Regression Vitest tập trung vào scope, trạng thái giả, Ledger chưa phân loại, số không hữu hạn, dữ liệu trùng và lần tải hồi phục. Không có mutation SQL, Ledger, dữ liệu mô phỏng hay Notion.
 - Mọi build/CI/browser QA phải gắn đúng SHA successor. Remote staging có API/SQL và quyền thật vẫn là điều kiện riêng để đóng PR.
+
+## An toàn phép gom nhóm Ledger: số âm / StatusChange bằng 0 (10/10/2026)
+
+- Trước khi tính kỳ vọng, SQL `GROUP BY` phải đếm **bản ghi âm** theo từng nhóm; phép `SUM` có thể triệt tiêu số âm với số dương và báo `Match` giả. Với `StatusChange`, còn phải đếm từng bản ghi **không dương** (gồm số 0) dù tổng nhóm lớn hơn 0.
+- Nếu thấy các bản ghi này, toàn bộ kết quả Expected/Difference theo 8 trạng thái được đánh dấu `null` (chưa xác định); danh sách tổng quan trả `Indeterminate`. `UnclassifiedLedgerEventCount` chỉ tính số bản ghi có dấu sai, không đếm nhầm các bản ghi hợp lệ cùng nhóm.
+- Tổng Legacy AVAILABLE là dữ liệu tham khảo từng phần; không được tính nhóm hỗn hợp số âm/dương như đã phân loại. `AvailableLedgerExpectedIsPartial=true` cảnh báo nguồn không đủ tin cậy, không tạo đề xuất sửa tồn.
+- Regression gồm SQL Server thật, InMemory và kiểm tra cả danh sách + bằng chứng có anchor. Không thêm mutation, sửa Ledger, SQL schema/migration hoặc Notion. Vercel demo không được coi là chứng cứ staging thật.

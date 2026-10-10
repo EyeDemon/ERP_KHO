@@ -152,7 +152,11 @@ namespace ERP.Infrastructure.Queries
                 {
                     g.Key.InventoryStatus, g.Key.TransactionType,
                     g.Key.FromInventoryStatus, g.Key.ToInventoryStatus,
-                    Quantity = g.Sum(x => x.Quantity), Events = g.Count()
+                    Quantity = g.Sum(x => x.Quantity), Events = g.Count(),
+                    // SQL SUM may cancel a malformed negative with a positive
+                    // in the same group. Validate individual row signs in SQL.
+                    NegativeQuantityEvents = g.Count(x => x.Quantity < 0m),
+                    NonPositiveQuantityEvents = g.Count(x => x.Quantity <= 0m)
                 }).ToListAsync();
             if (stockGroups.Count == 0 && ledgerGroups.Count == 0)
                 throw new NotFoundException("Không có bucket hoặc sự kiện sổ cái cho kho và sản phẩm này.");
@@ -185,10 +189,16 @@ namespace ERP.Infrastructure.Queries
                     if (group.FromInventoryStatus is not { } from ||
                         group.ToInventoryStatus is not { } to ||
                         from == to || group.InventoryStatus != to ||
-                        !byStatus.ContainsKey(from) || !byStatus.ContainsKey(to) ||
-                        group.Quantity <= 0m)
+                        !byStatus.ContainsKey(from) || !byStatus.ContainsKey(to))
                     {
                         unclassifiedCount += group.Events;
+                        continue;
+                    }
+                    // Mixed valid/invalid rows cannot be rebuilt using their
+                    // aggregate sum, even if it is strictly positive.
+                    if (group.NonPositiveQuantityEvents > 0)
+                    {
+                        unclassifiedCount += group.NonPositiveQuantityEvents;
                         continue;
                     }
                     byStatus[from].StatusChangeOutQuantity += group.Quantity;
@@ -196,11 +206,15 @@ namespace ERP.Infrastructure.Queries
                     continue;
                 }
                 if (!byStatus.TryGetValue(group.InventoryStatus, out var current) ||
-                    group.Quantity < 0m ||
                     group.TransactionType == TransactionType.TransferAdjustment ||
                     !Enum.IsDefined(group.TransactionType))
                 {
                     unclassifiedCount += group.Events;
+                    continue;
+                }
+                if (group.NegativeQuantityEvents > 0)
+                {
+                    unclassifiedCount += group.NegativeQuantityEvents;
                     continue;
                 }
                 current.DirectLedgerNetQuantity +=
@@ -226,16 +240,22 @@ namespace ERP.Infrastructure.Queries
             // aggregate, not by materializing the entire immutable history.
             var grouped = await anchoredLedger
                 .GroupBy(x => x.TransactionType)
-                .Select(x => new { Type = x.Key, Quantity = x.Sum(t => t.Quantity) })
+                .Select(x => new
+                {
+                    Type = x.Key, Quantity = x.Sum(t => t.Quantity),
+                    NegativeQuantityEvents = x.Count(t => t.Quantity < 0m)
+                })
                 .ToListAsync();
             // Legacy TransferAdjustment does not have a canonical sign.
             // Never crash the investigation or silently present the partial
             // AVAILABLE sum as complete when such an event is encountered.
             var availableLedgerExpectedIsPartial = grouped.Any(x =>
-                x.Quantity < 0m || x.Type == TransactionType.TransferAdjustment ||
-                !Enum.IsDefined(x.Type));
+                x.NegativeQuantityEvents > 0 ||
+                x.Type == TransactionType.TransferAdjustment || !Enum.IsDefined(x.Type));
+            // A mixed-sign group is partial in its entirety: never let a
+            // negative historical row disappear into a positive SUM.
             var expectedQuantity = grouped
-                .Where(x => x.Quantity >= 0m &&
+                .Where(x => x.NegativeQuantityEvents == 0 &&
                     x.Type != TransactionType.TransferAdjustment &&
                     Enum.IsDefined(x.Type))
                 .Sum(x => x.Type.ApplySign(x.Quantity));
@@ -462,7 +482,8 @@ namespace ERP.Infrastructure.Queries
                     g.Key.InventoryStatus, g.Key.FromInventoryStatus, g.Key.ToInventoryStatus,
                     TotalQuantity = g.Sum(t => t.Quantity),
                     EventCount = g.Count(),
-                    NegativeQuantityEvents = g.Count(t => t.Quantity < 0m)
+                    NegativeQuantityEvents = g.Count(t => t.Quantity < 0m),
+                    NonPositiveQuantityEvents = g.Count(t => t.Quantity <= 0m)
                 })
                 .ToListAsync();
 
@@ -502,19 +523,20 @@ namespace ERP.Infrastructure.Queries
                 // negative rows could otherwise cancel in SQL SUM.
                 var unclassifiedCount = stockTransactions.Sum(t =>
                 {
-                    if (t.NegativeQuantityEvents > 0 ||
-                        !Enum.IsDefined(t.InventoryStatus) ||
+                    if (!Enum.IsDefined(t.InventoryStatus) ||
                         !Enum.IsDefined(t.TransactionType) ||
                         t.TransactionType == TransactionType.TransferAdjustment)
                         return t.EventCount;
                     if (t.TransactionType != TransactionType.StatusChange)
-                        return 0;
-                    return t.TotalQuantity <= 0m ||
-                           t.FromInventoryStatus is not { } from ||
-                           t.ToInventoryStatus is not { } to ||
-                           from == to || t.InventoryStatus != to ||
-                           !Enum.IsDefined(from) || !Enum.IsDefined(to)
-                        ? t.EventCount : 0;
+                        return t.NegativeQuantityEvents;
+                    if (t.FromInventoryStatus is not { } from ||
+                        t.ToInventoryStatus is not { } to ||
+                        from == to || t.InventoryStatus != to ||
+                        !Enum.IsDefined(from) || !Enum.IsDefined(to))
+                        return t.EventCount;
+                    // Zero/negative status transfers remain invalid even
+                    // when other positive rows hide them in an aggregate.
+                    return t.NonPositiveQuantityEvents;
                 });
                 decimal? expectedQuantity = unclassifiedCount > 0 ? null :
                     stockTransactions.Sum(t =>

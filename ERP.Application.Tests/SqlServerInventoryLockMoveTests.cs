@@ -1508,6 +1508,89 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+
+    [SqlServerFact]
+    public async Task ReconciliationInvestigation_MixedSignAndZeroStatusRows_DoNotHideInSqlAggregates()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var db = CreateContext())
+            {
+                db.InventoryTransactions.AddRange(
+                    new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.Import,
+                        Quantity = 10m, TransactionDate = DateTime.UtcNow
+                    },
+                    new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.QcHold,
+                        TransactionType = TransactionType.Import,
+                        Quantity = 7m, TransactionDate = DateTime.UtcNow
+                    },
+                    new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.QcHold,
+                        TransactionType = TransactionType.Import,
+                        Quantity = -7m, TransactionDate = DateTime.UtcNow
+                    },
+                    new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.QcHold,
+                        FromInventoryStatus = InventoryStatus.Available,
+                        ToInventoryStatus = InventoryStatus.QcHold,
+                        TransactionType = TransactionType.StatusChange,
+                        Quantity = 3m, TransactionDate = DateTime.UtcNow
+                    },
+                    new InventoryTransaction
+                    {
+                        ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId,
+                        LocationId = fixture.SourceLocationId, LotId = fixture.LotId,
+                        CreatedBy = fixture.UserId, InventoryStatus = InventoryStatus.QcHold,
+                        FromInventoryStatus = InventoryStatus.Available,
+                        ToInventoryStatus = InventoryStatus.QcHold,
+                        TransactionType = TransactionType.StatusChange,
+                        Quantity = 0m, TransactionDate = DateTime.UtcNow
+                    });
+                await db.SaveChangesAsync();
+            }
+
+            await using var read = CreateContext();
+            var service = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var qcEvidence = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId,
+                eventStatus: nameof(InventoryStatus.QcHold));
+            qcEvidence.UnclassifiedLedgerEventCount.Should().Be(2);
+            qcEvidence.AllStatusExpectedQuantity.Should().BeNull();
+            qcEvidence.AllStatusDifference.Should().BeNull();
+            qcEvidence.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
+            qcEvidence.Events.Single(x => x.Quantity == -7m).SignedQuantity.Should().BeNull();
+            qcEvidence.Events.Single(x => x.TransactionType == nameof(TransactionType.StatusChange) &&
+                x.Quantity == 0m).SignedQuantity.Should().BeNull();
+
+            var summary = await service.GetReconciliationsAsync(
+                fixture.WarehouseId, fixture.ProductId, null);
+            var row = summary.Items.Should().ContainSingle().Subject;
+            row.UnclassifiedLedgerEventCount.Should().Be(2);
+            row.Status.Should().Be("Indeterminate");
+            row.ExpectedQuantity.Should().BeNull();
+            row.Difference.Should().BeNull();
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task ReconciliationInvestigation_RealLedgerBucketEvidence_IsAuthorizedBoundedAndAnchored()
     {
