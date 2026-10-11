@@ -18,6 +18,25 @@ node tools/ERP.BrowserQa/permission-browser.mjs --manifest TestResults/BrowserQA
 
 Wait until the startup helper exits successfully; the runner requires the completed PID/credential manifest. The Chromium server binds to loopback. The runner closes its in-memory browser contexts/server in `finally`, records their process identity and checks that its temporary profiles were removed. No storageState, HAR, video, trace, screenshot, password, bearer, cookie or full response body is written. Its ignored JSON evidence contains source/runner/fixture hashes, case names/classification, statuses, timings, assertions and scalar database counts only. A failed case remains failed; prior cases are not silently retried. Membership UI stays **DEFERRED_BY_OWNER**.
 
+### Process lifetime diagnostics
+
+Startup returning successfully does **not** invoke cleanup. Its error handler invokes guarded Stop only after database creation; an external caller's `finally` can separately request cleanup when that caller ends. Neither helper can prove whether a desktop host terminates its child process tree. Do not infer termination from transport shutdown timestamps alone.
+
+`lifecycle.jsonl` under the exact run artifact directory records startup, API/frontend process identity (PID, parent PID, executable and start time), bounded loopback health checks, startup readiness/failure, cleanup source/reason and observed process state. It excludes command lines, HTTP bodies, credentials and connection strings. An absent process has unknown/null exit code; only an observable process handle can supply an exit code. Diagnostic write failure emits a safe warning and must not replace the original startup failure or disable guarded cleanup. No supervisor, restart or alternative launcher is added.
+
+```powershell
+# Resource-free checks, using command doubles for lifecycle logic:
+./tools/ERP.BrowserQa/Test-BrowserQaLifecycle.ps1
+# Observe an active, already owned run; never reuse a cleaned run:
+. ./tools/ERP.BrowserQa/BrowserQaLifecycle.ps1
+$qaManifest = Get-Content -LiteralPath 'TestResults/BrowserQA/<RunId>/manifest.json' -Raw | ConvertFrom-Json
+Get-BrowserQaLifecycleStatus $qaManifest
+# A caller that intentionally cleans in finally should identify that reason:
+./tools/ERP.BrowserQa/Stop-BrowserQa.ps1 -ManifestPath 'TestResults/BrowserQA/<RunId>/manifest.json' -Reason CallerFinally
+```
+
+The resource-free test exercises real lifecycle functions and the parsed startup catch block. The startup-success assertion also checks the helper has no cleanup `finally`; it is not full SQL startup evidence. Host shutdown can prevent any script from writing a final event, so missing cleanup/exit records remain UNKNOWN. These records diagnose QA environment lifetime, not production behavior.
+
 | Case | Capability and planned evidence | Classification |
 | --- | --- | --- |
 | Viewer | Real authenticated fetch, JSON property absence/null assertions; task/list/history/destinations and safe errors | Browser HTTP + SQL postconditions |

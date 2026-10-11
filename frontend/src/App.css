@@ -11,3 +11,10 @@ body {
 *, *::before, *::after {
   box-sizing: inherit;
 }
+
+.main-sidebar { width: 250px; flex-shrink: 0; }
+@media (max-width: 720px) {
+  .main-layout { flex-direction: column; }
+  .main-sidebar { width: auto; }
+  .main-sidebar ul { display: flex; flex-wrap: wrap; column-gap: 20px; }
+}

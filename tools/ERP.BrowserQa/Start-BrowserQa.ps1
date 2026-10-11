@@ -1,6 +1,7 @@
 param([string]$RunId = ([guid]::NewGuid().ToString('N')))
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'BrowserQaConnection.ps1')
+. (Join-Path $PSScriptRoot 'BrowserQaLifecycle.ps1')
 if ($RunId -notmatch '^[a-f0-9]{32}$') { throw 'Invalid Browser QA Run ID.' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $database = "ERP_KHO_BrowserQA_$RunId"
@@ -12,6 +13,7 @@ $createdDatabase=$false
 $manifestPath = Join-Path $artifactRoot 'manifest.json'
 $manifest=[ordered]@{RunId=$RunId;Database=$database;MarkerType='LocalBrowserFullStackQA';ApiPid=$null;FrontendPid=$null;ApiUrl='http://127.0.0.1:5265';FrontendUrl='http://127.0.0.1:4175';ArtifactRoot=$artifactRoot;CreatedAtUtc=[DateTime]::UtcNow.ToString('o');CredentialIdentifier='credential.dpapi';BrowserTabs=@();BrowserProfiles=@();HelperFiles=@('credential.dpapi');RetryReceiptId=$null;ConcurrentReceiptId=$null;UiReceiptId=$null}
 $manifest|ConvertTo-Json|Set-Content $manifestPath -Encoding UTF8
+Write-BrowserQaLifecycle $manifest 'StartupStarted' 'Start-BrowserQa' @{State='Starting'}
 try {
 $connection = New-Object System.Data.SqlClient.SqlConnection $master
 try {
@@ -78,6 +80,7 @@ finally { foreach($key in $variables.Keys){[Environment]::SetEnvironmentVariable
 $owned=Get-CimInstance Win32_Process -Filter "ProcessId=$($api.Id)"
 $manifest.ApiPid=$api.Id; $manifest.ApiStartTimeUtc=$api.StartTime.ToUniversalTime().ToString('o'); $manifest.ApiCommandLine=$owned.CommandLine; $manifest.ApiExecutablePath=$owned.ExecutablePath
 $manifest|ConvertTo-Json|Set-Content $manifestPath -Encoding UTF8
+Write-BrowserQaLifecycle $manifest 'ProcessStarted' 'Start-BrowserQa' @{Prefix='Api';Pid=$api.Id;ParentPid=$owned.ParentProcessId;Executable=$owned.ExecutablePath;StartedAtUtc=$manifest.ApiStartTimeUtc;State='Running'}
 $oldApi=[Environment]::GetEnvironmentVariable('VITE_API_BASE_URL','Process'); [Environment]::SetEnvironmentVariable('VITE_API_BASE_URL','http://127.0.0.1:5265','Process')
 try { $frontend=Start-Process node -ArgumentList @("$repo/frontend/node_modules/vite/bin/vite.js",'--host','127.0.0.1','--port','4175','--strictPort') -WorkingDirectory "$repo/frontend" -WindowStyle Hidden -RedirectStandardOutput (Join-Path $artifactRoot 'frontend.stdout.log') -RedirectStandardError (Join-Path $artifactRoot 'frontend.stderr.log') -PassThru }
 finally { [Environment]::SetEnvironmentVariable('VITE_API_BASE_URL',$oldApi,'Process') }
@@ -87,12 +90,14 @@ foreach($entry in @(@('Api',$api),@('Frontend',$frontend))) {
     $manifest[($entry[0]+'StartTimeUtc')]=$entry[1].StartTime.ToUniversalTime().ToString('o')
     $manifest[($entry[0]+'CommandLine')]=$owned.CommandLine
     $manifest[($entry[0]+'ExecutablePath')]=$owned.ExecutablePath
+    if ($entry[0] -eq 'Frontend') { Write-BrowserQaLifecycle $manifest 'ProcessStarted' 'Start-BrowserQa' @{Prefix='Frontend';Pid=$frontend.Id;ParentPid=$owned.ParentProcessId;Executable=$owned.ExecutablePath;StartedAtUtc=$manifest.FrontendStartTimeUtc;State='Running'} }
 }
 $manifest|ConvertTo-Json|Set-Content $manifestPath -Encoding UTF8
 
 # Establish exportable stock through the real import workflow (Admin maker, Manager checker).
 $apiBase='http://127.0.0.1:5265'
-for($attempt=0;$attempt -lt 30;$attempt++){try{Invoke-WebRequest "$apiBase/swagger/index.html" -UseBasicParsing|Out-Null;break}catch{if($attempt -eq 29){throw 'Browser QA API did not become ready.'};Start-Sleep -Milliseconds 200}}
+Wait-BrowserQaHealthy $manifest 'Api'
+Wait-BrowserQaHealthy $manifest 'Frontend'
 $adminLogin=Invoke-RestMethod "$apiBase/api/Auth/login" -Method Post -ContentType 'application/json' -Body (@{username='qa_admin_browser';password=$password}|ConvertTo-Json)
 $adminHeaders=@{Authorization="Bearer $($adminLogin.token)";'Idempotency-Key'=[guid]::NewGuid().ToString()}
 $warehouses=Invoke-RestMethod "$apiBase/api/warehouses" -Headers $adminHeaders
@@ -124,12 +129,16 @@ $manifest|ConvertTo-Json|Set-Content $manifestPath -Encoding UTF8
 $adminLogin=$null;$managerLogin=$null;$adminHeaders=$null;$managerHeaders=$null
 (ConvertTo-SecureString $password -AsPlainText -Force|ConvertFrom-SecureString)|Set-Content (Join-Path $artifactRoot 'credential.dpapi') -Encoding ascii
 [Array]::Clear($jwtBytes,0,$jwtBytes.Length); $jwt=$null; $password=$null; $databaseConnection=$null
+Wait-BrowserQaHealthy $manifest 'Api'
+Wait-BrowserQaHealthy $manifest 'Frontend'
+Write-BrowserQaLifecycle $manifest 'StartupReady' 'Start-BrowserQa' @{State='Ready'}
 $manifest|ConvertTo-Json -Compress
 
 } catch {
     $startupFailure=$_
+    Write-BrowserQaLifecycle $manifest 'StartupFailed' 'Start-BrowserQa' @{State='Failed';FailureType=$startupFailure.Exception.GetType().FullName}
     if ($createdDatabase) {
-        try { & (Join-Path $PSScriptRoot 'Stop-BrowserQa.ps1') -ManifestPath $manifestPath } catch { Write-Warning 'Owned Browser QA cleanup failed; retain the manifest for guarded cleanup.' }
+        try { & (Join-Path $PSScriptRoot 'Stop-BrowserQa.ps1') -ManifestPath $manifestPath -Reason StartupFailure } catch { Write-Warning 'Owned Browser QA cleanup failed; retain the manifest for guarded cleanup.' }
     }
     throw $startupFailure
 }

@@ -1,6 +1,85 @@
 # Quản lý giữ hàng Manual MVP
 
-Trạng thái local hiện hành: **LOCAL SUCCESSOR VERIFICATION PASS**. External CI/SonarCloud của HEAD cuối được đối chiếu trong PR body; không tự suy local PASS thành external PASS. PR #32 vẫn Draft; chưa ghi owner đã chấp nhận Manual MVP. Base đã nghiệm thu vẫn `ae1f2c1c58197360a23d2d8dd2231ab600d7fa22`.
+## Tiện ích browser successor — 2026-10-11
+
+**LOCAL UTILITY SUCCESSOR PASS.** Source: `f9bc0cd827af6b623692f5489cd61e3cc8d2fa62` cùng các hash working-tree đã kiểm chứng trước commit; external CI/SonarCloud của commit successor được ghi trong Draft PR #32, không dùng kết quả f9bc0cd để chứng nhận layout mới. Chưa có owner acceptance hoặc production approval.
+
+Tool: **Codex In-app Browser / cua_repl**; frontend `http://127.0.0.1:4175`, API loopback `5265`. Đây là tương tác UI thật bằng tiện ích, không đổi tên evidence runner/HTTP thành utility. Owner tự nhập credential; tiện ích chỉ bấm đăng nhập, không đọc password field/clipboard hoặc ghi plaintext credential. Official bootstrap/marker và production security configuration giữ nguyên.
+
+| Case | Source-associated utility evidence |
+| --- | --- |
+| Staff read/create, không release/expire | Run `9f6b291b43bc4751ba288b5dee596b13`: đăng nhập thành công sau handoff bằng executable PowerShell đã xác minh; tạo 5 tại Kho A, controls release/expire absent. Hash MainLayout/App.css/StockReservations.css trùng successor; không backend/permission change |
+| Viewer list/detail/reconciliation | Run `c45b0797d53047c1897f66a0c546a61b`: nonempty Manual fixture; không mutation controls/cost/value/private/technical fields trên UI; đối chiếu chỉ đọc. Không gọi đây là raw HTTP filtering proof; giữ runner evidence riêng |
+| Mobile và keyboard | 375/768 px: create/detail/release containment, Tab/Shift+Tab, Escape trả focus về trigger và outer scrollX 0. Boundary 720/721 và desktop 1280: detail/return focus không tràn document. Bảng giữ hàng vẫn scroll nội bộ và action truy cập được |
+| Shared-layout smoke | Viewer list Sản phẩm/Phiếu nhập/Phiếu xuất/Cất hàng tại 375/768/1280; Admin Quản trị quyền tại cùng các widths. Document width bằng client width, kể cả vertical scrollbar; không dùng login responsive thay shared-layout smoke. Đây là list/route smoke, không tuyên bố toàn bộ form/bản in của các module đã review lại |
+| Admin release và ExportReceipt read-only | Run c45b…: giải phóng Manual 1 từ 5 còn 4, loading/disabled và success tiếng Việt; ExportReceipt hold chỉ có Chi tiết dù Admin có release grant. Export hold là guarded SQL fixture, không gọi setup này là UI approve/reserve workflow |
+
+Double-click utility được quan sát, SQL chứng minh một effect/audit/claim; **network count NOT OBSERVED BY UTILITY**. Network-count/raw-response/replay/concurrency evidence runner trước đó giữ nguyên phạm vi. SQL hậu điều kiện: Staff create Physical On Hand 200/reserved 5/ledger 0/audit 1; Viewer read không thêm effect/audit/claim; Admin partial release Physical On Hand 200/reserved 4/released 1/ledger 0/audit 1/claim 1 trước setup Export hold riêng. Không đọc business tables ERP_KHO.
+
+Findings layout được sửa tối thiểu: shared flex minWidth:0/mobile sidebar và table containment; smoke phát hiện thêm bảng Sản phẩm (document 368/client 360), Phiếu nhập (605/360), Phiếu xuất (485/360). Native overflow region có tên tiếng Việt và keyboard focus sửa đúng bảng; successor document=client và ArrowRight chỉ scroll vùng bảng. Không che body/root overflow, bỏ cột hoặc thay authorization/hooks/generation guards. Pure layout regression được kiểm chứng bằng utility trước/sau; không thêm test mirror implementation.
+
+Final frontend source: **110/110 tests**, 20 files, 0 failed/skipped; lint/production build/dependency audit PASS, 0 vulnerabilities. Không backend/model/migration change, không lặp local SQL suites. Diagnostic helper tests **13/13 PASS** bằng command doubles/resource-free, source không đổi; không coi là full startup/host termination proof. Review nội bộ UI/UX Pro Max, React checklist, careful/QA và Ponytail giữ native/reused patterns, không supervisor/dependency hoặc production configuration change.
+
+Lifecycle: startup thành công không tự cleanup; các fresh runs từng healthy sau helper return. Run 9f6b… sau đó được quan sát cả hai process ABSENT, không có exit code/cleanup marker giải thích; termination cause vẫn **UNKNOWN**. Không quy thành production defect hoặc kết luận host stop_process đã gây termination. Recovery input lịch sử `rejected: blocked by policy` và error-document URL policy là hai trạng thái riêng; không retry input bị chặn bằng launcher/driver/transport khác. Fresh official Start được phép và utility tab mới truy cập thành công.
+
+Cleanup: run 9f6b… và c45b… qua official Stop/verified marker, exact databases absent, credentials removed, owned API/frontend processes/listeners 0. Tab c45b… provider `browser-use:1ac3d7be-100c-4bf1-ac89-7b5f239c9070` đã đóng và viewport reset; tab lỗi cũ không rõ ownership giữ **UNKNOWN**, không đóng. Windows clipboard UNKNOWN giữ nguyên. Main/other worktrees/cache UNKNOWN/policy-blocked helper/.npm-cache bảo toàn; ERP_KHO ONLINE chỉ qua metadata. Ignored evidence có scalar assertions/hash, không public logs/credentials/response bodies.
+
+Notion native recheck: Page 17 §35 `2026-10-08T16:48:56.271Z`, Page 30 §21 `2026-10-08T16:49:12.197Z` **UNCHANGED**; không sửa contract. Drive artifact vẫn metadata-only **NOT REVIEWED**; không tuyên bố đã visual review mới. Sáu Critical complexity recommendations còn OPEN là maintainability findings; không suppress hoặc gọi là security defects. Backup/restore và membership UI vẫn owner-deferred. PR #32 giữ Draft; REMOTE STAGING NOT AUTHORIZED · CAPACITY EXECUTION NOT AUTHORIZED · PRODUCTION NO-GO.
+
+## Historical utility checkpoint 2026-10-10 — superseded by successor above
+
+Yêu cầu tương tác bằng **Codex In-app Browser / cua_repl** bổ sung vẫn **PARTIAL**; không thay evidence runner hoặc CI/SonarCloud đã đạt. Source chạy UI: `f9bc0cd827af6b623692f5489cd61e3cc8d2fa62`, Run `ed3b43f298e38ddd2b57a7a3ea53bdac`, frontend `http://127.0.0.1:4175`, API loopback `5265`, official bootstrap và exact ownership marker. Admin đăng nhập do owner hỗ trợ; Manager nhập mật khẩu do owner hỗ trợ, tiện ích bấm đăng nhập. Không lưu/in plaintext credential hoặc đọc password field để vượt redaction.
+
+| Case utility UI | Actual / phạm vi evidence |
+| --- | --- |
+| Admin tạo/detail/giải phóng từng phần | PASS: tạo 20, giải phóng 2; nguồn Manual, snapshot Cái giữ hàng; ExportReceipt hold chỉ có Chi tiết |
+| Manager tạo/detail/giải phóng từng phần | PASS: tạo 10, giải phóng 3; chỉ Kho A trong selector/list |
+| Scoped expiry và reconciliation | PASS: Manager xử lý đúng một Manual A hết hạn; Manual B và ExportReceipt hold còn active, released 0; đối chiếu chỉ đọc, không thêm effect |
+| Validation/loading/error/stale | PASS: zero, precision và thiếu lý do có thông báo tiếng Việt; disabled/Đang xử lý được quan sát; SQL fixture đổi rowversion khi form mở rồi UI submit bị stale conflict, zero extra effect. Transient load/permission errors hiển thị thông báo an toàn, reload phục hồi; không gán lỗi môi trường này thành defect production |
+| Double-click | PARTIAL theo capability: thao tác dblclick tạo/release/expire qua utility, SQL chứng minh một effect/audit/claim mỗi command; utility không cung cấp network count, không tuyên bố chỉ một HTTP request. Runner network-count PASS giữ phạm vi riêng |
+| Keyboard/dialog/tiếng Việt | PASS trên Admin/Manager: Tab/Shift+Tab Kho/Sản phẩm, focus containment, Escape đóng và trả focus về trigger; labels/status/error/empty tiếng Việt |
+| Staff và Viewer đăng nhập/thao tác utility | BLOCKED, chưa chạy. Runner Staff/Viewer PASS không thay lượt utility |
+| Mobile 375×812 | FAIL precursor: document rộng 476 px, focus về trigger kéo trang ngang 116 px. Draft fix ở shared MainLayout + App.css + StockReservations.css; chưa browser successor, không ghi đã đóng |
+
+SQL hậu điều kiện của đúng marker-owned database trước cleanup: product MR-QA Physical On Hand **200**, reserved **31**, ledger **0**, StockReservation audit **5**, claims **5**. Admin/Manager còn giữ 18/7; Manual A expired/released 1; foreign Manual B giữ 1; ExportReceipt hold giữ 5. SQL chỉ fixture và hậu điều kiện, không gọi là thao tác UI. Không quan sát raw HTTP status qua utility; status/replay/filtering trước đó thuộc runner evidence riêng.
+
+Bản sửa mobile chưa commit: 110/110 frontend tests, lint/production build/audit PASS (0 vulnerabilities), diff check PASS. Không backend/model/migration change; không lặp Application/API SQL suites. Cần successor browser tại desktop/mobile trước commit/push; CI/SonarCloud hiện hành vẫn thuộc f9bc0cd. Sáu Critical complexity maintainability recommendations vẫn OPEN; không suppress hoặc tự coi là security defects.
+
+Blocker: utility từ chối bind tab theo URL policy; owner mở trực tiếp thấy ERR_CONNECTION_REFUSED, API/frontend run đã kết thúc. Thao tác phục hồi hai process trên database hiện có bị automatic execution review từ chối `blocked by policy`; không retry bằng script/transport khác. Staff/Viewer và mobile successor vẫn BLOCKED. Không tạo run lặp để thay bằng runner PASS.
+
+Official Stop-BrowserQa đã cleanup exact run: database absent, credential removed, process/listener 0. Tab utility chưa xác nhận đóng vì URL-policy blocker, giữ trạng thái UNKNOWN thay vì Browser Closed=true. Protected main/worktrees/.npm-cache/UNKNOWN cache/policy-blocked helper không bị tác động. Notion 17 §35 `2026-10-08T16:48:56.271Z`, 30 §21 `2026-10-08T16:49:12.197Z` UNCHANGED qua native fetch trước sửa; không viết contract. Drive metadata-only vẫn NOT REVIEWED.
+
+**Chưa READY FOR OWNER ACCEPTANCE cho yêu cầu utility bổ sung; PR #32 giữ Draft, chưa có owner acceptance.**
+
+### Review mobile và blocker — tiếp tục 2026-10-10, chưa browser successor
+
+Đã đọc AGENTS.md và đầy đủ bản cài `ui-ux-pro-max/SKILL.md`; áp dụng Quick Reference accessibility/interactions/responsive cho web. Focused search `horizontal scroll responsive table --domain ux` xác nhận hai guidance phù hợp Web: nội dung vừa viewport, bảng rộng dùng wrapper `overflow-x:auto`. Không áp dụng ví dụ `overflow-x:hidden` lên document vì sẽ che nội dung/focus. Không cài Python; dùng runtime Python đã bundle sẵn để đọc dataset skill.
+
+Static review ba file source (hash không đổi so với bản sửa draft đã test):
+- `MainLayout.tsx`: content flex child có `minWidth:0`; class mới chỉ dùng bố cục, không đổi permission refresh/Outlet/route/action logic. Sidebar không shrink ở desktop; dưới 720 px chuyển lên trên nội dung và links wrap. Đây là thay đổi shared layout, chưa kết luận mọi route đã responsive.
+- `App.css`: selectors chỉ `.main-layout/.main-sidebar`; không thêm body/root overflow hidden/clip, transform, fixed overlay hoặc rule ảnh hưởng focus. Desktop giữ sidebar 250 px; cần kiểm tra vùng 720/721/768 px vì trước đây sidebar được phép shrink.
+- `StockReservations.css`: giữ table `min-width:980px` trong `.reservation-table{overflow-x:auto}`; wrapper mobile `max-width:100%` theo content parent, tools wrap. Không bỏ cột hoặc ẩn action để vừa màn hình.
+- `AccessibleDialog` portal vào body, giữ containment/Escape/returnFocus; không sửa component này. Print overlay có CSS độc lập, không đổi bản in. Source strings/validation/accessibility vẫn tiếng Việt.
+
+Smoke cần chạy khi QA và utility được phép: `/stock-reservations` ở 375×812 và 768×1024, thêm boundary 720/721 và desktop 1280; create/detail/release form/dialog, Tab/Shift+Tab/Escape/return focus phải có document scrollWidth không vượt clientWidth (dung sai 1 px), scrollX không tăng; bảng vẫn cuộn nội bộ và truy cập cột action được. `/warehouses` có wrapper cuộn table, `/approvals` có wrapper và breakpoint filter riêng; `/products` dùng table trực tiếp nên ưu tiên smoke dữ liệu dài để phát hiện tác động shared layout. Theo yêu cầu owner mới nhất, smoke còn phải bao gồm đăng nhập, phiếu nhập, phiếu xuất, Cất hàng và quản trị quyền với persona có quyền tương ứng; đăng nhập nằm ngoài MainLayout nên là kiểm tra không bị ảnh hưởng bởi App.css. Không sửa các route khác hoặc khai smoke PASS khi chưa chạy.
+
+Phân loại chính xác các blocker (không retry operation bị từ chối):
+
+| Nhóm | Operation / evidence | Kết luận |
+| --- | --- | --- |
+| Browser URL policy | Tool `mcp__cua_repl.js`, input `let qaTab = await cua.getTab({url:'http://127.0.0.1:4175/stock-reservations'}, {browser:'iab'});` bị từ chối, nguyên văn: `Browser Use rejected this action due to browser security policy. Reason: The browser URL policy blocks this action. Browser use cannot visit the requested page. The requested URL protocol is not allowed. Allowed protocols: "http:", "https:".` | Inventory read-only mới xác nhận tab run ID 1 là error document `data:text/html`; không phải protocol HTTP của API bị cấm. Không bind/navigate/close lại tab này bằng đường khác |
+| Môi trường/process | PIDs cũ 9220/13672 không còn, ports 4175/5265 không LISTEN; owner báo ERR_CONNECTION_REFUSED. Inventory có thêm tab ID 2 tại HTTP URL nhưng cũng title `This site can't be reached`, ownership không xác định | Không có QA environment đang chạy; chưa xác định nguyên nhân process kết thúc. Không coi là lỗi ứng dụng hoặc bằng chứng lỗi authorization |
+| Execution review | Tool `functions.exec` → `tools.exec_command`, workdir Manual MVP, một PowerShell compound command kiểm marker/absent PIDs, đọc connection qua official helper, định nghĩa QA env, hai `Start-Process`, cập nhật manifest và loop/finally cleanup. Toàn input bị chặn ở `CreateProcess`: `rejected: blocked by policy` | Không suy rằng review đã chỉ ra một subcommand cụ thể hay authorization bug. Không retry bằng sửa script/launcher/driver/transport, không tạo QA run mới. Hai lệnh launch được trích dưới đây; toàn input nằm trong tool record của hội thoại, không khai đã xuất thành artifact riêng và không thực thi lại |
+
+Các lệnh launch đã nằm trong compound input bị từ chối (trích nguyên input, **documentation only**, không phải lệnh yêu cầu owner chạy):
+```powershell
+$qaApi=Start-Process dotnet -ArgumentList @("$qaRoot/ERP.Api/bin/Release/net10.0/ERP.Api.dll",'--contentRoot',"$qaRoot/ERP.Api",'--urls','http://127.0.0.1:5265') -WorkingDirectory $qaManifest.ArtifactRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $qaManifest.ArtifactRoot 'api.restart.stdout.log') -RedirectStandardError (Join-Path $qaManifest.ArtifactRoot 'api.restart.stderr.log') -PassThru
+$qaFrontend=Start-Process node -ArgumentList @("$qaRoot/frontend/node_modules/vite/bin/vite.js",'--host','127.0.0.1','--port','4175','--strictPort') -WorkingDirectory "$qaRoot/frontend" -WindowStyle Hidden -RedirectStandardOutput (Join-Path $qaManifest.ArtifactRoot 'frontend.restart.stdout.log') -RedirectStandardError (Join-Path $qaManifest.ArtifactRoot 'frontend.restart.stderr.log') -PassThru
+```
+
+Không chạy thêm tests/suites/browser khi source không đổi trong lượt review này. 110/110/lint/build/audit draft evidence giữ source hashes cũ; CI/SonarCloud PASS chỉ thuộc f9bc0cd. Staff read/create/no release-expire, Viewer read-only/no sensitive UI, mobile successor và shared-route smoke còn BLOCKED. Tab run 1 vẫn UNKNOWN cho cleanup; tab 2 không rõ ownership được giữ nguyên. Không commit/push bốn file draft trước gate browser cần thiết.
+
+Checkpoint source f9bc0cd trước yêu cầu utility bổ sung: **LOCAL SUCCESSOR VERIFICATION PASS**. External CI/SonarCloud của HEAD này được đối chiếu trong PR body; không tự suy local PASS thành external PASS. PR #32 vẫn Draft; chưa ghi owner đã chấp nhận Manual MVP. Base đã nghiệm thu vẫn `ae1f2c1c58197360a23d2d8dd2231ab600d7fa22`.
 
 ## SonarCloud và accessibility successor — 2026-10-10
 
