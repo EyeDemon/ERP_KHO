@@ -86,7 +86,10 @@ interface Investigation {
   bucketAnchorId?:number; bucketAfterId?:number|null; nextBucketAfterId?:number|null;
   bucketHasRowsAfterAnchor?:boolean; bucketStatus?: string;
   eventStatus?:string; eventBeforeId?:number|null; nextEventBeforeId?:number|null;
-  ledgerHasEventsAfterAnchor?:boolean;
+  ledgerHasEventsAfterAnchor?:boolean; evidenceAnchorsStale?:boolean;
+  snapshotComparisonStatus?:'Match' | 'Mismatch' | 'Indeterminate';
+  snapshotComparisonExpectedQuantity?:number|null;
+  snapshotComparisonDifference?:number|null;
   eventsTruncated:boolean; bucketsTruncated:boolean;
   currentQuantity:number; expectedQuantity:number; difference:number;
   allStatusCurrentQuantity?:number; allStatusReservedQuantity?:number;
@@ -388,8 +391,27 @@ export default function InventoryReconciliation() {
           (evidence.statusBreakdown.some(s => s.difference === null) ? 'Indeterminate' :
             evidence.statusBreakdown.some(s => s.difference !== 0) ? 'Mismatch' : 'Match')
           : null;
+      const anchorDrift = evidence?.ledgerHasEventsAfterAnchor === true ||
+        evidence?.bucketHasRowsAfterAnchor === true;
+      const hasSnapshotVerdict = evidence?.snapshotComparisonStatus !== undefined;
       if (!evidence || evidence.warehouseId !== warehouse ||
           evidence.productId !== product || evidence.isReadOnly !== true ||
+          (evidence.evidenceAnchorsStale !== undefined &&
+            (typeof evidence.evidenceAnchorsStale !== 'boolean' ||
+              evidence.evidenceAnchorsStale !== anchorDrift)) ||
+          (hasSnapshotVerdict && (
+            !['Match', 'Mismatch', 'Indeterminate'].includes(evidence.snapshotComparisonStatus ?? '') ||
+            evidence.evidenceAnchorsStale !== anchorDrift ||
+            !isNullableQuantity(evidence.snapshotComparisonExpectedQuantity) ||
+            !isNullableQuantity(evidence.snapshotComparisonDifference) ||
+            (anchorDrift
+              ? (evidence.snapshotComparisonStatus !== 'Indeterminate' ||
+                evidence.snapshotComparisonExpectedQuantity !== null ||
+                evidence.snapshotComparisonDifference !== null)
+              : (evidence.snapshotComparisonStatus !== evidence.allStatusStatus ||
+                evidence.snapshotComparisonExpectedQuantity !== evidence.allStatusExpectedQuantity ||
+                evidence.snapshotComparisonDifference !== evidence.allStatusDifference))
+          )) ||
           (evidence.allStatusStatus !== undefined &&
             evidence.allStatusStatus !== detailVerdict) ||
           (evidence.unclassifiedStockBucketCount !== undefined &&
@@ -746,6 +768,14 @@ export default function InventoryReconciliation() {
                 onClick={() => void loadInvestigation(investigation.warehouseId, investigation.productId)}>
                 Làm mới mốc Ledger
               </button>
+              {investigation.evidenceAnchorsStale && (
+                <p role="alert">
+                  Mốc bằng chứng đã cũ: đã có Ledger hoặc bucket mới ngoài mốc đang xem.
+                  Kết luận so sánh với tồn hiện tại là Chưa xác định; số liệu lịch sử
+                  không cùng thời điểm với Balance. Hãy làm mới mốc để điều tra tiếp,
+                  không dùng chênh lệch này để sửa tồn.
+                </p>
+              )}
               {investigation.availableLedgerExpectedIsPartial && (
                 <p role="alert">
                   Lịch sử Ledger của cặp kho / sản phẩm có dữ liệu chưa phân loại an toàn hoặc
@@ -795,18 +825,18 @@ export default function InventoryReconciliation() {
                       cần xác minh dữ liệu gốc trước khi sửa tồn.
                     </p>
                   )}
-                  {investigation.allStatusStatus && (
+                  {(investigation.snapshotComparisonStatus ?? investigation.allStatusStatus) && (
                     <p role="status">
                       Kết luận 8 trạng thái:{' '}
-                      <UiBadge tone={investigation.allStatusStatus === 'Indeterminate' ? 'warning'
-                        : investigation.allStatusStatus === 'Match' ? 'success' : 'danger'}>
-                        {investigation.allStatusStatus === 'Indeterminate' ? 'Chưa xác định'
-                          : investigation.allStatusStatus === 'Match' ? 'Khớp tất cả'
+                      <UiBadge tone={(investigation.snapshotComparisonStatus ?? investigation.allStatusStatus) === 'Indeterminate' ? 'warning'
+                        : (investigation.snapshotComparisonStatus ?? investigation.allStatusStatus) === 'Match' ? 'success' : 'danger'}>
+                        {(investigation.snapshotComparisonStatus ?? investigation.allStatusStatus) === 'Indeterminate' ? 'Chưa xác định'
+                          : (investigation.snapshotComparisonStatus ?? investigation.allStatusStatus) === 'Match' ? 'Khớp tất cả'
                             : 'Lệch theo trạng thái'}
                       </UiBadge>
                     </p>
                   )}
-                  {investigation.allStatusStatus === 'Mismatch' &&
+                  {(investigation.snapshotComparisonStatus ?? investigation.allStatusStatus) === 'Mismatch' &&
                     investigation.allStatusDifference === 0 && (
                       <p role="alert">
                         Lệch dù tổng bằng 0: các trạng thái tồn kho có chênh lệch bù trừ.
@@ -817,7 +847,8 @@ export default function InventoryReconciliation() {
                     <UiMetric label="Tổng tồn mọi trạng thái" value={numberFormat.format(investigation.allStatusCurrentQuantity ?? 0)} />
                     <UiMetric label="Tổng đang giữ mọi trạng thái" value={numberFormat.format(investigation.allStatusReservedQuantity ?? 0)} />
                     <UiMetric label="Tổng Ledger các trạng thái (tham khảo)"
-                      value={investigation.allStatusExpectedQuantity == null ? 'Chưa xác định' : numberFormat.format(investigation.allStatusExpectedQuantity)} />
+                      value={investigation.evidenceAnchorsStale || investigation.allStatusExpectedQuantity == null
+                        ? 'Chưa xác định' : numberFormat.format(investigation.allStatusExpectedQuantity)} />
                   </UiMetricGrid>
                   <UiTableScroll><table aria-label="Đối chiếu từng trạng thái tồn kho theo Ledger">
                     <thead><tr>

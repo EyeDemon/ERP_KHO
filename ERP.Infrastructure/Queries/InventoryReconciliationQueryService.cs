@@ -270,6 +270,12 @@ namespace ERP.Infrastructure.Queries
             // against a missing Ledger; no automatic repair is authorized.
             var allStatusStatus = !comparable ? "Indeterminate" :
                 statusBreakdown.Any(x => x.Difference != 0m) ? "Mismatch" : "Match";
+            // Legacy all-status arithmetic is preserved for forensic keyset
+            // paging, but it is not an integrity verdict against mutable
+            // Balance when either scoped high-water mark is obsolete.
+            var evidenceAnchorsStale = hasNewEvents || bucketHasRowsAfterAnchor;
+            var snapshotComparisonStatus = evidenceAnchorsStale
+                ? "Indeterminate" : allStatusStatus;
 
             var currentQuantity = await stocks.SumAsync(x => (decimal?)x.Quantity) ?? 0m;
             // Compute the signed quantity from a small bounded transaction-type
@@ -368,6 +374,12 @@ namespace ERP.Infrastructure.Queries
                 EventBeforeId = eventBeforeId,
                 NextEventBeforeId = hasOlderEvents && page.Count > 0 ? page[^1].Id : null,
                 LedgerHasEventsAfterAnchor = hasNewEvents,
+                EvidenceAnchorsStale = evidenceAnchorsStale,
+                SnapshotComparisonStatus = snapshotComparisonStatus,
+                SnapshotComparisonExpectedQuantity = evidenceAnchorsStale
+                    ? null : allStatusExpected,
+                SnapshotComparisonDifference = evidenceAnchorsStale || !allStatusExpected.HasValue
+                    ? null : allStatusCurrent - allStatusExpected.Value,
                 EventCount = eventCount,
                 BucketCount = bucketCount,
                 CurrentQuantity = currentQuantity,

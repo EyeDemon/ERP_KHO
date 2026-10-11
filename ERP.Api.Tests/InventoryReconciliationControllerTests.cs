@@ -132,6 +132,27 @@ namespace ERP.Api.Tests
         }
 
         [Fact]
+        public void Investigation_StaleAnchor_ExposesIndeterminateSnapshotComparison()
+        {
+            var evidence = new InventoryReconciliationInvestigationDto
+            {
+                EventAnchorId = 10, BucketAnchorId = 4,
+                LedgerHasEventsAfterAnchor = true, EvidenceAnchorsStale = true,
+                SnapshotComparisonStatus = "Indeterminate",
+                SnapshotComparisonExpectedQuantity = null,
+                SnapshotComparisonDifference = null
+            };
+            var json = System.Text.Json.JsonSerializer.SerializeToElement(evidence,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+            json.GetProperty("evidenceAnchorsStale").GetBoolean().Should().BeTrue();
+            json.GetProperty("snapshotComparisonStatus").GetString().Should().Be("Indeterminate");
+            json.GetProperty("snapshotComparisonExpectedQuantity").ValueKind.Should().Be(
+                System.Text.Json.JsonValueKind.Null);
+            json.GetProperty("snapshotComparisonDifference").ValueKind.Should().Be(
+                System.Text.Json.JsonValueKind.Null);
+        }
+
+        [Fact]
         public async Task Reconciliation_UnknownHistory_SerializesNullableExpectedAndDifference()
         {
             var dto = new InventoryReconciliationDto

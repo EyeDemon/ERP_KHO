@@ -33,6 +33,15 @@ namespace ERP.Application.DTOs
         public int? EventBeforeId { get; set; }
         public int? NextEventBeforeId { get; set; }
         public bool LedgerHasEventsAfterAnchor { get; set; }
+        // A newer Ledger event or bucket ID invalidates comparison to CURRENT stock.
+        // Legacy all-status arithmetic remains visible only as read-only evidence.
+        public bool EvidenceAnchorsStale { get; set; }
+        // Authoritative advisory verdict: never certify a stale pinned anchor.
+        // These nullable comparison totals are distinct from historical Ledger
+        // arithmetic and do not claim a transactionally frozen SQL snapshot.
+        public string SnapshotComparisonStatus { get; set; } = "Indeterminate";
+        public decimal? SnapshotComparisonExpectedQuantity { get; set; }
+        public decimal? SnapshotComparisonDifference { get; set; }
         public int EventCount { get; set; }
         public int BucketCount { get; set; }
         public bool EventsTruncated { get; set; }
