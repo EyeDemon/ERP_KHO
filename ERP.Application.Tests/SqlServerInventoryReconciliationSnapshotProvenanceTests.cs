@@ -1,3 +1,5 @@
+using System.Data;
+using System.Data.Common;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
@@ -6,16 +8,34 @@ using ERP.Infrastructure.Queries;
 using ERP.Infrastructure.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace ERP.Application.Tests;
 
 [Collection(SqlServerExportStockCollection.Name)]
 public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
 {
-    private static ErpKhoDbContext CreateContext() => new(
-        new DbContextOptionsBuilder<ErpKhoDbContext>()
+    private static ErpKhoDbContext CreateContext(DbCommandInterceptor? interceptor = null)
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
             .UseSqlServer(Environment.GetEnvironmentVariable(
-                SqlServerFactAttribute.ConnectionVariable)!).Options);
+                SqlServerFactAttribute.ConnectionVariable)!);
+        if (interceptor is not null) options.AddInterceptors(interceptor);
+        return new ErpKhoDbContext(options.Options);
+    }
+
+    private sealed class SqlIsolationProbe : DbCommandInterceptor
+    {
+        public List<IsolationLevel?> Observed { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Observed.Add(command.Transaction?.IsolationLevel);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
 
     private sealed record CurrentUser(int UserId, string Role = "Manager") : ICurrentUser
     {
@@ -73,10 +93,17 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
 
         try
         {
-            await using var read = CreateContext();
+            var probe = new SqlIsolationProbe();
+            await using var read = CreateContext(probe);
             var query = new InventoryReconciliationQueryService(
                 read, new WarehouseAuthorizationService(read, new CurrentUser(user.Id)));
             var first = await query.GetInvestigationAsync(warehouse.Id, product.Id);
+            // Every SQL read — including access checks and the final evidence
+            // keyset pages — must share a serializable transaction. It must
+            // be disposed before the next HTTP investigation begins.
+            probe.Observed.Should().NotBeEmpty()
+                .And.OnlyContain(x => x == IsolationLevel.Serializable);
+            read.Database.CurrentTransaction.Should().BeNull();
             first.EvidenceAnchorsStale.Should().BeFalse();
             first.SnapshotComparisonStatus.Should().Be("Match");
             first.SnapshotComparisonExpectedQuantity.Should().Be(10m);

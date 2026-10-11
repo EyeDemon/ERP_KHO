@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -88,6 +89,18 @@ namespace ERP.Infrastructure.Queries
                 throw new BusinessRuleException("Trạng thái lịch sử Ledger không hợp lệ.");
             if (_warehouseAuthorization is null)
                 throw new InvalidOperationException("Thiếu dịch vụ phân quyền kho đối chiếu.");
+
+            // A single detail response combines many independently executed
+            // Ledger and Balance queries. On SQL Server, SERIALIZABLE holds
+            // shared/range locks until the response has been fully assembled:
+            // no concurrent posting can split these in-request observations.
+            // This is deliberately scoped to ONE authorized warehouse/product,
+            // NOT the broad cross-warehouse summary list. Cross-HTTP-page
+            // anchors remain advisory and are revalidated as before.
+            // InMemory tests have no relational transaction support.
+            await using var investigationReadTransaction = _context.Database.IsSqlServer()
+                ? await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+                : null;
 
             await _warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId);
 
@@ -393,7 +406,7 @@ namespace ERP.Infrastructure.Queries
             var hasOlderEvents = rawEvents.Count > limit;
             var page = rawEvents.Take(limit).ToList();
 
-            return new InventoryReconciliationInvestigationDto
+            var result = new InventoryReconciliationInvestigationDto
             {
                 WarehouseId = warehouseId,
                 WarehouseName = warehouseName,
@@ -477,6 +490,11 @@ namespace ERP.Infrastructure.Queries
                         TransactionDate = x.TransactionDate
                     }).ToList()
             };
+            // No mutations: commit releases SQL SERIALIZABLE reader locks and
+            // ensures no live transaction leaks into a later request.
+            if (investigationReadTransaction is not null)
+                await investigationReadTransaction.CommitAsync();
+            return result;
         }
 
         public async Task<PagedResult<InventoryReconciliationDto>> GetReconciliationsAsync(

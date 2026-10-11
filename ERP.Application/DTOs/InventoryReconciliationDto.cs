@@ -17,8 +17,10 @@ namespace ERP.Application.DTOs
         public int WarehouseId { get; set; }
         public string WarehouseName { get; set; } = string.Empty;
         // Bucket IDs are keyset-paged independently of Ledger events. This
-        // high-water ID excludes newly inserted buckets, but quantities and
-        // statuses remain CURRENT reads, not a transactionally frozen snapshot.
+        // high-water ID excludes newly inserted buckets. SQL Server detail
+        // requests use a scoped SERIALIZABLE read transaction, but quantities
+        // and statuses remain CURRENT across separate HTTP page requests;
+        // anchors/fingerprint do NOT freeze later pages.
         // Current-state bucket evidence is explicitly scoped to one status.
         public string BucketStatus { get; set; } = "Available";
         public int BucketAnchorId { get; set; }
@@ -45,7 +47,8 @@ namespace ERP.Application.DTOs
         public bool EvidenceAnchorsStale { get; set; }
         // Authoritative advisory verdict: never certify a stale pinned anchor.
         // These nullable comparison totals are distinct from historical Ledger
-        // arithmetic and do not claim a transactionally frozen SQL snapshot.
+        // arithmetic; SQL Server locks each detail request consistently, not
+        // an immutable cross-request SQL snapshot.
         public string SnapshotComparisonStatus { get; set; } = "Indeterminate";
         public decimal? SnapshotComparisonExpectedQuantity { get; set; }
         public decimal? SnapshotComparisonDifference { get; set; }
