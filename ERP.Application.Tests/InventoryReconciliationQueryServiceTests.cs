@@ -191,6 +191,60 @@ namespace ERP.Application.Tests
         }
 
 
+
+        [Fact]
+        public async Task Investigation_RejectsFutureScopedAnchorsAfterWarehouseAuthorization()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var first = await service.GetInvestigationAsync(1, 1);
+            first.EventAnchorId.Should().BeGreaterThan(0);
+            first.BucketAnchorId.Should().BeGreaterThan(0);
+
+            var futureLedger = () => service.GetInvestigationAsync(
+                1, 1, eventAnchorId: first.EventAnchorId + 1);
+            await futureLedger.Should().ThrowAsync<BusinessRuleException>()
+                .WithMessage("*Mốc lịch sử sổ cái vượt quá*");
+
+            var futureBucket = () => service.GetInvestigationAsync(
+                1, 1, eventAnchorId: first.EventAnchorId,
+                bucketAnchorId: first.BucketAnchorId + 1);
+            await futureBucket.Should().ThrowAsync<BusinessRuleException>()
+                .WithMessage("*Mốc bucket tồn vượt quá*");
+
+            // A real older anchor must remain valid after a later event.
+            db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                ProductId = 1, WarehouseId = 1, InventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.Import, Quantity = 1m,
+                TransactionDate = DateTime.UtcNow.AddDays(-1)
+            });
+            await db.SaveChangesAsync();
+            var pinned = await service.GetInvestigationAsync(1, 1,
+                eventAnchorId: first.EventAnchorId, bucketAnchorId: first.BucketAnchorId);
+            pinned.EventAnchorId.Should().Be(first.EventAnchorId);
+            pinned.LedgerHasEventsAfterAnchor.Should().BeTrue();
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(4));
+        }
+
+        [Fact]
+        public async Task Investigation_FutureAnchorsCannotBypassWarehouseDenial()
+        {
+            using var db = await GetDbContextAsync();
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(2, default))
+                .ThrowsAsync(new NotFoundException("Không tìm thấy kho được cấp quyền."));
+            var service = new InventoryReconciliationQueryService(db, auth.Object);
+            var attempt = () => service.GetInvestigationAsync(2, 1,
+                eventAnchorId: int.MaxValue, bucketAnchorId: int.MaxValue);
+            await attempt.Should().ThrowAsync<NotFoundException>();
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(2, default), Times.Once);
+            auth.VerifyNoOtherCalls();
+        }
+
         [Fact]
         public async Task Investigation_RevokedWarehouseBetweenPages_FailsClosed()
         {

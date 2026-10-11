@@ -1766,6 +1766,46 @@ public sealed class SqlServerInventoryLockMoveTests
         finally { await CleanupAsync(fixture); }
     }
 
+
+    [SqlServerFact]
+    public async Task ReconciliationInvestigation_RejectsFutureLedgerAndBucketAnchorsInSqlServer()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using var read = CreateContext();
+            var service = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var first = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId);
+            first.BucketAnchorId.Should().BeGreaterThan(0);
+
+            var futureLedger = () => service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId,
+                eventAnchorId: int.MaxValue);
+            await FluentActions.Awaiting(futureLedger)
+                .Should().ThrowAsync<BusinessRuleException>()
+                .WithMessage("*Mốc lịch sử sổ cái vượt quá*");
+
+            var futureBucket = () => service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId,
+                eventAnchorId: first.EventAnchorId,
+                bucketAnchorId: int.MaxValue);
+            await FluentActions.Awaiting(futureBucket)
+                .Should().ThrowAsync<BusinessRuleException>()
+                .WithMessage("*Mốc bucket tồn vượt quá*");
+
+            // The legitimate anchored read remains usable after denial.
+            var valid = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId,
+                eventAnchorId: first.EventAnchorId,
+                bucketAnchorId: first.BucketAnchorId);
+            valid.EventAnchorId.Should().Be(first.EventAnchorId);
+            valid.BucketAnchorId.Should().Be(first.BucketAnchorId);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task ReconciliationInvestigation_RealLedgerBucketEvidence_IsAuthorizedBoundedAndAnchored()
     {

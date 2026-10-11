@@ -114,3 +114,10 @@ Snapshot số dư nhất quán xuyên trang (keyset hiện giữ ranh giới ID 
 - SQL/CI cô lập không thay thế nghiệm thu staging thực. Dữ liệu Balance đọc hiện tại không được snapshot-lock cùng Ledger anchor; Blueprint INV-11 vẫn foundation.
 
 - CI #698 ban đầu FAIL duy nhất do regression cố ghi (InventoryStatus)99 vào SQL Server; log xác nhận khóa ngoại trạng thái hoạt động đúng. Successor regression giữ nguyên FK, assert cập nhật bị từ chối và read model sau lỗi vẫn đúng. Đây là bảo vệ dữ liệu ở tầng SQL; truy vấn defensive đối với dữ liệu nhập bất thường được kiểm tra độc lập bằng InMemory, không chứng minh SQL có thể lưu sai trạng thái.
+
+## INV-11 — Không chấp nhận mốc điều tra trong tương lai (2026-10-11)
+
+- `eventAnchorId` và `bucketAnchorId` không phải con số tùy ý. Sau `EnsureWarehouseAccessAsync` và khi đã xác nhận kho–sản phẩm, dịch vụ đọc **Max(ID) đúng phạm vi kho–sản phẩm** của toàn Ledger và **Max(ID) bucket trong trạng thái đã chọn**. Mốc do client gửi vượt Max tương ứng sẽ bị `BusinessRuleException`, không trả bằng chứng với mốc giả.
+- Mốc Ledger giả trong tương lai có thể làm `ledgerHasEventsAfterAnchor=false` giả, che khuất sự kiện mới. Mốc bucket giả có thể che `bucketHasRowsAfterAnchor`; mốc của trạng thái khác không được tái dùng. Cả hai được kiểm tra sau phân quyền, tránh tiết lộ dữ liệu ngoài kho.
+- Mốc cũ có thực vẫn hợp lệ sau khi có sự kiện/bucket mới, giữ keyset pagination và chỉ báo dữ liệu phát sinh sau mốc. `eventAnchorId=0` và `bucketAnchorId=0` vẫn cho phép kiểm tra lịch sử đầu kỳ/bucket rỗng hợp lệ.
+- Regression InMemory kiểm tra mốc sai, mốc đúng cũ sau Ledger mới và không vượt kiểm tra quyền; SQL Server integration kiểm tra từ chối mốc tương lai cùng đường truy vấn thực. Chỉ bổ sung query Max theo scope, không thay đổi Ledger, số dư, schema, quyền, Notion hoặc Production. Đây vẫn không phải snapshot SQL đồng thời Ledger/Balance.

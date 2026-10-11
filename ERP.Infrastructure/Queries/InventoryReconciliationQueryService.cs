@@ -118,7 +118,14 @@ namespace ERP.Infrastructure.Queries
 
             // Use the warehouse/product-wide high-water mark, not just AVAILABLE,
             // so a later QC/Quarantine status event cannot be silently excluded.
-            var anchor = eventAnchorId ?? await allStatusLedger.MaxAsync(x => (int?)x.Id) ?? 0;
+            var latestScopedEventId = await allStatusLedger.MaxAsync(x => (int?)x.Id) ?? 0;
+            // A client-supplied future high-water mark is not a real Ledger
+            // snapshot. It can falsely suppress the "events after anchor"
+            // indicator even though the scoped history is incomplete.
+            // Resolve it only AFTER the warehouse authorization check.
+            if (eventAnchorId.HasValue && eventAnchorId.Value > latestScopedEventId)
+                throw new BusinessRuleException("Mốc lịch sử sổ cái vượt quá sự kiện hiện có của kho và sản phẩm.");
+            var anchor = eventAnchorId ?? latestScopedEventId;
             var anchoredAllStatusLedger = allStatusLedger.Where(x => x.Id <= anchor);
             var anchoredLedger = ledger.Where(x => x.Id <= anchor);
             // Recheck within the authorized scope on each page request.
@@ -127,7 +134,13 @@ namespace ERP.Infrastructure.Queries
             // Use a monotonically increasing identity cursor instead of OFFSET.
             // This bounds new bucket INSERTs, but does not freeze mutable stock
             // quantities/statuses across requests. Every page rechecks access.
-            var bucketAnchor = bucketAnchorId ?? await selectedStatusStocks.MaxAsync(x => (int?)x.Id) ?? 0;
+            var latestScopedBucketId = await selectedStatusStocks.MaxAsync(x => (int?)x.Id) ?? 0;
+            // Bucket anchors belong to the selected status, not another
+            // warehouse/product/status. Never accept a fabricated future ID.
+            // Older anchors stay valid when later buckets are inserted.
+            if (bucketAnchorId.HasValue && bucketAnchorId.Value > latestScopedBucketId)
+                throw new BusinessRuleException("Mốc bucket tồn vượt quá bucket hiện có trong phạm vi được chọn.");
+            var bucketAnchor = bucketAnchorId ?? latestScopedBucketId;
             var anchoredStocks = selectedStatusStocks.Where(x => x.Id <= bucketAnchor);
             var bucketCount = await anchoredStocks.CountAsync();
             var bucketHasRowsAfterAnchor = await selectedStatusStocks.AnyAsync(x => x.Id > bucketAnchor);
