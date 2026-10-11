@@ -39,6 +39,7 @@ interface ReconciliationRow {
   historyInsufficientForNonAvailableStock?: boolean;
   unclassifiedLedgerEventCount?: number;
   unclassifiedStockBucketCount?: number;
+  invalidReservationBucketCount?: number;
   statusChangeInQuantity?: number;
   statusChangeOutQuantity?: number;
   importQuantity: number;
@@ -98,7 +99,8 @@ interface Investigation {
   allStatusExpectedQuantity?:number|null; allStatusDifference?:number|null;
   allStatusStatus?: 'Match' | 'Mismatch' | 'Indeterminate';
   unclassifiedLedgerEventCount?:number;
-  unclassifiedStockBucketCount?:number; statusBreakdown?:StatusEvidence[];
+  unclassifiedStockBucketCount?:number; invalidReservationBucketCount?:number;
+  statusBreakdown?:StatusEvidence[];
   availableLedgerExpectedIsPartial?:boolean;
   historyInsufficientForNonAvailableStock?: boolean;
   isReadOnly:boolean; buckets:InvestigationBucket[]; events:InvestigationEvent[];
@@ -807,10 +809,17 @@ export default function InventoryReconciliation() {
                   không dùng chênh lệch này để sửa tồn.
                 </p>
               )}
+              {(investigation.invalidReservationBucketCount ?? 0) > 0 && (
+                <p role="alert">
+                  Phát hiện {investigation.invalidReservationBucketCount} bucket có lượng giữ chỗ
+                  không hợp lệ (âm hoặc vượt tồn). Kết luận đối chiếu chưa xác định;
+                  cần kiểm tra dữ liệu gốc, không tự sửa số dư.
+                </p>
+              )}
               {investigation.availableLedgerExpectedIsPartial && (
                 <p role="alert">
-                  Lịch sử Ledger của cặp kho / sản phẩm có dữ liệu chưa phân loại an toàn hoặc
-                  thiếu chứng từ gốc. Tổng Ledger AVAILABLE và chênh lệch bên dưới chỉ là một phần,
+                  Dữ liệu Ledger/Balance có lịch sử chưa phân loại, thiếu chứng từ gốc
+                  hoặc lượng giữ chỗ bất thường. Số Ledger AVAILABLE và chênh lệch bên dưới chưa đủ tin cậy,
                   không dùng để sửa tồn.
                 </p>
               )}

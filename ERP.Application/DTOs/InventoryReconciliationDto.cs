@@ -76,6 +76,9 @@ namespace ERP.Application.DTOs
         // Physical legacy bucket status IDs outside the canonical eight.
         // Their quantities remain in aggregate totals but poison comparison.
         public int UnclassifiedStockBucketCount { get; set; }
+        // Buckets with negative reservation or ReservedQuantity > Quantity.
+        // This is an integrity anomaly, not an authorization to patch Balance.
+        public int InvalidReservationBucketCount { get; set; }
         public IReadOnlyList<InventoryReconciliationStatusEvidenceDto> StatusBreakdown { get; set; } = [];
         public IReadOnlyList<InventoryReconciliationEvidenceEventDto> Events { get; set; } = [];
         public IReadOnlyList<InventoryReconciliationEvidenceBucketDto> Buckets { get; set; } = [];
@@ -152,6 +155,9 @@ namespace ERP.Application.DTOs
         public bool HistoryInsufficientForNonAvailableStock { get; set; }
         public int UnclassifiedLedgerEventCount { get; set; }
         public int UnclassifiedStockBucketCount { get; set; }
+        // Buckets with negative reservation or ReservedQuantity > Quantity.
+        // This is an integrity anomaly, not an authorization to patch Balance.
+        public int InvalidReservationBucketCount { get; set; }
         public decimal StatusChangeInQuantity { get; set; }
         public decimal StatusChangeOutQuantity { get; set; }
         public decimal ImportQuantity { get; set; }

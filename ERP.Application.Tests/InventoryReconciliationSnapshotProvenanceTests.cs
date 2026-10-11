@@ -147,6 +147,47 @@ public sealed class InventoryReconciliationSnapshotProvenanceTests
         refreshed.AllStatusBucketAggregateFingerprint.Should().NotBe(first.AllStatusBucketAggregateFingerprint);
     }
 
+
+    [Theory]
+    [InlineData(11)]
+    [InlineData(-1)]
+    public async Task InvalidBucketReservation_FailsClosedInDetailAndSummary(int reserved)
+    {
+        using var db = await SeedAsync();
+        var stock = await db.InventoryStocks.SingleAsync(x => x.Id == 1);
+        stock.ReservedQuantity = reserved;
+        await db.SaveChangesAsync();
+        var query = Query(db);
+
+        var detail = await query.GetInvestigationAsync(1, 1);
+        detail.InvalidReservationBucketCount.Should().Be(1);
+        detail.AllStatusCurrentQuantity.Should().Be(10m);
+        detail.AllStatusReservedQuantity.Should().Be((decimal)reserved);
+        detail.AllStatusStatus.Should().Be("Indeterminate");
+        detail.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+        detail.SnapshotComparisonStatus.Should().Be("Indeterminate");
+        detail.SnapshotComparisonExpectedQuantity.Should().BeNull();
+        detail.SnapshotComparisonDifference.Should().BeNull();
+        detail.StatusBreakdown.Should().OnlyContain(row =>
+            row.ExpectedQuantity == null && row.Difference == null);
+
+        var list = await query.GetReconciliationsAsync(1, 1, null);
+        var row = list.Items.Should().ContainSingle().Subject;
+        row.InvalidReservationBucketCount.Should().Be(1);
+        row.AllStatusStatus.Should().Be("Indeterminate");
+        row.AllStatusExpectedQuantity.Should().BeNull();
+        row.AllStatusDifference.Should().BeNull();
+        row.Status.Should().Be("Indeterminate");
+        row.ExpectedQuantity.Should().BeNull();
+        row.Difference.Should().BeNull();
+
+        stock.ReservedQuantity = 5m;
+        await db.SaveChangesAsync();
+        var repaired = await query.GetInvestigationAsync(1, 1);
+        repaired.InvalidReservationBucketCount.Should().Be(0);
+        repaired.SnapshotComparisonStatus.Should().Be("Match");
+    }
+
     [Fact]
     public async Task NewBucketInAnotherStatus_InvalidatesPinnedAllStatusComparisonButNotSelectedPage()
     {

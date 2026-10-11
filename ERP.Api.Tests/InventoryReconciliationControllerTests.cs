@@ -75,6 +75,7 @@ namespace ERP.Api.Tests
                 AllStatusCurrentQuantity = 12m, AllStatusReservedQuantity = 2m,
                 AllStatusExpectedQuantity = 12m, AllStatusDifference = 0m,
                 UnclassifiedLedgerEventCount = 0,
+                InvalidReservationBucketCount = 0,
                 StatusBreakdown = [new InventoryReconciliationStatusEvidenceDto
                 {
                     Status = "QcHold", CurrentQuantity = 3m, ReservedQuantity = 0m,
@@ -121,6 +122,7 @@ namespace ERP.Api.Tests
             json.GetProperty("allStatusCurrentQuantity").GetDecimal().Should().Be(12m);
             json.GetProperty("allStatusExpectedQuantity").GetDecimal().Should().Be(12m);
             json.GetProperty("unclassifiedLedgerEventCount").GetInt32().Should().Be(0);
+            json.GetProperty("invalidReservationBucketCount").GetInt32().Should().Be(0);
             json.GetProperty("availableLedgerExpectedIsPartial").GetBoolean().Should().BeTrue();
             var status = json.GetProperty("statusBreakdown").EnumerateArray().Single();
             status.GetProperty("status").GetString().Should().Be("QcHold");
@@ -167,7 +169,8 @@ namespace ERP.Api.Tests
             {
                 ProductId = 11, WarehouseId = 7, CurrentQuantity = 10m,
                 ExpectedQuantity = null, Difference = null,
-                UnclassifiedLedgerEventCount = 2, Status = "Indeterminate",
+                UnclassifiedLedgerEventCount = 2, InvalidReservationBucketCount = 1,
+                Status = "Indeterminate",
                 StatusChangeOutQuantity = 3m
             };
             var mock = new Mock<IInventoryReconciliationQueryService>(MockBehavior.Strict);
@@ -185,6 +188,7 @@ namespace ERP.Api.Tests
             json.GetProperty("expectedQuantity").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
             json.GetProperty("difference").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
             json.GetProperty("status").GetString().Should().Be("Indeterminate");
+            json.GetProperty("invalidReservationBucketCount").GetInt32().Should().Be(1);
             json.GetProperty("unclassifiedLedgerEventCount").GetInt32().Should().Be(2);
             json.GetProperty("statusChangeOutQuantity").GetDecimal().Should().Be(3m);
             mock.VerifyAll();

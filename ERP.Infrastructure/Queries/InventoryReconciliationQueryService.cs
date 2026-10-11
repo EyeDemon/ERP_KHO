@@ -172,7 +172,9 @@ namespace ERP.Infrastructure.Queries
                 .Select(g => new
                 {
                     Status = g.Key, Quantity = g.Sum(x => x.Quantity),
-                    Reserved = g.Sum(x => x.ReservedQuantity), Buckets = g.Count()
+                    Reserved = g.Sum(x => x.ReservedQuantity), Buckets = g.Count(),
+                    InvalidReservationBuckets = g.Count(x =>
+                        x.ReservedQuantity < 0m || x.ReservedQuantity > x.Quantity)
                 }).ToListAsync();
             // A bounded per-status aggregate fingerprint detects bucket updates,
             // but does not establish an atomic or row-level database snapshot.
@@ -207,6 +209,7 @@ namespace ERP.Infrastructure.Queries
             var unclassifiedStockBucketCount = stockGroups
                 .Where(group => !Enum.IsDefined(group.Status))
                 .Sum(group => group.Buckets);
+            var invalidReservationBucketCount = stockGroups.Sum(group => group.InvalidReservationBuckets);
 
             var byStatus = Enum.GetValues<InventoryStatus>()
                 .ToDictionary(status => status,
@@ -277,6 +280,7 @@ namespace ERP.Infrastructure.Queries
                 !stockGroups.Any(x => x.Status == InventoryStatus.Available && x.Quantity != 0m);
             var comparable = unclassifiedCount == 0 &&
                 unclassifiedStockBucketCount == 0 &&
+                invalidReservationBucketCount == 0 &&
                 !historyInsufficientForNonAvailableStock;
             foreach (var row in byStatus.Values)
             {
@@ -430,6 +434,7 @@ namespace ERP.Infrastructure.Queries
                     : null,
                 UnclassifiedLedgerEventCount = unclassifiedCount,
                 UnclassifiedStockBucketCount = unclassifiedStockBucketCount,
+                InvalidReservationBucketCount = invalidReservationBucketCount,
                 StatusBreakdown = statusBreakdown,
                 EventsTruncated = hasOlderEvents,
                 BucketsTruncated = buckets.Count > 100,
@@ -573,7 +578,9 @@ namespace ERP.Infrastructure.Queries
                 .Select(g => new
                 {
                     g.Key.ProductId, g.Key.WarehouseId, g.Key.Status,
-                    Quantity = g.Sum(s => s.Quantity), Buckets = g.Count()
+                    Quantity = g.Sum(s => s.Quantity), Buckets = g.Count(),
+                    InvalidReservationBuckets = g.Count(s =>
+                        s.ReservedQuantity < 0m || s.ReservedQuantity > s.Quantity)
                 }).ToListAsync();
 
             var transactions = await transactionQuery
@@ -604,6 +611,7 @@ namespace ERP.Infrastructure.Queries
                 var unclassifiedStockBucketCount = pairStocks
                     .Where(s => !Enum.IsDefined(s.Status)).Sum(s => s.Buckets);
                 var invalidStockStatus = unclassifiedStockBucketCount > 0;
+                var invalidReservationBucketCount = pairStocks.Sum(s => s.InvalidReservationBuckets);
 
                 var stockTransactions = transactions
                     .Where(t => t.ProductId == pair.ProductId && t.WarehouseId == pair.WarehouseId)
@@ -661,7 +669,7 @@ namespace ERP.Infrastructure.Queries
                     stockTransactions.Count == 0;
                 decimal? expectedQuantity =
                     unclassifiedCount > 0 || invalidStockStatus ||
-                    lacksLedgerForOtherStatusOnly ? null :
+                    invalidReservationBucketCount > 0 || lacksLedgerForOtherStatusOnly ? null :
                     stockTransactions.Sum(t =>
                     {
                         if (t.TransactionType == TransactionType.StatusChange)
@@ -683,7 +691,7 @@ namespace ERP.Infrastructure.Queries
                 decimal? allStatusDifference = null;
                 var allStatusStatus = "Indeterminate";
                 if (unclassifiedCount == 0 && !invalidStockStatus &&
-                    !lacksLedgerForOtherStatusOnly)
+                    invalidReservationBucketCount == 0 && !lacksLedgerForOtherStatusOnly)
                 {
                     var expectedByStatus = Enum.GetValues<InventoryStatus>()
                         .ToDictionary(state => state, _ => 0m);
@@ -724,6 +732,7 @@ namespace ERP.Infrastructure.Queries
                     HistoryInsufficientForNonAvailableStock = lacksLedgerForOtherStatusOnly,
                     UnclassifiedLedgerEventCount = unclassifiedCount,
                     UnclassifiedStockBucketCount = unclassifiedStockBucketCount,
+                    InvalidReservationBucketCount = invalidReservationBucketCount,
                     StatusChangeInQuantity = statusChangeIn,
                     StatusChangeOutQuantity = statusChangeOut,
                     ImportQuantity = importQuantity,
