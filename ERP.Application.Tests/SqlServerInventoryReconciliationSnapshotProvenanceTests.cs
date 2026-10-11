@@ -131,6 +131,24 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
             qcPinned.SnapshotComparisonStatus.Should().Be("Indeterminate");
             qcPinned.SnapshotComparisonExpectedQuantity.Should().BeNull();
             qcPinned.SnapshotComparisonDifference.Should().BeNull();
+            var freshQc = await query.GetInvestigationAsync(warehouse.Id, product.Id);
+            await using (var writer = CreateContext())
+            {
+                var stock = await writer.InventoryStocks.SingleAsync(x =>
+                    x.WarehouseId == warehouse.Id && x.ProductId == product.Id &&
+                    x.Status == InventoryStatus.QcHold);
+                stock.Quantity = 5m;
+                await writer.SaveChangesAsync();
+            }
+            var pinnedEdit = await query.GetInvestigationAsync(warehouse.Id, product.Id,
+                eventAnchorId: freshQc.EventAnchorId,
+                allStatusBucketAnchorId: freshQc.AllStatusBucketAnchorId,
+                allStatusBucketAggregateFingerprint: freshQc.AllStatusBucketAggregateFingerprint);
+            pinnedEdit.AllStatusBucketAggregateChanged.Should().BeTrue();
+            pinnedEdit.LedgerHasEventsAfterAnchor.Should().BeFalse();
+            pinnedEdit.AllStatusBucketHasRowsAfterAnchor.Should().BeFalse();
+            pinnedEdit.SnapshotComparisonStatus.Should().Be("Indeterminate");
+            pinnedEdit.SnapshotComparisonDifference.Should().BeNull();
         }
         finally
         {

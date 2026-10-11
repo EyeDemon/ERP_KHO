@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using ERP.Application.Common;
 using ERP.Application.DTOs;
@@ -50,7 +52,8 @@ namespace ERP.Infrastructure.Queries
             int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
             int? eventBeforeId = null, int? bucketAnchorId = null,
             int? bucketAfterId = null, string bucketStatus = "Available",
-            string eventStatus = "Available", int? allStatusBucketAnchorId = null)
+            string eventStatus = "Available", int? allStatusBucketAnchorId = null,
+            string? allStatusBucketAggregateFingerprint = null)
         {
             if (warehouseId <= 0 || productId <= 0)
                 throw new BusinessRuleException("ID kho và ID sản phẩm phải là số nguyên dương.");
@@ -65,6 +68,11 @@ namespace ERP.Infrastructure.Queries
                 throw new BusinessRuleException("Mốc ID bucket tồn không hợp lệ.");
             if (allStatusBucketAnchorId is < 0)
                 throw new BusinessRuleException("Mốc bucket toàn trạng thái không hợp lệ.");
+            if (allStatusBucketAggregateFingerprint is not null &&
+                (allStatusBucketAggregateFingerprint.Length != 64 ||
+                 allStatusBucketAggregateFingerprint.Any(c =>
+                     !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))))
+                throw new BusinessRuleException("Dấu kiểm tra tổng hợp bucket không hợp lệ.");
             if (bucketAfterId.HasValue && (bucketAfterId.Value <= 0 ||
                 !bucketAnchorId.HasValue || bucketAfterId.Value >= bucketAnchorId.Value))
                 throw new BusinessRuleException("Phân trang bucket yêu cầu ID sau hợp lệ và mốc bucket cố định.");
@@ -166,6 +174,16 @@ namespace ERP.Infrastructure.Queries
                     Status = g.Key, Quantity = g.Sum(x => x.Quantity),
                     Reserved = g.Sum(x => x.ReservedQuantity), Buckets = g.Count()
                 }).ToListAsync();
+            // A bounded per-status aggregate fingerprint detects bucket updates,
+            // but does not establish an atomic or row-level database snapshot.
+            var aggregateText = string.Join(";", stockGroups.OrderBy(x => (int)x.Status)
+                .Select(x => FormattableString.Invariant(
+                    $"{(int)x.Status}:{x.Quantity}:{x.Reserved}:{x.Buckets}")));
+            var observedFingerprint = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(aggregateText))).ToLowerInvariant();
+            var pinnedFingerprint = allStatusBucketAggregateFingerprint ?? observedFingerprint;
+            var aggregateChanged = !string.Equals(
+                pinnedFingerprint, observedFingerprint, StringComparison.Ordinal);
             var ledgerGroups = await anchoredAllStatusLedger
                 .GroupBy(x => new
                 {
@@ -285,7 +303,7 @@ namespace ERP.Infrastructure.Queries
             // paging, but it is not an integrity verdict against mutable
             // Balance when either scoped high-water mark is obsolete.
             var evidenceAnchorsStale = hasNewEvents || bucketHasRowsAfterAnchor ||
-                allStatusBucketHasRowsAfterAnchor;
+                allStatusBucketHasRowsAfterAnchor || aggregateChanged;
             var snapshotComparisonStatus = evidenceAnchorsStale
                 ? "Indeterminate" : allStatusStatus;
 
@@ -385,6 +403,8 @@ namespace ERP.Infrastructure.Queries
                 BucketHasRowsAfterAnchor = bucketHasRowsAfterAnchor,
                 AllStatusBucketAnchorId = allStatusBucketAnchor,
                 AllStatusBucketHasRowsAfterAnchor = allStatusBucketHasRowsAfterAnchor,
+                AllStatusBucketAggregateFingerprint = pinnedFingerprint,
+                AllStatusBucketAggregateChanged = aggregateChanged,
                 EventBeforeId = eventBeforeId,
                 NextEventBeforeId = hasOlderEvents && page.Count > 0 ? page[^1].Id : null,
                 LedgerHasEventsAfterAnchor = hasNewEvents,

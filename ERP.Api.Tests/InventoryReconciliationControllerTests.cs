@@ -66,6 +66,8 @@ namespace ERP.Api.Tests
                 EventStatus = "Quarantine", BucketStatus = "QcHold", BucketAnchorId = 100, BucketAfterId = 20, NextBucketAfterId = 24,
                 BucketHasRowsAfterAnchor = true, BucketsTruncated = true,
                 AllStatusBucketAnchorId = 120, AllStatusBucketHasRowsAfterAnchor = true,
+                AllStatusBucketAggregateFingerprint = new string('a', 64),
+                AllStatusBucketAggregateChanged = true,
                 LedgerHasEventsAfterAnchor = true,
                 CurrentQuantity = 9, ExpectedQuantity = 11, Difference = -2,
                 BucketCount = 1, EventCount = 2, EventsTruncated = false,
@@ -92,13 +94,13 @@ namespace ERP.Api.Tests
                     Quantity = 2, SignedQuantity = null
                 }]
             };
-            mock.Setup(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20, "QcHold", "Quarantine", 120))
+            mock.Setup(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20, "QcHold", "Quarantine", 120, new string('a', 64)))
                 .ReturnsAsync(result);
             var response = await new InventoryReconciliationController(mock.Object)
-                .Investigation(7, 17, 32, 50, 20, 100, 20, "QcHold", "Quarantine", 120);
+                .Investigation(7, 17, 32, 50, 20, 100, 20, "QcHold", "Quarantine", 120, new string('a', 64));
             var ok = response.Result.Should().BeOfType<OkObjectResult>().Subject;
             ok.Value.Should().BeSameAs(result);
-            mock.Verify(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20, "QcHold", "Quarantine", 120), Times.Once);
+            mock.Verify(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20, "QcHold", "Quarantine", 120, new string('a', 64)), Times.Once);
             mock.VerifyNoOtherCalls();
             var json = System.Text.Json.JsonSerializer.SerializeToElement(result,
                 new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
@@ -111,6 +113,9 @@ namespace ERP.Api.Tests
             json.GetProperty("bucketHasRowsAfterAnchor").GetBoolean().Should().BeTrue();
             json.GetProperty("allStatusBucketAnchorId").GetInt32().Should().Be(120);
             json.GetProperty("allStatusBucketHasRowsAfterAnchor").GetBoolean().Should().BeTrue();
+            json.GetProperty("allStatusBucketAggregateFingerprint").GetString()
+                .Should().Be(new string('a', 64));
+            json.GetProperty("allStatusBucketAggregateChanged").GetBoolean().Should().BeTrue();
             json.GetProperty("nextEventBeforeId").GetInt32().Should().Be(18);
             json.GetProperty("ledgerHasEventsAfterAnchor").GetBoolean().Should().BeTrue();
             json.GetProperty("allStatusCurrentQuantity").GetDecimal().Should().Be(12m);

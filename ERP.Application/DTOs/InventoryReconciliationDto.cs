@@ -29,6 +29,9 @@ namespace ERP.Application.DTOs
         // New QC/Quarantine buckets invalidate the eight-status comparison.
         public int AllStatusBucketAnchorId { get; set; }
         public bool AllStatusBucketHasRowsAfterAnchor { get; set; }
+        // Aggregate baseline, not an atomic stock snapshot or access token.
+        public string AllStatusBucketAggregateFingerprint { get; set; } = string.Empty;
+        public bool AllStatusBucketAggregateChanged { get; set; }
         // Chosen status of the immutable Ledger history, independent of bucket scope.
         public string EventStatus { get; set; } = "Available";
         public int EventAnchorId { get; set; }

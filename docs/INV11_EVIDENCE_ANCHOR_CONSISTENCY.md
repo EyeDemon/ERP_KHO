@@ -29,3 +29,19 @@ Notion remains unchanged. No projection rebuild, repair, auto-correction, PR mer
 - `allStatusBucketHasRowsAfterAnchor` detects a new stock bucket in **any** status and forces `evidenceAnchorsStale=true`, `snapshotComparisonStatus=Indeterminate`, null comparison totals. Historical arithmetic stays read-only.
 - InMemory covers warehouse isolation/QC-only insert, SQL Server covers QC insertion without new Ledger/AVAILABLE bucket, API and Vitest cover field propagation and Vietnamese fail-closed UX.
 - Identity anchors do **not** detect in-place bucket edits/deletes/status changes or create an atomic SQL snapshot. Remote authenticated .NET/API/SQL staging UAT and controlled remediation remain outstanding. Notion unchanged, no production promotion.
+
+## Status aggregate fingerprint across pinned evidence pages (2026-10-11)
+
+The authorized per-status SQL GROUP BY (status ID, total Quantity,
+ReservedQuantity and bucket count) receives a deterministic SHA-256 fingerprint.
+The baseline is retained across keyset pages and status filters. A different
+aggregate without new IDs makes `allStatusBucketAggregateChanged=true`,
+`evidenceAnchorsStale=true`, `snapshotComparisonStatus=Indeterminate`, and
+null snapshot expected/difference. An exact 64 lowercase hex value is accepted;
+it is not an access token and warehouse authorization remains mandatory.
+
+InMemory/SQL Server test in-place stock changes; API/Vitest verify propagation.
+**Limitations:** mutually offsetting in-status edits and reverted changes can
+escape an aggregate hash. Inter-statement races persist. This is NOT a row-level
+or atomic Ledger/Balance snapshot; no repair permitted, staging still pending.
+Notion and Production unchanged.

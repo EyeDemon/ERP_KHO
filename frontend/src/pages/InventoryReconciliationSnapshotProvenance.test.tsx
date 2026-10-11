@@ -19,7 +19,7 @@ describe('INV-11 anchored snapshot provenance', () => {
     vi.clearAllMocks();
   });
 
-  it.each(['ledger', 'bucket', 'other-status-bucket'] as const)(
+  it.each(['ledger', 'bucket', 'other-status-bucket', 'aggregate-change'] as const)(
     'renders indeterminate comparison for stale %s anchor and rejects forged Match',
     async drift => {
       vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
@@ -28,6 +28,8 @@ describe('INV-11 anchored snapshot provenance', () => {
         warehouseId: 1, warehouseName: 'Kho HCM',
         productId: 10, productCode: 'SKU-ANCHOR', productName: 'Hàng thử',
         eventAnchorId: 72, bucketAnchorId: 12, allStatusBucketAnchorId: 12,
+        allStatusBucketAggregateFingerprint: 'a'.repeat(64),
+        allStatusBucketAggregateChanged: drift === 'aggregate-change',
         eventCount: 0, bucketCount: 0,
         ledgerHasEventsAfterAnchor: drift === 'ledger',
         bucketHasRowsAfterAnchor: drift === 'bucket',
@@ -81,7 +83,8 @@ describe('INV-11 anchored snapshot provenance', () => {
         { target: { value: 'QcHold' } });
       await waitFor(() => expect(vi.mocked(apiClient.get).mock.calls.some(([url]) =>
         url.includes('bucketStatus=QcHold') &&
-        url.includes('allStatusBucketAnchorId=12'))).toBe(true));
+        url.includes('allStatusBucketAnchorId=12') &&
+        url.includes('allStatusBucketAggregateFingerprint=' + 'a'.repeat(64)))).toBe(true));
       expect(await view.findByText(/Mốc bằng chứng đã cũ/)).toBeTruthy();
       fireEvent.click(view.getByRole('button', { name: 'Đóng hồ sơ' }));
       forged = true;

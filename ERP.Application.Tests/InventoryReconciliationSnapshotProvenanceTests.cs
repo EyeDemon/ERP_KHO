@@ -112,6 +112,42 @@ public sealed class InventoryReconciliationSnapshotProvenanceTests
     }
 
     [Fact]
+    public async Task ExistingBucketEdit_InvalidatesAggregateWithoutNewIds()
+    {
+        using var db = await SeedAsync();
+        var query = Query(db);
+        var first = await query.GetInvestigationAsync(1, 1);
+        first.AllStatusBucketAggregateFingerprint.Should().HaveLength(64);
+        var stock = await db.InventoryStocks.SingleAsync(x => x.Id == 1);
+        stock.Quantity = 12m;
+        await db.SaveChangesAsync();
+        var pinned = await query.GetInvestigationAsync(1, 1,
+            eventAnchorId: first.EventAnchorId, bucketAnchorId: first.BucketAnchorId,
+            allStatusBucketAnchorId: first.AllStatusBucketAnchorId,
+            allStatusBucketAggregateFingerprint: first.AllStatusBucketAggregateFingerprint);
+        pinned.AllStatusBucketAggregateChanged.Should().BeTrue();
+        pinned.LedgerHasEventsAfterAnchor.Should().BeFalse();
+        pinned.BucketHasRowsAfterAnchor.Should().BeFalse();
+        pinned.AllStatusBucketHasRowsAfterAnchor.Should().BeFalse();
+        pinned.SnapshotComparisonStatus.Should().Be("Indeterminate");
+        pinned.SnapshotComparisonExpectedQuantity.Should().BeNull();
+        pinned.SnapshotComparisonDifference.Should().BeNull();
+        stock.Quantity = 10m;
+        stock.Status = InventoryStatus.QcHold;
+        await db.SaveChangesAsync();
+        var changedStatus = await query.GetInvestigationAsync(1, 1,
+            eventAnchorId: first.EventAnchorId,
+            allStatusBucketAnchorId: first.AllStatusBucketAnchorId,
+            allStatusBucketAggregateFingerprint: first.AllStatusBucketAggregateFingerprint);
+        changedStatus.AllStatusBucketAggregateChanged.Should().BeTrue();
+        changedStatus.EvidenceAnchorsStale.Should().BeTrue();
+        var refreshed = await query.GetInvestigationAsync(1, 1,
+            bucketStatus: nameof(InventoryStatus.QcHold));
+        refreshed.AllStatusBucketAggregateChanged.Should().BeFalse();
+        refreshed.AllStatusBucketAggregateFingerprint.Should().NotBe(first.AllStatusBucketAggregateFingerprint);
+    }
+
+    [Fact]
     public async Task NewBucketInAnotherStatus_InvalidatesPinnedAllStatusComparisonButNotSelectedPage()
     {
         using var db = await SeedAsync();
