@@ -958,6 +958,49 @@ describe('InventoryReconciliation', () => {
     expect(view.getByText('AVAILABLE · Chênh lệch tham khảo').previousSibling?.textContent).toBe('0');
   });
 
+
+  it('rejects an incomplete Ledger investigation that incorrectly claims AVAILABLE is complete', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : url.includes('/investigation?')
+          ? { warehouseId: 1, productId: 10, eventAnchorId: 20,
+            isReadOnly: true, eventCount: 1, bucketCount: 0,
+            eventsTruncated: false, bucketsTruncated: false,
+            events: [], buckets: [],
+            currentQuantity: 12, expectedQuantity: 12, difference: 0,
+            availableLedgerExpectedIsPartial: false,
+            unclassifiedLedgerEventCount: 1,
+            allStatusStatus: 'Indeterminate',
+            allStatusCurrentQuantity: 12,
+            allStatusExpectedQuantity: null, allStatusDifference: null,
+            statusBreakdown: [
+              'Available', 'QcHold', 'Quarantine', 'Damaged', 'Rejected',
+              'Blocked', 'Expired', 'RecallBlocked',
+            ].map(status => ({
+              status, currentQuantity: status === 'Available' ? 12 : 0,
+              reservedQuantity: 0, bucketCount: 0, directLedgerNetQuantity: 0,
+              statusChangeInQuantity: 0, statusChangeOutQuantity: 0,
+              expectedQuantity: null, difference: null,
+            })),
+          }
+          : { items: [{
+            warehouseId: 1, warehouseName: 'Kho thử',
+            productId: 10, productCode: 'SKU-PARTIAL', productName: 'Hàng thử',
+            currentQuantity: 12, expectedQuantity: null, difference: null,
+            status: 'Indeterminate', unclassifiedLedgerEventCount: 1,
+          }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    await view.findByText('SKU-PARTIAL');
+    fireEvent.click(view.getByRole('button', {
+      name: 'Xem bằng chứng SKU-PARTIAL tại Kho thử',
+    }));
+    expect(await view.findByText('Không thể tải bằng chứng điều tra. Hãy thử lại.')).toBeTruthy();
+    expect(view.queryByRole('table', {
+      name: 'Đối chiếu từng trạng thái tồn kho theo Ledger',
+    })).toBeNull();
+  });
+
   it('marks historical unclassifiable ledger as unknown instead of a repair amount',async()=>{
     vi.mocked(apiClient.get).mockImplementation((url:string)=>{
       if(url==='/api/InventoryReconciliation/warehouses')

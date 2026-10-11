@@ -263,9 +263,12 @@ namespace ERP.Infrastructure.Queries
             // Legacy TransferAdjustment does not have a canonical sign.
             // Never crash the investigation or silently present the partial
             // AVAILABLE sum as complete when such an event is encountered.
-            var availableLedgerExpectedIsPartial = historyInsufficientForNonAvailableStock ||
-                grouped.Any(x => x.NegativeQuantityEvents > 0 ||
-                    x.Type == TransactionType.TransferAdjustment || !Enum.IsDefined(x.Type));
+            // This headline is derived from the complete eight-status projection
+            // only when EVERY historical event can be classified. A malformed
+            // QC/Quarantine StatusChange can alter AVAILABLE without appearing
+            // in its transaction-type group, so checking only grouped AVAILABLE
+            // rows would incorrectly mark a classified-only subtotal complete.
+            var availableLedgerExpectedIsPartial = !comparable;
             // A mixed-sign group is partial in its entirety: never let a
             // negative historical row disappear into a positive SUM.
             var legacyClassifiedQuantity = grouped

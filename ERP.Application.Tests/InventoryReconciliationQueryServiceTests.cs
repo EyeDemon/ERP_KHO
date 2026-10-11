@@ -746,12 +746,15 @@ namespace ERP.Application.Tests
 
             var stale = await query.GetInvestigationAsync(1, 1, original.EventAnchorId);
             stale.UnclassifiedLedgerEventCount.Should().Be(0);
+            stale.AvailableLedgerExpectedIsPartial.Should().BeFalse();
             stale.AllStatusExpectedQuantity.Should().Be(12m);
             stale.LedgerHasEventsAfterAnchor.Should().BeTrue();
 
             var fresh = await query.GetInvestigationAsync(1, 1);
             fresh.UnclassifiedLedgerEventCount.Should().Be(2);
-            fresh.AvailableLedgerExpectedIsPartial.Should().BeFalse();
+            // The unsupported QC events may affect AVAILABLE through transfers,
+            // even though they do not occur in the AVAILABLE-only SQL group.
+            fresh.AvailableLedgerExpectedIsPartial.Should().BeTrue();
             fresh.ExpectedQuantity.Should().Be(12m); // still a legacy classified-only subset
             fresh.AllStatusExpectedQuantity.Should().BeNull();
             fresh.AllStatusDifference.Should().BeNull();
@@ -866,6 +869,8 @@ namespace ERP.Application.Tests
             var evidence = await query.GetInvestigationAsync(1, 1,
                 eventStatus: nameof(InventoryStatus.QcHold));
             evidence.UnclassifiedLedgerEventCount.Should().Be(1);
+            evidence.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+            evidence.ExpectedQuantity.Should().Be(12m); // legacy-only subtotal, not verified
             evidence.AllStatusExpectedQuantity.Should().BeNull();
             evidence.StatusBreakdown.Should().OnlyContain(x =>
                 x.ExpectedQuantity == null && x.Difference == null);

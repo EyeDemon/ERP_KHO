@@ -1579,6 +1579,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 fixture.WarehouseId, fixture.ProductId,
                 eventStatus: nameof(InventoryStatus.QcHold));
             qcEvidence.UnclassifiedLedgerEventCount.Should().Be(2);
+            qcEvidence.AvailableLedgerExpectedIsPartial.Should().BeTrue();
             qcEvidence.AllStatusExpectedQuantity.Should().BeNull();
             qcEvidence.AllStatusDifference.Should().BeNull();
             qcEvidence.StatusBreakdown.Should().OnlyContain(x =>

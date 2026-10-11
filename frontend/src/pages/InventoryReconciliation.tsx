@@ -381,6 +381,8 @@ export default function InventoryReconciliation() {
           evidence.productId !== product || evidence.isReadOnly !== true ||
           (evidence.allStatusStatus !== undefined &&
             evidence.allStatusStatus !== detailVerdict) ||
+          ((evidence.unclassifiedLedgerEventCount ?? 0) > 0 &&
+            evidence.availableLedgerExpectedIsPartial !== true) ||
           (evidence.historyInsufficientForNonAvailableStock === true &&
             (detailVerdict !== 'Indeterminate' ||
               evidence.availableLedgerExpectedIsPartial !== true ||
@@ -724,8 +726,9 @@ export default function InventoryReconciliation() {
               </button>
               {investigation.availableLedgerExpectedIsPartial && (
                 <p role="alert">
-                  Ledger AVAILABLE có giao dịch chưa xác định được chiều tăng/giảm.
-                  Tổng Ledger AVAILABLE và chênh lệch bên dưới chỉ là một phần, không dùng để sửa tồn.
+                  Lịch sử Ledger của cặp kho / sản phẩm có dữ liệu chưa phân loại an toàn hoặc
+                  thiếu chứng từ gốc. Tổng Ledger AVAILABLE và chênh lệch bên dưới chỉ là một phần,
+                  không dùng để sửa tồn.
                 </p>
               )}
               <UiMetricGrid>
