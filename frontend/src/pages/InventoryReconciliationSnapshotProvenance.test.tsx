@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import InventoryReconciliation from './InventoryReconciliation';
 import apiClient from '../services/apiClient';
@@ -19,7 +19,7 @@ describe('INV-11 anchored snapshot provenance', () => {
     vi.clearAllMocks();
   });
 
-  it.each(['ledger', 'bucket'] as const)(
+  it.each(['ledger', 'bucket', 'other-status-bucket'] as const)(
     'renders indeterminate comparison for stale %s anchor and rejects forged Match',
     async drift => {
       vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
@@ -27,9 +27,11 @@ describe('INV-11 anchored snapshot provenance', () => {
       const evidence = {
         warehouseId: 1, warehouseName: 'Kho HCM',
         productId: 10, productCode: 'SKU-ANCHOR', productName: 'Hàng thử',
-        eventAnchorId: 72, bucketAnchorId: 12, eventCount: 0, bucketCount: 0,
+        eventAnchorId: 72, bucketAnchorId: 12, allStatusBucketAnchorId: 12,
+        eventCount: 0, bucketCount: 0,
         ledgerHasEventsAfterAnchor: drift === 'ledger',
         bucketHasRowsAfterAnchor: drift === 'bucket',
+        allStatusBucketHasRowsAfterAnchor: drift === 'other-status-bucket',
         evidenceAnchorsStale: true,
         snapshotComparisonStatus: 'Indeterminate',
         snapshotComparisonExpectedQuantity: null,
@@ -50,11 +52,13 @@ describe('INV-11 anchored snapshot provenance', () => {
       vi.mocked(apiClient.get).mockImplementation((url: string) => {
         if (url.endsWith('/warehouses'))
           return Promise.resolve({ data: [{ id: 1, code: 'HCM', name: 'Kho HCM' }] });
-        if (url.includes('/investigation?'))
+        if (url.includes('/investigation?')) {
+          const bucketStatus = new URL(url, 'http://localhost').searchParams.get('bucketStatus') ?? 'Available';
           return Promise.resolve({ data: forged
             ? { ...evidence, snapshotComparisonStatus: 'Match',
               snapshotComparisonExpectedQuantity: 10, snapshotComparisonDifference: 0 }
-            : evidence });
+            : { ...evidence, bucketStatus } });
+        }
         return Promise.resolve({ data: { items: [{
           productId: 10, productCode: 'SKU-ANCHOR', productName: 'Hàng thử',
           warehouseId: 1, warehouseName: 'Kho HCM',
@@ -73,6 +77,12 @@ describe('INV-11 anchored snapshot provenance', () => {
       expect(view.getByText(/Kết luận 8 trạng thái/).textContent).toContain('Chưa xác định');
       expect(view.getByText('Tổng Ledger các trạng thái (tham khảo)').previousSibling?.textContent)
         .toBe('Chưa xác định');
+      fireEvent.change(view.getByLabelText('Trạng thái bucket cần xem'),
+        { target: { value: 'QcHold' } });
+      await waitFor(() => expect(vi.mocked(apiClient.get).mock.calls.some(([url]) =>
+        url.includes('bucketStatus=QcHold') &&
+        url.includes('allStatusBucketAnchorId=12'))).toBe(true));
+      expect(await view.findByText(/Mốc bằng chứng đã cũ/)).toBeTruthy();
       fireEvent.click(view.getByRole('button', { name: 'Đóng hồ sơ' }));
       forged = true;
       fireEvent.click(trigger);

@@ -109,6 +109,28 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
             fresh.SnapshotComparisonStatus.Should().Be("Mismatch");
             fresh.SnapshotComparisonExpectedQuantity.Should().Be(13m);
             fresh.SnapshotComparisonDifference.Should().Be(-3m);
+
+            // QC insert alone: no new Ledger or AVAILABLE bucket.
+            await using (var writer = CreateContext())
+            {
+                writer.InventoryStocks.Add(new InventoryStock
+                {
+                    WarehouseId = warehouse.Id, ProductId = product.Id,
+                    LocationId = location.Id, Status = InventoryStatus.QcHold,
+                    Quantity = 2m
+                });
+                await writer.SaveChangesAsync();
+            }
+            var qcPinned = await query.GetInvestigationAsync(warehouse.Id, product.Id,
+                eventAnchorId: fresh.EventAnchorId, bucketAnchorId: fresh.BucketAnchorId,
+                allStatusBucketAnchorId: fresh.AllStatusBucketAnchorId);
+            qcPinned.LedgerHasEventsAfterAnchor.Should().BeFalse();
+            qcPinned.BucketHasRowsAfterAnchor.Should().BeFalse();
+            qcPinned.AllStatusBucketHasRowsAfterAnchor.Should().BeTrue();
+            qcPinned.EvidenceAnchorsStale.Should().BeTrue();
+            qcPinned.SnapshotComparisonStatus.Should().Be("Indeterminate");
+            qcPinned.SnapshotComparisonExpectedQuantity.Should().BeNull();
+            qcPinned.SnapshotComparisonDifference.Should().BeNull();
         }
         finally
         {

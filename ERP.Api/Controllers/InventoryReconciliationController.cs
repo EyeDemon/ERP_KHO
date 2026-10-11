@@ -32,9 +32,11 @@ namespace ERP.Api.Controllers
             [FromQuery] int? eventAnchorId = null, [FromQuery] int limit = 50,
             [FromQuery] int? eventBeforeId = null, [FromQuery] int? bucketAnchorId = null,
             [FromQuery] int? bucketAfterId = null, [FromQuery] string bucketStatus = "Available",
-            [FromQuery] string eventStatus = "Available")
+            [FromQuery] string eventStatus = "Available",
+            [FromQuery] int? allStatusBucketAnchorId = null)
             => Ok(await _queryService.GetInvestigationAsync(warehouseId, productId, eventAnchorId, limit,
-                eventBeforeId, bucketAnchorId, bucketAfterId, bucketStatus, eventStatus));
+                eventBeforeId, bucketAnchorId, bucketAfterId, bucketStatus, eventStatus,
+                allStatusBucketAnchorId));
 
         [HttpGet]
         public async Task<IActionResult> GetReconciliations(

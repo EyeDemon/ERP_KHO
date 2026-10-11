@@ -85,6 +85,7 @@ interface Investigation {
   eventCount:number; bucketCount:number;
   bucketAnchorId?:number; bucketAfterId?:number|null; nextBucketAfterId?:number|null;
   bucketHasRowsAfterAnchor?:boolean; bucketStatus?: string;
+  allStatusBucketAnchorId?:number; allStatusBucketHasRowsAfterAnchor?:boolean;
   eventStatus?:string; eventBeforeId?:number|null; nextEventBeforeId?:number|null;
   ledgerHasEventsAfterAnchor?:boolean; evidenceAnchorsStale?:boolean;
   snapshotComparisonStatus?:'Match' | 'Mismatch' | 'Indeterminate';
@@ -356,6 +357,7 @@ export default function InventoryReconciliation() {
     bucketAnchor?: number, bucketAfter?: number,
     targetBucketPage = 0, bucketCursors: (number | null)[] = [null],
     bucketStatus = 'Available', eventStatus = 'Available',
+    allStatusBucketAnchor?: number,
   ) => {
     if (demoRuntime) return;
     const generation = ++investigationGeneration.current;
@@ -374,6 +376,8 @@ export default function InventoryReconciliation() {
       if (bucketAfter !== undefined) params.set('bucketAfterId', String(bucketAfter));
       if (bucketStatus !== 'Available') params.set('bucketStatus', bucketStatus);
       if (eventStatus !== 'Available') params.set('eventStatus', eventStatus);
+      if (allStatusBucketAnchor !== undefined)
+        params.set('allStatusBucketAnchorId', String(allStatusBucketAnchor));
       const response = await apiClient.get('/api/InventoryReconciliation/investigation?' + params.toString());
       if (generation !== investigationGeneration.current) return;
       const evidence = response.data as Investigation;
@@ -392,7 +396,8 @@ export default function InventoryReconciliation() {
             evidence.statusBreakdown.some(s => s.difference !== 0) ? 'Mismatch' : 'Match')
           : null;
       const anchorDrift = evidence?.ledgerHasEventsAfterAnchor === true ||
-        evidence?.bucketHasRowsAfterAnchor === true;
+        evidence?.bucketHasRowsAfterAnchor === true ||
+        evidence?.allStatusBucketHasRowsAfterAnchor === true;
       const hasSnapshotVerdict = evidence?.snapshotComparisonStatus !== undefined;
       if (!evidence || evidence.warehouseId !== warehouse ||
           evidence.productId !== product || evidence.isReadOnly !== true ||
@@ -434,6 +439,13 @@ export default function InventoryReconciliation() {
           (anchor !== undefined && evidence.eventAnchorId !== anchor) ||
           (before !== undefined && evidence.eventBeforeId !== before) ||
           (bucketAnchor !== undefined && evidence.bucketAnchorId !== bucketAnchor) ||
+          (allStatusBucketAnchor !== undefined &&
+            evidence.allStatusBucketAnchorId !== allStatusBucketAnchor) ||
+          (evidence.allStatusBucketAnchorId !== undefined &&
+            (!Number.isSafeInteger(evidence.allStatusBucketAnchorId) ||
+              evidence.allStatusBucketAnchorId < 0)) ||
+          (evidence.allStatusBucketHasRowsAfterAnchor !== undefined &&
+            typeof evidence.allStatusBucketHasRowsAfterAnchor !== "boolean") ||
           (bucketAfter !== undefined && evidence.bucketAfterId !== bucketAfter) ||
           (bucketStatus !== 'Available' && evidence.bucketStatus !== bucketStatus) ||
           (evidence.bucketStatus !== undefined && evidence.bucketStatus !== bucketStatus) ||
@@ -492,7 +504,7 @@ export default function InventoryReconciliation() {
         investigation.eventAnchorId, next, eventPageIndex + 1, cursors,
         investigation.bucketAnchorId, bucketPageCursors[bucketPageIndex] ?? undefined,
         bucketPageIndex, bucketPageCursors, investigation.bucketStatus ?? 'Available',
-        investigation.eventStatus ?? 'Available');
+        investigation.eventStatus ?? 'Available', investigation.allStatusBucketAnchorId);
     } else if (eventPageIndex > 0) {
       const index = eventPageIndex - 1;
       const before = eventPageCursors[index] ?? undefined;
@@ -500,7 +512,7 @@ export default function InventoryReconciliation() {
         investigation.eventAnchorId, before, index, eventPageCursors,
         investigation.bucketAnchorId, bucketPageCursors[bucketPageIndex] ?? undefined,
         bucketPageIndex, bucketPageCursors, investigation.bucketStatus ?? 'Available',
-        investigation.eventStatus ?? 'Available');
+        investigation.eventStatus ?? 'Available', investigation.allStatusBucketAnchorId);
     }
   };
 
@@ -514,14 +526,14 @@ export default function InventoryReconciliation() {
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
         investigation.bucketAnchorId, next, bucketPageIndex + 1, cursors,
-        investigation.bucketStatus ?? 'Available', investigation.eventStatus ?? 'Available');
+        investigation.bucketStatus ?? 'Available', investigation.eventStatus ?? 'Available', investigation.allStatusBucketAnchorId);
     } else if (bucketPageIndex > 0) {
       const index = bucketPageIndex - 1;
       const after = bucketPageCursors[index] ?? undefined;
       void loadInvestigation(investigation.warehouseId, investigation.productId,
         investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
         investigation.bucketAnchorId, after, index, bucketPageCursors,
-        investigation.bucketStatus ?? 'Available', investigation.eventStatus ?? 'Available');
+        investigation.bucketStatus ?? 'Available', investigation.eventStatus ?? 'Available', investigation.allStatusBucketAnchorId);
     }
   };
 
@@ -534,7 +546,7 @@ export default function InventoryReconciliation() {
     void loadInvestigation(investigation.warehouseId, investigation.productId,
       investigation.eventAnchorId, eventBefore, eventPageIndex, eventPageCursors,
       undefined, undefined, 0, [null], status,
-      investigation.eventStatus ?? 'Available');
+      investigation.eventStatus ?? 'Available', investigation.allStatusBucketAnchorId);
   };
 
   const changeEventStatus = (status: string) => {
@@ -546,7 +558,8 @@ export default function InventoryReconciliation() {
     void loadInvestigation(investigation.warehouseId, investigation.productId,
       investigation.eventAnchorId, undefined, 0, [null],
       investigation.bucketAnchorId, bucketAfter, bucketPageIndex, bucketPageCursors,
-      investigation.bucketStatus ?? 'Available', status);
+      investigation.bucketStatus ?? 'Available', status,
+      investigation.allStatusBucketAnchorId);
   };
 
   const closeInvestigation = () => {
@@ -770,7 +783,7 @@ export default function InventoryReconciliation() {
               </button>
               {investigation.evidenceAnchorsStale && (
                 <p role="alert">
-                  Mốc bằng chứng đã cũ: đã có Ledger hoặc bucket mới ngoài mốc đang xem.
+                  Mốc bằng chứng đã cũ: đã có Ledger hoặc bucket mới ở một trạng thái tồn kho ngoài mốc đang xem.
                   Kết luận so sánh với tồn hiện tại là Chưa xác định; số liệu lịch sử
                   không cùng thời điểm với Balance. Hãy làm mới mốc để điều tra tiếp,
                   không dùng chênh lệch này để sửa tồn.
@@ -884,6 +897,12 @@ export default function InventoryReconciliation() {
               <p className="ui-muted-text">Bucket là số dư hiện tại theo trạng thái đã chọn;
                 các sự kiện Ledger bên dưới có bộ lọc riêng theo trạng thái.
                 Đổi trạng thái bucket không thay đổi mốc Ledger đã chọn.</p>
+              {investigation.allStatusBucketHasRowsAfterAnchor && (
+                <p role="status" className="ui-muted-text">
+                  Có bucket mới ở một trong tám trạng thái sau mốc toàn kho/sản phẩm
+                  #{investigation.allStatusBucketAnchorId}. Kết luận đối chiếu đã bị vô hiệu hóa.
+                </p>
+              )}
               {investigation.bucketHasRowsAfterAnchor && (
                 <p role="status" className="ui-muted-text">
                   Đã xuất hiện bucket mới sau mốc ID #{investigation.bucketAnchorId}.

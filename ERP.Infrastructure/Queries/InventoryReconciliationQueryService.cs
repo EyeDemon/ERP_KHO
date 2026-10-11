@@ -50,7 +50,7 @@ namespace ERP.Infrastructure.Queries
             int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
             int? eventBeforeId = null, int? bucketAnchorId = null,
             int? bucketAfterId = null, string bucketStatus = "Available",
-            string eventStatus = "Available")
+            string eventStatus = "Available", int? allStatusBucketAnchorId = null)
         {
             if (warehouseId <= 0 || productId <= 0)
                 throw new BusinessRuleException("ID kho và ID sản phẩm phải là số nguyên dương.");
@@ -63,6 +63,8 @@ namespace ERP.Infrastructure.Queries
                 throw new BusinessRuleException("Phân trang sự kiện yêu cầu ID trước hợp lệ và mốc sổ cái cố định.");
             if (bucketAnchorId is < 0)
                 throw new BusinessRuleException("Mốc ID bucket tồn không hợp lệ.");
+            if (allStatusBucketAnchorId is < 0)
+                throw new BusinessRuleException("Mốc bucket toàn trạng thái không hợp lệ.");
             if (bucketAfterId.HasValue && (bucketAfterId.Value <= 0 ||
                 !bucketAnchorId.HasValue || bucketAfterId.Value >= bucketAnchorId.Value))
                 throw new BusinessRuleException("Phân trang bucket yêu cầu ID sau hợp lệ và mốc bucket cố định.");
@@ -144,6 +146,15 @@ namespace ERP.Infrastructure.Queries
             var anchoredStocks = selectedStatusStocks.Where(x => x.Id <= bucketAnchor);
             var bucketCount = await anchoredStocks.CountAsync();
             var bucketHasRowsAfterAnchor = await selectedStatusStocks.AnyAsync(x => x.Id > bucketAnchor);
+            // Preserve selected-status keyset pages while detecting new stock
+            // buckets in ANY status of the authorized warehouse/product.
+            var latestAllStatusBucketId = await allStatusStocks.MaxAsync(x => (int?)x.Id) ?? 0;
+            if (allStatusBucketAnchorId.HasValue &&
+                allStatusBucketAnchorId.Value > latestAllStatusBucketId)
+                throw new BusinessRuleException("Mốc bucket toàn trạng thái vượt quá bucket hiện có của kho và sản phẩm.");
+            var allStatusBucketAnchor = allStatusBucketAnchorId ?? latestAllStatusBucketId;
+            var allStatusBucketHasRowsAfterAnchor = await allStatusStocks
+                .AnyAsync(x => x.Id > allStatusBucketAnchor);
             var eventCount = await selectedEventLedger.CountAsync(x => x.Id <= anchor);
 
             // SQL aggregation bounds materialization to the status enum, rather
@@ -273,7 +284,8 @@ namespace ERP.Infrastructure.Queries
             // Legacy all-status arithmetic is preserved for forensic keyset
             // paging, but it is not an integrity verdict against mutable
             // Balance when either scoped high-water mark is obsolete.
-            var evidenceAnchorsStale = hasNewEvents || bucketHasRowsAfterAnchor;
+            var evidenceAnchorsStale = hasNewEvents || bucketHasRowsAfterAnchor ||
+                allStatusBucketHasRowsAfterAnchor;
             var snapshotComparisonStatus = evidenceAnchorsStale
                 ? "Indeterminate" : allStatusStatus;
 
@@ -371,6 +383,8 @@ namespace ERP.Infrastructure.Queries
                 BucketAfterId = bucketAfterId,
                 NextBucketAfterId = buckets.Count > 100 ? buckets[99].InventoryStockId : null,
                 BucketHasRowsAfterAnchor = bucketHasRowsAfterAnchor,
+                AllStatusBucketAnchorId = allStatusBucketAnchor,
+                AllStatusBucketHasRowsAfterAnchor = allStatusBucketHasRowsAfterAnchor,
                 EventBeforeId = eventBeforeId,
                 NextEventBeforeId = hasOlderEvents && page.Count > 0 ? page[^1].Id : null,
                 LedgerHasEventsAfterAnchor = hasNewEvents,

@@ -25,6 +25,10 @@ namespace ERP.Application.DTOs
         public int? BucketAfterId { get; set; }
         public int? NextBucketAfterId { get; set; }
         public bool BucketHasRowsAfterAnchor { get; set; }
+        // Warehouse/product-wide high-water independent of selected-status pages.
+        // New QC/Quarantine buckets invalidate the eight-status comparison.
+        public int AllStatusBucketAnchorId { get; set; }
+        public bool AllStatusBucketHasRowsAfterAnchor { get; set; }
         // Chosen status of the immutable Ledger history, independent of bucket scope.
         public string EventStatus { get; set; } = "Available";
         public int EventAnchorId { get; set; }

@@ -12,7 +12,7 @@ namespace ERP.Application.Interfaces
             int warehouseId, int productId, int? eventAnchorId = null, int limit = 50,
             int? eventBeforeId = null, int? bucketAnchorId = null,
             int? bucketAfterId = null, string bucketStatus = "Available",
-            string eventStatus = "Available");
+            string eventStatus = "Available", int? allStatusBucketAnchorId = null);
 
         Task<PagedResult<InventoryReconciliationDto>> GetReconciliationsAsync(
             int? warehouseId,

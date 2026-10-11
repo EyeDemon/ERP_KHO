@@ -110,4 +110,54 @@ public sealed class InventoryReconciliationSnapshotProvenanceTests
         refreshed.SnapshotComparisonStatus.Should().Be("Mismatch");
         refreshed.SnapshotComparisonDifference.Should().Be(2);
     }
+
+    [Fact]
+    public async Task NewBucketInAnotherStatus_InvalidatesPinnedAllStatusComparisonButNotSelectedPage()
+    {
+        using var db = await SeedAsync();
+        var query = Query(db);
+        var first = await query.GetInvestigationAsync(1, 1);
+        first.AllStatusBucketAnchorId.Should().Be(1);
+        first.AllStatusBucketHasRowsAfterAnchor.Should().BeFalse();
+
+        // Another warehouse must not poison this authorized pair.
+        db.Warehouses.Add(new Warehouse { Id = 2, Code = "W2", Name = "Other warehouse" });
+        db.InventoryStocks.Add(new InventoryStock
+        {
+            Id = 2, WarehouseId = 2, ProductId = 1, Quantity = 7,
+            Status = InventoryStatus.QcHold
+        });
+        await db.SaveChangesAsync();
+        var isolated = await query.GetInvestigationAsync(1, 1,
+            eventAnchorId: first.EventAnchorId, bucketAnchorId: first.BucketAnchorId,
+            allStatusBucketAnchorId: first.AllStatusBucketAnchorId);
+        isolated.EvidenceAnchorsStale.Should().BeFalse();
+        isolated.SnapshotComparisonStatus.Should().Be("Match");
+
+        db.InventoryStocks.Add(new InventoryStock
+        {
+            Id = 3, WarehouseId = 1, ProductId = 1, Quantity = 2,
+            Status = InventoryStatus.QcHold
+        });
+        await db.SaveChangesAsync();
+        var pinned = await query.GetInvestigationAsync(1, 1,
+            eventAnchorId: first.EventAnchorId, bucketAnchorId: first.BucketAnchorId,
+            allStatusBucketAnchorId: first.AllStatusBucketAnchorId);
+        pinned.EventAnchorId.Should().Be(first.EventAnchorId);
+        pinned.BucketAnchorId.Should().Be(first.BucketAnchorId);
+        pinned.AllStatusBucketAnchorId.Should().Be(first.AllStatusBucketAnchorId);
+        pinned.LedgerHasEventsAfterAnchor.Should().BeFalse();
+        pinned.BucketHasRowsAfterAnchor.Should().BeFalse();
+        pinned.AllStatusBucketHasRowsAfterAnchor.Should().BeTrue();
+        pinned.Buckets.Should().ContainSingle(x => x.InventoryStockId == 1);
+        pinned.EvidenceAnchorsStale.Should().BeTrue();
+        pinned.AllStatusStatus.Should().Be("Mismatch"); // historical arithmetic
+        pinned.SnapshotComparisonStatus.Should().Be("Indeterminate");
+        pinned.SnapshotComparisonExpectedQuantity.Should().BeNull();
+        pinned.SnapshotComparisonDifference.Should().BeNull();
+
+        var refreshed = await query.GetInvestigationAsync(1, 1);
+        refreshed.EvidenceAnchorsStale.Should().BeFalse();
+        refreshed.SnapshotComparisonStatus.Should().Be("Mismatch");
+    }
 }
