@@ -79,6 +79,8 @@ namespace ERP.Application.DTOs
         // Buckets with negative reservation or ReservedQuantity > Quantity.
         // This is an integrity anomaly, not an authorization to patch Balance.
         public int InvalidReservationBucketCount { get; set; }
+        // Physical negative buckets need separate read-only investigation.
+        public int NegativePhysicalBucketCount { get; set; }
         public IReadOnlyList<InventoryReconciliationStatusEvidenceDto> StatusBreakdown { get; set; } = [];
         public IReadOnlyList<InventoryReconciliationEvidenceEventDto> Events { get; set; } = [];
         public IReadOnlyList<InventoryReconciliationEvidenceBucketDto> Buckets { get; set; } = [];
@@ -158,6 +160,8 @@ namespace ERP.Application.DTOs
         // Buckets with negative reservation or ReservedQuantity > Quantity.
         // This is an integrity anomaly, not an authorization to patch Balance.
         public int InvalidReservationBucketCount { get; set; }
+        // Physical negative buckets need separate read-only investigation.
+        public int NegativePhysicalBucketCount { get; set; }
         public decimal StatusChangeInQuantity { get; set; }
         public decimal StatusChangeOutQuantity { get; set; }
         public decimal ImportQuantity { get; set; }

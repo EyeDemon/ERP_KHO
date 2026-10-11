@@ -189,6 +189,38 @@ public sealed class InventoryReconciliationSnapshotProvenanceTests
     }
 
     [Fact]
+    public async Task OffsetNegativePhysicalBucket_DoesNotCertifyAggregateMatch()
+    {
+        using var db = await SeedAsync();
+        var positive = await db.InventoryStocks.SingleAsync(x => x.Id == 1);
+        positive.Quantity = 12m;
+        db.InventoryStocks.Add(new InventoryStock
+        {
+            Id = 2, WarehouseId = 1, ProductId = 1,
+            Status = InventoryStatus.QcHold, Quantity = -2m
+        });
+        await db.SaveChangesAsync();
+        var query = Query(db);
+        var detail = await query.GetInvestigationAsync(1, 1);
+        detail.AllStatusCurrentQuantity.Should().Be(10m);
+        detail.NegativePhysicalBucketCount.Should().Be(1);
+        detail.AllStatusStatus.Should().Be("Indeterminate");
+        detail.SnapshotComparisonStatus.Should().Be("Indeterminate");
+        detail.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+        detail.AllStatusExpectedQuantity.Should().BeNull();
+        detail.StatusBreakdown.Should().OnlyContain(x => x.ExpectedQuantity == null);
+
+        var row = (await query.GetReconciliationsAsync(1, 1, null))
+            .Items.Should().ContainSingle().Subject;
+        row.NegativePhysicalBucketCount.Should().Be(1);
+        row.AllStatusCurrentQuantity.Should().Be(10m);
+        row.Status.Should().Be("Indeterminate");
+        row.AllStatusStatus.Should().Be("Indeterminate");
+        row.ExpectedQuantity.Should().BeNull();
+        row.Difference.Should().BeNull();
+    }
+
+    [Fact]
     public async Task NewBucketInAnotherStatus_InvalidatesPinnedAllStatusComparisonButNotSelectedPage()
     {
         using var db = await SeedAsync();

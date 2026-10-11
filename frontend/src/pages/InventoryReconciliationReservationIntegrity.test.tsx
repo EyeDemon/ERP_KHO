@@ -61,3 +61,24 @@ it('warns about invalid reserved buckets without certifying a ledger match', asy
   expect(view.getByText(/Kết luận 8 trạng thái/).textContent).toContain('Chưa xác định');
   expect(view.queryByText(/Mốc bằng chứng đã cũ/)).toBeNull();
 });
+
+it('does not show Match for a compensating negative physical bucket', async () => {
+  vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
+  vi.mocked(apiClient.get).mockImplementation((url: string) => {
+    if (url.endsWith('/warehouses'))
+      return Promise.resolve({ data: [{ id: 1, code: 'HCM', name: 'Kho HCM' }] });
+    return Promise.resolve({ data: { items: [{
+      productId: 10, productCode: 'SKU-NEG', productName: 'Tồn cần điều tra',
+      warehouseId: 1, warehouseName: 'Kho HCM',
+      currentQuantity: 10, expectedQuantity: null, difference: null,
+      negativePhysicalBucketCount: 1, invalidReservationBucketCount: 1,
+      status: 'Indeterminate', allStatusCurrentQuantity: 10,
+      allStatusExpectedQuantity: null, allStatusDifference: null,
+      allStatusStatus: 'Indeterminate',
+    }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } });
+  });
+  const view = render(<InventoryReconciliation />);
+  await view.findByText('SKU-NEG');
+  expect(view.getByText(/1 bucket có tồn vật lý âm/)).toBeTruthy();
+  expect(view.queryByText('Khớp tất cả')).toBeNull();
+});

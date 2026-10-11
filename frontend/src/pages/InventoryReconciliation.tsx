@@ -40,6 +40,7 @@ interface ReconciliationRow {
   unclassifiedLedgerEventCount?: number;
   unclassifiedStockBucketCount?: number;
   invalidReservationBucketCount?: number;
+  negativePhysicalBucketCount?: number;
   statusChangeInQuantity?: number;
   statusChangeOutQuantity?: number;
   importQuantity: number;
@@ -100,6 +101,7 @@ interface Investigation {
   allStatusStatus?: 'Match' | 'Mismatch' | 'Indeterminate';
   unclassifiedLedgerEventCount?:number;
   unclassifiedStockBucketCount?:number; invalidReservationBucketCount?:number;
+  negativePhysicalBucketCount?:number;
   statusBreakdown?:StatusEvidence[];
   availableLedgerExpectedIsPartial?:boolean;
   historyInsufficientForNonAvailableStock?: boolean;
@@ -156,6 +158,9 @@ const isValidReconciliationPage = (
         (row.unclassifiedStockBucketCount !== undefined &&
           (!Number.isSafeInteger(row.unclassifiedStockBucketCount) ||
             row.unclassifiedStockBucketCount < 0)) ||
+        (row.negativePhysicalBucketCount !== undefined &&
+          (!Number.isSafeInteger(row.negativePhysicalBucketCount) ||
+            row.negativePhysicalBucketCount < 0)) ||
         (row.historyInsufficientForNonAvailableStock !== undefined &&
           typeof row.historyInsufficientForNonAvailableStock !== 'boolean')) return false;
 
@@ -169,6 +174,10 @@ const isValidReconciliationPage = (
           row.expectedQuantity !== null || row.difference !== null ||
           row.allStatusExpectedQuantity !== null ||
           row.allStatusDifference !== null)) return false;
+    if ((row.negativePhysicalBucketCount ?? 0) > 0 &&
+        (row.status !== 'Indeterminate' || row.allStatusStatus !== 'Indeterminate' ||
+          row.expectedQuantity !== null || row.difference !== null ||
+          row.allStatusExpectedQuantity !== null || row.allStatusDifference !== null)) return false;
     if (row.historyInsufficientForNonAvailableStock === true &&
         (row.status !== 'Indeterminate' ||
           (row.unclassifiedLedgerEventCount ?? 0) !== 0 ||
@@ -429,9 +438,17 @@ export default function InventoryReconciliation() {
           (evidence.unclassifiedStockBucketCount !== undefined &&
             (!Number.isSafeInteger(evidence.unclassifiedStockBucketCount) ||
               evidence.unclassifiedStockBucketCount < 0)) ||
+          (evidence.negativePhysicalBucketCount !== undefined &&
+            (!Number.isSafeInteger(evidence.negativePhysicalBucketCount) ||
+              evidence.negativePhysicalBucketCount < 0)) ||
           ((evidence.unclassifiedLedgerEventCount ?? 0) > 0 &&
             evidence.availableLedgerExpectedIsPartial !== true) ||
           ((evidence.unclassifiedStockBucketCount ?? 0) > 0 &&
+            (detailVerdict !== 'Indeterminate' ||
+              evidence.availableLedgerExpectedIsPartial !== true ||
+              (evidence.allStatusExpectedQuantity ?? null) !== null ||
+              (evidence.allStatusDifference ?? null) !== null)) ||
+          ((evidence.negativePhysicalBucketCount ?? 0) > 0 &&
             (detailVerdict !== 'Indeterminate' ||
               evidence.availableLedgerExpectedIsPartial !== true ||
               (evidence.allStatusExpectedQuantity ?? null) !== null ||
@@ -738,6 +755,9 @@ export default function InventoryReconciliation() {
                             {row.historyInsufficientForNonAvailableStock && (
                               <span>Thiếu lịch sử Ledger — cần đối chiếu chứng từ</span>
                             )}
+                            {(row.negativePhysicalBucketCount ?? 0) > 0 && (
+                              <span>{row.negativePhysicalBucketCount} bucket có tồn vật lý âm — cần kiểm tra nguồn gốc</span>
+                            )}
                             {(row.unclassifiedStockBucketCount ?? 0) > 0 && (
                               <span>{row.unclassifiedStockBucketCount} bucket có trạng thái không hỗ trợ — cần kiểm tra dữ liệu gốc</span>
                             )}
@@ -807,6 +827,13 @@ export default function InventoryReconciliation() {
                   Kết luận so sánh với tồn hiện tại là Chưa xác định; số liệu lịch sử
                   không cùng thời điểm với Balance. Hãy làm mới mốc để điều tra tiếp,
                   không dùng chênh lệch này để sửa tồn.
+                </p>
+              )}
+              {(investigation.negativePhysicalBucketCount ?? 0) > 0 && (
+                <p role="alert">
+                  Phát hiện {investigation.negativePhysicalBucketCount} bucket có tồn vật lý âm.
+                  Kết luận chưa xác định; kiểm tra dữ liệu gốc và chính sách tồn âm,
+                  không tự sửa Ledger hoặc Balance.
                 </p>
               )}
               {(investigation.invalidReservationBucketCount ?? 0) > 0 && (
