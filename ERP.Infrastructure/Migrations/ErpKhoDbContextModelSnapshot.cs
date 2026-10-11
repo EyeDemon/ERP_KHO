@@ -1792,6 +1792,20 @@ namespace ERP.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BaseUomCodeSnapshot")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("BaseUomIdSnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BaseUomNameSnapshot")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("BaseUomPrecisionSnapshot")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("ConsumedAt")
                         .HasColumnType("datetime2");
 
@@ -1833,6 +1847,12 @@ namespace ERP.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<string>("SourceCode")
                         .HasMaxLength(50)

@@ -29,7 +29,7 @@ public sealed class SqlServerStockReservationTests
             await using var db = CreateContext();
             var service = CreateService(db, fixture.UserId);
             var first = await service.CreateAsync(new() { ProductId = fixture.ProductId, WarehouseId = fixture.WarehouseId, Quantity = 30 });
-            await service.ReleaseAsync(first.Id, new() { Quantity = 10, Reason = "test partial release" });
+            await service.ReleaseAsync(first.Id, new() { Quantity = 10, Reason = "test partial release", RowVersion = first.RowVersion! });
             var reservation = await db.StockReservations.SingleAsync(x => x.Id == first.Id);
             await service.ConsumeAsync(reservation, fixture.UserId);
             await new UnitOfWork(db).SaveChangesAsync();
@@ -361,6 +361,8 @@ public sealed class SqlServerStockReservationTests
         var product = new Product { Code = $"RP{suffix}", Name = "Reservation product", Unit = unit };
         var warehouse = new Warehouse { Code = $"RW{suffix}", Name = "Reservation warehouse" };
         db.AddRange(creator, approver, product, warehouse); await db.SaveChangesAsync();
+        var permissionIds = await db.Permissions.Where(p => p.Code == "reservation.read" || p.Code == "reservation.create" || p.Code == "reservation.release").Select(p => p.Id).ToArrayAsync();
+        foreach (var id in permissionIds) db.RolePermissions.Add(new() { RoleId = role.Id, PermissionId = id, GrantedByUserId = creator.Id });
         var location = new WarehouseLocation { WarehouseId = warehouse.Id, Code = "LEGACY", Name = "Legacy stock", LocationType = WarehouseLocationType.Legacy, IsActive = true, IsPickable = true, IsSystemManaged = true, CreatedBy = creator.Id };
         db.Add(location); await db.SaveChangesAsync();
         db.UserWarehouses.AddRange(
@@ -402,6 +404,7 @@ public sealed class SqlServerStockReservationTests
         await db.Units.Where(x => x.Id == f.UnitId).ExecuteDeleteAsync();
         await db.WarehouseLocations.Where(x => x.WarehouseId == f.WarehouseId).ExecuteDeleteAsync();
         await db.Warehouses.Where(x => x.Id == f.WarehouseId).ExecuteDeleteAsync();
+        await db.RolePermissions.Where(x => x.RoleId == f.RoleId).ExecuteDeleteAsync();
         await db.Users.Where(x => userIds.Contains(x.Id)).ExecuteDeleteAsync();
         await db.Roles.Where(x => x.Id == f.RoleId).ExecuteDeleteAsync();
     }

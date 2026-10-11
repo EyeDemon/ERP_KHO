@@ -435,6 +435,7 @@ const ExportReceipts = () => {
 
       <h3>Danh Sách Phiếu Xuất</h3>
       {listLoading && <p role="status">Đang tải danh sách phiếu xuất...</p>}
+      <div style={{ overflowX: 'auto' }} role="region" aria-label="Danh sách phiếu xuất" tabIndex={0}>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
         <thead>
           <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
@@ -474,6 +475,7 @@ const ExportReceipts = () => {
           {!listLoading && receipts.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '10px' }}>Chưa có phiếu xuất nào</td></tr>}
         </tbody>
       </table>
+      </div>
 
       {selectedReceipt && (
         <div style={{ padding: '15px', border: '1px solid #34495e', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>

@@ -300,7 +300,7 @@ public sealed class OutboundDispatchHttpTests
         Assert.Equal(stock.OnHand==20?80m:0m,await f.Db.InventoryTransactions.SumAsync(x=>x.Quantity));
     }
 
-    private sealed class Fixture : IAsyncDisposable
+    internal sealed class Fixture : IAsyncDisposable
     {
         private readonly SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase owned;
         private readonly WebApplicationFactory<Program> factory;

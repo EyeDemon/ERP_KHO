@@ -22,6 +22,9 @@ public class StockReservationConfiguration : IEntityTypeConfiguration<StockReser
         builder.Property(x => x.ConsumedQuantity).HasPrecision(18, 4);
         builder.Property(x => x.ReleasedQuantity).HasPrecision(18, 4);
         builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.Property(x => x.BaseUomCodeSnapshot).HasMaxLength(50);
+        builder.Property(x => x.BaseUomNameSnapshot).HasMaxLength(100);
         builder.HasIndex(x => x.ReservationCode).IsUnique();
         builder.HasIndex(x => new { x.ProductId, x.WarehouseId, x.Status, x.ExpiresAt });
         builder.HasIndex(x => new { x.SourceType, x.SourceId, x.ProductId }).IsUnique().HasFilter("[SourceId] IS NOT NULL");

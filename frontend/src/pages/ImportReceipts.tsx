@@ -525,6 +525,7 @@ const ImportReceipts = () => {
       <hr style={{ margin: '30px 0' }} />
 
       <h3>Danh Sách Phiếu Nhập</h3>
+      <div style={{ overflowX: 'auto' }} role="region" aria-label="Danh sách phiếu nhập" tabIndex={0}>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
         <thead>
           <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
@@ -583,6 +584,7 @@ const ImportReceipts = () => {
           )}
         </tbody>
       </table>
+      </div>
 
       {selectedReceipt && (
         <div style={{ padding: '15px', border: '1px solid #34495e', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>

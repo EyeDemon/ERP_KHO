@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$ManifestPath, [ValidateSet('Sql','Credential','HoldLock','HoldExportLocations','HoldExportReceipt','Processes')][string]$Mode='Sql')
+param([Parameter(Mandatory)][string]$ManifestPath, [ValidateSet('Sql','Credential','HoldLock','HoldExportLocations','HoldExportReceipt','HoldReservation','Processes')][string]$Mode='Sql')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'BrowserQaConnection.ps1')
 $manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json
@@ -30,7 +30,7 @@ try {
         $pointer=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
         try {[Console]::Out.Write([Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer))}
         finally {[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)}
-    } elseif($Mode -in @('HoldLock','HoldExportLocations','HoldExportReceipt')) {
+    } elseif($Mode -in @('HoldLock','HoldExportLocations','HoldExportReceipt','HoldReservation')) {
         $stage='lock'
         $transaction=$connection.BeginTransaction()
         try {
@@ -39,7 +39,7 @@ try {
             if($Mode -ne 'HoldLock') {
                 $request=[Console]::In.ReadToEnd()|ConvertFrom-Json
                 if(($request.id -isnot [int] -and $request.id -isnot [long]) -or $request.id -le 0 -or $request.id -gt [int]::MaxValue) { throw 'Positive fixture ID required.' }
-                $command.CommandText=if($Mode -eq 'HoldExportReceipt') {'SELECT Id FROM ExportReceipts WITH(UPDLOCK,HOLDLOCK) WHERE Id=@id'} else {'SELECT * FROM WarehouseLocations WITH(UPDLOCK,HOLDLOCK) WHERE WarehouseId=@id ORDER BY Id'}
+                $command.CommandText=if($Mode -eq 'HoldReservation') {'SELECT Id FROM StockReservations WITH(UPDLOCK,HOLDLOCK) WHERE Id=@id'} elseif($Mode -eq 'HoldExportReceipt') {'SELECT Id FROM ExportReceipts WITH(UPDLOCK,HOLDLOCK) WHERE Id=@id'} else {'SELECT * FROM WarehouseLocations WITH(UPDLOCK,HOLDLOCK) WHERE WarehouseId=@id ORDER BY Id'}
                 [void]$command.Parameters.AddWithValue('@id',$request.id)
             }
             [void]$command.ExecuteNonQuery()

@@ -44,7 +44,7 @@ const AppRoutes = () => {
         <Route path="inventory" element={<Inventory />} />
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
-        <Route path="stock-reservations" element={<StockReservations />} />
+        <Route path="stock-reservations" element={<PermissionRoute permission="reservation.read"><StockReservations /></PermissionRoute>} />
         <Route path="approvals" element={<ApprovalRoute />} />
         <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
         <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
