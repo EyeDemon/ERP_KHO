@@ -819,7 +819,7 @@ export default function InventoryReconciliation() {
               {investigation.availableLedgerExpectedIsPartial && (
                 <p role="alert">
                   Dữ liệu Ledger/Balance có lịch sử chưa phân loại, thiếu chứng từ gốc
-                  hoặc lượng giữ chỗ bất thường. Số Ledger AVAILABLE và chênh lệch bên dưới chưa đủ tin cậy,
+                  hoặc lượng giữ chỗ bất thường. Tổng Ledger AVAILABLE và chênh lệch bên dưới chưa đủ tin cậy,
                   không dùng để sửa tồn.
                 </p>
               )}

@@ -48,7 +48,8 @@ it('warns about invalid reserved buckets without certifying a ledger match', asy
       warehouseId: 1, warehouseName: 'Kho HCM',
       currentQuantity: 10, expectedQuantity: null, difference: null,
       invalidReservationBucketCount: 1, status: 'Indeterminate',
-      allStatusStatus: 'Indeterminate',
+      allStatusCurrentQuantity: 10, allStatusExpectedQuantity: null,
+      allStatusDifference: null, allStatusStatus: 'Indeterminate',
     }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } });
   });
   const view = render(<InventoryReconciliation />);
