@@ -36,9 +36,19 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
         var unit = new Unit { Code = $"RSU{suffix}", Name = "Snapshot unit", DecimalPlaces = 4 };
         var product = new Product { Code = $"RSP{suffix}", Name = "Snapshot product", Unit = unit };
         var warehouse = new Warehouse { Code = $"RSW{suffix}", Name = "Snapshot warehouse" };
+        var location = new WarehouseLocation
+        {
+            Code = $"RSL{suffix}", Name = "Snapshot location",
+            LocationType = WarehouseLocationType.Legacy,
+            IsActive = true, IsPickable = true
+        };
         await using (var setup = CreateContext())
         {
             setup.AddRange(user, product, warehouse);
+            await setup.SaveChangesAsync();
+            location.WarehouseId = warehouse.Id;
+            location.CreatedBy = user.Id;
+            setup.WarehouseLocations.Add(location);
             await setup.SaveChangesAsync();
             setup.UserWarehouses.Add(new UserWarehouse
             {
@@ -47,11 +57,13 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
             setup.InventoryStocks.Add(new InventoryStock
             {
                 WarehouseId = warehouse.Id, ProductId = product.Id,
+                LocationId = location.Id,
                 Status = InventoryStatus.Available, Quantity = 10
             });
             setup.InventoryTransactions.Add(new InventoryTransaction
             {
                 WarehouseId = warehouse.Id, ProductId = product.Id,
+                LocationId = location.Id,
                 CreatedBy = user.Id, InventoryStatus = InventoryStatus.Available,
                 TransactionType = TransactionType.Import, Quantity = 10,
                 TransactionDate = DateTime.UtcNow
@@ -109,6 +121,7 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
                 x.UserId == user.Id && x.WarehouseId == warehouse.Id).ExecuteDeleteAsync();
             await cleanup.Products.Where(x => x.Id == product.Id).ExecuteDeleteAsync();
             await cleanup.Units.Where(x => x.Id == unit.Id).ExecuteDeleteAsync();
+            await cleanup.WarehouseLocations.Where(x => x.Id == location.Id).ExecuteDeleteAsync();
             await cleanup.Warehouses.Where(x => x.Id == warehouse.Id).ExecuteDeleteAsync();
             await cleanup.Users.Where(x => x.Id == user.Id).ExecuteDeleteAsync();
             await cleanup.Roles.Where(x => x.Id == role.Id).ExecuteDeleteAsync();
