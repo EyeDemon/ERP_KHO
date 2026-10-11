@@ -45,7 +45,7 @@ export function assertFiltered(value) {
   assert(!JSON.stringify(value).includes('QA_PRIVATE_EXCEPTION'), 'Viewer private content absent');
 }
 
-function helper(manifestPath, mode, request) {
+export function helper(manifestPath, mode, request) {
   const child = spawn('pwsh.exe', ['-NoProfile', '-File', path.join(here, 'Invoke-BrowserQaFixture.ps1'), '-ManifestPath', manifestPath, '-Mode', mode], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let stdout = '';
   // Only the safe stage/number/type/line diagnostic is surfaced; discard provider messages.
@@ -672,7 +672,7 @@ export async function captureOriginal(page, pattern, { arrivalMs = 10000, deadli
     cleanup: () => { if (!finished && !failed) fail(new Error('Original response capture cancelled')); return cleanup(); } };
 }
 
-async function quiesce(actor, held) {
+export async function quiesce(actor, held) {
   // Do not mistake a legitimate newer 403-triggered identity refresh for the held old response.
   for (let attempt = 0; attempt < 100; attempt++) {
     if ([...actor.pending].every(request => request === held)) { await delay(100); if ([...actor.pending].every(request => request === held)) return; }

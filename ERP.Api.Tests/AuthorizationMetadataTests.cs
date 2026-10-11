@@ -17,7 +17,7 @@ namespace ERP.Api.Tests
                 typeof(ProductsController), typeof(ProductCategoriesController), typeof(ProductBarcodesController),
                 typeof(ProductBarcodeLookupController), typeof(WarehousesController), typeof(UnitsController),
                 typeof(BusinessPartnersController), typeof(UserWarehouseAccessController), typeof(AccountSecurityController),
-                typeof(PermissionsController), typeof(ExportReceiptsController), typeof(StockReservationsController) };
+                typeof(PermissionsController), typeof(ExportReceiptsController), typeof(StockReservationsController), typeof(ReceivingReasonCodesController) };
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
             foreach (var controller in controllers)

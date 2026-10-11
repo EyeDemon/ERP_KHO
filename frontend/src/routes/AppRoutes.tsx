@@ -17,6 +17,7 @@ import Approvals from '../pages/Approvals';
 import BusinessPartners from '../pages/BusinessPartners';
 import PutawayTasks from '../pages/PutawayTasks';
 import Permissions from '../pages/Permissions';
+import ReceivingReasonCodes from '../pages/ReceivingReasonCodes';
 import { canViewApprovals, canViewStocktakes, usePermission, usePermissionSet } from '../services/authorization';
 
 const PermissionRoute = ({ permission, children }: { permission: string; children: ReactNode }) =>
@@ -48,6 +49,7 @@ const AppRoutes = () => {
         <Route path="approvals" element={<ApprovalRoute />} />
         <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
         <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
+        <Route path="receiving-reason-codes" element={<PermissionRoute permission="reason_code.read"><ReceivingReasonCodes /></PermissionRoute>} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
