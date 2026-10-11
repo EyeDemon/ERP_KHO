@@ -1059,6 +1059,47 @@ namespace ERP.Application.Tests
             row.AllStatusStatus.Should().Be("Mismatch");
         }
 
+
+        [Fact]
+        public async Task Reconciliation_UnknownLegacyStockStatus_IsVisibleAndIndeterminateInBothViews()
+        {
+            using var db = await GetDbContextAsync();
+            var legacy = await db.InventoryStocks.SingleAsync(s =>
+                s.ProductId == 1 && s.WarehouseId == 1);
+            legacy.Status = (InventoryStatus)99;
+            await db.SaveChangesAsync();
+
+            var auth = new Mock<IWarehouseAuthorizationService>(MockBehavior.Strict);
+            auth.Setup(x => x.EnsureWarehouseAccessAsync(1, default))
+                .Returns(Task.CompletedTask);
+            var query = new InventoryReconciliationQueryService(db, auth.Object);
+            var list = (await query.GetReconciliationsAsync(1, 1, null))
+                .Items.Should().ContainSingle().Subject;
+            list.UnclassifiedStockBucketCount.Should().Be(1);
+            list.UnclassifiedLedgerEventCount.Should().Be(0);
+            list.CurrentQuantity.Should().Be(0m);
+            list.AllStatusCurrentQuantity.Should().Be(12m);
+            list.ExpectedQuantity.Should().BeNull();
+            list.Difference.Should().BeNull();
+            list.Status.Should().Be("Indeterminate");
+            list.AllStatusStatus.Should().Be("Indeterminate");
+            list.AllStatusExpectedQuantity.Should().BeNull();
+
+            var evidence = await query.GetInvestigationAsync(1, 1);
+            evidence.UnclassifiedStockBucketCount.Should().Be(1);
+            evidence.UnclassifiedLedgerEventCount.Should().Be(0);
+            evidence.AllStatusCurrentQuantity.Should().Be(12m);
+            evidence.AllStatusReservedQuantity.Should().Be(0m);
+            evidence.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+            evidence.AllStatusStatus.Should().Be("Indeterminate");
+            evidence.AllStatusExpectedQuantity.Should().BeNull();
+            evidence.AllStatusDifference.Should().BeNull();
+            evidence.StatusBreakdown.Should().HaveCount(8);
+            evidence.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
+            auth.Verify(x => x.EnsureWarehouseAccessAsync(1, default), Times.Exactly(2));
+        }
+
         [Fact]
         public async Task GetReconciliationsAsync_CalculatesCorrectExpectedQuantity()
         {

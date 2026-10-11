@@ -57,6 +57,9 @@ namespace ERP.Application.DTOs
         public decimal? AllStatusExpectedQuantity { get; set; }
         public decimal? AllStatusDifference { get; set; }
         public int UnclassifiedLedgerEventCount { get; set; }
+        // Physical legacy bucket status IDs outside the canonical eight.
+        // Their quantities remain in aggregate totals but poison comparison.
+        public int UnclassifiedStockBucketCount { get; set; }
         public IReadOnlyList<InventoryReconciliationStatusEvidenceDto> StatusBreakdown { get; set; } = [];
         public IReadOnlyList<InventoryReconciliationEvidenceEventDto> Events { get; set; } = [];
         public IReadOnlyList<InventoryReconciliationEvidenceBucketDto> Buckets { get; set; } = [];
@@ -132,6 +135,7 @@ namespace ERP.Application.DTOs
         // Missing non-AVAILABLE Ledger history is distinct from invalid events.
         public bool HistoryInsufficientForNonAvailableStock { get; set; }
         public int UnclassifiedLedgerEventCount { get; set; }
+        public int UnclassifiedStockBucketCount { get; set; }
         public decimal StatusChangeInQuantity { get; set; }
         public decimal StatusChangeOutQuantity { get; set; }
         public decimal ImportQuantity { get; set; }

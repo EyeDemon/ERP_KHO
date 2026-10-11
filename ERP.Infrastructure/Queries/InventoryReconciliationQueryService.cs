@@ -160,6 +160,11 @@ namespace ERP.Infrastructure.Queries
                 }).ToListAsync();
             if (stockGroups.Count == 0 && ledgerGroups.Count == 0)
                 throw new NotFoundException("Không có bucket hoặc sự kiện sổ cái cho kho và sản phẩm này.");
+            // Legacy/unknown status IDs must remain inspectable without
+            // silently dropping physical stock or manufacturing a Match.
+            var unclassifiedStockBucketCount = stockGroups
+                .Where(group => !Enum.IsDefined(group.Status))
+                .Sum(group => group.Buckets);
 
             var byStatus = Enum.GetValues<InventoryStatus>()
                 .ToDictionary(status => status,
@@ -170,7 +175,7 @@ namespace ERP.Infrastructure.Queries
             foreach (var stockGroup in stockGroups)
             {
                 if (!byStatus.TryGetValue(stockGroup.Status, out var entry))
-                    throw new BusinessRuleException("Tồn kho có trạng thái chưa được hệ thống hỗ trợ.");
+                    continue; // Counted above; poison the verdict, preserve all-status totals.
                 entry.CurrentQuantity = stockGroup.Quantity;
                 entry.ReservedQuantity = stockGroup.Reserved;
                 entry.BucketCount = stockGroup.Buckets;
@@ -229,6 +234,7 @@ namespace ERP.Infrastructure.Queries
                     x.Status != InventoryStatus.Available && x.Buckets > 0) &&
                 !stockGroups.Any(x => x.Status == InventoryStatus.Available && x.Quantity != 0m);
             var comparable = unclassifiedCount == 0 &&
+                unclassifiedStockBucketCount == 0 &&
                 !historyInsufficientForNonAvailableStock;
             foreach (var row in byStatus.Values)
             {
@@ -238,8 +244,11 @@ namespace ERP.Infrastructure.Queries
                 row.Difference = row.CurrentQuantity - row.ExpectedQuantity.Value;
             }
             var statusBreakdown = byStatus.Values.ToList();
-            var allStatusCurrent = statusBreakdown.Sum(x => x.CurrentQuantity);
-            var allStatusReserved = statusBreakdown.Sum(x => x.ReservedQuantity);
+            // All-status totals include unknown physical buckets. Individual
+            // eight canonical status rows deliberately exclude them and are
+            // marked indeterminate until their source state is investigated.
+            var allStatusCurrent = stockGroups.Sum(x => x.Quantity);
+            var allStatusReserved = stockGroups.Sum(x => x.Reserved);
             decimal? allStatusExpected = comparable
                 ? statusBreakdown.Sum(x => x.ExpectedQuantity!.Value)
                 : null;
@@ -361,6 +370,7 @@ namespace ERP.Infrastructure.Queries
                     ? allStatusCurrent - allStatusExpected.Value
                     : null,
                 UnclassifiedLedgerEventCount = unclassifiedCount,
+                UnclassifiedStockBucketCount = unclassifiedStockBucketCount,
                 StatusBreakdown = statusBreakdown,
                 EventsTruncated = hasOlderEvents,
                 BucketsTruncated = buckets.Count > 100,
@@ -532,7 +542,9 @@ namespace ERP.Infrastructure.Queries
                 var currentQuantity = pairStocks.Where(s => s.Status == InventoryStatus.Available)
                     .Sum(s => s.Quantity);
                 var allStatusCurrent = pairStocks.Sum(s => s.Quantity);
-                var invalidStockStatus = pairStocks.Any(s => !Enum.IsDefined(s.Status));
+                var unclassifiedStockBucketCount = pairStocks
+                    .Where(s => !Enum.IsDefined(s.Status)).Sum(s => s.Buckets);
+                var invalidStockStatus = unclassifiedStockBucketCount > 0;
 
                 var stockTransactions = transactions
                     .Where(t => t.ProductId == pair.ProductId && t.WarehouseId == pair.WarehouseId)
@@ -589,7 +601,8 @@ namespace ERP.Infrastructure.Queries
                         s.Quantity != 0m) &&
                     stockTransactions.Count == 0;
                 decimal? expectedQuantity =
-                    unclassifiedCount > 0 || lacksLedgerForOtherStatusOnly ? null :
+                    unclassifiedCount > 0 || invalidStockStatus ||
+                    lacksLedgerForOtherStatusOnly ? null :
                     stockTransactions.Sum(t =>
                     {
                         if (t.TransactionType == TransactionType.StatusChange)
@@ -651,6 +664,7 @@ namespace ERP.Infrastructure.Queries
                     AllStatusStatus = allStatusStatus,
                     HistoryInsufficientForNonAvailableStock = lacksLedgerForOtherStatusOnly,
                     UnclassifiedLedgerEventCount = unclassifiedCount,
+                    UnclassifiedStockBucketCount = unclassifiedStockBucketCount,
                     StatusChangeInQuantity = statusChangeIn,
                     StatusChangeOutQuantity = statusChangeOut,
                     ImportQuantity = importQuantity,

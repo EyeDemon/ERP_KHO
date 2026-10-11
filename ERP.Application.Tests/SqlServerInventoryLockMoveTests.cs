@@ -1675,6 +1675,45 @@ public sealed class SqlServerInventoryLockMoveTests
     }
 
 
+
+    [SqlServerFact]
+    public async Task Reconciliation_SqlLegacyUnknownPhysicalStatus_ReturnsIndeterminateWithoutDroppingStock()
+    {
+        var fixture = await CreateFixtureAsync();
+        try
+        {
+            await using (var change = CreateContext())
+            {
+                var stock = await change.InventoryStocks.SingleAsync(x => x.Id == fixture.SourceStockId);
+                stock.Status = (InventoryStatus)99;
+                await change.SaveChangesAsync();
+            }
+            await using var read = CreateContext();
+            var service = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(
+                read, new WarehouseAuthorizationService(read, new CurrentUser(fixture.UserId)));
+            var row = (await service.GetReconciliationsAsync(
+                fixture.WarehouseId, fixture.ProductId, null))
+                .Items.Should().ContainSingle().Subject;
+            row.UnclassifiedStockBucketCount.Should().Be(1);
+            row.AllStatusCurrentQuantity.Should().Be(10m);
+            row.Status.Should().Be("Indeterminate");
+            row.AllStatusStatus.Should().Be("Indeterminate");
+            row.ExpectedQuantity.Should().BeNull();
+            row.AllStatusExpectedQuantity.Should().BeNull();
+            var evidence = await service.GetInvestigationAsync(
+                fixture.WarehouseId, fixture.ProductId);
+            evidence.UnclassifiedStockBucketCount.Should().Be(1);
+            evidence.AllStatusCurrentQuantity.Should().Be(10m);
+            evidence.AllStatusReservedQuantity.Should().Be(0m);
+            evidence.AvailableLedgerExpectedIsPartial.Should().BeTrue();
+            evidence.AllStatusStatus.Should().Be("Indeterminate");
+            evidence.AllStatusExpectedQuantity.Should().BeNull();
+            evidence.StatusBreakdown.Should().OnlyContain(x =>
+                x.ExpectedQuantity == null && x.Difference == null);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     [SqlServerFact]
     public async Task Reconciliation_SqlAllStatusDetectsOffsettingQcAndQuarantineDifferences()
     {

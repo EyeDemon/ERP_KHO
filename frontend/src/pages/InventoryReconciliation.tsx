@@ -38,6 +38,7 @@ interface ReconciliationRow {
   allStatusStatus?: 'Match' | 'Mismatch' | 'Indeterminate';
   historyInsufficientForNonAvailableStock?: boolean;
   unclassifiedLedgerEventCount?: number;
+  unclassifiedStockBucketCount?: number;
   statusChangeInQuantity?: number;
   statusChangeOutQuantity?: number;
   importQuantity: number;
@@ -91,7 +92,8 @@ interface Investigation {
   allStatusCurrentQuantity?:number; allStatusReservedQuantity?:number;
   allStatusExpectedQuantity?:number|null; allStatusDifference?:number|null;
   allStatusStatus?: 'Match' | 'Mismatch' | 'Indeterminate';
-  unclassifiedLedgerEventCount?:number; statusBreakdown?:StatusEvidence[];
+  unclassifiedLedgerEventCount?:number;
+  unclassifiedStockBucketCount?:number; statusBreakdown?:StatusEvidence[];
   availableLedgerExpectedIsPartial?:boolean;
   historyInsufficientForNonAvailableStock?: boolean;
   isReadOnly:boolean; buckets:InvestigationBucket[]; events:InvestigationEvent[];
@@ -144,6 +146,9 @@ const isValidReconciliationPage = (
         (row.unclassifiedLedgerEventCount !== undefined &&
           (!Number.isSafeInteger(row.unclassifiedLedgerEventCount) ||
             row.unclassifiedLedgerEventCount < 0)) ||
+        (row.unclassifiedStockBucketCount !== undefined &&
+          (!Number.isSafeInteger(row.unclassifiedStockBucketCount) ||
+            row.unclassifiedStockBucketCount < 0)) ||
         (row.historyInsufficientForNonAvailableStock !== undefined &&
           typeof row.historyInsufficientForNonAvailableStock !== 'boolean')) return false;
 
@@ -151,6 +156,12 @@ const isValidReconciliationPage = (
     if (seen.has(key)) return false;
     seen.add(key);
 
+    if ((row.unclassifiedStockBucketCount ?? 0) > 0 &&
+        (row.status !== 'Indeterminate' ||
+          row.allStatusStatus !== 'Indeterminate' ||
+          row.expectedQuantity !== null || row.difference !== null ||
+          row.allStatusExpectedQuantity !== null ||
+          row.allStatusDifference !== null)) return false;
     if (row.historyInsufficientForNonAvailableStock === true &&
         (row.status !== 'Indeterminate' ||
           (row.unclassifiedLedgerEventCount ?? 0) !== 0 ||
@@ -381,8 +392,16 @@ export default function InventoryReconciliation() {
           evidence.productId !== product || evidence.isReadOnly !== true ||
           (evidence.allStatusStatus !== undefined &&
             evidence.allStatusStatus !== detailVerdict) ||
+          (evidence.unclassifiedStockBucketCount !== undefined &&
+            (!Number.isSafeInteger(evidence.unclassifiedStockBucketCount) ||
+              evidence.unclassifiedStockBucketCount < 0)) ||
           ((evidence.unclassifiedLedgerEventCount ?? 0) > 0 &&
             evidence.availableLedgerExpectedIsPartial !== true) ||
+          ((evidence.unclassifiedStockBucketCount ?? 0) > 0 &&
+            (detailVerdict !== 'Indeterminate' ||
+              evidence.availableLedgerExpectedIsPartial !== true ||
+              (evidence.allStatusExpectedQuantity ?? null) !== null ||
+              (evidence.allStatusDifference ?? null) !== null)) ||
           (evidence.historyInsufficientForNonAvailableStock === true &&
             (detailVerdict !== 'Indeterminate' ||
               evidence.availableLedgerExpectedIsPartial !== true ||
@@ -664,6 +683,9 @@ export default function InventoryReconciliation() {
                             {row.historyInsufficientForNonAvailableStock && (
                               <span>Thiếu lịch sử Ledger — cần đối chiếu chứng từ</span>
                             )}
+                            {(row.unclassifiedStockBucketCount ?? 0) > 0 && (
+                              <span>{row.unclassifiedStockBucketCount} bucket có trạng thái không hỗ trợ — cần kiểm tra dữ liệu gốc</span>
+                            )}
                           </div>
                         ) : <span className="ui-muted-text">Chưa có đối chiếu 8 trạng thái</span>}
                       </td>
@@ -756,6 +778,14 @@ export default function InventoryReconciliation() {
                       Có tồn kho ngoài trạng thái Khả dụng nhưng không tìm thấy lịch sử Ledger đến mốc
                       đối chiếu. Không thể xác nhận tồn dự kiến hoặc mức lệch cần xử lý;
                       cần đối chiếu chứng từ và lịch sử phát sinh trước khi điều chỉnh tồn kho.
+                    </p>
+                  )}
+                  {(investigation.unclassifiedStockBucketCount ?? 0) > 0 && (
+                    <p role="alert">
+                      Có {investigation.unclassifiedStockBucketCount} bucket tồn với trạng thái ngoài
+                      tám trạng thái được hỗ trợ. Tổng tồn vẫn bao gồm số lượng các bucket này,
+                      nhưng không thể xác định số dư dự kiến hoặc kết luận khớp.
+                      Cần xác minh dữ liệu gốc; không tự điều chỉnh tồn kho.
                     </p>
                   )}
                   {(investigation.unclassifiedLedgerEventCount ?? 0) > 0 && (

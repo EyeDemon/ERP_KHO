@@ -41,6 +41,69 @@ describe('InventoryReconciliation', () => {
 
 
 
+
+  it('discloses unsupported stock buckets in both list and detailed evidence without inventing Match', async () => {
+    const statuses = ['Available', 'QcHold', 'Quarantine', 'Damaged',
+      'Rejected', 'Blocked', 'Expired', 'RecallBlocked'];
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{id: 1, code: 'W1', name: 'Kho thử'}]
+        : url.includes('/investigation?')
+          ? { warehouseId: 1, productId: 10, eventAnchorId: 20,
+            eventCount: 0, bucketCount: 0, events: [], buckets: [],
+            eventsTruncated: false, bucketsTruncated: false,
+            isReadOnly: true, currentQuantity: 0, expectedQuantity: 0,
+            difference: 0, allStatusCurrentQuantity: 12, allStatusReservedQuantity: 0,
+            unclassifiedLedgerEventCount: 0, unclassifiedStockBucketCount: 1,
+            availableLedgerExpectedIsPartial: true,
+            allStatusExpectedQuantity: null, allStatusDifference: null,
+            allStatusStatus: 'Indeterminate',
+            statusBreakdown: statuses.map(status => ({
+              status, currentQuantity: 0, reservedQuantity: 0, bucketCount: 0,
+              directLedgerNetQuantity: 0, statusChangeInQuantity: 0,
+              statusChangeOutQuantity: 0, expectedQuantity: null, difference: null,
+            })) }
+          : { items: [{
+            warehouseId: 1, productId: 10, warehouseName: 'Kho thử',
+            productCode: 'SKU-LEGACY', productName: 'Tồn bất thường',
+            currentQuantity: 0, expectedQuantity: null, difference: null,
+            status: 'Indeterminate', allStatusCurrentQuantity: 12,
+            allStatusExpectedQuantity: null, allStatusDifference: null,
+            allStatusStatus: 'Indeterminate', unclassifiedStockBucketCount: 1,
+            unclassifiedLedgerEventCount: 0,
+            importQuantity: 10, exportQuantity: 0, transferInQuantity: 0,
+            transferOutQuantity: 0, adjustmentIncreaseQuantity: 0,
+            adjustmentDecreaseQuantity: 0,
+          }], totalRecords: 1, pageIndex: 1, pageSize: 20, totalPages: 1 } }));
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText('SKU-LEGACY')).toBeTruthy();
+    expect(view.getByText(/1 bucket có trạng thái không hỗ trợ/)).toBeTruthy();
+    fireEvent.click(view.getByRole('button', {name:'Xem bằng chứng SKU-LEGACY tại Kho thử'}));
+    expect(await view.findByText(/Có 1 bucket tồn với trạng thái ngoài/)).toBeTruthy();
+    expect(view.getByText('Tổng Ledger các trạng thái (tham khảo)').previousSibling?.textContent)
+      .toBe('Chưa xác định');
+  });
+
+  it('rejects invalid-stock API payload claiming a completed reconciliation', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({data:url.endsWith('/warehouses')
+        ? [{id:1,code:'W1',name:'Kho thử'}]
+        : {items:[{
+          warehouseId:1,productId:10,warehouseName:'Kho thử',
+          productCode:'SKU-UNSAFE',productName:'Tồn bất thường',
+          currentQuantity:0,expectedQuantity:0,difference:0,status:'Match',
+          allStatusCurrentQuantity:12,allStatusExpectedQuantity:0,
+          allStatusDifference:12,allStatusStatus:'Mismatch',
+          unclassifiedStockBucketCount:1,
+          unclassifiedLedgerEventCount:0,importQuantity:0,exportQuantity:0,
+          transferInQuantity:0,transferOutQuantity:0,adjustmentIncreaseQuantity:0,
+          adjustmentDecreaseQuantity:0
+        }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}}));
+    const view=render(<InventoryReconciliation />);
+    expect(await view.findByText(/Máy chủ trả dữ liệu đối chiếu không hợp lệ/)).toBeTruthy();
+    expect(view.queryByText('SKU-UNSAFE')).toBeNull();
+  });
+
   it('shows missing-Ledger reason in the list even with an empty AVAILABLE placeholder', async () => {
     vi.mocked(apiClient.get).mockImplementation((url: string) =>
       Promise.resolve({ data: url.endsWith('/warehouses')
