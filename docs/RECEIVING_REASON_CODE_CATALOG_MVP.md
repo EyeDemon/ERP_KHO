@@ -2,7 +2,15 @@
 
 ## Current checkpoint
 
-**LOCAL VERIFICATION PASS — published-head CI/Sonar handoff pending.** Branch `feature/receiving-reason-code-catalog`, accepted Manual base `7b039993832eca715c3210e0782b9d43394f635e`; source-specific local automated, utility UI and supplemental mounted-browser evidence is recorded below. No migration, permission seed, bundle, dependency or production workflow changes. PR #32 remains Draft and its owner acceptance is limited to the accepted Manual source. Existing 75 CODE_SMELL findings remain in their associated backlog; they are neither suppressed nor claimed fixed. Final published HEAD/CI/Sonar will be recorded in the new Draft PR body, not assigned from an older PR.
+**LOCAL VERIFICATION PASS — successor Sonar/CI handoff pending.** Draft PR #34, branch `feature/receiving-reason-code-catalog`, accepted Manual base `7b039993832eca715c3210e0782b9d43394f635e`; source-specific local automated, utility UI and supplemental mounted-browser evidence is recorded below. No migration, permission seed, bundle, dependency or production workflow changes. PR #32 remains Draft and its owner acceptance is limited to the accepted Manual source. Existing 75 CODE_SMELL findings remain in their associated backlog; they are neither suppressed nor claimed fixed. Final published HEAD/CI/Sonar will be recorded in PR #34's body, not assigned from an older PR.
+
+### Published-head check and narrow test-runner fix
+
+At source `17073b2808f6c578e0be364eae386ab9e9d33690`, CI **38162903482 SUCCESS**: Application **357/357**, API **217/217**, frontend **118/118**; build/lint/dependency audit passed, zero failed/skipped and zero dependency vulnerabilities. SonarCloud was independently **ERROR** for one vulnerability, `javascript:S4036`, `tools/ERP.BrowserQa/reason-catalog-browser.mjs:22`: source-HEAD lookup searched PATH for Git. It is not an API authorization finding. The issue was fixed by using the verified absolute Git for Windows executable in its protected Program Files directory, with no PATH fallback, suppression or gate change.
+
+Affected successor checks: runner syntax PASS; the exact executable selected by the runner returned source HEAD `17073b2` with an empty PATH; existing capture/ownership/redaction/error-propagation regressions **18/18 PASS**, zero failed/skipped. The one-line executable change does not alter browser coordination, UI, API or model, so the utility UI and mounted 3/3 evidence below remain associated with unchanged behavior. No new QA database/process/credential was created, and full SQL/frontend/browser suites were not repeated solely for source-HEAD metadata lookup. The successor commit's CI and Sonar results must be checked before claiming READY.
+
+PR #34's first analysis also reported **48 CODE_SMELL** findings (1 Critical, 9 Major, 38 Minor), separately from the existing 75-item Manual backlog. The Critical item is `javascript:S6859` on the browser-context Vite `/src/services/apiClient.ts` import; it is a maintainability classification, not automatically a security vulnerability. Findings are retained, not suppressed or blanket-refactored to lower metrics. No owner acceptance is inferred from CI or a quality gate.
 
 ## Canonical contract and freshness
 

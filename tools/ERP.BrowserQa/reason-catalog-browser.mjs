@@ -19,7 +19,7 @@ assert(modulePath,'Use installed test-only Playwright');
 assert.equal(require(path.join(path.dirname(modulePath),'package.json')).version,'1.62.1');
 const {chromium}=require(modulePath);
 const sql=async text=>JSON.parse(await helper(manifestPath,'Sql',{sql:text}).completed);
-const record={sourceHead:execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).trim(),runId:manifest.RunId,classification:'Supplemental mounted component-in-browser; real API; SQL fixture/postconditions',files:[],cases:[]};
+const record={sourceHead:execFileSync('C:/Program Files/Git/cmd/git.exe',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).trim(),runId:manifest.RunId,classification:'Supplemental mounted component-in-browser; real API; SQL fixture/postconditions',files:[],cases:[]};
 for(const file of ['frontend/src/pages/ReceivingReasonCodes.tsx','frontend/e2e/mounted-reason-catalog.tsx','tools/ERP.BrowserQa/reason-catalog-browser.mjs']) record.files.push({file,sha256:createHash('sha256').update(await readFile(path.join(repo,file))).digest('hex')});
 const report=path.join(manifest.ArtifactRoot,'reason-catalog-browser-'+Date.now()+'.json');
 const save=()=>writeFile(report,JSON.stringify(safeEvidence(record),null,2));
