@@ -3,6 +3,7 @@ import apiClient from '../services/apiClient';
 import { usePermission, currentUserId, hasPermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
+import ReceiptQcBasis from '../components/ReceiptQcBasis';
 import { permissionError } from '../services/permissionPresentation';
 
 interface ImportReceiptDetail {
@@ -15,7 +16,7 @@ interface ImportReceiptDetail {
   postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; basePostedQuantity: number;
   unitPrice?: number;
   note: string;
-  requiresQc: boolean; qcState: string; qcPolicyId?: number; qcPolicyVersion?: number; qcPolicySource?: string;
+  requiresQc: boolean; qcState: string; qcPolicyId?: number; qcPolicyVersion?: number; qcPolicySource?: string; qcPolicyEffectiveAtUtc?: string;
   qcDispositionReasonCode?: string; qcDispositionNote?: string;
   observedQuantity: number; doorRejectedQuantity: number; finalReceivedQuantity: number; baseFinalReceivedQuantity: number;
 }
@@ -542,7 +543,7 @@ const ImportReceipts = () => {
           {receipts.map(r => (
             <tr key={r.id}>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.code}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{new Date(r.createdAt).toLocaleString()}</td>
+              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{new Date(r.createdAt).toLocaleString('vi-VN')}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.warehouseName}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.supplierCode ? `${r.supplierCode} - ${r.supplierName}` : '—'}</td>
               <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.createdByName}</td>
@@ -595,16 +596,17 @@ const ImportReceipts = () => {
             {selectedReceipt.status === 'Draft' && canUpdate && canReadPartners && <div><label>Đổi nhà cung cấp <select aria-label="Đổi nhà cung cấp" disabled={partnerUpdating} value={selectedReceipt.supplierId||''} onChange={e=>void changeSupplier(e.target.value?Number(e.target.value):null)}><option value="">-- Gỡ liên kết --</option>{suppliers.filter(x=>x.isActive||x.id===selectedReceipt.supplierId).map(x=><option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive?'':' (ngừng hoạt động)'}</option>)}</select></label>{partnerUpdating && <span role="status"> Đang cập nhật...</span>}</div>}
             <div><strong>Trạng thái:</strong> {statusLabel(selectedReceipt.status)}</div>
             <div><strong>Người tạo:</strong> {selectedReceipt.createdByName}</div>
-            <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</div>
+            <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString('vi-VN')}</div>
             {['Approved', 'ReadyToPost', 'Posted'].includes(selectedReceipt.status) && selectedReceipt.approvedAt && (
               <>
                 <div><strong>Người duyệt:</strong> {selectedReceipt.approvedByName}</div>
-                <div><strong>Ngày duyệt:</strong> {new Date(selectedReceipt.approvedAt).toLocaleString()}</div>
+                <div><strong>Ngày duyệt:</strong> {new Date(selectedReceipt.approvedAt).toLocaleString('vi-VN')}</div>
               </>
             )}
             <div><strong>Ghi chú:</strong> {selectedReceipt.note}</div>
           </div>
           
+          <div style={{ overflowX: 'auto' }} role="region" aria-label="Các dòng phiếu nhập" tabIndex={0}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
@@ -620,7 +622,10 @@ const ImportReceipts = () => {
               {selectedReceipt.details.map(d => (
                 <tr key={d.id}>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productCode}</td>
-                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productName}<br/><small>Kiểm tra chất lượng: {d.requiresQc ? `Bắt buộc · ${statusLabel(d.qcState)} · chính sách ${d.qcPolicyId ?? '—'} phiên bản ${d.qcPolicyVersion ?? '—'}` : 'Không yêu cầu'}</small></td>
+                  <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{d.productName}
+                    {d.requiresQc && <p>Trạng thái kiểm tra chất lượng: {statusLabel(d.qcState)}</p>}
+                    <ReceiptQcBasis requiresQc={d.requiresQc} qcPolicySource={d.qcPolicySource} qcPolicyVersion={d.qcPolicyVersion} qcPolicyEffectiveAtUtc={d.qcPolicyEffectiveAtUtc}/>
+                  </td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>{d.expectedQuantity} {d.operationUnitCode}</td>
                   <td style={{ padding: '10px', border: '1px solid #bdc3c7', textAlign: 'right' }}>
                     {selectedReceipt.status === 'Draft' && (canReceive || canObserve) ? <div style={{display:'grid', gap:'4px'}}>
@@ -642,6 +647,7 @@ const ImportReceipts = () => {
               ))}
             </tbody>
           </table>
+          </div>
           {selectedReceipt.status === 'Draft' && canObserve && <button disabled={workflowId === selectedReceipt.id} onClick={() => void observeReceipt(selectedReceipt.id, selectedReceipt)} style={{marginTop:'12px'}}>{workflowId === selectedReceipt.id ? 'Đang ghi nhận...' : 'Ghi nhận số lượng thực tế'}</button>}
           {canReadDiscrepancy && ['DiscrepancyPending','DiscrepancyRejected'].includes(selectedReceipt.status) && <section aria-labelledby="discrepancy-heading" style={{marginTop:'16px',padding:'12px',border:'1px solid #d4a017'}}>
             <h4 id="discrepancy-heading">Xử lý sai lệch nhận hàng</h4>

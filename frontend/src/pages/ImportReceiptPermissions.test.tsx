@@ -67,6 +67,38 @@ describe('quyền độc lập trên phiếu nhập', () => {
     expect(view.queryByText('Ghi nhận tồn kho')).toBeNull();
   });
 
+  it('căn cứ đã lưu dùng receipt.read, không gọi chính sách và không có mutation', async () => {
+    const saved = { ...receipt, details: [{ id: 1, productName: 'Hàng đã lưu', requiresQc: true,
+      qcPolicyId: 987654, qcPolicyVersion: 3, qcPolicySource: 'Product', qcPolicyEffectiveAtUtc: '2026-09-20T16:00:00Z' }] };
+    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [saved] : saved }) as never);
+    const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
+    fireEvent.click(view.getByText('Chi tiết'));
+    fireEvent.click(await view.findByText('Xem căn cứ kiểm tra chất lượng'));
+    expect(view.getByText('Chính sách theo sản phẩm')).toBeTruthy();
+    expect(view.getByText('Phiên bản 3')).toBeTruthy();
+    expect(view.queryByText(/987654/)).toBeNull();
+    expect(get.mock.calls.every(([url]) => url.startsWith('/api/importreceipts') && !url.includes('discrepanc'))).toBe(true);
+    expect(apiClient.post).not.toHaveBeenCalled(); expect(apiClient.put).not.toHaveBeenCalled();
+    act(() => setCurrentPermissions([]));
+    expect(view.queryByText('Chính sách theo sản phẩm')).toBeNull();
+    expect(view.queryByRole('button', { name: /căn cứ kiểm tra chất lượng/ })).toBeNull();
+  });
+
+  it('căn cứ trong response detail cũ không phục hồi sau revoke → regrant khi trang mounted', async () => {
+    let finish!: (value: unknown) => void;
+    get.mockImplementation(url => url === '/api/importreceipts' ? Promise.resolve({ data: [receipt] }) as never
+      : new Promise(resolve => { finish = resolve; }) as never);
+    const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
+    fireEvent.click(view.getByText('Chi tiết'));
+    act(() => setCurrentPermissions([]));
+    act(() => setCurrentPermissions(['receipt.read']));
+    await view.findByText('QA_RECEIPT');
+    await act(async () => finish({ data: { ...receipt, details: [{ id: 1, requiresQc: true, qcPolicySource: 'Product', qcPolicyVersion: 999 }] } }));
+    expect(view.queryByText('Phiên bản 999')).toBeNull();
+    expect(view.queryByRole('button', { name: /căn cứ kiểm tra chất lượng/ })).toBeNull();
+    expect(view.queryByText(/Chi Tiết Phiếu Nhập:/)).toBeNull();
+  });
+
   it('optional dependency failure không xóa core receipt', async () => {
     setCurrentPermissions(['receipt.read', 'receiving_discrepancy.read', 'reason_code.read']);
     get.mockImplementation(async url => {
