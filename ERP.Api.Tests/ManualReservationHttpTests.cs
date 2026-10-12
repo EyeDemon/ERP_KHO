@@ -31,7 +31,8 @@ public sealed class ManualReservationHttpTests
     [ApprovalSqlServerFact]
     public async Task DeterministicBundlesUnknownRoleAndLegacySnapshots()
     {
-        await using var f=await Fixture.Create();
+        await using var f=await Fixture.Create(diagnoseMigration: true);
+        using var diagnostic = new ERP.TestSupport.SqlFailureDiagnostics(f.Db);
         foreach(var (role, count) in new[]{("Admin",3),("Manager",3),("WarehouseStaff",2),("Viewer",1)})
             Assert.Equal(count,await f.Db.RolePermissions.CountAsync(x=>x.Role.RoleName==role&&x.Permission.Code.StartsWith("reservation.")));
         var unknown=new Role{RoleName="ManualUnknown"};f.Db.Roles.Add(unknown);await f.Db.SaveChangesAsync();

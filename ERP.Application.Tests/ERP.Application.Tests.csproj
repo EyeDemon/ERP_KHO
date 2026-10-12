@@ -3,6 +3,7 @@
   <ItemGroup>
     <Compile Remove="Operational/**/*.cs" />
     <Compile Include="..\ERP.Api.Tests\Helpers\PermissionMigrationBootstrap.cs" Link="Helpers\PermissionMigrationBootstrap.cs" />
+    <Compile Include="..\ERP.Api.Tests\Helpers\SqlFailureDiagnostics.cs" Link="Helpers\SqlFailureDiagnostics.cs" />
   </ItemGroup>
 
   <PropertyGroup>

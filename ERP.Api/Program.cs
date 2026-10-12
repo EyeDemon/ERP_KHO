@@ -169,6 +169,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IStockTransferService, ERP
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockReservationService, ERP.Infrastructure.Services.StockReservationService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingReasonCatalogQuery, ERP.Infrastructure.Queries.ReceivingReasonCatalogQuery>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPutawayService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());

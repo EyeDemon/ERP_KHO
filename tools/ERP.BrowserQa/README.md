@@ -1,5 +1,11 @@
 # Permission browser runner
 
+## Receiving reason catalog read-only successor
+
+After utility-browser UI verification, `node tools/ERP.BrowserQa/reason-catalog-browser.mjs --manifest TestResults/BrowserQA/<RunId>/manifest.json` supplements controlled mounted list/detail/history delays. It reuses this harness and its existing credential/SQL/redaction/capture helpers, not a second harness. Required QA-only `QA_CATALOG` version fixtures are documented in RECEIVING_REASON_CODE_CATALOG_MVP.md. The test-only mounted HTML entry is outside the production bundle. Real apiClient 403 refresh from browser context keeps dialog-inert controls intact; this is browser-origin HTTP coordination, not utility UI. Reports retain failures, original 200 timings and source hashes; no raw bodies/credentials are saved. Guarded Stop remains mandatory after completion.
+
+This Windows-only supplemental runner reads its source HEAD with the fixed Git for Windows executable `C:/Program Files/Git/cmd/git.exe`, rather than searching PATH. Install Git at that protected machine location; a missing executable fails before any runner SQL/credential/browser action. Do not add a PATH fallback to accommodate another installation.
+
 Test-only Playwright Library **1.62.1**, reused from the installed workspace runtime, with its installed PowerShell 7 (`pwsh.exe`) for the existing DPAPI/helper contract. No production dependency, bundle hook, browser security override, rate-limit override or second SQL/credential harness. Set `ERP_KHO_PLAYWRIGHT_MODULE` to the installed module's `index.js`; the runner rejects another version. Node's built-in `node:test` checks runner ownership/redaction guards without starting QA resources.
 
 Read API documentation before running: [Page](https://playwright.dev/docs/api/class-page), [network observation/routing](https://playwright.dev/docs/network), [BrowserContext](https://playwright.dev/docs/api/class-browsercontext). `page.evaluate(fetch)` below means a real HTTP request from the authenticated browser page, not a user UI workflow. Routing may delay the original response in memory; it must not change grants, responses, production endpoints or security configuration.

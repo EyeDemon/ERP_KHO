@@ -251,10 +251,10 @@ public sealed class SqlServerApprovalIdempotencyTests
         private ErpKhoDbContext Context(IRequestMetadata metadata) =>
             new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(ConnectionString).Options, metadata);
 
-        public async Task MigrateAndSeedAsync()
+        public async Task MigrateAndSeedAsync(bool diagnoseMigration = false)
         {
             await using var context = Context();
-            await ERP.TestSupport.PermissionMigrationBootstrap.MigrateAsync(context, _runId, "approval_test_user_1");
+            await ERP.TestSupport.PermissionMigrationBootstrap.MigrateAsync(context, _runId, "approval_test_user_1", diagnoseMigration);
             var role = await context.Roles.SingleAsync(r => r.RoleName == "Manager");
             context.Users.Add(new User { Username = "approval_test_user_2", FullName = "Test Two", PasswordHash = "TEST_HASH_ONLY", Role = role });
             var unit = new Unit { Code = "IDEM_UNIT", Name = "Idempotency unit" };
