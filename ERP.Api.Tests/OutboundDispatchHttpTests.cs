@@ -315,12 +315,12 @@ public sealed class OutboundDispatchHttpTests
             client=factory.CreateClient(new(){BaseAddress=new Uri("https://localhost")});
         }
         public ErpKhoDbContext Context()=>new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(owned.ConnectionString).Options);
-        public static async Task<Fixture> Create(bool immediateLegacy=false)
+        public static async Task<Fixture> Create(bool immediateLegacy=false, bool diagnoseMigration=false)
         {
             var owned=await SqlServerApprovalIdempotencyTests.ApprovalSafetyDatabase.CreateAsync(Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
             try
             {
-                await owned.MigrateAndSeedAsync();var f=new Fixture(owned, immediateLegacy);
+                await owned.MigrateAndSeedAsync(diagnoseMigration);var f=new Fixture(owned, immediateLegacy);
                 var users=await f.Db.Users.OrderBy(x=>x.Id).ToArrayAsync(); f.Maker=users[0].Id;f.Checker=users[1].Id;
                 var staff=new User{Username="dispatch",PasswordHash="QA_NOT_A_LOGIN",RoleId=(await f.Db.Roles.SingleAsync(x=>x.RoleName=="WarehouseStaff")).Id};
                 var viewer=new User{Username="reader",PasswordHash="QA_NOT_A_LOGIN",RoleId=(await f.Db.Roles.SingleAsync(x=>x.RoleName=="Viewer")).Id};
@@ -331,7 +331,11 @@ public sealed class OutboundDispatchHttpTests
                 f.Db.InventoryStocks.Add(new(){ProductId=f.Product,WarehouseId=f.Warehouse,Quantity=60,Location=new(){WarehouseId=f.Warehouse,Code="B",Name="Vị trí B",LocationType=WarehouseLocationType.Storage,IsPickable=true,CreatedBy=f.Maker}});
                 await f.Db.SaveChangesAsync();return f;
             }
-            catch{await owned.DisposeAsync();throw;}
+            catch (Exception original)
+            {
+                await ERP.TestSupport.SqlFailureDiagnostics.CleanupAfterFailureAsync(original, () => owned.DisposeAsync().AsTask());
+                throw;
+            }
         }
         public async Task<HttpResponseMessage> Send(HttpMethod method,string url,int actor,object? body=null,string? key=null)
         {

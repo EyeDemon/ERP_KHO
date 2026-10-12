@@ -3,6 +3,7 @@ using System.Text.Json;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
+using ERP.TestSupport;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -12,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace ERP.Api.Tests;
 
@@ -24,6 +26,7 @@ public sealed partial class InboundHttpIntegrationTests
             Environment.GetEnvironmentVariable(ApprovalSqlServerFactAttribute.ConnectionVariable)!);
         await database.MigrateAndSeedAsync();
         await using var db = Context(database.ConnectionString);
+        using var diagnostic = new SqlFailureDiagnostics(db, includeOtherContexts: true);
         var admin = await db.Users.SingleAsync(u => u.Role.RoleName == "Admin");
         var warehouse = await db.Warehouses.SingleAsync();
         var product = await db.Products.Include(x => x.Unit).SingleAsync();
@@ -39,7 +42,7 @@ public sealed partial class InboundHttpIntegrationTests
         db.AddRange(item, new InventoryStock { ProductId=product.Id, WarehouseId=warehouse.Id, LocationId=source.Id, Quantity=5 });
         await db.SaveChangesAsync();
         var total = await db.InventoryStocks.SumAsync(x => x.Quantity);
-        await using var factory = Factory(database.ConnectionString);
+        await using var factory = Factory(database.ConnectionString, diagnostic);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress=new Uri("https://localhost") });
         await using var blocker = Context(database.ConnectionString);
         await using var transaction = await blocker.Database.BeginTransactionAsync();
@@ -48,23 +51,60 @@ public sealed partial class InboundHttpIntegrationTests
             JsonSerializer.Serialize(new { itemId=item.Id, destinationLocationId=destination.Id, quantity=5, unitCode=product.Unit.Code, rowVersion=Convert.ToBase64String(task.RowVersion) }));
         var deactivate = Send(client, HttpMethod.Put, $"/api/putaway-tasks/locations/{destination.Id}", admin.Id, "Admin", body:
             JsonSerializer.Serialize(new { name=destination.Name, isActive=false, isPickable=true, rowVersion=Convert.ToBase64String(destination.RowVersion) }));
-        await Task.Delay(150);
-        Assert.False(move.IsCompleted); Assert.False(deactivate.IsCompleted);
-        await transaction.CommitAsync();
-        using var moved = await move.WaitAsync(TimeSpan.FromSeconds(20));
-        using var deactivated = await deactivate.WaitAsync(TimeSpan.FromSeconds(20));
-        Assert.True((moved.StatusCode == HttpStatusCode.OK && deactivated.StatusCode == HttpStatusCode.Conflict) ||
-            (deactivated.StatusCode == HttpStatusCode.OK && moved.StatusCode == HttpStatusCode.BadRequest),
-            $"Move={moved.StatusCode}; deactivate={deactivated.StatusCode}");
-        db.ChangeTracker.Clear();
-        var active = await db.WarehouseLocations.Where(x => x.Id == destination.Id).Select(x => x.IsActive).SingleAsync();
-        var quantity = await db.InventoryStocks.Where(x => x.LocationId == destination.Id).SumAsync(x => x.Quantity);
-        Assert.True(active || quantity == 0);
-        Assert.Equal(total, await db.InventoryStocks.SumAsync(x => x.Quantity));
-        var effects = moved.IsSuccessStatusCode ? 1 : 0;
-        Assert.Equal(effects, await db.InventoryLocationMovements.CountAsync());
-        Assert.Equal(effects, await db.AuditLogs.CountAsync(x => x.Action == "PutawayTask.Moved"));
-        Assert.Equal(effects, await db.IdempotencyRecords.CountAsync());
+        try
+        {
+            diagnostic.Write(new { stage = "requests-started" });
+            await Task.Delay(150);
+            Assert.False(move.IsCompleted); Assert.False(deactivate.IsCompleted);
+            await transaction.CommitAsync();
+            using var moved = await move.WaitAsync(TimeSpan.FromSeconds(20));
+            using var deactivated = await deactivate.WaitAsync(TimeSpan.FromSeconds(20));
+            diagnostic.Write(new { stage = "requests-completed", moveStatus = (int)moved.StatusCode, deactivateStatus = (int)deactivated.StatusCode });
+            Assert.True((moved.StatusCode == HttpStatusCode.OK && deactivated.StatusCode == HttpStatusCode.Conflict) ||
+                (deactivated.StatusCode == HttpStatusCode.OK && moved.StatusCode == HttpStatusCode.BadRequest),
+                $"Move={moved.StatusCode}; deactivate={deactivated.StatusCode}");
+            await Postconditions(moved, deactivated);
+        }
+        catch (Exception original)
+        {
+            diagnostic.Failure("race-request-or-assertion", original);
+            // Release the test blocker before observing balances. Never replace the original failure.
+            try { await transaction.DisposeAsync(); await Postconditions(null, null); }
+            catch (Exception observation) { diagnostic.Failure("postconditions-unavailable", observation); }
+            throw;
+        }
+
+        async Task Postconditions(HttpResponseMessage? moved, HttpResponseMessage? deactivated)
+        {
+            db.ChangeTracker.Clear();
+            var active = await db.WarehouseLocations.Where(x => x.Id == destination.Id).Select(x => x.IsActive).SingleAsync();
+            var quantity = await db.InventoryStocks.Where(x => x.LocationId == destination.Id).SumAsync(x => x.Quantity);
+            var sourceQuantity = await db.InventoryStocks.Where(x => x.LocationId == source.Id).SumAsync(x => x.Quantity);
+            var afterTotal = await db.InventoryStocks.SumAsync(x => x.Quantity);
+            var persistedTask = await db.PutawayTasks.AsNoTracking().SingleAsync(x => x.Id == task.Id);
+            var movedQuantity = await db.PutawayTaskItems.Where(x => x.Id == item.Id).Select(x => x.MovedBaseQuantity).SingleAsync();
+            var movements = await db.InventoryLocationMovements.CountAsync();
+            var audits = await db.AuditLogs.CountAsync(x => x.Action == "PutawayTask.Moved");
+            var claims = await db.IdempotencyRecords.CountAsync();
+            var ledger = await db.InventoryTransactions.CountAsync();
+            Console.WriteLine("Location race postconditions: " + JsonSerializer.Serialize(new {
+                moveStatus = moved == null ? (int?)null : (int)moved.StatusCode, deactivateStatus = deactivated == null ? (int?)null : (int)deactivated.StatusCode,
+                active, sourceQuantity, destinationQuantity = quantity, beforeTotal = total, afterTotal,
+                taskStatus = persistedTask.Status.ToString(), movedQuantity, movements, audits, claims, ledger
+            }));
+            if (moved == null || deactivated == null) return;
+            Assert.True(active || quantity == 0);
+            Assert.Equal(total, afterTotal);
+            var effects = moved.IsSuccessStatusCode ? 1 : 0;
+            Assert.Equal(effects, movements);
+            Assert.Equal(effects, audits);
+            Assert.Equal(effects, claims);
+            Assert.Equal(0, ledger);
+            Assert.Equal(effects * 5m, quantity);
+            Assert.Equal((1 - effects) * 5m, sourceQuantity);
+            Assert.Equal(effects * 5m, movedQuantity);
+            Assert.Equal(effects == 1 ? PutawayTaskStatus.Completed : PutawayTaskStatus.Assigned, persistedTask.Status);
+        }
     }
 
     [ApprovalSqlServerFact]
@@ -494,7 +534,7 @@ public sealed partial class InboundHttpIntegrationTests
     }
 
     private static ErpKhoDbContext Context(string connection) => new(new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(connection).Options);
-    private static WebApplicationFactory<Program> Factory(string connection) => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+    private static WebApplicationFactory<Program> Factory(string connection, SqlFailureDiagnostics? diagnostic = null) => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -504,6 +544,8 @@ public sealed partial class InboundHttpIntegrationTests
         }));
         builder.ConfigureTestServices(services =>
         {
+            if (diagnostic != null)
+                services.AddSingleton<ILoggerFactory>(_ => LoggerFactory.Create(logging => logging.AddProvider(new ServerFailureLogger(diagnostic))));
             services.RemoveAll<DbContextOptions<ErpKhoDbContext>>();
             services.AddDbContext<ErpKhoDbContext>(options => options.UseSqlServer(connection));
             services.AddAuthentication(options => { options.DefaultAuthenticateScheme = "OwnedHttpTest"; options.DefaultChallengeScheme = "OwnedHttpTest"; })

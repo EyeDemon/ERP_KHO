@@ -9,7 +9,7 @@ namespace ERP.TestSupport;
 
 public static class PermissionMigrationBootstrap
 {
-    public static async Task MigrateAsync(ErpKhoDbContext db, string runId, string username)
+    public static async Task MigrateAsync(ErpKhoDbContext db, string runId, string username, bool diagnose = false)
     {
         var connection = new SqlConnectionStringBuilder(db.Database.GetConnectionString());
         OwnedDatabasePolicy.EnsureAllowedName(connection.InitialCatalog);
@@ -22,9 +22,13 @@ public static class PermissionMigrationBootstrap
         verify.Parameters.AddWithValue("@database", connection.InitialCatalog);
         if (Convert.ToInt32(await verify.ExecuteScalarAsync()) != 1) throw new InvalidOperationException("QA bootstrap ownership mismatch.");
 
+        using var diagnostic = diagnose ? new SqlFailureDiagnostics(db) : null;
+        diagnostic?.Write(new { stage = "owned-bootstrap", runId });
+        Task Migrate(string stage, Func<Task> action) => diagnostic?.ObserveAsync(stage, action) ?? action();
+
         if (!(await db.Database.GetAppliedMigrationsAsync()).Contains("20260930032852_AddPermissionCodeAuthorization"))
         {
-            await db.GetService<IMigrator>().MigrateAsync("20260927014531_AddInboundPutawayLocationMovement");
+            await Migrate("pre-permission-migrate", () => db.GetService<IMigrator>().MigrateAsync("20260927014531_AddInboundPutawayLocationMovement"));
             // Only this marker-owned fixture creates its legitimate bootstrap identity before the strict production migration.
             await db.Database.ExecuteSqlRawAsync("""
                 INSERT INTO Roles(RoleName,Description)
@@ -37,6 +41,6 @@ public static class PermissionMigrationBootstrap
                 SELECT {username},'QA_FIXTURE_HASH_NOT_A_LOGIN',N'Owned QA bootstrap',Id,1,SYSUTCDATETIME(),0 FROM Roles WHERE RoleName='Admin';
                 """);
         }
-        await db.Database.MigrateAsync();
+        await Migrate("remaining-migrate", () => db.Database.MigrateAsync());
     }
 }
