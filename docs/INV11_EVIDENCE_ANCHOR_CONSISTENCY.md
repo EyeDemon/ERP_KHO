@@ -72,3 +72,20 @@ concurrent stock postings and realistic bucket volumes must still be measured
 for lock waits, timeouts and deadlocks before this feature can be marked Live.
 All evidence remains read-only. No business correction, schema change,
 Notion edit, merge or production promotion is authorized.
+
+## Scoped concurrent writers: unrelated product must stay writable (2026-10-13)
+
+An additional real SQL Server assertion extends the two-connection pause scenario.
+While the INV-11 detail reader holds the serializable stock/Ledger observation
+for a single authorized `(warehouseId, productId)`, a separate writer updates
+a **different product in the same warehouse** and must complete within the
+bounded test cancellation window. An update of the *investigated* product still
+must wait until the read transaction releases its locks. Both resulting physical
+quantities are asserted using new DbContexts, and the test cleans up the two
+isolated product fixtures.
+
+This is a positive/negative lock-scope regression, **not** a throughput test or
+guarantee that SQL Server never chooses broad plans or escalates locks under
+production volumes. If it fails, investigate actual indexes/query plans and
+locking before authorizing release; do not suppress the test or claim a safe
+warehouse-wide posting SLA. Staging concurrency/load UAT remains required.

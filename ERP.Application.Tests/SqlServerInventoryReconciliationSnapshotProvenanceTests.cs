@@ -71,6 +71,10 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
         };
         var unit = new Unit { Code = $"RSU{suffix}", Name = "Snapshot unit", DecimalPlaces = 4 };
         var product = new Product { Code = $"RSP{suffix}", Name = "Snapshot product", Unit = unit };
+        var unrelatedProduct = new Product
+        {
+            Code = $"RSO{suffix}", Name = "Unrelated concurrent product", Unit = unit
+        };
         var warehouse = new Warehouse { Code = $"RSW{suffix}", Name = "Snapshot warehouse" };
         var location = new WarehouseLocation
         {
@@ -80,7 +84,7 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
         };
         await using (var setup = CreateContext())
         {
-            setup.AddRange(user, product, warehouse);
+            setup.AddRange(user, product, unrelatedProduct, warehouse);
             await setup.SaveChangesAsync();
             location.WarehouseId = warehouse.Id;
             location.CreatedBy = user.Id;
@@ -95,6 +99,12 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
                 WarehouseId = warehouse.Id, ProductId = product.Id,
                 LocationId = location.Id,
                 Status = InventoryStatus.Available, Quantity = 10
+            });
+            setup.InventoryStocks.Add(new InventoryStock
+            {
+                WarehouseId = warehouse.Id, ProductId = unrelatedProduct.Id,
+                LocationId = location.Id,
+                Status = InventoryStatus.Available, Quantity = 7
             });
             setup.InventoryTransactions.Add(new InventoryTransaction
             {
@@ -199,9 +209,23 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
             // evidence response could mix two database instants.
             probe.PauseBeforeLedgerAggregate = true;
             var inFlightInvestigation = query.GetInvestigationAsync(warehouse.Id, product.Id);
-            await probe.ReaderPaused.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            await using (var competingWriter = CreateContext())
+            try
             {
+                await probe.ReaderPaused.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+                // A different product at the SAME warehouse must remain
+                // writable. This detects an accidental table/warehouse-wide
+                // reader lock that would serialize otherwise unrelated posts.
+                await using (var unrelatedWriter = CreateContext())
+                {
+                    var unrelatedStock = await unrelatedWriter.InventoryStocks.SingleAsync(x =>
+                        x.WarehouseId == warehouse.Id && x.ProductId == unrelatedProduct.Id);
+                    unrelatedStock.Quantity += 1m;
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    await unrelatedWriter.SaveChangesAsync(timeout.Token);
+                }
+
+                await using var competingWriter = CreateContext();
                 var availableStock = await competingWriter.InventoryStocks.SingleAsync(x =>
                     x.WarehouseId == warehouse.Id && x.ProductId == product.Id &&
                     x.Status == InventoryStatus.Available);
@@ -218,7 +242,7 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
                 }
                 finally
                 {
-                    // Never leave the SQL reader paused after a failed assertion.
+                    // The blocked writer must be released before waiting for it.
                     probe.ResumeReader.TrySetResult(true);
                 }
 
@@ -226,10 +250,20 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
                 stableResponse.AllStatusCurrentQuantity.Should().Be(freshQc.AllStatusCurrentQuantity + 3m);
                 await save.WaitAsync(TimeSpan.FromSeconds(30));
             }
+            finally
+            {
+                // Also release the reader when the unrelated write, setup,
+                // or any earlier assertion unexpectedly fails.
+                probe.ResumeReader.TrySetResult(true);
+            }
             read.Database.CurrentTransaction.Should().BeNull();
             var afterWriter = await query.GetInvestigationAsync(warehouse.Id, product.Id);
             afterWriter.AllStatusCurrentQuantity.Should().Be(freshQc.AllStatusCurrentQuantity + 4m);
             afterWriter.SnapshotComparisonStatus.Should().Be("Mismatch");
+            await using var verifyOther = CreateContext();
+            (await verifyOther.InventoryStocks.SingleAsync(x =>
+                x.WarehouseId == warehouse.Id && x.ProductId == unrelatedProduct.Id))
+                .Quantity.Should().Be(8m);
         }
         finally
         {
@@ -237,10 +271,12 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
             await cleanup.InventoryTransactions.Where(x =>
                 x.ProductId == product.Id && x.WarehouseId == warehouse.Id).ExecuteDeleteAsync();
             await cleanup.InventoryStocks.Where(x =>
-                x.ProductId == product.Id && x.WarehouseId == warehouse.Id).ExecuteDeleteAsync();
+                (x.ProductId == product.Id || x.ProductId == unrelatedProduct.Id) &&
+                x.WarehouseId == warehouse.Id).ExecuteDeleteAsync();
             await cleanup.UserWarehouses.Where(x =>
                 x.UserId == user.Id && x.WarehouseId == warehouse.Id).ExecuteDeleteAsync();
-            await cleanup.Products.Where(x => x.Id == product.Id).ExecuteDeleteAsync();
+            await cleanup.Products.Where(x =>
+                x.Id == product.Id || x.Id == unrelatedProduct.Id).ExecuteDeleteAsync();
             await cleanup.Units.Where(x => x.Id == unit.Id).ExecuteDeleteAsync();
             await cleanup.WarehouseLocations.Where(x => x.Id == location.Id).ExecuteDeleteAsync();
             await cleanup.Warehouses.Where(x => x.Id == warehouse.Id).ExecuteDeleteAsync();
