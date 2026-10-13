@@ -1,0 +1,5 @@
+.receipt-qc-basis { min-width: 16rem; max-width: 24rem; overflow-wrap: anywhere; }
+.receipt-qc-basis button { min-height: 44px; white-space: normal; text-align: left; cursor: pointer; }
+.receipt-qc-basis dt { font-weight: 600; margin-top: 0.75rem; }
+.receipt-qc-basis dd { margin: 0.25rem 0 0; }
+.receipt-qc-basis p { line-height: 1.5; }

@@ -12,18 +12,28 @@ const page=(items= [item])=>({items,totalRecords:items.length,pageIndex:1,pageSi
 
 describe('Approvals page',()=>{
   afterEach(cleanup);
-  it('export capabilities remain independent and approval calls named reserve with a fresh token', async () => {
+  it('export capabilities remain independent and approval calls named reserve with a fresh token', async ({ onTestFinished }) => {
+    const started = performance.now();
+    const stages: { stage: string; elapsedMs: number }[] = [];
+    const mark = (stage: string) => stages.push({ stage, elapsedMs: Math.round(performance.now() - started) });
+    // Timing only: never log request arguments, tokens, payloads or exception objects.
+    onTestFinished(() => console.info('ApprovalTestTiming', JSON.stringify({ elapsedMs: Math.round(performance.now() - started), stages })));
+    mark('setup');
     const outbound={...item,documentType:'ExportReceipt',canApprove:true,canReject:true};
     vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/exportreceipts/7'?{rowVersion:'AAAAAAAAAAE='}:page([outbound])}) as never);
     vi.mocked(apiClient.post).mockResolvedValue({data:{}});
     setCurrentPermissions(['export_receipt.read','export_receipt.approve','approval.reject']);
-    const view=render(<Approvals />);await view.findByText('TRF-7');
+    mark('before-render');
+    const view=render(<Approvals />);mark('render-returned');await view.findByText('TRF-7');mark('queue-visible');
     expect(view.queryByTitle('Từ chối')).toBeNull();
-    fireEvent.click(view.getByTitle('Duyệt'));fireEvent.click(view.getByText('Xác nhận duyệt'));
+    fireEvent.click(view.getByTitle('Duyệt'));mark('confirmation-visible');fireEvent.click(view.getByText('Xác nhận duyệt'));mark('confirmation-clicked');
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledWith('/api/ExportReceipts/7/approve-and-reserve',{rowVersion:'AAAAAAAAAAE='},{headers:expect.objectContaining({'Idempotency-Key':expect.any(String)})}));
+    mark('reserve-post-observed');
     act(()=>setCurrentPermissions(['export_receipt.read','approval.reject','export_receipt.cancel']));
+    mark('permissions-changed');
     await waitFor(()=>expect(view.getByTitle('Từ chối')).toBeTruthy());
     expect(view.queryByTitle('Duyệt')).toBeNull();
+    mark('assertions-complete');
   });
   it('QC approval requires both grants even when a previously loaded server capability says yes', async () => {
     const qc = { ...item, documentType: 'ImportReceipt', pendingState: 'QcCompleted', canApprove: true, canReject: false };
