@@ -45,3 +45,30 @@ InMemory/SQL Server test in-place stock changes; API/Vitest verify propagation.
 escape an aggregate hash. Inter-statement races persist. This is NOT a row-level
 or atomic Ledger/Balance snapshot; no repair permitted, staging still pending.
 Notion and Production unchanged.
+
+## Real SQL Server concurrent writer versus scoped reader (2026-10-11)
+
+The detailed `GetInvestigationAsync` path now opens one SQL Server
+`SERIALIZABLE` read transaction after input validation and before warehouse
+access checks. A command interceptor verifies all reader commands use that
+isolation level, with disposal verified after the response. The broad list is
+unchanged (no global serializable transaction), and all stock updates remain
+owned by the inventory posting engine.
+
+A dedicated *two-connection* SQL Server regression pauses the authorized
+detail reader **after the all-status stock aggregation, before the Ledger
+GROUP BY**, then attempts a stock update on the same warehouse/product from
+another DbContext. The update must remain blocked while the detail response
+is assembled, then complete when the reader transaction is released. The
+first response must retain the pre-update Balance quantities; a fresh second
+request must see the updated quantities. This validates inter-statement
+isolation on an actual SQL Server, not just a mocked transaction property.
+
+**Operational boundary:** the test validates ordering and lock release for
+one controlled concurrency case; it does not establish latency, throughput,
+lock-escalation resistance, deadlock freedom, or transactionally immutable
+cross-request evidence. A production-like, authenticated staging backend with
+concurrent stock postings and realistic bucket volumes must still be measured
+for lock waits, timeouts and deadlocks before this feature can be marked Live.
+All evidence remains read-only. No business correction, schema change,
+Notion edit, merge or production promotion is authorized.

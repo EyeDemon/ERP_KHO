@@ -27,13 +27,29 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
     private sealed class SqlIsolationProbe : DbCommandInterceptor
     {
         public List<IsolationLevel?> Observed { get; } = [];
+        public bool PauseBeforeLedgerAggregate { get; set; }
+        public TaskCompletionSource<bool> ReaderPaused { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> ResumeReader { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
             DbCommand command, CommandEventData eventData,
             InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
             Observed.Add(command.Transaction?.IsolationLevel);
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+            // This command follows materialization of the all-status stock
+            // GROUP BY. Pausing here holds the prior SQL SERIALIZABLE stock
+            // read locks while a second DbContext attempts a physical UPDATE.
+            if (PauseBeforeLedgerAggregate &&
+                command.CommandText.Contains("InventoryTransactions", StringComparison.OrdinalIgnoreCase) &&
+                command.CommandText.Contains("GROUP BY", StringComparison.OrdinalIgnoreCase))
+            {
+                PauseBeforeLedgerAggregate = false;
+                ReaderPaused.TrySetResult(true);
+                await ResumeReader.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+            return await base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 
@@ -176,6 +192,44 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
             pinnedEdit.AllStatusBucketHasRowsAfterAnchor.Should().BeFalse();
             pinnedEdit.SnapshotComparisonStatus.Should().Be("Indeterminate");
             pinnedEdit.SnapshotComparisonDifference.Should().BeNull();
+
+            // A real second SQL connection must not be able to change a stock
+            // bucket between the detail's materialized Balance GROUP BY and
+            // its subsequent Ledger GROUP BY. Otherwise this single HTTP
+            // evidence response could mix two database instants.
+            probe.PauseBeforeLedgerAggregate = true;
+            var inFlightInvestigation = query.GetInvestigationAsync(warehouse.Id, product.Id);
+            await probe.ReaderPaused.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await using (var competingWriter = CreateContext())
+            {
+                var availableStock = await competingWriter.InventoryStocks.SingleAsync(x =>
+                    x.WarehouseId == warehouse.Id && x.ProductId == product.Id &&
+                    x.Status == InventoryStatus.Available);
+                availableStock.Quantity += 1m;
+                var save = competingWriter.SaveChangesAsync();
+                try
+                {
+                    // The update needs an exclusive lock on the same stock row.
+                    // SQL SERIALIZABLE retains the reader's shared lock until
+                    // its transaction commits, so this write must not finish.
+                    var earliest = await Task.WhenAny(save, Task.Delay(500));
+                    earliest.Should().NotBe(save,
+                        "a writer must not change physical stock during a scoped reconciliation read");
+                }
+                finally
+                {
+                    // Never leave the SQL reader paused after a failed assertion.
+                    probe.ResumeReader.TrySetResult(true);
+                }
+
+                var stableResponse = await inFlightInvestigation.WaitAsync(TimeSpan.FromSeconds(30));
+                stableResponse.AllStatusCurrentQuantity.Should().Be(freshQc.AllStatusCurrentQuantity + 3m);
+                await save.WaitAsync(TimeSpan.FromSeconds(30));
+            }
+            read.Database.CurrentTransaction.Should().BeNull();
+            var afterWriter = await query.GetInvestigationAsync(warehouse.Id, product.Id);
+            afterWriter.AllStatusCurrentQuantity.Should().Be(freshQc.AllStatusCurrentQuantity + 4m);
+            afterWriter.SnapshotComparisonStatus.Should().Be("Mismatch");
         }
         finally
         {
