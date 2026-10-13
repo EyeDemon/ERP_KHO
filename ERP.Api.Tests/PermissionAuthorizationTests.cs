@@ -19,6 +19,9 @@ public sealed class PermissionAuthorizationTests
     [InlineData(AppPermissions.BarcodeManage, AppPermissions.ProductUpdate)]
     [InlineData(AppPermissions.LocationManage, AppPermissions.WarehouseManage)]
     [InlineData(AppPermissions.WarehouseManage, AppPermissions.LocationManage)]
+    [InlineData(AppPermissions.InventoryLedgerRead, AppPermissions.InventoryReversalCreate)]
+    [InlineData(AppPermissions.InventoryReversalCreate, AppPermissions.InventoryLedgerRead)]
+    [InlineData(AppPermissions.InventoryTraceabilityRead, AppPermissions.InventoryLedgerRead)]
     [InlineData(AppPermissions.ReceiptCancel, AppPermissions.ApprovalReject)]
     [InlineData(AppPermissions.ApprovalReject, AppPermissions.ReceiptRead)]
     public async Task GrantDoesNotAliasAnotherCapability(string granted, string required)

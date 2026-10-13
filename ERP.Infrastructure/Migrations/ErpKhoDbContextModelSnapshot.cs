@@ -1300,6 +1300,10 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
                     b.Property<int?>("ReversalOfTransactionId")
                         .HasColumnType("int");
 
@@ -3424,6 +3428,12 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("DestinationWarehouseId")
                         .HasColumnType("int");
 
+                    b.Property<int>("DraftRevision")
+                        .ValueGeneratedOnAdd()
+                        .IsConcurrencyToken()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<DateTime?>("DispatchedAt")
                         .HasColumnType("datetime2");
 
@@ -3433,6 +3443,17 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("ReverseOfTransferId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReverseReasonCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("ReverseReason")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
 
                     b.Property<DateTime?>("ReceivedAt")
                         .HasColumnType("datetime2");
@@ -3467,6 +3488,11 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("DispatchedBy");
 
                     b.HasIndex("ReceivedBy");
+
+                    b.HasIndex("ReverseOfTransferId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_StockTransfers_ReverseOfTransferId")
+                        .HasFilter("[ReverseOfTransferId] IS NOT NULL");
 
                     b.HasIndex("SourceWarehouseId");
 
@@ -5671,6 +5697,11 @@ namespace ERP.Infrastructure.Migrations
                     b.HasOne("ERP.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("ReceivedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.StockTransfer", null)
+                        .WithMany()
+                        .HasForeignKey("ReverseOfTransferId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Entities.Warehouse", "SourceWarehouse")

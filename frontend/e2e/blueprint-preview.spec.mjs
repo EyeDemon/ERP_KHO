@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const base = (process.env.PLAYWRIGHT_BASE_URL
   ?? 'https://erp-wms-blueprint-demo-git-part-syste-b0b8f5-bayuuandree99-8132.vercel.app').replace(/\/$/, '');
 
-test('PR33: Real dashboard, Blueprint routing, and inventory fixture disclosures', async ({ page }) => {
+test('ERP/WMS: Real dashboard, Blueprint routing, and inventory fixture disclosures', async ({ page }) => {
   const mutations = [];
   const runtimeErrors = [];
   page.on('request', request => {
@@ -30,7 +30,7 @@ test('PR33: Real dashboard, Blueprint routing, and inventory fixture disclosures
   expect(runtimeErrors, 'Preview must not throw unhandled runtime errors').toEqual([]);
 });
 
-test('PR33: reconciliation layout, table scroll and usable mobile nav', async ({ page }) => {
+test('ERP/WMS: reconciliation layout, table scroll and usable mobile nav', async ({ page }) => {
   const mutations = [];
   const runtimeErrors = [];
   page.on('request', request => {
@@ -43,7 +43,7 @@ test('PR33: reconciliation layout, table scroll and usable mobile nav', async ({
     await page.goto(base + '/inventory-reconciliation', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /Đối chiếu tồn kho & ledger/, level: 1 })).toBeVisible();
     await expect(page.getByRole('note').filter({ hasText: /không phải kết quả từ SQL Server thật/ })).toBeVisible();
-    await expect(page.getByText('Độ lệch tuyệt đối')).toBeVisible();
+    await expect(page.getByText(/Độ lệch (tuyệt đối|đã xác định)/)).toBeVisible();
     await expect(page.locator('.reconciliation-table')).toContainText('SKU-1008');
     await expect(page.locator('.reconciliation-table')).toContainText('SKU-2012');
 
@@ -80,7 +80,7 @@ test('PR33: reconciliation layout, table scroll and usable mobile nav', async ({
       await page.locator('.sidebar-mobile-close').click();
       await expect(page.locator('.mobile-nav-toggle')).toHaveAttribute('aria-expanded', 'false');
     }
-    console.log('PR33 viewport metrics', JSON.stringify(m));
+    console.log('ERP/WMS viewport metrics', JSON.stringify(m));
   }
 
   expect(mutations, 'Read-only preview must not perform mutation requests').toEqual([]);

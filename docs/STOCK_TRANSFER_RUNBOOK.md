@@ -1,48 +1,52 @@
-# Stock Transfer Runbook
+# Sổ tay điều chuyển kho — đối soát số lượng và hoàn trả
 
-## State machine
+## Trạng thái giao dịch
 
 ```text
-Draft -> Approved -> InTransit -> Received -> Completed
-Draft -> Cancelled
-Approved -> Cancelled
+Nháp → Đã duyệt → Đang vận chuyển → Đã nhận → Hoàn tất
+Nháp/Đã duyệt → Hủy
+Đang vận chuyển → Hoàn trả kho nguồn
+Đã nhận/Hoàn tất → Lập phiếu điều chuyển ngược (Nháp mới)
 ```
 
-- Only `Draft` can be edited.
-- `Approved` reserves no stock. Dispatch atomically decreases source stock and changes the transfer to `InTransit` in one transaction.
-- Receive atomically increases destination stock by `ReceivedQuantity` only and changes the transfer to `Received` in one transaction.
-- Transfers cannot be cancelled after dispatch. Reversing an in-transit transfer requires a future explicit reversal workflow; stock is never silently restored.
-- Completing a `Received` transfer confirms its recorded discrepancy.
+- Phiếu đã xuất kho không thể bị hủy như phiếu nháp. Hoàn trả khi **chưa nhận** phải đi qua lệnh `return`, tạo giao dịch hoàn kho nguồn và liên kết với chứng từ xuất gốc, không xóa sổ cái.
+- Khi **đã nhận hoặc hoàn tất**, việc đưa hàng về kho nguồn phải tạo **phiếu điều chuyển ngược mới**, rồi duyệt, xuất và nhận theo quy trình thường.
+- Các thao tác ghi sử dụng Idempotency-Key; backend kiểm tra quyền kho và trạng thái authoritative.
+- **Chỉnh sửa phiếu Nháp** trực tiếp tại màn chi tiết: sửa kho, số lượng, ghi chú qua `PUT /api/stock-transfers/{id}`, cùng khóa idempotency gắn với mã phiếu và nội dung payload; biểu mẫu cho phép sửa trước khi duyệt và tải lại chi tiết sau lưu.
+- **Tạo phiếu và mọi chuyển trạng thái phải ghi cùng audit một cách nguyên tử.** `Create`, `Approve`, `Complete`, `Cancel` tự mở giao dịch SQL ở `READ COMMITTED` nếu chưa có giao dịch bên ngoài; nếu có giao dịch bao ngoài do `IdempotentCommandFilter` sở hữu thì tham gia giao dịch đó, không tự commit. Lỗi lưu audit phải rollback cả chứng từ/trạng thái, không được ghi thành công nửa chừng.
+- `Approve`, `Complete`, `Cancel` đọc trạng thái chứng từ với khóa `UPDLOCK, HOLDLOCK` khi giao dịch đang mở, xác thực lại quyền kho trước CAS trạng thái; không phê duyệt trên phiên bản chứng từ đã bị người khác sửa.
+- SQL integration sử dụng `SaveChangesInterceptor` chủ động chặn ghi audit của `Created`, `Approved`, `Cancelled`, `Completed`: xác minh không có trạng thái/chứng từ mồ côi, không ghi sai tồn kho/sổ cái, và thực hiện lại được khi hết lỗi.
+- Backend giữ khóa `UPDLOCK, HOLDLOCK` của phiếu trong giao dịch `Serializable` trước khi xác thực `Draft` và thay thế các dòng, không để phê duyệt đồng thời chen vào giữa. Các lệnh duyệt, hoàn tất và hủy kiểm tra lại cặp kho gốc/đích trong điều kiện cập nhật SQL để không xác nhận chứng từ đã bị đổi kho sau khi phân quyền.
+- Khi cập nhật trả xung đột `409`, giao diện giữ nội dung để người vận hành kiểm tra, **khóa nút lưu để không gửi lại dữ liệu đã lỗi thời**, đồng thời cung cấp **Tải lại phiên bản mới**. Nếu phiếu vẫn Nháp thì nạp lại nội dung hiện hành; nếu đã duyệt thì đóng trình sửa và mở chi tiết chỉ đọc. Không dùng lại dữ liệu cũ để tự động ghi đè.
+- Từ chối phiếu đã duyệt/xuất hoặc phiếu điều chuyển ngược; dữ liệu sai phải rollback đầy đủ. Dữ liệu lịch sử posted không được sửa.
 
-## In-transit and discrepancy
+## Đối soát khi nhận
 
-In-transit quantity is derived from documents as `DispatchedQuantity - ReceivedQuantity`; no separate balance table exists. Received, missing and damaged quantities are non-negative and their sum cannot exceed dispatched quantity. Missing and damaged stock is not added to destination availability. Excess receipt is not accepted by this version and requires a future discrepancy approval workflow.
+Với **từng sản phẩm** đã xuất, trước khi chuyển sang `Received` phải có:
 
-## Authorization
-
-- Admin can access all warehouses.
-- Manager can create, approve, dispatch, receive, complete and cancel within warehouse scope.
-- WarehouseStaff can create, dispatch, receive, complete and cancel within warehouse scope.
-- Viewer is read-only.
-- Source access is required for create, approve, dispatch and cancel. Destination access is required for receive and complete. Read queries are scoped to transfers where either warehouse is accessible; both rows and total counts are filtered in SQL.
-- `StockTransfer:RequireDifferentApprover` enables separation of creator and approver without a code change.
-
-## Migration
-
-Apply in an approved non-production environment:
-
-```powershell
-dotnet ef database update --project ERP.Infrastructure --startup-project ERP.Api
+```text
+Thực nhận + Thiếu + Hỏng = Đã xuất
 ```
 
-Rollback only this module:
+- Các phần không âm và có tối đa **4 chữ số thập phân**; không được vượt số đã xuất.
+- Thiếu hoặc hỏng phải được khai báo rõ, không biến mất thành chênh lệch ngầm khi đóng phiếu.
+- Không hỗ trợ nhận dở dang rồi chuyển phiếu sang trạng thái `Received`. Yêu cầu tương lai về partial receiving phải có trạng thái, ledger và reconciliation riêng.
+- Chỉ cộng `Thực nhận` vào tồn kho đích; `Thiếu` và `Hỏng` nằm trên chi tiết chứng từ để điều tra. Nếu số liệu không hợp lệ, API từ chối trước bước chuyển trạng thái và ghi tồn/sổ cái.
+- Nhận nhiều lần hoặc đồng thời bị ràng buộc chuyển trạng thái có điều kiện. Giao diện đối soát trước khi xác nhận; backend luôn là nguồn quyết định cuối cùng.
+- Khi nhiều phiếu khác nhau cùng nhận vào một bucket tồn kho đích (sản phẩm + kho + vị trí `LEGACY` + trạng thái), hệ thống giữ `sp_getapplock` độc quyền theo **bucket**, `LockOwner=Transaction` trước khi `MERGE`. Lệnh nhận/hoàn trả mở transaction ở `READ COMMITTED` để giải phóng khóa đọc phụ sau mỗi câu lệnh; `UPDLOCK/HOLDLOCK` trên chứng từ và khóa bucket riêng vẫn giữ đến commit/rollback. Cách này tránh chu trình khóa chuyển đổi do các lần đọc `SERIALIZABLE` trước khi xin application lock; không khóa nguyên kho. Nếu khóa không lấy được, rollback và báo lỗi, không coi như thành công. Các luồng vẫn phải tuân thủ khóa bảo vệ sổ cái và idempotency.
+- `MERGE` nhận điều chuyển **chỉ** chọn bucket chưa gắn lô/serial (`LotId IS NULL`, `SerialId IS NULL`). Một lô khác có cùng kho, vị trí và trạng thái phải giữ nguyên số lượng; khóa bucket không được dùng để bỏ qua ranh giới truy vết lô/serial.
+- Kiểm thử thêm hai phiếu hoàn trả đồng thời về cùng ô tồn nguồn, xác minh số dư, liên kết đảo và audit đều duy nhất, đúng mỗi chứng từ.
+- Bài test `FourIndependentReceiptsIntoMissingCanonicalBucketAreSerializedWithoutDuplicateLedger` tạo bốn phiếu độc lập nhận đồng thời vào bucket không có sẵn, đối chiếu tồn đầu/cuối, đúng một bản ghi bucket, đúng bốn `TransferIn` và bốn audit nhận. Bài test cũ với hai phiếu vẫn giữ nguyên.
 
-```powershell
-dotnet ef database update 20260824114540_AddRefreshTokenSessions --project ERP.Infrastructure --startup-project ERP.Api
-```
+## Phân quyền và dữ liệu
 
-Reapply with the first command. Migration `20260824121209_AddStockTransfers` creates `StockTransfers`, `StockTransferDetails`, constraints and indexes and adds the filtered idempotency index for transfer inventory transactions. It does not modify existing business rows. Do not apply directly to production without the normal backup and deployment approval process.
+- Quyền tạo/duyệt/xuất/nhận theo vai trò và phạm vi kho; xem phiếu khi có quyền trên ít nhất một đầu kho, nhưng ghi phải thỏa quyền tương ứng.
+- Hoàn trả/điều chuyển ngược yêu cầu `inventory_reversal.create` và quyền kho liên quan.
+- SQL giữ nguyên ledger gốc, liên kết đảo khi áp dụng và audit. Không cho phép sửa/xóa lịch sử posted.
+- Môi trường Vercel Blueprint chỉ là bản demo frontend (read-only), **không** chứng minh backend SQL staging/production đã triển khai.
 
-## Deferred scope
+## Kiểm thử & nghiệm thu
 
-Company/Branch transfers, damaged-goods warehouses, excess-receipt approval, transfer reversal after dispatch and a dedicated transfer Excel export are not included.
+- `SqlServerStockTransferTests`: thiếu phân bổ, vượt, số âm, quá 4 số thập phân và decimal quá lớn đều bị từ chối; xác minh không ghi thêm hàng tồn, ledger, audit hoặc chuyển phiếu sang Received; sau đó nhận đủ số lượng với khai báo thực nhận/thiếu/hỏng được phép.
+- `StockTransferCommandSafety.test.tsx`: kiểm tra trước khi gửi API, khóa idempotency gắn với payload, chỉ gửi khi tổng từng dòng khớp số đã xuất.
+- Khi thay đổi module: chỉ CI ở mốc batch đáng kể, xác minh bằng chứng SQL/API/Frontend theo đúng HEAD, và thực hiện QA trình duyệt + staging backend/SQL trước khi nghiệm thu production.

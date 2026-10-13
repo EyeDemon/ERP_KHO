@@ -1,9 +1,21 @@
 using ERP.Application.DTOs;
+using ERP.Application.Common;
 
 namespace ERP.Application.Interfaces;
 
 public interface IInventoryReversalService
 {
+    Task<IReadOnlyList<InventoryReversalReasonDto>> GetReversalReasonsAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<InventoryReversalWarehouseDto>> GetReversalWarehousesAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<PagedResult<InventoryReversalCandidateDto>> GetCandidatesAsync(
+        int? warehouseId = null, int page = 1, int pageSize = 20,
+        int? transactionId = null, bool? isReversed = null,
+        string? productCode = null, CancellationToken cancellationToken = default);
+
     Task<InventoryReversalResultDto> ReverseAsync(
         CreateInventoryReversalDto request,
         CancellationToken cancellationToken = default);
@@ -11,6 +23,9 @@ public interface IInventoryReversalService
 
 public interface IInventoryTraceabilityQueryService
 {
+    Task<IReadOnlyList<InventoryReversalWarehouseDto>> GetAccessibleWarehousesAsync(
+        CancellationToken cancellationToken = default);
+
     Task<InventoryTraceabilityResultDto> TraceAsync(
         int? warehouseId = null,
         int? productId = null,
@@ -19,5 +34,8 @@ public interface IInventoryTraceabilityQueryService
         string? referenceType = null,
         int? referenceId = null,
         int limit = 200,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        int bucketOffset = 0,
+        int eventOffset = 0,
+        int? eventAnchorId = null);
 }

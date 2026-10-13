@@ -13,6 +13,7 @@ public class InventoryTransactionConfiguration : IEntityTypeConfiguration<Invent
         builder.Property(x => x.Quantity).HasPrecision(18, 4);
         builder.Property(x => x.ReferenceType).HasMaxLength(50);
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.ReasonCode).HasMaxLength(40);
         builder.Property(x => x.InventoryStatus).HasConversion<int>();
         builder.Property(x => x.FromInventoryStatus).HasConversion<int?>();
         builder.Property(x => x.ToInventoryStatus).HasConversion<int?>();

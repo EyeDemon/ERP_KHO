@@ -1,5 +1,9 @@
 # ERP/WMS Blueprint Coverage Audit — 2026-10-02
 
+## INV-11 reservation integrity (PR #31 Draft, 2026-10-11)
+
+Read-only SQL grouping detects buckets where ReservedQuantity is negative or exceeds Quantity. Such pairs are Indeterminate, not Match, with null expected/difference; no Balance repair. Spec 82 is read-only. This is not an atomic snapshot or authenticated remote staging.
+
 ## Purpose
 
 Audit the current Complete UI Blueprint registry against the canonical Notion technical documentation, Screen Matrix 229, UX Governance 282, Capability Map 210, Roadmap 211, Gap Register 212, Master Index 214 and Final Coverage Audit 275.

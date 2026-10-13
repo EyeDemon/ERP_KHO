@@ -173,6 +173,151 @@ async function main(manifestPath) {
     }
     password = undefined;
     const admin = actors.admin, manager = actors.manager, viewer = actors.viewer, reader = actors.reader;
+
+    await run('INV-11 interactive reconciliation and unauthorized route', 'Chromium UI interactions + real API + isolated SQL', async () => {
+      const ownedStock = await sql(`
+        SELECT TOP(1) ProductId AS productId
+        FROM InventoryStocks WHERE WarehouseId=@warehouse AND Quantity > 0
+        ORDER BY Id FOR JSON PATH, WITHOUT_ARRAY_WRAPPER`,
+        { warehouse: fixture.warehouse });
+      assert(ownedStock?.productId > 0, 'A real posted stock record exists in the owned fixture');
+      const productResult = await fetchFromBrowser(admin, '/api/products');
+      expectStatus(productResult, 200);
+      const product = productResult.data.find(p => p.id === ownedStock.productId);
+      assert(product?.code, 'Posted receipt product is visible through the real authorized API');
+
+      const warehousesResult = await fetchFromBrowser(admin, '/api/InventoryReconciliation/warehouses');
+      expectStatus(warehousesResult, 200);
+      assert(warehousesResult.data.some(w => w.id === fixture.warehouse), 'Authorized warehouse is selectable');
+
+      const page = admin.page;
+      const browserErrors = [];
+      const observeError = err => browserErrors.push(err.message);
+      page.on('pageerror', observeError);
+      try {
+        await page.goto(manifest.FrontendUrl + '/inventory-reconciliation');
+        await page.getByRole('heading', { name: 'Đối chiếu tồn kho & ledger' }).waitFor();
+
+        const field = page.getByLabel('ID sản phẩm');
+        await field.fill('1.5');
+        await page.getByRole('button', { name: 'Đối chiếu', exact: true }).click();
+        await page.getByRole('alert').filter({ hasText: 'ID sản phẩm phải là số nguyên dương' }).waitFor();
+        assert.equal(await field.evaluate(el => el === document.activeElement), true,
+          'Invalid product ID restores focus and does not submit');
+        await field.fill(String(product.id));
+        await page.getByRole('button', { name: 'Đối chiếu', exact: true }).click();
+
+        const row = page.getByRole('row').filter({ hasText: product.code }).first();
+        await row.waitFor();
+        const trigger = row.getByRole('button', { name: /Xem bằng chứng/ });
+        const detailResponse = page.waitForResponse(r =>
+          /\/api\/InventoryReconciliation\/investigation\?/i.test(r.url()) &&
+          r.request().method() === 'GET');
+        await trigger.click();
+        const detail = await detailResponse;
+        assert.equal(detail.status(), 200, 'Real authorized read-only investigation succeeds');
+        const payload = await detail.json();
+        assert.equal(payload.productId, product.id, 'Product scope matches UI selection');
+        assert.equal(payload.warehouseId, fixture.warehouse, 'Warehouse scope matches owned fixture');
+        assert.equal(payload.isReadOnly, true, 'Investigation evidence is read-only');
+        assert.equal(payload.statusBreakdown.length, 8, 'All eight statuses returned');
+
+        const table = page.getByRole('table', { name: 'Đối chiếu từng trạng thái tồn kho theo Ledger' });
+        await table.waitFor();
+        assert.equal(await table.locator('tbody tr').count(), 8, 'Eight rendered status rows');
+        assert.match(await table.innerText(), /Khả dụng/);
+        assert.match(await table.innerText(), /Chờ kiểm định/);
+        assert.equal(await page.getByRole('button', { name: 'Sự kiện mới hơn' }).isDisabled(), true);
+
+        // Exercise BOTH new read-only status scopes against real ASP.NET/SQL
+        // under the authenticated Chromium session. They are independent and
+        // must preserve the same warehouse/product Ledger high-water ID.
+        const holdEventsResponse = page.waitForResponse(r =>
+          /\/api\/InventoryReconciliation\/investigation\?/i.test(r.url()) &&
+          new URL(r.url()).searchParams.get('eventStatus') === 'QcHold' &&
+          r.request().method() === 'GET');
+        await page.getByLabel('Trạng thái Ledger cần xem').selectOption('QcHold');
+        const holdEvents = await holdEventsResponse;
+        assert.equal(holdEvents.status(), 200, 'QC_HOLD history remains authorized');
+        const holdHistory = await holdEvents.json();
+        assert.equal(holdHistory.eventStatus, 'QcHold', 'History query is status-scoped');
+        assert.equal(holdHistory.bucketStatus, 'Available', 'Ledger selector does not change bucket status');
+        assert.equal(holdHistory.eventAnchorId, payload.eventAnchorId, 'Immutable Ledger anchor is preserved');
+        await page.getByRole('heading', { name: /Sự kiện Ledger Chờ kiểm định/ }).waitFor();
+
+        const holdBucketsResponse = page.waitForResponse(r =>
+          /\/api\/InventoryReconciliation\/investigation\?/i.test(r.url()) &&
+          new URL(r.url()).searchParams.get('bucketStatus') === 'QcHold' &&
+          new URL(r.url()).searchParams.get('eventStatus') === 'QcHold' &&
+          r.request().method() === 'GET');
+        await page.getByLabel('Trạng thái bucket cần xem').selectOption('QcHold');
+        const holdBuckets = await holdBucketsResponse;
+        assert.equal(holdBuckets.status(), 200, 'QC_HOLD bucket query remains authorized');
+        const holdSnapshot = await holdBuckets.json();
+        assert.equal(holdSnapshot.bucketStatus, 'QcHold', 'Bucket scope matches selection');
+        assert.equal(holdSnapshot.eventStatus, 'QcHold', 'Bucket selector does not change Ledger status');
+        assert.equal(holdSnapshot.eventAnchorId, payload.eventAnchorId, 'Bucket switch keeps Ledger anchor');
+        await page.getByRole('heading', { name: /Bucket tồn Chờ kiểm định hiện tại/ }).waitFor();
+        const restoreEvents = page.waitForResponse(r =>
+          /\/api\/InventoryReconciliation\/investigation\?/i.test(r.url()) &&
+          new URL(r.url()).searchParams.get('bucketStatus') === 'QcHold' &&
+          !new URL(r.url()).searchParams.has('eventStatus'));
+        await page.getByLabel('Trạng thái Ledger cần xem').selectOption('Available');
+        assert.equal((await restoreEvents).status(), 200, 'Can return to AVAILABLE Ledger');
+        await page.getByRole('heading', { name: /Sự kiện Ledger Khả dụng/ }).waitFor();
+
+        await page.getByRole('button', { name: 'Đóng hồ sơ' }).click();
+        assert.equal(await table.count(), 0, 'Close removes private evidence');
+        assert.equal(await trigger.evaluate(el => el === document.activeElement), true,
+          'Focus returns to evidence trigger');
+
+        // A wide evidence table is allowed to scroll *inside its container*.
+        // It must not force the entire 390px mobile document to overflow.
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.waitForTimeout(120);
+        const mobile = await page.evaluate(() => ({
+          width: document.documentElement.clientWidth,
+          scroll: document.documentElement.scrollWidth,
+          body: document.body.scrollWidth,
+          content: document.querySelector('main.app-content')?.getBoundingClientRect().width
+        }));
+        assert.equal(mobile.width, 390, 'Chromium mobile CSS viewport remains 390px');
+        assert(mobile.scroll <= mobile.width + 1,
+          'No document-wide horizontal overflow on mobile');
+        assert(mobile.body <= mobile.width + 1,
+          'No body-wide horizontal overflow on mobile');
+        await page.setViewportSize({ width: 1280, height: 800 });
+
+        // A receipt-only identity cannot open the reconciliation route or
+        // download its warehouse/ledger evidence after permission denial.
+        await reader.page.goto(manifest.FrontendUrl + '/inventory-reconciliation');
+        await reader.page.getByRole('heading', { name: 'Không có quyền truy cập' }).waitFor();
+        assert.equal(await reader.page.getByRole('heading', { name: 'Đối chiếu tồn kho & ledger' }).count(), 0);
+        const forbidden = await fetchFromBrowser(reader,
+          `/api/InventoryReconciliation/investigation?warehouseId=${fixture.warehouse}&productId=${product.id}`);
+        expectStatus(forbidden, 403);
+        assert.equal(browserErrors.length, 0, 'No browser page exceptions during interactive QA');
+        return {
+          assertions: [
+            'real Chromium login and navigation',
+            'invalid ID validation and focus',
+            'authorized warehouse/product evidence via real API',
+            'eight rendered inventory status rows',
+            'independent authorized QC_HOLD Ledger/bucket selections preserve event anchor',
+            'read-only data and close/focus restore',
+            'receipt-only role blocked by UI route and API HTTP 403',
+            'no page exceptions',
+            '390px viewport has no document-wide horizontal overflow'
+          ],
+          actor: 'Admin and receipt-only reader on isolated SQL Server',
+          statuses: [200, 403],
+          browserInteractions: 17
+        };
+      } finally {
+        page.off('pageerror', observeError);
+      }
+    });
+
     await run('Conditional QC partial/final/approval/replay', 'UI workflow + browser HTTP + SQL postconditions', async () => {
       const qc = await sql(`
         SET NOCOUNT ON; BEGIN TRAN;

@@ -99,7 +99,7 @@ const AppRoutes = () => {
         <Route path="inventory-movements" element={<PermissionRoute permission="inventory.read"><InventoryMovements /></PermissionRoute>} />
         <Route path="inventory-reversals" element={<PermissionRoute permission="inventory_ledger.read"><InventoryReversals /></PermissionRoute>} />
         <Route path="inventory-traceability" element={<PermissionRoute permission="inventory_traceability.read"><InventoryTraceability /></PermissionRoute>} />
-        <Route path="inventory-reconciliation" element={<InventoryReconciliation />} />
+        <Route path="inventory-reconciliation" element={<PermissionRoute permission="inventory_ledger.read"><InventoryReconciliation /></PermissionRoute>} />
         <Route path="stocktakes" element={<StocktakeRoute><Stocktakes /></StocktakeRoute>} />
         <Route path="stock-transfers" element={<StockTransfers />} />
         <Route path="stock-reservations" element={<StockReservations />} />

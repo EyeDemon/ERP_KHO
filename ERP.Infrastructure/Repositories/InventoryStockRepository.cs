@@ -294,6 +294,27 @@ namespace ERP.Infrastructure.Repositories
             bool releaseOnly = false,
             int? excludedReservationId = null)
         {
+            // Serialize allocations of the same product/warehouse before
+            // reading stock candidates. Document locks alone cannot protect
+            // two independent transfers spending one source stock bucket.
+            if (_context.Database.IsSqlServer() && _context.Database.CurrentTransaction is not null)
+            {
+                var allocationLock = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {allocationLock},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+BEGIN
+    DECLARE @lockMessage nvarchar(2048) =
+        CONCAT(N'Không thể khóa phân bổ tồn kho. Mã khóa SQL: ', @lockResult);
+    THROW 51033, @lockMessage, 1;
+END;", token);
+            }
+
             var today = DateTime.UtcNow.Date;
             var eligible = _dbSet.AsNoTracking()
                 .Where(x => x.ProductId == productId &&

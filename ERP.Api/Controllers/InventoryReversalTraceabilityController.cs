@@ -1,6 +1,7 @@
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
+using ERP.Application.Common;
 using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,27 @@ public sealed class InventoryReversalTraceabilityController(
     IInventoryReversalService reversalService,
     IInventoryTraceabilityQueryService traceabilityService) : ControllerBase
 {
+    [HttpGet("reversal-reasons")]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+    public async Task<ActionResult<IReadOnlyList<InventoryReversalReasonDto>>> ReversalReasons(
+        CancellationToken cancellationToken = default) =>
+        Ok(await reversalService.GetReversalReasonsAsync(cancellationToken));
+
+    [HttpGet("reversal-warehouses")]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+    public async Task<ActionResult<IReadOnlyList<InventoryReversalWarehouseDto>>> ReversalWarehouses(
+        CancellationToken cancellationToken = default) =>
+        Ok(await reversalService.GetReversalWarehousesAsync(cancellationToken));
+
+    [HttpGet("reversal-candidates")]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+    public async Task<ActionResult<PagedResult<InventoryReversalCandidateDto>>> Candidates(
+        [FromQuery] int? warehouseId, [FromQuery] int? transactionId,
+        [FromQuery] bool? isReversed, [FromQuery] string? productCode,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default) =>
+        Ok(await reversalService.GetCandidatesAsync(warehouseId, page, pageSize, transactionId, isReversed, productCode, cancellationToken));
+
     [HttpPost("reversals")]
     [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]
     [IdempotentCommand("InventoryReversal.Create")]
@@ -21,6 +43,12 @@ public sealed class InventoryReversalTraceabilityController(
         CreateInventoryReversalDto request,
         CancellationToken cancellationToken) =>
         Ok(await reversalService.ReverseAsync(request, cancellationToken));
+
+    [HttpGet("traceability-warehouses")]
+    [PermissionAuthorize(AppPermissions.InventoryTraceabilityRead)]
+    public async Task<ActionResult<IReadOnlyList<InventoryReversalWarehouseDto>>> TraceabilityWarehouses(
+        CancellationToken cancellationToken = default) =>
+        Ok(await traceabilityService.GetAccessibleWarehousesAsync(cancellationToken));
 
     [HttpGet("traceability")]
     [PermissionAuthorize(AppPermissions.InventoryTraceabilityRead)]
@@ -32,7 +60,10 @@ public sealed class InventoryReversalTraceabilityController(
         [FromQuery] string? referenceType,
         [FromQuery] int? referenceId,
         [FromQuery] int limit = 200,
+        [FromQuery] int bucketOffset = 0,
+        [FromQuery] int eventOffset = 0,
+        [FromQuery] int? eventAnchorId = null,
         CancellationToken cancellationToken = default) =>
         Ok(await traceabilityService.TraceAsync(
-            warehouseId, productId, lotNumber, serialNumber, referenceType, referenceId, limit, cancellationToken));
+            warehouseId, productId, lotNumber, serialNumber, referenceType, referenceId, limit, cancellationToken, bucketOffset, eventOffset, eventAnchorId));
 }
