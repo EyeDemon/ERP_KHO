@@ -397,6 +397,67 @@ public sealed class SqlServerStockReservationTests
         finally { await CleanupAsync(fixture); }
     }
 
+    [SqlServerFact]
+    public async Task ExportReceiptReservation_IsIsolatedFromManualExpireAndManualRelease()
+    {
+        var fixture = await CreateFixtureAsync(100);
+        try
+        {
+            var receiptId = await CreateExportReceiptAsync(fixture, 30);
+            await using (var approve = CreateContext())
+                await CreateExportService(approve, fixture.UserId).ApproveAndReserveAsync(receiptId, fixture.UserId);
+
+            int exportReservationId;
+            await using (var backdate = CreateContext())
+            {
+                exportReservationId = await backdate.StockReservations
+                    .Where(x => x.SourceType == "ExportReceipt" && x.SourceId == receiptId)
+                    .Select(x => x.Id)
+                    .SingleAsync();
+                await backdate.StockReservations
+                    .Where(x => x.Id == exportReservationId)
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.CreatedAt, DateTime.UtcNow.AddHours(-4))
+                        .SetProperty(x => x.ExpiresAt, DateTime.UtcNow.AddHours(-2)));
+            }
+
+            // 1. ExpireAsync and new Manual reservation stale sweep must NOT expire ExportReceipt reservation
+            await using (var expire = CreateContext())
+            {
+                var service = CreateService(expire, fixture.UserId);
+                (await service.ExpireAsync()).Should().Be(0);
+                var manual = await service.CreateAsync(new()
+                {
+                    ProductId = fixture.ProductId,
+                    WarehouseId = fixture.WarehouseId,
+                    Quantity = 10
+                });
+                await service.ReleaseAsync(manual.Id, new() { Reason = "cleanup manual hold" });
+            }
+
+            // 2. Manual ReleaseAsync on ExportReceipt reservation must be rejected with ConcurrencyException (409 Conflict)
+            await using (var manualRelease = CreateContext())
+            {
+                var service = CreateService(manualRelease, fixture.UserId);
+                var act = () => service.ReleaseAsync(exportReservationId, new() { Reason = "attempt manual release on export hold" });
+                await act.Should().ThrowAsync<ConcurrencyException>();
+            }
+
+            // 3. ExportReceipt reservation remains Active and can still be dispatched cleanly
+            await using (var dispatch = CreateContext())
+                await CreateExportService(dispatch, fixture.CreatorId).DispatchAsync(receiptId, fixture.CreatorId);
+
+            await using var verify = CreateContext();
+            var stock = await verify.InventoryStocks.AsNoTracking()
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.WarehouseId == fixture.WarehouseId);
+            stock.Quantity.Should().Be(70);
+            stock.ReservedQuantity.Should().Be(0);
+            (await verify.StockReservations.AsNoTracking().SingleAsync(x => x.Id == exportReservationId))
+                .Status.Should().Be(StockReservationStatus.Consumed);
+        }
+        finally { await CleanupAsync(fixture); }
+    }
+
     private static async Task<int> CreateExportReceiptAsync(Fixture fixture, decimal quantity)
     {
         await using var db = CreateContext();

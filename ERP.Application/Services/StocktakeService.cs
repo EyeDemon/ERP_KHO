@@ -16,8 +16,16 @@ namespace ERP.Application.Services
         private readonly IAuditLogRepository _auditLogRepository;
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
         private readonly ICurrentUser? _currentUser;
+        private readonly IInventoryLockEvaluator? _inventoryLocks;
 
-        internal StocktakeService(IStocktakeRepository stocktakeRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository)
+        internal StocktakeService(
+            IStocktakeRepository stocktakeRepository,
+            IInventoryStockRepository inventoryStockRepository,
+            IInventoryTransactionRepository inventoryTransactionRepository,
+            IWarehouseRepository warehouseRepository,
+            IUnitOfWork unitOfWork,
+            IAuditLogRepository auditLogRepository,
+            IInventoryLockEvaluator? inventoryLocks = null)
         {
             _stocktakeRepository = stocktakeRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -25,6 +33,7 @@ namespace ERP.Application.Services
             _warehouseRepository = warehouseRepository;
             _unitOfWork = unitOfWork;
             _auditLogRepository = auditLogRepository;
+            _inventoryLocks = inventoryLocks;
         }
 
         public StocktakeService(
@@ -35,7 +44,8 @@ namespace ERP.Application.Services
             IUnitOfWork unitOfWork,
             IAuditLogRepository auditLogRepository,
             IWarehouseAuthorizationService warehouseAuthorization,
-            ICurrentUser currentUser)
+            ICurrentUser currentUser,
+            IInventoryLockEvaluator? inventoryLocks = null)
         {
             _stocktakeRepository = stocktakeRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -45,6 +55,7 @@ namespace ERP.Application.Services
             _auditLogRepository = auditLogRepository;
             _warehouseAuthorization = warehouseAuthorization;
             _currentUser = currentUser;
+            _inventoryLocks = inventoryLocks;
         }
 
                 public async Task<int> CreateStocktakeAsync(DTOs.CreateStocktakeDto dto, int createdByUserId)
@@ -130,37 +141,47 @@ namespace ERP.Application.Services
                     if (detail.ActualQuantity == null)
                         throw new BusinessRuleException($"Chưa nhập số lượng thực tế cho sản phẩm id {detail.ProductId}");
 
-                    var reservedStock = detail.LocationId.HasValue
+                    var currentStock = detail.LocationId.HasValue
                         ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, stocktake.WarehouseId, InventoryStatus.Available, detail.LocationId.Value)
                         : await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, stocktake.WarehouseId);
-                    if (detail.ActualQuantity.Value < (reservedStock?.ReservedQuantity ?? 0))
-                        throw new ERP.Domain.Exceptions.ConcurrencyException($"Không thể duyệt kiểm kê: sản phẩm ID {detail.ProductId} có tồn thực tế {detail.ActualQuantity.Value} thấp hơn số lượng đang giữ {reservedStock?.ReservedQuantity ?? 0}. Hãy xử lý reservation trước.");
 
-                    var diff = detail.ActualQuantity.Value - detail.SystemQuantity;
+                    var targetLocationId = detail.LocationId ?? currentStock?.LocationId;
+                    if ((_inventoryLocks is not null && await _inventoryLocks.HasActiveLockAsync(stocktake.WarehouseId, targetLocationId, detail.ProductId, InventoryStatus.Available, currentStock?.LotId, currentStock?.SerialId)) ||
+                        await _inventoryStockRepository.IsLockedAsync(stocktake.WarehouseId, detail.ProductId, targetLocationId, currentStock?.LotId, currentStock?.SerialId))
+                    {
+                        ThrowConflict($"Không thể duyệt kiểm kê: tồn kho của sản phẩm ID {detail.ProductId} đang bị khóa bởi InventoryLock.");
+                    }
+
+                    var currentQuantity = currentStock?.Quantity ?? 0m;
+                    if (currentQuantity != detail.SystemQuantity)
+                    {
+                        ThrowConflict($"Không thể duyệt kiểm kê: tồn kho hiện tại ({currentQuantity}) của sản phẩm ID {detail.ProductId} đã thay đổi so với ảnh chụp kiểm kê ({detail.SystemQuantity}). Vui lòng kiểm đếm hoặc chụp lại phiếu.");
+                    }
+
+                    if (detail.ActualQuantity.Value < (currentStock?.ReservedQuantity ?? 0m))
+                        ThrowConflict($"Không thể duyệt kiểm kê: sản phẩm ID {detail.ProductId} có tồn thực tế {detail.ActualQuantity.Value} thấp hơn số lượng đang giữ {currentStock?.ReservedQuantity ?? 0m}. Hãy xử lý reservation trước.");
+
+                    var diff = detail.ActualQuantity.Value - currentQuantity;
                     if (diff != 0)
                     {
-                        // Update Stock
-                        var stock = detail.LocationId.HasValue
-                            ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, stocktake.WarehouseId, InventoryStatus.Available, detail.LocationId.Value)
-                            : await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, stocktake.WarehouseId);
-                        if (stock == null)
+                        if (currentStock == null)
                         {
                             var locationId = detail.LocationId ?? await _inventoryStockRepository.GetLegacyAdjustmentLocationIdAsync(stocktake.WarehouseId);
-                            stock = new InventoryStock
+                            currentStock = new InventoryStock
                             {
                                 ProductId = detail.ProductId,
                                 WarehouseId = stocktake.WarehouseId,
                                 LocationId = locationId,
-                                Quantity = detail.ActualQuantity.Value,
+                                Quantity = diff,
                                 LastUpdated = DateTime.UtcNow
                             };
-                            await _inventoryStockRepository.AddAsync(stock);
+                            await _inventoryStockRepository.AddAsync(currentStock);
                         }
                         else
                         {
-                            stock.Quantity = detail.ActualQuantity.Value;
-                            stock.LastUpdated = DateTime.UtcNow;
-                            await _inventoryStockRepository.UpdateAsync(stock);
+                            currentStock.Quantity += diff;
+                            currentStock.LastUpdated = DateTime.UtcNow;
+                            await _inventoryStockRepository.UpdateAsync(currentStock);
                         }
 
                         // Create Transaction
@@ -168,7 +189,7 @@ namespace ERP.Application.Services
                         {
                             ProductId = detail.ProductId,
                             WarehouseId = stocktake.WarehouseId,
-                            LocationId = detail.LocationId ?? stock.LocationId,
+                            LocationId = detail.LocationId ?? currentStock.LocationId,
                             TransactionType = diff > 0 ? TransactionType.AdjustmentIncrease : TransactionType.AdjustmentDecrease,
                             Quantity = Math.Abs(diff),
                             ReferenceId = stocktake.Id,
@@ -205,15 +226,21 @@ namespace ERP.Application.Services
             catch (ERP.Domain.Exceptions.ConcurrencyException)
             {
                 await _unitOfWork.RollbackTransactionAsync();
-                var conflict = new BusinessRuleException("Dữ liệu đã bị thay đổi bởi người khác, vui lòng thử lại.");
-                conflict.Data["HttpStatusCode"] = 409;
-                throw conflict;
+                ThrowConflict("Dữ liệu đã bị thay đổi bởi người khác, vui lòng thử lại.");
             }
             catch (Exception)
             {
                 await _unitOfWork.RollbackTransactionAsync();
                 throw;
             }
+        }
+
+        private static void ThrowConflict(string message)
+        {
+            var conflict = new BusinessRuleException(message);
+            conflict.Data["HttpStatusCode"] = 409;
+            conflict.Data["ErrorCode"] = "CONCURRENCY_CONFLICT";
+            throw conflict;
         }
         public async Task UpdateStocktakeDetailAsync(int stocktakeId, int detailId, DTOs.UpdateStocktakeDetailDto dto)
         {

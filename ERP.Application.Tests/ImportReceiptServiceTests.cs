@@ -709,6 +709,27 @@ namespace ERP.Application.Tests
             _mockStockRepo.Verify(x => x.AddAsync(It.IsAny<InventoryStock>()), Times.Never);
             _mockTransactionRepo.Verify(x => x.AddAsync(It.IsAny<InventoryTransaction>()), Times.Never);
         }
+
+        [Fact]
+        public async Task CreateAsync_DuplicateProductLines_ThrowsBusinessRuleException()
+        {
+            _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1, Name = "WH1" });
+            var dto = new CreateImportReceiptDto
+            {
+                Code = "IM-DUP-001",
+                WarehouseId = 1,
+                Details = new List<CreateImportReceiptDetailDto>
+                {
+                    new() { ProductId = 1, Quantity = 5, UnitPrice = 10 },
+                    new() { ProductId = 1, Quantity = 3, UnitPrice = 10 }
+                }
+            };
+
+            Func<Task> act = async () => await _service.CreateAsync(dto, 99);
+
+            await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("*lặp nhiều dòng*");
+            _mockImportRepo.Verify(x => x.AddAsync(It.IsAny<ImportReceipt>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
     }
 }
 

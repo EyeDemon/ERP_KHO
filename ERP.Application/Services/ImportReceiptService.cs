@@ -100,6 +100,9 @@ namespace ERP.Application.Services
             if (dto.Details == null || !dto.Details.Any())
                 throw new BusinessRuleException("Phiếu nhập phải có ít nhất 1 sản phẩm");
 
+            if (dto.Details.GroupBy(x => x.ProductId).Any(x => x.Count() > 1))
+                throw new BusinessRuleException("Một sản phẩm không được lặp nhiều dòng.");
+
             if (await _importReceiptRepository.ExistsByCodeAsync(dto.Code))
                 throw new BusinessRuleException($"Mã phiếu nhập '{dto.Code}' đã tồn tại");
 

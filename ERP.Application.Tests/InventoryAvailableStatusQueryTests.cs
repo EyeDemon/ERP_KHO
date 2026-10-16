@@ -30,6 +30,58 @@ public sealed class InventoryAvailableStatusQueryTests
         (await reports.GetTransactionsUpToDateAsync(DateTime.UtcNow.AddMinutes(1), null, null)).Should().ContainSingle(x => x.InventoryStatus == InventoryStatus.Available && x.Quantity == 10);
     }
 
+    [Fact]
+    public async Task GetCurrentStockAsync_ExcludesStockLockedByActiveInventoryLock()
+    {
+        await using var db = CreateContext();
+        Seed(db);
+        db.WarehouseLocations.Add(new WarehouseLocation
+        {
+            Id = 2,
+            WarehouseId = 1,
+            Code = "PICK-2",
+            Name = "Pick 2",
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsPickable = true
+        });
+        db.InventoryStocks.Add(new InventoryStock
+        {
+            ProductId = 1,
+            WarehouseId = 1,
+            LocationId = 2,
+            Status = InventoryStatus.Available,
+            Quantity = 7
+        });
+        var activeLock = new InventoryLock
+        {
+            Id = 1,
+            WarehouseId = 1,
+            ProductId = 1,
+            LocationId = 2,
+            LockType = InventoryLockType.QualityHold,
+            Reason = "QC_HOLD",
+            Status = InventoryLockStatus.Active,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            CreatedBy = 1
+        };
+        db.InventoryLocks.Add(activeLock);
+        await db.SaveChangesAsync();
+
+        var service = new InventoryQueryService(db);
+        var whileLocked = (await service.GetCurrentStockAsync(1, 1, null, null)).Single();
+        whileLocked.OnHandQuantity.Should().Be(10);
+        whileLocked.AvailableQuantity.Should().Be(10);
+
+        activeLock.Status = InventoryLockStatus.Released;
+        activeLock.ReleasedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var afterRelease = (await service.GetCurrentStockAsync(1, 1, null, null)).Single();
+        afterRelease.OnHandQuantity.Should().Be(17);
+        afterRelease.AvailableQuantity.Should().Be(17);
+    }
+
     private static ErpKhoDbContext CreateContext() => new(
         new DbContextOptionsBuilder<ErpKhoDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 

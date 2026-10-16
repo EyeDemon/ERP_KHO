@@ -16,7 +16,10 @@ namespace ERP.Infrastructure.Repositories
 
         public async Task<InventoryStock?> GetByProductAndWarehouseAsync(int productId, int warehouseId)
         {
-            return await _dbSet
+            var source = _context.Database.CurrentTransaction != null && _context.Database.IsSqlServer()
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)InventoryStatus.Available}")
+                : _dbSet.AsQueryable();
+            return await source
                 .Include(s => s.Location)
                 .Include(s => s.Product)
                     .ThenInclude(p => p.Unit)
@@ -26,12 +29,38 @@ namespace ERP.Infrastructure.Repositories
         public Task<InventoryStock?> GetByProductWarehouseAndStatusAsync(int productId, int warehouseId, InventoryStatus status) =>
             _dbSet.Include(s=>s.Location).FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && (status != InventoryStatus.Available || s.Location.IsPickable))));
 
-        public Task<InventoryStock?> GetByProductWarehouseStatusAndLocationAsync(int productId, int warehouseId, InventoryStatus status, int locationId) =>
-            _dbSet.FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && s.LocationId == locationId);
+        public Task<InventoryStock?> GetByProductWarehouseStatusAndLocationAsync(int productId, int warehouseId, InventoryStatus status, int locationId)
+        {
+            var source = _context.Database.CurrentTransaction != null && _context.Database.IsSqlServer()
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)status} AND LocationId = {locationId}")
+                : _dbSet.AsQueryable();
+            return source.FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && s.LocationId == locationId);
+        }
 
         public async Task<int?> GetLegacyAdjustmentLocationIdAsync(int warehouseId, CancellationToken cancellationToken = default) =>
             await _context.WarehouseLocations.Where(x => x.WarehouseId == warehouseId && x.Code == "LEGACY" && x.IsSystemManaged)
                 .Select(x => (int?)x.Id).SingleOrDefaultAsync(cancellationToken);
+
+        public Task<bool> IsLockedAsync(
+            int warehouseId,
+            int productId,
+            int? locationId = null,
+            int? lotId = null,
+            int? serialId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var now = DateTime.UtcNow;
+            return _context.InventoryLocks
+                .EffectiveAt(now)
+                .AnyAsync(x =>
+                    x.WarehouseId == warehouseId &&
+                    (!x.LocationId.HasValue || x.LocationId == locationId) &&
+                    (!x.ProductId.HasValue || x.ProductId == productId) &&
+                    (!x.InventoryStatus.HasValue || x.InventoryStatus == InventoryStatus.Available) &&
+                    (!x.LotId.HasValue || x.LotId == lotId) &&
+                    (!x.SerialId.HasValue || x.SerialId == serialId),
+                    cancellationToken);
+        }
 
         public async Task<bool> TryDecreaseStockAsync(
             int productId,

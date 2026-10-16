@@ -907,6 +907,26 @@ namespace ERP.Application.Tests
             Func<Task> act = async () => await _service.CancelAsync(1, 99);
             await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Không thể hủy phiếu xuất đã xuất kho hoặc đã bị hủy.");
         }
+
+        [Fact]
+        public async Task CreateAsync_DuplicateProductLines_ThrowsBusinessRuleException()
+        {
+            var dto = new CreateExportReceiptDto
+            {
+                Code = "EX-DUP-001",
+                WarehouseId = 1,
+                Details = new List<CreateExportReceiptDetailDto>
+                {
+                    new() { ProductId = 1, Quantity = 5, UnitPrice = 10 },
+                    new() { ProductId = 1, Quantity = 3, UnitPrice = 10 }
+                }
+            };
+
+            Func<Task> act = async () => await _service.CreateAsync(dto, 99);
+
+            await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("*lặp nhiều dòng*");
+            _mockExportRepo.Verify(x => x.AddAsync(It.IsAny<ExportReceipt>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
     }
 }
 

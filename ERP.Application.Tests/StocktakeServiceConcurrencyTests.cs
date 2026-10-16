@@ -56,6 +56,10 @@ namespace ERP.Application.Tests
                     {
                         property.SetColumnType(null);
                     }
+                    if (property.IsConcurrencyToken && property.ClrType == typeof(byte[]))
+                    {
+                        property.SetDefaultValueSql("X'01'");
+                    }
                 }
             }
         }
@@ -197,6 +201,44 @@ namespace ERP.Application.Tests
             ctx.Products.Add(product);
             await ctx.SaveChangesAsync();
 
+            var location = new WarehouseLocation
+            {
+                WarehouseId = warehouse.Id,
+                Code = "LEGACY",
+                Name = "Legacy Location",
+                LocationType = WarehouseLocationType.Legacy,
+                IsActive = true,
+                IsPickable = true,
+                IsSystemManaged = true,
+                CreatedBy = maker.Id
+            };
+            ctx.WarehouseLocations.Add(location);
+            await ctx.SaveChangesAsync();
+
+            ctx.InventoryStocks.Add(new InventoryStock
+            {
+                ProductId = product.Id,
+                WarehouseId = warehouse.Id,
+                LocationId = location.Id,
+                Status = InventoryStatus.Available,
+                Quantity = 10,
+                LastUpdated = DateTime.UtcNow
+            });
+            ctx.InventoryTransactions.Add(new InventoryTransaction
+            {
+                ProductId = product.Id,
+                WarehouseId = warehouse.Id,
+                LocationId = location.Id,
+                InventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.Import,
+                Quantity = 10,
+                ReferenceId = 1,
+                ReferenceType = "ImportReceipt",
+                TransactionDate = DateTime.UtcNow,
+                CreatedBy = maker.Id
+            });
+            await ctx.SaveChangesAsync();
+
             var stocktake = new Stocktake
             {
                 Code = "ST-CONC-001",
@@ -211,6 +253,7 @@ namespace ERP.Application.Tests
             {
                 StocktakeId = stocktake.Id,
                 ProductId = product.Id,
+                LocationId = location.Id,
                 SystemQuantity = 10,
                 ActualQuantity = 15,
                 DifferenceQuantity = 5,
@@ -407,6 +450,82 @@ namespace ERP.Application.Tests
             
             var finalStocktakeCount = await verifyCtx.Stocktakes.CountAsync();
             finalStocktakeCount.Should().Be(stocktakeCount, "no stocktake should have been added");
+        }
+
+        [Fact]
+        public async Task ApproveStocktakeAsync_WhenStockChangedOrValid_RejectsStaleSnapshot409AndPreservesLedgerEqualsBalance()
+        {
+            await SeedTestData();
+
+            int stocktakeId, checkerId, makerId, productId, warehouseId, locationId;
+            using (var setupCtx = CreateContext())
+            {
+                var st = await setupCtx.Stocktakes.Include(x => x.Details).FirstAsync();
+                stocktakeId = st.Id;
+                warehouseId = st.WarehouseId;
+                productId = st.Details.First().ProductId;
+                locationId = st.Details.First().LocationId!.Value;
+                checkerId = (await setupCtx.Users.SingleAsync(u => u.Username == "checker")).Id;
+                makerId = (await setupCtx.Users.SingleAsync(u => u.Username == "maker")).Id;
+
+                // Simulate concurrent import (+2) after stocktake draft snapshot (SystemQuantity = 10)
+                var stock = await setupCtx.InventoryStocks.SingleAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId);
+                stock.Quantity += 2;
+                setupCtx.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = productId,
+                    WarehouseId = warehouseId,
+                    LocationId = locationId,
+                    InventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.Import,
+                    Quantity = 2,
+                    ReferenceId = 2,
+                    ReferenceType = "ImportReceipt",
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = makerId
+                });
+                await setupCtx.SaveChangesAsync();
+            }
+
+            // 1. Stale snapshot approval must fail with 409 Conflict (CONCURRENCY_CONFLICT) and not overwrite stock
+            using (var staleCtx = CreateContext())
+            {
+                var service = CreateService(staleCtx);
+                var act = () => service.ApproveStocktakeAsync(stocktakeId, checkerId);
+                var ex = await act.Should().ThrowAsync<BusinessRuleException>();
+                ex.Which.Data["HttpStatusCode"].Should().Be(409);
+                ex.Which.Data["ErrorCode"].Should().Be("CONCURRENCY_CONFLICT");
+            }
+
+            // 2. Resnapshot SystemQuantity to 12 and approve ActualQuantity = 15 -> diff = +3, SUM(Ledger) == Balance (15)
+            using (var resnapshotCtx = CreateContext())
+            {
+                var detail = await resnapshotCtx.StocktakeDetails.SingleAsync(d => d.StocktakeId == stocktakeId);
+                detail.SystemQuantity = 12;
+                detail.DifferenceQuantity = 3;
+                await resnapshotCtx.SaveChangesAsync();
+            }
+
+            using (var approveCtx = CreateContext())
+            {
+                var service = CreateService(approveCtx);
+                await service.ApproveStocktakeAsync(stocktakeId, checkerId);
+            }
+
+            using (var verifyCtx = CreateContext())
+            {
+                var stock = await verifyCtx.InventoryStocks.SingleAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId);
+                var txs = await verifyCtx.InventoryTransactions
+                    .Where(t => t.ProductId == productId && t.WarehouseId == warehouseId)
+                    .ToListAsync();
+                var ledgerBalance = txs.Sum(t =>
+                    t.TransactionType is TransactionType.Import or TransactionType.AdjustmentIncrease or TransactionType.TransferIn
+                        ? t.Quantity
+                        : -t.Quantity);
+
+                stock.Quantity.Should().Be(15);
+                ledgerBalance.Should().Be(stock.Quantity, "SUM(InventoryTransactions) must equal InventoryStock.Quantity");
+            }
         }
 
         public void Dispose()
