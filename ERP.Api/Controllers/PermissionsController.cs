@@ -24,6 +24,13 @@ public sealed class PermissionsController(ErpKhoDbContext db) : ControllerBase
         .Select(x => new { x.Id, x.RoleName, RowVersion = Convert.ToBase64String(x.RowVersion),
             Permissions = x.Permissions.OrderBy(p => p.Permission.Code).Select(p => p.Permission.Code).ToArray() }).ToListAsync(ct));
 
+    [HttpGet("audit-logs"), PermissionAuthorize(AppPermissions.PermissionRead)]
+    public async Task<IActionResult> AuditLogs(CancellationToken ct) => Ok(await db.AuditLogs.AsNoTracking()
+        .OrderByDescending(x => x.Timestamp)
+        .Take(20)
+        .Select(x => new { x.Id, x.UserId, x.Action, x.EntityName, x.EntityId, x.WarehouseId, x.NewValues, x.Result, x.Timestamp })
+        .ToListAsync(ct));
+
     [HttpPost("roles/{roleId:int}/grants"), IdempotentCommand("Permission.Grant"), PermissionAuthorize(AppPermissions.PermissionAssign)]
     public Task<IActionResult> Grant(int roleId, PermissionGrantDto dto, CancellationToken ct) =>
         Change(roleId, dto.PermissionCode, dto.RowVersion, true, ct);

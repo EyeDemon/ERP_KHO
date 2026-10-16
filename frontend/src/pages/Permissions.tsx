@@ -3,10 +3,49 @@ import apiClient from '../services/apiClient';
 import { beginPermissionRefresh, setCurrentPermissions, usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { permissionError, permissionLabel, roleLabel } from '../services/permissionPresentation';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 type Permission = { code: string; description: string };
 type Role = { id: number; roleName: string; rowVersion: string; permissions: string[] };
+type UserSecurityStatus = {
+  userId: number;
+  username: string;
+  roleName: string;
+  isActive: boolean;
+  isTemporarilyLocked: boolean;
+  lockoutEndUtc?: string | null;
+  failedLoginCount: number;
+  mustChangePassword: boolean;
+  securityStateVersion: number;
+  activeSessionCount: number;
+};
+type WarehouseAccessDto = {
+  warehouseId: number;
+  warehouseCode: string;
+  warehouseName: string;
+  warehouseIsActive: boolean;
+  grantedByUserId?: number | null;
+  grantedAt: string;
+};
+type UserWarehouseAccessListDto = {
+  userId: number;
+  username: string;
+  fullName: string;
+  roleName: string;
+  isActive: boolean;
+  warehouses: WarehouseAccessDto[];
+};
+type PermissionAuditLog = {
+  id: number;
+  userId?: number | null;
+  action: string;
+  entityName: string;
+  entityId: number;
+  warehouseId?: number | null;
+  newValues?: string | null;
+  result?: string | null;
+  timestamp: string;
+};
 
 export default function Permissions() {
   const canReadCatalog = usePermission('permission.read');
@@ -20,6 +59,24 @@ export default function Permissions() {
   const [success, setSuccess] = useState('');
   const inFlight = useRef(false);
   const requestVersion = useRef(0);
+
+  // AD-01 / AD-06: User Security & Session Governance State
+  const [targetUserIdInput, setTargetUserIdInput] = useState('');
+  const [userSecurity, setUserSecurity] = useState<UserSecurityStatus | null>(null);
+  const [securityReason, setSecurityReason] = useState('');
+  const [tempPassword, setTempPassword] = useState('');
+  const [securityBusy, setSecurityBusy] = useState(false);
+
+  // AD-03: User Warehouse Access Scope State
+  const [whUserIdInput, setWhUserIdInput] = useState('');
+  const [userWarehouses, setUserWarehouses] = useState<UserWarehouseAccessListDto | null>(null);
+  const [grantWarehouseIdInput, setGrantWarehouseIdInput] = useState('');
+  const [whBusy, setWhBusy] = useState(false);
+
+  // Audit Log Viewer State
+  const [auditLogs, setAuditLogs] = useState<PermissionAuditLog[]>([]);
+  const [auditLoaded, setAuditLoaded] = useState(false);
+  const [auditBusy, setAuditBusy] = useState(false);
 
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -55,11 +112,124 @@ export default function Permissions() {
     } catch (failure) { setRoles([]); setCatalog([]); setError(permissionError(failure)); }
     finally { inFlight.current = false; setPending(false); }
   };
+
+  const loadUserSecurity = async () => {
+    const uid = Number(targetUserIdInput);
+    if (!Number.isInteger(uid) || uid <= 0 || securityBusy) return;
+    setSecurityBusy(true); setError(''); setSuccess('');
+    try {
+      const res = await apiClient.get<UserSecurityStatus>(`/api/users/${uid}/security`);
+      setUserSecurity(res.data);
+    } catch (failure) {
+      setUserSecurity(null);
+      setError(permissionError(failure));
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const runSecurityAction = async (endpoint: 'lock' | 'unlock' | 'revoke-sessions' | 'reset-password') => {
+    if (!userSecurity || securityBusy) return;
+    setSecurityBusy(true); setError(''); setSuccess('');
+    const uid = userSecurity.userId;
+    const actionKey = `user-sec-${endpoint}:${uid}:${userSecurity.securityStateVersion}`;
+    try {
+      const headers = idempotencyHeaders(actionKey);
+      if (endpoint === 'reset-password') {
+        await apiClient.post(`/api/users/${uid}/security/reset-password`, {
+          temporaryPassword: tempPassword,
+          reason: securityReason.trim() || 'Quản trị viên đặt lại mật khẩu tạm thời',
+        }, { headers });
+        setTempPassword('');
+      } else {
+        await apiClient.post(`/api/users/${uid}/security/${endpoint}`, {
+          reason: securityReason.trim() || `Thao tác quản trị bảo mật (${endpoint})`,
+        }, { headers });
+      }
+      completeIdempotentAction(actionKey);
+      const refreshed = await apiClient.get<UserSecurityStatus>(`/api/users/${uid}/security`);
+      setUserSecurity(refreshed.data);
+      setSuccess('Đã thực thi thao tác bảo mật tài khoản.');
+    } catch (failure) {
+      setError(permissionError(failure));
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const loadUserWarehouseScope = async () => {
+    const uid = Number(whUserIdInput);
+    if (!Number.isInteger(uid) || uid <= 0 || whBusy) return;
+    setWhBusy(true); setError(''); setSuccess('');
+    try {
+      const res = await apiClient.get<UserWarehouseAccessListDto>(`/api/users/${uid}/warehouse-access`);
+      setUserWarehouses(res.data);
+    } catch (failure) {
+      setUserWarehouses(null);
+      setError(permissionError(failure));
+    } finally {
+      setWhBusy(false);
+    }
+  };
+
+  const grantWarehouseScope = async () => {
+    if (!userWarehouses || whBusy) return;
+    const warehouseId = Number(grantWarehouseIdInput);
+    if (!Number.isInteger(warehouseId) || warehouseId <= 0) return;
+    setWhBusy(true); setError(''); setSuccess('');
+    const uid = userWarehouses.userId;
+    const actionKey = `user-wh-grant:${uid}:${warehouseId}`;
+    try {
+      await apiClient.post(`/api/users/${uid}/warehouse-access`, { warehouseId }, { headers: idempotencyHeaders(actionKey) });
+      completeIdempotentAction(actionKey);
+      setGrantWarehouseIdInput('');
+      const refreshed = await apiClient.get<UserWarehouseAccessListDto>(`/api/users/${uid}/warehouse-access`);
+      setUserWarehouses(refreshed.data);
+      setSuccess('Đã cấp quyền truy cập kho cho người dùng.');
+    } catch (failure) {
+      setError(permissionError(failure));
+    } finally {
+      setWhBusy(false);
+    }
+  };
+
+  const revokeWarehouseScope = async (warehouseId: number) => {
+    if (!userWarehouses || whBusy) return;
+    setWhBusy(true); setError(''); setSuccess('');
+    const uid = userWarehouses.userId;
+    const actionKey = `user-wh-revoke:${uid}:${warehouseId}`;
+    try {
+      await apiClient.delete(`/api/users/${uid}/warehouse-access/${warehouseId}`, { headers: idempotencyHeaders(actionKey) });
+      completeIdempotentAction(actionKey);
+      const refreshed = await apiClient.get<UserWarehouseAccessListDto>(`/api/users/${uid}/warehouse-access`);
+      setUserWarehouses(refreshed.data);
+      setSuccess('Đã thu hồi quyền truy cập kho của người dùng.');
+    } catch (failure) {
+      setError(permissionError(failure));
+    } finally {
+      setWhBusy(false);
+    }
+  };
+
+  const loadAuditLogs = async () => {
+    if (auditBusy) return;
+    setAuditBusy(true); setError('');
+    try {
+      const res = await apiClient.get<PermissionAuditLog[]>('/api/permissions/audit-logs');
+      setAuditLogs(res.data);
+      setAuditLoaded(true);
+    } catch (failure) {
+      setError(permissionError(failure));
+    } finally {
+      setAuditBusy(false);
+    }
+  };
+
   return <UiPage>
     <UiPageHeader
       eyebrow="Kiểm soát"
       title="Quản trị quyền truy cập"
-      description="Theo dõi permission catalog và grant theo role. Mọi thay đổi quyền cần tuân thủ concurrency và idempotency."
+      description="Theo dõi permission catalog, grant theo role, bảo mật phiên người dùng, phạm vi kho và nhật ký kiểm toán."
       actions={<button type="button" disabled={pending || loading} onClick={() => void load()}>Tải lại</button>}
     />
 
@@ -101,6 +271,193 @@ export default function Permissions() {
           })}</tbody>
         </table>
       </UiCard>)}
+
+      {canAssign && (
+        <>
+          <UiCard title="Quản trị bảo mật tài khoản & phiên đăng nhập">
+            <UiToolbar>
+              <UiToolbarField label="ID Người dùng">
+                <input
+                  aria-label="ID người dùng cần kiểm tra bảo mật"
+                  type="number"
+                  min="1"
+                  value={targetUserIdInput}
+                  onChange={e => setTargetUserIdInput(e.target.value)}
+                  placeholder="Nhập User ID..."
+                />
+              </UiToolbarField>
+              <button type="button" disabled={securityBusy || !targetUserIdInput} onClick={() => void loadUserSecurity()}>
+                Tra cứu bảo mật
+              </button>
+            </UiToolbar>
+
+            {userSecurity && (
+              <div className="ui-stack">
+                <p>
+                  <strong>{userSecurity.username}</strong> ({roleLabel(userSecurity.roleName)}) •{' '}
+                  <UiBadge tone={userSecurity.isActive ? 'success' : 'danger'}>
+                    {userSecurity.isActive ? 'Đang hoạt động' : 'Đã khóa'}
+                  </UiBadge>{' '}
+                  • Phiên hoạt động: <strong>{userSecurity.activeSessionCount}</strong> • Sai mật khẩu: <strong>{userSecurity.failedLoginCount}</strong>
+                </p>
+                <UiToolbar>
+                  <UiToolbarField label="Lý do thao tác">
+                    <input
+                      aria-label="Lý do thao tác bảo mật"
+                      value={securityReason}
+                      onChange={e => setSecurityReason(e.target.value)}
+                      placeholder="Nhập lý do kiểm toán..."
+                    />
+                  </UiToolbarField>
+                  <UiToolbarField label="Mật khẩu tạm (nếu đặt lại)">
+                    <input
+                      aria-label="Mật khẩu tạm thời"
+                      type="password"
+                      value={tempPassword}
+                      onChange={e => setTempPassword(e.target.value)}
+                      placeholder="Tối thiểu 8 ký tự..."
+                    />
+                  </UiToolbarField>
+                  <button type="button" disabled={securityBusy || !userSecurity.isActive} onClick={() => void runSecurityAction('lock')}>
+                    Khóa tài khoản
+                  </button>
+                  <button type="button" disabled={securityBusy || (userSecurity.isActive && !userSecurity.isTemporarilyLocked)} onClick={() => void runSecurityAction('unlock')}>
+                    Mở khóa tài khoản
+                  </button>
+                  <button type="button" disabled={securityBusy} onClick={() => void runSecurityAction('revoke-sessions')}>
+                    Thu hồi mọi phiên
+                  </button>
+                  <button type="button" disabled={securityBusy || !tempPassword} onClick={() => void runSecurityAction('reset-password')}>
+                    Đặt lại mật khẩu
+                  </button>
+                </UiToolbar>
+              </div>
+            )}
+          </UiCard>
+
+          <UiCard title="Phân quyền phạm vi kho theo người dùng">
+            <UiToolbar>
+              <UiToolbarField label="ID Người dùng">
+                <input
+                  aria-label="ID người dùng phân quyền kho"
+                  type="number"
+                  min="1"
+                  value={whUserIdInput}
+                  onChange={e => setWhUserIdInput(e.target.value)}
+                  placeholder="Nhập User ID..."
+                />
+              </UiToolbarField>
+              <button type="button" disabled={whBusy || !whUserIdInput} onClick={() => void loadUserWarehouseScope()}>
+                Tải phạm vi kho
+              </button>
+            </UiToolbar>
+
+            {userWarehouses && (
+              <div className="ui-stack">
+                <p>
+                  Người dùng: <strong>{userWarehouses.fullName || userWarehouses.username}</strong> ({roleLabel(userWarehouses.roleName)})
+                </p>
+                <UiToolbar>
+                  <UiToolbarField label="ID Kho cấp thêm">
+                    <input
+                      aria-label="ID kho cần cấp quyền"
+                      type="number"
+                      min="1"
+                      value={grantWarehouseIdInput}
+                      onChange={e => setGrantWarehouseIdInput(e.target.value)}
+                      placeholder="Nhập Warehouse ID..."
+                    />
+                  </UiToolbarField>
+                  <button type="button" disabled={whBusy || !grantWarehouseIdInput} onClick={() => void grantWarehouseScope()}>
+                    Cấp quyền kho
+                  </button>
+                </UiToolbar>
+                <UiTableScroll>
+                  <table aria-label="Phạm vi kho của người dùng">
+                    <thead>
+                      <tr>
+                        <th>Mã kho</th>
+                        <th>Tên kho</th>
+                        <th>Trạng thái kho</th>
+                        <th>Thời điểm cấp</th>
+                        <th>Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userWarehouses.warehouses.length === 0 ? (
+                        <tr><td colSpan={5} className="ui-empty-cell">Người dùng chưa được gán kho nào.</td></tr>
+                      ) : (
+                        userWarehouses.warehouses.map(wh => (
+                          <tr key={wh.warehouseId}>
+                            <td><code>{wh.warehouseCode}</code></td>
+                            <td>{wh.warehouseName}</td>
+                            <td>
+                              <UiBadge tone={wh.warehouseIsActive ? 'success' : 'neutral'}>
+                                {wh.warehouseIsActive ? 'Hoạt động' : 'Ngừng'}
+                              </UiBadge>
+                            </td>
+                            <td>{new Date(wh.grantedAt).toLocaleString('vi-VN')}</td>
+                            <td>
+                              <button
+                                type="button"
+                                disabled={whBusy}
+                                aria-label={`Thu hồi kho ${wh.warehouseCode}`}
+                                onClick={() => void revokeWarehouseScope(wh.warehouseId)}
+                              >
+                                Thu hồi kho
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </UiTableScroll>
+              </div>
+            )}
+          </UiCard>
+        </>
+      )}
+
+      {canReadCatalog && (
+        <UiCard title="Nhật ký kiểm toán phân quyền & bảo mật">
+          <div className="ui-inline-actions">
+            <button type="button" disabled={auditBusy} onClick={() => void loadAuditLogs()}>
+              {auditBusy ? 'Đang tải nhật ký...' : 'Tải nhật ký kiểm toán'}
+            </button>
+          </div>
+          {auditLoaded && (
+            <UiTableScroll>
+              <table aria-label="Nhật ký kiểm toán phân quyền">
+                <thead>
+                  <tr>
+                    <th>Thời gian</th>
+                    <th>Người thực hiện</th>
+                    <th>Hành động</th>
+                    <th>Đối tượng</th>
+                    <th>Chi tiết thay đổi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogs.length === 0 ? (
+                    <tr><td colSpan={5} className="ui-empty-cell">Chưa có bản ghi kiểm toán.</td></tr>
+                  ) : (
+                    auditLogs.map(log => (
+                      <tr key={log.id}>
+                        <td>{new Date(log.timestamp).toLocaleString('vi-VN')}</td>
+                        <td>{log.userId ? `User #${log.userId}` : 'Hệ thống'}</td>
+                        <td><code>{log.action}</code></td>
+                        <td>{log.entityName} #{log.entityId}</td>
+                        <td><small>{log.newValues || '—'}</small></td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </UiTableScroll>
+          )}
+        </UiCard>
+      )}
     </>}
   </UiPage>;
 }

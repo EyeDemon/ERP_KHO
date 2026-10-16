@@ -85,6 +85,11 @@ static async Task<int> RunTestsAsync(string connectionString, string runId)
     startInfo.ArgumentList.Add(Path.Combine("TestResults", "SqlIntegration", runId));
     startInfo.ArgumentList.Add("--verbosity");
     startInfo.ArgumentList.Add("minimal");
+    if (Environment.GetEnvironmentVariable("ERP_KHO_SQLSERVER_TEST_FILTER") is { Length: > 0 } filter)
+    {
+        startInfo.ArgumentList.Add("--filter");
+        startInfo.ArgumentList.Add(filter);
+    }
     startInfo.Environment["ERP_KHO_SQLSERVER_TEST_CONNECTION"] = connectionString;
     startInfo.Environment["ERP_KHO_SQLSERVER_TEST_RUN_ID"] = runId;
     startInfo.Environment.Remove("ERP_KHO_SQLSERVER_ADMIN_CONNECTION");

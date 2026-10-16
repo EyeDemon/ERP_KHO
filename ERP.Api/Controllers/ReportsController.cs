@@ -2,6 +2,9 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ERP.Api.Authorization;
+using ERP.Domain.Enums;
+using ERP.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using System.IO;
 
@@ -17,6 +20,65 @@ namespace ERP.Api.Controllers
         public ReportsController(IReportService reportService)
         {
             _reportService = reportService;
+        }
+
+        [HttpGet("operational-dashboard")]
+        [Authorize]
+        public async Task<IActionResult> GetOperationalDashboard(
+            [FromServices] ErpKhoDbContext db,
+            [FromServices] IWarehouseAuthorizationService warehouseAuth,
+            CancellationToken cancellationToken = default)
+        {
+            var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+
+            var warehouseCount = await db.Warehouses.AsNoTracking()
+                .CountAsync(w => accessibleIds.Contains(w.Id) && w.IsActive, cancellationToken);
+            var productCount = await db.Products.AsNoTracking()
+                .CountAsync(p => !p.IsDeleted, cancellationToken);
+            var inventoryBucketCount = await db.InventoryStocks.AsNoTracking()
+                .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && s.Quantity > 0, cancellationToken);
+            var invalidStockCount = await db.InventoryStocks.AsNoTracking()
+                .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && (s.Quantity < 0 || s.ReservedQuantity < 0 || s.ReservedQuantity > s.Quantity), cancellationToken);
+
+            var openInboundCount = await db.ImportReceipts.AsNoTracking()
+                .CountAsync(r => accessibleIds.Contains(r.WarehouseId) && r.Status != ReceiptStatus.Posted && r.Status != ReceiptStatus.Rejected, cancellationToken);
+            var openPutawayCount = await db.PutawayTasks.AsNoTracking()
+                .CountAsync(t => accessibleIds.Contains(t.WarehouseId) && t.Status != PutawayTaskStatus.Completed && t.Status != PutawayTaskStatus.Cancelled, cancellationToken);
+            var openOutboundCount = await db.ExportReceipts.AsNoTracking()
+                .CountAsync(r => accessibleIds.Contains(r.WarehouseId) && (r.Status == ReceiptStatus.Draft || r.Status == ReceiptStatus.Approved), cancellationToken);
+            var openTransferCount = await db.StockTransfers.AsNoTracking()
+                .CountAsync(t => (accessibleIds.Contains(t.SourceWarehouseId) || accessibleIds.Contains(t.DestinationWarehouseId)) &&
+                                 (t.Status == StockTransferStatus.Draft || t.Status == StockTransferStatus.Approved || t.Status == StockTransferStatus.InTransit), cancellationToken);
+
+            var recentAudits = await db.AuditLogs.AsNoTracking()
+                .Where(a => !a.WarehouseId.HasValue || accessibleIds.Contains(a.WarehouseId.Value))
+                .OrderByDescending(a => a.Timestamp)
+                .Take(10)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.Action,
+                    a.EntityName,
+                    a.EntityId,
+                    a.WarehouseId,
+                    a.Result,
+                    a.Timestamp
+                })
+                .ToListAsync(cancellationToken);
+
+            return Ok(new
+            {
+                warehouseCount,
+                productCount,
+                inventoryBucketCount,
+                invalidStockCount,
+                openTaskCount = openInboundCount + openPutawayCount + openOutboundCount + openTransferCount,
+                openInboundCount,
+                openPutawayCount,
+                openOutboundCount,
+                openTransferCount,
+                recentActivities = recentAudits
+            });
         }
 
         [HttpGet("inventory")]
