@@ -38,7 +38,7 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
 
         await using var context = new ErpKhoDbContext(
             new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(builder.ConnectionString).Options);
-        await context.Database.GetDbConnection().OpenAsync();
+        await context.Database.OpenConnectionAsync();
         context.Database.GetDbConnection().Database.Should().Be(builder.InitialCatalog);
         await ERP.TestSupport.PermissionMigrationBootstrap.MigrateAsync(context, runId, "qa_permission_bootstrap");
     }

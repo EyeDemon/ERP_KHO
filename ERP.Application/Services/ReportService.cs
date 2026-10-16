@@ -33,7 +33,9 @@ namespace ERP.Application.Services
                 foreach (var allowedWarehouseId in warehouseIds)
                     transactions.AddRange(await _reportRepository.GetTransactionsUpToDateAsync(reportDate, allowedWarehouseId, productId, cancellationToken));
 
-                var grouped = transactions.GroupBy(t => new { t.ProductId, t.WarehouseId })
+                var grouped = transactions
+                    .Where(t => t.TransactionType.HasCanonicalSign())
+                    .GroupBy(t => new { t.ProductId, t.WarehouseId })
                     .Select(g => new InventoryReportDto
                     {
                         ProductId = g.Key.ProductId,
@@ -133,7 +135,7 @@ namespace ERP.Application.Services
             if (asOfDate.HasValue)
             {
                 var transactions = await _reportRepository.GetTransactionsUpToDateAsync(asOfDate.Value, warehouseId, productId, cancellationToken);
-                return transactions.GroupBy(t => new { t.ProductId, t.WarehouseId }).Select(g => new InventoryReportDto
+                return transactions.Where(t => t.TransactionType.HasCanonicalSign()).GroupBy(t => new { t.ProductId, t.WarehouseId }).Select(g => new InventoryReportDto
                 {
                     ProductId = g.Key.ProductId, ProductCode = g.First().Product.Code, ProductName = g.First().Product.Name,
                     UnitName = g.First().Product.Unit?.Name ?? "", WarehouseId = g.Key.WarehouseId,

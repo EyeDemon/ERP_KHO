@@ -26,6 +26,14 @@ namespace ERP.Infrastructure.Repositories
             }
         }
 
+        public override Task UpdateAsync(InventoryTransaction entity, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(
+                "InventoryTransactions ledger is append-only; modifying existing ledger entries is forbidden (Rule 2).");
+
+        public override Task DeleteAsync(InventoryTransaction entity, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(
+                "InventoryTransactions ledger is append-only; deleting ledger entries is forbidden (Rule 2).");
+
         private static bool IsExportReceiptLedgerConflict(InventoryTransaction entity, DbUpdateException exception) =>
             string.Equals(entity.ReferenceType, "ExportReceipt", StringComparison.Ordinal) &&
             exception.InnerException is SqlException { Number: 2601 or 2627 } sql &&

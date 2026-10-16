@@ -80,16 +80,53 @@ public class ErpKhoDbContext : DbContext
     public DbSet<SalesOrderLine> SalesOrderLines => Set<SalesOrderLine>();
     public DbSet<Backorder> Backorders => Set<Backorder>();
 
-    public override int SaveChanges()
+    public override int SaveChanges() => SaveChanges(acceptAllChangesOnSuccess: true);
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        EnforceAppendOnlyInventoryLedger();
         EnrichAuditLogs();
-        return base.SaveChanges();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+        SaveChangesAsync(acceptAllChangesOnSuccess: true, cancellationToken);
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        EnforceAppendOnlyInventoryLedger();
         EnrichAuditLogs();
-        return base.SaveChangesAsync(cancellationToken);
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void EnforceAppendOnlyInventoryLedger()
+    {
+        foreach (var entry in ChangeTracker.Entries<InventoryTransaction>())
+        {
+            if (entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException(
+                    "InventoryTransactions ledger is append-only; deleting ledger entries is forbidden (Rule 2).");
+            }
+
+            if (entry.State == EntityState.Modified && !IsAllowedReversalCorrectiveLinkUpdate(entry))
+            {
+                throw new InvalidOperationException(
+                    "InventoryTransactions ledger is append-only; modifying existing ledger entries is forbidden (Rule 2).");
+            }
+        }
+    }
+
+    private static bool IsAllowedReversalCorrectiveLinkUpdate(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<InventoryTransaction> entry)
+    {
+        if (entry.Entity.TransactionType != ERP.Domain.Enums.TransactionType.Reversal)
+            return false;
+
+        var correctiveProp = entry.Property(x => x.CorrectiveTransactionId);
+        if (!correctiveProp.IsModified || correctiveProp.OriginalValue != null || correctiveProp.CurrentValue == null)
+            return false;
+
+        return entry.Properties.All(p => !p.IsModified || p.Metadata.Name == nameof(InventoryTransaction.CorrectiveTransactionId));
     }
 
     private void EnrichAuditLogs()
