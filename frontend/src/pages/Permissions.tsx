@@ -77,6 +77,7 @@ export default function Permissions() {
   const [auditLogs, setAuditLogs] = useState<PermissionAuditLog[]>([]);
   const [auditLoaded, setAuditLoaded] = useState(false);
   const [auditBusy, setAuditBusy] = useState(false);
+  const [showGovernance, setShowGovernance] = useState(false);
 
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -272,7 +273,15 @@ export default function Permissions() {
         </table>
       </UiCard>)}
 
-      {canAssign && (
+      {(canAssign || canReadCatalog) && (
+        <div className="ui-inline-actions">
+          <button type="button" onClick={() => setShowGovernance(v => !v)}>
+            {showGovernance ? 'Ẩn quản trị bảo mật, phạm vi kho & kiểm toán' : 'Quản trị bảo mật, phạm vi kho & kiểm toán'}
+          </button>
+        </div>
+      )}
+
+      {showGovernance && canAssign && (
         <>
           <UiCard title="Quản trị bảo mật tài khoản & phiên đăng nhập">
             <UiToolbar>
@@ -419,7 +428,7 @@ export default function Permissions() {
         </>
       )}
 
-      {canReadCatalog && (
+      {showGovernance && canReadCatalog && (
         <UiCard title="Nhật ký kiểm toán phân quyền & bảo mật">
           <div className="ui-inline-actions">
             <button type="button" disabled={auditBusy} onClick={() => void loadAuditLogs()}>

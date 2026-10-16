@@ -34,14 +34,14 @@ namespace ERP.Api.Controllers
             var warehouseCount = await db.Warehouses.AsNoTracking()
                 .CountAsync(w => accessibleIds.Contains(w.Id) && w.IsActive, cancellationToken);
             var productCount = await db.Products.AsNoTracking()
-                .CountAsync(p => !p.IsDeleted, cancellationToken);
+                .CountAsync(cancellationToken);
             var inventoryBucketCount = await db.InventoryStocks.AsNoTracking()
                 .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && s.Quantity > 0, cancellationToken);
             var invalidStockCount = await db.InventoryStocks.AsNoTracking()
                 .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && (s.Quantity < 0 || s.ReservedQuantity < 0 || s.ReservedQuantity > s.Quantity), cancellationToken);
 
             var openInboundCount = await db.ImportReceipts.AsNoTracking()
-                .CountAsync(r => accessibleIds.Contains(r.WarehouseId) && r.Status != ReceiptStatus.Posted && r.Status != ReceiptStatus.Rejected, cancellationToken);
+                .CountAsync(r => accessibleIds.Contains(r.WarehouseId) && r.Status != ReceiptStatus.Posted && r.Status != ReceiptStatus.Cancelled, cancellationToken);
             var openPutawayCount = await db.PutawayTasks.AsNoTracking()
                 .CountAsync(t => accessibleIds.Contains(t.WarehouseId) && t.Status != PutawayTaskStatus.Completed && t.Status != PutawayTaskStatus.Cancelled, cancellationToken);
             var openOutboundCount = await db.ExportReceipts.AsNoTracking()
@@ -79,6 +79,109 @@ namespace ERP.Api.Controllers
                 openTransferCount,
                 recentActivities = recentAudits
             });
+        }
+
+        [HttpGet("expiry-aging")]
+        [Authorize]
+        public async Task<IActionResult> GetExpiryAgingReport(
+            [FromServices] ErpKhoDbContext db,
+            [FromServices] IWarehouseAuthorizationService warehouseAuth,
+            [FromQuery] int? warehouseId = null,
+            [FromQuery] int? productId = null,
+            [FromQuery] int nearExpiryDays = 30,
+            [FromQuery] bool onlyLots = false,
+            CancellationToken cancellationToken = default)
+        {
+            var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
+                return Ok(Array.Empty<object>());
+
+            if (nearExpiryDays < 1) nearExpiryDays = 30;
+            var today = DateTime.UtcNow.Date;
+            var nearThreshold = today.AddDays(nearExpiryDays);
+
+            var query = db.InventoryStocks.AsNoTracking()
+                .Where(s => accessibleIds.Contains(s.WarehouseId) && s.Quantity > 0);
+
+            if (warehouseId.HasValue)
+                query = query.Where(s => s.WarehouseId == warehouseId.Value);
+            if (productId.HasValue)
+                query = query.Where(s => s.ProductId == productId.Value);
+            if (onlyLots)
+                query = query.Where(s => s.LotId.HasValue);
+
+            var rows = await query
+                .Select(s => new
+                {
+                    InventoryStockId = s.Id,
+                    s.WarehouseId,
+                    WarehouseName = s.Warehouse.Name,
+                    s.LocationId,
+                    LocationCode = s.Location != null ? s.Location.Code : "DEFAULT",
+                    s.ProductId,
+                    ProductCode = s.Product.Code,
+                    ProductName = s.Product.Name,
+                    UnitName = s.Product.Unit.Name,
+                    Status = s.Status.ToString(),
+                    s.LotId,
+                    LotNumber = s.Lot != null ? s.Lot.LotNumber : null,
+                    ManufactureDate = s.Lot != null ? s.Lot.ManufactureDate : null,
+                    ExpiryDate = s.Lot != null ? s.Lot.ExpiryDate : null,
+                    LotCreatedAt = s.Lot != null ? (DateTime?)s.Lot.CreatedAt : null,
+                    s.Quantity,
+                    s.ReservedQuantity,
+                    AvailableQuantity = s.Quantity - s.ReservedQuantity,
+                    s.LastUpdated
+                })
+                .ToListAsync(cancellationToken);
+
+            var result = rows
+                .Select(r =>
+                {
+                    var daysToExpiry = r.ExpiryDate.HasValue
+                        ? (int?)(r.ExpiryDate.Value.Date - today).TotalDays
+                        : null;
+                    var anchorDate = (r.ManufactureDate ?? r.LotCreatedAt ?? r.LastUpdated).Date;
+                    var ageDays = Math.Max(0, (int)(today - anchorDate).TotalDays);
+                    var expiryStatus = !r.ExpiryDate.HasValue
+                        ? "NO_EXPIRY"
+                        : r.ExpiryDate.Value.Date < today
+                            ? "EXPIRED"
+                            : r.ExpiryDate.Value.Date <= nearThreshold
+                                ? "NEAR_EXPIRY"
+                                : "GOOD";
+
+                    return new
+                    {
+                        r.InventoryStockId,
+                        r.WarehouseId,
+                        r.WarehouseName,
+                        r.LocationId,
+                        r.LocationCode,
+                        r.ProductId,
+                        r.ProductCode,
+                        r.ProductName,
+                        r.UnitName,
+                        r.Status,
+                        r.LotId,
+                        r.LotNumber,
+                        r.ManufactureDate,
+                        r.ExpiryDate,
+                        r.Quantity,
+                        r.ReservedQuantity,
+                        r.AvailableQuantity,
+                        DaysToExpiry = daysToExpiry,
+                        AgeDays = ageDays,
+                        ExpiryStatus = expiryStatus
+                    };
+                })
+                .OrderBy(r => r.ExpiryStatus == "EXPIRED" ? 0 : r.ExpiryStatus == "NEAR_EXPIRY" ? 1 : r.ExpiryStatus == "GOOD" ? 2 : 3)
+                .ThenBy(r => r.DaysToExpiry ?? int.MaxValue)
+                .ThenByDescending(r => r.AgeDays)
+                .ThenBy(r => r.ProductCode)
+                .ToList();
+
+            return Ok(result);
         }
 
         [HttpGet("inventory")]

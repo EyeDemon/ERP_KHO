@@ -102,6 +102,12 @@ public sealed class DockAppointmentDto
     public DateTime? CheckedOutAtUtc { get; set; }
     public string? ExceptionCode { get; set; }
     public string? Note { get; set; }
+    public int? PurchaseOrderId { get; set; }
+    public string? PurchaseOrderCode { get; set; }
+    public int? AsnId { get; set; }
+    public string? AsnCode { get; set; }
+    public int? ImportReceiptId { get; set; }
+    public string? ImportReceiptCode { get; set; }
     public string? RowVersion { get; set; }
     public IReadOnlyList<DockAppointmentEventDto> Events { get; set; } = [];
 }
@@ -132,6 +138,9 @@ public sealed class UpsertDockAppointmentDto
     public bool RequiresTemperatureControl { get; set; }
     public bool Hazardous { get; set; }
     public string? Note { get; set; }
+    public int? PurchaseOrderId { get; set; }
+    public int? AsnId { get; set; }
+    public int? ImportReceiptId { get; set; }
     public string? RowVersion { get; set; }
 }
 
@@ -139,6 +148,13 @@ public class DockAppointmentCommandDto
 {
     public string? RowVersion { get; set; }
     public string? Note { get; set; }
+}
+
+public sealed class DockAppointmentLinkInboundDto : DockAppointmentCommandDto
+{
+    public int? PurchaseOrderId { get; set; }
+    public int? AsnId { get; set; }
+    public int? ImportReceiptId { get; set; }
 }
 
 public sealed class DockAppointmentArrivalDto : DockAppointmentCommandDto

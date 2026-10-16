@@ -183,6 +183,7 @@ public sealed class DockYardService(
             .Include(x => x.Warehouse)
             .Include(x => x.Dock)
             .Include(x => x.YardSlot)
+            .Include(x => x.Events)
             .Where(x => accessible.Contains(x.WarehouseId));
 
         if (query.WarehouseId.HasValue)
@@ -252,9 +253,11 @@ public sealed class DockYardService(
             UpdatedAtUtc = now
         };
         ApplyAppointmentData(appointment, dto);
+        var inboundLinkNote = await BuildInboundLinkNoteIfRequestedAsync(appointment.WarehouseId, appointment.Direction, dto.PurchaseOrderId, dto.AsnId, dto.ImportReceiptId, token);
         context.DockAppointments.Add(appointment);
         await SaveAsync(token);
         AddEvent(appointment, "Created", dto.Note);
+        if (inboundLinkNote is not null) AddEvent(appointment, "INBOUND_DOC_LINK", inboundLinkNote);
         AddAudit("DockAppointment.Created", "DockAppointment", appointment.Id, appointment.WarehouseId, $"Code: {appointment.Code}");
         await context.SaveChangesAsync(token);
         if (transaction is not null) await transaction.CommitAsync(token);
@@ -275,8 +278,10 @@ public sealed class DockYardService(
             throw new BusinessRuleException("Mã appointment không được thay đổi sau khi tạo.");
 
         ApplyAppointmentData(appointment, dto);
+        var inboundLinkNote = await BuildInboundLinkNoteIfRequestedAsync(appointment.WarehouseId, appointment.Direction, dto.PurchaseOrderId, dto.AsnId, dto.ImportReceiptId, token);
         Touch(appointment);
         AddEvent(appointment, "DraftUpdated", dto.Note);
+        if (inboundLinkNote is not null) AddEvent(appointment, "INBOUND_DOC_LINK", inboundLinkNote);
         AddAudit("DockAppointment.Updated", "DockAppointment", appointment.Id, appointment.WarehouseId, $"Code: {appointment.Code}");
         await SaveAsync(token);
         return await ReloadAsync(id, token);
@@ -463,6 +468,81 @@ public sealed class DockYardService(
         AddAudit("DockAppointment.Exception", "DockAppointment", appointment.Id, appointment.WarehouseId, $"ExceptionCode: {appointment.ExceptionCode}");
         await SaveAsync(token);
         return await ReloadAsync(id, token);
+    }
+
+    public async Task<DockAppointmentDto> LinkInboundDocumentsAsync(int id, DockAppointmentLinkInboundDto dto, CancellationToken token = default)
+    {
+        var appointment = await GetForMutationAsync(id, token);
+        if (appointment.Status is DockAppointmentStatus.Cancelled or DockAppointmentStatus.NoShow)
+            throw new ConcurrencyException("Không thể liên kết chứng từ cho appointment đã hủy hoặc không đến.");
+        ApplyVersion(appointment, dto.RowVersion);
+        if (!dto.PurchaseOrderId.HasValue && !dto.AsnId.HasValue && !dto.ImportReceiptId.HasValue)
+            throw new BusinessRuleException("Cần chọn ít nhất một chứng từ PO, ASN hoặc Phiếu nhập để liên kết.");
+
+        var inboundLinkNote = await BuildInboundLinkNoteIfRequestedAsync(
+            appointment.WarehouseId,
+            appointment.Direction,
+            dto.PurchaseOrderId,
+            dto.AsnId,
+            dto.ImportReceiptId,
+            token);
+
+        Touch(appointment);
+        AddEvent(appointment, "INBOUND_DOC_LINK", inboundLinkNote);
+        AddAudit("DockAppointment.InboundLinked", "DockAppointment", appointment.Id, appointment.WarehouseId, inboundLinkNote);
+        await SaveAsync(token);
+        return await ReloadAsync(id, token);
+    }
+
+    private async Task<string?> BuildInboundLinkNoteIfRequestedAsync(
+        int warehouseId,
+        DockAppointmentDirection direction,
+        int? purchaseOrderId,
+        int? asnId,
+        int? importReceiptId,
+        CancellationToken token)
+    {
+        if (!purchaseOrderId.HasValue && !asnId.HasValue && !importReceiptId.HasValue)
+            return null;
+        if (direction != DockAppointmentDirection.Inbound)
+            throw new BusinessRuleException("Chỉ appointment luồng Nhập kho (Inbound) mới được liên kết PO / ASN / Phiếu nhập.");
+
+        PurchaseOrder? po = null;
+        Asn? asn = null;
+        ImportReceipt? receipt = null;
+
+        if (purchaseOrderId.HasValue)
+        {
+            po = await context.PurchaseOrders.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == purchaseOrderId.Value && x.WarehouseId == warehouseId, token)
+                ?? throw new BusinessRuleException("Purchase Order không tồn tại hoặc không thuộc kho của appointment.");
+        }
+        if (asnId.HasValue)
+        {
+            asn = await context.Asns.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == asnId.Value && x.WarehouseId == warehouseId, token)
+                ?? throw new BusinessRuleException("ASN không tồn tại hoặc không thuộc kho của appointment.");
+            if (po is not null && asn.PurchaseOrderId.HasValue && asn.PurchaseOrderId.Value != po.Id)
+                throw new BusinessRuleException("ASN không thuộc Purchase Order đã chọn.");
+            if (po is null && asn.PurchaseOrderId.HasValue)
+                po = await context.PurchaseOrders.AsNoTracking().SingleOrDefaultAsync(x => x.Id == asn.PurchaseOrderId.Value, token);
+        }
+        if (importReceiptId.HasValue)
+        {
+            receipt = await context.ImportReceipts.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == importReceiptId.Value && x.WarehouseId == warehouseId, token)
+                ?? throw new BusinessRuleException("Phiếu nhập không tồn tại hoặc không thuộc kho của appointment.");
+            if (po is not null && receipt.PurchaseOrderId.HasValue && receipt.PurchaseOrderId.Value != po.Id)
+                throw new BusinessRuleException("Phiếu nhập không thuộc Purchase Order đã chọn.");
+            if (asn is not null && receipt.AsnId.HasValue && receipt.AsnId.Value != asn.Id)
+                throw new BusinessRuleException("Phiếu nhập không thuộc ASN đã chọn.");
+            if (asn is null && receipt.AsnId.HasValue)
+                asn = await context.Asns.AsNoTracking().SingleOrDefaultAsync(x => x.Id == receipt.AsnId.Value, token);
+            if (po is null && receipt.PurchaseOrderId.HasValue)
+                po = await context.PurchaseOrders.AsNoTracking().SingleOrDefaultAsync(x => x.Id == receipt.PurchaseOrderId.Value, token);
+        }
+
+        return $"PO:{po?.Id}:{po?.Code}|ASN:{asn?.Id}:{asn?.Code}|GR:{receipt?.Id}:{receipt?.Code}";
     }
 
     private async Task<DockAppointmentDto> TransitionAsync(
@@ -705,53 +785,102 @@ public sealed class DockYardService(
         RowVersion = Version(x.RowVersion)
     };
 
-    private static DockAppointmentDto MapAppointment(DockAppointment x, bool includeEvents = false) => new()
+    private static DockAppointmentDto MapAppointment(DockAppointment x, bool includeEvents = false)
     {
-        Id = x.Id,
-        WarehouseId = x.WarehouseId,
-        WarehouseCode = x.Warehouse.Code,
-        WarehouseName = x.Warehouse.Name,
-        Code = x.Code,
-        Direction = x.Direction,
-        Status = x.Status,
-        PlannedStartUtc = AsUtc(x.PlannedStartUtc),
-        PlannedEndUtc = AsUtc(x.PlannedEndUtc),
-        CarrierCode = x.CarrierCode,
-        CarrierName = x.CarrierName,
-        VehiclePlate = x.VehiclePlate,
-        TrailerPlate = x.TrailerPlate,
-        VehicleType = x.VehicleType,
-        RequiresTemperatureControl = x.RequiresTemperatureControl,
-        Hazardous = x.Hazardous,
-        DriverName = x.DriverName,
-        DriverPhone = x.DriverPhone,
-        SealNumber = x.SealNumber,
-        YardSlotId = x.YardSlotId,
-        YardSlotCode = x.YardSlot?.Code,
-        DockId = x.DockId,
-        DockCode = x.Dock?.Code,
-        ArrivedAtUtc = AsUtc(x.ArrivedAtUtc),
-        CheckedInAtUtc = AsUtc(x.CheckedInAtUtc),
-        DockAssignedAtUtc = AsUtc(x.DockAssignedAtUtc),
-        ServiceStartedAtUtc = AsUtc(x.ServiceStartedAtUtc),
-        ServiceCompletedAtUtc = AsUtc(x.ServiceCompletedAtUtc),
-        CheckedOutAtUtc = AsUtc(x.CheckedOutAtUtc),
-        ExceptionCode = x.ExceptionCode,
-        Note = x.Note,
-        RowVersion = Version(x.RowVersion),
-        Events = includeEvents
-            ? x.Events.OrderBy(y => y.EventAtUtc).Select(y => new DockAppointmentEventDto
+        var (poId, poCode, asnId, asnCode, grId, grCode) = ParseLatestInboundLink(x.Events);
+        return new DockAppointmentDto
+        {
+            Id = x.Id,
+            WarehouseId = x.WarehouseId,
+            WarehouseCode = x.Warehouse.Code,
+            WarehouseName = x.Warehouse.Name,
+            Code = x.Code,
+            Direction = x.Direction,
+            Status = x.Status,
+            PlannedStartUtc = AsUtc(x.PlannedStartUtc),
+            PlannedEndUtc = AsUtc(x.PlannedEndUtc),
+            CarrierCode = x.CarrierCode,
+            CarrierName = x.CarrierName,
+            VehiclePlate = x.VehiclePlate,
+            TrailerPlate = x.TrailerPlate,
+            VehicleType = x.VehicleType,
+            RequiresTemperatureControl = x.RequiresTemperatureControl,
+            Hazardous = x.Hazardous,
+            DriverName = x.DriverName,
+            DriverPhone = x.DriverPhone,
+            SealNumber = x.SealNumber,
+            YardSlotId = x.YardSlotId,
+            YardSlotCode = x.YardSlot?.Code,
+            DockId = x.DockId,
+            DockCode = x.Dock?.Code,
+            ArrivedAtUtc = AsUtc(x.ArrivedAtUtc),
+            CheckedInAtUtc = AsUtc(x.CheckedInAtUtc),
+            DockAssignedAtUtc = AsUtc(x.DockAssignedAtUtc),
+            ServiceStartedAtUtc = AsUtc(x.ServiceStartedAtUtc),
+            ServiceCompletedAtUtc = AsUtc(x.ServiceCompletedAtUtc),
+            CheckedOutAtUtc = AsUtc(x.CheckedOutAtUtc),
+            ExceptionCode = x.ExceptionCode,
+            Note = x.Note,
+            PurchaseOrderId = poId,
+            PurchaseOrderCode = poCode,
+            AsnId = asnId,
+            AsnCode = asnCode,
+            ImportReceiptId = grId,
+            ImportReceiptCode = grCode,
+            RowVersion = Version(x.RowVersion),
+            Events = includeEvents
+                ? x.Events.OrderBy(y => y.EventAtUtc).Select(y => new DockAppointmentEventDto
+                {
+                    Id = y.Id,
+                    EventType = y.EventType,
+                    EventAtUtc = AsUtc(y.EventAtUtc),
+                    ActorUserId = y.ActorUserId,
+                    DockId = y.DockId,
+                    YardSlotId = y.YardSlotId,
+                    Note = y.Note
+                }).ToList()
+                : []
+        };
+    }
+
+    private static (int? PoId, string? PoCode, int? AsnId, string? AsnCode, int? GrId, string? GrCode) ParseLatestInboundLink(IEnumerable<DockAppointmentEvent>? events)
+    {
+        var linkNote = events?
+            .Where(e => string.Equals(e.EventType, "INBOUND_DOC_LINK", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(e.Note))
+            .OrderByDescending(e => e.EventAtUtc)
+            .ThenByDescending(e => e.Id)
+            .Select(e => e.Note!)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(linkNote))
+            return default;
+
+        int? poId = null, asnId = null, grId = null;
+        string? poCode = null, asnCode = null, grCode = null;
+        foreach (var token in linkNote.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = token.Split(':', 3);
+            if (parts.Length < 3) continue;
+            var key = parts[0].ToUpperInvariant();
+            var parsedId = int.TryParse(parts[1], out var idVal) && idVal > 0 ? idVal : (int?)null;
+            var codeVal = string.IsNullOrWhiteSpace(parts[2]) ? null : parts[2];
+            switch (key)
             {
-                Id = y.Id,
-                EventType = y.EventType,
-                EventAtUtc = AsUtc(y.EventAtUtc),
-                ActorUserId = y.ActorUserId,
-                DockId = y.DockId,
-                YardSlotId = y.YardSlotId,
-                Note = y.Note
-            }).ToList()
-            : []
-    };
+                case "PO":
+                    poId = parsedId;
+                    poCode = codeVal;
+                    break;
+                case "ASN":
+                    asnId = parsedId;
+                    asnCode = codeVal;
+                    break;
+                case "GR":
+                    grId = parsedId;
+                    grCode = codeVal;
+                    break;
+            }
+        }
+        return (poId, poCode, asnId, asnCode, grId, grCode);
+    }
 
     private static DateTime AsUtc(DateTime value) =>
         value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);

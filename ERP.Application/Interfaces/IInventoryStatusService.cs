@@ -18,4 +18,9 @@ public interface IInventoryStatusService
     Task<InventoryStatusChangeResultDto> ChangeAsync(
         CreateInventoryStatusChangeDto request,
         CancellationToken cancellationToken = default);
+
+    Task<InventoryDispositionResultDto> ExecuteDispositionAsync(
+        CreateInventoryDispositionDto request,
+        CancellationToken cancellationToken = default);
 }
+

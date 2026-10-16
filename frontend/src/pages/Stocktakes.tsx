@@ -19,12 +19,16 @@ interface StocktakeSummary {
   createdAt: string;
   approvedAt?: string;
   detailCount: number;
+  isBlindCount?: boolean;
 }
 
 interface StocktakeDetailRow {
   id: number;
   stocktakeId: number;
   productId: number;
+  locationId?: number;
+  locationCode?: string;
+  locationName?: string;
   productCode: string;
   productName: string;
   unitName: string;
@@ -42,6 +46,12 @@ interface Warehouse {
   id: number;
   name: string;
   isActive: boolean;
+}
+
+interface LocationOption {
+  id: number;
+  code: string;
+  name: string;
 }
 
 const PAGE_SIZE = 10;
@@ -69,9 +79,13 @@ const Stocktakes = () => {
   
   // Create Form State
   const [createWarehouseId, setCreateWarehouseId] = useState<number | ''>('');
+  const [createLocationId, setCreateLocationId] = useState<number | ''>('');
+  const [createIsBlindCount, setCreateIsBlindCount] = useState(false);
+  const [createLocations, setCreateLocations] = useState<LocationOption[]>([]);
   const [createNote, setCreateNote] = useState('');
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  const [freezeLoading, setFreezeLoading] = useState(false);
 
   // Edit Row State
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
@@ -111,6 +125,17 @@ const Stocktakes = () => {
     fetchStocktakes();
     fetchWarehouses();
   }, []);
+
+  useEffect(() => {
+    if (createWarehouseId === '') {
+      setCreateLocations([]);
+      setCreateLocationId('');
+      return;
+    }
+    apiClient.get(`/api/locations?warehouseId=${createWarehouseId}`)
+      .then(res => setCreateLocations(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setCreateLocations([]));
+  }, [createWarehouseId]);
 
   const getStatusText = (status: number) => {
     switch (status) {
@@ -155,6 +180,8 @@ const Stocktakes = () => {
 
   const handleAddNew = () => {
     setCreateWarehouseId('');
+    setCreateLocationId('');
+    setCreateIsBlindCount(false);
     setCreateNote('');
     setFormError('');
     setSuccessMsg('');
@@ -177,9 +204,11 @@ const Stocktakes = () => {
 
     setFormLoading(true);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         warehouseId: createWarehouseId,
-        note: createNote
+        note: createNote,
+        ...(createLocationId !== '' ? { locationId: Number(createLocationId) } : {}),
+        ...(createIsBlindCount ? { isBlindCount: true } : {}),
       };
       const action = `stocktake-create:${JSON.stringify(payload)}`;
       const res = await apiClient.post('/api/stocktakes', payload, { headers: idempotencyHeaders(action) });
@@ -195,6 +224,30 @@ const Stocktakes = () => {
       setFormError(err.response?.data?.message || 'Lỗi khi tạo phiếu kiểm kê.');
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleCountFreeze = async () => {
+    if (!currentDetail || freezeLoading) return;
+    setFreezeLoading(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const distinctLocations = Array.from(new Set(currentDetail.details.map(d => d.locationId).filter((x): x is number => typeof x === 'number')));
+      const locationId = distinctLocations.length === 1 ? distinctLocations[0] : undefined;
+      const key = `stocktake-count-freeze:${currentDetail.id}`;
+      await apiClient.post('/api/inventory/locks', {
+        lockType: 'CountFreeze',
+        warehouseId: currentDetail.warehouseId,
+        ...(locationId ? { locationId } : {}),
+        reason: `Đóng băng kiểm kê (CountFreeze) cho phiếu ${currentDetail.code}`
+      }, { headers: idempotencyHeaders(key) });
+      completeIdempotentAction(key);
+      setSuccessMsg(`Đã tạo khóa đóng băng kiểm kê (CountFreeze) cho phiếu ${currentDetail.code}.`);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Không thể tạo khóa đóng băng kiểm kê.');
+    } finally {
+      setFreezeLoading(false);
     }
   };
 
@@ -427,6 +480,30 @@ const Stocktakes = () => {
                 </label>
 
                 <label className="ui-stack">
+                  <span>Vị trí / Bin kiểm kê (Cycle Count - tùy chọn)</span>
+                  <select
+                    aria-label="Vị trí kiểm kê"
+                    value={createLocationId}
+                    onChange={(e) => setCreateLocationId(e.target.value ? parseInt(e.target.value) : '')}
+                    disabled={formLoading || createWarehouseId === ''}
+                  >
+                    <option value="">-- Toàn bộ kho (Full Warehouse) --</option>
+                    {createLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.code} — {loc.name}</option>)}
+                  </select>
+                </label>
+
+                <label className="ui-inline-actions">
+                  <input
+                    aria-label="Kiểm kê mù (Blind Count)"
+                    type="checkbox"
+                    checked={createIsBlindCount}
+                    onChange={(e) => setCreateIsBlindCount(e.target.checked)}
+                    disabled={formLoading}
+                  />
+                  <span>Kiểm kê mù (Blind Count — ẩn số lượng tồn hệ thống khi nhân viên kiểm đếm)</span>
+                </label>
+
+                <label className="ui-stack">
                   <span>Ghi chú</span>
                   <textarea
                     aria-label="Ghi chú kiểm kê"
@@ -457,6 +534,11 @@ const Stocktakes = () => {
               actions={
                 <div className="stocktake-page-actions">
                   <button type="button" onClick={() => setViewMode('list')}>Quay lại danh sách</button>
+                  {currentDetail.status === 0 && canApprove && (
+                    <button type="button" onClick={() => void handleCountFreeze()} disabled={freezeLoading || loading}>
+                      {freezeLoading ? 'Đang khóa...' : 'Đóng băng kiểm kê (Count Freeze)'}
+                    </button>
+                  )}
                   {currentDetail.status === 0 && canApprove && currentDetail.createdBy !== userId && (
                     <button type="button" className="ui-primary-button" onClick={() => void handleApprove()} disabled={loading}>
                       {loading ? 'Đang xử lý...' : 'Duyệt phiếu'}
@@ -472,7 +554,12 @@ const Stocktakes = () => {
             <UiCard title="Thông tin phiếu">
               <div className="stocktake-detail-meta">
                 <div><strong>Kho:</strong> {currentDetail.warehouseName}</div>
-                <div><strong>Trạng thái:</strong> <UiBadge tone={statusTone(currentDetail.status)}>{getStatusText(currentDetail.status)}</UiBadge></div>
+                <div>
+                  <strong>Trạng thái:</strong> <UiBadge tone={statusTone(currentDetail.status)}>{getStatusText(currentDetail.status)}</UiBadge>
+                  {Boolean(currentDetail.isBlindCount || currentDetail.note?.toUpperCase().startsWith('[BLIND]')) && (
+                    <> {' '}<UiBadge tone="warning">Kiểm kê mù (Blind Count)</UiBadge></>
+                  )}
+                </div>
                 <div><strong>Ngày tạo:</strong> {new Date(currentDetail.createdAt).toLocaleString('vi-VN')}</div>
                 <div><strong>Người tạo:</strong> {currentDetail.createdByName}</div>
                 {currentDetail.approvedByName && (
@@ -503,12 +590,13 @@ const Stocktakes = () => {
                   <tbody>
                     {currentDetail.details.map(row => {
                       const isEditing = editingRowId === row.id;
+                      const isBlindDraft = currentDetail.status === 0 && Boolean(currentDetail.isBlindCount || currentDetail.note?.toUpperCase().startsWith('[BLIND]'));
                       return (
                         <tr key={row.id}>
-                          <td><strong>{row.productCode}</strong></td>
+                          <td><strong>{row.productCode}</strong>{row.locationCode && <><br /><small>{row.locationCode}</small></>}</td>
                           <td>{row.productName}</td>
                           <td>{row.unitName}</td>
-                          <td>{row.systemQuantity}</td>
+                          <td>{isBlindDraft ? <span className="ui-muted-text">Ẩn (Blind Count)</span> : row.systemQuantity}</td>
                           <td>
                             {isEditing ? (
                               <input
@@ -525,7 +613,11 @@ const Stocktakes = () => {
                               row.actualQuantity !== undefined && row.actualQuantity !== null ? row.actualQuantity : '—'
                             )}
                           </td>
-                          <td>{isEditing ? renderVariance(row.systemQuantity, editActualQuantity) : renderVariance(row.systemQuantity, row.actualQuantity)}</td>
+                          <td>
+                            {isBlindDraft
+                              ? <span className="stocktake-variance neutral">Ẩn khi đếm mù</span>
+                              : (isEditing ? renderVariance(row.systemQuantity, editActualQuantity) : renderVariance(row.systemQuantity, row.actualQuantity))}
+                          </td>
                           <td>
                             {isEditing ? (
                               <input

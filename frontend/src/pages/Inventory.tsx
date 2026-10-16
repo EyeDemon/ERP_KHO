@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../services/apiClient';
-import { UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 import InventoryBuckets from './InventoryBuckets';
 import './Inventory.css';
 
@@ -57,6 +57,29 @@ interface InventoryInOutDto {
   closingQuantity: number;
 }
 
+interface InventoryExpiryAgingDto {
+  inventoryStockId: number;
+  warehouseId: number;
+  warehouseName: string;
+  locationId?: number | null;
+  locationCode: string;
+  productId: number;
+  productCode: string;
+  productName: string;
+  unitName: string;
+  status: string;
+  lotId?: number | null;
+  lotNumber?: string | null;
+  manufactureDate?: string | null;
+  expiryDate?: string | null;
+  quantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  daysToExpiry?: number | null;
+  ageDays: number;
+  expiryStatus: 'EXPIRED' | 'NEAR_EXPIRY' | 'GOOD' | 'NO_EXPIRY';
+}
+
 interface PagedResult<T> {
   items: T[];
   totalRecords: number;
@@ -97,7 +120,7 @@ const inventoryStatusLabel = (value: string) => ({
 }[value] ?? value);
 
 const Inventory = () => {
-  const [activeTab, setActiveTab] = useState<'stock' | 'buckets' | 'history' | 'inout'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'buckets' | 'history' | 'inout' | 'expiry'>('stock');
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
 
   // Stock State
@@ -152,6 +175,17 @@ const Inventory = () => {
   const [inoutReport, setInoutReport] = useState<InventoryInOutDto[] | null>(null);
   const [inoutLoading, setInoutLoading] = useState(false);
   const [inoutError, setInoutError] = useState('');
+
+  // Expiry & Aging State
+  const [expiryFilter, setExpiryFilter] = useState({
+    warehouseId: '',
+    productId: '',
+    nearExpiryDays: '30',
+    onlyLots: false
+  });
+  const [expiryReport, setExpiryReport] = useState<InventoryExpiryAgingDto[]>([]);
+  const [expiryLoading, setExpiryLoading] = useState(false);
+  const [expiryError, setExpiryError] = useState('');
 
   const fetchStocks = async () => {
     setStockLoading(true);
@@ -220,6 +254,26 @@ const Inventory = () => {
     }
   };
 
+  const fetchExpiryAging = async () => {
+    setExpiryLoading(true);
+    setExpiryError('');
+    try {
+      const params = new URLSearchParams();
+      if (expiryFilter.warehouseId) params.append('warehouseId', expiryFilter.warehouseId);
+      if (expiryFilter.productId) params.append('productId', expiryFilter.productId);
+      if (expiryFilter.nearExpiryDays) params.append('nearExpiryDays', expiryFilter.nearExpiryDays);
+      if (expiryFilter.onlyLots) params.append('onlyLots', 'true');
+
+      const res = await apiClient.get('/api/Reports/expiry-aging?' + params.toString());
+      setExpiryReport(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      setExpiryError('Lỗi khi tải báo cáo hạn dùng và tuổi tồn.');
+      setExpiryReport([]);
+    } finally {
+      setExpiryLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'stock') {
       fetchStocks();
@@ -229,9 +283,11 @@ const Inventory = () => {
       if (!inoutReport && !inoutError) {
         fetchInOut();
       }
+    } else if (activeTab === 'expiry') {
+      fetchExpiryAging();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, historyFilter.page]); 
+  }, [activeTab, historyFilter.page]);
 
   const handleStockFilterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,6 +308,11 @@ const Inventory = () => {
     e.preventDefault();
     setInoutPage(1);
     fetchInOut();
+  };
+
+  const handleExpiryFilterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void fetchExpiryAging();
   };
 
   const handleExportStock = async () => {
@@ -581,6 +642,107 @@ const Inventory = () => {
     );
   };
 
+  const renderExpiryTab = () => {
+    const expiryBadge = (status: InventoryExpiryAgingDto['expiryStatus'], days?: number | null) => {
+      if (status === 'EXPIRED') return <UiBadge tone="danger">Đã hết hạn ({days} ngày)</UiBadge>;
+      if (status === 'NEAR_EXPIRY') return <UiBadge tone="warning">Sắp hết hạn ({days} ngày)</UiBadge>;
+      if (status === 'GOOD') return <UiBadge tone="success">Còn hạn tốt ({days} ngày)</UiBadge>;
+      return <UiBadge tone="neutral">Không có HSD</UiBadge>;
+    };
+
+    return (
+      <UiCard title="Báo cáo Hạn dùng (FEFO) & Tuổi tồn kho (Aging)">
+        <form onSubmit={handleExpiryFilterSubmit}>
+          <UiToolbar>
+            <UiToolbarField label="Kho">
+              <select
+                aria-label="Kho báo cáo hạn dùng"
+                value={expiryFilter.warehouseId}
+                onChange={e => setExpiryFilter({ ...expiryFilter, warehouseId: e.target.value })}
+              >
+                <option value="">Tất cả kho được phép</option>
+                {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+              </select>
+            </UiToolbarField>
+            <UiToolbarField label="ID Sản phẩm">
+              <input
+                aria-label="ID sản phẩm báo cáo hạn dùng"
+                type="number"
+                value={expiryFilter.productId}
+                onChange={e => setExpiryFilter({ ...expiryFilter, productId: e.target.value })}
+                placeholder="Nhập ID sản phẩm..."
+              />
+            </UiToolbarField>
+            <UiToolbarField label="Ngưỡng cảnh báo cận hạn (ngày)">
+              <input
+                aria-label="Ngưỡng cảnh báo cận hạn"
+                type="number"
+                min={1}
+                value={expiryFilter.nearExpiryDays}
+                onChange={e => setExpiryFilter({ ...expiryFilter, nearExpiryDays: e.target.value })}
+              />
+            </UiToolbarField>
+            <label className="ui-checkbox-label">
+              <input
+                type="checkbox"
+                checked={expiryFilter.onlyLots}
+                onChange={e => setExpiryFilter({ ...expiryFilter, onlyLots: e.target.checked })}
+              />
+              Chỉ hiển thị dòng có Lô (Lot)
+            </label>
+            <div className="inventory-toolbar-actions">
+              <button type="submit">Lọc Hạn Dùng & Tuổi Tồn</button>
+            </div>
+          </UiToolbar>
+        </form>
+
+        {expiryError && <p role="alert">{expiryError}</p>}
+        {expiryLoading ? (
+          <p role="status">Đang tải...</p>
+        ) : (
+          <UiTableScroll>
+            <table aria-label="Báo cáo hạn dùng và tuổi tồn" className="inventory-table-wide">
+              <thead>
+                <tr>
+                  <th>Kho / Vị trí</th>
+                  <th>Sản phẩm</th>
+                  <th>Lô (Lot)</th>
+                  <th>Trạng thái tồn</th>
+                  <th>Ngày SX</th>
+                  <th>Hạn sử dụng</th>
+                  <th>Tình trạng HSD</th>
+                  <th className="inventory-numeric">Tuổi tồn (ngày)</th>
+                  <th className="inventory-numeric">Tồn thực tế</th>
+                  <th className="inventory-numeric">Khả dụng</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expiryReport.length === 0 ? (
+                  <tr><td colSpan={10} className="ui-empty-cell">Không có dữ liệu hạn dùng / tuổi tồn</td></tr>
+                ) : (
+                  expiryReport.map(row => (
+                    <tr key={row.inventoryStockId}>
+                      <td><strong>{row.warehouseName}</strong><br /><small>{row.locationCode}</small></td>
+                      <td><strong>{row.productCode}</strong> — {row.productName}</td>
+                      <td>{row.lotNumber || '—'}</td>
+                      <td>{inventoryStatusLabel(row.status)}</td>
+                      <td>{row.manufactureDate ? new Date(row.manufactureDate).toLocaleDateString('vi-VN') : '—'}</td>
+                      <td>{row.expiryDate ? new Date(row.expiryDate).toLocaleDateString('vi-VN') : '—'}</td>
+                      <td>{expiryBadge(row.expiryStatus, row.daysToExpiry)}</td>
+                      <td className="inventory-numeric">{row.ageDays}</td>
+                      <td className="inventory-numeric">{row.quantity} {row.unitName}</td>
+                      <td className="inventory-numeric inventory-available">{row.availableQuantity} {row.unitName}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </UiTableScroll>
+        )}
+      </UiCard>
+    );
+  };
+
   return (
     <UiPage>
       <div className="inventory-page">
@@ -631,12 +793,23 @@ const Inventory = () => {
           >
             Xuất nhập tồn
           </button>
+          <button
+            type="button"
+            role="tab"
+            className="inventory-tab"
+            aria-selected={activeTab === 'expiry'}
+            aria-controls="inventory-expiry-panel"
+            onClick={() => setActiveTab('expiry')}
+          >
+            Hạn dùng & Tuổi tồn
+          </button>
         </div>
 
         {activeTab === 'stock' && <section id="inventory-stock-panel" role="tabpanel">{renderStockTab()}</section>}
         {activeTab === 'buckets' && <section id="inventory-buckets-panel" role="tabpanel"><InventoryBuckets warehouses={warehouses} /></section>}
         {activeTab === 'history' && <section id="inventory-history-panel" role="tabpanel">{renderHistoryTab()}</section>}
         {activeTab === 'inout' && <section id="inventory-inout-panel" role="tabpanel">{renderInOutTab()}</section>}
+        {activeTab === 'expiry' && <section id="inventory-expiry-panel" role="tabpanel">{renderExpiryTab()}</section>}
       </div>
     </UiPage>
   );

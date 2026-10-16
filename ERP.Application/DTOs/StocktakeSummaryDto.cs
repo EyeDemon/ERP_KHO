@@ -18,5 +18,7 @@ namespace ERP.Application.DTOs
         public DateTime CreatedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
         public int DetailCount { get; set; }
+        public bool IsBlindCount => Note != null && Note.StartsWith("[BLIND]", StringComparison.OrdinalIgnoreCase);
     }
 }
+

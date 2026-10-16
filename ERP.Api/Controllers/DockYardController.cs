@@ -129,4 +129,10 @@ public sealed class DockYardController(IDockYardService service) : ControllerBas
     [PermissionAuthorize(AppPermissions.DockAppointmentManage)]
     public async Task<IActionResult> MarkException(int id, DockAppointmentExceptionDto dto, CancellationToken token) =>
         Ok(await service.MarkExceptionAsync(id, dto, token));
+
+    [HttpPost("appointments/{id:int}/link-inbound")]
+    [IdempotentCommand("DockYard.Appointment.LinkInbound")]
+    [PermissionAuthorize(AppPermissions.DockAppointmentManage)]
+    public async Task<IActionResult> LinkInbound(int id, DockAppointmentLinkInboundDto dto, CancellationToken token) =>
+        Ok(await service.LinkInboundDocumentsAsync(id, dto, token));
 }

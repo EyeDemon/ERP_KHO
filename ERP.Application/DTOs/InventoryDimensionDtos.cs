@@ -60,3 +60,29 @@ public sealed class InventoryStatusChangeResultDto
     public int? LotId { get; set; }
     public int? SerialId { get; set; }
 }
+
+public sealed class CreateInventoryDispositionDto
+{
+    public int InventoryStockId { get; set; }
+    public decimal Quantity { get; set; }
+    public string Action { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class InventoryDispositionResultDto
+{
+    public int SourceStockId { get; set; }
+    public int? DestinationStockId { get; set; }
+    public int TransactionId { get; set; }
+    public string Action { get; set; } = string.Empty;
+    public string FromStatus { get; set; } = string.Empty;
+    public string? ToStatus { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal RemainingSourceQuantity { get; set; }
+    public int ProductId { get; set; }
+    public int WarehouseId { get; set; }
+    public int LocationId { get; set; }
+    public int? LotId { get; set; }
+    public int? SerialId { get; set; }
+}
+

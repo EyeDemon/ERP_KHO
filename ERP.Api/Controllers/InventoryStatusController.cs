@@ -36,4 +36,13 @@ public sealed class InventoryStatusController(IInventoryStatusService service) :
         CreateInventoryStatusChangeDto request,
         CancellationToken cancellationToken) =>
         Ok(await service.ChangeAsync(request, cancellationToken));
+
+    [HttpPost("disposition")]
+    [PermissionAuthorize(AppPermissions.InventoryStatusChangeCreate)]
+    [IdempotentCommand("InventoryStatus.Disposition")]
+    public async Task<ActionResult<InventoryDispositionResultDto>> Disposition(
+        CreateInventoryDispositionDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.ExecuteDispositionAsync(request, cancellationToken));
 }
+

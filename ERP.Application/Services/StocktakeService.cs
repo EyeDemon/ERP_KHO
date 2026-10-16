@@ -66,9 +66,26 @@ namespace ERP.Application.Services
             if (warehouse == null)
                 throw new NotFoundException($"Không tìm thấy kho id {dto.WarehouseId}");
 
-            var stocks = await _inventoryStockRepository.FindAsync(s => s.WarehouseId == dto.WarehouseId);
+            var stocks = (await _inventoryStockRepository.FindAsync(s => s.WarehouseId == dto.WarehouseId)).ToList();
+            if (dto.LocationId.HasValue)
+            {
+                stocks = stocks.Where(s => s.LocationId == dto.LocationId.Value).ToList();
+            }
 
             var code = $"KK-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..16].ToUpperInvariant()}";
+            var normalizedNote = dto.Note?.Trim();
+            if (dto.IsBlindCount)
+            {
+                normalizedNote = string.IsNullOrWhiteSpace(normalizedNote)
+                    ? "[BLIND] Kiểm kê mù"
+                    : normalizedNote.StartsWith("[BLIND]", StringComparison.OrdinalIgnoreCase)
+                        ? normalizedNote
+                        : $"[BLIND] {normalizedNote}";
+            }
+            else
+            {
+                normalizedNote = dto.Note;
+            }
 
             var stocktake = new Stocktake
             {
@@ -77,7 +94,7 @@ namespace ERP.Application.Services
                 Status = ReceiptStatus.Draft,
                 CreatedBy = createdByUserId,
                 CreatedAt = DateTime.UtcNow,
-                Note = dto.Note,
+                Note = normalizedNote,
                 Details = stocks.Select(s => new StocktakeDetail
                 {
                     ProductId = s.ProductId,

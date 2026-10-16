@@ -327,5 +327,39 @@ namespace ERP.Application.Tests
             capturedCodes[1].Should().NotBeNullOrWhiteSpace().And.StartWith("KK-");
             capturedCodes[0].Should().NotBe(capturedCodes[1]);
         }
+
+        [Fact]
+        public async Task CreateStocktakeAsync_WithLocationAndBlindCount_FiltersStocksByLocationAndPrefixesBlindMarker()
+        {
+            var dto = new DTOs.CreateStocktakeDto
+            {
+                WarehouseId = 1,
+                LocationId = 50,
+                IsBlindCount = true,
+                Note = "Kiểm kê kệ A1"
+            };
+            var warehouse = new Warehouse { Id = 1, Name = "Kho Tổng" };
+            var stocks = new List<InventoryStock>
+            {
+                new InventoryStock { ProductId = 10, WarehouseId = 1, LocationId = 50, Quantity = 25m },
+                new InventoryStock { ProductId = 20, WarehouseId = 1, LocationId = 99, Quantity = 80m }
+            };
+
+            _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(warehouse);
+            _mockStockRepo.Setup(x => x.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<InventoryStock, bool>>>(), It.IsAny<CancellationToken>()))
+                           .ReturnsAsync(stocks);
+
+            Stocktake? captured = null;
+            _mockStocktakeRepo.Setup(x => x.AddAsync(It.IsAny<Stocktake>(), It.IsAny<CancellationToken>()))
+                              .Callback<Stocktake, CancellationToken>((s, _) => captured = s)
+                              .ReturnsAsync((Stocktake s, CancellationToken _) => s);
+
+            await _service.CreateStocktakeAsync(dto, 99);
+
+            captured.Should().NotBeNull();
+            captured!.Note.Should().Be("[BLIND] Kiểm kê kệ A1");
+            captured.Details.Should().ContainSingle(d => d.ProductId == 10 && d.LocationId == 50 && d.SystemQuantity == 25m);
+        }
     }
 }
+

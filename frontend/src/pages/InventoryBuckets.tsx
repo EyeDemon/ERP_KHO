@@ -52,6 +52,8 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
   const [error,setError]=useState('');
   const [selected,setSelected]=useState<InventoryBucket|null>(null);
   const [change,setChange]=useState({toStatus:'',quantity:'',reason:''});
+  const [dispositionBucket,setDispositionBucket]=useState<InventoryBucket|null>(null);
+  const [disposition,setDisposition]=useState({action:'ReleaseToAvailable',quantity:'',reason:''});
   const [busy,setBusy]=useState(false);
   const lock=useRef(false);
 
@@ -78,8 +80,17 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
   useEffect(()=>{void load()},[]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startChange=(bucket:InventoryBucket)=>{
+    setDispositionBucket(null);
     setSelected(bucket);
     setChange({toStatus:'',quantity:String(Math.max(0,bucket.onHandQuantity-bucket.reservedQuantity)),reason:''});
+    setError('');
+  };
+
+  const startDisposition=(bucket:InventoryBucket)=>{
+    setSelected(null);
+    setDispositionBucket(bucket);
+    const defaultAction=['EXPIRED','RECALL_BLOCKED'].includes(bucket.status)?'Scrap':'ReleaseToAvailable';
+    setDisposition({action:defaultAction,quantity:String(Math.max(0,bucket.onHandQuantity-bucket.reservedQuantity)),reason:''});
     setError('');
   };
 
@@ -100,6 +111,28 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
       completeIdempotentAction(key);
       setSelected(null);
       setChange({toStatus:'',quantity:'',reason:''});
+      await load();
+    }catch(e){setError(messageOf(e))}
+    finally{lock.current=false;setBusy(false)}
+  };
+
+  const submitDisposition=async(e:FormEvent)=>{
+    e.preventDefault();
+    if(!dispositionBucket||!canChange||lock.current)return;
+    const quantity=Number(disposition.quantity);
+    if(!disposition.action||!Number.isFinite(quantity)||quantity<=0||!disposition.reason.trim())return;
+    const key=`inventory-disposition-${dispositionBucket.inventoryStockId}-${disposition.action}`;
+    lock.current=true;setBusy(true);setError('');
+    try{
+      await apiClient.post('/api/inventory/disposition',{
+        inventoryStockId:dispositionBucket.inventoryStockId,
+        quantity,
+        action:disposition.action,
+        reason:disposition.reason.trim(),
+      },{headers:idempotencyHeaders(key)});
+      completeIdempotentAction(key);
+      setDispositionBucket(null);
+      setDisposition({action:'ReleaseToAvailable',quantity:'',reason:''});
       await load();
     }catch(e){setError(messageOf(e))}
     finally{lock.current=false;setBusy(false)}
@@ -162,7 +195,12 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
                 <td className="inventory-numeric">{bucket.onHandQuantity}</td>
                 <td className="inventory-numeric">{bucket.reservedQuantity}</td>
                 <td className="inventory-numeric inventory-available">{bucket.availableQuantity}</td>
-                {canChange&&<td><button type="button" disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startChange(bucket)}>Đổi trạng thái</button></td>}
+                {canChange&&<td>
+                  <div className="ui-inline-actions">
+                    <button type="button" disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startChange(bucket)}>Đổi trạng thái</button>
+                    {bucket.status!=='AVAILABLE'&&<button type="button" disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startDisposition(bucket)}>Xử lý / Thanh hủy</button>}
+                  </div>
+                </td>}
               </tr>)}
           </tbody>
         </table>
@@ -187,5 +225,25 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
         </div>
       </form>
     </UiCard>}
+
+    {dispositionBucket&&canChange&&<UiCard title={`Xử lý chất lượng / Thanh hủy (Disposition) • ${dispositionBucket.productCode} • ${dispositionBucket.status}`}>
+      <form onSubmit={submitDisposition} className="ui-form-grid">
+        <p className="ui-muted-text">
+          Nhóm tồn {dispositionBucket.locationCode} • {dispositionBucket.lotNumber||'không có lô'} • {dispositionBucket.serialNumber||'không có sê-ri'}.
+          Tối đa chưa được giữ: {Math.max(0,dispositionBucket.onHandQuantity-dispositionBucket.reservedQuantity)}.
+        </p>
+        <UiToolbarField label="Quyết định xử lý"><select aria-label="Quyết định xử lý" value={disposition.action} onChange={e=>setDisposition(x=>({...x,action:e.target.value}))} required>
+          {!['EXPIRED','RECALL_BLOCKED'].includes(dispositionBucket.status)&&<option value="ReleaseToAvailable">Phát hành về Khả dụng (Release to AVAILABLE)</option>}
+          <option value="Scrap">Thanh hủy / Xuất hủy (Scrap - ghi sổ cái giảm tồn)</option>
+        </select></UiToolbarField>
+        <UiToolbarField label="Số lượng xử lý"><input aria-label="Số lượng xử lý" type="number" min="0.0001" step="any" max={Math.max(0,dispositionBucket.onHandQuantity-dispositionBucket.reservedQuantity)} value={disposition.quantity} onChange={e=>setDisposition(x=>({...x,quantity:e.target.value}))} required/></UiToolbarField>
+        <UiToolbarField label="Biên bản / Lý do xử lý"><input aria-label="Biên bản / Lý do xử lý" value={disposition.reason} onChange={e=>setDisposition(x=>({...x,reason:e.target.value}))} placeholder="Số biên bản QC / lý do thanh hủy" required/></UiToolbarField>
+        <div className="ui-inline-actions">
+          <button type="submit" disabled={busy||!disposition.action||!disposition.reason.trim()}>Xác nhận xử lý</button>
+          <button type="button" disabled={busy} onClick={()=>setDispositionBucket(null)}>Hủy</button>
+        </div>
+      </form>
+    </UiCard>}
   </div>;
 }
+

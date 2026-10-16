@@ -27,4 +27,5 @@ public interface IDockYardService
     Task<DockAppointmentDto> CancelAsync(int id, DockAppointmentCommandDto dto, CancellationToken token = default);
     Task<DockAppointmentDto> MarkNoShowAsync(int id, DockAppointmentCommandDto dto, CancellationToken token = default);
     Task<DockAppointmentDto> MarkExceptionAsync(int id, DockAppointmentExceptionDto dto, CancellationToken token = default);
+    Task<DockAppointmentDto> LinkInboundDocumentsAsync(int id, DockAppointmentLinkInboundDto dto, CancellationToken token = default);
 }

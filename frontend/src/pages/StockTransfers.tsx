@@ -51,6 +51,22 @@ type Transfer = {
   cancelledAt?: string;
   details: TransferLine[];
 };
+type InTransitItem = {
+  transferId: number;
+  transferCode: string;
+  sourceWarehouseId: number;
+  sourceWarehouseName: string;
+  destinationWarehouseId: number;
+  destinationWarehouseName: string;
+  productId: number;
+  productCode: string;
+  productName: string;
+  unitName: string;
+  dispatchedQuantity: number;
+  inTransitQuantity: number;
+  dispatchedAt?: string | null;
+  hoursInTransit: number;
+};
 
 const statusNames = ['Draft', 'Approved', 'InTransit', 'Received', 'Completed', 'Cancelled', 'Returned'];
 const statusLabel: Record<string, string> = {
@@ -108,10 +124,34 @@ export default function StockTransfers() {
   >({});
   const [actionInFlight, setActionInFlight] = useState(false);
   const [createInFlight, setCreateInFlight] = useState(false);
+  const [showInTransit, setShowInTransit] = useState(false);
+  const [inTransitItems, setInTransitItems] = useState<InTransitItem[]>([]);
+  const [inTransitLoading, setInTransitLoading] = useState(false);
   const actionInFlightRef = useRef(false);
   const createInFlightRef = useRef(false);
   const listRequestSequence = useRef(0);
   const detailRequestSequence = useRef(0);
+
+  const loadInTransit = async () => {
+    setInTransitLoading(true);
+    try {
+      const params: Record<string, string> = {};
+      if (filters.sourceWarehouseId) params.sourceWarehouseId = filters.sourceWarehouseId;
+      if (filters.destinationWarehouseId) params.destinationWarehouseId = filters.destinationWarehouseId;
+      const res = await apiClient.get('/api/stock-transfers/in-transit', { params });
+      setInTransitItems(Array.isArray(res.data?.items) ? (res.data.items as InTransitItem[]) : []);
+    } catch {
+      setInTransitItems([]);
+    } finally {
+      setInTransitLoading(false);
+    }
+  };
+
+  const toggleInTransit = () => {
+    const next = !showInTransit;
+    setShowInTransit(next);
+    if (next) void loadInTransit();
+  };
 
   const load = async (requestedPage = page) => {
     const requestSequence = ++listRequestSequence.current;
@@ -145,6 +185,7 @@ export default function StockTransfers() {
   }, [page]);
 
   const applyFilters = () => {
+    if (showInTransit) void loadInTransit();
     if (page === 1) void load(1);
     else setPage(1);
   };
@@ -450,7 +491,57 @@ export default function StockTransfers() {
             </select>
           </UiToolbarField>
           <button type="button" onClick={applyFilters}>Lọc</button>
+          <button type="button" onClick={toggleInTransit}>
+            {showInTransit ? 'Ẩn tồn đang vận chuyển' : 'Tồn đang vận chuyển (In-Transit)'}
+          </button>
         </UiToolbar>
+
+        {showInTransit && (
+          <UiCard title="Tồn kho đang vận chuyển giữa các kho (In-Transit)">
+            {inTransitLoading ? (
+              <p role="status">Đang tải tồn đang vận chuyển...</p>
+            ) : inTransitItems.length === 0 ? (
+              <UiEmptyState title="Không có hàng hóa nào đang vận chuyển (In-Transit)." />
+            ) : (
+              <UiTableScroll>
+                <table aria-label="Tồn kho đang vận chuyển">
+                  <thead>
+                    <tr>
+                      <th>Mã phiếu</th>
+                      <th>Kho nguồn → Kho đích</th>
+                      <th>Sản phẩm</th>
+                      <th>ĐVT</th>
+                      <th className="ui-number">SL đã xuất</th>
+                      <th className="ui-number">SL đang vận chuyển</th>
+                      <th>Thời điểm xuất</th>
+                      <th className="ui-number">Thời gian vận chuyển</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inTransitItems.map(row => (
+                      <tr key={`${row.transferId}-${row.productId}`}>
+                        <td>
+                          <button type="button" onClick={() => void openDetail(row.transferId)}>
+                            <strong>{row.transferCode}</strong>
+                          </button>
+                        </td>
+                        <td>{row.sourceWarehouseName} → {row.destinationWarehouseName}</td>
+                        <td><strong>{row.productCode}</strong> — {row.productName}</td>
+                        <td>{row.unitName}</td>
+                        <td className="ui-number">{row.dispatchedQuantity}</td>
+                        <td className="ui-number">
+                          <UiBadge tone="warning">{row.inTransitQuantity}</UiBadge>
+                        </td>
+                        <td>{row.dispatchedAt ? new Date(row.dispatchedAt).toLocaleString('vi-VN') : '—'}</td>
+                        <td className="ui-number">{row.hoursInTransit}h</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </UiTableScroll>
+            )}
+          </UiCard>
+        )}
 
         <UiCard title="Danh sách phiếu điều chuyển">
           {loading ? (

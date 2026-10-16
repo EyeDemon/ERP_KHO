@@ -300,12 +300,106 @@ public sealed class PutawayService(
 
     public async Task<IReadOnlyList<WarehouseLocationDto>> GetDestinationsAsync(int taskId, int itemId, CancellationToken token = default)
     {
-        var task = await Load(taskId, token); var item = task.Items.SingleOrDefault(x=>x.Id==itemId) ?? throw new NotFoundException("Không tìm thấy dòng hàng.");
+        var task = await Load(taskId, token);
+        var item = task.Items.SingleOrDefault(x => x.Id == itemId) ?? throw new NotFoundException("Không tìm thấy dòng hàng.");
         var type = RequiredType(item.InventoryStatus);
-        var productStorageClass = item.ReceiptLine.Product.StorageClass;
-        return (await context.WarehouseLocations.AsNoTracking().Where(x=>x.WarehouseId==task.WarehouseId && x.IsActive && !x.IsBlocked && x.LocationType==type && (item.InventoryStatus!=InventoryStatus.Available || x.IsPickable)
+        var product = item.ReceiptLine.Product;
+        var productStorageClass = product.StorageClass;
+        var candidates = await context.WarehouseLocations.AsNoTracking()
+            .Where(x => x.WarehouseId == task.WarehouseId
+                && x.IsActive
+                && !x.IsBlocked
+                && x.LocationType == type
+                && (item.InventoryStatus != InventoryStatus.Available || x.IsPickable)
                 && (x.StorageClass == null || (productStorageClass != null && x.StorageClass == productStorageClass)))
-            .OrderBy(x=>x.Code).ToListAsync(token)).Select(Location).ToList();
+            .ToListAsync(token);
+
+        if (candidates.Count == 0)
+            return [];
+
+        var now = DateTime.UtcNow;
+        var activeLocks = await context.InventoryLocks.AsNoTracking()
+            .EffectiveAt(now)
+            .Where(l => l.WarehouseId == task.WarehouseId
+                && (!l.ProductId.HasValue || l.ProductId == item.ProductId)
+                && (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus))
+            .Select(l => l.LocationId)
+            .ToListAsync(token);
+
+        if (activeLocks.Any(id => !id.HasValue))
+            return [];
+
+        var lockedLocationIds = activeLocks.Where(id => id.HasValue).Select(id => id!.Value).ToHashSet();
+        var candidateIds = candidates.Select(c => c.Id).ToList();
+        var stockRows = await context.InventoryStocks.AsNoTracking()
+            .Where(x => x.WarehouseId == task.WarehouseId && x.LocationId.HasValue && candidateIds.Contains(x.LocationId.Value) && x.Quantity > 0)
+            .Join(context.Products.AsNoTracking(), s => s.ProductId, p => p.Id, (s, p) => new
+            {
+                LocationId = s.LocationId!.Value,
+                s.ProductId,
+                s.Status,
+                s.Quantity,
+                p.StorageClass,
+                p.UnitWeightKg,
+                p.UnitVolumeM3,
+                p.UnitPalletEquivalent
+            })
+            .ToListAsync(token);
+
+        var incomingBaseQty = item.RemainingBaseQuantity > 0 ? item.RemainingBaseQuantity : 1m;
+        var eligible = new List<(WarehouseLocation Location, bool HasSameSku, bool ExactStorageClassMatch, decimal UtilizationRatio)>();
+
+        foreach (var location in candidates)
+        {
+            if (lockedLocationIds.Contains(location.Id))
+                continue;
+
+            var rows = stockRows.Where(x => x.LocationId == location.Id).ToList();
+            if (location.StorageClass is not null && rows.Any(x => !string.Equals(x.StorageClass, location.StorageClass, StringComparison.Ordinal)))
+                continue;
+
+            var ratios = new List<decimal>();
+            if (location.MaxWeightKg.HasValue && location.MaxWeightKg.Value > 0)
+            {
+                if (!product.UnitWeightKg.HasValue || rows.Any(x => !x.UnitWeightKg.HasValue))
+                    continue;
+                var used = rows.Sum(x => x.Quantity * x.UnitWeightKg!.Value);
+                if (used + incomingBaseQty * product.UnitWeightKg.Value > location.MaxWeightKg.Value)
+                    continue;
+                ratios.Add(used / location.MaxWeightKg.Value);
+            }
+            if (location.MaxVolumeM3.HasValue && location.MaxVolumeM3.Value > 0)
+            {
+                if (!product.UnitVolumeM3.HasValue || rows.Any(x => !x.UnitVolumeM3.HasValue))
+                    continue;
+                var used = rows.Sum(x => x.Quantity * x.UnitVolumeM3!.Value);
+                if (used + incomingBaseQty * product.UnitVolumeM3.Value > location.MaxVolumeM3.Value)
+                    continue;
+                ratios.Add(used / location.MaxVolumeM3.Value);
+            }
+            if (location.MaxPalletEquivalent.HasValue && location.MaxPalletEquivalent.Value > 0)
+            {
+                if (!product.UnitPalletEquivalent.HasValue || rows.Any(x => !x.UnitPalletEquivalent.HasValue))
+                    continue;
+                var used = rows.Sum(x => x.Quantity * x.UnitPalletEquivalent!.Value);
+                if (used + incomingBaseQty * product.UnitPalletEquivalent.Value > location.MaxPalletEquivalent.Value)
+                    continue;
+                ratios.Add(used / location.MaxPalletEquivalent.Value);
+            }
+
+            var hasSameSku = rows.Any(x => x.ProductId == item.ProductId && x.Status == item.InventoryStatus);
+            var exactStorageClass = location.StorageClass is not null && string.Equals(location.StorageClass, productStorageClass, StringComparison.Ordinal);
+            var utilization = ratios.Count == 0 ? 0m : ratios.Max();
+            eligible.Add((location, hasSameSku, exactStorageClass, utilization));
+        }
+
+        return eligible
+            .OrderByDescending(x => x.HasSameSku)
+            .ThenByDescending(x => x.ExactStorageClassMatch)
+            .ThenBy(x => x.UtilizationRatio)
+            .ThenBy(x => x.Location.Code)
+            .Select(x => Location(x.Location))
+            .ToList();
     }
 
     public Task<PutawayTaskDto> AssignAsync(int id, PutawayStateCommandDto dto, CancellationToken token = default) => Mutate(id,dto, [PutawayTaskStatus.Open,PutawayTaskStatus.Assigned], task=>{ task.AssignedUserId=dto.AssignedUserId ?? throw new BusinessRuleException("Người thực hiện là bắt buộc."); task.Status=PutawayTaskStatus.Assigned; },"Assigned",token);

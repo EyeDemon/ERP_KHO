@@ -324,6 +324,117 @@ public sealed class DockYardServiceTests : IAsyncDisposable
         (await _db.InventoryStocks.CountAsync()).Should().Be(beforeStocks);
     }
 
+    [Fact]
+    public async Task Inbound_appointment_links_po_asn_and_receipt_and_rejects_cross_warehouse_or_outbound()
+    {
+        var supplier = new BusinessPartner { Code = "SUP-DOCK", Name = "Supplier Dock", IsSupplier = true, IsActive = true, RowVersion = Version(19) };
+        var otherWarehouse = new Warehouse { Code = "WH-OTHER", Name = "Kho Khác" };
+        _db.AddRange(supplier, otherWarehouse);
+        await _db.SaveChangesAsync();
+
+        var po = new PurchaseOrder
+        {
+            ExternalPoId = "EXT-PO-101",
+            SourceSystem = "ERP",
+            Code = "PO-DOCK-101",
+            SupplierId = supplier.Id,
+            WarehouseId = _warehouse.Id,
+            OrderDate = DateTime.UtcNow.Date,
+            Status = PurchaseOrderStatus.Open,
+            CreatedBy = _user.Id,
+            RowVersion = Version(20)
+        };
+        var otherPo = new PurchaseOrder
+        {
+            ExternalPoId = "EXT-PO-202",
+            SourceSystem = "ERP",
+            Code = "PO-OTHER-202",
+            SupplierId = supplier.Id,
+            WarehouseId = otherWarehouse.Id,
+            OrderDate = DateTime.UtcNow.Date,
+            Status = PurchaseOrderStatus.Open,
+            CreatedBy = _user.Id,
+            RowVersion = Version(21)
+        };
+        _db.AddRange(po, otherPo);
+        await _db.SaveChangesAsync();
+
+        var asn = new Asn
+        {
+            Code = "ASN-DOCK-101",
+            PurchaseOrderId = po.Id,
+            SupplierId = supplier.Id,
+            WarehouseId = _warehouse.Id,
+            Status = AsnStatus.Confirmed,
+            CreatedBy = _user.Id,
+            RowVersion = Version(22)
+        };
+        _db.Asns.Add(asn);
+        await _db.SaveChangesAsync();
+
+        var receipt = new ImportReceipt
+        {
+            Code = "GR-DOCK-101",
+            WarehouseId = _warehouse.Id,
+            PurchaseOrderId = po.Id,
+            AsnId = asn.Id,
+            Status = ReceiptStatus.Draft,
+            CreatedBy = _user.Id
+        };
+        _db.ImportReceipts.Add(receipt);
+        await _db.SaveChangesAsync();
+
+        var created = await _service.CreateAppointmentAsync(new UpsertDockAppointmentDto
+        {
+            WarehouseId = _warehouse.Id,
+            Code = "APT-INB-101",
+            Direction = DockAppointmentDirection.Inbound,
+            PlannedStart = new DateTimeOffset(2026, 10, 5, 1, 0, 0, TimeSpan.Zero),
+            PlannedEnd = new DateTimeOffset(2026, 10, 5, 2, 0, 0, TimeSpan.Zero),
+            CarrierName = "Fast Inbound",
+            VehicleType = "TRUCK",
+            PurchaseOrderId = po.Id,
+            AsnId = asn.Id
+        });
+
+        created.PurchaseOrderId.Should().Be(po.Id);
+        created.PurchaseOrderCode.Should().Be("PO-DOCK-101");
+        created.AsnId.Should().Be(asn.Id);
+        created.AsnCode.Should().Be("ASN-DOCK-101");
+
+        var linked = await _service.LinkInboundDocumentsAsync(created.Id, new DockAppointmentLinkInboundDto
+        {
+            RowVersion = created.RowVersion!,
+            ImportReceiptId = receipt.Id,
+            Note = "Đã đối chiếu phiếu nhập tại cổng"
+        });
+
+        linked.PurchaseOrderId.Should().Be(po.Id);
+        linked.AsnId.Should().Be(asn.Id);
+        linked.ImportReceiptId.Should().Be(receipt.Id);
+        linked.ImportReceiptCode.Should().Be("GR-DOCK-101");
+
+        var crossWarehouse = () => _service.LinkInboundDocumentsAsync(created.Id, new DockAppointmentLinkInboundDto
+        {
+            RowVersion = linked.RowVersion!,
+            PurchaseOrderId = otherPo.Id
+        });
+        await crossWarehouse.Should().ThrowAsync<BusinessRuleException>()
+            .WithMessage("*không thuộc kho*");
+
+        var outbound = () => _service.CreateAppointmentAsync(new UpsertDockAppointmentDto
+        {
+            WarehouseId = _warehouse.Id,
+            Code = "APT-OUT-101",
+            Direction = DockAppointmentDirection.Outbound,
+            PlannedStart = new DateTimeOffset(2026, 10, 5, 3, 0, 0, TimeSpan.Zero),
+            PlannedEnd = new DateTimeOffset(2026, 10, 5, 4, 0, 0, TimeSpan.Zero),
+            PurchaseOrderId = po.Id
+        });
+        await outbound.Should().ThrowAsync<BusinessRuleException>()
+            .WithMessage("*Inbound*");
+    }
+
     private DockAppointment Appointment(DockAppointmentStatus status, DateTime start, DateTime end, byte version) => new()
     {
         WarehouseId = _warehouse.Id,
@@ -352,6 +463,19 @@ public sealed class DockYardServiceTests : IAsyncDisposable
     {
         public TestDbContext(DbContextOptions<ErpKhoDbContext> options) : base(options) { }
 
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            foreach (var entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified))
+            {
+                var prop = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "RowVersion");
+                if (prop?.CurrentValue is not byte[] { Length: > 0 })
+                {
+                    prop?.CurrentValue = Version(1);
+                }
+            }
+            return base.SaveChangesAsync(cancellationToken);
+        }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -362,6 +486,8 @@ public sealed class DockYardServiceTests : IAsyncDisposable
                     var columnType = property.GetColumnType();
                     if (columnType != null && columnType.Contains("max", StringComparison.OrdinalIgnoreCase))
                         property.SetColumnType(null);
+                    if (property.Name == "RowVersion")
+                        property.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
                 }
             }
         }

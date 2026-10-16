@@ -237,6 +237,172 @@ public sealed class PutawayServiceTests : IDisposable
         (await db.InventoryLocationMovements.CountAsync()).Should().Be(1);
     }
 
+    [Fact]
+    public async Task GetDestinationsAsync_excludes_locked_and_overcapacity_bins_and_prioritizes_same_sku_and_storage_class()
+    {
+        var ids = await SeedAsync();
+        await using var db = Create();
+        var product = await db.Products.SingleAsync(x => x.Id == ids.ProductId);
+        product.StorageClass = "CHILLED";
+        product.UnitWeightKg = 2m;
+
+        var s1 = await db.WarehouseLocations.SingleAsync(x => x.Id == ids.Storage1);
+        s1.Code = "A-GENERIC-EMPTY";
+        s1.StorageClass = null;
+
+        var s2 = await db.WarehouseLocations.SingleAsync(x => x.Id == ids.Storage2);
+        s2.Code = "Z-SAME-SKU";
+        s2.StorageClass = "CHILLED";
+        s2.MaxWeightKg = 50m;
+
+        var exactClassBin = new WarehouseLocation
+        {
+            WarehouseId = ids.WarehouseId,
+            Code = "M-EXACT-CLASS",
+            Name = "Kệ Lạnh M",
+            LocationType = WarehouseLocationType.Storage,
+            StorageClass = "CHILLED",
+            MaxWeightKg = 50m,
+            IsActive = true,
+            IsPickable = true
+        };
+        var overCapacityBin = new WarehouseLocation
+        {
+            WarehouseId = ids.WarehouseId,
+            Code = "B-OVER-CAP",
+            Name = "Kệ Quá Tải",
+            LocationType = WarehouseLocationType.Storage,
+            StorageClass = "CHILLED",
+            MaxWeightKg = 15m,
+            IsActive = true,
+            IsPickable = true
+        };
+        var lockedBin = new WarehouseLocation
+        {
+            WarehouseId = ids.WarehouseId,
+            Code = "C-LOCKED",
+            Name = "Kệ Bị Khóa",
+            LocationType = WarehouseLocationType.Storage,
+            StorageClass = "CHILLED",
+            MaxWeightKg = 50m,
+            IsActive = true,
+            IsPickable = true
+        };
+        db.WarehouseLocations.AddRange(exactClassBin, overCapacityBin, lockedBin);
+        await db.SaveChangesAsync();
+
+        db.InventoryStocks.Add(new InventoryStock
+        {
+            ProductId = ids.ProductId,
+            WarehouseId = ids.WarehouseId,
+            LocationId = s2.Id,
+            Status = InventoryStatus.Available,
+            Quantity = 5
+        });
+        db.InventoryLocks.Add(new InventoryLock
+        {
+            WarehouseId = ids.WarehouseId,
+            LocationId = lockedBin.Id,
+            LockType = InventoryLockType.MaintenanceFreeze,
+            Reason = "Bảo trì kệ",
+            Status = InventoryLockStatus.Active,
+            CreatedBy = ids.UserId,
+            RowVersion = Guid.NewGuid().ToByteArray()
+        });
+        await db.SaveChangesAsync();
+
+        var service = Service(db, ids.WarehouseId, ids.UserId);
+        var destinations = await service.GetDestinationsAsync(ids.TaskId, ids.ItemId);
+
+        destinations.Select(x => x.Code).Should().Equal(
+            "Z-SAME-SKU",
+            "M-EXACT-CLASS",
+            "A-GENERIC-EMPTY");
+    }
+
+    [Fact]
+    public async Task ExecuteDispositionAsync_releases_quarantine_blocks_expired_lot_and_scraps_with_ledger_conservation()
+    {
+        var ids = await SeedAsync();
+        await using var db = Create();
+        var statusService = new InventoryStatusService(db, new Access(ids.WarehouseId), new Current(ids.UserId));
+
+        var goodLot = new InventoryLot
+        {
+            ProductId = ids.ProductId,
+            LotNumber = "LOT-GOOD-01",
+            ExpiryDate = DateTime.UtcNow.Date.AddDays(30)
+        };
+        var expiredLot = new InventoryLot
+        {
+            ProductId = ids.ProductId,
+            LotNumber = "LOT-EXP-01",
+            ExpiryDate = DateTime.UtcNow.Date.AddDays(-2)
+        };
+        db.InventoryLots.AddRange(goodLot, expiredLot);
+        await db.SaveChangesAsync();
+
+        var quarantineGoodStock = new InventoryStock
+        {
+            ProductId = ids.ProductId,
+            WarehouseId = ids.WarehouseId,
+            LocationId = ids.Storage1,
+            LotId = goodLot.Id,
+            Status = InventoryStatus.Quarantine,
+            Quantity = 8
+        };
+        var quarantineExpiredStock = new InventoryStock
+        {
+            ProductId = ids.ProductId,
+            WarehouseId = ids.WarehouseId,
+            LocationId = ids.Storage1,
+            LotId = expiredLot.Id,
+            Status = InventoryStatus.Quarantine,
+            Quantity = 4
+        };
+        db.InventoryStocks.AddRange(quarantineGoodStock, quarantineExpiredStock);
+        await db.SaveChangesAsync();
+
+        var releaseResult = await statusService.ExecuteDispositionAsync(new CreateInventoryDispositionDto
+        {
+            InventoryStockId = quarantineGoodStock.Id,
+            Quantity = 5,
+            Action = "ReleaseToAvailable",
+            Reason = "QC đạt biên bản BB-01"
+        });
+
+        releaseResult.Action.Should().Be("ReleaseToAvailable");
+        releaseResult.FromStatus.Should().Be("QUARANTINE");
+        releaseResult.ToStatus.Should().Be("AVAILABLE");
+        releaseResult.RemainingSourceQuantity.Should().Be(3);
+
+        var expiredReleaseAct = () => statusService.ExecuteDispositionAsync(new CreateInventoryDispositionDto
+        {
+            InventoryStockId = quarantineExpiredStock.Id,
+            Quantity = 2,
+            Action = "ReleaseToAvailable",
+            Reason = "Thử phát hành lô hết hạn"
+        });
+        await expiredReleaseAct.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
+            .WithMessage("*lô đã hết hạn*");
+
+        var scrapResult = await statusService.ExecuteDispositionAsync(new CreateInventoryDispositionDto
+        {
+            InventoryStockId = quarantineExpiredStock.Id,
+            Quantity = 4,
+            Action = "Scrap",
+            Reason = "Thanh hủy lô hết hạn BB-HUY-01"
+        });
+
+        scrapResult.Action.Should().Be("Scrap");
+        scrapResult.RemainingSourceQuantity.Should().Be(0);
+        (await db.InventoryTransactions.AsNoTracking()
+            .AnyAsync(t => t.Id == scrapResult.TransactionId &&
+                           t.TransactionType == TransactionType.AdjustmentDecrease &&
+                           t.ReferenceType == "QualityDispositionScrap" &&
+                           t.Quantity == 4)).Should().BeTrue();
+    }
+
     private async Task<(int WarehouseId,int UserId,int ProductId,int TaskId,int ItemId,int Receiving,int Storage1,int Storage2,int Damaged)> SeedAsync()
     {
         await using var db=Create(); var role=new Role{RoleName="Manager"}; var user=new User{Username=Guid.NewGuid().ToString("N"),PasswordHash="x",FullName="QA",Role=role};
@@ -252,5 +418,6 @@ public sealed class PutawayServiceTests : IDisposable
     public void Dispose()=>connection.Dispose();
     private sealed record Current(int UserId):ICurrentUser{public bool IsAuthenticated=>true;public bool IsGlobalAdmin=>false;public string Role=>"Manager";}
     private sealed class Access(int id):IWarehouseAuthorizationService{public Task<IReadOnlyList<int>> GetAccessibleWarehouseIdsAsync(CancellationToken c=default)=>Task.FromResult<IReadOnlyList<int>>([id]);public Task<bool> CanAccessWarehouseAsync(int w,CancellationToken c=default)=>Task.FromResult(w==id);public Task EnsureWarehouseAccessAsync(int w,CancellationToken c=default)=>w==id?Task.CompletedTask:throw new UnauthorizedAccessException();}
-    private sealed class TestContext(DbContextOptions<ErpKhoDbContext> o):ErpKhoDbContext(o){public override Task<int> SaveChangesAsync(CancellationToken c=default){foreach(var e in ChangeTracker.Entries().Where(x=>x.Entity is PutawayTask or PutawayTaskItem or WarehouseLocation&&x.State is EntityState.Added or EntityState.Modified))e.Property("RowVersion").CurrentValue=Guid.NewGuid().ToByteArray();return base.SaveChangesAsync(c);}protected override void OnModelCreating(ModelBuilder m){base.OnModelCreating(m);foreach(var p in m.Model.GetEntityTypes().SelectMany(x=>x.GetProperties()))if(p.GetColumnType()?.Contains("max",StringComparison.OrdinalIgnoreCase)==true)p.SetColumnType(null);foreach(var t in new[]{typeof(PutawayTask),typeof(PutawayTaskItem),typeof(WarehouseLocation)})m.Entity(t).Property("RowVersion").IsConcurrencyToken().ValueGeneratedNever();}}
+    private sealed class TestContext(DbContextOptions<ErpKhoDbContext> o):ErpKhoDbContext(o){public override Task<int> SaveChangesAsync(CancellationToken c=default){foreach(var e in ChangeTracker.Entries().Where(x=>x.Entity is PutawayTask or PutawayTaskItem or WarehouseLocation or InventoryLock&&x.State is EntityState.Added or EntityState.Modified))e.Property("RowVersion").CurrentValue=Guid.NewGuid().ToByteArray();return base.SaveChangesAsync(c);}protected override void OnModelCreating(ModelBuilder m){base.OnModelCreating(m);foreach(var p in m.Model.GetEntityTypes().SelectMany(x=>x.GetProperties()))if(p.GetColumnType()?.Contains("max",StringComparison.OrdinalIgnoreCase)==true)p.SetColumnType(null);foreach(var t in new[]{typeof(PutawayTask),typeof(PutawayTaskItem),typeof(WarehouseLocation),typeof(InventoryLock)})m.Entity(t).Property("RowVersion").IsConcurrencyToken().ValueGeneratedNever();}}
 }
+

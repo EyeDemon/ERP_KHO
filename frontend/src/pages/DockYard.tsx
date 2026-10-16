@@ -30,11 +30,15 @@ type Appointment = {
   dockId?: number | null; dockCode?: string | null; arrivedAtUtc?: string | null; checkedInAtUtc?: string | null; dockAssignedAtUtc?: string | null;
   serviceStartedAtUtc?: string | null; serviceCompletedAtUtc?: string | null; checkedOutAtUtc?: string | null; exceptionCode?: string | null;
   note?: string | null; rowVersion?: string | null; events?: AppointmentEvent[];
+  purchaseOrderId?: number | null; purchaseOrderCode?: string | null;
+  asnId?: number | null; asnCode?: string | null;
+  importReceiptId?: number | null; importReceiptCode?: string | null;
 };
 
 type AppointmentForm = {
   id?: number; code: string; direction: '0' | '1'; plannedStart: string; plannedEnd: string; carrierCode: string; carrierName: string;
-  vehiclePlate: string; trailerPlate: string; vehicleType: string; requiresTemperatureControl: boolean; hazardous: boolean; note: string; rowVersion?: string | null;
+  vehiclePlate: string; trailerPlate: string; vehicleType: string; requiresTemperatureControl: boolean; hazardous: boolean; note: string;
+  purchaseOrderId: string; asnId: string; importReceiptId: string; rowVersion?: string | null;
 };
 type DockForm = {
   id?: number; code: string; name: string; supportsInbound: boolean; supportsOutbound: boolean; allowedVehicleType: string;
@@ -44,7 +48,8 @@ type YardForm = { id?: number; code: string; name: string; isActive: boolean; ro
 type ActionPanel =
   | { mode: 'checkin'; appointment: Appointment; vehiclePlate: string; trailerPlate: string; driverName: string; driverPhone: string; sealNumber: string; yardSlotId: string; note: string }
   | { mode: 'assignDock'; appointment: Appointment; dockId: string; note: string }
-  | { mode: 'exception'; appointment: Appointment; exceptionCode: string; note: string };
+  | { mode: 'exception'; appointment: Appointment; exceptionCode: string; note: string }
+  | { mode: 'linkInbound'; appointment: Appointment; purchaseOrderId: string; asnId: string; importReceiptId: string; note: string };
 
 const statusLabel: Record<number, string> = {
   0: 'Nháp',
@@ -78,6 +83,7 @@ const eventTypeLabel = (value: string) => ({
   CANCELLED: 'Đã hủy',
   NO_SHOW: 'Không đến',
   EXCEPTION_RECORDED: 'Ghi nhận ngoại lệ',
+  INBOUND_DOCUMENTS_LINKED: 'Liên kết PO / ASN / GR',
 }[value] ?? value);
 const timeZoneParts = (date: Date, timeZone: string) => {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -130,6 +136,7 @@ const displayWarehouseTime = (value: string, timeZone: string) =>
 const emptyAppointment = (): AppointmentForm => ({
   code: '', direction: '0', plannedStart: '', plannedEnd: '', carrierCode: '', carrierName: '', vehiclePlate: '', trailerPlate: '',
   vehicleType: '', requiresTemperatureControl: false, hazardous: false, note: '',
+  purchaseOrderId: '', asnId: '', importReceiptId: '',
 });
 const emptyDock = (): DockForm => ({
   code: '', name: '', supportsInbound: true, supportsOutbound: true, allowedVehicleType: '', isTemperatureControlled: false,
@@ -227,7 +234,7 @@ const DockYard = () => {
     const q = search.trim().toLocaleLowerCase('vi');
     return appointments.filter(item =>
       (!status || String(item.status) === status)
-      && (!q || [item.code, item.carrierName ?? '', item.vehiclePlate ?? '', item.driverName ?? '', item.dockCode ?? '', item.yardSlotCode ?? '']
+      && (!q || [item.code, item.carrierName ?? '', item.vehiclePlate ?? '', item.driverName ?? '', item.dockCode ?? '', item.yardSlotCode ?? '', item.purchaseOrderCode ?? '', item.asnCode ?? '', item.importReceiptCode ?? '']
         .join(' ').toLocaleLowerCase('vi').includes(q))
     );
   }, [appointments, search, status]);
@@ -290,6 +297,9 @@ const DockYard = () => {
       requiresTemperatureControl: appointment.requiresTemperatureControl,
       hazardous: appointment.hazardous,
       note: appointment.note ?? '',
+      purchaseOrderId: appointment.purchaseOrderId ? String(appointment.purchaseOrderId) : '',
+      asnId: appointment.asnId ? String(appointment.asnId) : '',
+      importReceiptId: appointment.importReceiptId ? String(appointment.importReceiptId) : '',
       rowVersion: appointment.rowVersion,
     });
   };
@@ -301,7 +311,7 @@ const DockYard = () => {
       setError('Cần nhập đủ thời gian bắt đầu và kết thúc.');
       return;
     }
-    let payload;
+    let payload: Record<string, unknown>;
     try {
       payload = {
         warehouseId,
@@ -319,6 +329,11 @@ const DockYard = () => {
         note: appointmentForm.note.trim() || null,
         rowVersion: appointmentForm.rowVersion,
       };
+      if (appointmentForm.direction === '0') {
+        if (appointmentForm.purchaseOrderId.trim()) payload.purchaseOrderId = Number(appointmentForm.purchaseOrderId);
+        if (appointmentForm.asnId.trim()) payload.asnId = Number(appointmentForm.asnId);
+        if (appointmentForm.importReceiptId.trim()) payload.importReceiptId = Number(appointmentForm.importReceiptId);
+      }
     } catch {
       setError('Giờ lịch hẹn không hợp lệ trong múi giờ của kho. Hãy kiểm tra lại ngày/giờ.');
       return;
@@ -468,7 +483,17 @@ const DockYard = () => {
                 <tbody>
                   {filtered.map(item => (
                     <tr key={item.id}>
-                      <td><strong>{item.code}</strong><br /><small>{directionLabel(item.direction)}</small></td>
+                      <td>
+                        <strong>{item.code}</strong><br />
+                        <small>{directionLabel(item.direction)}</small>
+                        {(item.purchaseOrderCode || item.asnCode || item.importReceiptCode) && (
+                          <><br /><small>{[
+                            item.purchaseOrderCode ? 'PO: ' + item.purchaseOrderCode : '',
+                            item.asnCode ? 'ASN: ' + item.asnCode : '',
+                            item.importReceiptCode ? 'GR: ' + item.importReceiptCode : '',
+                          ].filter(Boolean).join(' • ')}</small></>
+                        )}
+                      </td>
                       <td>{displayWarehouseTime(item.plannedStartUtc, warehouseTimeZone)}<br /><small>→ {displayWarehouseTime(item.plannedEndUtc, warehouseTimeZone)} • {warehouseTimeZone}</small></td>
                       <td>{item.carrierName || item.carrierCode || '—'}<br /><small>{item.vehiclePlate || 'Chưa có biển số'}</small></td>
                       <td>{item.yardSlotCode || '—'}</td>
@@ -478,6 +503,22 @@ const DockYard = () => {
                         <div className="ui-inline-actions">
                           <button type="button" aria-label={'Chi tiết lịch hẹn ' + item.code} onClick={() => void showDetail(item)}>Chi tiết</button>
                           {canManageAppointment && item.status === 0 && <button type="button" aria-label={'Sửa lịch hẹn ' + item.code} onClick={() => openAppointment(item)}>Sửa</button>}
+                          {canManageAppointment && item.direction === 0 && ![6, 7, 8].includes(item.status) && (
+                            <button
+                              type="button"
+                              aria-label={'Liên kết chứng từ nhập cho lịch hẹn ' + item.code}
+                              onClick={() => setActionPanel({
+                                mode: 'linkInbound',
+                                appointment: item,
+                                purchaseOrderId: item.purchaseOrderId?.toString() ?? '',
+                                asnId: item.asnId?.toString() ?? '',
+                                importReceiptId: item.importReceiptId?.toString() ?? '',
+                                note: '',
+                              })}
+                            >
+                              Liên kết PO/ASN/GR
+                            </button>
+                          )}
                           {canManageAppointment && item.status === 0 && <button type="button" aria-label={'Xác nhận lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'confirm')}>Xác nhận</button>}
                           {canCheckIn && item.status === 1 && <button type="button" aria-label={'Ghi nhận xe đến ' + item.code} onClick={() => void runCommand(item, 'arrive')}>Xe đến</button>}
                           {canCheckIn && item.status === 2 && <button type="button" aria-label={'Ghi nhận vào cổng cho lịch hẹn ' + item.code} onClick={() => setActionPanel({ mode: 'checkin', appointment: item, vehiclePlate: item.vehiclePlate ?? '', trailerPlate: item.trailerPlate ?? '', driverName: '', driverPhone: '', sealNumber: '', yardSlotId: '', note: '' })}>Ghi nhận vào cổng</button>}
@@ -532,6 +573,16 @@ const DockYard = () => {
 
       {selected && <UiCard title={'Dòng thời gian • ' + selected.code}>
         <p><strong>{statusLabel[selected.status]}</strong> • {directionLabel(selected.direction)} • {selected.vehiclePlate || 'Chưa có xe'} • {selected.dockCode || 'Chưa gán cửa kho'}</p>
+        {(selected.purchaseOrderCode || selected.asnCode || selected.importReceiptCode) && (
+          <p className="ui-muted">
+            Chứng từ nhập liên kết:{' '}
+            {[
+              selected.purchaseOrderCode ? 'PO: ' + selected.purchaseOrderCode : '',
+              selected.asnCode ? 'ASN: ' + selected.asnCode : '',
+              selected.importReceiptCode ? 'GR: ' + selected.importReceiptCode : '',
+            ].filter(Boolean).join(' • ')}
+          </p>
+        )}
         <UiTableScroll>
           <table aria-label="Dòng thời gian lịch hẹn">
             <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Cửa kho</th><th>Sân bãi</th><th>Ghi chú</th></tr></thead>
@@ -554,6 +605,13 @@ const DockYard = () => {
           <label className="ui-stack"><span>Biển số xe dự kiến</span><input aria-label="Biển số xe dự kiến" value={appointmentForm.vehiclePlate} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, vehiclePlate: event.target.value.toUpperCase() }))} /></label>
           <label className="ui-stack"><span>Rơ-moóc</span><input aria-label="Rơ-moóc dự kiến" value={appointmentForm.trailerPlate} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, trailerPlate: event.target.value.toUpperCase() }))} /></label>
           <label className="ui-stack"><span>Loại phương tiện</span><input aria-label="Loại phương tiện" value={appointmentForm.vehicleType} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, vehicleType: event.target.value.toUpperCase() }))} /></label>
+          {appointmentForm.direction === '0' && (
+            <>
+              <label className="ui-stack"><span>ID Đơn mua hàng (PO)</span><input aria-label="ID Đơn mua hàng (PO)" type="number" min={1} value={appointmentForm.purchaseOrderId} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, purchaseOrderId: event.target.value }))} /></label>
+              <label className="ui-stack"><span>ID Thông báo giao hàng (ASN)</span><input aria-label="ID Thông báo giao hàng (ASN)" type="number" min={1} value={appointmentForm.asnId} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, asnId: event.target.value }))} /></label>
+              <label className="ui-stack"><span>ID Phiếu nhập kho (GR)</span><input aria-label="ID Phiếu nhập kho (GR)" type="number" min={1} value={appointmentForm.importReceiptId} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, importReceiptId: event.target.value }))} /></label>
+            </>
+          )}
           <label className="ui-checkbox-label"><input type="checkbox" checked={appointmentForm.requiresTemperatureControl} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, requiresTemperatureControl: event.target.checked }))} /> Yêu cầu kiểm soát nhiệt độ</label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={appointmentForm.hazardous} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, hazardous: event.target.checked }))} /> Hàng nguy hiểm</label>
           <label className="ui-stack"><span>Ghi chú</span><textarea aria-label="Ghi chú lịch hẹn" value={appointmentForm.note} disabled={saving} onChange={event => setAppointmentForm(current => current && ({ ...current, note: event.target.value }))} /></label>
@@ -584,7 +642,7 @@ const DockYard = () => {
         </form>
       </UiCard>}
 
-      {actionPanel && <UiCard title={actionPanel.mode === 'checkin' ? 'Ghi nhận vào cổng • ' + actionPanel.appointment.code : actionPanel.mode === 'assignDock' ? 'Gán cửa kho • ' + actionPanel.appointment.code : 'Ghi nhận ngoại lệ • ' + actionPanel.appointment.code}>
+      {actionPanel && <UiCard title={actionPanel.mode === 'checkin' ? 'Ghi nhận vào cổng • ' + actionPanel.appointment.code : actionPanel.mode === 'assignDock' ? 'Gán cửa kho • ' + actionPanel.appointment.code : actionPanel.mode === 'linkInbound' ? 'Liên kết chứng từ nhập • ' + actionPanel.appointment.code : 'Ghi nhận ngoại lệ • ' + actionPanel.appointment.code}>
         {actionPanel.mode === 'checkin' && <form className="ui-form-grid" onSubmit={event => {
           event.preventDefault();
           void runCommand(actionPanel.appointment, 'check-in', {
@@ -623,6 +681,21 @@ const DockYard = () => {
           </select></label>
           <label className="ui-stack"><span>Ghi chú</span><textarea value={actionPanel.note} onChange={event => setActionPanel(current => current?.mode === 'exception' ? { ...current, note: event.target.value } : current)} /></label>
           <div className="ui-inline-actions"><button type="submit" disabled={saving}>Ghi nhận ngoại lệ</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
+        </form>}
+        {actionPanel.mode === 'linkInbound' && <form className="ui-form-grid" onSubmit={event => {
+          event.preventDefault();
+          void runCommand(actionPanel.appointment, 'link-inbound', {
+            purchaseOrderId: actionPanel.purchaseOrderId.trim() ? Number(actionPanel.purchaseOrderId) : null,
+            asnId: actionPanel.asnId.trim() ? Number(actionPanel.asnId) : null,
+            importReceiptId: actionPanel.importReceiptId.trim() ? Number(actionPanel.importReceiptId) : null,
+            note: actionPanel.note.trim() || null,
+          });
+        }}>
+          <label className="ui-stack"><span>ID Đơn mua hàng (PO)</span><input aria-label="Liên kết ID PO" type="number" min={1} value={actionPanel.purchaseOrderId} onChange={event => setActionPanel(current => current?.mode === 'linkInbound' ? { ...current, purchaseOrderId: event.target.value } : current)} /></label>
+          <label className="ui-stack"><span>ID Thông báo giao hàng (ASN)</span><input aria-label="Liên kết ID ASN" type="number" min={1} value={actionPanel.asnId} onChange={event => setActionPanel(current => current?.mode === 'linkInbound' ? { ...current, asnId: event.target.value } : current)} /></label>
+          <label className="ui-stack"><span>ID Phiếu nhập kho (GR)</span><input aria-label="Liên kết ID GR" type="number" min={1} value={actionPanel.importReceiptId} onChange={event => setActionPanel(current => current?.mode === 'linkInbound' ? { ...current, importReceiptId: event.target.value } : current)} /></label>
+          <label className="ui-stack"><span>Ghi chú</span><textarea aria-label="Ghi chú liên kết chứng từ" value={actionPanel.note} onChange={event => setActionPanel(current => current?.mode === 'linkInbound' ? { ...current, note: event.target.value } : current)} /></label>
+          <div className="ui-inline-actions"><button type="submit" disabled={saving}>Lưu liên kết chứng từ</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
         </form>}
       </UiCard>}
     </UiPage>
