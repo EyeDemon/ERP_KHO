@@ -9,9 +9,12 @@ using ClosedXML.Excel;
 using System.IO;
 using System.Security.Claims;
 
+using ERP.Api.Infrastructure;
+
 namespace ERP.Api.Controllers
 {
     [Authorize(Roles = AppRoles.AllRoles)]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
     [ApiController]
     [Route("api/[controller]")]
     public class ReportsController : ControllerBase
@@ -275,8 +278,12 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-            if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
-                return Ok(Array.Empty<object>());
+            if (warehouseId.HasValue)
+            {
+                await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                if (!accessibleIds.Contains(warehouseId.Value))
+                    return Forbid();
+            }
 
             var scopedIds = warehouseId.HasValue ? new[] { warehouseId.Value } : accessibleIds.ToArray();
             var tasks = new List<object>();
@@ -404,8 +411,12 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-            if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
-                return Ok(Array.Empty<object>());
+            if (warehouseId.HasValue)
+            {
+                await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                if (!accessibleIds.Contains(warehouseId.Value))
+                    return Forbid();
+            }
 
             var scopedIds = warehouseId.HasValue ? new[] { warehouseId.Value } : accessibleIds.ToArray();
             var today = DateTime.UtcNow.Date;
@@ -513,7 +524,7 @@ namespace ERP.Api.Controllers
                     x.severity,
                     x.summary,
                     x.route,
-                    acknowledged = acknowledgedCodes.Contains(x.code)
+                    acknowledged = acknowledgedCodes.Contains($"{x.category}:{x.code}") || acknowledgedCodes.Contains(x.code)
                 })
                 .Where(x => includeAcknowledged || !x.acknowledged)
                 .Take(50)
@@ -522,10 +533,15 @@ namespace ERP.Api.Controllers
             return Ok(allExceptions);
         }
 
-        public sealed record AcknowledgeOperationalExceptionDto(string ExceptionCode, int? WarehouseId, string? ResolutionNote);
+        public sealed record AcknowledgeOperationalExceptionDto(
+            string ExceptionCode,
+            int? WarehouseId,
+            string? ResolutionNote,
+            string? ExceptionType = null);
 
         [HttpPost("operational-exceptions/acknowledge")]
         [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+        [IdempotentCommand("OperationalException.Acknowledge")]
         public async Task<IActionResult> AcknowledgeOperationalException(
             [FromBody] AcknowledgeOperationalExceptionDto request,
             [FromServices] ErpKhoDbContext db,
@@ -546,6 +562,12 @@ namespace ERP.Api.Controllers
             var effectiveWarehouseId = request.WarehouseId ?? accessibleIds.First();
             int? userId = int.TryParse(User?.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null;
             var now = DateTime.UtcNow;
+            var normalizedCode = request.ExceptionCode.Trim();
+            var normalizedType = string.IsNullOrWhiteSpace(request.ExceptionType)
+                ? null
+                : request.ExceptionType.Trim().ToUpperInvariant();
+            var auditKey = normalizedType is null ? normalizedCode : $"{normalizedType}:{normalizedCode}";
+
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
                 UserId = userId,
@@ -553,7 +575,7 @@ namespace ERP.Api.Controllers
                 EntityId = effectiveWarehouseId,
                 WarehouseId = effectiveWarehouseId,
                 Action = "Exception.Acknowledged",
-                OldValues = request.ExceptionCode.Trim(),
+                OldValues = auditKey,
                 NewValues = "ACKNOWLEDGED",
                 Reason = string.IsNullOrWhiteSpace(request.ResolutionNote)
                     ? "Đã tiếp nhận và phân công xử lý ngoại lệ"
@@ -566,7 +588,8 @@ namespace ERP.Api.Controllers
             return Ok(new
             {
                 acknowledged = true,
-                exceptionCode = request.ExceptionCode.Trim(),
+                exceptionCode = normalizedCode,
+                exceptionType = normalizedType,
                 warehouseId = effectiveWarehouseId,
                 userId,
                 acknowledgedAtUtc = now
@@ -772,40 +795,12 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-            if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
-                return Ok(new
-                {
-                    inboundPostedCount = 0,
-                    putawayCompletedCount = 0,
-                    putawayOpenCount = 0,
-                    outboundShippedCount = 0,
-                    deliverySuccessRatePct = 100m,
-                    stocktakeTotalCount = 0,
-                    stocktakeApprovedCount = 0,
-                    stocktakeLineCount = 0,
-                    stocktakeAccurateLineCount = 0,
-                    stocktakeAccuracyRatePct = 100m,
-                    inboundOutboundSla = new
-                    {
-                        inboundTotalReceipts = 0,
-                        inboundPostedReceipts = 0,
-                        inboundCompletedPutawayTasks = 0,
-                        inboundTotalPutawayTasks = 0,
-                        inboundCompletionRatePercent = 100m,
-                        outboundTotalShipments = 0,
-                        outboundDeliveredShipments = 0,
-                        outboundDeliverySuccessRatePercent = 100m
-                    },
-                    stocktakeAccuracy = new
-                    {
-                        totalStocktakes = 0,
-                        approvedStocktakes = 0,
-                        totalLinesCounted = 0,
-                        accurateLinesCount = 0,
-                        lineAccuracyPercent = 100m
-                    },
-                    turnoverItems = Array.Empty<object>()
-                });
+            if (warehouseId.HasValue)
+            {
+                await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                if (!accessibleIds.Contains(warehouseId.Value))
+                    return Forbid();
+            }
 
             var scopedIds = warehouseId.HasValue ? new[] { warehouseId.Value } : accessibleIds.ToArray();
             days = Math.Clamp(days, 1, 365);
@@ -814,16 +809,24 @@ namespace ERP.Api.Controllers
             var inboundPostedCount = await db.ImportReceipts.AsNoTracking()
                 .CountAsync(r => scopedIds.Contains(r.WarehouseId) && r.Status == ReceiptStatus.Posted && r.CreatedAt >= since, cancellationToken);
             var putawayCompletedCount = await db.PutawayTasks.AsNoTracking()
-                .CountAsync(t => scopedIds.Contains(t.WarehouseId) && t.Status == PutawayTaskStatus.Completed, cancellationToken);
+                .CountAsync(t => scopedIds.Contains(t.WarehouseId) && t.Status == PutawayTaskStatus.Completed && t.CreatedAt >= since, cancellationToken);
             var putawayOpenCount = await db.PutawayTasks.AsNoTracking()
-                .CountAsync(t => scopedIds.Contains(t.WarehouseId) && t.Status != PutawayTaskStatus.Completed && t.Status != PutawayTaskStatus.Cancelled, cancellationToken);
-            var outboundPostedExports = await db.ExportReceipts.AsNoTracking()
-                .CountAsync(r => scopedIds.Contains(r.WarehouseId) && r.Status == ReceiptStatus.Posted && r.CreatedAt >= since, cancellationToken);
+                .CountAsync(t => scopedIds.Contains(t.WarehouseId) && t.Status != PutawayTaskStatus.Completed && t.Status != PutawayTaskStatus.Cancelled && t.CreatedAt >= since, cancellationToken);
+            var outboundPostedExportsWithoutShipment = await db.ExportReceipts.AsNoTracking()
+                .CountAsync(r => scopedIds.Contains(r.WarehouseId) &&
+                                 r.Status == ReceiptStatus.Posted &&
+                                 r.CreatedAt >= since &&
+                                 !db.Shipments.Any(s =>
+                                     (s.SourceId == r.Id || s.SourceCode == r.Code) &&
+                                     (s.Status == ShipmentStatus.Delivered || s.Status == ShipmentStatus.Completed || s.Status == ShipmentStatus.Dispatched || s.Status == ShipmentStatus.InTransit)),
+                            cancellationToken);
             var deliveredShipments = await db.Shipments.AsNoTracking()
                 .CountAsync(s => scopedIds.Contains(s.WarehouseId) &&
+                                 s.CreatedAt >= since &&
                                  (s.Status == ShipmentStatus.Delivered || s.Status == ShipmentStatus.Completed || s.Status == ShipmentStatus.Dispatched || s.Status == ShipmentStatus.InTransit), cancellationToken);
             var failedShipments = await db.Shipments.AsNoTracking()
                 .CountAsync(s => scopedIds.Contains(s.WarehouseId) &&
+                                 s.CreatedAt >= since &&
                                  (s.Status == ShipmentStatus.DeliveryFailed || s.Status == ShipmentStatus.ReturnToWarehouse), cancellationToken);
             var totalTrackedShipments = deliveredShipments + failedShipments;
             var deliverySuccessRatePct = totalTrackedShipments > 0
@@ -831,11 +834,11 @@ namespace ERP.Api.Controllers
                 : 100m;
 
             var stocktakeTotalCount = await db.Stocktakes.AsNoTracking()
-                .CountAsync(s => scopedIds.Contains(s.WarehouseId), cancellationToken);
+                .CountAsync(s => scopedIds.Contains(s.WarehouseId) && s.CreatedAt >= since, cancellationToken);
             var stocktakeApprovedCount = await db.Stocktakes.AsNoTracking()
-                .CountAsync(s => scopedIds.Contains(s.WarehouseId) && s.Status == ReceiptStatus.Approved, cancellationToken);
+                .CountAsync(s => scopedIds.Contains(s.WarehouseId) && s.Status == ReceiptStatus.Approved && s.CreatedAt >= since, cancellationToken);
             var stocktakeDetailsQuery = db.StocktakeDetails.AsNoTracking()
-                .Where(d => scopedIds.Contains(d.Stocktake.WarehouseId));
+                .Where(d => scopedIds.Contains(d.Stocktake.WarehouseId) && d.Stocktake.CreatedAt >= since);
             var totalStocktakeLines = await stocktakeDetailsQuery.CountAsync(cancellationToken);
             var countedLineCount = await stocktakeDetailsQuery.CountAsync(d => d.ActualQuantity.HasValue, cancellationToken);
             var stocktakeLineCount = countedLineCount > 0 ? countedLineCount : totalStocktakeLines;
@@ -928,7 +931,7 @@ namespace ERP.Api.Controllers
                 inboundPostedCount,
                 putawayCompletedCount,
                 putawayOpenCount,
-                outboundShippedCount = outboundPostedExports + deliveredShipments,
+                outboundShippedCount = outboundPostedExportsWithoutShipment + deliveredShipments,
                 deliverySuccessRatePct,
                 stocktakeTotalCount,
                 stocktakeApprovedCount,
@@ -972,8 +975,12 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-            if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
-                return Ok(Array.Empty<object>());
+            if (warehouseId.HasValue)
+            {
+                await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                if (!accessibleIds.Contains(warehouseId.Value))
+                    return Forbid();
+            }
 
             if (nearExpiryDays < 1) nearExpiryDays = 30;
             var today = DateTime.UtcNow.Date;

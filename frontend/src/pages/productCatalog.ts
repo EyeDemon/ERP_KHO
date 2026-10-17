@@ -4,7 +4,11 @@ export const roundQty4 = (value: number): number =>
   Number.isFinite(value) ? Math.round((value + Number.EPSILON) * 10000) / 10000 : 0;
 
 export const sanitizeScannerCode = (value: string): string =>
-  value.replace(/[\u0000-\u001f\u007f\u200b\ufeff]+/g, '').trim();
+  value
+    .replace(/[\u0000-\u001f\u007f\u200b\ufeff]+/g, '')
+    .trim()
+    .replace(/^(\][A-Za-z][0-9])+/, '')
+    .trim();
 
 export const normalizeBarcodeInput = (value: string): string => {
   const normalized = sanitizeScannerCode(value);

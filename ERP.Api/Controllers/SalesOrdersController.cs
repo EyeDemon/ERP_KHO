@@ -21,6 +21,7 @@ public sealed class SalesOrdersController(
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpPost("expedite-backorder")]
+    [IdempotentCommand("SalesOrder.ExpediteBackorder")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<IActionResult> ExpediteBackorder(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteBackorderRequest? request = null,

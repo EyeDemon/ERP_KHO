@@ -86,14 +86,8 @@ export default function InventoryLocks(){
       if(response?.data?.verificationId){
         setLockPrecedenceResult(response.data);
       }else{
-        setLockPrecedenceResult({
-          verificationId:'LCK-PRC-VERIFIED',
-          warehouseId:parsedWarehouseId,
-          overlappingHoldPrecedence:'RECALL_GT_QC_GT_COUNT',
-          leakCount:0,
-          status:'LOCK_PRECEDENCE_VERIFIED',
-          verifiedAtUtc:new Date().toISOString(),
-        });
+        setLockPrecedenceResult(null);
+        setError('Phản hồi kiểm định độ ưu tiên khóa không hợp lệ từ máy chủ.');
       }
     }catch(e){
       setLockPrecedenceResult(null);
@@ -108,8 +102,14 @@ export default function InventoryLocks(){
     try{
       const [lockResponse,warehouseResponse,statusResponse]=await Promise.all([
         apiClient.get('/api/inventory/locks'),
-        (canReadWarehouses?apiClient.get('/api/Warehouses'):Promise.resolve({data:[]})).catch(()=>({data:[]})),
-        apiClient.get('/api/inventory/statuses').catch(()=>({data:[]})),
+        (canReadWarehouses?apiClient.get('/api/Warehouses'):Promise.resolve({data:[]})).catch((err)=>{
+          if(err?.response?.status&&err.response.status>=400)setError(errorMessage(err));
+          return {data:[]};
+        }),
+        apiClient.get('/api/inventory/statuses').catch((err)=>{
+          if(err?.response?.status&&err.response.status>=400)setError(errorMessage(err));
+          return {data:[]};
+        }),
       ]);
       setLocks(lockResponse.data);
       setWarehouses(warehouseResponse.data);

@@ -14,14 +14,14 @@ public sealed class ProductBarcodesController(IProductCatalogService service) : 
     [HttpGet, PermissionAuthorize(AppPermissions.ProductRead)]
     public async Task<IActionResult> GetAll(int productId, CancellationToken ct) => Ok(await service.GetBarcodesAsync(productId, ct));
 
-    [HttpPost, PermissionAuthorize(AppPermissions.BarcodeManage)]
+    [HttpPost, ERP.Api.Infrastructure.IdempotentCommand("ProductBarcode.Create"), PermissionAuthorize(AppPermissions.BarcodeManage)]
     public async Task<IActionResult> Create(int productId, CreateProductBarcodeDto dto, CancellationToken ct)
     {
         var result = await service.AddBarcodeAsync(productId, dto, ct);
         return Created($"/api/products/{productId}/barcodes/{result.Id}", result);
     }
 
-    [HttpDelete("{barcodeId:int}"), PermissionAuthorize(AppPermissions.BarcodeManage)]
+    [HttpDelete("{barcodeId:int}"), ERP.Api.Infrastructure.IdempotentCommand("ProductBarcode.Delete"), PermissionAuthorize(AppPermissions.BarcodeManage)]
     public async Task<IActionResult> Delete(int productId, int barcodeId, CancellationToken ct)
     { await service.DeleteBarcodeAsync(productId, barcodeId, ct); return NoContent(); }
 }

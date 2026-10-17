@@ -15,10 +15,13 @@ public sealed class WarehouseAuthorizationService(
             throw new UnauthorizedAccessException("Người dùng chưa xác thực.");
 
         if (currentUser.IsGlobalAdmin)
-            return await context.Warehouses.AsNoTracking().Select(x => x.Id).ToListAsync(cancellationToken);
+            return await context.Warehouses.AsNoTracking()
+                .Where(x => x.IsActive)
+                .Select(x => x.Id)
+                .ToListAsync(cancellationToken);
 
         return await context.UserWarehouses.AsNoTracking()
-            .Where(x => x.UserId == currentUser.UserId)
+            .Where(x => x.UserId == currentUser.UserId && !context.Warehouses.Any(w => w.Id == x.WarehouseId && !w.IsActive))
             .Select(x => x.WarehouseId)
             .ToListAsync(cancellationToken);
     }
@@ -31,14 +34,18 @@ public sealed class WarehouseAuthorizationService(
         if (warehouseId <= 0)
             return false;
 
-        // Global admin bypasses membership, never resource existence.
-        // An unknown warehouse must fail closed like an unassigned one.
+        // Global admin bypasses membership, never resource existence or active state.
+        // An unknown or inactive warehouse must fail closed like an unassigned one.
         if (currentUser.IsGlobalAdmin)
             return await context.Warehouses.AsNoTracking()
-                .AnyAsync(x => x.Id == warehouseId, cancellationToken);
+                .AnyAsync(x => x.Id == warehouseId && x.IsActive, cancellationToken);
 
         return await context.UserWarehouses.AsNoTracking()
-            .AnyAsync(x => x.UserId == currentUser.UserId && x.WarehouseId == warehouseId, cancellationToken);
+            .AnyAsync(x =>
+                x.UserId == currentUser.UserId &&
+                x.WarehouseId == warehouseId &&
+                !context.Warehouses.Any(w => w.Id == x.WarehouseId && !w.IsActive),
+                cancellationToken);
     }
 
     public async Task EnsureWarehouseAccessAsync(int warehouseId, CancellationToken cancellationToken = default)

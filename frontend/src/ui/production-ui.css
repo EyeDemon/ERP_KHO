@@ -40,7 +40,8 @@
 }
 
 .production-ui > * {
-  max-width: 1440px;
+  max-width: min(1440px, 100%);
+  min-width: 0;
   margin-left: auto;
   margin-right: auto;
 }
@@ -426,8 +427,10 @@
 .production-ui .ui-inline-wrap{display:flex;align-items:center;gap:var(--ui-space-2);flex-wrap:wrap}
 .production-ui .ui-inline-actions{display:flex;align-items:center;gap:var(--ui-space-2);flex-wrap:wrap}
 .production-ui .ui-auto-actions{margin-left:auto}
-.production-ui .ui-stack{display:grid;gap:var(--ui-space-2)}
-.production-ui .ui-form-grid{display:grid;gap:var(--ui-space-2);max-width:760px}
+.production-ui .ui-stack{display:grid;gap:var(--ui-space-2);min-width:0;max-width:100%}
+.production-ui .ui-stack>*,.production-ui .ui-card>*,.production-ui .ui-form-grid>*{min-width:0;max-width:100%}
+.production-ui .ui-form-grid{display:grid;gap:var(--ui-space-2);max-width:min(760px,100%);min-width:0}
+.production-ui :where(div, section):has(> table){min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
 .production-ui .ui-muted-text{color:var(--ui-muted);font-size:12px}
 .production-ui .ui-success-text{color:var(--ui-success);margin:0}
 .production-ui .ui-empty-cell{text-align:center!important;color:var(--ui-muted);padding:24px!important}
@@ -482,6 +485,16 @@
   .production-ui small,
   .production-ui .ui-badge {
     font-size: 12px;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .production-ui span,
+  .production-ui strong,
+  .production-ui p,
+  .production-ui div {
+    overflow-wrap: anywhere;
   }
 
   .production-ui :where(div, section):has(> table) {

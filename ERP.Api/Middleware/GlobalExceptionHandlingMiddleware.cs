@@ -32,7 +32,8 @@ public class GlobalExceptionHandlingMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        var isSqlServerConcurrencyError = IsSqlServerConcurrencyError(FindSqlException(exception)?.Number);
+        var isSqlServerConcurrencyError = IsSqlServerConcurrencyError(FindSqlException(exception)?.Number)
+            || exception is Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException;
         var statusCode = exception switch
         {
             BusinessRuleException business when business.Data["HttpStatusCode"] is 409 => (int)HttpStatusCode.Conflict,
@@ -42,6 +43,7 @@ public class GlobalExceptionHandlingMiddleware
             ForbiddenException => (int)HttpStatusCode.Forbidden,
             UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
             ConcurrencyException => (int)HttpStatusCode.Conflict,
+            Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException => (int)HttpStatusCode.Conflict,
             _ when isSqlServerConcurrencyError => (int)HttpStatusCode.Conflict,
             _ => (int)HttpStatusCode.InternalServerError
         };

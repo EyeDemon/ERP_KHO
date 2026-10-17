@@ -251,6 +251,7 @@ const Inventory = () => {
     humanInTheLoopBoundary: string;
     status: string;
   } | null>(null);
+  const [governanceBusy, setGovernanceBusy] = useState(false);
 
   const fetchStocks = async () => {
     setStockLoading(true);
@@ -1048,8 +1049,10 @@ const Inventory = () => {
                     <button
                       type="button"
                       className="btn-primary"
+                      disabled={governanceBusy}
                       onClick={async () => {
-                        const baselineAvailable = analyticsReport.turnoverAndDaysOnHand.reduce((sum, x) => sum + x.onHandQuantity, 0);
+                        if (governanceBusy) return;
+                        setGovernanceBusy(true);
                         setAnalyticsError('');
                         try {
                           const res = await apiClient.post('/api/inventory/what-if-simulation', {
@@ -1061,19 +1064,13 @@ const Inventory = () => {
                             setWhatIfResult(res.data);
                             return;
                           }
-                          const simulatedDemand = Math.round(baselineAvailable * whatIfMultiplier * 100) / 100;
-                          const projectedNetBalance = Math.round((baselineAvailable - simulatedDemand) * 100) / 100;
-                          setWhatIfResult({
-                            demandMultiplier: whatIfMultiplier,
-                            totalAvailable: baselineAvailable,
-                            simulatedDemand,
-                            projectedNetBalance,
-                            scenarioStatus: projectedNetBalance < 0 ? 'PROJECTED_SHORTAGE' : 'PROJECTED_SUFFICIENT',
-                            immutableSnapshotGuarantee: true,
-                          });
+                          setWhatIfResult(null);
+                          setAnalyticsError('Phản hồi mô phỏng kịch bản giả định What-If không hợp lệ từ máy chủ.');
                         } catch {
                           setWhatIfResult(null);
                           setAnalyticsError('Không thể chạy mô phỏng kịch bản giả định What-If.');
+                        } finally {
+                          setGovernanceBusy(false);
                         }
                       }}
                     >
@@ -1082,7 +1079,10 @@ const Inventory = () => {
                     <button
                       type="button"
                       className="btn-secondary"
+                      disabled={governanceBusy}
                       onClick={() => {
+                        if (governanceBusy) return;
+                        setGovernanceBusy(true);
                         setAnalyticsError('');
                         void apiClient
                           .post('/api/inventory/evaluate-decision-policy-governance', {
@@ -1090,19 +1090,25 @@ const Inventory = () => {
                           })
                           .then((res) => {
                             const d = (res?.data ?? {}) as Record<string, unknown>;
+                            if (typeof d.policyRegistryId !== 'string' || !d.policyRegistryId) {
+                              setDecisionPolicyAudit(null);
+                              setAnalyticsError('Phản hồi kiểm định sổ đăng ký chính sách quyết định không hợp lệ từ máy chủ.');
+                              return;
+                            }
                             setDecisionPolicyAudit({
-                              policyRegistryId: String(d.policyRegistryId ?? 'DEC-POL-20261017'),
-                              forecastBiasMapeStatus: String(d.forecastBiasMapeStatus ?? 'MAPE_WITHIN_TOLERANCE_BAND'),
-                              demandAnomalyDetector: String(d.demandAnomalyDetector ?? 'SPIKE_AND_DROP_GUARD_ACTIVE'),
-                              inventoryRiskScoreStatus: String(d.inventoryRiskScoreStatus ?? 'EXPLAINABLE_RISK_SCORING_READY'),
-                              humanInTheLoopBoundary: String(d.humanInTheLoopBoundary ?? 'APPROVAL_REQUIRED_BEFORE_LEDGER_MUTATION'),
-                              status: String(d.status ?? 'DECISION_POLICY_GOVERNANCE_VERIFIED'),
+                              policyRegistryId: d.policyRegistryId,
+                              forecastBiasMapeStatus: String(d.forecastBiasMapeStatus ?? ''),
+                              demandAnomalyDetector: String(d.demandAnomalyDetector ?? ''),
+                              inventoryRiskScoreStatus: String(d.inventoryRiskScoreStatus ?? ''),
+                              humanInTheLoopBoundary: String(d.humanInTheLoopBoundary ?? ''),
+                              status: String(d.status ?? 'VERIFIED'),
                             });
                           })
                           .catch(() => {
                             setDecisionPolicyAudit(null);
                             setAnalyticsError('Không thể kiểm định sổ đăng ký chính sách quyết định và rủi ro.');
-                          });
+                          })
+                          .finally(() => setGovernanceBusy(false));
                       }}
                     >
                       Kiểm định Sổ đăng ký Chính sách Quyết định, Chấm điểm Rủi ro & Phát hiện Bất thường Cầu (AX-27..32, AX-35, AX-38, AX-42)

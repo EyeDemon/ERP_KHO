@@ -46,17 +46,69 @@ public sealed class InventoryReversalTraceabilityController(
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var page = await reversalService.GetCandidatesAsync(warehouseId, 1, int.MaxValue, null, null, null, cancellationToken);
+        if (db != null && await db.InventoryTransactions.AsNoTracking().AnyAsync(cancellationToken))
+        {
+            var candidateQuery = db.InventoryTransactions.AsNoTracking()
+                .Where(t => (t.TransactionType == ERP.Domain.Enums.TransactionType.Move ||
+                             t.TransactionType == ERP.Domain.Enums.TransactionType.StatusChange) &&
+                            t.ReversalOfTransactionId == null);
+            if (warehouseId.HasValue)
+                candidateQuery = candidateQuery.Where(t => t.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                candidateQuery = candidateQuery.Where(t => accessibleIds.Contains(t.WarehouseId));
+
+            var totalCandidates = await candidateQuery.CountAsync(cancellationToken);
+            var alreadyReversed = await candidateQuery.CountAsync(
+                t => t.CorrectiveTransactionId != null ||
+                     db.InventoryTransactions.Any(r => r.ReversalOfTransactionId == t.Id),
+                cancellationToken);
+            var moveCount = await candidateQuery.CountAsync(
+                t => t.TransactionType == ERP.Domain.Enums.TransactionType.Move,
+                cancellationToken);
+            var statusChangeCount = await candidateQuery.CountAsync(
+                t => t.TransactionType == ERP.Domain.Enums.TransactionType.StatusChange,
+                cancellationToken);
+
+            return Ok(new
+            {
+                totalCandidatesInWindow = totalCandidates,
+                reversibleCount = totalCandidates - alreadyReversed,
+                alreadyReversedCount = alreadyReversed,
+                moveTransactionCount = moveCount,
+                statusChangeTransactionCount = statusChangeCount,
+            });
+        }
+
+        const int pageSize = 100;
+        var pageIndex = 1;
+        var firstPage = await reversalService.GetCandidatesAsync(warehouseId, pageIndex, pageSize, null, null, null, cancellationToken)
+            ?? await reversalService.GetCandidatesAsync(warehouseId, 1, int.MaxValue, null, null, null, cancellationToken);
+        var items = firstPage.Items.ToList();
+        while (items.Count < firstPage.TotalRecords)
+        {
+            pageIndex++;
+            var nextPage = await reversalService.GetCandidatesAsync(warehouseId, pageIndex, pageSize, null, null, null, cancellationToken);
+            if (nextPage == null || nextPage.Items.Count == 0)
+                break;
+            items.AddRange(nextPage.Items);
+        }
+
         return Ok(new
         {
-            totalCandidatesInWindow = page.TotalRecords,
-            reversibleCount = page.Items.Count(x => !x.IsReversed),
-            alreadyReversedCount = page.Items.Count(x => x.IsReversed),
-            moveTransactionCount = page.Items.Count(x => x.TransactionType == "Move"),
-            statusChangeTransactionCount = page.Items.Count(x => x.TransactionType == "StatusChange"),
+            totalCandidatesInWindow = firstPage.TotalRecords,
+            reversibleCount = items.Count(x => !x.IsReversed),
+            alreadyReversedCount = items.Count(x => x.IsReversed),
+            moveTransactionCount = items.Count(x => x.TransactionType == "Move"),
+            statusChangeTransactionCount = items.Count(x => x.TransactionType == "StatusChange"),
         });
     }
 
@@ -98,11 +150,62 @@ public sealed class InventoryReversalTraceabilityController(
         [FromQuery] int? productId = null,
         CancellationToken cancellationToken = default)
     {
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        if (db != null && (await db.InventoryStocks.AsNoTracking().AnyAsync(cancellationToken) ||
+                           await db.InventoryTransactions.AsNoTracking().AnyAsync(cancellationToken)))
+        {
+            var bucketQuery = db.InventoryStocks.AsNoTracking()
+                .Where(s => s.Quantity > 0 || s.ReservedQuantity > 0);
+            var eventQuery = db.InventoryTransactions.AsNoTracking().AsQueryable();
+
+            if (warehouseId.HasValue)
+            {
+                bucketQuery = bucketQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                eventQuery = eventQuery.Where(t => t.WarehouseId == warehouseId.Value);
+            }
+            else if (accessibleIds != null)
+            {
+                bucketQuery = bucketQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
+                eventQuery = eventQuery.Where(t => accessibleIds.Contains(t.WarehouseId));
+            }
+
+            if (productId.HasValue)
+            {
+                bucketQuery = bucketQuery.Where(s => s.ProductId == productId.Value);
+                eventQuery = eventQuery.Where(t => t.ProductId == productId.Value);
+            }
+
+            var totalBuckets = await bucketQuery.CountAsync(cancellationToken);
+            var totalEvents = await eventQuery.CountAsync(cancellationToken);
+            var lotTrackedBucketCount = await bucketQuery.CountAsync(s => s.LotId != null, cancellationToken);
+            var serialTrackedBucketCount = await bucketQuery.CountAsync(s => s.SerialId != null, cancellationToken);
+            var availableBucketCount = await bucketQuery.CountAsync(
+                s => s.Status == ERP.Domain.Enums.InventoryStatus.Available,
+                cancellationToken);
+
+            return Ok(new
+            {
+                totalBuckets,
+                totalEvents,
+                lotTrackedBucketCount,
+                serialTrackedBucketCount,
+                availableBucketCount,
+                nonAvailableBucketCount = totalBuckets - availableBucketCount,
+            });
+        }
 
         var trace = await traceabilityService.TraceAsync(
-            warehouseId, productId, null, null, null, null, int.MaxValue, cancellationToken);
+            warehouseId, productId, null, null, null, null, 500, cancellationToken)
+            ?? await traceabilityService.TraceAsync(
+                warehouseId, productId, null, null, null, null, int.MaxValue, cancellationToken);
         return Ok(new
         {
             totalBuckets = trace.CurrentBuckets.Count,

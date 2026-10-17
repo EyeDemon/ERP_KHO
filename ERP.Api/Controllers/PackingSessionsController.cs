@@ -71,7 +71,7 @@ public sealed class PackingSessionsController(
 
     public sealed record ExecuteKittingVasRequest(int? WarehouseId = null, string? KitSkuCode = null, string? VasServiceType = null);
 
-    [HttpPost("execute-kitting-vas"), PermissionAuthorize(AppPermissions.PackingRead)]
+    [HttpPost("execute-kitting-vas"), IdempotentCommand("Packing.ExecuteKittingVas"), PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<IActionResult> ExecuteKittingVas(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteKittingVasRequest? request = null,
         CancellationToken cancellationToken = default)

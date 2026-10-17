@@ -271,6 +271,7 @@ public sealed class InventoryStatusService(
             var source = await context.InventoryStocks
                 .Include(x => x.StatusDefinition)
                 .Include(x => x.Lot)
+                .Include(x => x.Location)
                 .SingleOrDefaultAsync(x => x.Id == request.InventoryStockId, cancellationToken)
                 ?? throw new NotFoundException("Không tìm thấy inventory bucket.");
             await warehouseAuthorization.EnsureWarehouseAccessAsync(source.WarehouseId, cancellationToken);
@@ -280,6 +281,33 @@ public sealed class InventoryStatusService(
             if (source.Quantity - source.ReservedQuantity < request.Quantity)
                 throw Conflict("INV_INSUFFICIENT_ON_HAND", "Không đủ tồn khả dụng chưa giữ để xử lý disposition.");
 
+            var targetLocationId = source.LocationId;
+            if (isRelease)
+            {
+                var needsPickableRelocation = source.Location is null ||
+                    !source.Location.IsPickable ||
+                    !source.Location.IsActive ||
+                    source.Location.IsBlocked ||
+                    source.Location.LocationType is WarehouseLocationType.Damaged or WarehouseLocationType.Rejected;
+                if (needsPickableRelocation)
+                {
+                    var pickableLocationId = await context.WarehouseLocations
+                        .Where(x => x.WarehouseId == source.WarehouseId &&
+                                    x.IsActive &&
+                                    !x.IsBlocked &&
+                                    x.IsPickable &&
+                                    x.LocationType != WarehouseLocationType.Damaged &&
+                                    x.LocationType != WarehouseLocationType.Rejected)
+                        .OrderBy(x => x.LocationType == WarehouseLocationType.Storage ? 0 : x.Code == "LEGACY" ? 1 : 2)
+                        .ThenBy(x => x.Id)
+                        .Select(x => (int?)x.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (!pickableLocationId.HasValue)
+                        throw Conflict("INV_DISPOSITION_NOT_ALLOWED", "Kho chưa có vị trí lưu trữ khả dụng (IsPickable) để giải tỏa tồn kho về AVAILABLE.");
+                    targetLocationId = pickableLocationId.Value;
+                }
+            }
+
             if (inventoryLocks is not null)
             {
                 await inventoryLocks.EnsureBucketUnlockedAsync(
@@ -287,7 +315,7 @@ public sealed class InventoryStatusService(
                 if (isRelease)
                 {
                     await inventoryLocks.EnsureBucketUnlockedAsync(
-                        source.WarehouseId, source.LocationId, source.ProductId, InventoryStatus.Available, source.LotId, source.SerialId, cancellationToken);
+                        source.WarehouseId, targetLocationId, source.ProductId, InventoryStatus.Available, source.LotId, source.SerialId, cancellationToken);
                 }
             }
 
@@ -306,7 +334,7 @@ public sealed class InventoryStatusService(
                 var destination = await context.InventoryStocks.SingleOrDefaultAsync(
                     x => x.ProductId == source.ProductId &&
                          x.WarehouseId == source.WarehouseId &&
-                         x.LocationId == source.LocationId &&
+                         x.LocationId == targetLocationId &&
                          x.Status == InventoryStatus.Available &&
                          x.LotId == source.LotId &&
                          x.SerialId == source.SerialId,
@@ -320,7 +348,7 @@ public sealed class InventoryStatusService(
                     {
                         ProductId = source.ProductId,
                         WarehouseId = source.WarehouseId,
-                        LocationId = source.LocationId,
+                        LocationId = targetLocationId,
                         LotId = source.LotId,
                         SerialId = source.SerialId,
                         Status = InventoryStatus.Available,
@@ -340,7 +368,9 @@ public sealed class InventoryStatusService(
                 {
                     ProductId = source.ProductId,
                     WarehouseId = source.WarehouseId,
-                    LocationId = source.LocationId,
+                    LocationId = targetLocationId,
+                    FromLocationId = source.LocationId,
+                    ToLocationId = targetLocationId,
                     LotId = source.LotId,
                     SerialId = source.SerialId,
                     InventoryStatus = InventoryStatus.Available,
@@ -363,8 +393,8 @@ public sealed class InventoryStatusService(
                     EntityId = source.Id,
                     WarehouseId = source.WarehouseId,
                     Timestamp = DateTime.UtcNow,
-                    OldValues = $"Status: {fromStatus}; Quantity: {source.Quantity + request.Quantity}",
-                    NewValues = $"Status: {InventoryStatus.Available}; ReleasedQuantity: {request.Quantity}; LotId: {source.LotId}; SerialId: {source.SerialId}",
+                    OldValues = $"Status: {fromStatus}; LocationId: {source.LocationId}; Quantity: {source.Quantity + request.Quantity}",
+                    NewValues = $"Status: {InventoryStatus.Available}; LocationId: {targetLocationId}; ReleasedQuantity: {request.Quantity}; LotId: {source.LotId}; SerialId: {source.SerialId}",
                     Reason = request.Reason.Trim(),
                     Result = "Success",
                     Severity = "Information"
@@ -428,7 +458,7 @@ public sealed class InventoryStatusService(
                 RemainingSourceQuantity = source.Quantity,
                 ProductId = source.ProductId,
                 WarehouseId = source.WarehouseId,
-                LocationId = source.LocationId ?? 0,
+                LocationId = (isRelease ? targetLocationId : source.LocationId) ?? 0,
                 LotId = source.LotId,
                 SerialId = source.SerialId
             };

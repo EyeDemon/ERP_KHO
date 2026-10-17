@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { sanitizeScannerCode } from './productCatalog';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type ShipmentHu = {
@@ -193,12 +194,17 @@ export default function Shipments(){
                 })
                 .then(res=>{
                   const data=res?.data??{};
-                  setTmsManifestResult({
-                    manifestId:typeof data.manifestId==='string'&&data.manifestId?data.manifestId:'TMS-MNF-20261017-01',
-                    carrierCode:typeof data.carrierCode==='string'&&data.carrierCode?data.carrierCode:'VTP-EXPRESS',
-                    syncedShipmentCount:typeof data.syncedShipmentCount==='number'?data.syncedShipmentCount:6,
-                    ediStatus:typeof data.ediStatus==='string'&&data.ediStatus?data.ediStatus:'ACK_200_SYNCED',
-                  });
+                  if(typeof data.manifestId==='string'&&data.manifestId){
+                    setTmsManifestResult({
+                      manifestId:data.manifestId,
+                      carrierCode:typeof data.carrierCode==='string'&&data.carrierCode?data.carrierCode:'VTP-EXPRESS',
+                      syncedShipmentCount:typeof data.syncedShipmentCount==='number'?data.syncedShipmentCount:0,
+                      ediStatus:typeof data.ediStatus==='string'&&data.ediStatus?data.ediStatus:'SYNCED',
+                    });
+                  }else{
+                    setTmsManifestResult(null);
+                    setError('Không thể đồng bộ Manifest TMS: dữ liệu phản hồi không hợp lệ.');
+                  }
                 })
                 .catch(e=>{
                   setTmsManifestResult(null);
@@ -271,9 +277,9 @@ export default function Shipments(){
                 autoComplete="off"
               />
             </label>
-            <button type="button" disabled={!!busy||!stagingCode.trim()} onClick={()=>void mutate(
+            <button type="button" disabled={!!busy||!sanitizeScannerCode(stagingCode)} onClick={()=>void mutate(
               'shipment-stage-'+selected.id,'/api/shipments/'+selected.id+'/stage',
-              {stagingLocationCode:stagingCode.trim(),rowVersion:selected.rowVersion}
+              {stagingLocationCode:sanitizeScannerCode(stagingCode),rowVersion:selected.rowVersion}
             )}>Xác nhận Staging</button>
           </div>
         </fieldset>}
@@ -302,9 +308,9 @@ export default function Shipments(){
             <label>HU barcode / code / SSCC
               <input aria-label="Shipment HU scan" value={huScan} onChange={e=>setHuScan(e.target.value)} autoComplete="off"/>
             </label>
-            <button type="button" disabled={!!busy||!huScan.trim()} onClick={()=>void mutate(
-              'shipment-load-hu-'+selected.id+'-'+huScan.trim().toUpperCase(),'/api/shipments/'+selected.id+'/load-hu',
-              {handlingUnitBarcode:huScan.trim(),rowVersion:selected.rowVersion}
+            <button type="button" disabled={!!busy||!sanitizeScannerCode(huScan)} onClick={()=>void mutate(
+              'shipment-load-hu-'+selected.id+'-'+sanitizeScannerCode(huScan).toUpperCase(),'/api/shipments/'+selected.id+'/load-hu',
+              {handlingUnitBarcode:sanitizeScannerCode(huScan),rowVersion:selected.rowVersion}
             )}>Xác nhận HU đã load</button>
           </div>
           <div className="ui-inline-wrap">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { ArrowRight, Check, PackageCheck, Send, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
@@ -72,10 +72,54 @@ export default function StockTransferDetailsDialog({
   const canTrace = usePermission('inventory_traceability.read');
   const inRouter = useInRouterContext();
   const traceHref = '/inventory-traceability?referenceType=StockTransfer&referenceId=' + selected.id;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const latestPropsRef = useRef({ actionInFlight, onClose });
   const [returnReasons, setReturnReasons] = useState<Array<{ code: string; name: string }>>([]);
   const [returnCode, setReturnCode] = useState('');
   const [returnReason, setReturnReason] = useState('');
   const [returnReasonError, setReturnReasonError] = useState('');
+
+  useEffect(() => {
+    latestPropsRef.current = { actionInFlight, onClose };
+  }, [actionInFlight, onClose]);
+
+  useEffect(() => {
+    const previousActive = document.activeElement as HTMLElement | null;
+    const root = dialogRef.current;
+    const focusable = () =>
+      Array.from(
+        root?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      );
+    (closeButtonRef.current ?? focusable()[0])?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        if (!latestPropsRef.current.actionInFlight) latestPropsRef.current.onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousActive?.focus();
+    };
+  }, []);
 
   useEffect(() => {
     setReturnReasons([]);
@@ -95,17 +139,26 @@ export default function StockTransferDetailsDialog({
   return (
           <div className="transfer-modal" role="presentation">
             <div
+              ref={dialogRef}
+              tabIndex={-1}
               className="transfer-dialog detail"
               role="dialog"
               aria-modal="true"
               aria-labelledby="transfer-detail-title"
+              onKeyDown={event => {
+                if (event.key === 'Escape' && !actionInFlight) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onClose();
+                }
+              }}
             >
               <div className="dialog-title">
                 <div>
                   <h2 id="transfer-detail-title">{selected.code}</h2>
                   <UiBadge tone={statusTone(status)}>{statusLabel[status]}</UiBadge>
                 </div>
-                <button type="button" aria-label="Đóng chi tiết điều chuyển" onClick={onClose}>
+                <button ref={closeButtonRef} type="button" aria-label="Đóng chi tiết điều chuyển" onClick={onClose}>
                   <X aria-hidden="true" />
                 </button>
               </div>

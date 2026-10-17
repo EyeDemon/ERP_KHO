@@ -496,14 +496,48 @@ public class StockReservationService(
     {
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
         var issues = new List<ReservationReconciliationIssueDto>();
-        var ledger = await context.StockReservations.AsNoTracking().Where(x => allowed.Contains(x.WarehouseId) && (x.Status == StockReservationStatus.Active || x.Status == StockReservationStatus.PartiallyConsumed || x.Status == StockReservationStatus.PartiallyAllocated || x.Status == StockReservationStatus.Allocated)).GroupBy(x => new { x.ProductId, x.WarehouseId }).Select(g => new { g.Key.ProductId, g.Key.WarehouseId, Reserved = g.Sum(x => x.Quantity - x.ConsumedQuantity - x.ReleasedQuantity) }).ToListAsync(cancellationToken);
-        var stocks = await context.InventoryStocks.AsNoTracking().Where(x => allowed.Contains(x.WarehouseId) && x.Status == ERP.Domain.Enums.InventoryStatus.Available && x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable).ToListAsync(cancellationToken);
+        var ledger = await context.StockReservations.AsNoTracking()
+            .Where(x => allowed.Contains(x.WarehouseId) &&
+                (x.Status == StockReservationStatus.Active ||
+                 x.Status == StockReservationStatus.PartiallyConsumed ||
+                 x.Status == StockReservationStatus.PartiallyAllocated ||
+                 x.Status == StockReservationStatus.Allocated))
+            .GroupBy(x => new { x.ProductId, x.WarehouseId })
+            .Select(g => new { g.Key.ProductId, g.Key.WarehouseId, Reserved = g.Sum(x => x.Quantity - x.ConsumedQuantity - x.ReleasedQuantity) })
+            .ToListAsync(cancellationToken);
+        var stocks = await context.InventoryStocks.AsNoTracking()
+            .Where(x => allowed.Contains(x.WarehouseId) &&
+                (x.Status == ERP.Domain.Enums.InventoryStatus.Available || x.ReservedQuantity != 0))
+            .GroupBy(x => new { x.ProductId, x.WarehouseId })
+            .Select(g => new
+            {
+                g.Key.ProductId,
+                g.Key.WarehouseId,
+                BucketCount = g.Count(),
+                Reserved = g.Sum(x => x.ReservedQuantity),
+                HasNegativeAvailable = g.Any(x => x.Quantity - x.ReservedQuantity < 0)
+            })
+            .ToListAsync(cancellationToken);
         foreach (var key in ledger.Select(x => (x.ProductId, x.WarehouseId)).Union(stocks.Select(x => (x.ProductId, x.WarehouseId))))
         {
             var l = ledger.FirstOrDefault(x => x.ProductId == key.ProductId && x.WarehouseId == key.WarehouseId)?.Reserved ?? 0;
-            var matching = stocks.Where(x => x.ProductId == key.ProductId && x.WarehouseId == key.WarehouseId).ToList();
-            var reserved = matching.Sum(x => x.ReservedQuantity);
-            if (matching.Count == 0 || l != reserved || matching.Any(x => x.Quantity - x.ReservedQuantity < 0)) issues.Add(new() { Issue = matching.Count == 0 ? "MissingStock" : l != reserved ? "LedgerMismatch" : "NegativeAvailable", ProductId = key.ProductId, WarehouseId = key.WarehouseId, LedgerReserved = l, StockReserved = matching.Count == 0 ? null : reserved });
+            var stockGroup = stocks.FirstOrDefault(x => x.ProductId == key.ProductId && x.WarehouseId == key.WarehouseId);
+            var reserved = stockGroup?.Reserved ?? 0;
+            if (stockGroup is null || stockGroup.BucketCount == 0 || l != reserved || stockGroup.HasNegativeAvailable)
+            {
+                issues.Add(new()
+                {
+                    Issue = stockGroup is null || stockGroup.BucketCount == 0
+                        ? "MissingStock"
+                        : l != reserved
+                            ? "LedgerMismatch"
+                            : "NegativeAvailable",
+                    ProductId = key.ProductId,
+                    WarehouseId = key.WarehouseId,
+                    LedgerReserved = l,
+                    StockReserved = stockGroup is null || stockGroup.BucketCount == 0 ? null : reserved
+                });
+            }
         }
         var invalidReservations = await context.StockReservations.AsNoTracking()
             .Where(x => allowed.Contains(x.WarehouseId) &&

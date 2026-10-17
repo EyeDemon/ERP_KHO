@@ -175,6 +175,7 @@ public sealed class DockYardController(
         Ok(await service.CreateDockAsync(warehouseId, dto, token));
 
     [HttpPut("docks/{dockId:int}")]
+    [IdempotentCommand("DockYard.Dock.Update")]
     [PermissionAuthorize(AppPermissions.DockManage)]
     public async Task<IActionResult> UpdateDock([FromQuery] int warehouseId, int dockId, UpsertDockDto dto, CancellationToken token) =>
         Ok(await service.UpdateDockAsync(warehouseId, dockId, dto, token));
@@ -191,6 +192,7 @@ public sealed class DockYardController(
         Ok(await service.CreateYardSlotAsync(warehouseId, dto, token));
 
     [HttpPut("yard-slots/{yardSlotId:int}")]
+    [IdempotentCommand("DockYard.YardSlot.Update")]
     [PermissionAuthorize(AppPermissions.DockManage)]
     public async Task<IActionResult> UpdateYardSlot([FromQuery] int warehouseId, int yardSlotId, UpsertYardSlotDto dto, CancellationToken token) =>
         Ok(await service.UpdateYardSlotAsync(warehouseId, yardSlotId, dto, token));

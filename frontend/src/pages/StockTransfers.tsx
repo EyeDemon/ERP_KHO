@@ -90,8 +90,10 @@ const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger
 
 export default function StockTransfers() {
   const role = localStorage.getItem('role') || 'Viewer';
-  const canWrite = hasPermission('stock_transfer.create') || ['Admin', 'Manager', 'WarehouseStaff'].includes(role);
-  const canApprove = hasPermission('stock_transfer.approve') || ['Admin', 'Manager'].includes(role);
+  const hasCreatePermission = usePermission('stock_transfer.create');
+  const hasApprovePermission = usePermission('stock_transfer.approve');
+  const canWrite = hasCreatePermission || ['Admin', 'Manager', 'WarehouseStaff'].includes(role);
+  const canApprove = hasApprovePermission || ['Admin', 'Manager'].includes(role);
   const canReturn = usePermission('inventory_reversal.create');
   const userId = currentUserId();
 
@@ -124,6 +126,7 @@ export default function StockTransfers() {
   >({});
   const [actionInFlight, setActionInFlight] = useState(false);
   const [createInFlight, setCreateInFlight] = useState(false);
+  const [governanceBusy, setGovernanceBusy] = useState(false);
   const [showInTransit, setShowInTransit] = useState(false);
   const [inTransitItems, setInTransitItems] = useState<InTransitItem[]>([]);
   const [inTransitLoading, setInTransitLoading] = useState(false);
@@ -175,16 +178,32 @@ export default function StockTransfers() {
       const hasExplicitPermissions = typeof localStorage !== 'undefined' && localStorage.getItem('permissions') !== null;
       const canReadWarehouses = !hasExplicitPermissions || hasPermission('warehouse.read');
       const canReadProducts = !hasExplicitPermissions || hasPermission('product.read');
+      let refLoadError = '';
       const [transfers, warehouseResult, productResult] = await Promise.all([
         apiClient.get('/api/stock-transfers', { params }),
-        canReadWarehouses ? apiClient.get('/api/warehouses').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
-        canReadProducts ? apiClient.get('/api/products').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+        canReadWarehouses
+          ? apiClient.get('/api/warehouses').catch((err: any) => {
+              if (err?.response?.status && err.response.status >= 400) {
+                refLoadError = err.response?.data?.message || 'Không thể tải danh sách kho.';
+              }
+              return { data: [] };
+            })
+          : Promise.resolve({ data: [] }),
+        canReadProducts
+          ? apiClient.get('/api/products').catch((err: any) => {
+              if (err?.response?.status && err.response.status >= 400) {
+                refLoadError = refLoadError || err.response?.data?.message || 'Không thể tải danh sách sản phẩm.';
+              }
+              return { data: [] };
+            })
+          : Promise.resolve({ data: [] }),
       ]);
       if (requestSequence !== listRequestSequence.current) return;
       setItems(transfers.data.items);
       setTotalPages(transfers.data.totalPages || 1);
       setWarehouses(Array.isArray(warehouseResult.data) ? warehouseResult.data : []);
       setProducts(Array.isArray(productResult.data) ? productResult.data : []);
+      if (refLoadError) setError(refLoadError);
     } catch (failure: any) {
       if (requestSequence === listRequestSequence.current) {
         setError(failure.response?.data?.message || 'Không thể tải dữ liệu điều chuyển.');
@@ -275,7 +294,37 @@ export default function StockTransfers() {
   };
 
   useEffect(() => {
-    if (showCreate) draftDialogRef.current?.querySelector('select')?.focus();
+    if (!showCreate) return;
+    const root = draftDialogRef.current;
+    const focusable = () =>
+      Array.from(
+        root?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      );
+    (root?.querySelector<HTMLElement>('select') ?? focusable()[0])?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !createInFlightRef.current) {
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        closeDraftEditor();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [showCreate]);
 
   const reloadConflictedDraft = async () => {
@@ -482,21 +531,31 @@ export default function StockTransfers() {
             <UiBadge tone={closedExceptionCount > 0 ? 'danger' : 'neutral'}>{`Đã hủy / Hoàn trả: ${closedExceptionCount}`}</UiBadge>
             <button
               type="button"
+              disabled={actionInFlight || createInFlight || governanceBusy}
               onClick={async () => {
+                if (governanceBusy) return;
+                setGovernanceBusy(true);
                 const defaultCode = items[0]?.code || 'TRF-IN-TRANSIT';
                 setError('');
                 try {
                   const res = await apiClient.post('/api/handling-units/verify-intransit-seal', {
                     transferCode: defaultCode,
                   });
-                  setSealVerification({
-                    sealVerificationId: res?.data?.sealVerificationId || 'HU-SEAL-VERIFIED',
-                    sealStatus: res?.data?.sealStatus || 'SEAL_INTACT_VERIFIED',
-                    transferCode: res?.data?.transferCode || defaultCode,
-                  });
+                  if (res?.data?.sealVerificationId && res?.data?.sealStatus) {
+                    setSealVerification({
+                      sealVerificationId: String(res.data.sealVerificationId),
+                      sealStatus: String(res.data.sealStatus),
+                      transferCode: String(res.data.transferCode || defaultCode),
+                    });
+                  } else {
+                    setSealVerification(null);
+                    setError('Phản hồi xác minh niêm phong HU không hợp lệ từ máy chủ.');
+                  }
                 } catch (err: any) {
                   setSealVerification(null);
                   setError(err?.response?.data?.message || 'Không thể xác minh niêm phong HU và đối chiếu hàng đang đi đường.');
+                } finally {
+                  setGovernanceBusy(false);
                 }
               }}
             >
@@ -504,23 +563,33 @@ export default function StockTransfers() {
             </button>
             <button
               type="button"
+              disabled={actionInFlight || createInFlight || governanceBusy}
               onClick={async () => {
+                if (governanceBusy) return;
+                setGovernanceBusy(true);
                 setError('');
                 try {
                   const res = await apiClient.post('/api/stock-transfers/simulate-network-rebalancing', {
                     sourceWarehouseId: filters.sourceWarehouseId ? Number(filters.sourceWarehouseId) : undefined,
                     destinationWarehouseId: filters.destinationWarehouseId ? Number(filters.destinationWarehouseId) : undefined,
                   });
-                  setNetworkRebalancing({
-                    simulationId: res?.data?.simulationId || 'NET-BAL-SIMULATED',
-                    networkSurplusShortageStatus: res?.data?.networkSurplusShortageStatus || 'SURPLUS_TO_SHORTAGE_LANES_MAPPED',
-                    interWarehouseReplenishment: res?.data?.interWarehouseReplenishment || 'RESPECTS_RESERVATION_AND_TRANSFER_SEMANTICS',
-                    replenishmentExceptionTriage: res?.data?.replenishmentExceptionTriage || 'ZERO_SILENT_STOCKOUT_CONFLICTS',
-                    status: res?.data?.status || 'NETWORK_REBALANCING_SIMULATED',
-                  });
+                  if (res?.data?.simulationId && res?.data?.status) {
+                    setNetworkRebalancing({
+                      simulationId: String(res.data.simulationId),
+                      networkSurplusShortageStatus: String(res.data.networkSurplusShortageStatus || ''),
+                      interWarehouseReplenishment: String(res.data.interWarehouseReplenishment || ''),
+                      replenishmentExceptionTriage: String(res.data.replenishmentExceptionTriage || ''),
+                      status: String(res.data.status),
+                    });
+                  } else {
+                    setNetworkRebalancing(null);
+                    setError('Phản hồi mô phỏng tái cân bằng tồn kho mạng lưới không hợp lệ từ máy chủ.');
+                  }
                 } catch (err: any) {
                   setNetworkRebalancing(null);
                   setError(err?.response?.data?.message || 'Không thể mô phỏng tái cân bằng tồn kho mạng lưới.');
+                } finally {
+                  setGovernanceBusy(false);
                 }
               }}
             >

@@ -384,7 +384,6 @@ public sealed class DockYardService(
             !ReleasedStatuses.Contains(x.Status) &&
             (x.Status == DockAppointmentStatus.DockAssigned ||
              x.Status == DockAppointmentStatus.InService ||
-             x.Status == DockAppointmentStatus.Completed ||
              x.Status == DockAppointmentStatus.Exception ||
              (x.PlannedStartUtc < appointment.PlannedEndUtc && appointment.PlannedStartUtc < x.PlannedEndUtc)), token);
         if (conflict)
@@ -597,6 +596,25 @@ public sealed class DockYardService(
         var zone = ResolveTimeZone(calendar.TimeZoneId);
         var localStart = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(appointment.PlannedStartUtc, DateTimeKind.Utc)), zone);
         var localEnd = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(appointment.PlannedEndUtc, DateTimeKind.Utc)), zone);
+
+        var dateKey = localStart.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var calendarExceptions = await context.AuditLogs.AsNoTracking()
+            .Where(a => a.EntityName == "WarehouseCalendarException" &&
+                        (a.WarehouseId == appointment.WarehouseId || a.EntityId == appointment.WarehouseId))
+            .OrderByDescending(a => a.Timestamp)
+            .ThenByDescending(a => a.Id)
+            .ToListAsync(token);
+        var matchedException = calendarExceptions.FirstOrDefault(a =>
+            (a.OldValues != null && a.OldValues.Contains(dateKey, StringComparison.OrdinalIgnoreCase)) ||
+            (a.NewValues != null && a.NewValues.Contains(dateKey, StringComparison.OrdinalIgnoreCase)));
+        if (matchedException is not null)
+        {
+            if (string.Equals(matchedException.Action, "EMERGENCY_OPEN_OVERRIDE", StringComparison.OrdinalIgnoreCase))
+                return;
+            if (string.Equals(matchedException.Action, "HOLIDAY_CLOSURE", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(matchedException.Action, "MAINTENANCE_WINDOW", StringComparison.OrdinalIgnoreCase))
+                throw new BusinessRuleException("Appointment nằm trong ngày kho đóng cửa.");
+        }
 
         var currentDayIdx = (int)localStart.DayOfWeek;
         var prevDayIdx = (currentDayIdx + 6) % 7;

@@ -14,6 +14,7 @@ import {
   UiTableScroll,
 } from '../ui/ProductionUi';
 import { InboundPlanningFeedback, InboundPlanningToolbar, productUnitOptions, runInboundStateCommand } from './inboundPlanningShared';
+import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import './InboundPlanning.css';
 
 type PurchaseOrderList = {
@@ -66,6 +67,7 @@ export default function PurchaseOrders(){
   const [creating,setCreating]=useState(false);
   const [showCreateForm,setShowCreateForm]=useState(true);
   const [busy,setBusy]=useState('');
+  const [governanceBusy,setGovernanceBusy]=useState(false);
   const [expediteResult,setExpediteResult]=useState<{expediteId:string;vendorNotificationStatus:string}|null>(null);
   const [procurementRecResult,setProcurementRecResult]=useState<{
     recommendationId:string;
@@ -78,35 +80,53 @@ export default function PurchaseOrders(){
   const mutationLock=useRef(new Set<string>());
 
   const expediteOverdue=async()=>{
+    if(governanceBusy)return;
+    setGovernanceBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/purchase-orders/expedite-overdue',{supplierId:supplierId||undefined});
-      setExpediteResult({
-        expediteId:res?.data?.expediteId||'PO-EXP-ACTIVE',
-        vendorNotificationStatus:res?.data?.vendorNotificationStatus||'DISPATCHED_TO_SUPPLIER',
-      });
+      if(res?.data?.expediteId&&res?.data?.vendorNotificationStatus){
+        setExpediteResult({
+          expediteId:String(res.data.expediteId),
+          vendorNotificationStatus:String(res.data.vendorNotificationStatus),
+        });
+      }else{
+        setExpediteResult(null);
+        setError('Phản hồi đôn đốc nhà cung cấp không hợp lệ từ máy chủ.');
+      }
     }catch(err:unknown){
       setExpediteResult(null);
       setError(permissionError(err,'Không thể phát tín hiệu đôn đốc nhà cung cấp.'));
+    }finally{
+      setGovernanceBusy(false);
     }
   };
 
   const generateProcurementRecommendations=async()=>{
+    if(governanceBusy)return;
+    setGovernanceBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/purchase-orders/generate-procurement-recommendations',{
         warehouseId:warehouseId||items[0]?.warehouseId||undefined,
       });
-      setProcurementRecResult({
-        recommendationId:res?.data?.recommendationId||'PROC-REC-ACTIVE',
-        procurementSuggestionStatus:res?.data?.procurementSuggestionStatus||'REORDER_THRESHOLD_PROPOSALS_READY',
-        supplierLeadTimePercentile:res?.data?.supplierLeadTimePercentile||'P90_LEAD_TIME_CALIBRATED',
-        expediteDeferSignal:res?.data?.expediteDeferSignal||'EXPEDITE_AND_DEFER_BALANCED',
-        status:res?.data?.status||'PROCUREMENT_INTELLIGENCE_READY',
-      });
+      if(res?.data?.recommendationId&&res?.data?.status){
+        setProcurementRecResult({
+          recommendationId:String(res.data.recommendationId),
+          procurementSuggestionStatus:String(res.data.procurementSuggestionStatus||''),
+          supplierLeadTimePercentile:String(res.data.supplierLeadTimePercentile||''),
+          expediteDeferSignal:String(res.data.expediteDeferSignal||''),
+          status:String(res.data.status),
+        });
+      }else{
+        setProcurementRecResult(null);
+        setError('Phản hồi đề xuất mua hàng thông minh không hợp lệ từ máy chủ.');
+      }
     }catch(err:unknown){
       setProcurementRecResult(null);
       setError(permissionError(err,'Không thể phân tích đề xuất đặt hàng thông minh.'));
+    }finally{
+      setGovernanceBusy(false);
     }
   };
 
@@ -158,7 +178,7 @@ export default function PurchaseOrders(){
   useEffect(()=>{void loadReferences();},[loadReferences]);
 
   const filtered=useMemo(()=>{
-    const q=search.trim().toLowerCase();
+    const q=sanitizeScannerCode(search).toLowerCase();
     if(!q)return items;
     return items.filter(item=>[item.code,item.externalPoId,item.supplierCode,item.supplierName,item.warehouseName].join(' ').toLowerCase().includes(q));
   },[items,search]);
@@ -171,7 +191,7 @@ export default function PurchaseOrders(){
       .sort((a,b)=>(a.expectedDate||'9999-12-31').localeCompare(b.expectedDate||'9999-12-31'))
       .slice(0,5);
     const receivedOrClosedCount=items.filter(x=>x.status==='Received'||x.status==='Closed').length;
-    const totalBaseOrderedQuantity=items.reduce((sum,x)=>sum+(x.baseOrderedQuantity||0),0);
+    const totalBaseOrderedQuantity=roundQty4(items.reduce((sum,x)=>sum+(x.baseOrderedQuantity||0),0));
     const completionRate=items.length>0?Math.round((receivedOrClosedCount/items.length)*100):0;
     return {
       overdueExpectedCount:overdueItems.length,
@@ -210,20 +230,22 @@ export default function PurchaseOrders(){
     if(!canPrepareCreate||creating)return;
     setError('');setSuccess('');
     if(!supplierId||!warehouseId){setError('Chọn nhà cung cấp và kho nhận.');return;}
-    if(lines.length===0||lines.some(line=>!line.externalLineId.trim()||!line.productId||!line.operationUnitId||Number(line.orderedQuantity)<=0)){
+    if(lines.length===0||lines.some(line=>!sanitizeScannerCode(line.externalLineId)||!line.productId||!line.operationUnitId||roundQty4(Number(line.orderedQuantity))<=0)){
       setError('Mỗi dòng cần mã dòng nguồn, sản phẩm, đơn vị và số lượng lớn hơn 0.');return;
     }
     setCreating(true);
-    const action='purchase-order-create:'+code.trim()+':'+externalPoId.trim();
+    const cleanCode=sanitizeScannerCode(code);
+    const cleanExternalPoId=sanitizeScannerCode(externalPoId);
+    const action='purchase-order-create:'+cleanCode+':'+cleanExternalPoId;
     try{
       const payload={
-        sourceSystem,externalPoId,code,supplierId,warehouseId,
+        sourceSystem:sanitizeScannerCode(sourceSystem),externalPoId:cleanExternalPoId,code:cleanCode,supplierId,warehouseId,
         orderDate:orderDate?orderDate+'T00:00:00':undefined,
         expectedDate:expectedDate?expectedDate+'T00:00:00':null,
         currency:currency||null,
         lines:lines.map(line=>({
-          externalLineId:line.externalLineId,productId:Number(line.productId),operationUnitId:Number(line.operationUnitId),
-          orderedQuantity:Number(line.orderedQuantity),allowedOverReceiptPct:Number(line.allowedOverReceiptPct||0),
+          externalLineId:sanitizeScannerCode(line.externalLineId),productId:Number(line.productId),operationUnitId:Number(line.operationUnitId),
+          orderedQuantity:roundQty4(Number(line.orderedQuantity)),allowedOverReceiptPct:Number(line.allowedOverReceiptPct||0),
           allowedUnderReceiptPct:Number(line.allowedUnderReceiptPct||0),
         })),
       };
@@ -283,7 +305,7 @@ export default function PurchaseOrders(){
         </div>
       </div>
       <div className="ui-inline-actions" style={{marginTop:8}}>
-        <button type="button" onClick={()=>void expediteOverdue()}>
+        <button type="button" disabled={!!busy||creating||governanceBusy} onClick={()=>void expediteOverdue()}>
           Gửi Yêu cầu Đôn đốc NCC &amp; Giữ Cửa Tiếp nhận Ưu tiên (IN-01)
         </button>
         {expediteResult&&(
@@ -291,7 +313,7 @@ export default function PurchaseOrders(){
             {expediteResult.expediteId} • {expediteResult.vendorNotificationStatus}
           </UiBadge>
         )}
-        <button type="button" onClick={()=>void generateProcurementRecommendations()}>
+        <button type="button" disabled={!!busy||creating||governanceBusy} onClick={()=>void generateProcurementRecommendations()}>
           Sinh Đề xuất Mua hàng, Phân tích Lead-Time NCC &amp; Khuyến nghị Expedite/Defer (AX-34, AX-36, AX-37)
         </button>
         {procurementRecResult&&(

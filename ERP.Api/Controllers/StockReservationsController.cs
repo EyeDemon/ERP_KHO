@@ -36,6 +36,7 @@ public class StockReservationsController(
 
     [HttpPost("{id:int}/release")]
     [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+    [IdempotentCommand("InventoryReservation.Release")]
     public async Task<IActionResult> Release(int id, ReleaseStockReservationDto request, CancellationToken cancellationToken)
     {
         await service.ReleaseAsync(id, request, cancellationToken);
@@ -44,6 +45,7 @@ public class StockReservationsController(
 
     [HttpPost("expire")]
     [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+    [IdempotentCommand("InventoryReservation.Expire")]
     public async Task<IActionResult> Expire(CancellationToken cancellationToken) => Ok(new { expired = await service.ExpireAsync(cancellationToken) });
 
     [HttpGet("reconciliation")]

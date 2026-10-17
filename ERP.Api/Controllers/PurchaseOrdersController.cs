@@ -36,7 +36,7 @@ public sealed class PurchaseOrdersController(
 
     public sealed record ExpediteOverduePurchaseOrdersRequest(int? SupplierId = null, int? WarehouseId = null);
 
-    [HttpPost("expedite-overdue"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
+    [HttpPost("expedite-overdue"),IdempotentCommand("PurchaseOrder.ExpediteOverdue"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> ExpediteOverdue(
         [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteOverduePurchaseOrdersRequest? request = null,
         CancellationToken ct = default)
@@ -102,7 +102,7 @@ public sealed class PurchaseOrdersController(
 
     public sealed record GenerateProcurementRecommendationsRequest(int? WarehouseId = null);
 
-    [HttpPost("generate-procurement-recommendations"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
+    [HttpPost("generate-procurement-recommendations"),IdempotentCommand("PurchaseOrder.GenerateProcurementRecommendations"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> GenerateProcurementRecommendations(
         [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateProcurementRecommendationsRequest? request = null,
         CancellationToken ct = default)

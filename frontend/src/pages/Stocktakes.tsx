@@ -96,8 +96,11 @@ const Stocktakes = () => {
   const [rowError, setRowError] = useState('');
   const [rowSuccessId, setRowSuccessId] = useState<number | null>(null);
   const [proposalStatus, setProposalStatus] = useState<string>('');
+  const [proposalBusy, setProposalBusy] = useState(false);
 
   const handleQuickAdjustmentProposal = async () => {
+    if (proposalBusy) return;
+    setProposalBusy(true);
     const targetWh = warehouses[0]?.id ?? stocktakes[0]?.warehouseId ?? undefined;
     setError('');
     try {
@@ -108,10 +111,17 @@ const Stocktakes = () => {
         reasonCode: 'COUNT_VARIANCE',
         note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng SoD (CT-07)'
       });
-      setProposalStatus(res?.data?.status || 'PENDING_SOD_APPROVAL');
+      if (res?.data?.status) {
+        setProposalStatus(res.data.status);
+      } else {
+        setProposalStatus('');
+        setError('Không thể tạo đề xuất điều chỉnh qua cổng SoD: dữ liệu phản hồi không hợp lệ.');
+      }
     } catch (err: any) {
       setProposalStatus('');
       setError(err?.response?.data?.message || 'Không thể tạo đề xuất điều chỉnh qua cổng SoD.');
+    } finally {
+      setProposalBusy(false);
     }
   };
 
@@ -158,7 +168,12 @@ const Stocktakes = () => {
     }
     apiClient.get(`/api/putaway-tasks/locations?warehouseId=${createWarehouseId}`)
       .then(res => setCreateLocations(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setCreateLocations([]));
+      .catch((err: any) => {
+        setCreateLocations([]);
+        if (err?.response?.status) {
+          setFormError(err?.response?.data?.message || 'Không thể tải danh sách vị trí kiểm kê.');
+        }
+      });
   }, [createWarehouseId]);
 
   const getStatusText = (status: number) => {
@@ -312,7 +327,7 @@ const Stocktakes = () => {
       setRowError('Số lượng thực tế không được để trống.');
       return;
     }
-    const val = Number(editActualQuantity);
+    const val = roundQty4(Number(editActualQuantity));
     if (isNaN(val) || val < 0) {
       setRowError('Số lượng thực tế phải lớn hơn hoặc bằng 0.');
       return;
@@ -434,7 +449,7 @@ const Stocktakes = () => {
                 </div>
               </div>
               <div className="ui-inline-actions" style={{ marginTop: 8 }}>
-                <button type="button" onClick={() => void handleQuickAdjustmentProposal()}>
+                <button type="button" disabled={proposalBusy} onClick={() => void handleQuickAdjustmentProposal()}>
                   Tạo nhanh Đề xuất Điều chỉnh qua cổng SoD (CT-07)
                 </button>
                 {proposalStatus && (
@@ -672,7 +687,7 @@ const Stocktakes = () => {
                                 className="stocktake-editor"
                                 aria-label={'Số lượng thực tế ' + row.productCode}
                                 type="number"
-                                step="0.01"
+                                step="0.0001"
                                 min="0"
                                 value={editActualQuantity}
                                 onChange={(e) => setEditActualQuantity(e.target.value)}

@@ -91,12 +91,19 @@ const WarehouseCalendar = () => {
 
   const loadCalendar = useCallback(async (targetWarehouseId: number) => {
     if (!targetWarehouseId) { setCalendar(null); setExceptions([]); return; }
+    let exError = '';
     const [response, exceptionsResponse] = await Promise.all([
       apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar'),
-      apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar/exceptions').catch(() => ({ data: [] })),
+      apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar/exceptions').catch((err: any) => {
+        if (err?.response?.status && err.response.status >= 400) {
+          exError = messageOf(err, 'Không thể tải danh sách ngoại lệ lịch kho.');
+        }
+        return { data: [] };
+      }),
     ]);
     applyCalendar(response.data as CalendarResponse);
     setExceptions(Array.isArray(exceptionsResponse?.data) ? (exceptionsResponse.data as CalendarException[]) : []);
+    if (exError) setError(exError);
   }, [applyCalendar]);
 
   useEffect(() => {
@@ -195,6 +202,7 @@ const WarehouseCalendar = () => {
 
   const activeShifts = calendar?.shifts.filter(shift => shift.isActive).length ?? 0;
   const openDays = calendar?.days.filter(day => day.isOpen).length ?? 0;
+  const [governanceBusy, setGovernanceBusy] = useState(false);
   const [shiftVerification, setShiftVerification] = useState<{ verificationId: string; shiftCoverageStatus: string } | null>(null);
   const [laborOptimization, setLaborOptimization] = useState<{
     optimizationId: string;
@@ -203,33 +211,49 @@ const WarehouseCalendar = () => {
   } | null>(null);
 
   const verifyShiftCoverage = async () => {
-    if (!warehouseId) return;
+    if (!warehouseId || governanceBusy) return;
+    setGovernanceBusy(true);
     setError('');
     try {
       const res = await apiClient.post('/api/warehouses/' + warehouseId + '/calendar/verify-shift-coverage', {});
-      setShiftVerification({
-        verificationId: res?.data?.verificationId || `CAL-VER-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
-        shiftCoverageStatus: res?.data?.shiftCoverageStatus || 'FULL_COVERAGE_VERIFIED',
-      });
+      if (res?.data?.verificationId && res?.data?.shiftCoverageStatus) {
+        setShiftVerification({
+          verificationId: String(res.data.verificationId),
+          shiftCoverageStatus: String(res.data.shiftCoverageStatus),
+        });
+      } else {
+        setShiftVerification(null);
+        setError('Phản hồi kiểm định độ phủ ca trực không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
       setShiftVerification(null);
       setError(messageOf(failure, 'Không thể kiểm định độ phủ ca trực và cửa sổ cắt đơn.'));
+    } finally {
+      setGovernanceBusy(false);
     }
   };
 
   const optimizeLaborInterleaving = async () => {
-    if (!warehouseId) return;
+    if (!warehouseId || governanceBusy) return;
+    setGovernanceBusy(true);
     setError('');
     try {
       const res = await apiClient.post('/api/warehouses/' + warehouseId + '/calendar/optimize-labor-interleaving', {});
-      setLaborOptimization({
-        optimizationId: res?.data?.optimizationId || `WLM-INT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
-        interleavingMode: res?.data?.interleavingMode || 'PUTAWAY_REPLENISH_PICK_CYCLE_COUNT_INTERLEAVED',
-        ergonomicSafetyStatus: res?.data?.ergonomicSafetyStatus || 'LIFT_LIMIT_AND_FATIGUE_ROTATION_COMPLIANT',
-      });
+      if (res?.data?.optimizationId && res?.data?.interleavingMode) {
+        setLaborOptimization({
+          optimizationId: String(res.data.optimizationId),
+          interleavingMode: String(res.data.interleavingMode),
+          ergonomicSafetyStatus: String(res.data.ergonomicSafetyStatus || ''),
+        });
+      } else {
+        setLaborOptimization(null);
+        setError('Phản hồi tối ưu đan xen nhiệm vụ không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
       setLaborOptimization(null);
       setError(messageOf(failure, 'Không thể tối ưu đan xen nhiệm vụ và định biên nhân lực.'));
+    } finally {
+      setGovernanceBusy(false);
     }
   };
 
@@ -325,7 +349,7 @@ const WarehouseCalendar = () => {
 
           <UiCard title="Lịch nghỉ lễ, Bảo trì & Ghi đè khẩn cấp (WH-07)">
             <div className="ui-inline-wrap">
-              <button type="button" onClick={() => void verifyShiftCoverage()}>
+              <button type="button" disabled={saving || governanceBusy} onClick={() => void verifyShiftCoverage()}>
                 Kiểm định Độ phủ Ca trực & Cửa sổ Cắt đơn (WH-05, WH-07)
               </button>
               {shiftVerification && (
@@ -333,7 +357,7 @@ const WarehouseCalendar = () => {
                   {`Đã kiểm định ${shiftVerification.verificationId} • ${shiftVerification.shiftCoverageStatus}`}
                 </UiBadge>
               )}
-              <button type="button" onClick={() => void optimizeLaborInterleaving()}>
+              <button type="button" disabled={saving || governanceBusy} onClick={() => void optimizeLaborInterleaving()}>
                 Tối ưu Đan xen Nhiệm vụ (Task Interleaving), Định biên Nhân lực & An toàn Công thái học (AX-02, AX-14)
               </button>
               {laborOptimization && (

@@ -112,6 +112,7 @@ const ImportReceipts = () => {
   const [resolutionForms, setResolutionForms] = useState<Record<number, ResolutionForm>>({});
   const [approvingId, setApprovingId] = useState<number | null>(null);
   const [workflowId, setWorkflowId] = useState<number | null>(null);
+  const [governanceBusy, setGovernanceBusy] = useState(false);
   const createInFlight = useRef(false);
   const approveInFlight = useRef<number | null>(null);
   const cancelInFlight = useRef<number | null>(null);
@@ -483,7 +484,10 @@ const ImportReceipts = () => {
             <UiBadge>{`Hàng khách trả lại / RMA (Tiếp nhận → Kiểm định QC → Phân loại AVAILABLE / QUARANTINE / DAMAGED): ${receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
             <button
               type="button"
+              disabled={governanceBusy}
               onClick={() => {
+                if (governanceBusy) return;
+                setGovernanceBusy(true);
                 setError('');
                 setSuccessMsg('');
                 const refCode = 'RMA-' + new Date().toISOString().slice(0, 10);
@@ -496,19 +500,27 @@ const ImportReceipts = () => {
                   })
                   .then((res) => {
                     const data = (res as { data?: { rmaInspectionCode?: string; rmaCode?: string } } | undefined)?.data;
-                    const code = data?.rmaInspectionCode || data?.rmaCode || 'RMA-QC-ACTIVE';
+                    const code = data?.rmaInspectionCode || data?.rmaCode;
+                    if (!code) {
+                      setError('Phản hồi khởi tạo hồ sơ kiểm định RMA không hợp lệ từ máy chủ.');
+                      return;
+                    }
                     setSuccessMsg(`Đã khởi tạo hồ sơ kiểm định RMA (${code}): Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.`);
                   })
                   .catch((err) => {
                     setError(permissionError(err, 'Không thể khởi tạo hồ sơ kiểm định RMA / hàng hoàn trả.'));
-                  });
+                  })
+                  .finally(() => setGovernanceBusy(false));
               }}
             >
               Khởi tạo Hồ sơ Kiểm định RMA / Hàng hoàn trả (QR-04)
             </button>
             <button
               type="button"
+              disabled={governanceBusy}
               onClick={() => {
+                if (governanceBusy) return;
+                setGovernanceBusy(true);
                 setError('');
                 setSuccessMsg('');
                 void apiClient
@@ -518,12 +530,17 @@ const ImportReceipts = () => {
                   })
                   .then((res) => {
                     const data = (res as { data?: { dispositionCode?: string; executionId?: string } } | undefined)?.data;
-                    const code = data?.dispositionCode || data?.executionId || 'RTV-REF-ACTIVE';
+                    const code = data?.dispositionCode || data?.executionId;
+                    if (!code) {
+                      setError('Phản hồi thực thi phân luồng tân trang & xuất trả RTV không hợp lệ từ máy chủ.');
+                      return;
+                    }
                     setSuccessMsg(`Đã thực thi phân luồng Reverse Logistics (${code}): Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV (AX-13).`);
                   })
                   .catch((err) => {
                     setError(permissionError(err, 'Không thể thực thi phân luồng tân trang (Refurbish) & xuất trả RTV.'));
-                  });
+                  })
+                  .finally(() => setGovernanceBusy(false));
               }}
             >
               Thực thi Phân luồng Tân trang (Refurbish) & Xuất trả Nhà cung cấp RTV (AX-13)

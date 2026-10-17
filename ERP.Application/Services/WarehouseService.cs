@@ -125,7 +125,7 @@ namespace ERP.Application.Services
             if (warehouse == null) throw new NotFoundException($"Không tìm thấy kho id {id}");
 
             var hasTx = await _warehouseRepository.HasTransactionsAsync(id);
-            if (hasTx) throw new BusinessRuleException("Không thể xóa kho đã có giao dịch");
+            if (hasTx) throw new BusinessRuleException("Không thể xóa kho đã có giao dịch hoặc dữ liệu nghiệp vụ liên quan");
 
             await _warehouseRepository.DeleteAsync(warehouse);
         }

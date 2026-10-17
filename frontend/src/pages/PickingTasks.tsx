@@ -68,6 +68,7 @@ export default function PickingTasks(){
     rfidIotTelemetry:string;
     voicePickToLight:string;
   }|null>(null);
+  const [governanceBusy,setGovernanceBusy]=useState(false);
   const lock=useRef(new Set<string>());
   const canAssign=usePermission('picking.assign');
   const canExecute=usePermission('picking.execute');
@@ -79,7 +80,10 @@ export default function PickingTasks(){
     try{
       const [tasksRes,waveRes]=await Promise.all([
         apiClient.get('/api/picking-tasks'),
-        apiClient.get('/api/picking-tasks/wave-summary').catch(()=>({data:[]})),
+        apiClient.get('/api/picking-tasks/wave-summary').catch((err)=>{
+          if(err?.response?.status&&err.response.status>=400)setError(failureMessage(err));
+          return {data:[]};
+        }),
       ]);
       const loadedTasks=Array.isArray(tasksRes.data)?(tasksRes.data as PickingTask[]):[];
       setTasks(loadedTasks);
@@ -119,10 +123,12 @@ export default function PickingTasks(){
   const mobileReadyTasksCount=tasks.filter(x=>['Open','Assigned','InProgress'].includes(x.status)).length;
   const shortPickExceptionTasksCount=tasks.filter(x=>x.status==='ShortPick').length;
   const verifyMobileScan=async()=>{
+    if(governanceBusy)return;
     const q=sanitizeScannerCode(mobileScanInput);
     if(!q){setMobileScanResult('Vui lòng nhập hoặc quét mã vạch / vị trí.');return;}
     const matchedTask=tasks.find(t=>t.taskCode.toLowerCase().includes(q.toLowerCase())||(t.sourceCode??'').toLowerCase().includes(q.toLowerCase()));
     const matchedLine=(selected?.lines??[]).find(l=>l.productCode.toLowerCase()===q.toLowerCase()||l.sourceLocationCode.toLowerCase()===q.toLowerCase());
+    setGovernanceBusy(true);
     setError('');
     try{
       await apiClient.post('/api/picking-tasks/mobile-scan-verify',{scanInput:q});
@@ -136,22 +142,33 @@ export default function PickingTasks(){
     }catch(e){
       setMobileScanResult('');
       setError(failureMessage(e));
+    }finally{
+      setGovernanceBusy(false);
     }
   };
 
   const syncAutomationTelemetry=async()=>{
+    if(governanceBusy)return;
+    setGovernanceBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/picking-tasks/sync-automation-telemetry',{});
+      if(!res?.data?.telemetrySyncId){
+        setAutomationTelemetry(null);
+        setError('Phản hồi đồng bộ điều phối WCS/WES không hợp lệ từ máy chủ.');
+        return;
+      }
       setAutomationTelemetry({
-        telemetrySyncId:res?.data?.telemetrySyncId||`WCS-IOT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}`,
-        wcsRoboticsState:res?.data?.wcsRoboticsState||'AMR_ASRS_CONVEYOR_SYNCHRONIZED',
-        rfidIotTelemetry:res?.data?.rfidIotTelemetry||'RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE',
-        voicePickToLight:res?.data?.voicePickToLight||'VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE',
+        telemetrySyncId:String(res.data.telemetrySyncId),
+        wcsRoboticsState:String(res.data.wcsRoboticsState??''),
+        rfidIotTelemetry:String(res.data.rfidIotTelemetry??''),
+        voicePickToLight:String(res.data.voicePickToLight??''),
       });
     }catch(e){
       setAutomationTelemetry(null);
       setError(failureMessage(e));
+    }finally{
+      setGovernanceBusy(false);
     }
   };
 
@@ -178,8 +195,8 @@ export default function PickingTasks(){
             onChange={e=>setMobileScanInput(e.target.value)}
             placeholder="Quét mã phiếu, SKU hoặc vị trí..."
           />
-          <button type="button" onClick={verifyMobileScan}>Kiểm tra mã quét RF (MO-11)</button>
-          <button type="button" onClick={()=>void syncAutomationTelemetry()}>
+          <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void verifyMobileScan()}>Kiểm tra mã quét RF (MO-11)</button>
+          <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void syncAutomationTelemetry()}>
             Đồng bộ Điều phối WCS/WES Robot, Cảm biến RFID/IoT & Hướng dẫn Voice/Pick-to-Light (AX-06, AX-15..17)
           </button>
           {mobileScanResult&&<span><strong>{mobileScanResult}</strong></span>}

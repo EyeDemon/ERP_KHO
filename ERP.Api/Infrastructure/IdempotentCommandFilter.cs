@@ -41,14 +41,29 @@ public sealed class IdempotentCommandFilter(
         }
 
         var rawKey = actionContext.HttpContext.Request.Headers[HeaderName].FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(rawKey) || rawKey.Length > 128)
+        if (string.IsNullOrWhiteSpace(rawKey))
+        {
+            if (IsOptionalHeaderScope(commandScope))
+            {
+                await next();
+                return;
+            }
+
+            actionContext.Result = new BadRequestObjectResult(new { message = "Idempotency-Key là bắt buộc và không được vượt quá 128 ký tự." });
+            return;
+        }
+
+        if (rawKey.Length > 128)
         {
             actionContext.Result = new BadRequestObjectResult(new { message = "Idempotency-Key là bắt buộc và không được vượt quá 128 ký tự." });
             return;
         }
 
         var keyHash = Hash(rawKey);
-        var fingerprint = Fingerprint(commandScope, actionContext.ActionArguments);
+        var fingerprint = Fingerprint(
+            commandScope,
+            actionContext.ActionArguments,
+            actionContext.HttpContext.Request.QueryString.HasValue ? actionContext.HttpContext.Request.QueryString.Value : null);
         metadata.IdempotencyKeyHash = keyHash;
         metadata.RequestFingerprint = fingerprint;
         await using var transaction = RequiresSerializableIsolation(commandScope)
@@ -118,7 +133,7 @@ public sealed class IdempotentCommandFilter(
         }
 
         var statusCode = ResultStatus(executed.Result);
-        if (statusCode >= 500 || statusCode is 401 or 403 or 404)
+        if (statusCode >= 400)
         {
             await transaction.RollbackAsync(CancellationToken.None);
             context.ChangeTracker.Clear();
@@ -133,7 +148,7 @@ public sealed class IdempotentCommandFilter(
         record.ResponseStatusCode = statusCode;
         record.ResponseBody = SerializeResult(executed.Result);
         if (record.ResponseBody?.Length > MaxStoredResponseLength)
-            throw new InvalidOperationException("Idempotent response exceeds the safe persistence limit.");
+            record.ResponseBody = "{\"truncated\":true}";
         record.CompletedAtUtc = DateTime.UtcNow;
         await context.SaveChangesAsync(actionContext.HttpContext.RequestAborted);
         await transaction.CommitAsync(actionContext.HttpContext.RequestAborted);
@@ -172,7 +187,10 @@ public sealed class IdempotentCommandFilter(
         };
     }
 
-    public static string Fingerprint(string scope, IDictionary<string, object?> arguments)
+    public static string Fingerprint(string scope, IDictionary<string, object?> arguments) =>
+        Fingerprint(scope, arguments, null);
+
+    public static string Fingerprint(string scope, IDictionary<string, object?> arguments, string? queryString)
     {
         var canonical = new SortedDictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var argument in arguments.OrderBy(x => x.Key, StringComparer.Ordinal))
@@ -180,10 +198,40 @@ public sealed class IdempotentCommandFilter(
             if (argument.Value is CancellationToken) continue;
             canonical[argument.Key] = JsonSerializer.SerializeToElement(argument.Value, argument.Value?.GetType() ?? typeof(object));
         }
+        if (!string.IsNullOrWhiteSpace(queryString))
+            canonical["__queryString"] = JsonSerializer.SerializeToElement(queryString);
         return Hash(scope + "\n" + JsonSerializer.Serialize(canonical));
     }
 
+    public static string ComputeRequestHash(HttpRequest request, string? body = null)
+    {
+        var raw = $"{request.Method}\n{request.Path}\n{request.QueryString.Value ?? string.Empty}\n{body ?? string.Empty}";
+        return Hash(raw);
+    }
+
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    public static bool IsOptionalHeaderScope(string scope) =>
+        scope.StartsWith("BusinessPartner.", StringComparison.Ordinal)
+        || scope.StartsWith("Product.", StringComparison.Ordinal)
+        || scope.StartsWith("Warehouse.", StringComparison.Ordinal)
+        || scope.StartsWith("Unit.", StringComparison.Ordinal)
+        || scope.StartsWith("ProductCategory.", StringComparison.Ordinal)
+        || scope.StartsWith("ProductBarcode.", StringComparison.Ordinal)
+        || scope.StartsWith("PutawayLocation.", StringComparison.Ordinal)
+        || scope.StartsWith("WarehouseCalendar.", StringComparison.Ordinal)
+        || scope is "DockYard.Dock.Update" or "DockYard.YardSlot.Update"
+            or "ImportReceipt.SetSupplier" or "ImportReceipt.RmaIntakeCheck" or "ImportReceipt.ExecuteRtvRefurbish"
+            or "ExportReceipt.SetCustomer"
+            or "Approval.EscalateOverdue"
+            or "PackingSession.ExecuteKittingVas"
+            or "PickingTask.SyncAutomationTelemetry"
+            or "PurchaseOrder.ExpediteOverdue" or "PurchaseOrder.GenerateProcurementRecommendations"
+            or "SalesOrder.ExpediteBackorder"
+            or "Shipment.SyncTmsManifest"
+            or "Stocktake.CreateAdjustmentProposal"
+            or "OperationalException.Acknowledge"
+            or "InventoryReservation.Release" or "InventoryReservation.Expire";
 
     public static bool RequiresSerializableIsolation(string scope) =>
         scope is not ("DockYard.Appointment.Confirm" or "StockTransfer.Approve") &&
@@ -222,7 +270,15 @@ public sealed class IdempotentCommandFilter(
         return inner?.GetType().Name == "SqliteException"
             && inner.GetType().GetProperty("SqliteErrorCode")?.GetValue(inner) is 19;
     }
-    private static int ResultStatus(IActionResult? result) => result switch { ObjectResult x => x.StatusCode ?? 200, StatusCodeResult x => x.StatusCode, _ => 200 };
+    internal static int ResultStatus(IActionResult? result) => result switch
+    {
+        ForbidResult => StatusCodes.Status403Forbidden,
+        ChallengeResult => StatusCodes.Status401Unauthorized,
+        UnauthorizedResult => StatusCodes.Status401Unauthorized,
+        ObjectResult x => x.StatusCode ?? StatusCodes.Status200OK,
+        StatusCodeResult x => x.StatusCode,
+        _ => StatusCodes.Status200OK
+    };
     private static string? SerializeResult(IActionResult? result) => result switch
     {
         ObjectResult x => JsonSerializer.Serialize(x.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)),

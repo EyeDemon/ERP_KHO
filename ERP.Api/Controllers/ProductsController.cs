@@ -103,6 +103,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
+        [ERP.Api.Infrastructure.IdempotentCommand("Product.Create")]
         [PermissionAuthorize(AppPermissions.ProductCreate)]
         public async Task<IActionResult> Create([FromBody] CreateProductDto dto, CancellationToken cancellationToken = default)
         {
@@ -112,6 +113,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}")]
+        [ERP.Api.Infrastructure.IdempotentCommand("Product.Update")]
         [PermissionAuthorize(AppPermissions.ProductUpdate)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateProductDto dto, CancellationToken cancellationToken = default)
         {
@@ -121,6 +123,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpDelete("{id}")]
+        [ERP.Api.Infrastructure.IdempotentCommand("Product.Delete")]
         [PermissionAuthorize(AppPermissions.ProductDeactivate)]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken = default)
         {
@@ -129,6 +132,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id:int}/category")]
+        [ERP.Api.Infrastructure.IdempotentCommand("Product.SetCategory")]
         [PermissionAuthorize(AppPermissions.ProductUpdate)]
         public async Task<IActionResult> SetCategory(int id, [FromBody] SetProductCategoryDto dto, [FromServices] IProductCatalogService catalogService, CancellationToken cancellationToken = default)
         {

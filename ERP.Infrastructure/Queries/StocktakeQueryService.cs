@@ -104,15 +104,12 @@ namespace ERP.Infrastructure.Queries
 
             if (stocktake.Status == ERP.Domain.Enums.ReceiptStatus.Draft &&
                 !string.IsNullOrWhiteSpace(stocktake.Note) &&
-                stocktake.Note.StartsWith("[BLIND]", System.StringComparison.OrdinalIgnoreCase))
+                stocktake.Note.TrimStart().StartsWith("[BLIND]", System.StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var detail in stocktake.Details)
                 {
-                    if (!detail.ActualQuantity.HasValue)
-                    {
-                        detail.SystemQuantity = 0m;
-                        detail.DifferenceQuantity = 0m;
-                    }
+                    detail.SystemQuantity = 0m;
+                    detail.DifferenceQuantity = 0m;
                 }
             }
 

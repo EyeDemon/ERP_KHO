@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
+import { sanitizeScannerCode } from './productCatalog';
 import {
   UiBadge,
   UiCard,
@@ -71,7 +72,7 @@ const Units = () => {
   }, [load]);
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('vi');
+    const query = sanitizeScannerCode(search).toLocaleLowerCase('vi');
     if (!query) return units;
     return units.filter((unit) =>
       [unit.code, unit.name].join(' ').toLocaleLowerCase('vi').includes(query)
@@ -123,7 +124,7 @@ const Units = () => {
     setFormError('');
     setSuccess('');
 
-    const code = form.code.trim();
+    const code = sanitizeScannerCode(form.code);
     const name = form.name.trim();
     if (!code) {
       setFormError('Mã đơn vị tính không được để trống.');
@@ -173,32 +174,51 @@ const Units = () => {
     }
   };
 
+  const [governanceBusy, setGovernanceBusy] = useState(false);
   const [uomIntegrity, setUomIntegrity] = useState<{ verificationId: string; status: string } | null>(null);
   const [catchWeightColdChainResult, setCatchWeightColdChainResult] = useState('');
 
   const verifyUomIntegrity = async () => {
+    if (governanceBusy) return;
+    setGovernanceBusy(true);
     setError('');
     try {
       const res = await apiClient.post('/api/Units/verify-uom-integrity', {});
-      setUomIntegrity({
-        verificationId: res?.data?.verificationId || `UOM-INT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
-        status: res?.data?.status || 'CANONICAL_UOM_VERIFIED',
-      });
+      if (res?.data?.verificationId && res?.data?.status) {
+        setUomIntegrity({
+          verificationId: String(res.data.verificationId),
+          status: String(res.data.status),
+        });
+      } else {
+        setUomIntegrity(null);
+        setError('Phản hồi kiểm định hệ số quy đổi ĐVT không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
       setUomIntegrity(null);
       setError(messageOf(failure, 'Không thể kiểm định hệ số quy đổi và bất biến ĐVT cơ sở.'));
+    } finally {
+      setGovernanceBusy(false);
     }
   };
 
   const verifyCatchWeightColdChain = async () => {
+    if (governanceBusy) return;
+    setGovernanceBusy(true);
     setError('');
     try {
       const res = await apiClient.post('/api/Units/verify-catch-weight-coldchain', {});
       const data = res?.data as { verificationId?: string; status?: string } | undefined;
-      setCatchWeightColdChainResult(`${data?.verificationId ?? 'CW-CC-HAZ-OK'} • ${data?.status ?? 'SPECIALIZED_INVENTORY_RULES_VERIFIED'}`);
+      if (data?.verificationId && data?.status) {
+        setCatchWeightColdChainResult(`${data.verificationId} • ${data.status}`);
+      } else {
+        setCatchWeightColdChainResult('');
+        setError('Phản hồi kiểm định Catch-Weight và chuỗi lạnh không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
       setCatchWeightColdChainResult('');
       setError(messageOf(failure, 'Không thể kiểm định tồn kho hai UOM (Catch-Weight) và chuỗi lạnh.'));
+    } finally {
+      setGovernanceBusy(false);
     }
   };
 
@@ -236,7 +256,7 @@ const Units = () => {
           </div>
         </div>
         <div className="ui-inline-wrap">
-          <button type="button" onClick={() => void verifyUomIntegrity()}>
+          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyUomIntegrity()}>
             Kiểm định Hệ số Quy đổi & Bất biến ĐVT Cơ sở (MD-03)
           </button>
           {uomIntegrity && (
@@ -244,7 +264,7 @@ const Units = () => {
               {`Đã kiểm định ${uomIntegrity.verificationId} • ${uomIntegrity.status}`}
             </UiBadge>
           )}
-          <button type="button" onClick={() => void verifyCatchWeightColdChain()}>
+          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyCatchWeightColdChain()}>
             Kiểm định Tồn kho Hai UOM (Catch-Weight), Chuỗi lạnh &amp; Hàng nguy hiểm Hazmat (AX-07, AX-18..20)
           </button>
           {catchWeightColdChainResult && (

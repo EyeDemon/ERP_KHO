@@ -157,10 +157,22 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
             var previous = await context.ImportReceiptDetails.AsNoTracking()
                 .Where(x => x.PurchaseOrderLineId == line.Id
                     && x.ImportReceiptId != receipt.Id
-                    && x.ImportReceipt.Status == ReceiptStatus.Posted)
-                .SumAsync(x => (decimal?)(x.BasePostedQuantity - x.BaseRejectedQuantity), token) ?? 0m;
-            var maximum = line.BaseOrderedQuantity * (1m + line.AllowedOverReceiptPct / 100m);
-            if (previous + detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity > maximum)
+                    && (x.ImportReceipt.Status == ReceiptStatus.Posted || x.ImportReceipt.Status == ReceiptStatus.ReadyToPost))
+                .SumAsync(x => (decimal?)(x.BasePostedQuantity > 0
+                    ? x.BasePostedQuantity - x.BaseRejectedQuantity
+                    : x.BaseAcceptedQuantity + x.BaseDamagedQuantity), token) ?? 0m;
+            var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1m;
+            var currentAccepted = detail.BaseAcceptedQuantity > 0 || detail.AcceptedQuantity == 0
+                ? detail.BaseAcceptedQuantity
+                : detail.AcceptedQuantity * factor;
+            var currentDamaged = detail.BaseDamagedQuantity > 0 || detail.DamagedQuantity == 0
+                ? detail.BaseDamagedQuantity
+                : detail.DamagedQuantity * factor;
+            var baseOrdered = line.BaseOrderedQuantity > 0
+                ? line.BaseOrderedQuantity
+                : line.OrderedQuantity * (line.ConversionFactorSnapshot > 0 ? line.ConversionFactorSnapshot : 1m);
+            var maximum = baseOrdered * (1m + line.AllowedOverReceiptPct / 100m);
+            if (previous + currentAccepted + currentDamaged > maximum)
                 throw Conflict($"Tổng số lượng POST vượt dung sai nhận của dòng PO {line.ExternalLineId}.");
         }
 

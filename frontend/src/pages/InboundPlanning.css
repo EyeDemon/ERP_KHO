@@ -65,6 +65,17 @@
   display: grid;
   gap: var(--ui-space-1);
   min-width: 0;
+  max-width: 100%;
+}
+
+.inbound-planning-form input,
+.inbound-planning-form select,
+.inbound-planning-form textarea,
+.inbound-planning-line input,
+.inbound-planning-line select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .inbound-planning-form .span-2 {
@@ -76,19 +87,27 @@
   gap: var(--ui-space-2);
 }
 
+.inbound-planning-form,
+.inbound-planning-form-grid,
+.inbound-planning-lines {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .inbound-planning-line {
   display: grid;
-  grid-template-columns: minmax(130px, .8fr) minmax(190px, 1.3fr) minmax(120px, .8fr) minmax(100px, .65fr) minmax(90px, .55fr) minmax(90px, .55fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: var(--ui-space-2);
   align-items: end;
   padding: var(--ui-space-3);
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius);
   background: var(--ui-background);
+  min-width: 0;
 }
 
 .inbound-planning-line.compact {
-  grid-template-columns: minmax(220px, 1.4fr) minmax(150px, .8fr) minmax(120px, .7fr) minmax(100px, .65fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .inbound-planning-form-actions {

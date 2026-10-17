@@ -125,18 +125,20 @@ namespace ERP.Application.Services
             product.Description = dto.Description;
             product.UnitId = dto.UnitId;
             product.IsActive = dto.IsActive;
-            if (dto.UpdateTrackingPolicy)
+            if (dto.UpdateTrackingPolicy || !string.IsNullOrWhiteSpace(dto.TrackingType))
             {
                 var trackingType = ParseTrackingType(dto.TrackingType);
-                ValidateTrackingPolicy(trackingType, dto.ExpiryControl, dto.ShelfLifeDays);
+                var expiryControl = dto.UpdateTrackingPolicy ? dto.ExpiryControl : product.ExpiryControl;
+                var shelfLifeDays = dto.UpdateTrackingPolicy ? dto.ShelfLifeDays : product.ShelfLifeDays;
+                ValidateTrackingPolicy(trackingType, expiryControl, shelfLifeDays);
                 var changed = trackingType != product.TrackingType ||
-                              dto.ExpiryControl != product.ExpiryControl ||
-                              dto.ShelfLifeDays != product.ShelfLifeDays;
+                              expiryControl != product.ExpiryControl ||
+                              shelfLifeDays != product.ShelfLifeDays;
                 if (changed && await HasTransactionsAsync())
                     throw new BusinessRuleException("Không thể đổi Lot/Serial/Expiry policy khi sản phẩm đã có tồn hoặc giao dịch kho.");
                 product.TrackingType = trackingType;
-                product.ExpiryControl = dto.ExpiryControl;
-                product.ShelfLifeDays = dto.ShelfLifeDays;
+                product.ExpiryControl = expiryControl;
+                product.ShelfLifeDays = shelfLifeDays;
             }
             if (dto.UpdateStorageProfile)
             {

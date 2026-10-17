@@ -122,6 +122,7 @@ namespace ERP.Api.Controllers
             int? ProductId = null);
 
         [HttpPost("adjustment-proposals")]
+        [IdempotentCommand("Stocktake.CreateAdjustmentProposal")]
         [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
         public async Task<IActionResult> CreateAdjustmentProposal(
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CreateAdjustmentProposalRequest? request = null,

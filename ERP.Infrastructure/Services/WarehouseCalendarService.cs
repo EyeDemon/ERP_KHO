@@ -29,7 +29,34 @@ public sealed class WarehouseCalendarService(
             .Include(x => x.Shifts)
             .SingleOrDefaultAsync(x => x.WarehouseId == warehouseId, token);
 
-        return Map(warehouse, calendar);
+        var exceptions = await LoadCalendarExceptionsAsync(warehouseId, token);
+        return Map(warehouse, calendar, exceptions);
+    }
+
+    public async Task<bool> ValidateOperatingWindowAsync(int warehouseId, DateTime? atUtc = null, CancellationToken token = default)
+    {
+        await warehouses.EnsureWarehouseAccessAsync(warehouseId, token);
+        var calendar = await context.WarehouseCalendars.AsNoTracking()
+            .Include(x => x.Days)
+            .SingleOrDefaultAsync(x => x.WarehouseId == warehouseId, token)
+            ?? throw new BusinessRuleException("Kho chưa cấu hình lịch vận hành.");
+
+        var zone = ResolveTimeZone(calendar.TimeZoneId);
+        var targetUtc = atUtc.HasValue
+            ? new DateTimeOffset(DateTime.SpecifyKind(atUtc.Value, DateTimeKind.Utc))
+            : timeProvider.GetUtcNow();
+        var localTime = TimeZoneInfo.ConvertTime(targetUtc, zone);
+        var exceptions = await LoadCalendarExceptionsAsync(warehouseId, token);
+        var overrideState = EvaluateDateException(exceptions, localTime.Date);
+        if (overrideState == true)
+            return true;
+        if (overrideState == false)
+            throw new BusinessRuleException("Kho đang đóng cửa hoặc bảo trì theo ngoại lệ lịch vận hành.");
+
+        var days = calendar.Days.OrderBy(x => x.DayOfWeek).ToList();
+        if (!IsCalendarOpen(days, localTime.DayOfWeek, localTime.TimeOfDay))
+            throw new BusinessRuleException("Kho đang ngoài giờ vận hành.");
+        return true;
     }
 
     public async Task<WarehouseCalendarDto> UpdateCalendarAsync(int warehouseId, UpdateWarehouseCalendarDto dto, CancellationToken token = default)
@@ -102,7 +129,8 @@ public sealed class WarehouseCalendarService(
         }
 
         if (transaction is not null) await transaction.CommitAsync(token);
-        return Map(warehouse, calendar);
+        var exceptions = await LoadCalendarExceptionsAsync(warehouseId, token);
+        return Map(warehouse, calendar, exceptions);
     }
 
     public async Task<WarehouseShiftDto> CreateShiftAsync(int warehouseId, UpsertWarehouseShiftDto dto, CancellationToken token = default)
@@ -159,7 +187,30 @@ public sealed class WarehouseCalendarService(
         return MapShift(shift);
     }
 
-    private WarehouseCalendarDto Map(Warehouse warehouse, WarehouseCalendar? calendar)
+    private Task<List<AuditLog>> LoadCalendarExceptionsAsync(int warehouseId, CancellationToken token) =>
+        context.AuditLogs.AsNoTracking()
+            .Where(a => a.EntityName == "WarehouseCalendarException" &&
+                        (a.WarehouseId == warehouseId || a.EntityId == warehouseId))
+            .OrderByDescending(a => a.Timestamp)
+            .ThenByDescending(a => a.Id)
+            .ToListAsync(token);
+
+    private static bool? EvaluateDateException(IReadOnlyList<AuditLog> exceptions, DateTime localDate)
+    {
+        var dateKey = localDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var matched = exceptions.FirstOrDefault(a =>
+            (a.OldValues != null && a.OldValues.Contains(dateKey, StringComparison.OrdinalIgnoreCase)) ||
+            (a.NewValues != null && a.NewValues.Contains(dateKey, StringComparison.OrdinalIgnoreCase)));
+        if (matched is null) return null;
+        if (string.Equals(matched.Action, "EMERGENCY_OPEN_OVERRIDE", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(matched.Action, "HOLIDAY_CLOSURE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(matched.Action, "MAINTENANCE_WINDOW", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return null;
+    }
+
+    private WarehouseCalendarDto Map(Warehouse warehouse, WarehouseCalendar? calendar, IReadOnlyList<AuditLog>? exceptions = null)
     {
         var timeZoneId = calendar?.TimeZoneId ?? "UTC";
         var zone = ResolveTimeZone(timeZoneId);
@@ -167,6 +218,9 @@ public sealed class WarehouseCalendarService(
         var days = calendar?.Days.OrderBy(x => x.DayOfWeek).ToList() ?? [];
         var shifts = calendar?.Shifts.OrderBy(x => x.StartTimeLocal).ThenBy(x => x.Code).ToList() ?? [];
         var openNow = IsCalendarOpen(days, localNow.DayOfWeek, localNow.TimeOfDay);
+        var overrideState = exceptions is not null ? EvaluateDateException(exceptions, localNow.Date) : null;
+        if (overrideState.HasValue)
+            openNow = overrideState.Value;
         var currentShift = openNow
             ? shifts.FirstOrDefault(x => x.IsActive && IsWithinShiftWindow(localNow.TimeOfDay, x.StartTimeLocal, x.EndTimeLocal))
             : null;

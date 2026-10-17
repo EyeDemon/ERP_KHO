@@ -308,6 +308,8 @@ namespace ERP.Application.Services
                 var previousStatus = receipt.Status;
                 if (previousStatus == ReceiptStatus.QcCompleted)
                     await EnsurePermissionAsync(approvedByUserId, "quality_disposition.approve");
+                if (_inboundPlanning is not null)
+                    await _inboundPlanning.ValidatePostAsync(receipt);
                 if (_inventoryIdentity is not null)
                     await _inventoryIdentity.ValidateReadyToPostAsync(receipt.Id);
                 receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
@@ -393,7 +395,7 @@ namespace ERP.Application.Services
                 receipt.Status = receipt.Details.Any(x => x.RequiresQc) ? ReceiptStatus.QcPending : ReceiptStatus.Received;
                 if (_inboundPlanning is not null) await _inboundPlanning.MarkReceivingAsync(receipt);
                 await _importReceiptRepository.UpdateAsync(receipt);
-                await _auditLogRepository.AddAsync(new AuditLog { UserId = receivedByUserId, Action = "ImportReceipt.Received", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.Draft}", NewValues = $"Status: {ReceiptStatus.Received}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
+                await _auditLogRepository.AddAsync(new AuditLog { UserId = receivedByUserId, Action = "ImportReceipt.Received", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.Draft}", NewValues = $"Status: {receipt.Status}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
                 await _unitOfWork.CommitTransactionAsync();
             }
             catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
@@ -576,13 +578,22 @@ namespace ERP.Application.Services
                     throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
 
-                if (receipt.Status != Domain.Enums.ReceiptStatus.Draft)
+                if (receipt.Status is not (Domain.Enums.ReceiptStatus.Draft
+                    or Domain.Enums.ReceiptStatus.Received
+                    or Domain.Enums.ReceiptStatus.QcPending
+                    or Domain.Enums.ReceiptStatus.QcCompleted
+                    or Domain.Enums.ReceiptStatus.ReadyToPost))
                     throw new BusinessRuleException("Chỉ có thể hủy phiếu nhập ở trạng thái nháp");
 
-                if (receipt.Status == Domain.Enums.ReceiptStatus.Draft)
+                var previousStatus = receipt.Status;
+                if (receipt.Supplier is not null)
                 {
-                    receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
-                    receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
+                    receipt.SupplierCodeSnapshot ??= receipt.Supplier.Code;
+                    receipt.SupplierNameSnapshot ??= receipt.Supplier.Name;
+                }
+                if (receipt.Asn is not null && receipt.Asn.Status == Domain.Enums.AsnStatus.Receiving)
+                {
+                    receipt.Asn.Status = Domain.Enums.AsnStatus.Arrived;
                 }
                 receipt.Status = Domain.Enums.ReceiptStatus.Cancelled;
                 await _importReceiptRepository.UpdateAsync(receipt);
@@ -594,7 +605,7 @@ namespace ERP.Application.Services
                     EntityName = "ImportReceipt",
                     EntityId = receipt.Id,
                     WarehouseId = receipt.WarehouseId,
-                    OldValues = $"Status: {Domain.Enums.ReceiptStatus.Draft}",
+                    OldValues = $"Status: {previousStatus}",
                     NewValues = $"Status: {Domain.Enums.ReceiptStatus.Cancelled}",
                     Result = "Success",
                     Reason = "Import receipt cancelled",

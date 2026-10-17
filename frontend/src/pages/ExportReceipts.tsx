@@ -3,6 +3,7 @@ import apiClient from '../services/apiClient';
 import { currentUserId, hasPermission, usePermissionSet } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
+import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import './ExportReceipts.css';
 
@@ -125,7 +126,11 @@ const ExportReceipts = () => {
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
   
   // Stock cache
-  const [stockCache, setStockCache] = useState<Record<string, number | null>>({});
+  const [stockCache, setStockCache] = useState<Record<string, number>>({});
+  const [stockLoading, setStockLoading] = useState<Record<string, boolean>>({});
+  const [stockError, setStockError] = useState<Record<string, boolean>>({});
+  const stockInFlightRef = useRef<Set<string>>(new Set());
+  const [cutoffBusy, setCutoffBusy] = useState(false);
   const [cutoffVerification, setCutoffVerification] = useState<{
     verificationId: string;
     cutoffComplianceStatus: string;
@@ -192,24 +197,36 @@ const ExportReceipts = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissionSnapshot, canCreate, canUpdate, canReadPartners]);
 
+  const fetchStockForKey = async (wId: number, pId: number): Promise<number | null> => {
+    const key = `${wId}_${pId}`;
+    if (stockInFlightRef.current.has(key)) return null;
+    stockInFlightRef.current.add(key);
+    setStockLoading(prev => ({ ...prev, [key]: true }));
+    setStockError(prev => ({ ...prev, [key]: false }));
+    try {
+      const res = await apiClient.get('/api/inventorystocks/current', { params: { warehouseId: wId, productId: pId } });
+      const stock = Array.isArray(res.data)
+        ? roundQty4(res.data.reduce((total: number, row: { availableQuantity?: number }) => total + Number(row.availableQuantity || 0), 0))
+        : 0;
+      setStockCache(prev => ({ ...prev, [key]: stock }));
+      setStockError(prev => ({ ...prev, [key]: false }));
+      return stock;
+    } catch {
+      setStockError(prev => ({ ...prev, [key]: true }));
+      return null;
+    } finally {
+      stockInFlightRef.current.delete(key);
+      setStockLoading(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
   // Fetch stock logic
   useEffect(() => {
     details.forEach(d => {
       if (warehouseId !== '' && d.productId !== '') {
         const key = `${warehouseId}_${d.productId}`;
-        if (stockCache[key] === undefined) {
-          // Mark as fetching
-          setStockCache(prev => ({ ...prev, [key]: null }));
-          apiClient.get('/api/inventorystocks/current', { params: { warehouseId, productId: d.productId } })
-            .then(res => {
-              const stock = Array.isArray(res.data)
-                ? res.data.reduce((total: number, row: { availableQuantity?: number }) => total + Number(row.availableQuantity || 0), 0)
-                : 0;
-              setStockCache(prev => ({ ...prev, [key]: stock }));
-            })
-            .catch(() => {
-              setStockCache(prev => ({ ...prev, [key]: null }));
-            });
+        if (stockCache[key] === undefined && !stockInFlightRef.current.has(key)) {
+          void fetchStockForKey(Number(warehouseId), Number(d.productId));
         }
       }
     });
@@ -291,13 +308,15 @@ const ExportReceipts = () => {
   };
 
   const isFormInvalid = () => {
-    if (!code.trim() || warehouseId === '' || details.length === 0) return true;
+    if (!sanitizeScannerCode(code) || warehouseId === '' || details.length === 0) return true;
     for (let i = 0; i < details.length; i++) {
       const d = details[i];
       if (d.productId === '' || d.quantity === '' || Number(d.quantity) <= 0 || d.unitPrice === '' || Number(d.unitPrice) < 0) return true;
       const key = `${warehouseId}_${d.productId}`;
       const stock = stockCache[key];
-      if (stock === undefined || stock === null || Number(d.quantity) > stock) return true;
+      if (stockLoading[key]) return true;
+      if (stock === undefined && !stockError[key]) return true;
+      if (stock !== undefined && roundQty4(Number(d.quantity)) > stock) return true;
     }
     return false;
   };
@@ -308,7 +327,8 @@ const ExportReceipts = () => {
     setError('');
     setSuccessMsg('');
 
-    if (!code.trim()) return setError('Vui lòng nhập mã phiếu');
+    const normalizedCode = sanitizeScannerCode(code);
+    if (!normalizedCode) return setError('Vui lòng nhập mã phiếu');
     if (warehouseId === '') return setError('Vui lòng chọn kho');
     if (details.length === 0) return setError('Cần ít nhất 1 dòng chi tiết');
 
@@ -319,24 +339,28 @@ const ExportReceipts = () => {
       if (d.unitPrice === '' || !Number.isFinite(Number(d.unitPrice)) || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
 
       const key = `${warehouseId}_${d.productId}`;
-      const stock = stockCache[key];
-      if (stock === undefined) return setError(`Dòng ${i + 1}: Đang tải tồn kho...`);
-      if (stock === null) return setError(`Dòng ${i + 1}: Lỗi tải tồn kho!`);
-      if (Number(d.quantity) > stock) {
-        return setError(`Dòng ${i + 1}: Số lượng xuất (${d.quantity}) vượt quá tồn khả dụng (${stock})`);
+      let stock: number | undefined | null = stockCache[key];
+      if (stock === undefined) {
+        if (stockLoading[key]) return setError(`Dòng ${i + 1}: Đang tải tồn kho...`);
+        stock = await fetchStockForKey(Number(warehouseId), Number(d.productId));
+        if (stock === null) return setError(`Dòng ${i + 1}: Lỗi tải tồn kho!`);
+      }
+      const normalizedQty = roundQty4(Number(d.quantity));
+      if (normalizedQty > stock) {
+        return setError(`Dòng ${i + 1}: Số lượng xuất (${normalizedQty}) vượt quá tồn khả dụng (${stock})`);
       }
     }
 
     createInFlight.current = true; setCreating(true);
     try {
       const payload = {
-        code: code.trim(),
+        code: normalizedCode,
         warehouseId: Number(warehouseId),
         customerId: customerId === '' ? null : Number(customerId),
         note,
         details: details.map(d => ({
           productId: Number(d.productId),
-          quantity: Number(d.quantity),
+          quantity: roundQty4(Number(d.quantity)),
           unitPrice: Number(d.unitPrice),
           note: d.note
         }))
@@ -398,9 +422,10 @@ const ExportReceipts = () => {
     if (wId === '' || pId === '') return '-';
     const key = `${wId}_${pId}`;
     const stock = stockCache[key];
-    if (stock === undefined) return 'Đang tải...';
-    if (stock === null) return 'Lỗi tải tồn';
-    return stock;
+    if (stock !== undefined) return stock;
+    if (stockLoading[key]) return 'Đang tải...';
+    if (stockError[key]) return 'Lỗi tải tồn';
+    return 'Đang tải...';
   };
 
   const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
@@ -438,19 +463,29 @@ const ExportReceipts = () => {
             <UiBadge tone="danger">{`Phiếu xuất đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`}</UiBadge>
             <button
               type="button"
+              disabled={cutoffBusy}
               onClick={async () => {
+                if (cutoffBusy) return;
+                setCutoffBusy(true);
                 setError('');
                 try {
                   const res = await apiClient.post('/api/ExportReceipts/verify-dispatch-cutoff', {
                     warehouseId: warehouseId !== '' ? Number(warehouseId) : null,
                   });
-                  setCutoffVerification({
-                    verificationId: res?.data?.verificationId || 'EXP-CUT-VERIFIED',
-                    cutoffComplianceStatus: res?.data?.cutoffComplianceStatus || 'DISPATCH_CUTOFF_VERIFIED',
-                  });
+                  if (res?.data?.verificationId && res?.data?.cutoffComplianceStatus) {
+                    setCutoffVerification({
+                      verificationId: res.data.verificationId,
+                      cutoffComplianceStatus: res.data.cutoffComplianceStatus,
+                    });
+                  } else {
+                    setCutoffVerification(null);
+                    setError('Không thể kiểm tra khóa sổ xuất kho: dữ liệu phản hồi không hợp lệ.');
+                  }
                 } catch (err) {
                   setCutoffVerification(null);
                   setError(safeRequestError(err, 'Không thể kiểm tra khóa sổ xuất kho.'));
+                } finally {
+                  setCutoffBusy(false);
                 }
               }}
             >

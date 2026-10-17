@@ -105,19 +105,29 @@ const WarehouseMap = () => {
   const [layout, setLayout] = useState<LayoutForm | null>(null);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  const [biSyncBusy, setBiSyncBusy] = useState(false);
   const [biSyncResult, setBiSyncResult] = useState<{ snapshotId: string; status: string } | null>(null);
 
   const syncBiSnapshot = async () => {
+    if (biSyncBusy) return;
+    setBiSyncBusy(true);
     setError('');
     try {
       const res = await apiClient.post('/api/Reports/sync-bi-snapshot', { warehouseId });
-      setBiSyncResult({
-        snapshotId: res?.data?.snapshotId || 'BI-SNAP-ACTIVE',
-        status: res?.data?.status || 'BI_HEATMAP_SYNCED',
-      });
+      if (res?.data?.snapshotId && res?.data?.status) {
+        setBiSyncResult({
+          snapshotId: String(res.data.snapshotId),
+          status: String(res.data.status),
+        });
+      } else {
+        setBiSyncResult(null);
+        setError('Phản hồi đồng bộ ảnh chụp bản đồ nhiệt BI không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
       setBiSyncResult(null);
       setError(errorMessage(failure, 'Không thể đồng bộ ảnh chụp bản đồ nhiệt và chuẩn dữ liệu BI.'));
+    } finally {
+      setBiSyncBusy(false);
     }
   };
 
@@ -134,14 +144,21 @@ const WarehouseMap = () => {
       setSnapshot(null);
       return;
     }
+    let biLoadError = '';
     const [response, biRes] = await Promise.all([
       apiClient.get('/api/putaway-tasks/location-map', { params: { warehouseId: targetWarehouseId } }),
-      apiClient.get<ProductivityAndBiSnapshot>('/api/Reports/productivity-and-bi-snapshot', { params: { warehouseId: targetWarehouseId } }).catch(() => null),
+      apiClient.get<ProductivityAndBiSnapshot>('/api/Reports/productivity-and-bi-snapshot', { params: { warehouseId: targetWarehouseId } }).catch((err: any) => {
+        if (err?.response?.status && err.response.status >= 400) {
+          biLoadError = errorMessage(err, 'Không thể tải ảnh chụp năng suất BI.');
+        }
+        return null;
+      }),
     ]);
     setSnapshot(response.data as MapResponse);
     if (biRes?.data && typeof biRes.data.completedPutawaysCount === 'number') {
       setBiSnapshot(biRes.data);
     }
+    if (biLoadError) setError(biLoadError);
   }, []);
 
   useEffect(() => {
@@ -282,7 +299,7 @@ const WarehouseMap = () => {
           </UiBadge>
         </div>
         <div className="ui-inline-actions" style={{ marginTop: 8 }}>
-          <button type="button" onClick={() => void syncBiSnapshot()}>
+          <button type="button" disabled={loading || saving || biSyncBusy} onClick={() => void syncBiSnapshot()}>
             Đồng bộ Ảnh chụp Bản đồ Nhiệt &amp; Chuẩn dữ liệu BI (WH-04, RP-07, RP-10)
           </button>
           {biSyncResult && (

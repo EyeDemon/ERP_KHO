@@ -51,6 +51,13 @@ public sealed class InventoryMovementService(
                 throw new NotFoundException("Không tìm thấy vị trí đích.");
             if (!destinationLocation.IsActive || destinationLocation.IsBlocked || destinationLocation.IsSystemManaged)
                 throw Conflict("INV_BUCKET_CONFLICT", "Vị trí đích không cho phép internal movement.");
+            if (source.Status == InventoryStatus.Available &&
+                (!destinationLocation.IsPickable ||
+                 destinationLocation.LocationType is WarehouseLocationType.Damaged or WarehouseLocationType.Rejected))
+                throw Conflict("INV_BUCKET_CONFLICT", "Không thể di chuyển tồn kho AVAILABLE vào vị trí không cho phép lấy hàng hoặc vị trí cách ly/hàng hỏng.");
+            if (source.Status is InventoryStatus.Damaged or InventoryStatus.Rejected or InventoryStatus.Quarantine &&
+                (destinationLocation.IsPickable || destinationLocation.LocationType == WarehouseLocationType.Storage))
+                throw Conflict("INV_BUCKET_CONFLICT", $"Không thể di chuyển tồn kho trạng thái {source.Status} vào vị trí lưu trữ lấy hàng (Storage/Pickable).");
 
             ValidateQuantityPrecision(source, request.Quantity);
             if (source.SerialId.HasValue && request.Quantity != 1m)

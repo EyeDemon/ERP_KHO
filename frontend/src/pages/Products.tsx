@@ -58,8 +58,9 @@ const Products = () => {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setEditing(null); setEditingCategory(null); setNotice(''); }, [canRead, canManage, canManageBarcodes, canManageCategories]);
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? products.filter(p => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.barcodes?.some(b => b.value.includes(search.trim()))) : products;
+    const cleanSearch = sanitizeScannerCode(search);
+    const q = cleanSearch.toLowerCase();
+    return q ? products.filter(p => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.barcodes?.some(b => b.value.includes(cleanSearch))) : products;
   }, [products, search]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visibleProducts = useMemo(() => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [filtered, currentPage]);
@@ -95,7 +96,7 @@ const Products = () => {
       if (editing) {
         await apiClient.put(`/api/products/${editing.id}`, { name: form.name, description: form.description || null, unitId: form.unitId, isActive: form.isActive, updateStorageProfile: true, updateTrackingPolicy: true, ...storageProfile(), ...trackingPolicy() });
         if (categoryChanged(editing.categoryId, form.categoryId)) await apiClient.put(`/api/products/${editing.id}/category`, categoryRequest(form.categoryId));
-      } else await apiClient.post('/api/products', { code: form.code, name: form.name, description: form.description || null, unitId: form.unitId, ...storageProfile(), ...trackingPolicy(), ...categoryRequest(form.categoryId) });
+      } else await apiClient.post('/api/products', { code: sanitizeScannerCode(form.code), name: form.name, description: form.description || null, unitId: form.unitId, ...storageProfile(), ...trackingPolicy(), ...categoryRequest(form.categoryId) });
       setNotice('Đã lưu sản phẩm.'); createMode(); await load();
       } catch (e) { setError(messageOf(e, 'Không thể lưu sản phẩm.')); }
     });
@@ -104,7 +105,7 @@ const Products = () => {
     e.preventDefault(); if (!canManageCategories) return; await mutate(async () => {
       try {
         if (editingCategory) await apiClient.put(`/api/product-categories/${editingCategory.id}`, { name: categoryForm.name, isActive: editingCategory.isActive });
-        else await apiClient.post('/api/product-categories', categoryForm);
+        else await apiClient.post('/api/product-categories', { code: sanitizeScannerCode(categoryForm.code), name: categoryForm.name });
         setCategoryForm({ code: '', name: '' }); setEditingCategory(null); await load();
       } catch (e) { setError(messageOf(e, editingCategory ? 'Không thể cập nhật danh mục.' : 'Không thể thêm danh mục.')); }
     });
@@ -120,29 +121,39 @@ const Products = () => {
   const [skuAuditResult, setSkuAuditResult] = useState<{ auditId: string; fefoPolicyStatus: string; packagingHierarchyStatus: string } | null>(null);
   const [categoryPolicyResult, setCategoryPolicyResult] = useState<{ verificationId: string; status: string } | null>(null);
   const triggerAutoAuditGovernance = async () => {
-    setError('');
-    try {
-      const res = await apiClient.post('/api/Products/auto-audit-governance', {});
-      if (res?.data?.auditId) {
-        setSkuAuditResult(res.data);
+    await mutate(async () => {
+      try {
+        const res = await apiClient.post('/api/Products/auto-audit-governance', {});
+        if (res?.data?.auditId) {
+          setSkuAuditResult(res.data);
+        } else {
+          setSkuAuditResult(null);
+          setError('Phản hồi kiểm định hồ sơ kỹ thuật SKU không hợp lệ từ máy chủ.');
+        }
+      } catch (failure) {
+        setSkuAuditResult(null);
+        setError(messageOf(failure, 'Không thể thực hiện kiểm định.'));
       }
-    } catch (failure) {
-      setError(messageOf(failure, 'Không thể thực hiện kiểm định.'));
-    }
+    });
   };
   const verifyCategoryStoragePolicy = async () => {
-    setError('');
-    try {
-      const res = await apiClient.post('/api/ProductCategories/verify-storage-policy', {});
-      if (res?.data) {
-        setCategoryPolicyResult({
-          verificationId: res.data.verificationId || 'CAT-POL-VERIFIED',
-          status: res.data.status || 'STORAGE_POLICY_VERIFIED',
-        });
+    await mutate(async () => {
+      try {
+        const res = await apiClient.post('/api/ProductCategories/verify-storage-policy', {});
+        if (res?.data?.verificationId && res?.data?.status) {
+          setCategoryPolicyResult({
+            verificationId: String(res.data.verificationId),
+            status: String(res.data.status),
+          });
+        } else {
+          setCategoryPolicyResult(null);
+          setError('Phản hồi kiểm định chính sách bảo quản danh mục không hợp lệ từ máy chủ.');
+        }
+      } catch (failure) {
+        setCategoryPolicyResult(null);
+        setError(messageOf(failure, 'Không thể thực hiện kiểm định.'));
       }
-    } catch (failure) {
-      setError(messageOf(failure, 'Không thể thực hiện kiểm định.'));
-    }
+    });
   };
 
   return <UiPage>
@@ -163,10 +174,10 @@ const Products = () => {
         <UiBadge>{`Theo dõi Lot: ${governanceSummary.lotCount} • Serial: ${governanceSummary.serialCount}`}</UiBadge>
         <UiBadge tone="warning">{`Kiểm soát HSD / FEFO (MD-08): ${governanceSummary.expiryCount} SKU`}</UiBadge>
         <UiBadge tone="success">{`Đã chuẩn hóa Trọng lượng/Thể tích/Pallet (MD-09): ${governanceSummary.dimensionCount} SKU`}</UiBadge>
-        <button type="button" onClick={() => void triggerAutoAuditGovernance()}>
+        <button type="button" disabled={mutating} onClick={() => void triggerAutoAuditGovernance()}>
           Chạy Kiểm định Hồ sơ Kỹ thuật & Chuẩn hóa FEFO/Đóng gói (MD-02, MD-08, MD-09)
         </button>
-        <button type="button" onClick={() => void verifyCategoryStoragePolicy()}>
+        <button type="button" disabled={mutating} onClick={() => void verifyCategoryStoragePolicy()}>
           Kiểm định Chính sách Bảo quản &amp; Phân nhóm Nhiệt độ/Nguy hại (MD-01)
         </button>
         {skuAuditResult && (

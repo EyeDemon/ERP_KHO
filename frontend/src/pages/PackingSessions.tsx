@@ -62,6 +62,7 @@ export default function PackingSessions(){
   const [labelPreviewHu,setLabelPreviewHu]=useState<HandlingUnit|null>(null);
   const [packagingVerificationResult,setPackagingVerificationResult]=useState('');
   const [kittingVasResult,setKittingVasResult]=useState('');
+  const [governanceBusy,setGovernanceBusy]=useState(false);
   const lock=useRef(new Set<string>());
   const canExecute=usePermission('packing.execute');
   const canCreateHu=usePermission('handling_unit.create');
@@ -72,7 +73,10 @@ export default function PackingSessions(){
     try{
       const [sessionsRes,husRes]=await Promise.all([
         apiClient.get('/api/packing-sessions'),
-        apiClient.get('/api/handling-units').catch(()=>({data:[]})),
+        apiClient.get('/api/handling-units').catch((err)=>{
+          if((err as {response?:{status?:number}})?.response?.status) setError(errorMessage(err));
+          return {data:[]};
+        }),
       ]);
       setSessions(Array.isArray(sessionsRes.data)?sessionsRes.data:[]);
       setHuRegistry(Array.isArray(husRes.data)?husRes.data:[]);
@@ -106,25 +110,43 @@ export default function PackingSessions(){
   const activeHus=(selected?.handlingUnits??[]).filter(x=>!['Cancelled','Staged','Loaded','Shipped'].includes(x.status));
   const packableHus=activeHus.filter(x=>['Open','InUse'].includes(x.status));
   const verifyPackagingProfile=async()=>{
+    if(governanceBusy)return;
+    setGovernanceBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/packing-sessions/verify-packaging-profile',{cartonType:huType||'STD-CARTON-M'});
       const data=res?.data as {verificationId?:string;cartonType?:string;gs1SsccReady?:boolean}|undefined;
-      setPackagingVerificationResult(`${data?.verificationId??'PKG-VER-OK'} • ${data?.cartonType??'STD-CARTON-M'} • GS1/SSCC Ready: ${data?.gs1SsccReady!==false?'YES':'NO'}`);
+      if(data?.verificationId){
+        setPackagingVerificationResult(`${data.verificationId} • ${data.cartonType??'STD-CARTON-M'} • GS1/SSCC Ready: ${data.gs1SsccReady!==false?'YES':'NO'}`);
+      }else{
+        setPackagingVerificationResult('');
+        setError('Không thể kiểm tra quy cách thùng: dữ liệu phản hồi không hợp lệ.');
+      }
     }catch(e){
       setPackagingVerificationResult('');
       setError(errorMessage(e));
+    }finally{
+      setGovernanceBusy(false);
     }
   };
   const executeKittingVas=async()=>{
+    if(governanceBusy)return;
+    setGovernanceBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/packing-sessions/execute-kitting-vas',{warehouseId:selected?.warehouseId??sessions[0]?.warehouseId??undefined,kitSkuCode:'KIT-BUNDLE-STD',vasServiceType:'LABELING_SHRINKWRAP_BUNDLE'});
       const data=res?.data as {workOrderId?:string;status?:string;vasServiceType?:string}|undefined;
-      setKittingVasResult(`${data?.workOrderId??'KIT-VAS-OK'} • ${data?.status??'KITTING_VAS_READY'} (${data?.vasServiceType??'LABELING_SHRINKWRAP_BUNDLE'})`);
+      if(data?.workOrderId){
+        setKittingVasResult(`${data.workOrderId} • ${data.status??'KITTING_VAS_READY'} (${data.vasServiceType??'LABELING_SHRINKWRAP_BUNDLE'})`);
+      }else{
+        setKittingVasResult('');
+        setError('Không thể thực thi Kitting/VAS: dữ liệu phản hồi không hợp lệ.');
+      }
     }catch(e){
       setKittingVasResult('');
       setError(errorMessage(e));
+    }finally{
+      setGovernanceBusy(false);
     }
   };
 
@@ -146,9 +168,9 @@ export default function PackingSessions(){
           <span>Chính sách Cartonization: <code>RECOMMEND_ONLY_REQUIRES_OPERATOR_CONFIRM</code></span>
         </div>
         <div className="ui-inline-wrap">
-          <button type="button" onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC (MD-08, AX-11)</button>
+          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC (MD-08, AX-11)</button>
           {packagingVerificationResult&&<span><strong>{packagingVerificationResult}</strong></span>}
-          <button type="button" onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS (AX-09, AX-10)</button>
+          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS (AX-09, AX-10)</button>
           {kittingVasResult&&<UiBadge tone="success">{kittingVasResult}</UiBadge>}
         </div>
       </UiCard>
@@ -288,7 +310,7 @@ export default function PackingSessions(){
           <div className="ui-inline-wrap">
             <span><strong>HU Code:</strong> {labelPreviewHu.huCode}</span>
             <span><strong>Barcode:</strong> <code>{labelPreviewHu.barcode}</code></span>
-            <span><strong>SSCC:</strong> <code>{labelPreviewHu.sscc || `003893${String(labelPreviewHu.id).padStart(12,'0')}`}</code></span>
+            <span><strong>SSCC:</strong> <code>{labelPreviewHu.sscc || labelPreviewHu.barcode || 'Chưa cấp SSCC'}</code></span>
             <span><strong>Loại HU:</strong> {labelPreviewHu.type}</span>
             <span><strong>Kho ID:</strong> #{labelPreviewHu.warehouseId}</span>
             <UiBadge tone={tone(labelPreviewHu.status)}>{huStateLabels[labelPreviewHu.status]??labelPreviewHu.status}</UiBadge>

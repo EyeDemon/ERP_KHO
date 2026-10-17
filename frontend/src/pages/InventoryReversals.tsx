@@ -85,13 +85,8 @@ export default function InventoryReversals(){
       if(response?.data?.verificationId){
         setChainIntegrityResult(response.data);
       }else{
-        setChainIntegrityResult({
-          verificationId:'REV-INT-VERIFIED',
-          warehouseId,
-          duplicateReversalBlocked:true,
-          appendOnlyLedgerStatus:'IMMUTABLE_VERIFIED',
-          verifiedAtUtc:new Date().toISOString(),
-        });
+        setChainIntegrityResult(null);
+        setError('Phản hồi xác minh chuỗi đảo giao dịch không hợp lệ từ máy chủ.');
       }
     }catch(e){
       setChainIntegrityResult(null);

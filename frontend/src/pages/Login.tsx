@@ -8,10 +8,14 @@ const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setError('');
     try {
       const response = await apiClient.post('/api/auth/login', { username, password });
       setAccessToken(response.data.token);
@@ -22,7 +26,18 @@ const Login = () => {
       setCurrentPermissions(identity.data.permissions || []);
       navigate('/');
     } catch (err: any) {
-      setError(permissionError(err, 'Đăng nhập thất bại. Vui lòng kiểm tra thông tin và thử lại.'));
+      if (err?.response?.status === 401) {
+        const msg = err?.response?.data?.message;
+        setError(
+          typeof msg === 'string' && msg.trim() && msg.trim() !== 'Invalid credentials.'
+            ? msg.trim()
+            : 'Sai tên đăng nhập hoặc mật khẩu. Vui lòng kiểm tra và thử lại.'
+        );
+      } else {
+        setError(permissionError(err, 'Đăng nhập thất bại. Vui lòng kiểm tra thông tin và thử lại.'));
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -62,7 +77,9 @@ const Login = () => {
             />
           </label>
 
-          <button type="submit" className="ui-primary-button">Đăng nhập</button>
+          <button type="submit" className="ui-primary-button" disabled={submitting}>
+            {submitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
+          </button>
         </form>
       </section>
     </main>

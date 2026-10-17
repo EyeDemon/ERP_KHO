@@ -28,6 +28,8 @@ public class StocktakeDetailConfiguration : IEntityTypeConfiguration<StocktakeDe
                .WithMany()
                .HasForeignKey(x => x.LocationId)
                .OnDelete(DeleteBehavior.Restrict);
-        builder.HasIndex(x => new { x.StocktakeId, x.ProductId, x.LocationId }).IsUnique();
+        builder.HasIndex(x => new { x.StocktakeId, x.ProductId, x.LocationId })
+               .IsUnique()
+               .HasFilter("[LocationId] IS NOT NULL");
     }
 }

@@ -211,7 +211,12 @@ const DockYard = () => {
     try {
       const [appointmentResponse, dwellResponse, dockResponse, yardResponse] = await Promise.all([
         apiClient.get('/api/dock-yard/appointments', { params: { warehouseId: targetWarehouseId } }),
-        apiClient.get('/api/dock-yard/dwell-monitor', { params: { warehouseId: targetWarehouseId } }).catch(() => ({ data: [] })),
+        apiClient.get('/api/dock-yard/dwell-monitor', { params: { warehouseId: targetWarehouseId } }).catch(err => {
+          if (err?.response?.status && err.response.status >= 400 && revision === loadRevisionRef.current) {
+            setError(messageOf(err, 'Không thể tải giám sát thời gian lưu bãi.'));
+          }
+          return { data: [] };
+        }),
         canReadDock
           ? apiClient.get('/api/dock-yard/docks', { params: { warehouseId: targetWarehouseId } })
           : Promise.resolve({ data: [] }),
@@ -674,10 +679,15 @@ const DockYard = () => {
                     })
                     .then(res => {
                       const data = res?.data ?? {};
+                      if (typeof data.dispatchId !== 'string' || !data.dispatchId) {
+                        setCrossDockResult(null);
+                        setError('Phản hồi điều phối Cross-Docking không hợp lệ từ máy chủ.');
+                        return;
+                      }
                       setCrossDockResult({
-                        dispatchId: typeof data.dispatchId === 'string' && data.dispatchId ? data.dispatchId : 'XDOCK-20261017-01',
+                        dispatchId: data.dispatchId,
                         dockDoorCode: typeof data.dockDoorCode === 'string' && data.dockDoorCode ? data.dockDoorCode : (docks[0]?.code ?? 'DOCK-XD-01'),
-                        stagedHuCount: typeof data.stagedHuCount === 'number' ? data.stagedHuCount : 4,
+                        stagedHuCount: typeof data.stagedHuCount === 'number' ? data.stagedHuCount : 0,
                         status: typeof data.status === 'string' && data.status ? data.status : 'CROSSDOCK_ROUTED',
                       });
                     })

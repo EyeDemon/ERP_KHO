@@ -34,6 +34,10 @@ namespace ERP.Infrastructure.Queries
                     (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
             if (_warehouseAuthorization is not null)
             {
+                if (warehouseId.HasValue)
+                {
+                    await _warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value);
+                }
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
                 query = query.Where(s => allowedWarehouseIds.Contains(s.WarehouseId));
             }

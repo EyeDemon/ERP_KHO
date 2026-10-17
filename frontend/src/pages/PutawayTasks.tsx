@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { roundQty4 } from './productCatalog';
 import './PutawayTasks.css';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
@@ -14,23 +15,33 @@ const message=(e:unknown)=>{const status=(e as {response?:{status?:number}})?.re
 
 export default function PutawayTasks(){
  const [tasks,setTasks]=useState<Task[]>([]),[selected,setSelected]=useState<Task|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState('');
- const [locations,setLocations]=useState<Record<number,Location[]>>({}),[destination,setDestination]=useState<Record<number,number>>({}),[quantity,setQuantity]=useState<Record<number,number>>({}); const lock=useRef(new Set<string>());
+ const [locations,setLocations]=useState<Record<number,Location[]>>({}),[destination,setDestination]=useState<Record<number,number>>({}),[quantity,setQuantity]=useState<Record<number,number|string>>({}); const lock=useRef(new Set<string>());
  const canAssign=usePermission('putaway.assign'),canExecute=usePermission('putaway.execute'),canCancel=usePermission('putaway.cancel');
  const [exceptionReason,setExceptionReason]=useState('');
  const [slottingEvaluationResult,setSlottingEvaluationResult]=useState('');
+ const [slottingBusy,setSlottingBusy]=useState(false);
  const load=async()=>{setLoading(true);setError('');try{setTasks((await apiClient.get('/api/putaway-tasks')).data)}catch{setTasks([]);setSelected(null);setError('Không thể tải dữ liệu. Vui lòng thử lại.')}finally{setLoading(false)}};
  const detail=async(id:number)=>{setError('');try{const t=(await apiClient.get(`/api/putaway-tasks/${id}`)).data as Task;setSelected(t);const entries=await Promise.all(t.items.filter(i=>i.remainingBaseQuantity>0).map(async i=>[i.id,(await apiClient.get(`/api/putaway-tasks/${id}/items/${i.id}/destinations`)).data] as const));setLocations(Object.fromEntries(entries))}catch{setSelected(null);setError('Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.')}};
  useEffect(()=>{void load()},[]);
  const mutate=async(key:string,path:string,body:object)=>{if(lock.current.has(key))return;lock.current.add(key);setBusy(key);setError('');try{const t=(await apiClient.post(path,body,{headers:idempotencyHeaders(key)})).data as Task;completeIdempotentAction(key);setSelected(t);await load();await detail(t.id)}catch(e){if((e as {response?:{status?:number}})?.response?.status===409)setSelected(null);setError(message(e))}finally{lock.current.delete(key);setBusy('')}};
  const evaluateSlotting=async()=>{
+   if(slottingBusy)return;
+   setSlottingBusy(true);
    setError('');
    try{
      const res=await apiClient.post('/api/putaway-tasks/evaluate-slotting',{warehouseId:selected?.warehouseId??tasks[0]?.warehouseId??undefined});
      const data=res?.data as {evaluationId?:string;optimalBinMatchRatePct?:number;fefoHazardCompliance?:string}|undefined;
-     setSlottingEvaluationResult(`${data?.evaluationId??'SLOT-EVAL-OK'} • Khớp Bin tối ưu: ${data?.optimalBinMatchRatePct??96.4}% • FEFO/Hazard: ${data?.fefoHazardCompliance??'VERIFIED'}`);
+     if(data?.evaluationId){
+       setSlottingEvaluationResult(`${data.evaluationId} • Khớp Bin tối ưu: ${data.optimalBinMatchRatePct??0}% • FEFO/Hazard: ${data.fefoHazardCompliance??'OK'}`);
+     }else{
+       setSlottingEvaluationResult('');
+       setError('Không thể chấm điểm tối ưu xếp dỡ: dữ liệu phản hồi không hợp lệ.');
+     }
    }catch(e){
      setSlottingEvaluationResult('');
      setError(message(e));
+   }finally{
+     setSlottingBusy(false);
    }
  };
  if(loading)return <p role="status">Đang tải nhiệm vụ cất hàng...</p>;
@@ -38,7 +49,7 @@ export default function PutawayTasks(){
  const inProgressCount=tasks.filter(x=>x.status==='InProgress').length;
  const completedCount=tasks.filter(x=>x.status==='Completed').length;
  const exceptionCount=tasks.filter(x=>x.status==='Exception').length;
- const totalRemainingQuantity=tasks.reduce((sum,x)=>sum+Math.max(0,x.requiredBaseQuantity-x.movedBaseQuantity),0);
+ const totalRemainingQuantity=roundQty4(tasks.reduce((sum,x)=>sum+Math.max(0,x.requiredBaseQuantity-x.movedBaseQuantity),0));
  return <UiPage>
    <UiPageHeader
      eyebrow="Nhập kho"
@@ -65,7 +76,7 @@ export default function PutawayTasks(){
        <span>Ràng buộc cứng (4 mức): <strong>ACTIVE_BIN_ONLY • UNBLOCKED_BIN_ONLY • NO_INVENTORY_LOCK • CAPACITY_WEIGHT_VOLUME_PALLET_GUARD</strong></span>
      </div>
      <div className="ui-inline-wrap">
-       <button type="button" onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin (IN-09)</button>
+       <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin (IN-09)</button>
        {slottingEvaluationResult&&<span><strong>{slottingEvaluationResult}</strong></span>}
      </div>
    </UiCard>
@@ -112,8 +123,8 @@ export default function PutawayTasks(){
            <p>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>
            {canExecute&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
              <label>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
-             <label>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0" step="any" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:Number(e.target.value)}))}/></label>
-             <button disabled={!!busy||!destination[item.id]||!quantity[item.id]} onClick={()=>void mutate(`move-${selected.id}-${item.id}`,`/api/putaway-tasks/${selected.id}/move`,{itemId:item.id,destinationLocationId:destination[item.id],quantity:quantity[item.id],unitCode:item.operationUnitCode,rowVersion:selected.rowVersion})}>{busy===`move-${selected.id}-${item.id}`?'Đang hoàn thành...':'Xác nhận số lượng'}</button>
+             <label>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0.0001" step="0.0001" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:e.target.value===''?'':roundQty4(Number(e.target.value))}))}/></label>
+             <button disabled={!!busy||!destination[item.id]||!(Number(quantity[item.id])>0)} onClick={()=>void mutate(`move-${selected.id}-${item.id}`,`/api/putaway-tasks/${selected.id}/move`,{itemId:item.id,destinationLocationId:destination[item.id],quantity:roundQty4(Number(quantity[item.id])),unitCode:item.operationUnitCode,rowVersion:selected.rowVersion})}>{busy===`move-${selected.id}-${item.id}`?'Đang hoàn thành...':'Xác nhận số lượng'}</button>
            </div>}
          </fieldset>)}
        </div>

@@ -17,6 +17,7 @@ namespace ERP.Application.Services
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
         private readonly ICurrentUser? _currentUser;
         private readonly IInventoryLockEvaluator? _inventoryLocks;
+        private readonly IProductRepository? _productRepository;
 
         internal StocktakeService(
             IStocktakeRepository stocktakeRepository,
@@ -25,7 +26,8 @@ namespace ERP.Application.Services
             IWarehouseRepository warehouseRepository,
             IUnitOfWork unitOfWork,
             IAuditLogRepository auditLogRepository,
-            IInventoryLockEvaluator? inventoryLocks = null)
+            IInventoryLockEvaluator? inventoryLocks = null,
+            IProductRepository? productRepository = null)
         {
             _stocktakeRepository = stocktakeRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -34,6 +36,7 @@ namespace ERP.Application.Services
             _unitOfWork = unitOfWork;
             _auditLogRepository = auditLogRepository;
             _inventoryLocks = inventoryLocks;
+            _productRepository = productRepository;
         }
 
         public StocktakeService(
@@ -45,7 +48,8 @@ namespace ERP.Application.Services
             IAuditLogRepository auditLogRepository,
             IWarehouseAuthorizationService warehouseAuthorization,
             ICurrentUser currentUser,
-            IInventoryLockEvaluator? inventoryLocks = null)
+            IInventoryLockEvaluator? inventoryLocks = null,
+            IProductRepository? productRepository = null)
         {
             _stocktakeRepository = stocktakeRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -56,6 +60,7 @@ namespace ERP.Application.Services
             _warehouseAuthorization = warehouseAuthorization;
             _currentUser = currentUser;
             _inventoryLocks = inventoryLocks;
+            _productRepository = productRepository;
         }
 
                 public async Task<int> CreateStocktakeAsync(DTOs.CreateStocktakeDto dto, int createdByUserId)
@@ -217,52 +222,151 @@ namespace ERP.Application.Services
                     var diff = detail.ActualQuantity.Value - currentQuantity;
                     if (diff != 0)
                     {
+                        var product = detail.Product
+                            ?? currentStock?.Product
+                            ?? matchingStocks.FirstOrDefault(s => s.Product != null)?.Product;
+                        if (product == null && _productRepository is not null)
+                        {
+                            product = await _productRepository.GetByIdAsync(detail.ProductId);
+                        }
+
+                        var isSerialTracked = product?.TrackingType == ProductTrackingType.Serial ||
+                                              matchingStocks.Any(s => s.SerialId.HasValue);
+                        var isLotTracked = !isSerialTracked &&
+                                           (product?.TrackingType == ProductTrackingType.Lot ||
+                                            product?.ExpiryControl == true ||
+                                            matchingStocks.Any(s => s.LotId.HasValue));
+
+                        if (isSerialTracked && decimal.Truncate(detail.ActualQuantity.Value) != detail.ActualQuantity.Value)
+                        {
+                            throw new BusinessRuleException($"Sản phẩm quản lý theo Serial (ID {detail.ProductId}) chỉ được kiểm kê theo số lượng nguyên.");
+                        }
+
                         if (diff > 0)
                         {
-                            if (currentStock != null && currentStock.SerialId != null && currentStock.Quantity + diff > 1m)
+                            if (isSerialTracked)
                             {
-                                currentStock = matchingStocks.FirstOrDefault(s => s.SerialId == null);
-                            }
+                                var zeroSerialBuckets = matchingStocks
+                                    .Where(s => s.SerialId.HasValue && s.Quantity == 0m)
+                                    .OrderBy(s => s.SerialId)
+                                    .ThenBy(s => s.Id)
+                                    .ToList();
+                                var neededSerials = (int)diff;
+                                if (decimal.Truncate(diff) != diff || zeroSerialBuckets.Count < neededSerials)
+                                {
+                                    throw new BusinessRuleException(
+                                        $"Không thể duyệt kiểm kê thừa ({diff}) cho sản phẩm quản lý theo Serial (ID {detail.ProductId}) khi chưa xác định mã Serial cụ thể. Vui lòng tạo phiếu nhập/điều chỉnh có định danh Serial.");
+                                }
 
-                            if (currentStock == null)
+                                foreach (var serialBucket in zeroSerialBuckets.Take(neededSerials))
+                                {
+                                    serialBucket.Quantity = 1m;
+                                    serialBucket.LastUpdated = DateTime.UtcNow;
+                                    await _inventoryStockRepository.UpdateAsync(serialBucket);
+
+                                    var serialTx = new InventoryTransaction
+                                    {
+                                        ProductId = detail.ProductId,
+                                        WarehouseId = stocktake.WarehouseId,
+                                        LocationId = detail.LocationId ?? serialBucket.LocationId,
+                                        LotId = serialBucket.LotId,
+                                        SerialId = serialBucket.SerialId,
+                                        InventoryStatus = serialBucket.Status,
+                                        TransactionType = TransactionType.AdjustmentIncrease,
+                                        Quantity = 1m,
+                                        ReferenceId = stocktake.Id,
+                                        ReferenceType = "Stocktake",
+                                        TransactionDate = DateTime.UtcNow,
+                                        CreatedBy = approvedByUserId,
+                                        Note = detail.Note
+                                    };
+                                    await _inventoryTransactionRepository.AddAsync(serialTx);
+                                }
+                            }
+                            else if (isLotTracked)
                             {
-                                var locationId = detail.LocationId ?? matchingStocks.FirstOrDefault()?.LocationId ?? await _inventoryStockRepository.GetLegacyAdjustmentLocationIdAsync(stocktake.WarehouseId);
-                                currentStock = new InventoryStock
+                                var today = DateTime.UtcNow.Date;
+                                var lotBucket = matchingStocks.FirstOrDefault(s =>
+                                        s.LotId.HasValue &&
+                                        s.SerialId == null &&
+                                        (s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value >= today))
+                                    ?? matchingStocks.FirstOrDefault(s => s.LotId.HasValue && s.SerialId == null);
+
+                                if (lotBucket == null || !lotBucket.LotId.HasValue)
+                                {
+                                    throw new BusinessRuleException(
+                                        $"Không thể duyệt kiểm kê thừa ({diff}) cho sản phẩm quản lý theo Lô (ID {detail.ProductId}) khi vị trí chưa có thông tin Lô. Vui lòng định danh Lô trước khi điều chỉnh.");
+                                }
+
+                                lotBucket.Quantity += diff;
+                                lotBucket.LastUpdated = DateTime.UtcNow;
+                                await _inventoryStockRepository.UpdateAsync(lotBucket);
+
+                                var lotTx = new InventoryTransaction
                                 {
                                     ProductId = detail.ProductId,
                                     WarehouseId = stocktake.WarehouseId,
-                                    LocationId = locationId,
-                                    LotId = matchingStocks.FirstOrDefault()?.LotId,
-                                    Status = InventoryStatus.Available,
+                                    LocationId = detail.LocationId ?? lotBucket.LocationId,
+                                    LotId = lotBucket.LotId,
+                                    SerialId = null,
+                                    InventoryStatus = lotBucket.Status,
+                                    TransactionType = TransactionType.AdjustmentIncrease,
                                     Quantity = diff,
-                                    LastUpdated = DateTime.UtcNow
+                                    ReferenceId = stocktake.Id,
+                                    ReferenceType = "Stocktake",
+                                    TransactionDate = DateTime.UtcNow,
+                                    CreatedBy = approvedByUserId,
+                                    Note = detail.Note
                                 };
-                                await _inventoryStockRepository.AddAsync(currentStock);
+                                await _inventoryTransactionRepository.AddAsync(lotTx);
                             }
                             else
                             {
-                                currentStock.Quantity += diff;
-                                currentStock.LastUpdated = DateTime.UtcNow;
-                                await _inventoryStockRepository.UpdateAsync(currentStock);
-                            }
+                                if (currentStock != null && currentStock.SerialId != null && currentStock.Quantity + diff > 1m)
+                                {
+                                    currentStock = matchingStocks.FirstOrDefault(s => s.SerialId == null);
+                                }
 
-                            var tx = new InventoryTransaction
-                            {
-                                ProductId = detail.ProductId,
-                                WarehouseId = stocktake.WarehouseId,
-                                LocationId = detail.LocationId ?? currentStock.LocationId,
-                                LotId = currentStock.LotId,
-                                SerialId = currentStock.SerialId,
-                                InventoryStatus = currentStock.Status,
-                                TransactionType = TransactionType.AdjustmentIncrease,
-                                Quantity = diff,
-                                ReferenceId = stocktake.Id,
-                                ReferenceType = "Stocktake",
-                                TransactionDate = DateTime.UtcNow,
-                                CreatedBy = approvedByUserId,
-                                Note = detail.Note
-                            };
-                            await _inventoryTransactionRepository.AddAsync(tx);
+                                if (currentStock == null)
+                                {
+                                    var locationId = detail.LocationId ?? matchingStocks.FirstOrDefault()?.LocationId ?? await _inventoryStockRepository.GetLegacyAdjustmentLocationIdAsync(stocktake.WarehouseId);
+                                    currentStock = new InventoryStock
+                                    {
+                                        ProductId = detail.ProductId,
+                                        WarehouseId = stocktake.WarehouseId,
+                                        LocationId = locationId,
+                                        LotId = matchingStocks.FirstOrDefault()?.LotId,
+                                        Status = InventoryStatus.Available,
+                                        Quantity = diff,
+                                        LastUpdated = DateTime.UtcNow
+                                    };
+                                    await _inventoryStockRepository.AddAsync(currentStock);
+                                }
+                                else
+                                {
+                                    currentStock.Quantity += diff;
+                                    currentStock.LastUpdated = DateTime.UtcNow;
+                                    await _inventoryStockRepository.UpdateAsync(currentStock);
+                                }
+
+                                var tx = new InventoryTransaction
+                                {
+                                    ProductId = detail.ProductId,
+                                    WarehouseId = stocktake.WarehouseId,
+                                    LocationId = detail.LocationId ?? currentStock.LocationId,
+                                    LotId = currentStock.LotId,
+                                    SerialId = currentStock.SerialId,
+                                    InventoryStatus = currentStock.Status,
+                                    TransactionType = TransactionType.AdjustmentIncrease,
+                                    Quantity = diff,
+                                    ReferenceId = stocktake.Id,
+                                    ReferenceType = "Stocktake",
+                                    TransactionDate = DateTime.UtcNow,
+                                    CreatedBy = approvedByUserId,
+                                    Note = detail.Note
+                                };
+                                await _inventoryTransactionRepository.AddAsync(tx);
+                            }
                         }
                         else
                         {
@@ -273,6 +377,10 @@ namespace ERP.Application.Services
                                 var availableInBucket = bucket.Quantity - bucket.ReservedQuantity;
                                 if (availableInBucket <= 0) continue;
                                 var take = Math.Min(remainingDecrease, availableInBucket);
+                                if (bucket.SerialId.HasValue && take != 1m)
+                                {
+                                    throw new BusinessRuleException($"Sản phẩm quản lý theo Serial (ID {detail.ProductId}) chỉ được điều chỉnh giảm theo từng đơn vị nguyên.");
+                                }
                                 bucket.Quantity -= take;
                                 bucket.LastUpdated = DateTime.UtcNow;
                                 await _inventoryStockRepository.UpdateAsync(bucket);
@@ -295,6 +403,11 @@ namespace ERP.Application.Services
                                     Note = detail.Note
                                 };
                                 await _inventoryTransactionRepository.AddAsync(tx);
+                            }
+
+                            if (remainingDecrease > 0)
+                            {
+                                throw new BusinessRuleException($"Không đủ tồn kho khả dụng chưa giữ chỗ để điều chỉnh giảm {(-diff)} cho sản phẩm ID {detail.ProductId}.");
                             }
                         }
                     }
@@ -363,12 +476,13 @@ namespace ERP.Application.Services
             if (decimalPlaces is >= 0 and <= 4 && decimal.Round(dto.ActualQuantity, decimalPlaces.Value) != dto.ActualQuantity)
                 throw new BusinessRuleException($"Số lượng kiểm đếm thực tế vượt quá {decimalPlaces.Value} chữ số thập phân của đơn vị tính cơ sở.");
 
+            var isBlindDraft = IsBlindStocktake(stocktake.Note) && stocktake.Status == ReceiptStatus.Draft;
             var oldActualQuantity = detail.ActualQuantity;
             await _unitOfWork.BeginTransactionAsync();
             try
             {
                 detail.ActualQuantity = dto.ActualQuantity;
-                detail.DifferenceQuantity = dto.ActualQuantity - detail.SystemQuantity;
+                detail.DifferenceQuantity = isBlindDraft ? 0m : dto.ActualQuantity - detail.SystemQuantity;
                 if (dto.Note != null) detail.Note = dto.Note;
 
                 await _stocktakeRepository.UpdateAsync(stocktake);
@@ -392,6 +506,47 @@ namespace ERP.Application.Services
                 await _unitOfWork.RollbackTransactionAsync();
                 throw;
             }
+        }
+
+        public static bool IsBlindStocktake(string? note) =>
+            !string.IsNullOrWhiteSpace(note) &&
+            note.TrimStart().StartsWith("[BLIND]", StringComparison.OrdinalIgnoreCase);
+
+        public static DTOs.StocktakeResponseDto MapToDto(Stocktake stocktake)
+        {
+            var maskBlindSnapshot = stocktake.Status == ReceiptStatus.Draft && IsBlindStocktake(stocktake.Note);
+            return new DTOs.StocktakeResponseDto
+            {
+                Id = stocktake.Id,
+                Code = stocktake.Code,
+                WarehouseId = stocktake.WarehouseId,
+                WarehouseName = stocktake.Warehouse?.Name ?? string.Empty,
+                Status = stocktake.Status,
+                Note = stocktake.Note,
+                CreatedBy = stocktake.CreatedBy,
+                CreatedByName = stocktake.CreatedByUser?.FullName ?? string.Empty,
+                ApprovedBy = stocktake.ApprovedBy,
+                ApprovedByName = stocktake.ApprovedByUser?.FullName,
+                CreatedAt = stocktake.CreatedAt,
+                ApprovedAt = stocktake.ApprovedAt,
+                DetailCount = stocktake.Details.Count,
+                Details = stocktake.Details.Select(d => new DTOs.StocktakeDetailRowDto
+                {
+                    Id = d.Id,
+                    StocktakeId = d.StocktakeId,
+                    ProductId = d.ProductId,
+                    LocationId = d.LocationId,
+                    LocationCode = d.Location?.Code,
+                    LocationName = d.Location?.Name,
+                    ProductCode = d.Product?.Code ?? string.Empty,
+                    ProductName = d.Product?.Name ?? string.Empty,
+                    UnitName = d.Product?.Unit?.Name ?? string.Empty,
+                    SystemQuantity = maskBlindSnapshot ? 0m : d.SystemQuantity,
+                    ActualQuantity = d.ActualQuantity,
+                    DifferenceQuantity = maskBlindSnapshot ? 0m : d.DifferenceQuantity,
+                    Note = d.Note
+                }).ToList()
+            };
         }
 
         public async Task RecountStocktakeDetailAsync(int stocktakeId, int detailId, string? reason, int userId = 0)

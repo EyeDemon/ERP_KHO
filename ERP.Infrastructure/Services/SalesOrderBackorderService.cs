@@ -317,7 +317,7 @@ public sealed class SalesOrderBackorderService(
                 .OrderByDescending(x => x.Id)
                 .FirstOrDefaultAsync(token);
             if (activeTask is not null &&
-                activeTask.Status is not PickingTaskStatus.Open and not PickingTaskStatus.Assigned)
+                activeTask.Status is PickingTaskStatus.InProgress or PickingTaskStatus.ShortPick)
                 throw Conflict("BACKORDER_EXECUTION_STARTED", "Picking đã bắt đầu; recovery sau execution cần multi-shipment workflow chưa được bật.");
 
             var remaining = row.Quantity - row.RecoveredQuantity - row.CancelledQuantity;
@@ -345,11 +345,58 @@ public sealed class SalesOrderBackorderService(
                 recover,
                 currentUser.UserId,
                 token);
-            await allocationService.AutoAllocateAsync(new CreateStockAllocationDto
+            var allocatedDtos = await allocationService.AutoAllocateAsync(new CreateStockAllocationDto
             {
                 ReservationId = reservation.Id,
                 Quantity = recover
             }, token);
+
+            var trackedTask = await context.PickingTasks
+                .Include(x => x.Lines)
+                .FirstOrDefaultAsync(x => x.SourceType == "SalesOrder" &&
+                                          x.SourceId == order.Id &&
+                                          x.Status != PickingTaskStatus.Cancelled, token);
+            if (trackedTask is not null && allocatedDtos.Count > 0)
+            {
+                var existingAllocIds = trackedTask.Lines.Select(l => l.AllocationId).ToHashSet();
+                var missingAllocIds = allocatedDtos
+                    .Select(a => a.Id)
+                    .Where(aId => aId > 0 && !existingAllocIds.Contains(aId))
+                    .ToArray();
+                if (missingAllocIds.Length > 0)
+                {
+                    var newAllocs = await context.StockAllocations
+                        .Where(a => missingAllocIds.Contains(a.Id))
+                        .OrderBy(a => a.Id)
+                        .ToListAsync(token);
+                    var nextSeq = trackedTask.Lines.Count == 0 ? 0 : trackedTask.Lines.Max(l => l.Sequence);
+                    var reopenToInProgress = trackedTask.Status is PickingTaskStatus.Resolved or PickingTaskStatus.Completed &&
+                                             trackedTask.AssignedUserId.HasValue;
+                    foreach (var alloc in newAllocs)
+                    {
+                        if (reopenToInProgress)
+                        {
+                            alloc.Status = StockAllocationStatus.Picking;
+                            alloc.Version++;
+                        }
+                        trackedTask.Lines.Add(new PickingTaskLine
+                        {
+                            AllocationId = alloc.Id,
+                            ProductId = alloc.ProductId,
+                            SourceLocationId = alloc.LocationId,
+                            RequestedQuantity = alloc.Quantity,
+                            PickedQuantity = 0m,
+                            Sequence = ++nextSeq,
+                            Status = reopenToInProgress ? PickingTaskLineStatus.InProgress : PickingTaskLineStatus.Open
+                        });
+                    }
+                    if (trackedTask.Status is PickingTaskStatus.Resolved or PickingTaskStatus.Completed)
+                    {
+                        trackedTask.Status = reopenToInProgress ? PickingTaskStatus.InProgress : PickingTaskStatus.Open;
+                        trackedTask.CompletedAt = null;
+                    }
+                }
+            }
 
             row.RecoveredQuantity += recover;
             row.UpdatedAt = DateTime.UtcNow;

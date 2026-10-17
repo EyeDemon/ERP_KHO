@@ -60,6 +60,7 @@ public sealed class ShipmentsController(
     }
 
     [HttpPost("sync-tms-manifest")]
+    [IdempotentCommand("Shipment.SyncTmsManifest")]
     [PermissionAuthorize(AppPermissions.ShipmentRead)]
     public async Task<IActionResult> SyncTmsManifest(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncTmsManifestRequest? request = null,

@@ -7,7 +7,28 @@ const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://localhost:7198';
 let accessToken: string | null = null;
 let isRedirecting = false;
 
-type RetryConfig = InternalAxiosRequestConfig & { _authRetry?: boolean };
+type RetryConfig = InternalAxiosRequestConfig & { _authRetry?: boolean; _idempotencyKey?: string };
+
+const AUTO_IDEMPOTENCY_TTL_MS = 5_000;
+const autoIdempotencyCache = new Map<string, { key: string; expiresAt: number }>();
+
+const buildRequestFingerprint = (method: string, config: Record<string, unknown>): string | null => {
+  const url = typeof config.url === 'string' ? config.url.trim() : '';
+  if (!url) return null;
+  let serializedData = '';
+  if (config.data !== undefined && config.data !== null) {
+    if (typeof config.data === 'string') {
+      serializedData = config.data;
+    } else {
+      try {
+        serializedData = JSON.stringify(config.data);
+      } catch {
+        serializedData = String(config.data);
+      }
+    }
+  }
+  return `${method}:${url}:${serializedData}`;
+};
 
 export const setAccessToken = (token: string | null): void => { accessToken = token; };
 export const getAccessToken = (): string | null => accessToken;
@@ -15,7 +36,8 @@ export const resetRedirectGuard = (): void => { isRedirecting = false; };
 
 export const shouldRedirectToLogin = (pathname: string, requestUrl?: string, redirecting = false): boolean => {
   if (redirecting || pathname === '/login' || pathname.endsWith('/login')) return false;
-  return !(requestUrl?.includes('/api/Auth/login') || requestUrl?.includes('/api/Auth/refresh'));
+  const lowerUrl = requestUrl?.toLowerCase() ?? '';
+  return !(lowerUrl.includes('/api/auth/login') || lowerUrl.includes('/api/auth/refresh'));
 };
 
 const apiClient = axios.create({ baseURL, withCredentials: true, headers: { 'Content-Type': 'application/json' } });
@@ -54,17 +76,44 @@ apiClient.interceptors.request.use((config) => {
     config.adapter = createBlueprintDemoApiAdapter(config);
   }
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
+  const retryConfig = config as RetryConfig;
   const method = config.method?.toLowerCase();
   if (method && ['post', 'put', 'patch', 'delete'].includes(method)) {
-    const hasIdempotencyKey =
-      Boolean(config.headers?.['Idempotency-Key']) ||
-      Boolean(config.headers?.['idempotency-key']);
-    if (!hasIdempotencyKey && config.headers) {
-      const randomPart =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      config.headers['Idempotency-Key'] = `auto-${method}-${randomPart}`;
+    const existingKey =
+      config.headers?.['Idempotency-Key'] ??
+      config.headers?.['idempotency-key'] ??
+      retryConfig._idempotencyKey;
+    if (existingKey) {
+      const resolvedKey = String(existingKey);
+      retryConfig._idempotencyKey = resolvedKey;
+      if (config.headers) {
+        config.headers['Idempotency-Key'] = resolvedKey;
+      }
+    } else if (config.headers) {
+      const now = Date.now();
+      for (const [fp, entry] of autoIdempotencyCache.entries()) {
+        if (entry.expiresAt <= now) autoIdempotencyCache.delete(fp);
+      }
+      const fingerprint = buildRequestFingerprint(method, config as unknown as Record<string, unknown>);
+      const cached = fingerprint ? autoIdempotencyCache.get(fingerprint) : undefined;
+      let generatedKey: string;
+      if (cached && cached.expiresAt > now) {
+        generatedKey = cached.key;
+      } else {
+        const randomPart =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        generatedKey = `auto-${method}-${randomPart}`;
+        if (fingerprint) {
+          autoIdempotencyCache.set(fingerprint, {
+            key: generatedKey,
+            expiresAt: now + AUTO_IDEMPOTENCY_TTL_MS,
+          });
+        }
+      }
+      retryConfig._idempotencyKey = generatedKey;
+      config.headers['Idempotency-Key'] = generatedKey;
     }
   }
   return config;
@@ -75,7 +124,8 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const config = error.config as RetryConfig | undefined;
     const requestUrl = config?.url;
-    const isAuthEndpoint = requestUrl?.includes('/api/Auth/login') || requestUrl?.includes('/api/Auth/refresh');
+    const lowerUrl = requestUrl?.toLowerCase() ?? '';
+    const isAuthEndpoint = lowerUrl.includes('/api/auth/login') || lowerUrl.includes('/api/auth/refresh');
     if (error.response?.status === 403 && accessToken) {
       const revision = beginPermissionRefresh();
       try {

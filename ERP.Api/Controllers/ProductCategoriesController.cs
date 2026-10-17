@@ -53,18 +53,18 @@ public sealed class ProductCategoriesController(
         });
     }
 
-    [HttpPost, PermissionAuthorize(AppPermissions.CategoryManage)]
+    [HttpPost, ERP.Api.Infrastructure.IdempotentCommand("ProductCategory.Create"), PermissionAuthorize(AppPermissions.CategoryManage)]
     public async Task<IActionResult> Create(CreateProductCategoryDto dto, CancellationToken ct)
     {
         var result = await service.CreateCategoryAsync(dto, ct);
         return Created($"/api/product-categories/{result.Id}", result);
     }
 
-    [HttpPut("{id:int}"), PermissionAuthorize(AppPermissions.CategoryManage)]
+    [HttpPut("{id:int}"), ERP.Api.Infrastructure.IdempotentCommand("ProductCategory.Update"), PermissionAuthorize(AppPermissions.CategoryManage)]
     public async Task<IActionResult> Update(int id, UpdateProductCategoryDto dto, CancellationToken ct)
     { await service.UpdateCategoryAsync(id, dto, ct); return NoContent(); }
 
-    [HttpDelete("{id:int}"), PermissionAuthorize(AppPermissions.CategoryManage)]
+    [HttpDelete("{id:int}"), ERP.Api.Infrastructure.IdempotentCommand("ProductCategory.Delete"), PermissionAuthorize(AppPermissions.CategoryManage)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     { await service.DeleteCategoryAsync(id, ct); return NoContent(); }
 }

@@ -308,15 +308,21 @@ export default function Permissions() {
     setError('');
     try {
       const res = await apiClient.get<Record<string, unknown>>('/api/permissions/compliance-evidence-bundle');
-      const data = res.data || {};
-      setEvidenceBundle({
-        bundleId: typeof data.bundleId === 'string' && data.bundleId ? data.bundleId : 'EVD-20261017-CANONICAL',
-        policyVersion: typeof data.policyVersion === 'string' && data.policyVersion ? data.policyVersion : 'v2026.10-CANONICAL',
-        legalHoldActive: Boolean(data.legalHoldActive ?? true),
-        appendOnlyAuditVerified: Boolean(data.appendOnlyAuditVerified ?? true),
-        generatedAtUtc: typeof data.generatedAtUtc === 'string' ? data.generatedAtUtc : new Date().toISOString(),
-      });
+      const data = res?.data;
+      if (data && typeof data.bundleId === 'string' && data.bundleId) {
+        setEvidenceBundle({
+          bundleId: data.bundleId,
+          policyVersion: typeof data.policyVersion === 'string' && data.policyVersion ? data.policyVersion : '',
+          legalHoldActive: Boolean(data.legalHoldActive),
+          appendOnlyAuditVerified: Boolean(data.appendOnlyAuditVerified),
+          generatedAtUtc: typeof data.generatedAtUtc === 'string' ? data.generatedAtUtc : '',
+        });
+      } else {
+        setEvidenceBundle(null);
+        setError('Phản hồi gói bằng chứng kiểm toán không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
+      setEvidenceBundle(null);
       setError(permissionError(failure));
     } finally {
       setEvidenceBusy(false);
@@ -329,15 +335,22 @@ export default function Permissions() {
     setError('');
     try {
       const res = await apiClient.post<Record<string, unknown>>('/api/user-warehouse-access/verify-sod-isolation', {});
-      const data = res.data || {};
-      setSodAuditResult({
-        status: String(data.status || data.sodPolicyStatus || 'RBAC_SOD_ISOLATION_VERIFIED'),
-        sodConflictCount: Number(data.sodConflictCount ?? (data.crossSiteLeakageDetected ? 1 : 0)),
-        multiWarehouseIsolationEnforced: Boolean(
-          data.multiWarehouseIsolationEnforced ?? (data.crossSiteLeakageDetected === undefined ? true : !data.crossSiteLeakageDetected),
-        ),
-      });
+      const data = res?.data;
+      const status = data && (data.status || data.sodPolicyStatus);
+      if (status) {
+        setSodAuditResult({
+          status: String(status),
+          sodConflictCount: Number(data.sodConflictCount ?? (data.crossSiteLeakageDetected ? 1 : 0)),
+          multiWarehouseIsolationEnforced: Boolean(
+            data.multiWarehouseIsolationEnforced ?? (data.crossSiteLeakageDetected === undefined ? true : !data.crossSiteLeakageDetected),
+          ),
+        });
+      } else {
+        setSodAuditResult(null);
+        setError('Phản hồi kiểm toán SoD không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
+      setSodAuditResult(null);
       setError(permissionError(failure));
     } finally {
       setSodAuditBusy(false);

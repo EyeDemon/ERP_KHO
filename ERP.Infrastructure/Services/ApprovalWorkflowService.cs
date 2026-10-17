@@ -225,9 +225,15 @@ public sealed class ApprovalWorkflowService(
         {
             var result = documentType switch
             {
-                "ImportReceipt" => await RejectReceiptAsync(documentType, id, reason, context.ImportReceipts, ReceiptStatus.Received, cancellationToken),
-                "ExportReceipt" => await RejectReceiptAsync(documentType, id, reason, context.ExportReceipts, ReceiptStatus.Draft, cancellationToken),
-                "Stocktake" => await RejectReceiptAsync(documentType, id, reason, context.Stocktakes, ReceiptStatus.Draft, cancellationToken),
+                "ImportReceipt" => await RejectReceiptAsync(
+                    documentType,
+                    id,
+                    reason,
+                    context.ImportReceipts,
+                    [ReceiptStatus.Received, ReceiptStatus.QcCompleted, ReceiptStatus.ReadyToPost],
+                    cancellationToken),
+                "ExportReceipt" => await RejectReceiptAsync(documentType, id, reason, context.ExportReceipts, [ReceiptStatus.Draft], cancellationToken),
+                "Stocktake" => await RejectReceiptAsync(documentType, id, reason, context.Stocktakes, [ReceiptStatus.Draft], cancellationToken),
                 "StockTransfer" => await RejectTransferAsync(id, reason, cancellationToken),
                 _ => throw new BusinessRuleException("Loại chứng từ không hợp lệ.")
             };
@@ -246,27 +252,30 @@ public sealed class ApprovalWorkflowService(
             ? "ImportReceipt"
             : documentType?.Trim() ?? string.Empty;
 
-    private async Task<ApprovalActionResult> RejectReceiptAsync<TEntity>(string type, int id, string reason, DbSet<TEntity> set, ReceiptStatus pendingStatus, CancellationToken token) where TEntity : class
+    private async Task<ApprovalActionResult> RejectReceiptAsync<TEntity>(string type, int id, string reason, DbSet<TEntity> set, ReceiptStatus[] pendingStatuses, CancellationToken token) where TEntity : class
     {
-        var entity = await set.SingleOrDefaultAsync(x => EF.Property<int>(x, "Id") == id, token) ?? throw new NotFoundException("Không tìm thấy chứng từ.");
+        var entity = await set.AsNoTracking().SingleOrDefaultAsync(x => EF.Property<int>(x, "Id") == id, token) ?? throw new NotFoundException("Không tìm thấy chứng từ.");
         var warehouseId = (int)entity.GetType().GetProperty("WarehouseId")!.GetValue(entity)!;
         var creatorId = (int)entity.GetType().GetProperty("CreatedBy")!.GetValue(entity)!;
         var code = (string)entity.GetType().GetProperty("Code")!.GetValue(entity)!;
+        var oldStatus = (ReceiptStatus)entity.GetType().GetProperty("Status")!.GetValue(entity)!;
         await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, token);
         ApprovalSafetyGuard.EnsureDifferentChecker(creatorId, currentUser.UserId);
         int affected;
         if (context.Database.IsRelational())
         {
-            affected = await set.Where(x => EF.Property<int>(x, "Id") == id && EF.Property<ReceiptStatus>(x, "Status") == pendingStatus)
+            affected = await set.Where(x => EF.Property<int>(x, "Id") == id && pendingStatuses.Contains(EF.Property<ReceiptStatus>(x, "Status")))
                 .ExecuteUpdateAsync(s => s.SetProperty(x => EF.Property<ReceiptStatus>(x, "Status"), ReceiptStatus.Cancelled), token);
         }
         else
         {
-            var statusProp = entity.GetType().GetProperty("Status")!;
-            var currentStatus = (ReceiptStatus)statusProp.GetValue(entity)!;
-            if (currentStatus == pendingStatus)
+            var tracked = await set.SingleOrDefaultAsync(x => EF.Property<int>(x, "Id") == id, token);
+            var statusProp = typeof(TEntity).GetProperty("Status")!;
+            var currentStatus = tracked is not null ? (ReceiptStatus)statusProp.GetValue(tracked)! : (ReceiptStatus)(-1);
+            if (tracked is not null && pendingStatuses.Contains(currentStatus))
             {
-                statusProp.SetValue(entity, ReceiptStatus.Cancelled);
+                statusProp.SetValue(tracked, ReceiptStatus.Cancelled);
+                oldStatus = currentStatus;
                 affected = 1;
             }
             else
@@ -280,7 +289,7 @@ public sealed class ApprovalWorkflowService(
             await VoidReceiptSerialsAsync(id, token);
             await SyncReceiptAsync(id, token);
         }
-        context.AuditLogs.Add(CreateAudit(type, id, code, creatorId, warehouseId, null, reason, pendingStatus));
+        context.AuditLogs.Add(CreateAudit(type, id, code, creatorId, warehouseId, null, reason, oldStatus));
         await context.SaveChangesAsync(token);
         return Result(type, id, code);
     }

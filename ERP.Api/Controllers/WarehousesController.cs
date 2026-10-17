@@ -174,6 +174,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
+        [ERP.Api.Infrastructure.IdempotentCommand("Warehouse.Create")]
         [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Create([FromBody] CreateWarehouseDto dto)
         {
@@ -183,6 +184,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}")]
+        [ERP.Api.Infrastructure.IdempotentCommand("Warehouse.Update")]
         [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateWarehouseDto dto)
         {
@@ -192,6 +194,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpDelete("{id}")]
+        [ERP.Api.Infrastructure.IdempotentCommand("Warehouse.Delete")]
         [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Delete(int id)
         {

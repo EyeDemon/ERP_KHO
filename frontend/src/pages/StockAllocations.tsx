@@ -59,18 +59,28 @@ export default function StockAllocations(){
   const [actionLocationId,setActionLocationId]=useState<number|''>('');
   const [actionCandidates,setActionCandidates]=useState<Candidate[]>([]);
   const [fefoVerification,setFefoVerification]=useState<{verificationId:string;fefoComplianceStatus:string}|null>(null);
+  const [fefoBusy,setFefoBusy]=useState(false);
 
   const verifyFefoCompliance=async()=>{
+    if(fefoBusy)return;
+    setFefoBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/inventory/allocations/verify-fefo-compliance',{});
-      setFefoVerification({
-        verificationId:res?.data?.verificationId||'ALC-FEFO-ACTIVE',
-        fefoComplianceStatus:res?.data?.fefoComplianceStatus||'STRICT_FEFO_FIFO_ALIGNED',
-      });
+      if(res?.data?.verificationId){
+        setFefoVerification({
+          verificationId:String(res.data.verificationId),
+          fefoComplianceStatus:String(res.data.fefoComplianceStatus??'VERIFIED'),
+        });
+      }else{
+        setFefoVerification(null);
+        setError('Phản hồi kiểm định tuân thủ phân bổ FEFO/FIFO không hợp lệ từ máy chủ.');
+      }
     }catch(failure){
       setFefoVerification(null);
       setError(messageOf(failure,'Không thể kiểm định tuân thủ phân bổ FEFO/FIFO.'));
+    }finally{
+      setFefoBusy(false);
     }
   };
 
@@ -184,7 +194,7 @@ export default function StockAllocations(){
         <UiMetric value={totalUnallocatedQuantity} label="Tổng lượng cam kết chờ phân bổ vị trí"/>
       </UiMetricGrid>
       <div className="ui-inline-actions" style={{marginTop:8}}>
-        <button type="button" onClick={()=>void verifyFefoCompliance()}>
+        <button type="button" disabled={fefoBusy||busy} onClick={()=>void verifyFefoCompliance()}>
           Kiểm định Tuân thủ Phân bổ FEFO/FIFO theo Vị trí (OUT-03)
         </button>
         {fefoVerification&&(

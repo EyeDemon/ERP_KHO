@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
@@ -40,16 +41,19 @@ public sealed class WarehouseCalendarsController(
         Ok(await service.GetAsync(warehouseId, token));
 
     [HttpPut]
+    [IdempotentCommand("WarehouseCalendar.Update")]
     [PermissionAuthorize(AppPermissions.WarehouseCalendarManage)]
     public async Task<IActionResult> Update(int warehouseId, UpdateWarehouseCalendarDto dto, CancellationToken token) =>
         Ok(await service.UpdateCalendarAsync(warehouseId, dto, token));
 
     [HttpPost("shifts")]
+    [IdempotentCommand("WarehouseCalendar.CreateShift")]
     [PermissionAuthorize(AppPermissions.WarehouseCalendarManage)]
     public async Task<IActionResult> CreateShift(int warehouseId, UpsertWarehouseShiftDto dto, CancellationToken token) =>
         Ok(await service.CreateShiftAsync(warehouseId, dto, token));
 
     [HttpPut("shifts/{shiftId:int}")]
+    [IdempotentCommand("WarehouseCalendar.UpdateShift")]
     [PermissionAuthorize(AppPermissions.WarehouseCalendarManage)]
     public async Task<IActionResult> UpdateShift(int warehouseId, int shiftId, UpsertWarehouseShiftDto dto, CancellationToken token) =>
         Ok(await service.UpdateShiftAsync(warehouseId, shiftId, dto, token));
@@ -78,6 +82,7 @@ public sealed class WarehouseCalendarsController(
     }
 
     [HttpPost("optimize-labor-interleaving")]
+    [IdempotentCommand("WarehouseCalendar.OptimizeLaborInterleaving")]
     [PermissionAuthorize(AppPermissions.WarehouseRead)]
     public async Task<IActionResult> OptimizeLaborInterleaving(int warehouseId, CancellationToken token = default)
     {
@@ -153,6 +158,7 @@ public sealed class WarehouseCalendarsController(
     }
 
     [HttpPost("exceptions")]
+    [IdempotentCommand("WarehouseCalendar.CreateException")]
     [PermissionAuthorize(AppPermissions.WarehouseCalendarManage)]
     public async Task<IActionResult> CreateException(
         int warehouseId,

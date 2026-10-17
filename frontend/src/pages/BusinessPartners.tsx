@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
+import { sanitizeScannerCode } from './productCatalog';
 import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 export interface BusinessPartner {
@@ -18,36 +19,55 @@ const BusinessPartners = () => {
   const [form, setForm] = useState<Partial<BusinessPartner>>(empty); const [editing, setEditing] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false); const [error, setError] = useState(''); const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false); const submitting = useRef(false);
+  const [governanceBusy, setGovernanceBusy] = useState(false);
   const [slaVerified, setSlaVerified] = useState(false);
   const [billingStatementResult, setBillingStatementResult] = useState('');
   const verifySlaContracts = async () => {
+    if (governanceBusy) return;
+    setGovernanceBusy(true);
     const targetId = items[0]?.id ?? 1;
     setError('');
     try {
-      await apiClient.post(`/api/business-partners/${targetId}/verify-sla-contract`);
-      setSlaVerified(true);
+      const res = await apiClient.post(`/api/business-partners/${targetId}/verify-sla-contract`);
+      if (res?.data !== undefined) {
+        setSlaVerified(true);
+      } else {
+        setSlaVerified(false);
+        setError('Phản hồi xác minh hồ sơ SLA đối tác không hợp lệ từ máy chủ.');
+      }
     } catch (e: any) {
       setSlaVerified(false);
       setError(e?.response?.data?.message || 'Không thể xác minh hồ sơ SLA đối tác.');
+    } finally {
+      setGovernanceBusy(false);
     }
   };
   const calculate3PlBilling = async () => {
+    if (governanceBusy) return;
+    setGovernanceBusy(true);
     const targetId = items[0]?.id ?? 1;
     setError('');
     try {
       const res = await apiClient.post('/api/business-partners/calculate-3pl-billing', { partnerId: targetId });
       const data = res?.data as { statementId?: string; status?: string } | undefined;
-      setBillingStatementResult(`${data?.statementId ?? '3PL-BILL-OK'} • ${data?.status ?? '3PL_BILLING_RECONCILED'}`);
+      if (data?.statementId && data?.status) {
+        setBillingStatementResult(`${data.statementId} • ${data.status}`);
+      } else {
+        setBillingStatementResult('');
+        setError('Phản hồi đối soát hợp đồng 3PL không hợp lệ từ máy chủ.');
+      }
     } catch (e: any) {
       setBillingStatementResult('');
       setError(e?.response?.data?.message || 'Không thể đối soát hợp đồng 3PL và tính phí kho.');
+    } finally {
+      setGovernanceBusy(false);
     }
   };
-  const load = useCallback(async () => { setLoading(true); setError(''); try { const r = await apiClient.get('/api/business-partners', { params: { page, pageSize: 10, search: search || undefined, role: role || undefined, active: active === '' ? undefined : active === 'true' } }); setItems(r.data.items); setPages(Math.max(1, r.data.totalPages)); } catch (e: any) { setError(e.response?.data?.message || 'Không tải được danh sách đối tác.'); } finally { setLoading(false); } }, [page, search, role, active]);
+  const load = useCallback(async () => { setLoading(true); setError(''); try { const r = await apiClient.get('/api/business-partners', { params: { page, pageSize: 10, search: sanitizeScannerCode(search) || undefined, role: role || undefined, active: active === '' ? undefined : active === 'true' } }); setItems(r.data.items); setPages(Math.max(1, r.data.totalPages)); } catch (e: any) { setError(e.response?.data?.message || 'Không tải được danh sách đối tác.'); } finally { setLoading(false); } }, [page, search, role, active]);
   useEffect(() => { void load(); }, [load]);
   const openCreate = () => { setEditing(null); setForm(empty); setShowForm(true); setError(''); setMessage(''); };
   const openEdit = (x: BusinessPartner) => { setEditing(x.id); setForm(x); setShowForm(true); setError(''); setMessage(''); };
-  const submit = async (e: React.FormEvent) => { e.preventDefault(); if (submitting.current) return; submitting.current = true; setLoading(true); setError(''); try { if (editing) await apiClient.put(`/api/business-partners/${editing}`, form); else await apiClient.post('/api/business-partners', form); setMessage(editing ? 'Đã cập nhật đối tác.' : 'Đã tạo đối tác.'); setShowForm(false); await load(); } catch (x: any) { const message=x.response?.data?.message || 'Không lưu được đối tác.'; setError(x.response?.status===409 ? `${message} Vui lòng tải lại danh sách rồi thử lại.` : message); } finally { submitting.current = false; setLoading(false); } };
+  const submit = async (e: React.FormEvent) => { e.preventDefault(); if (submitting.current) return; submitting.current = true; setLoading(true); setError(''); try { const payload = { ...form, code: sanitizeScannerCode(form.code || '') }; if (editing) await apiClient.put(`/api/business-partners/${editing}`, payload); else await apiClient.post('/api/business-partners', payload); setMessage(editing ? 'Đã cập nhật đối tác.' : 'Đã tạo đối tác.'); setShowForm(false); await load(); } catch (x: any) { const message=x.response?.data?.message || 'Không lưu được đối tác.'; setError(x.response?.status===409 ? `${message} Vui lòng tải lại danh sách rồi thử lại.` : message); } finally { submitting.current = false; setLoading(false); } };
   const remove = async (x: BusinessPartner) => { if (!confirm(`Xóa đối tác ${x.code}?`)) return; try { await apiClient.delete(`/api/business-partners/${x.id}`); setMessage('Đã xóa đối tác.'); await load(); } catch (e: any) { setError(e.response?.data?.message || 'Không xóa được đối tác.'); } };
   const field = (name: keyof BusinessPartner, value: unknown) => setForm(v => ({ ...v, [name]: value }));
   const activeSuppliersCount = items.filter(x => x.isActive && x.isSupplier).length;
@@ -97,13 +117,13 @@ const BusinessPartners = () => {
           </div>
         </div>
         <div className="ui-inline-actions" style={{ marginTop: 8 }}>
-          <button type="button" onClick={() => void verifySlaContracts()}>
+          <button type="button" disabled={loading || governanceBusy} onClick={() => void verifySlaContracts()}>
             Xác minh &amp; Đồng bộ Hồ sơ SLA Đối tác
           </button>
           {slaVerified && (
             <UiBadge tone="success">Đã đồng bộ cam kết SLA (98.5% On-Time)</UiBadge>
           )}
-          <button type="button" onClick={() => void calculate3PlBilling()}>
+          <button type="button" disabled={loading || governanceBusy} onClick={() => void calculate3PlBilling()}>
             Đối soát Hợp đồng 3PL, Tồn Ký gửi Đa Chủ sở hữu &amp; Tính phí Kho (AX-05, AX-21, AX-22)
           </button>
           {billingStatementResult && (
@@ -171,9 +191,9 @@ const BusinessPartners = () => {
           <label className="ui-checkbox-label"><input type="checkbox" checked={!!form.isCustomer} disabled={loading} onChange={event => field('isCustomer', event.target.checked)} /> Khách hàng</label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={!!form.isActive} disabled={loading} onChange={event => field('isActive', event.target.checked)} /> Hoạt động</label>
         </div>
-        <label>Điện thoại<input value={form.phone || ''} maxLength={50} onChange={event => field('phone', event.target.value)} /></label>
-        <label>Email<input value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
-        <label>Địa chỉ<textarea value={form.address || ''} maxLength={500} rows={3} onChange={event => field('address', event.target.value)} /></label>
+        <label>Điện thoại<input aria-label="Điện thoại đối tác" value={form.phone || ''} maxLength={50} onChange={event => field('phone', event.target.value)} /></label>
+        <label>Email<input aria-label="Email đối tác" value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
+        <label>Địa chỉ<textarea aria-label="Địa chỉ đối tác" value={form.address || ''} maxLength={500} rows={3} onChange={event => field('address', event.target.value)} /></label>
         <div className="ui-inline-actions">
           <button type="submit" disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu'}</button>
           <button type="button" disabled={loading} onClick={() => setShowForm(false)}>Hủy</button>

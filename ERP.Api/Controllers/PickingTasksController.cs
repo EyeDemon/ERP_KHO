@@ -230,6 +230,7 @@ public sealed class PickingTasksController(
     public sealed record SyncAutomationTelemetryRequest(int? WarehouseId = null);
 
     [HttpPost("sync-automation-telemetry")]
+    [IdempotentCommand("Picking.SyncAutomationTelemetry")]
     [PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> SyncAutomationTelemetry(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncAutomationTelemetryRequest? request = null,

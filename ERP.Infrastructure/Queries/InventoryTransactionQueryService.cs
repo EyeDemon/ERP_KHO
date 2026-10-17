@@ -39,9 +39,16 @@ namespace ERP.Infrastructure.Queries
             int pageIndex = 1,
             int pageSize = 20)
         {
+            pageIndex = Math.Max(1, pageIndex);
+            pageSize = Math.Clamp(pageSize <= 0 ? 20 : pageSize, 1, 200);
+
             var query = _context.InventoryTransactions.AsNoTracking();
             if (_warehouseAuthorization is not null)
             {
+                if (warehouseId.HasValue)
+                {
+                    await _warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value);
+                }
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
                 query = query.Where(t => allowedWarehouseIds.Contains(t.WarehouseId));
             }
@@ -91,11 +98,23 @@ namespace ERP.Infrastructure.Queries
 
             // Count total
             var totalRecords = await query.CountAsync();
+            var offset = ((long)pageIndex - 1) * pageSize;
+            if (offset >= totalRecords)
+            {
+                return new PagedResult<InventoryTransactionHistoryDto>
+                {
+                    Items = [],
+                    TotalRecords = totalRecords,
+                    PageIndex = pageIndex,
+                    PageSize = pageSize
+                };
+            }
 
-            // Order by date desc, then apply paging
+            // Order by date desc, then Id desc for deterministic pagination
             var pagedQuery = query
                 .OrderByDescending(t => t.TransactionDate)
-                .Skip((pageIndex - 1) * pageSize)
+                .ThenByDescending(t => t.Id)
+                .Skip(checked((int)offset))
                 .Take(pageSize);
 
             // Projection

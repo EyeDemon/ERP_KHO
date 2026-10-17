@@ -974,7 +974,7 @@ public sealed class SqlServerStockTransferTests
         await db.Roles.Where(x => x.Id == fixture.RoleId).ExecuteDeleteAsync();
     }
 
-    private static Task<decimal> StockAsync(ErpKhoDbContext db, int product, int warehouse) => db.InventoryStocks.Where(x => x.ProductId == product && x.WarehouseId == warehouse).Select(x => x.Quantity).SingleAsync();
+    private static Task<decimal> StockAsync(ErpKhoDbContext db, int product, int warehouse) => db.InventoryStocks.Where(x => x.ProductId == product && x.WarehouseId == warehouse && x.Status == InventoryStatus.Available).Select(x => x.Quantity).SingleAsync();
     private static ErpKhoDbContext CreateContext(SaveChangesInterceptor? interceptor = null)
     {
         var options = new DbContextOptionsBuilder<ErpKhoDbContext>()

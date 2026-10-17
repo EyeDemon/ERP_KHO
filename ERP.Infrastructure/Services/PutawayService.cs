@@ -427,7 +427,16 @@ public sealed class PutawayService(
             var baseQty=ToBase(dto.Quantity,dto.UnitCode,item); if(baseQty>item.RemainingBaseQuantity) throw new BusinessRuleException("Số lượng cất vượt quá số lượng còn lại.");
             var product=await ProductForCapacity(item.ProductId,token)??throw new NotFoundException("Không tìm thấy sản phẩm.");
             await EnsurePutawayCapacityAsync(destination, product, baseQty, token);
+            if (context.Database.IsSqlServer())
+            {
+                _ = await context.InventoryStocks
+                    .FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE WarehouseId = {task.WarehouseId} AND ProductId = {item.ProductId} AND Status = {(int)item.InventoryStatus} AND (LocationId = {item.SourceLocationId} OR LocationId = {destination.Id})")
+                    .OrderBy(x => x.Id)
+                    .ToListAsync(token);
+            }
             var sourceBuckets = await context.InventoryStocks
+                .Include(x => x.Lot)
+                .Include(x => x.Serial)
                 .Where(x => x.ProductId == item.ProductId &&
                             x.WarehouseId == task.WarehouseId &&
                             x.Status == item.InventoryStatus &&
@@ -437,6 +446,58 @@ public sealed class PutawayService(
                 .ThenBy(x => x.SerialId)
                 .ThenBy(x => x.Id)
                 .ToListAsync(token);
+            if (item.ReceiptLineId > 0)
+            {
+                var lineIdentities = await context.ImportReceiptInventoryIdentities.AsNoTracking()
+                    .Where(x => x.ImportReceiptDetailId == item.ReceiptLineId)
+                    .ToListAsync(token);
+                var statusIdentities = lineIdentities.Where(x => x.TargetStatus == item.InventoryStatus).ToList();
+                var identities = statusIdentities.Count > 0 ? statusIdentities : lineIdentities;
+                if (identities.Count > 0)
+                {
+                    var allowedLots = identities
+                        .Where(x => !string.IsNullOrWhiteSpace(x.LotNumber))
+                        .Select(x => x.LotNumber!.Trim())
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var allowedSerials = identities
+                        .Where(x => !string.IsNullOrWhiteSpace(x.SerialNumber))
+                        .Select(x => x.SerialNumber!.Trim())
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var allowUntracked = identities.Any(x => string.IsNullOrWhiteSpace(x.LotNumber) && string.IsNullOrWhiteSpace(x.SerialNumber));
+
+                    sourceBuckets = sourceBuckets.Where(b =>
+                    {
+                        var lotKey = b.Lot?.LotNumber ?? (b.LotId.HasValue ? b.LotId.Value.ToString() : null);
+                        var serialKey = b.Serial?.SerialNumber ?? (b.SerialId.HasValue ? b.SerialId.Value.ToString() : null);
+                        if (serialKey is not null)
+                            return allowedSerials.Contains(serialKey) &&
+                                   (lotKey is null || allowedLots.Count == 0 || allowedLots.Contains(lotKey));
+                        if (lotKey is not null)
+                            return allowedLots.Contains(lotKey);
+                        return allowUntracked;
+                    }).ToList();
+                }
+                else if (task.ReceiptId > 0)
+                {
+                    var receiptTxIdentities = await context.InventoryTransactions.AsNoTracking()
+                        .Where(t => t.ReferenceType == "ImportReceipt" &&
+                                    t.ReferenceId == task.ReceiptId &&
+                                    t.ProductId == item.ProductId &&
+                                    t.InventoryStatus == item.InventoryStatus &&
+                                    (t.LotId.HasValue || t.SerialId.HasValue))
+                        .Select(t => new { t.LotId, t.SerialId })
+                        .ToListAsync(token);
+                    if (receiptTxIdentities.Count > 0)
+                    {
+                        var allowedPairs = receiptTxIdentities
+                            .Select(t => (t.LotId, t.SerialId))
+                            .ToHashSet();
+                        sourceBuckets = sourceBuckets
+                            .Where(b => allowedPairs.Contains((b.LotId, b.SerialId)))
+                            .ToList();
+                    }
+                }
+            }
             if (sourceBuckets.Count == 0 || sourceBuckets.Sum(x => x.Quantity - x.ReservedQuantity) < baseQty)
                 throw Conflict("Tồn tại vị trí nguồn đã thay đổi. Vui lòng tải lại.");
             var nowUtc = DateTime.UtcNow;

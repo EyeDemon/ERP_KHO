@@ -60,18 +60,28 @@ export default function StockReservations() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sweepPreview, setSweepPreview] = useState<{ sweepId: string; status: string } | null>(null);
+  const [sweepBusy, setSweepBusy] = useState(false);
 
   const sweepExpiredPreview = async () => {
+    if (sweepBusy) return;
+    setSweepBusy(true);
     setError('');
     try {
       const res = await apiClient.post('/api/stock-reservations/sweep-expired-preview', {});
-      setSweepPreview({
-        sweepId: res?.data?.sweepId || 'RSV-SWP-ACTIVE',
-        status: res?.data?.status || 'COMMITMENT_TTL_VERIFIED',
-      });
+      if (res?.data?.sweepId) {
+        setSweepPreview({
+          sweepId: String(res.data.sweepId),
+          status: String(res.data.status ?? 'VERIFIED'),
+        });
+      } else {
+        setSweepPreview(null);
+        setError('Phản hồi rà soát giữ hàng sắp hết hạn không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
       setSweepPreview(null);
       setError(messageOf(failure, 'Không thể rà soát giữ hàng sắp hết hạn.'));
+    } finally {
+      setSweepBusy(false);
     }
   };
 
@@ -165,7 +175,7 @@ export default function StockReservations() {
           <UiMetric value={expiringSoonCount} label="Bản ghi sắp hết hạn (24h)" />
         </UiMetricGrid>
         <div className="ui-inline-actions" style={{ marginTop: 8 }}>
-          <button type="button" onClick={() => void sweepExpiredPreview()}>
+          <button type="button" disabled={sweepBusy || busy} onClick={() => void sweepExpiredPreview()}>
             Rà soát &amp; Cảnh báo Giữ hàng Sắp hết hạn (OUT-02)
           </button>
           {sweepPreview && (

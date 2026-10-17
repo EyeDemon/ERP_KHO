@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type OrderLine = {
@@ -147,10 +148,15 @@ export default function OutboundDemand(){
 
   const createOrder=async(event:React.FormEvent)=>{
     event.preventDefault();
+    const cleanExternalOrderId=sanitizeScannerCode(externalOrderId);
+    if(createLines.some(line=>line.productId&&(!Number.isFinite(Number(line.quantity))||roundQty4(Number(line.quantity))<=0))){
+      setError('Số lượng mỗi dòng hàng trong Sales Order phải lớn hơn 0.');
+      return;
+    }
     const lines=createLines
-      .filter(line=>line.productId&&Number(line.quantity)>0)
-      .map(line=>({externalLineId:line.externalLineId.trim(),productId:Number(line.productId),orderedQuantity:Number(line.quantity)}));
-    if(!externalOrderId.trim()||!customerId||!warehouseId||lines.length===0){
+      .filter(line=>line.productId&&roundQty4(Number(line.quantity))>0)
+      .map(line=>({externalLineId:sanitizeScannerCode(line.externalLineId),productId:Number(line.productId),orderedQuantity:roundQty4(Number(line.quantity))}));
+    if(!cleanExternalOrderId||!customerId||!warehouseId||lines.length===0){
       setError('External Order ID, khách hàng, kho và ít nhất một dòng hàng là bắt buộc.');
       return;
     }
@@ -158,12 +164,12 @@ export default function OutboundDemand(){
       setError('Foundation hiện yêu cầu mỗi SKU chỉ xuất hiện một dòng trong Sales Order.');
       return;
     }
-    const key=`sales-order-create-${externalOrderId.trim()}`;
+    const key=`sales-order-create-${cleanExternalOrderId}`;
     if(lock.current.has(key))return;
     lock.current.add(key);setBusy(key);setError('');setNotice('');
     try{
       const response=await apiClient.post('/api/sales-orders',{
-        externalOrderId:externalOrderId.trim(),
+        externalOrderId:cleanExternalOrderId,
         customerId:Number(customerId),
         warehouseId:Number(warehouseId),
         requestedShipDate:requestedShipDate||undefined,
@@ -183,6 +189,7 @@ export default function OutboundDemand(){
   };
 
   const masterReady=canReadPartners&&canReadProducts&&canReadWarehouses;
+  const [governanceBusy,setGovernanceBusy]=useState(false);
   const [expediteResult,setExpediteResult]=useState<{expediteId:string;orderNumber:string;allocationWaveQueued:boolean}|null>(null);
   const [atpRoutingResult,setAtpRoutingResult]=useState<{
     evaluationId:string;
@@ -193,47 +200,65 @@ export default function OutboundDemand(){
     status:string;
   }|null>(null);
   const triggerExpediteBackorder=async()=>{
+    if(governanceBusy)return;
+    setGovernanceBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/sales-orders/expedite-backorder',{
         warehouseId:orders[0]?.warehouseId??undefined,
         orderNumber:backorders[0]?.orderCode??orders[0]?.orderCode??'SO-PRIORITY-QUEUE',
       });
-      setExpediteResult({
-        expediteId:res?.data?.expediteId||`EXP-BO-${new Date().toISOString().slice(0,10).replace(/-/g,'')}`,
-        orderNumber:res?.data?.orderNumber??backorders[0]?.orderCode??orders[0]?.orderCode??'SO-PRIORITY-QUEUE',
-        allocationWaveQueued:res?.data?.allocationWaveQueued??true,
-      });
+      if(res?.data?.expediteId){
+        setExpediteResult({
+          expediteId:String(res.data.expediteId),
+          orderNumber:String(res.data.orderNumber??backorders[0]?.orderCode??orders[0]?.orderCode??'SO-PRIORITY-QUEUE'),
+          allocationWaveQueued:Boolean(res.data.allocationWaveQueued??true),
+        });
+      }else{
+        setExpediteResult(null);
+        setError('Phản hồi kích hoạt ưu tiên cấp phát Backorder không hợp lệ từ máy chủ.');
+      }
     }catch(e){
       setExpediteResult(null);
       setError(messageOf(e));
+    }finally{
+      setGovernanceBusy(false);
     }
   };
   const evaluateAtpRouting=async()=>{
+    if(governanceBusy)return;
+    setGovernanceBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/sales-orders/evaluate-atp-routing',{
         warehouseId:orders[0]?.warehouseId??undefined,
       });
-      setAtpRoutingResult({
-        evaluationId:res?.data?.evaluationId||`ATP-ROUTE-${new Date().toISOString().slice(0,10).replace(/-/g,'')}`,
-        atpCtpPromiseStatus:res?.data?.atpCtpPromiseStatus||'PROMISE_DATE_VERIFIED_READONLY',
-        fulfillmentNodeRouting:res?.data?.fulfillmentNodeRouting||'OPTIMAL_WAREHOUSE_NODE_SELECTED',
-        allocationFairnessPolicy:res?.data?.allocationFairnessPolicy||'PROPORTIONAL_SERVICE_TIER_FAIRNESS',
-        serviceSegmentation:res?.data?.serviceSegmentation||'TIER_1_VIP_AND_STANDARD_SLA_ACTIVE',
-        status:res?.data?.status||'ATP_ROUTING_FAIRNESS_READY',
-      });
+      if(res?.data?.evaluationId&&res?.data?.status){
+        setAtpRoutingResult({
+          evaluationId:String(res.data.evaluationId),
+          atpCtpPromiseStatus:String(res.data.atpCtpPromiseStatus||''),
+          fulfillmentNodeRouting:String(res.data.fulfillmentNodeRouting||''),
+          allocationFairnessPolicy:String(res.data.allocationFairnessPolicy||''),
+          serviceSegmentation:String(res.data.serviceSegmentation||''),
+          status:String(res.data.status),
+        });
+      }else{
+        setAtpRoutingResult(null);
+        setError('Phản hồi tính toán ATP/CTP và định tuyến kho không hợp lệ từ máy chủ.');
+      }
     }catch(e){
       setAtpRoutingResult(null);
       setError(messageOf(e));
+    }finally{
+      setGovernanceBusy(false);
     }
   };
-  const totalOrderedQty=orders.reduce((sum,item)=>sum+item.orderedQuantity,0);
-  const totalReservedQty=orders.reduce((sum,item)=>sum+item.reservedQuantity,0);
-  const totalAllocatedQty=orders.reduce((sum,item)=>sum+item.allocatedQuantity,0);
-  const totalShippedQty=orders.reduce((sum,item)=>sum+item.shippedQuantity,0);
-  const totalBackorderQty=orders.reduce((sum,item)=>sum+item.backorderQuantity,0);
-  const openBackorderRemaining=backorders.reduce((sum,item)=>sum+item.remainingQuantity,0);
+  const totalOrderedQty=roundQty4(orders.reduce((sum,item)=>sum+item.orderedQuantity,0));
+  const totalReservedQty=roundQty4(orders.reduce((sum,item)=>sum+item.reservedQuantity,0));
+  const totalAllocatedQty=roundQty4(orders.reduce((sum,item)=>sum+item.allocatedQuantity,0));
+  const totalShippedQty=roundQty4(orders.reduce((sum,item)=>sum+item.shippedQuantity,0));
+  const totalBackorderQty=roundQty4(orders.reduce((sum,item)=>sum+item.backorderQuantity,0));
+  const openBackorderRemaining=roundQty4(backorders.reduce((sum,item)=>sum+item.remainingQuantity,0));
   const fulfillmentRatePct=totalOrderedQty>0?Math.round((totalShippedQty*10000)/totalOrderedQty)/100:100;
 
   if(loading)return <p role="status">Đang tải Demand & Backorder...</p>;
@@ -257,7 +282,7 @@ export default function OutboundDemand(){
           <span>Đã giao (Shipped): <strong>{totalShippedQty}</strong></span>
           <span>Tồn thiếu (Backorder): <strong>{totalBackorderQty}</strong> (Còn mở: {openBackorderRemaining})</span>
           <span>Tỷ lệ đáp ứng (%): <strong>{fulfillmentRatePct}%</strong></span>
-          <button type="button" onClick={()=>void triggerExpediteBackorder()}>
+          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void triggerExpediteBackorder()}>
             Kích hoạt Ưu tiên Cấp phát Đơn tồn thiếu Backorder (OUT-09)
           </button>
           {expediteResult&&(
@@ -265,7 +290,7 @@ export default function OutboundDemand(){
               {`Đã kích hoạt ${expediteResult.expediteId} • ${expediteResult.orderNumber} (Wave Queued: ${String(expediteResult.allocationWaveQueued)})`}
             </UiBadge>
           )}
-          <button type="button" onClick={()=>void evaluateAtpRouting()}>
+          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void evaluateAtpRouting()}>
             Tính toán Cam kết ATP/CTP, Định tuyến Điểm hoàn tất & Công bằng Phân bổ (AX-23, AX-26, AX-39, AX-40)
           </button>
           {atpRoutingResult&&(
@@ -399,16 +424,16 @@ export default function OutboundDemand(){
             </div>
             {canManageBackorders&&['Open','PartiallyAllocated'].includes(item.status)&&item.remainingQuantity>0&&<div className="ui-inline-wrap">
               <label>Số lượng recover
-                <input aria-label={`Recover quantity ${item.backorderCode}`} type="number" min="0" step="any"
+                <input aria-label={`Recover quantity ${item.backorderCode}`} type="number" min="0.0001" step="0.0001"
                   value={recoverQty[item.id]??''} onChange={e=>setRecoverQty(v=>({...v,[item.id]:e.target.value}))}
                   placeholder={String(item.remainingQuantity)}/>
               </label>
-              <button type="button" disabled={!!busy} onClick={()=>void mutate(
+              <button type="button" disabled={!!busy||(Boolean(recoverQty[item.id])&&!(roundQty4(Number(recoverQty[item.id]))>0))} onClick={()=>void mutate(
                 `backorder-reallocate-${item.id}`,`/api/backorders/${item.id}/reallocate`,
-                {quantity:recoverQty[item.id]?Number(recoverQty[item.id]):undefined,rowVersion:item.rowVersion},'Đã thử recover Backorder theo tồn Available hiện tại.'
+                {quantity:recoverQty[item.id]?roundQty4(Number(recoverQty[item.id])):undefined,rowVersion:item.rowVersion},'Đã thử recover Backorder theo tồn Available hiện tại.'
               )}>Reallocate</button>
               <label>Số lượng hủy
-                <input aria-label={`Cancel backorder quantity ${item.backorderCode}`} type="number" min="0" step="any"
+                <input aria-label={`Cancel backorder quantity ${item.backorderCode}`} type="number" min="0.0001" step="0.0001"
                   value={backorderCancelQty[item.id]??''} onChange={e=>setBackorderCancelQty(v=>({...v,[item.id]:e.target.value}))}
                   placeholder={String(item.remainingQuantity)}/>
               </label>
@@ -416,9 +441,9 @@ export default function OutboundDemand(){
                 <input aria-label={`Cancel backorder reason ${item.backorderCode}`}
                   value={backorderCancelReason[item.id]??''} onChange={e=>setBackorderCancelReason(v=>({...v,[item.id]:e.target.value}))}/>
               </label>
-              <button type="button" disabled={!!busy||!(backorderCancelReason[item.id]??'').trim()} onClick={()=>void mutate(
+              <button type="button" disabled={!!busy||!(backorderCancelReason[item.id]??'').trim()||(Boolean(backorderCancelQty[item.id])&&!(roundQty4(Number(backorderCancelQty[item.id]))>0))} onClick={()=>void mutate(
                 `backorder-cancel-${item.id}`,`/api/backorders/${item.id}/cancel`,
-                {quantity:backorderCancelQty[item.id]?Number(backorderCancelQty[item.id]):undefined,reason:backorderCancelReason[item.id],rowVersion:item.rowVersion},'Đã hủy phần Backorder chưa recover.'
+                {quantity:backorderCancelQty[item.id]?roundQty4(Number(backorderCancelQty[item.id])):undefined,reason:backorderCancelReason[item.id],rowVersion:item.rowVersion},'Đã hủy phần Backorder chưa recover.'
               )}>Hủy Backorder</button>
             </div>}
           </fieldset>)}

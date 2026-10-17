@@ -105,6 +105,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
+        [ERP.Api.Infrastructure.IdempotentCommand("Unit.Create")]
         [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Create([FromBody] CreateUnitDto dto)
         {
@@ -114,6 +115,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}")]
+        [ERP.Api.Infrastructure.IdempotentCommand("Unit.Update")]
         [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateUnitDto dto)
         {
@@ -123,6 +125,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpDelete("{id}")]
+        [ERP.Api.Infrastructure.IdempotentCommand("Unit.Delete")]
         [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Delete(int id)
         {

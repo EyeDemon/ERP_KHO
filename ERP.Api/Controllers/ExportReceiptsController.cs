@@ -147,7 +147,7 @@ namespace ERP.Api.Controllers
             return Ok(new { message = "Duyệt phiếu xuất thành công" });
         }
 
-        [HttpPut("{id:int}/customer"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate), PermissionAuthorize(AppPermissions.PartnerRead)]
+        [HttpPut("{id:int}/customer"), IdempotentCommand("ExportReceipt.SetCustomer"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate), PermissionAuthorize(AppPermissions.PartnerRead)]
         public async Task<IActionResult> SetCustomer(int id, [FromBody] ERP.Application.DTOs.SetReceiptPartnerDto dto, [FromServices] IBusinessPartnerService partners, CancellationToken ct)
         { await partners.SetExportCustomerAsync(id, dto.PartnerId, ct); return NoContent(); }
 

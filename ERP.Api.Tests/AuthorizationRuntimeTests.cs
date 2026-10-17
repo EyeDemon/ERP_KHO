@@ -87,7 +87,9 @@ namespace ERP.Api.Tests
                         AppPermissions.ExportReceiptUpdate,
                         AppPermissions.ExportReceiptApprove,
                         AppPermissions.ExportReceiptDispatch,
-                        AppPermissions.ExportReceiptCancel
+                        AppPermissions.ExportReceiptCancel,
+                        AppPermissions.InventoryRead,
+                        AppPermissions.InventoryLedgerRead
                     });
                 }
                 else if (role == AppRoles.WarehouseStaff)
@@ -103,6 +105,7 @@ namespace ERP.Api.Tests
                 else if (role == AppRoles.Viewer)
                 {
                     permissionCodes.Add(AppPermissions.ExportReceiptRead);
+                    permissionCodes.Add(AppPermissions.InventoryRead);
                 }
 
                 foreach (var code in permissionCodes)

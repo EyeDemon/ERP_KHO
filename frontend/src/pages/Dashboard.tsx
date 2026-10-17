@@ -125,11 +125,18 @@ const Dashboard = () => {
     let active = true;
     setLiveLoading(true);
     setLiveError('');
+    let auxError = '';
+    const captureAuxError = <T,>(fallback: T, message: string) => (err: any): T => {
+      if (err?.response?.status && err.response.status >= 400 && !auxError) {
+        auxError = err.response?.data?.message || message;
+      }
+      return fallback;
+    };
     Promise.all([
       apiClient.get<OperationalDashboardSummary>('/api/Reports/operational-dashboard'),
-      apiClient.get<WarehouseTaskItem[]>('/api/Reports/warehouse-tasks').catch(() => ({ data: [] as WarehouseTaskItem[] })),
-      apiClient.get<OperationalExceptionItem[]>('/api/Reports/operational-exceptions').catch(() => ({ data: [] as OperationalExceptionItem[] })),
-      apiClient.get<MultiWarehouseControlTowerDto>('/api/Reports/multi-warehouse-control-tower').catch(() => null),
+      apiClient.get<WarehouseTaskItem[]>('/api/Reports/warehouse-tasks').catch(captureAuxError({ data: [] as WarehouseTaskItem[] }, 'Không thể tải danh sách tác vụ kho.')),
+      apiClient.get<OperationalExceptionItem[]>('/api/Reports/operational-exceptions').catch(captureAuxError({ data: [] as OperationalExceptionItem[] }, 'Không thể tải danh sách ngoại lệ vận hành.')),
+      apiClient.get<MultiWarehouseControlTowerDto>('/api/Reports/multi-warehouse-control-tower').catch(captureAuxError(null, 'Không thể tải dữ liệu tháp điều hành đa kho.')),
     ])
       .then(([summaryRes, tasksRes, exRes, towerRes]) => {
         if (!active) return;
@@ -141,6 +148,7 @@ const Dashboard = () => {
         if (towerRes?.data && Array.isArray(towerRes.data.warehouses)) {
           setControlTower(towerRes.data);
         }
+        if (auxError) setLiveError(auxError);
       })
       .catch(() => {
         if (active) setLiveError('Không thể tải số liệu tổng quan trực tiếp.');

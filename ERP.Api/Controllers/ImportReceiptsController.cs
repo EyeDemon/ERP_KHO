@@ -171,6 +171,7 @@ namespace ERP.Api.Controllers
 
         [HttpPost("rma-intake-check")]
         [HttpPost("initiate-rma-inspection")]
+        [IdempotentCommand("ImportReceipt.RmaIntakeCheck")]
         [PermissionAuthorize(AppPermissions.ReceiptRead)]
         public async Task<IActionResult> RmaIntakeCheck(
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RmaIntakeCheckRequest? request = null,
@@ -243,6 +244,7 @@ namespace ERP.Api.Controllers
         public sealed record ExecuteRtvRefurbishRequest(int? WarehouseId = null, string? DispositionType = null);
 
         [HttpPost("execute-rtv-refurbish")]
+        [IdempotentCommand("ImportReceipt.ExecuteRtvRefurbish")]
         [PermissionAuthorize(AppPermissions.ReceiptRead)]
         public async Task<IActionResult> ExecuteRtvRefurbish(
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteRtvRefurbishRequest? request = null,
@@ -363,7 +365,7 @@ namespace ERP.Api.Controllers
             return Ok(new { message = "Hủy phiếu nhập thành công" });
         }
 
-        [HttpPut("{id:int}/supplier"), PermissionAuthorize(AppPermissions.ReceiptUpdate)]
+        [HttpPut("{id:int}/supplier"), IdempotentCommand("ImportReceipt.SetSupplier"), PermissionAuthorize(AppPermissions.ReceiptUpdate)]
         public async Task<IActionResult> SetSupplier(int id, [FromBody] ERP.Application.DTOs.SetReceiptPartnerDto dto, [FromServices] IBusinessPartnerService partners, CancellationToken ct)
         { await partners.SetImportSupplierAsync(id, dto.PartnerId, ct); return NoContent(); }
     }

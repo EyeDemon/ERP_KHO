@@ -14,6 +14,7 @@ import {
   UiTableScroll,
 } from '../ui/ProductionUi';
 import { InboundPlanningFeedback, InboundPlanningToolbar, productUnitOptions, runInboundStateCommand } from './inboundPlanningShared';
+import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import './InboundPlanning.css';
 
 type AsnList={
@@ -72,24 +73,34 @@ export default function Asns(){
   const [creating,setCreating]=useState(false);
   const [showCreateForm,setShowCreateForm]=useState(true);
   const [busy,setBusy]=useState('');
+  const [stagingBusy,setStagingBusy]=useState(false);
   const [stagingReservation,setStagingReservation]=useState<{stagingReservationId:string;stagingLaneCode:string}|null>(null);
   const requestSeq=useRef(0);
   const mutationLock=useRef(new Set<string>());
 
   const preAllocateStaging=async()=>{
+    if(stagingBusy)return;
+    setStagingBusy(true);
     setError('');
     try{
       const res=await apiClient.post('/api/asns/pre-allocate-staging',{
         warehouseId:warehouseId?Number(warehouseId):(items[0]?.warehouseId??undefined),
         asnNumber:selected?.code||items[0]?.code||'ASN-NEXT-ARRIVAL',
       });
-      setStagingReservation({
-        stagingReservationId:res?.data?.stagingReservationId||'ASN-STG-ACTIVE',
-        stagingLaneCode:res?.data?.stagingLaneCode||'STAGE-IN-01',
-      });
+      if(res?.data?.stagingReservationId&&res?.data?.stagingLaneCode){
+        setStagingReservation({
+          stagingReservationId:String(res.data.stagingReservationId),
+          stagingLaneCode:String(res.data.stagingLaneCode),
+        });
+      }else{
+        setStagingReservation(null);
+        setError('Phản hồi cấp phát bãi đệm tiếp nhận không hợp lệ từ máy chủ.');
+      }
     }catch(err:unknown){
       setStagingReservation(null);
       setError(permissionError(err,'Không thể cấp phát trước bãi đệm tiếp nhận.'));
+    }finally{
+      setStagingBusy(false);
     }
   };
 
@@ -141,7 +152,7 @@ export default function Asns(){
   useEffect(()=>{void loadReferences();},[loadReferences]);
 
   const filtered=useMemo(()=>{
-    const q=search.trim().toLowerCase();
+    const q=sanitizeScannerCode(search).toLowerCase();
     if(!q)return items;
     return items.filter(item=>[item.code,item.purchaseOrderCode??'',item.supplierCode,item.supplierName,item.warehouseName].join(' ').toLowerCase().includes(q));
   },[items,search]);
@@ -151,9 +162,9 @@ export default function Asns(){
     const overdueArrivalCount=items.filter(x=>(x.status==='Confirmed'||x.status==='InTransit')&&x.expectedArrivalAtUtc&&new Date(x.expectedArrivalAtUtc).getTime()<nowMs).length;
     const linkedPoAsnCount=items.filter(x=>x.purchaseOrderId!=null).length;
     const unlinkedPoAsnCount=items.filter(x=>x.purchaseOrderId==null).length;
-    const inboundExpectedVolume=items
+    const inboundExpectedVolume=roundQty4(items
       .filter(x=>['Confirmed','InTransit','Arrived','Receiving'].includes(x.status))
-      .reduce((sum,x)=>sum+(x.baseExpectedQuantity||0),0);
+      .reduce((sum,x)=>sum+(x.baseExpectedQuantity||0),0));
     return {
       overdueArrivalCount,
       linkedPoAsnCount,
@@ -211,20 +222,21 @@ export default function Asns(){
     if(!canPrepareCreate||creating)return;
     setError('');setSuccess('');
     if(!purchaseOrderId&&(!supplierId||!warehouseId)){setError('ASN không gắn PO cần nhà cung cấp và kho nhận.');return;}
-    if(lines.length===0||lines.some(line=>!line.productId||!line.operationUnitId||Number(line.expectedQuantity)<=0||(purchaseOrderId&&!line.purchaseOrderLineId))){
+    if(lines.length===0||lines.some(line=>!line.productId||!line.operationUnitId||roundQty4(Number(line.expectedQuantity))<=0||(purchaseOrderId&&!line.purchaseOrderLineId))){
       setError('Mỗi dòng ASN cần nguồn PO (nếu có), sản phẩm, đơn vị và số lượng lớn hơn 0.');return;
     }
     setCreating(true);
-    const action='asn-create:'+code.trim();
+    const cleanCode=sanitizeScannerCode(code);
+    const action='asn-create:'+cleanCode;
     try{
       const payload={
-        code,purchaseOrderId:purchaseOrderId||null,
+        code:cleanCode,purchaseOrderId:purchaseOrderId||null,
         supplierId:purchaseOrderId?0:supplierId,warehouseId:purchaseOrderId?0:warehouseId,
         expectedArrivalAtUtc:expectedArrival?new Date(expectedArrival).toISOString():null,
         carrierName:carrierName||null,vehiclePlate:vehiclePlate||null,note:note||null,
         lines:lines.map(line=>({
           purchaseOrderLineId:line.purchaseOrderLineId||null,productId:Number(line.productId),
-          operationUnitId:Number(line.operationUnitId),expectedQuantity:Number(line.expectedQuantity),
+          operationUnitId:Number(line.operationUnitId),expectedQuantity:roundQty4(Number(line.expectedQuantity)),
         })),
       };
       const response=await apiClient.post('/api/asns',payload,{headers:idempotencyHeaders(action)});
@@ -279,7 +291,7 @@ export default function Asns(){
         </div>
       </div>
       <div className="ui-inline-actions" style={{marginTop:8}}>
-        <button type="button" onClick={()=>void preAllocateStaging()}>
+        <button type="button" disabled={!!busy||creating||stagingBusy} onClick={()=>void preAllocateStaging()}>
           Cấp phát Trước Bãi đệm Tiếp nhận (Pre-Allocate Staging — IN-02)
         </button>
         {stagingReservation&&(

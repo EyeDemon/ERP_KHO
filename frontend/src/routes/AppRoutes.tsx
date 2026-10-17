@@ -67,8 +67,10 @@ const PermissionRoute = ({ permission, children }: { permission: string | string
   return allowed ? children : <AccessDenied />;
 };
 
-const StocktakeRoute = ({ children }: { children: ReactNode }) =>
-  (isBlueprintDemoRuntime() || canViewStocktakes()) ? children : <Navigate to="/" replace />;
+const StocktakeRoute = ({ children }: { children: ReactNode }) => {
+  usePermissionSet();
+  return (isBlueprintDemoRuntime() || canViewStocktakes()) ? children : <Navigate to="/" replace />;
+};
 const ApprovalRoute = () => {
   usePermissionSet();
   return canViewApprovals() ? <Approvals /> : <AccessDenied />;
@@ -97,6 +99,7 @@ const AppRoutes = () => {
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
         <Route path="warehouse-structure" element={<PermissionRoute permission="location.read"><WarehouseLocations /></PermissionRoute>} />
+        <Route path="warehouse-locations" element={<Navigate to="/warehouse-structure" replace />} />
         <Route path="warehouse-map" element={<PermissionRoute permission="location.read"><WarehouseMap /></PermissionRoute>} />
         <Route path="warehouse-calendar" element={<PermissionRoute permission="warehouse.read"><WarehouseCalendar /></PermissionRoute>} />
         <Route path="dock-yard" element={<PermissionRoute permission="dock_appointment.read"><DockYard /></PermissionRoute>} />
@@ -120,6 +123,7 @@ const AppRoutes = () => {
         <Route path="packing-sessions" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
         <Route path="shipments" element={<PermissionRoute permission="shipment.read"><Shipments /></PermissionRoute>} />
         <Route path="backorders" element={<PermissionRoute permission={['backorder.read', 'sales_order.read']}><OutboundDemand /></PermissionRoute>} />
+        <Route path="outbound-demand" element={<Navigate to="/backorders" replace />} />
         <Route path="approvals" element={<ApprovalRoute />} />
         <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
         <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />

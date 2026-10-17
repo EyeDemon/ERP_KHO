@@ -46,7 +46,7 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(allowedOrigins)
               .WithHeaders("Authorization", "Content-Type", "Accept", "Idempotency-Key")
-              .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+              .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
               .AllowCredentials();
     });
 });
@@ -303,7 +303,7 @@ app.MapControllers();
 
 var healthEndpointsEnabled = builder.Configuration.GetValue(
     "Health:Enabled",
-    !app.Environment.IsDevelopment());
+    true);
 if (healthEndpointsEnabled)
 {
     app.MapHealthChecks("/health/live", new HealthCheckOptions

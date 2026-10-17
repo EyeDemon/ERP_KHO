@@ -164,14 +164,8 @@ export default function InventoryTraceability(){
       if(response?.data?.simulationId){
         setRecallSimulation(response.data);
       }else{
-        setRecallSimulation({
-          simulationId:'TRC-RCL-VERIFIED',
-          query:queryValue,
-          upstreamPoLinked:true,
-          downstreamShipmentLinked:true,
-          recallContainmentReady:true,
-          simulatedAtUtc:new Date().toISOString(),
-        });
+        setRecallSimulation(null);
+        setRequestError('Phản hồi mô phỏng cây thu hồi không hợp lệ từ máy chủ.');
       }
     }catch(e){
       setRecallSimulation(null);

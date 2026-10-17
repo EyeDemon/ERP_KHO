@@ -46,13 +46,15 @@ public sealed partial class StockTransferService
             if (original.ReverseOfTransferId.HasValue ||
                 original.Status is not (StockTransferStatus.Received or StockTransferStatus.Completed))
                 throw Conflict("Chỉ tạo điều chuyển ngược cho phiếu gốc đã nhận hoặc hoàn tất.");
-            if (await context.StockTransfers.AsNoTracking().AnyAsync(x => x.ReverseOfTransferId == id, cancellationToken))
+            if (await context.StockTransfers.AsNoTracking().AnyAsync(
+                    x => x.ReverseOfTransferId == id && x.Status != StockTransferStatus.Cancelled,
+                    cancellationToken))
                 throw Conflict("Phiếu gốc đã có chứng từ điều chuyển ngược.");
             var lines = original.Details.Where(x => x.ReceivedQuantity > 0)
                 .OrderBy(x => x.ProductId).ToList();
             if (lines.Count == 0)
                 throw Conflict("Phiếu gốc không có số lượng thực nhận để điều chuyển ngược.");
-            await EnsureReverseDraftReceiptLedgerAsync(original, cancellationToken);
+            await EnsureReverseDraftAvailableLedgerAsync(original, cancellationToken);
 
             var now = DateTime.UtcNow;
             var reverse = new StockTransfer
@@ -87,6 +89,30 @@ public sealed partial class StockTransferService
         {
             if (tx is not null) await tx.RollbackAsync(cancellationToken);
             throw;
+        }
+    }
+
+    private async Task EnsureReverseDraftAvailableLedgerAsync(StockTransfer original, CancellationToken cancellationToken)
+    {
+        var outbound = await context.InventoryTransactions.AsNoTracking()
+            .Where(x => x.ReferenceType == "StockTransfer" && x.ReferenceId == original.Id &&
+                x.TransactionType == TransactionType.TransferOut && x.WarehouseId == original.SourceWarehouseId)
+            .ToListAsync(cancellationToken);
+        var inboundAvailable = await context.InventoryTransactions.AsNoTracking()
+            .Where(x => x.ReferenceType == "StockTransfer" && x.ReferenceId == original.Id &&
+                x.TransactionType == TransactionType.TransferIn &&
+                x.InventoryStatus == InventoryStatus.Available &&
+                x.WarehouseId == original.DestinationWarehouseId)
+            .ToListAsync(cancellationToken);
+        if (outbound.Count != original.Details.Count ||
+            inboundAvailable.Count != original.Details.Count(x => x.ReceivedQuantity > 0))
+            throw Conflict("Sổ cái xuất/nhận không khớp chứng từ.");
+        foreach (var line in original.Details)
+        {
+            if (outbound.Count(x => x.ProductId == line.ProductId && x.Quantity == line.DispatchedQuantity) != 1 ||
+                inboundAvailable.Count(x => x.ProductId == line.ProductId && x.Quantity == line.ReceivedQuantity) !=
+                    (line.ReceivedQuantity > 0 ? 1 : 0))
+                throw Conflict("Sổ cái xuất/nhận không khớp chứng từ.");
         }
     }
 }

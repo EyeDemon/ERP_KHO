@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
+import { sanitizeScannerCode } from './productCatalog';
 import {
   UiBadge,
   UiCard,
@@ -55,6 +56,7 @@ const Warehouses = () => {
   const [form, setForm] = useState<WarehouseForm>(emptyForm);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [governanceBusy, setGovernanceBusy] = useState(false);
   const [networkMheEval, setNetworkMheEval] = useState<{
     evaluationId: string;
     networkTopologyMode: string;
@@ -63,20 +65,29 @@ const Warehouses = () => {
   } | null>(null);
 
   const evaluateNetworkMhe = async () => {
+    if (governanceBusy) return;
+    setGovernanceBusy(true);
     setError('');
     try {
       const res = await apiClient.post('/api/Warehouses/evaluate-network-mhe', {
         warehouseId: warehouses[0]?.id ?? null,
       });
-      setNetworkMheEval({
-        evaluationId: res?.data?.evaluationId || `NET-MHE-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
-        networkTopologyMode: res?.data?.networkTopologyMode || 'HUB_AND_SPOKE_BALANCED',
-        capacityForecastStatus: res?.data?.capacityForecastStatus || 'OPTIMAL_HEADROOM_82PCT',
-        mheFleetReadiness: res?.data?.mheFleetReadiness || 'FORKLIFT_CONVEYOR_SORTER_READY',
-      });
+      if (res?.data?.evaluationId && res?.data?.networkTopologyMode) {
+        setNetworkMheEval({
+          evaluationId: String(res.data.evaluationId),
+          networkTopologyMode: String(res.data.networkTopologyMode),
+          capacityForecastStatus: String(res.data.capacityForecastStatus || ''),
+          mheFleetReadiness: String(res.data.mheFleetReadiness || ''),
+        });
+      } else {
+        setNetworkMheEval(null);
+        setError('Phản hồi đánh giá quy hoạch mạng lưới kho và thiết bị MHE không hợp lệ từ máy chủ.');
+      }
     } catch (failure) {
       setNetworkMheEval(null);
       setError(messageOf(failure, 'Không thể đánh giá quy hoạch mạng lưới kho và thiết bị MHE.'));
+    } finally {
+      setGovernanceBusy(false);
     }
   };
 
@@ -98,7 +109,7 @@ const Warehouses = () => {
   }, [load]);
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('vi');
+    const query = sanitizeScannerCode(search).toLocaleLowerCase('vi');
     if (!query) return warehouses;
     return warehouses.filter((warehouse) =>
       [warehouse.code, warehouse.name, warehouse.address ?? '']
@@ -154,7 +165,7 @@ const Warehouses = () => {
     setFormError('');
     setSuccess('');
 
-    const code = form.code.trim();
+    const code = sanitizeScannerCode(form.code);
     const name = form.name.trim();
     if (!code) {
       setFormError('Mã kho không được để trống.');
@@ -240,7 +251,7 @@ const Warehouses = () => {
           </div>
         </div>
         <div className="ui-inline-wrap">
-          <button type="button" onClick={() => void evaluateNetworkMhe()}>
+          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void evaluateNetworkMhe()}>
             Đánh giá Quy hoạch Mạng lưới Kho (Hub/Spoke), Dự báo Sức chứa & Thiết bị MHE (AX-03, AX-04, AX-08)
           </button>
           {networkMheEval && (

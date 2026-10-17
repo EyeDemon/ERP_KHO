@@ -44,7 +44,10 @@ export default function InventoryMovements(){
     try{
       const [bucketRes,suggestionRes]=await Promise.all([
         apiClient.get('/api/inventory/buckets?'),
-        apiClient.get('/api/inventory/replenishment-suggestions').catch(()=>({data:[]})),
+        apiClient.get('/api/inventory/replenishment-suggestions').catch((err)=>{
+          if(err?.response?.status&&err.response.status>=400)setError(errorMessage(err));
+          return {data:[]};
+        }),
       ]);
       setBuckets(Array.isArray(bucketRes.data)?bucketRes.data:[]);
       setSuggestions(Array.isArray(suggestionRes.data)?suggestionRes.data:[]);
@@ -93,7 +96,7 @@ export default function InventoryMovements(){
   const submit=async(e:FormEvent)=>{
     e.preventDefault();
     if(!selected||!canMove||guard.current)return;
-    const quantity=Number(form.quantity);
+    const quantity=Math.round((Number(form.quantity)+Number.EPSILON)*10000)/10000;
     if(!form.destinationLocationId||!Number.isFinite(quantity)||quantity<=0||!form.reason.trim())return;
     const key=`inventory-move-${selected.inventoryStockId}`;
     guard.current=true;setBusy(true);setError('');
