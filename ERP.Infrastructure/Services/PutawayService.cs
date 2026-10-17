@@ -248,9 +248,13 @@ public sealed class PutawayService(
             entity.MaxPalletEquivalent = dto.MaxPalletEquivalent;
         }
         ValidateFlags(entity.LocationType, dto.IsPickable, dto.IsReceivable);
-        if (!dto.IsActive && (await context.InventoryStocks.AnyAsync(x => x.LocationId == id && x.Quantity != 0, token) ||
+        if (!dto.IsActive && (await context.InventoryStocks.AnyAsync(x => x.LocationId == id && (x.Quantity != 0 || x.ReservedQuantity != 0), token) ||
+            await context.StockAllocations.AnyAsync(x => x.LocationId == id && (x.Status == StockAllocationStatus.Active || x.Status == StockAllocationStatus.Picking || x.Status == StockAllocationStatus.Picked), token) ||
             await context.PutawayTaskItems.AnyAsync(x => x.SourceLocationId == id && x.PutawayTask.Status != PutawayTaskStatus.Completed && x.PutawayTask.Status != PutawayTaskStatus.Cancelled, token)))
-            throw Conflict("Không thể ngừng hoạt động vị trí đang có tồn kho hoặc nhiệm vụ chưa hoàn tất.");
+            throw Conflict("Không thể ngừng hoạt động vị trí đang có tồn kho, giữ hàng hoặc nhiệm vụ chưa hoàn tất.");
+        if ((dto.IsBlocked || !dto.IsPickable) && (await context.InventoryStocks.AnyAsync(x => x.LocationId == id && x.ReservedQuantity > 0, token) ||
+            await context.StockAllocations.AnyAsync(x => x.LocationId == id && (x.Status == StockAllocationStatus.Active || x.Status == StockAllocationStatus.Picking || x.Status == StockAllocationStatus.Picked), token)))
+            throw Conflict("Không thể khóa hoặc tắt quyền lấy hàng của vị trí đang có cam kết giữ hàng hoặc phân bổ đang mở.");
         entity.Name=Required(dto.Name,"Tên vị trí"); entity.IsActive=dto.IsActive; entity.IsBlocked=dto.IsBlocked; entity.IsPickable=dto.IsPickable; entity.IsReceivable=dto.IsReceivable; entity.UpdatedAt=DateTime.UtcNow; entity.UpdatedBy=currentUser.UserId;
         try { await context.SaveChangesAsync(token); } catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.", ex); }
         if (transaction is not null) await transaction.CommitAsync(token);

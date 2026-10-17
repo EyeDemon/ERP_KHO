@@ -564,7 +564,8 @@ public sealed class SalesOrderBackorderService(
                          x.Status == ShipmentStatus.InTransit ||
                          x.Status == ShipmentStatus.Delivered ||
                          x.Status == ShipmentStatus.Completed ||
-                         x.Status == ShipmentStatus.DeliveryFailed))
+                         x.Status == ShipmentStatus.DeliveryFailed ||
+                         x.Status == ShipmentStatus.ReturnToWarehouse))
             .Select(x => x.PackingSessionId)
             .ToArrayAsync(token);
 

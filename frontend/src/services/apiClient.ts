@@ -54,6 +54,19 @@ apiClient.interceptors.request.use((config) => {
     config.adapter = createBlueprintDemoApiAdapter(config);
   }
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
+  const method = config.method?.toLowerCase();
+  if (method && ['post', 'put', 'patch', 'delete'].includes(method)) {
+    const hasIdempotencyKey =
+      Boolean(config.headers?.['Idempotency-Key']) ||
+      Boolean(config.headers?.['idempotency-key']);
+    if (!hasIdempotencyKey && config.headers) {
+      const randomPart =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      config.headers['Idempotency-Key'] = `auto-${method}-${randomPart}`;
+    }
+  }
   return config;
 });
 

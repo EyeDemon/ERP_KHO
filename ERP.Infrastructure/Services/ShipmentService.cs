@@ -54,7 +54,7 @@ public sealed class ShipmentService(
             if (shipment.PackingSession.Status is not PackingSessionStatus.Packed and not PackingSessionStatus.Closed)
                 throw Conflict("SHIPMENT_PACKING_NOT_READY", "Packing session chưa hoàn tất.");
 
-            var locationCode = request.StagingLocationCode?.Trim().ToUpperInvariant();
+            var locationCode = CleanScan(request.StagingLocationCode)?.ToUpperInvariant();
             if (string.IsNullOrWhiteSpace(locationCode))
                 throw new BusinessRuleException("Staging location là bắt buộc.");
             var stagingLocation = await context.WarehouseLocations.SingleOrDefaultAsync(
@@ -134,7 +134,7 @@ public sealed class ShipmentService(
         MutateAsync(id, request.RowVersion, async (shipment, token) =>
         {
             RequireStatus(shipment, ShipmentStatus.Loading, "Shipment phải ở LOADING trước khi quét HU.");
-            var scan = request.HandlingUnitBarcode?.Trim();
+            var scan = CleanScan(request.HandlingUnitBarcode);
             if (string.IsNullOrWhiteSpace(scan))
                 throw new BusinessRuleException("Barcode/HU code là bắt buộc.");
 
@@ -229,14 +229,20 @@ public sealed class ShipmentService(
                 throw Conflict("SHIPMENT_PICKING_NOT_READY", "Picking task chưa hoàn tất.");
             if (picking.Lines.Any(x => x.Status is not PickingTaskLineStatus.Picked and not PickingTaskLineStatus.Resolved))
                 throw Conflict("SHIPMENT_PICKING_NOT_READY", "Picking line chưa hoàn tất.");
-            if (picking.Lines.SelectMany(x => x.ShortPicks).Any(x =>
-                    x.Status == ShortPickExceptionStatus.Resolved &&
-                    x.ResolutionType is ShortPickResolutionType.Backorder
-                        or ShortPickResolutionType.CancelRemainder
-                        or ShortPickResolutionType.SupervisorOverride))
-                throw Conflict("SHIPMENT_PICKING_NOT_READY", "Shipment còn thiếu hàng sau Picking.");
+            if (picking.Lines.SelectMany(x => x.ShortPicks).Any(x => x.Status == ShortPickExceptionStatus.Open))
+                throw Conflict("SHIPMENT_PICKING_NOT_READY", "Shipment còn ngoại lệ thiếu hàng chưa xử lý.");
 
-            var reservationIds = picking.Lines
+            var zeroPickedLines = picking.Lines.Where(x => x.PickedQuantity <= 0).ToList();
+            if (zeroPickedLines.Any(x =>
+                    x.PickedQuantity < 0 ||
+                    x.Status != PickingTaskLineStatus.Resolved ||
+                    x.Allocation.Status is not StockAllocationStatus.Released and not StockAllocationStatus.Reallocated))
+                throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Picking line có PickedQuantity = 0 nhưng allocation chưa được release/reallocate.");
+
+            var dispatchableLines = picking.Lines
+                .Where(x => x.PickedQuantity > 0)
+                .ToList();
+            var reservationIds = dispatchableLines
                 .Select(x => x.Allocation.ReservationId)
                 .Distinct()
                 .Order()
@@ -257,7 +263,7 @@ public sealed class ShipmentService(
                 if (reservation.WarehouseId != shipment.WarehouseId)
                     throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Reservation không cùng kho với Shipment.");
 
-                var lines = picking.Lines
+                var lines = dispatchableLines
                     .Where(x => x.Allocation.ReservationId == reservation.Id)
                     .OrderBy(x => x.Allocation.LocationId)
                     .ThenBy(x => x.Id)
@@ -769,10 +775,17 @@ public sealed class ShipmentService(
         Events = shipment.TrackingEvents.OrderBy(x => x.OccurredAt).ThenBy(x => x.Id).Select(MapTrackingEvent).ToList()
     };
 
-    private static string? NormalizeSeal(string? value)
+    private static string? CleanScan(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
-        var normalized = value.Trim().ToUpperInvariant();
+        var cleaned = new string(value.Where(ch => ch >= 32 && ch != 127 && ch != '\u200b' && ch != '\ufeff').ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
+
+    private static string? NormalizeSeal(string? value)
+    {
+        var normalized = CleanScan(value)?.ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(normalized)) return null;
         if (normalized.Length > 80)
             throw new BusinessRuleException("Seal number không được vượt quá 80 ký tự.");
         return normalized;

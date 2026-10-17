@@ -487,7 +487,7 @@ namespace ERP.Application.Services
                 if (_inboundPlanning is not null) await _inboundPlanning.ValidatePostAsync(receipt);
                 if (_inventoryIdentity is not null) await _inventoryIdentity.ValidateReadyToPostAsync(receipt.Id);
                 int? receivingLocationId = _putaway is null ? null : await _putaway.GetReceivingLocationIdAsync(receipt.WarehouseId);
-                foreach (var detail in receipt.Details)
+                foreach (var detail in receipt.Details.OrderBy(d => d.ProductId).ThenBy(d => d.Id))
                 {
                     var legacyNoQc = !detail.RequiresQc && detail.BaseReceivedQuantity == 0 && detail.BaseAcceptedQuantity > 0;
                     if (!legacyNoQc && detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity != detail.BaseReceivedQuantity)

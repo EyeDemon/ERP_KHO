@@ -36,6 +36,13 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccountSecurityCommandDto? request = null,
         CancellationToken cancellationToken = default)
     {
+        var user = db is not null
+            ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            : null;
+        if (db is not null && user is null && await db.Users.AnyAsync(cancellationToken))
+            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
+
+        var revisionBefore = user?.SecurityRevision;
         if (sessionService is not null && !string.IsNullOrWhiteSpace(request?.RowVersion))
             await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
 
@@ -43,14 +50,11 @@ public sealed class AccountSecurityController(
         var lockoutEnd = now.AddMinutes(30);
         if (db is not null)
         {
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-            if (user is null && await db.Users.AnyAsync(cancellationToken))
-                throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
-
             if (user is not null)
             {
                 user.LockoutEnd = lockoutEnd;
-                user.SecurityRevision++;
+                if (user.SecurityRevision == revisionBefore)
+                    user.SecurityRevision++;
             }
 
             var activeSessions = await db.UserSessions
@@ -112,16 +116,19 @@ public sealed class AccountSecurityController(
         if (string.IsNullOrWhiteSpace(request?.TemporaryPassword) || request.TemporaryPassword.Trim().Length < 8)
             throw new ERP.Application.Exceptions.BusinessRuleException("Mật khẩu tạm thời phải có tối thiểu 8 ký tự.");
 
+        var user = db is not null
+            ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            : null;
+        if (db is not null && user is null && await db.Users.AnyAsync(cancellationToken))
+            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
+
+        var revisionBefore = user?.SecurityRevision;
         if (sessionService is not null && !string.IsNullOrWhiteSpace(request.RowVersion))
             await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
 
         var now = DateTime.UtcNow;
         if (db is not null)
         {
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-            if (user is null && await db.Users.AnyAsync(cancellationToken))
-                throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
-
             if (user is not null)
             {
                 var trimmedPassword = request.TemporaryPassword.Trim();
@@ -129,7 +136,8 @@ public sealed class AccountSecurityController(
                 user.FailedLoginCount = 0;
                 user.LastFailedLoginAt = null;
                 user.LockoutEnd = null;
-                user.SecurityRevision++;
+                if (user.SecurityRevision == revisionBefore)
+                    user.SecurityRevision++;
             }
 
             var activeSessions = await db.UserSessions

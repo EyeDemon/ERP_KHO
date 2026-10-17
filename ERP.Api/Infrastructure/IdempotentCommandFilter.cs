@@ -186,22 +186,35 @@ public sealed class IdempotentCommandFilter(
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     public static bool RequiresSerializableIsolation(string scope) =>
-        scope is "DockYard.Appointment.CheckIn" or "DockYard.Appointment.AssignDock"
+        scope is not ("DockYard.Appointment.Confirm" or "StockTransfer.Approve") &&
+        (scope.StartsWith("ImportReceipt.", StringComparison.Ordinal)
+        || scope.StartsWith("ExportReceipt.", StringComparison.Ordinal)
+        || scope.StartsWith("Inbound.", StringComparison.Ordinal)
+        || scope.StartsWith("Outbound.", StringComparison.Ordinal)
+        || scope.StartsWith("SalesOrder.", StringComparison.Ordinal)
+        || scope.StartsWith("Backorder.", StringComparison.Ordinal)
+        || scope.StartsWith("StockReservation.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryReservation.", StringComparison.Ordinal)
+        || scope.StartsWith("StockAllocation.", StringComparison.Ordinal)
         || scope.StartsWith("InventoryAllocation.", StringComparison.Ordinal)
         || scope.StartsWith("Picking.", StringComparison.Ordinal)
+        || scope.StartsWith("PickingTask.", StringComparison.Ordinal)
         || scope.StartsWith("Packing.", StringComparison.Ordinal)
+        || scope.StartsWith("PackingSession.", StringComparison.Ordinal)
         || scope.StartsWith("HandlingUnit.", StringComparison.Ordinal)
         || scope.StartsWith("Shipment.", StringComparison.Ordinal)
-        || scope.StartsWith("SalesOrder.", StringComparison.Ordinal)
-        || scope.StartsWith("ExportReceipt.", StringComparison.Ordinal)
-        || scope.StartsWith("Backorder.", StringComparison.Ordinal)
-        || scope.StartsWith("ImportReceipt.InventoryIdentity.", StringComparison.Ordinal)
-        || scope.StartsWith("InventoryStatus.", StringComparison.Ordinal)
-        || scope.StartsWith("InventoryLock.", StringComparison.Ordinal)
+        || scope.StartsWith("Putaway.", StringComparison.Ordinal)
+        || scope.StartsWith("PutawayTask.", StringComparison.Ordinal)
+        || scope.StartsWith("Stocktake.", StringComparison.Ordinal)
+        || scope.StartsWith("StockTransfer.", StringComparison.Ordinal)
         || scope.StartsWith("InventoryMovement.", StringComparison.Ordinal)
         || scope.StartsWith("InventoryReversal.", StringComparison.Ordinal)
-        || scope.StartsWith("InventoryReservation.", StringComparison.Ordinal)
-        || scope.StartsWith("Putaway.Move", StringComparison.Ordinal);
+        || scope.StartsWith("InventoryLock.", StringComparison.Ordinal)
+        || scope.StartsWith("InventoryStatus.", StringComparison.Ordinal)
+        || scope.StartsWith("ReceivingDiscrepancy.", StringComparison.Ordinal)
+        || scope.StartsWith("DockAppointment.", StringComparison.Ordinal)
+        || scope.StartsWith("DockYard.", StringComparison.Ordinal)
+        || scope.StartsWith("Approval.", StringComparison.Ordinal));
     private static bool IsUniqueViolation(DbUpdateException ex)
     {
         if (ex.InnerException is SqlException { Number: 2601 or 2627 }) return true;

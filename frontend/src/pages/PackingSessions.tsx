@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
+import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
@@ -193,7 +194,7 @@ export default function PackingSessions(){
             </label>
             <button type="button" disabled={!!busy} onClick={()=>void mutate(
               `packing-create-hu-${selected.id}`,`/api/packing-sessions/${selected.id}/create-hu`,
-              {type:huType,huCode:huCode||undefined,barcode:huCode||undefined,rowVersion:selected.rowVersion}
+              {type:huType,huCode:sanitizeScannerCode(huCode)||undefined,barcode:sanitizeScannerCode(huCode)||undefined,rowVersion:selected.rowVersion}
             )}>Tạo HU</button>
           </div>
         </fieldset>}
@@ -218,10 +219,10 @@ export default function PackingSessions(){
                 <input aria-label={`Packing quantity ${line.productCode}`} type="number" min="0" step="any" value={packForm[line.pickingTaskLineId]?.quantity??''}
                   onChange={e=>setPackForm(v=>({...v,[line.pickingTaskLineId]:{...(v[line.pickingTaskLineId]??{huId:'',barcode:''}),quantity:e.target.value}}))}/>
               </label>
-              <button type="button" disabled={!!busy||!packForm[line.pickingTaskLineId]?.huId||!packForm[line.pickingTaskLineId]?.barcode||!Number(packForm[line.pickingTaskLineId]?.quantity)}
+              <button type="button" disabled={!!busy||!packForm[line.pickingTaskLineId]?.huId||!sanitizeScannerCode(packForm[line.pickingTaskLineId]?.barcode??'')||!Number.isFinite(Number(packForm[line.pickingTaskLineId]?.quantity))||Number(packForm[line.pickingTaskLineId]?.quantity)<=0}
                 onClick={()=>void mutate(
                   `packing-pack-${selected.id}-${line.pickingTaskLineId}`,`/api/packing-sessions/${selected.id}/pack`,
-                  {handlingUnitId:Number(packForm[line.pickingTaskLineId]?.huId),pickingTaskLineId:line.pickingTaskLineId,productBarcode:packForm[line.pickingTaskLineId]?.barcode,quantity:Number(packForm[line.pickingTaskLineId]?.quantity),rowVersion:selected.rowVersion}
+                  {handlingUnitId:Number(packForm[line.pickingTaskLineId]?.huId),pickingTaskLineId:line.pickingTaskLineId,productBarcode:sanitizeScannerCode(packForm[line.pickingTaskLineId]?.barcode??''),quantity:roundQty4(Number(packForm[line.pickingTaskLineId]?.quantity)),rowVersion:selected.rowVersion}
                 )}>Xác nhận Pack</button>
             </div>}
           </fieldset>)}
@@ -235,7 +236,7 @@ export default function PackingSessions(){
               <span>Barcode: <strong>{hu.barcode}</strong></span>
               {hu.sscc&&<span>SSCC: <code>{hu.sscc}</code></span>}
               {hu.parentHandlingUnitCode&&<span>Trong HU: {hu.parentHandlingUnitCode}</span>}
-              <span>Content: {hu.contents.reduce((sum,item)=>sum+item.quantity,0)}</span>
+              <span>Content: {roundQty4(hu.contents.reduce((sum,item)=>sum+item.quantity,0))}</span>
             </div>
             {hu.contents.length>0&&<ul>{hu.contents.map(item=><li key={item.id}>{item.productCode}: {item.quantity}</li>)}</ul>}
 
@@ -327,7 +328,7 @@ export default function PackingSessions(){
                 <td><code>{item.barcode}</code>{item.sscc?<><br/><small>SSCC: {item.sscc}</small></>:null}</td>
                 <td>{item.parentHandlingUnitCode||'—'}</td>
                 <td><UiBadge tone={tone(item.status)}>{huStateLabels[item.status]??item.status}</UiBadge></td>
-                <td>{(item.contents??[]).reduce((sum,c)=>sum+c.quantity,0)}</td>
+                <td>{roundQty4((item.contents??[]).reduce((sum,c)=>sum+c.quantity,0))}</td>
                 <td>
                   <button type="button" className="ui-btn-secondary" onClick={()=>setLabelPreviewHu(item)}>Xem / In nhãn HU</button>
                 </td>

@@ -104,6 +104,23 @@ namespace ERP.Application.Services
             var product = await _productRepository.GetByIdAsync(id, cancellationToken);
             if (product == null) throw new NotFoundException($"Không tìm thấy sản phẩm id {id}");
 
+            bool? hasTransactions = null;
+            Task<bool> HasTransactionsAsync() => hasTransactions is { } cached
+                ? Task.FromResult(cached)
+                : LoadHasTransactionsAsync();
+            async Task<bool> LoadHasTransactionsAsync()
+            {
+                var result = await _productRepository.HasTransactionsAsync(id, cancellationToken);
+                hasTransactions = result;
+                return result;
+            }
+
+            if (product.UnitId > 0 && product.UnitId != dto.UnitId && await HasTransactionsAsync())
+                throw new BusinessRuleException("Không thể thay đổi đơn vị tính cơ sở của sản phẩm đã phát sinh giao dịch hoặc còn tồn kho.");
+
+            if (product.IsActive && !dto.IsActive && await HasTransactionsAsync())
+                throw new BusinessRuleException("Không thể ngừng hoạt động sản phẩm đã phát sinh giao dịch hoặc còn tồn kho/giữ chỗ.");
+
             product.Name = dto.Name;
             product.Description = dto.Description;
             product.UnitId = dto.UnitId;
@@ -115,7 +132,7 @@ namespace ERP.Application.Services
                 var changed = trackingType != product.TrackingType ||
                               dto.ExpiryControl != product.ExpiryControl ||
                               dto.ShelfLifeDays != product.ShelfLifeDays;
-                if (changed && await _productRepository.HasTransactionsAsync(id, cancellationToken))
+                if (changed && await HasTransactionsAsync())
                     throw new BusinessRuleException("Không thể đổi Lot/Serial/Expiry policy khi sản phẩm đã có tồn hoặc giao dịch kho.");
                 product.TrackingType = trackingType;
                 product.ExpiryControl = dto.ExpiryControl;

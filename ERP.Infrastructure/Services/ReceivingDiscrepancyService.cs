@@ -95,6 +95,7 @@ public sealed class ReceivingDiscrepancyService(
         var reason = await ActiveReason(dto.ReasonCode, token);
         var action = ParseAction(dto.Action);
         var line = discrepancy.ImportReceiptDetail;
+        var factor = line.ConversionFactor <= 0 ? 1m : line.ConversionFactor;
         var normalizedObserved = NormalizeToOperationUom(line, observation.BaseObservedQuantity);
         if (observation.ObservedUnitId != line.OperationUnitId && !dto.ConfirmNormalizedObservation)
             throw new BusinessRuleException("UOM quan sát khác UOM dự kiến; cần xác nhận normalized observation trước khi resolve.");
@@ -105,19 +106,33 @@ public sealed class ReceivingDiscrepancyService(
         if (reason.RequiresAttachment && string.IsNullOrWhiteSpace(dto.EvidenceReference))
             throw new BusinessRuleException("Lý do này yêu cầu evidence reference.");
 
+        var opDecimals = Math.Clamp(line.OperationUnitDecimalPlaces, 0, 4);
         var doorRejected = dto.DoorRejectedQuantity;
         var final = action switch
         {
             ReceivingResolutionAction.AcceptObserved => normalizedObserved - doorRejected,
             ReceivingResolutionAction.AcceptExpectedRejectExcess when normalizedObserved >= line.ExpectedQuantity => line.ExpectedQuantity,
             ReceivingResolutionAction.RejectAtDoor => normalizedObserved - doorRejected,
-            ReceivingResolutionAction.RejectWrongProduct when doorRejected == normalizedObserved => 0,
+            ReceivingResolutionAction.RejectWrongProduct when doorRejected == normalizedObserved || decimal.Round(doorRejected * factor, line.BaseUnitDecimalPlaces, MidpointRounding.AwayFromZero) == observation.BaseObservedQuantity => 0,
             ReceivingResolutionAction.RouteToQc => normalizedObserved - doorRejected,
             _ => throw new BusinessRuleException("Resolution action và quantity không hợp lệ.")
         };
         if (action == ReceivingResolutionAction.AcceptExpectedRejectExcess) doorRejected = normalizedObserved - line.ExpectedQuantity;
-        var baseDoor = doorRejected * line.ConversionFactor;
-        var baseFinal = final * line.ConversionFactor;
+        var baseExpected = line.BaseExpectedQuantity > 0 ? line.BaseExpectedQuantity : line.ExpectedQuantity * factor;
+        var baseDoor = action switch
+        {
+            ReceivingResolutionAction.AcceptExpectedRejectExcess => observation.BaseObservedQuantity - baseExpected,
+            ReceivingResolutionAction.RejectWrongProduct => observation.BaseObservedQuantity,
+            _ => doorRejected * factor
+        };
+        var baseFinal = action switch
+        {
+            ReceivingResolutionAction.AcceptExpectedRejectExcess => baseExpected,
+            ReceivingResolutionAction.RejectWrongProduct => 0m,
+            _ => observation.BaseObservedQuantity - baseDoor
+        };
+        doorRejected = decimal.Round(doorRejected, opDecimals, MidpointRounding.AwayFromZero);
+        final = decimal.Round(final, opDecimals, MidpointRounding.AwayFromZero);
         EnsureQuantity(baseDoor, line.BaseUnitDecimalPlaces, "Door Rejected Base UOM");
         EnsureQuantity(baseFinal, line.BaseUnitDecimalPlaces, "Final Received Base UOM");
 
@@ -126,7 +141,7 @@ public sealed class ReceivingDiscrepancyService(
         var difference = observation.BaseObservedQuantity - line.BaseExpectedQuantity;
         var outside = Math.Abs(difference) > allowed;
         var directionDisallowed = difference > 0 ? policy?.OverageAllowed == false : difference < 0 && policy?.ShortageAllowed == false;
-        var valueOutside = policy?.ValueTolerance is decimal valueTolerance && Math.Abs(difference) * line.UnitPrice > valueTolerance;
+        var valueOutside = policy?.ValueTolerance is decimal valueTolerance && (Math.Abs(difference) / factor) * line.UnitPrice > valueTolerance;
         var requiresApproval = reason.RequiresApproval || directionDisallowed || valueOutside || (outside && (policy?.RequiresApprovalOutsideTolerance ?? true));
         var previous = discrepancy.Resolutions.OrderByDescending(x => x.Version).FirstOrDefault();
         var now = DateTime.UtcNow;
@@ -232,14 +247,18 @@ public sealed class ReceivingDiscrepancyService(
     private async Task<(int Id,string Code,decimal Factor,int Version,int DecimalPlaces)> ResolveObservedUom(ImportReceiptDetail line, int? observedUnitId, DateTime now, CancellationToken token)
     {
         var id = observedUnitId.GetValueOrDefault(line.OperationUnitId);
-        if (id == line.OperationUnitId) return (id, line.OperationUnitCodeSnapshot, line.ConversionFactor, line.ConversionVersion, line.OperationUnitDecimalPlaces);
+        if (id == line.OperationUnitId) return (id, line.OperationUnitCodeSnapshot, line.ConversionFactor <= 0 ? 1m : line.ConversionFactor, line.ConversionVersion, line.OperationUnitDecimalPlaces);
         var conversion = await context.ProductUoms.Include(x => x.Unit).Where(x => x.ProductId == line.ProductId && x.UnitId == id && x.IsActive && x.EffectiveFromUtc <= now).OrderByDescending(x => x.Version).FirstOrDefaultAsync(token);
         if (conversion is null || conversion.ConversionFactor <= 0) throw new BusinessRuleException("UOM quan sát không có conversion active/effective; hãy sửa master data hoặc recount bằng UOM hỗ trợ.");
         return (conversion.UnitId, conversion.Unit.Code, conversion.ConversionFactor, conversion.Version, conversion.Unit.DecimalPlaces);
     }
     private static ReceivingResolutionAction ParseAction(string value) => value.Trim().ToUpperInvariant() switch { "ACCEPT_OBSERVED" => ReceivingResolutionAction.AcceptObserved, "ACCEPT_EXPECTED_REJECT_EXCESS" => ReceivingResolutionAction.AcceptExpectedRejectExcess, "REJECT_AT_DOOR" => ReceivingResolutionAction.RejectAtDoor, "REJECT_WRONG_PRODUCT" => ReceivingResolutionAction.RejectWrongProduct, "ROUTE_TO_QC" => ReceivingResolutionAction.RouteToQc, _ => throw new BusinessRuleException("Resolution action không hợp lệ.") };
     private static string PolicySource(ReceivingTolerancePolicy? p) => p is null ? "SystemDefault" : p.ProductId.HasValue && p.SupplierId.HasValue && p.WarehouseId.HasValue ? "ProductSupplierWarehouse" : p.ProductId.HasValue && p.SupplierId.HasValue ? "ProductSupplier" : p.ProductId.HasValue ? "Product" : p.WarehouseId.HasValue ? "WarehouseDefault" : "SystemDefault";
-    private static decimal NormalizeToOperationUom(ImportReceiptDetail line, decimal baseQuantity) => baseQuantity / line.ConversionFactor;
+    private static decimal NormalizeToOperationUom(ImportReceiptDetail line, decimal baseQuantity)
+    {
+        var factor = line.ConversionFactor <= 0 ? 1m : line.ConversionFactor;
+        return baseQuantity / factor;
+    }
     private static void ApplyFinal(ImportReceiptDetail line, decimal final, decimal baseFinal, decimal door, decimal baseDoor, ReceivingResolutionVersion? resolution)
     {
         line.DoorRejectedQuantity = door; line.BaseDoorRejectedQuantity = baseDoor; line.FinalReceivedQuantity = final; line.BaseFinalReceivedQuantity = baseFinal; line.FinalResolutionVersion = resolution;

@@ -356,20 +356,26 @@ END;", token);
             var today = DateTime.UtcNow.Date;
             var eligible = _dbSet.AsNoTracking()
                 .Where(x => x.ProductId == productId &&
-                            x.WarehouseId == warehouseId &&
-                            x.Location != null &&
-                            x.Location.IsActive &&
-                            !x.Location.IsBlocked &&
-                            x.Location.IsPickable);
-
-            if (releaseOnly)
-                eligible = eligible.Where(x => x.ReservedQuantity > 0);
-            else
-                eligible = eligible.UnlockedAt(_context, DateTime.UtcNow);
+                            x.WarehouseId == warehouseId);
 
             if (releaseOnly)
             {
-                // Releasing a commitment is allowed even while stock is locked.
+                eligible = eligible.Where(x => x.ReservedQuantity > 0);
+                // Releasing a commitment is allowed even while stock or location is locked/blocked.
+            }
+            else
+            {
+                eligible = eligible
+                    .UnlockedAt(_context, DateTime.UtcNow)
+                    .Where(x => x.Location != null &&
+                                x.Location.IsActive &&
+                                !x.Location.IsBlocked &&
+                                x.Location.IsPickable);
+            }
+
+            if (releaseOnly)
+            {
+                // Already filtered by ReservedQuantity > 0 above.
             }
             else if (reserve)
                 eligible = eligible.Where(x => x.StatusDefinition.IsReservable &&

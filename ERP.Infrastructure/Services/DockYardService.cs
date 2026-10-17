@@ -597,21 +597,51 @@ public sealed class DockYardService(
         var zone = ResolveTimeZone(calendar.TimeZoneId);
         var localStart = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(appointment.PlannedStartUtc, DateTimeKind.Utc)), zone);
         var localEnd = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(appointment.PlannedEndUtc, DateTimeKind.Utc)), zone);
-        var day = calendar.Days.SingleOrDefault(x => x.DayOfWeek == (int)localStart.DayOfWeek);
-        if (day?.IsOpen != true || !day.OpensAtLocal.HasValue || !day.ClosesAtLocal.HasValue)
+
+        var currentDayIdx = (int)localStart.DayOfWeek;
+        var prevDayIdx = (currentDayIdx + 6) % 7;
+        var today = calendar.Days.SingleOrDefault(x => x.DayOfWeek == currentDayIdx);
+        var prevDay = calendar.Days.SingleOrDefault(x => x.DayOfWeek == prevDayIdx);
+
+        WarehouseCalendarDay? matchedDay = null;
+        var baseDate = localStart.Date;
+
+        if (prevDay?.IsOpen == true &&
+            prevDay.OpensAtLocal.HasValue &&
+            prevDay.ClosesAtLocal.HasValue &&
+            prevDay.OpensAtLocal.Value > prevDay.ClosesAtLocal.Value &&
+            localStart.TimeOfDay < prevDay.ClosesAtLocal.Value)
+        {
+            matchedDay = prevDay;
+            baseDate = localStart.Date.AddDays(-1);
+        }
+        else if (today?.IsOpen == true &&
+                 today.OpensAtLocal.HasValue &&
+                 today.ClosesAtLocal.HasValue)
+        {
+            matchedDay = today;
+            baseDate = localStart.Date;
+        }
+
+        if (matchedDay is null || !matchedDay.OpensAtLocal.HasValue || !matchedDay.ClosesAtLocal.HasValue)
             throw new BusinessRuleException("Appointment nằm trong ngày kho đóng cửa.");
 
-        var open = localStart.Date + day.OpensAtLocal.Value;
-        var close = localStart.Date + day.ClosesAtLocal.Value;
-        if (day.OpensAtLocal.Value > day.ClosesAtLocal.Value) close = close.AddDays(1);
+        var open = baseDate + matchedDay.OpensAtLocal.Value;
+        var close = baseDate + matchedDay.ClosesAtLocal.Value;
+        if (matchedDay.OpensAtLocal.Value > matchedDay.ClosesAtLocal.Value)
+            close = close.AddDays(1);
         if (localStart.DateTime < open || localEnd.DateTime > close)
             throw new BusinessRuleException("Appointment nằm ngoài giờ vận hành của kho.");
 
-        var cutoffValue = appointment.Direction == DockAppointmentDirection.Inbound ? day.InboundCutoffLocal : day.OutboundCutoffLocal;
+        var cutoffValue = appointment.Direction == DockAppointmentDirection.Inbound
+            ? matchedDay.InboundCutoffLocal
+            : matchedDay.OutboundCutoffLocal;
         if (cutoffValue.HasValue)
         {
-            var cutoff = localStart.Date + cutoffValue.Value;
-            if (day.OpensAtLocal.Value > day.ClosesAtLocal.Value && cutoffValue.Value < day.OpensAtLocal.Value) cutoff = cutoff.AddDays(1);
+            var cutoff = baseDate + cutoffValue.Value;
+            if (matchedDay.OpensAtLocal.Value > matchedDay.ClosesAtLocal.Value &&
+                cutoffValue.Value < matchedDay.OpensAtLocal.Value)
+                cutoff = cutoff.AddDays(1);
             if (localStart.DateTime > cutoff)
                 throw new BusinessRuleException("Appointment bắt đầu sau cutoff của ngày vận hành.");
         }
@@ -915,6 +945,12 @@ public sealed class DockYardService(
             if (TimeZoneInfo.TryConvertWindowsIdToIanaId(value, out var iana))
             {
                 try { return TimeZoneInfo.FindSystemTimeZoneById(iana); } catch (TimeZoneNotFoundException) { }
+            }
+            if (string.Equals(value, "Asia/Ho_Chi_Minh", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "Asia/Saigon", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "SE Asia Standard Time", StringComparison.OrdinalIgnoreCase))
+            {
+                return TimeZoneInfo.CreateCustomTimeZone("Asia/Ho_Chi_Minh", TimeSpan.FromHours(7), "Indochina Time", "Indochina Time");
             }
             throw new BusinessRuleException("Timezone của kho không hợp lệ.");
         }

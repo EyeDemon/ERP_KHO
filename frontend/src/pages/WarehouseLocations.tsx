@@ -168,8 +168,8 @@ const capacityLabel: Record<string, string> = {
   Inactive: 'Ngừng hoạt động',
 };
 const capacityUsage = (used?: number | null, max?: number | null, unit = '') => {
-  if (max == null) return 'Không giới hạn';
-  if (used == null) return 'Thiếu profile / ' + max + (unit ? ' ' + unit : '');
+  if (max == null || !Number.isFinite(max) || max <= 0) return 'Không giới hạn';
+  if (used == null || !Number.isFinite(used)) return 'Thiếu profile / ' + max + (unit ? ' ' + unit : '');
   const percent = Math.round((used / max) * 100);
   return used + ' / ' + max + (unit ? ' ' + unit : '') + ' • ' + percent + '%';
 };

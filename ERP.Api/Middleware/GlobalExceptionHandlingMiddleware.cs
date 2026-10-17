@@ -55,7 +55,7 @@ public class GlobalExceptionHandlingMiddleware
             _logger.LogWarning(exception, "Handled exception: {Message}", exception.Message);
         }
 
-        var publicMessage = PublicMessage(exception.Message, isSqlServerConcurrencyError);
+        var publicMessage = ResolvePublicMessage(exception.Message, statusCode, isSqlServerConcurrencyError);
         var response = new ErrorResponse
         {
             Success = false,
@@ -80,6 +80,11 @@ public class GlobalExceptionHandlingMiddleware
 
     internal static string PublicMessage(string message, bool isSqlServerConcurrencyError)
         => isSqlServerConcurrencyError ? "Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại." : message;
+
+    internal static string ResolvePublicMessage(string message, int statusCode, bool isSqlServerConcurrencyError)
+        => statusCode == (int)HttpStatusCode.InternalServerError
+            ? "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau."
+            : PublicMessage(message, isSqlServerConcurrencyError);
 
     private static SqlException? FindSqlException(Exception? error)
     {

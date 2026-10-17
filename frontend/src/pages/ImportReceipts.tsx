@@ -5,6 +5,7 @@ import { completeIdempotentAction, idempotencyHeaders } from '../services/idempo
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 import ReceiptInventoryIdentityEditor from '../components/ReceiptInventoryIdentityEditor';
 import { permissionError } from '../services/permissionPresentation';
+import { roundQty4 } from './productCatalog';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import './ImportReceipts.css';
 
@@ -352,9 +353,9 @@ const ImportReceipts = () => {
     for (let i = 0; i < details.length; i++) {
       const d = details[i];
       if (d.productId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn sản phẩm`);
-      if (d.expectedQuantity === '' || Number(d.expectedQuantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng dự kiến phải > 0`);
+      if (d.expectedQuantity === '' || !Number.isFinite(Number(d.expectedQuantity)) || Number(d.expectedQuantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng dự kiến phải > 0`);
       if (d.operationUnitId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn Đơn vị thao tác`);
-      if (d.unitPrice === '' || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
+      if (d.unitPrice === '' || !Number.isFinite(Number(d.unitPrice)) || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
     }
 
     createInFlight.current = true; setCreating(true);
@@ -403,9 +404,9 @@ const ImportReceipts = () => {
       const source = !receipt && (command === 'receive' || command === 'qc-disposition' || command === 'post') ? (await apiClient.get(`/api/importreceipts/${id}`)).data as ImportReceipt : receipt;
       const body = command === 'receive' ? { lines: (source?.details || []).map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.requiresQc ? 0 : d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }) })) }
         : command === 'qc-disposition' ? { lines: (source?.details || []).filter(d => d.requiresQc && d.qcState === 'QcPending' && !qcExcludedLines.includes(d.id)).map(d => ({ lineId: d.id, ...(receiveLines[d.id] || { acceptedQuantity: 0, damagedQuantity: 0, rejectedQuantity: 0 }), reasonCode: receiveLines[d.id]?.reasonCode, note: receiveLines[d.id]?.note })) } : undefined;
-      if (command === 'receive' && body?.lines.some(line => line.receivedQuantity <= 0 || line.acceptedQuantity < 0 || (!source?.details.find(d => d.id === line.lineId)?.requiresQc && line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== line.receivedQuantity)))
+      if (command === 'receive' && body?.lines.some(line => line.receivedQuantity <= 0 || line.acceptedQuantity < 0 || (!source?.details.find(d => d.id === line.lineId)?.requiresQc && roundQty4(line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity) !== roundQty4(line.receivedQuantity))))
         throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận.');
-      if (command === 'qc-disposition' && body?.lines.some(line => line.acceptedQuantity < 0 || line.damagedQuantity < 0 || line.rejectedQuantity < 0 || line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity !== source?.details.find(d => d.id === line.lineId)?.receivedQuantity || ((line.damagedQuantity > 0 || line.rejectedQuantity > 0) && !line.reasonCode?.trim())))
+      if (command === 'qc-disposition' && body?.lines.some(line => line.acceptedQuantity < 0 || line.damagedQuantity < 0 || line.rejectedQuantity < 0 || roundQty4(line.acceptedQuantity + line.damagedQuantity + line.rejectedQuantity) !== roundQty4(source?.details.find(d => d.id === line.lineId)?.receivedQuantity ?? 0) || ((line.damagedQuantity > 0 || line.rejectedQuantity > 0) && !line.reasonCode?.trim())))
         throw new Error('Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận; lượng hư hỏng hoặc từ chối cần mã lý do.');
       if (command === 'qc-disposition') {
         if (!body?.lines.length) return setError('Chọn ít nhất một dòng để ghi kết quả kiểm tra chất lượng.');
@@ -413,9 +414,9 @@ const ImportReceipts = () => {
         if (body.lines.length === pendingCount && !canCompleteQc) return setError('Bạn không có quyền hoàn tất kiểm tra chất lượng. Hãy ghi kết quả từng phần hoặc liên hệ người có quyền.');
       }
       if (command === 'post') {
-        const available = source?.details.reduce((sum, line) => sum + line.baseAcceptedQuantity, 0) ?? 0;
-        const damaged = source?.details.reduce((sum, line) => sum + line.damagedQuantity * line.conversionFactor, 0) ?? 0;
-        const rejected = source?.details.reduce((sum, line) => sum + line.rejectedQuantity * line.conversionFactor, 0) ?? 0;
+        const available = roundQty4(source?.details.reduce((sum, line) => sum + line.baseAcceptedQuantity, 0) ?? 0);
+        const damaged = roundQty4(source?.details.reduce((sum, line) => sum + line.damagedQuantity * line.conversionFactor, 0) ?? 0);
+        const rejected = roundQty4(source?.details.reduce((sum, line) => sum + line.rejectedQuantity * line.conversionFactor, 0) ?? 0);
         if (!window.confirm(`Ghi nhận tồn kho sẽ tăng lượng có thể sử dụng ${available}, hư hỏng ${damaged}, hàng bị từ chối ${rejected} theo đơn vị cơ sở đã lưu. Tiếp tục?`)) return;
       }
       await apiClient.post(`/api/importreceipts/${id}/${command}`, body, { headers: idempotencyHeaders(action) });
@@ -640,7 +641,7 @@ const ImportReceipts = () => {
                       const p = products.find(x => x.id === d.productId);
                       const u = p?.uoms?.find(x => x.unitId === d.operationUnitId);
                       return p && u && d.expectedQuantity !== ''
-                        ? <div className="import-line-summary">{d.expectedQuantity} {u.unitCode} = {Number(d.expectedQuantity) * u.conversionFactor} {p.unitCode} Đơn vị cơ sở</div>
+                        ? <div className="import-line-summary">{d.expectedQuantity} {u.unitCode} = {roundQty4(Number(d.expectedQuantity) * u.conversionFactor)} {p.unitCode} Đơn vị cơ sở</div>
                         : null;
                     })()}
                   </div>
@@ -785,7 +786,7 @@ const ImportReceipts = () => {
                           <>{d.receivedQuantity} / {d.acceptedQuantity} {d.operationUnitCode}<br /><small>Hư hỏng: {d.damagedQuantity}; Từ chối: {d.rejectedQuantity}</small></>
                         )}
                       </td>
-                      <td className="import-numeric">× {d.conversionFactor} (v{d.conversionVersion})<br />{selectedReceipt.status === 'Draft' ? (receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor : d.baseAcceptedQuantity || d.baseExpectedQuantity} {d.baseUnitCode}</td>
+                      <td className="import-numeric">× {d.conversionFactor} (v{d.conversionVersion})<br />{selectedReceipt.status === 'Draft' ? roundQty4((receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor) : d.baseAcceptedQuantity || d.baseExpectedQuantity} {d.baseUnitCode}</td>
                       <td>{d.note}</td>
                     </tr>
                   ))}
@@ -866,7 +867,7 @@ const ImportReceipts = () => {
                           Xác nhận số lượng quan sát đã quy đổi × {d.conversionFactor} v{d.conversionVersion}
                         </label>
                       )}
-                      <div>Số lượng cuối dự kiến: {Math.max(0, d.normalizedObservedQuantity - form.doorRejectedQuantity)} {d.operationUnitCode}; phần từ chối tại cửa không tạo tồn kho.</div>
+                      <div>Số lượng cuối dự kiến: {roundQty4(Math.max(0, d.normalizedObservedQuantity - form.doorRejectedQuantity))} {d.operationUnitCode}; phần từ chối tại cửa không tạo tồn kho.</div>
                       <label>Kiểm đếm lại <input aria-label={'Kiểm đếm lại ' + line?.productCode} type="number" min="0" step="any" value={receiveLines[d.receiptLineId]?.receivedQuantity ?? d.observedQuantity} onChange={e => setReceiveLines(x => ({ ...x, [d.receiptLineId]: { ...(x[d.receiptLineId] || { acceptedQuantity: 0, damagedQuantity: 0, rejectedQuantity: 0 }), receivedQuantity: Number(e.target.value) } }))} /></label>
                       <div className="import-row-actions">
                         {canResolve && <button type="button" disabled={workflowId === selectedReceipt.id} onClick={() => void recountDiscrepancy(d)}>Lưu phiên bản kiểm đếm mới</button>}

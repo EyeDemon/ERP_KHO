@@ -94,6 +94,7 @@ const Dashboard = () => {
   const [liveTasks, setLiveTasks] = useState<WarehouseTaskItem[]>([]);
   const [liveExceptions, setLiveExceptions] = useState<OperationalExceptionItem[]>([]);
   const [acknowledgedCodes, setAcknowledgedCodes] = useState<string[]>([]);
+  const [acknowledgingCode, setAcknowledgingCode] = useState<string | null>(null);
   const [controlTower, setControlTower] = useState<MultiWarehouseControlTowerDto | null>(null);
   const [taskTypeFilter, setTaskTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,6 +104,8 @@ const Dashboard = () => {
   const [liveError, setLiveError] = useState('');
 
   const acknowledgeException = async (code: string) => {
+    if (acknowledgingCode === code) return;
+    setAcknowledgingCode(code);
     setLiveError('');
     try {
       await apiClient.post('/api/Reports/operational-exceptions/acknowledge', {
@@ -112,6 +115,8 @@ const Dashboard = () => {
       setAcknowledgedCodes((prev) => (prev.includes(code) ? prev : [...prev, code]));
     } catch {
       setLiveError('Không thể xác nhận xử lý ngoại lệ vận hành.');
+    } finally {
+      setAcknowledgingCode((current) => (current === code ? null : current));
     }
   };
 
@@ -449,7 +454,7 @@ const Dashboard = () => {
                             {acknowledgedCodes.includes(ex.code) ? (
                               <UiBadge tone="success">Đã tiếp nhận (Audit)</UiBadge>
                             ) : (
-                              <button type="button" onClick={() => void acknowledgeException(ex.code)}>
+                              <button type="button" disabled={acknowledgingCode === ex.code} onClick={() => void acknowledgeException(ex.code)}>
                                 Tiếp nhận xử lý
                               </button>
                             )}

@@ -297,8 +297,9 @@ public sealed class PickingService(
 
             task.Status = PickingTaskStatus.Completed;
             task.CompletedAt = DateTime.UtcNow;
-            AddAudit("PickingTask.Completed", task, $"PickedQuantity: {task.Lines.Sum(x => x.PickedQuantity)}");
-            if (packingSessionIntegration is not null)
+            var totalPicked = task.Lines.Sum(x => x.PickedQuantity);
+            AddAudit("PickingTask.Completed", task, $"PickedQuantity: {totalPicked}");
+            if (packingSessionIntegration is not null && totalPicked > 0)
                 await packingSessionIntegration.EnsureForPickingTaskAsync(task.Id, currentUser.UserId, token);
         }, cancellationToken);
 
@@ -348,41 +349,52 @@ public sealed class PickingService(
         if (allocation.Status != StockAllocationStatus.Picking)
             throw Conflict("PICK_ALLOCATION_CHANGED", "Allocation đã thay đổi trước khi xử lý Short Pick.");
 
+        var today = DateTime.UtcNow.Date;
         var reservation = await context.StockReservations.SingleAsync(x => x.Id == allocation.ReservationId, token);
         var candidates = await context.InventoryStocks.AsNoTracking()
             .UnlockedAt(context, DateTime.UtcNow)
             .Where(x => x.ProductId == allocation.ProductId &&
                         x.WarehouseId == allocation.WarehouseId &&
                         x.Status == allocation.InventoryStatus &&
+                        (x.StatusDefinition == null || x.StatusDefinition.IsPickable) &&
                         x.LocationId.HasValue &&
                         x.LocationId != allocation.LocationId &&
                         x.Location != null &&
                         x.Location.IsActive &&
                         !x.Location.IsBlocked &&
                         x.Location.IsPickable &&
-                        x.ReservedQuantity > 0)
-            .OrderBy(x => x.LocationId)
-            .ThenBy(x => x.LotId)
-            .ThenBy(x => x.SerialId)
+                        (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today) &&
+                        x.Quantity > 0)
+            .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
+            .ThenBy(x => x.Lot == null ? null : x.Lot.ExpiryDate)
+            .ThenBy(x => x.Lot == null ? DateTime.MaxValue : x.Lot.ReceivedAt)
+            .ThenBy(x => x.LocationId)
+            .ThenBy(x => x.Id)
             .Select(x => new
             {
+                x.Id,
                 LocationId = x.LocationId!.Value,
                 x.LotId,
                 x.SerialId,
-                Available = x.ReservedQuantity -
-                    (context.StockAllocations
-                        .Where(a => a.WarehouseId == x.WarehouseId &&
-                                    a.ProductId == x.ProductId &&
-                                    a.LocationId == x.LocationId &&
-                                    a.InventoryStatus == x.Status &&
-                                    a.LotId == x.LotId &&
-                                    a.SerialId == x.SerialId &&
-                                    CapacityStatuses.Contains(a.Status))
-                        .Sum(a => (decimal?)a.Quantity) ?? 0m)
+                ExpiryDate = x.Lot == null ? null : x.Lot.ExpiryDate,
+                x.Quantity,
+                x.ReservedQuantity,
+                Committed = context.StockAllocations
+                    .Where(a => a.WarehouseId == x.WarehouseId &&
+                                a.ProductId == x.ProductId &&
+                                a.LocationId == x.LocationId &&
+                                a.InventoryStatus == x.Status &&
+                                a.LotId == x.LotId &&
+                                a.SerialId == x.SerialId &&
+                                CapacityStatuses.Contains(a.Status))
+                    .Sum(a => (decimal?)a.Quantity) ?? 0m
             })
             .ToListAsync(token);
 
-        if (candidates.Sum(x => Math.Max(0m, x.Available)) < exception.ShortageQuantity)
+        var totalAvailable = candidates.Sum(x =>
+            Math.Max(0m, x.ReservedQuantity - x.Committed) +
+            Math.Max(0m, x.Quantity - x.ReservedQuantity));
+        if (totalAvailable < exception.ShortageQuantity)
             throw Conflict("PICK_SHORT", "Không có đủ reserved capacity ở vị trí khác để reallocate phần Short Pick.");
 
         var originalQuantity = allocation.Quantity;
@@ -401,11 +413,45 @@ public sealed class PickingService(
         allocation.Version++;
 
         var remaining = exception.ShortageQuantity;
+        var totalShiftedFromSource = 0m;
         var sequence = task.Lines.Max(x => x.Sequence);
+        var now = DateTime.UtcNow;
         foreach (var candidate in candidates)
         {
-            var take = Math.Min(remaining, Math.Max(0m, candidate.Available));
+            var uncommittedReserved = Math.Max(0m, candidate.ReservedQuantity - candidate.Committed);
+            var unreservedAvailable = Math.Max(0m, candidate.Quantity - candidate.ReservedQuantity);
+            var takeFromReserved = Math.Min(remaining, uncommittedReserved);
+            var takeFromUnreserved = Math.Min(remaining - takeFromReserved, unreservedAvailable);
+            var take = takeFromReserved + takeFromUnreserved;
             if (take <= 0) continue;
+
+            if (takeFromUnreserved > 0)
+            {
+                var targetQuery = context.InventoryStocks
+                    .UnlockedAt(context, now)
+                    .Where(x => x.Id == candidate.Id && x.Quantity - x.ReservedQuantity >= takeFromUnreserved);
+                int targetUpdated;
+                if (context.Database.IsRelational())
+                {
+                    targetUpdated = await targetQuery.ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity + takeFromUnreserved)
+                        .SetProperty(x => x.LastUpdated, now), token);
+                }
+                else
+                {
+                    var targetRows = await targetQuery.ToListAsync(token);
+                    foreach (var row in targetRows)
+                    {
+                        row.ReservedQuantity += takeFromUnreserved;
+                        row.LastUpdated = now;
+                    }
+                    targetUpdated = targetRows.Count;
+                }
+                if (targetUpdated != 1)
+                    throw new ConcurrencyException("Tồn kho tại vị trí thay thế đã thay đổi trong lúc reallocate Short Pick.");
+                totalShiftedFromSource += takeFromUnreserved;
+            }
+
             var created = new StockAllocation
             {
                 AllocationCode = $"ALC-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..34].ToUpperInvariant(),
@@ -440,6 +486,37 @@ public sealed class PickingService(
         if (remaining != 0)
             throw new ConcurrencyException("Không thể reallocate đầy đủ phần Short Pick.");
 
+        if (totalShiftedFromSource > 0)
+        {
+            var sourceQuery = context.InventoryStocks
+                .Where(x => x.ProductId == allocation.ProductId &&
+                            x.WarehouseId == allocation.WarehouseId &&
+                            x.LocationId == allocation.LocationId &&
+                            x.Status == allocation.InventoryStatus &&
+                            x.LotId == allocation.LotId &&
+                            x.SerialId == allocation.SerialId &&
+                            x.ReservedQuantity >= totalShiftedFromSource);
+            int sourceUpdated;
+            if (context.Database.IsRelational())
+            {
+                sourceUpdated = await sourceQuery.ExecuteUpdateAsync(update => update
+                    .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - totalShiftedFromSource)
+                    .SetProperty(x => x.LastUpdated, now), token);
+            }
+            else
+            {
+                var sourceRows = await sourceQuery.ToListAsync(token);
+                foreach (var row in sourceRows)
+                {
+                    row.ReservedQuantity -= totalShiftedFromSource;
+                    row.LastUpdated = now;
+                }
+                sourceUpdated = sourceRows.Count;
+            }
+            if (sourceUpdated != 1)
+                throw new ConcurrencyException("Reserved bucket tại vị trí nguồn đã thay đổi trong lúc chuyển vùng giữ hàng.");
+        }
+
         reservation.AllocationVersion++;
         line.Status = PickingTaskLineStatus.Resolved;
         ResolveException(exception, ShortPickResolutionType.AlternativeLocation, note);
@@ -469,18 +546,37 @@ public sealed class PickingService(
                         a.WarehouseId == allocation.WarehouseId &&
                         a.ProductId == allocation.ProductId &&
                         a.LocationId == allocation.LocationId &&
+                        a.InventoryStatus == allocation.InventoryStatus &&
+                        a.LotId == allocation.LotId &&
+                        a.SerialId == allocation.SerialId &&
                         CapacityStatuses.Contains(a.Status))
             .SumAsync(a => (decimal?)a.Quantity, token) ?? 0m;
 
-        var affected = await context.InventoryStocks
+        var bucketQuery = context.InventoryStocks
             .Where(x => x.ProductId == allocation.ProductId &&
                         x.WarehouseId == allocation.WarehouseId &&
                         x.LocationId == allocation.LocationId &&
-                        x.Status == InventoryStatus.Available &&
-                        x.ReservedQuantity >= otherCommitted + originalQuantity)
-            .ExecuteUpdateAsync(update => update
+                        x.Status == allocation.InventoryStatus &&
+                        x.LotId == allocation.LotId &&
+                        x.SerialId == allocation.SerialId &&
+                        x.ReservedQuantity >= otherCommitted + originalQuantity);
+        int affected;
+        if (context.Database.IsRelational())
+        {
+            affected = await bucketQuery.ExecuteUpdateAsync(update => update
                 .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - shortage)
                 .SetProperty(x => x.LastUpdated, DateTime.UtcNow), token);
+        }
+        else
+        {
+            var bucketRows = await bucketQuery.ToListAsync(token);
+            foreach (var row in bucketRows)
+            {
+                row.ReservedQuantity -= shortage;
+                row.LastUpdated = DateTime.UtcNow;
+            }
+            affected = bucketRows.Count;
+        }
         if (affected != 1)
             throw new ConcurrencyException("Reserved bucket đã thay đổi trước khi xử lý Short Pick.");
 
@@ -506,6 +602,45 @@ public sealed class PickingService(
         reservation.ReleasedBy = currentUser.UserId;
         reservation.ReleaseReason = $"Short Pick {resolution}";
         UpdateReservationStatus(reservation);
+
+        if (task.SourceType == "SalesOrder" && task.SourceId.HasValue)
+        {
+            var soLine = await context.SalesOrderLines
+                .Include(x => x.Backorder)
+                .SingleOrDefaultAsync(
+                    x => x.SalesOrderId == task.SourceId.Value && x.ProductId == allocation.ProductId,
+                    token);
+            if (soLine is not null)
+            {
+                if (resolution == ShortPickResolutionType.Backorder)
+                {
+                    if (soLine.Backorder is null)
+                    {
+                        soLine.Backorder = new Backorder
+                        {
+                            BackorderCode = $"BO-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..33].ToUpperInvariant(),
+                            WarehouseId = task.WarehouseId,
+                            Quantity = shortage,
+                            Status = BackorderStatus.Open,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                    }
+                    else
+                    {
+                        soLine.Backorder.Quantity += shortage;
+                        soLine.Backorder.UpdatedAt = DateTime.UtcNow;
+                        soLine.Backorder.ResolvedAt = null;
+                        soLine.Backorder.Status = soLine.Backorder.RecoveredQuantity > 0
+                            ? BackorderStatus.PartiallyAllocated
+                            : BackorderStatus.Open;
+                    }
+                }
+                else
+                {
+                    soLine.CancelledQuantity = Math.Min(soLine.OrderedQuantity, soLine.CancelledQuantity + shortage);
+                }
+            }
+        }
 
         line.Status = PickingTaskLineStatus.Resolved;
         ResolveException(exception, resolution, note);
@@ -555,7 +690,7 @@ public sealed class PickingService(
 
     private static void ValidateLocationScan(PickingTaskLine line, string raw)
     {
-        var scanned = raw?.Trim();
+        var scanned = CleanScan(raw);
         if (string.IsNullOrWhiteSpace(scanned) ||
             !string.Equals(scanned, line.SourceLocation.Code, StringComparison.OrdinalIgnoreCase))
             throw Conflict("PICK_WRONG_LOCATION", $"Sai vị trí lấy hàng. Yêu cầu {line.SourceLocation.Code}.");
@@ -563,7 +698,7 @@ public sealed class PickingService(
 
     private async Task ValidateProductScanAsync(PickingTaskLine line, string raw, CancellationToken token)
     {
-        var scanned = raw?.Trim();
+        var scanned = CleanScan(raw);
         if (string.IsNullOrWhiteSpace(scanned))
             throw Conflict("PICK_WRONG_PRODUCT", "Barcode sản phẩm là bắt buộc.");
         if (string.Equals(scanned, line.Product.Code, StringComparison.OrdinalIgnoreCase)) return;
@@ -576,8 +711,8 @@ public sealed class PickingService(
     private static void ValidateTrackingScan(PickingTaskLine line, PickScanDto request)
     {
         var allocation = line.Allocation;
-        var scannedLot = string.IsNullOrWhiteSpace(request.LotNumber) ? null : request.LotNumber.Trim();
-        var scannedSerial = string.IsNullOrWhiteSpace(request.SerialNumber) ? null : request.SerialNumber.Trim();
+        var scannedLot = NullIfEmpty(CleanScan(request.LotNumber));
+        var scannedSerial = NullIfEmpty(CleanScan(request.SerialNumber));
 
         if (allocation.LotId.HasValue)
         {
@@ -605,9 +740,25 @@ public sealed class PickingService(
             throw Conflict("PICK_WRONG_SERIAL", "Dòng Picking này không được phân bổ theo serial.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.DestinationToteBarcode))
+        if (NullIfEmpty(CleanScan(request.DestinationToteBarcode)) is not null)
             throw Conflict("PICK_DESTINATION_HU_NOT_AVAILABLE", "Destination Tote/HU chưa được gắn trực tiếp từ Picking task.");
     }
+
+    private static string CleanScan(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var buffer = new char[value.Length];
+        var count = 0;
+        foreach (var ch in value)
+        {
+            if (ch < 32 || ch == 127 || ch == '\u200b' || ch == '\ufeff')
+                continue;
+            buffer[count++] = ch;
+        }
+        return new string(buffer, 0, count).Trim();
+    }
+
+    private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
 
     private static void ValidateQuantityPrecision(PickingTaskLine line, decimal quantity)
     {

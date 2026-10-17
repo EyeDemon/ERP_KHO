@@ -153,15 +153,21 @@ public sealed class ReceiptInventoryIdentityService(
             {
                 if (string.IsNullOrWhiteSpace(identity.SerialNumber))
                     throw Conflict("SERIAL_REQUIRED", $"Dòng {detail.Id} thiếu serial.");
-                if (await context.InventorySerials.AnyAsync(
-                        x => x.ProductId == product.Id && x.SerialNumber == identity.SerialNumber,
+                if (identity.BaseQuantity != 1m)
+                    throw Conflict("SERIAL_QUANTITY_INVALID", "Mỗi serial phải có BaseQuantity = 1.");
+                var serialNumber = NormalizeIdentifier(identity.SerialNumber);
+                if (context.InventorySerials.Local.Any(
+                        x => x.ProductId == product.Id &&
+                             string.Equals(x.SerialNumber, serialNumber, StringComparison.OrdinalIgnoreCase)) ||
+                    await context.InventorySerials.AnyAsync(
+                        x => x.ProductId == product.Id && x.SerialNumber == serialNumber,
                         cancellationToken))
-                    throw Conflict("SERIAL_ALREADY_ON_HAND", $"Serial {identity.SerialNumber} đã tồn tại.");
+                    throw Conflict("SERIAL_ALREADY_ON_HAND", $"Serial {serialNumber} đã tồn tại.");
                 serial = new InventorySerial
                 {
                     ProductId = product.Id,
                     Lot = lot,
-                    SerialNumber = identity.SerialNumber!,
+                    SerialNumber = serialNumber,
                     CreatedAt = DateTime.UtcNow
                 };
                 context.InventorySerials.Add(serial);
@@ -202,6 +208,8 @@ public sealed class ReceiptInventoryIdentityService(
             }
             else
             {
+                if (product.TrackingType == ProductTrackingType.Serial && stock.Quantity + identity.BaseQuantity > 1m)
+                    throw Conflict("SERIAL_ALREADY_ON_HAND", $"Serial {identity.SerialNumber} không thể có tồn kho > 1.");
                 stock.Quantity += identity.BaseQuantity;
                 stock.LastUpdated = DateTime.UtcNow;
             }
@@ -234,7 +242,8 @@ public sealed class ReceiptInventoryIdentityService(
     {
         var number = NormalizeIdentifier(identity.LotNumber!);
         var lot = context.InventoryLots.Local.SingleOrDefault(
-                      x => x.ProductId == product.Id && x.LotNumber == number)
+                      x => x.ProductId == product.Id &&
+                           string.Equals(x.LotNumber, number, StringComparison.OrdinalIgnoreCase))
                   ?? await context.InventoryLots.SingleOrDefaultAsync(
                       x => x.ProductId == product.Id && x.LotNumber == number,
                       cancellationToken);
@@ -381,10 +390,15 @@ public sealed class ReceiptInventoryIdentityService(
             throw Conflict("LOT_EXPIRED", "Không thể nhận lot đã hết hạn.");
     }
 
-    private static string NormalizeIdentifier(string value) => value.Trim();
+    private static string NormalizeIdentifier(string value) =>
+        new string(value.Where(ch => ch >= 32 && ch != 127 && ch != '\u200b' && ch != '\ufeff').ToArray()).Trim();
 
-    private static string? NormalizeNullable(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string? NormalizeNullable(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var cleaned = NormalizeIdentifier(value);
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
 
     private static BusinessRuleException Conflict(string code, string message)
     {

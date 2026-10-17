@@ -157,7 +157,7 @@ namespace ERP.Application.Services
                 stocktake.ApprovedBy = approvedByUserId;
                 stocktake.ApprovedAt = DateTime.UtcNow;
 
-                foreach (var detail in stocktake.Details)
+                foreach (var detail in stocktake.Details.OrderBy(d => d.ProductId).ThenBy(d => d.LocationId ?? 0).ThenBy(d => d.Id))
                 {
                     if (detail.ActualQuantity == null)
                         throw new BusinessRuleException($"Chưa nhập số lượng thực tế cho sản phẩm id {detail.ProductId}");
@@ -344,6 +344,8 @@ namespace ERP.Application.Services
         {
             if (dto.ActualQuantity < 0)
                 throw new BusinessRuleException("Số lượng thực tế không được âm.");
+            if (decimal.Round(dto.ActualQuantity, 4) != dto.ActualQuantity)
+                throw new BusinessRuleException("Số lượng kiểm đếm thực tế chỉ hỗ trợ tối đa 4 chữ số thập phân.");
 
             var stocktake = await _stocktakeRepository.GetByIdWithDetailsAsync(stocktakeId);
             if (stocktake == null)
@@ -356,6 +358,10 @@ namespace ERP.Application.Services
             var detail = stocktake.Details.FirstOrDefault(d => d.Id == detailId);
             if (detail == null)
                 throw new NotFoundException($"Không tìm thấy chi tiết phiếu id {detailId}");
+
+            var decimalPlaces = detail.Product?.Unit?.DecimalPlaces;
+            if (decimalPlaces is >= 0 and <= 4 && decimal.Round(dto.ActualQuantity, decimalPlaces.Value) != dto.ActualQuantity)
+                throw new BusinessRuleException($"Số lượng kiểm đếm thực tế vượt quá {decimalPlaces.Value} chữ số thập phân của đơn vị tính cơ sở.");
 
             var oldActualQuantity = detail.ActualQuantity;
             await _unitOfWork.BeginTransactionAsync();
@@ -403,11 +409,30 @@ namespace ERP.Application.Services
             if (detail == null)
                 throw new NotFoundException($"Không tìm thấy chi tiết phiếu id {detailId}");
 
+            var oldSystemQuantity = detail.SystemQuantity;
             var oldActualQuantity = detail.ActualQuantity;
             var cleanReason = string.IsNullOrWhiteSpace(reason) ? "Yêu cầu kiểm đếm lại" : reason.Trim();
             await _unitOfWork.BeginTransactionAsync();
             try
             {
+                var currentStock = detail.LocationId.HasValue
+                    ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, stocktake.WarehouseId, InventoryStatus.Available, detail.LocationId.Value)
+                    : await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, stocktake.WarehouseId);
+
+                var matchingStocks = (await _inventoryStockRepository.FindAsync(s =>
+                        s.ProductId == detail.ProductId &&
+                        s.WarehouseId == stocktake.WarehouseId &&
+                        s.Status == InventoryStatus.Available &&
+                        (!detail.LocationId.HasValue || s.LocationId == detail.LocationId.Value)))
+                    ?.Where(s => s.Status == InventoryStatus.Available && (!detail.LocationId.HasValue || s.LocationId == detail.LocationId.Value))
+                    .ToList() ?? new List<InventoryStock>();
+
+                if (matchingStocks.Count == 0 && currentStock != null)
+                {
+                    matchingStocks.Add(currentStock);
+                }
+
+                detail.SystemQuantity = matchingStocks.Sum(s => s.Quantity);
                 detail.ActualQuantity = null;
                 detail.DifferenceQuantity = 0;
                 detail.Note = string.IsNullOrWhiteSpace(detail.Note)
@@ -422,8 +447,8 @@ namespace ERP.Application.Services
                     EntityName = "Stocktake",
                     EntityId = stocktake.Id,
                     WarehouseId = stocktake.WarehouseId,
-                    OldValues = $"DetailId: {detail.Id}; ActualQuantity: {oldActualQuantity}",
-                    NewValues = $"DetailId: {detail.Id}; ActualQuantity: null; Note: {detail.Note}",
+                    OldValues = $"DetailId: {detail.Id}; SystemQuantity: {oldSystemQuantity}; ActualQuantity: {oldActualQuantity}",
+                    NewValues = $"DetailId: {detail.Id}; SystemQuantity: {detail.SystemQuantity}; ActualQuantity: null; Note: {detail.Note}",
                     Reason = cleanReason,
                     Result = "Success",
                     Severity = "Information",

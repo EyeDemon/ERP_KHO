@@ -11,16 +11,22 @@ namespace ERP.Application.Services
     {
         private readonly IWarehouseRepository _warehouseRepository;
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
+        private readonly IInventoryStockRepository? _stockRepository;
 
-        internal WarehouseService(IWarehouseRepository warehouseRepository)
+        internal WarehouseService(IWarehouseRepository warehouseRepository, IInventoryStockRepository? stockRepository = null)
         {
             _warehouseRepository = warehouseRepository;
+            _stockRepository = stockRepository;
         }
 
-        public WarehouseService(IWarehouseRepository warehouseRepository, IWarehouseAuthorizationService warehouseAuthorization)
+        public WarehouseService(
+            IWarehouseRepository warehouseRepository,
+            IWarehouseAuthorizationService warehouseAuthorization,
+            IInventoryStockRepository? stockRepository = null)
         {
             _warehouseRepository = warehouseRepository;
             _warehouseAuthorization = warehouseAuthorization;
+            _stockRepository = stockRepository;
         }
 
         public async Task<IEnumerable<WarehouseDto>> GetAllWarehousesAsync()
@@ -92,6 +98,16 @@ namespace ERP.Application.Services
                 await _warehouseAuthorization.EnsureWarehouseAccessAsync(id);
             var warehouse = await _warehouseRepository.GetByIdAsync(id);
             if (warehouse == null) throw new NotFoundException($"Không tìm thấy kho id {id}");
+
+            if (warehouse.IsActive && !dto.IsActive)
+            {
+                var hasActiveStock = _stockRepository is not null
+                    ? (await _stockRepository.FindAsync(s => s.WarehouseId == id && (s.Quantity > 0 || s.ReservedQuantity > 0)))
+                        ?.Any(s => s.Quantity > 0 || s.ReservedQuantity > 0) == true
+                    : await _warehouseRepository.HasTransactionsAsync(id);
+                if (hasActiveStock)
+                    throw new BusinessRuleException("Không thể ngừng hoạt động kho khi vẫn còn tồn kho hoặc hàng đang giữ chỗ.");
+            }
 
             warehouse.Name = dto.Name;
             warehouse.Address = dto.Address;

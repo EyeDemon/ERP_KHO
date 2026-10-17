@@ -56,13 +56,7 @@ namespace ERP.Infrastructure.Queries
 
         public async Task<StocktakeResponseDto> GetStocktakeByIdAsync(int id)
         {
-            var query = _context.Stocktakes.AsNoTracking();
-            if (_warehouseAuthorization is not null)
-            {
-                var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
-                query = query.Where(s => allowedWarehouseIds.Contains(s.WarehouseId));
-            }
-            var stocktake = await query
+            var stocktake = await _context.Stocktakes.AsNoTracking()
                 .Where(s => s.Id == id)
                 .Select(s => new StocktakeResponseDto
                 {
@@ -101,6 +95,11 @@ namespace ERP.Infrastructure.Queries
             if (stocktake == null)
             {
                 throw new NotFoundException("Stocktake", id);
+            }
+
+            if (_warehouseAuthorization is not null)
+            {
+                await _warehouseAuthorization.EnsureWarehouseAccessAsync(stocktake.WarehouseId);
             }
 
             if (stocktake.Status == ERP.Domain.Enums.ReceiptStatus.Draft &&

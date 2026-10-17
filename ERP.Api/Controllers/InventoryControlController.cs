@@ -67,9 +67,9 @@ public sealed class InventoryControlController(
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
+        if (warehouseId.HasValue)
+            await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
         var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
-            return Ok(Array.Empty<object>());
 
         var scopedWarehouseIds = warehouseId.HasValue
             ? new[] { warehouseId.Value }
@@ -155,18 +155,9 @@ public sealed class InventoryControlController(
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
+        if (warehouseId.HasValue)
+            await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
         var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
-        {
-            return Ok(new
-            {
-                abcClassificationSummary = new { classA_HighVolumeCount = 0, classB_MediumVolumeCount = 0, classC_LowVolumeCount = 0, totalClassifiedSkus = 0 },
-                safetyStockAndReorderProposals = Array.Empty<object>(),
-                atpCtpSummary = new { availableToPromiseQty = 0m, capableToPromiseQty = 0m, defaultPromiseLeadTimeHours = 24 },
-                networkBalancingSummary = new { activeStockWarehousesCount = 0, surplusWarehousesCount = 0, shortageWarehousesCount = 0 },
-                decisionPolicyRegistry = new { policyVersion = "AX-2026.10-HUMAN-IN-THE-LOOP", humanApprovalRequiredAtBoundary = true, autonomousLedgerMutationAllowed = false }
-            });
-        }
 
         var scopedWarehouseIds = warehouseId.HasValue
             ? new[] { warehouseId.Value }
@@ -280,22 +271,9 @@ public sealed class InventoryControlController(
         var req = request ?? new WhatIfSimulationRequest();
         var clampedMultiplier = Math.Clamp(req.DemandMultiplier, 0.5m, 5.0m);
         var horizonDays = Math.Clamp(req.HorizonDays, 1, 90);
+        if (req.WarehouseId.HasValue)
+            await warehouseAuth.EnsureWarehouseAccessAsync(req.WarehouseId.Value, cancellationToken);
         var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-
-        if (req.WarehouseId.HasValue && !accessibleIds.Contains(req.WarehouseId.Value))
-        {
-            return Ok(new
-            {
-                warehouseId = req.WarehouseId,
-                demandMultiplier = clampedMultiplier,
-                horizonDays,
-                totalAvailable = 0m,
-                simulatedDemand = 0m,
-                projectedNetBalance = 0m,
-                scenarioStatus = "RESTRICTED_SCOPE",
-                immutableSnapshotGuarantee = true
-            });
-        }
 
         var scopedWarehouseIds = req.WarehouseId.HasValue
             ? new[] { req.WarehouseId.Value }

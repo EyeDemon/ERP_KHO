@@ -82,7 +82,7 @@ public sealed class PackingService(
             var generated = $"HU-{now:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..33].ToUpperInvariant();
             var code = NormalizeIdentity(request.HuCode, generated, 50);
             var barcode = NormalizeIdentity(request.Barcode, code, 64);
-            var sscc = string.IsNullOrWhiteSpace(request.Sscc) ? null : request.Sscc.Trim();
+            var sscc = CleanScan(request.Sscc);
             if (sscc is { Length: > 32 })
                 throw new BusinessRuleException("SSCC không được vượt quá 32 ký tự.");
 
@@ -121,18 +121,28 @@ public sealed class PackingService(
 
             var line = session.PickingTask.Lines.SingleOrDefault(x => x.Id == request.PickingTaskLineId)
                 ?? throw Conflict("HU_CONTENT_MISMATCH", "Dòng Picking không thuộc Packing session này.");
-            if (!string.IsNullOrWhiteSpace(request.LotNumber))
+            if (line.Allocation?.Lot?.ExpiryDate?.Date < DateTime.UtcNow.Date)
+                throw Conflict("HU_CONTENT_MISMATCH", "Lô hàng đã hết hạn sử dụng và không thể đóng gói.");
+
+            var expectedLot = line.Allocation?.Lot?.LotNumber;
+            var scannedLot = CleanScan(request.LotNumber);
+            var requiresLotScan = !string.IsNullOrWhiteSpace(expectedLot) &&
+                                  (line.Product.TrackingType != ProductTrackingType.None || line.Product.ExpiryControl);
+            if (requiresLotScan || !string.IsNullOrWhiteSpace(scannedLot))
             {
-                var expectedLot = line.Allocation?.Lot?.LotNumber;
                 if (string.IsNullOrWhiteSpace(expectedLot) ||
-                    !string.Equals(expectedLot, request.LotNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+                    string.IsNullOrWhiteSpace(scannedLot) ||
+                    !string.Equals(expectedLot, scannedLot, StringComparison.OrdinalIgnoreCase))
                     throw Conflict("HU_CONTENT_MISMATCH", "LotNumber không khớp với dòng Picking đã phân bổ.");
             }
-            if (!string.IsNullOrWhiteSpace(request.SerialNumber))
+
+            var expectedSerial = line.Allocation?.Serial?.SerialNumber;
+            var scannedSerial = CleanScan(request.SerialNumber);
+            if (!string.IsNullOrWhiteSpace(expectedSerial) || !string.IsNullOrWhiteSpace(scannedSerial))
             {
-                var expectedSerial = line.Allocation?.Serial?.SerialNumber;
                 if (string.IsNullOrWhiteSpace(expectedSerial) ||
-                    !string.Equals(expectedSerial, request.SerialNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+                    string.IsNullOrWhiteSpace(scannedSerial) ||
+                    !string.Equals(expectedSerial, scannedSerial, StringComparison.OrdinalIgnoreCase))
                     throw Conflict("HU_CONTENT_MISMATCH", "SerialNumber không khớp với dòng Picking đã phân bổ.");
             }
             if (line.PickedQuantity <= 0)
@@ -187,8 +197,11 @@ public sealed class PackingService(
                 throw Conflict("HU_CLOSED", "Handling Unit đã đóng.");
             if (hu.Status is HandlingUnitStatus.Staged or HandlingUnitStatus.Loaded or HandlingUnitStatus.Shipped or HandlingUnitStatus.Cancelled)
                 throw Conflict("HU_CLOSED", "Handling Unit không còn ở trạng thái cho phép đóng.");
-            if (hu.Contents.Count == 0 && hu.Children.Count == 0)
+            var activeChildren = hu.Children.Where(x => x.Status != HandlingUnitStatus.Cancelled).ToList();
+            if (hu.Contents.Count == 0 && activeChildren.Count == 0)
                 throw Conflict("HU_CONTENT_MISMATCH", "Handling Unit rỗng không thể đóng.");
+            if (activeChildren.Any(x => x.Status != HandlingUnitStatus.Closed))
+                throw Conflict("HU_CLOSED", "Tất cả Handling Unit con phải ở trạng thái CLOSED trước khi đóng HU cha.");
 
             hu.Status = HandlingUnitStatus.Closed;
             hu.SealedAt = DateTime.UtcNow;
@@ -263,6 +276,10 @@ public sealed class PackingService(
             EnsureNestableChild(child);
             if (!child.ParentHandlingUnitId.HasValue)
                 throw Conflict("HU_CONTENT_MISMATCH", "Handling Unit hiện không nằm trong HU cha.");
+            var parent = session.HandlingUnits.SingleOrDefault(x => x.Id == child.ParentHandlingUnitId.Value)
+                ?? throw Conflict("HU_CONTENT_MISMATCH", "Cấu trúc Handling Unit hiện tại không hợp lệ.");
+            if (parent.Status is not HandlingUnitStatus.Open and not HandlingUnitStatus.InUse)
+                throw Conflict("HU_CLOSED", "Handling Unit cha đã đóng và không thể tách HU con.");
             var oldParent = child.ParentHandlingUnitId.Value;
             child.ParentHandlingUnitId = null;
             AddAudit("HandlingUnit.Unnested", session, $"ChildId: {child.Id}; OldParentId: {oldParent}");
@@ -287,7 +304,7 @@ public sealed class PackingService(
             }
 
             var activeHus = session.HandlingUnits.Where(x => x.Status != HandlingUnitStatus.Cancelled).ToList();
-            if (activeHus.Count == 0 || activeHus.Any(x => x.Contents.Count == 0 && x.Children.Count == 0))
+            if (activeHus.Count == 0 || activeHus.Any(x => x.Contents.Count == 0 && x.Children.All(c => c.Status == HandlingUnitStatus.Cancelled)))
                 throw Conflict("HU_CONTENT_MISMATCH", "Packing session còn Handling Unit rỗng.");
             if (activeHus.Any(x => x.Status != HandlingUnitStatus.Closed))
                 throw Conflict("HU_CLOSED", "Tất cả Handling Unit đang sử dụng phải được đóng trước khi xác nhận PACKED.");
@@ -482,7 +499,7 @@ public sealed class PackingService(
 
     private async Task ValidateProductScanAsync(PickingTaskLine line, string raw, CancellationToken token)
     {
-        var scanned = raw?.Trim();
+        var scanned = CleanScan(raw);
         if (string.IsNullOrWhiteSpace(scanned))
             throw Conflict("HU_CONTENT_MISMATCH", "Barcode sản phẩm là bắt buộc.");
         if (string.Equals(scanned, line.Product.Code, StringComparison.OrdinalIgnoreCase)) return;
@@ -490,6 +507,13 @@ public sealed class PackingService(
                 x => x.ProductId == line.ProductId && x.Value == scanned,
                 token))
             throw Conflict("HU_CONTENT_MISMATCH", "Barcode không khớp sản phẩm đã Picking.");
+    }
+
+    private static string? CleanScan(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var cleaned = new string(value.Where(ch => ch >= 32 && ch != 127 && ch != '\u200b' && ch != '\ufeff').ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
     }
 
     private static void ValidateQuantityPrecision(PickingTaskLine line, decimal quantity)
@@ -509,7 +533,8 @@ public sealed class PackingService(
 
     private static string NormalizeIdentity(string? requested, string fallback, int maxLength)
     {
-        var value = string.IsNullOrWhiteSpace(requested) ? fallback : requested.Trim().ToUpperInvariant();
+        var cleaned = CleanScan(requested);
+        var value = string.IsNullOrWhiteSpace(cleaned) ? fallback : cleaned.ToUpperInvariant();
         if (value.Length is < 1 || value.Length > maxLength)
             throw new BusinessRuleException("Mã/Barcode Handling Unit không hợp lệ.");
         return value;

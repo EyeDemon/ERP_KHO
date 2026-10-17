@@ -167,7 +167,9 @@ public sealed class WarehouseCalendarService(
         var days = calendar?.Days.OrderBy(x => x.DayOfWeek).ToList() ?? [];
         var shifts = calendar?.Shifts.OrderBy(x => x.StartTimeLocal).ThenBy(x => x.Code).ToList() ?? [];
         var openNow = IsCalendarOpen(days, localNow.DayOfWeek, localNow.TimeOfDay);
-        var currentShift = shifts.FirstOrDefault(x => x.IsActive && IsWithinWindow(localNow.TimeOfDay, x.StartTimeLocal, x.EndTimeLocal));
+        var currentShift = openNow
+            ? shifts.FirstOrDefault(x => x.IsActive && IsWithinShiftWindow(localNow.TimeOfDay, x.StartTimeLocal, x.EndTimeLocal))
+            : null;
 
         return new WarehouseCalendarDto
         {
@@ -318,6 +320,9 @@ public sealed class WarehouseCalendarService(
     private static bool IsWithinWindow(TimeSpan value, TimeSpan start, TimeSpan end) =>
         start < end ? value >= start && value <= end : value >= start || value <= end;
 
+    private static bool IsWithinShiftWindow(TimeSpan value, TimeSpan start, TimeSpan end) =>
+        start < end ? value >= start && value < end : value >= start || value < end;
+
     private static TimeSpan ParseRequiredTime(string? value, string field) =>
         ParseOptionalTime(value, field) ?? throw new BusinessRuleException(field + " là bắt buộc.");
 
@@ -356,6 +361,12 @@ public sealed class WarehouseCalendarService(
             if (TimeZoneInfo.TryConvertWindowsIdToIanaId(id, out var ianaId))
             {
                 try { return TimeZoneInfo.FindSystemTimeZoneById(ianaId); } catch (TimeZoneNotFoundException) { }
+            }
+            if (string.Equals(id, "Asia/Ho_Chi_Minh", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(id, "Asia/Saigon", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(id, "SE Asia Standard Time", StringComparison.OrdinalIgnoreCase))
+            {
+                return TimeZoneInfo.CreateCustomTimeZone("Asia/Ho_Chi_Minh", TimeSpan.FromHours(7), "Indochina Time", "Indochina Time");
             }
             throw new BusinessRuleException("Timezone không hợp lệ trên hệ thống.");
         }

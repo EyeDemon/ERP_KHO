@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
+import { roundQty4, sanitizeScannerCode } from '../pages/productCatalog';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { UiBadge, UiCard, UiTableScroll } from '../ui/ProductionUi';
 
@@ -67,14 +68,14 @@ export default function ReceiptInventoryIdentityEditor({
 
   if(tracked.length===0)return null;
 
-  const allocated=(lineId:number,targetStatus:IdentityRow['targetStatus'])=>rows
+  const allocated=(lineId:number,targetStatus:IdentityRow['targetStatus'])=>roundQty4(rows
     .filter(x=>x.lineId===lineId&&x.targetStatus===targetStatus)
-    .reduce((sum,x)=>sum+Number(x.baseQuantity||0),0);
+    .reduce((sum,x)=>sum+Number(x.baseQuantity||0),0));
 
   const addRow=(line:ReceiptTrackingLine)=>{
     const statuses:IdentityRow['targetStatus'][]=['AVAILABLE','DAMAGED','REJECTED'];
-    const targetStatus=statuses.find(s=>allocated(line.id,s)<requiredFor(line,s))??'AVAILABLE';
-    const remaining=Math.max(0,requiredFor(line,targetStatus)-allocated(line.id,targetStatus));
+    const targetStatus=statuses.find(s=>allocated(line.id,s)<roundQty4(requiredFor(line,s)))??'AVAILABLE';
+    const remaining=roundQty4(Math.max(0,roundQty4(requiredFor(line,targetStatus))-allocated(line.id,targetStatus)));
     setRows(current=>[...current,{
       lineId:line.id,productId:line.productId,targetStatus,
       baseQuantity:line.trackingType==='Serial'?1:(remaining||''),
@@ -94,11 +95,11 @@ export default function ReceiptInventoryIdentityEditor({
         lines:rows.map(row=>({
           lineId:row.lineId,
           targetStatus:row.targetStatus,
-          baseQuantity:Number(row.baseQuantity),
-          lotNumber:row.lotNumber?.trim()||null,
+          baseQuantity:roundQty4(Number(row.baseQuantity)),
+          lotNumber:sanitizeScannerCode(row.lotNumber??'')||null,
           manufactureDate:row.manufactureDate||null,
           expiryDate:row.expiryDate||null,
-          serialNumber:row.serialNumber?.trim()||null,
+          serialNumber:sanitizeScannerCode(row.serialNumber??'')||null,
         }))
       },{headers:idempotencyHeaders(key)});
       completeIdempotentAction(key);
@@ -125,9 +126,9 @@ export default function ReceiptInventoryIdentityEditor({
       {tracked.map(line=><fieldset key={line.id} className="ui-stack">
         <legend>{line.productCode} — {line.productName} <UiBadge>{line.trackingType}</UiBadge></legend>
         <div className="ui-inline-wrap">
-          <span>AVAILABLE {allocated(line.id,'AVAILABLE')}/{line.baseAcceptedQuantity} {line.baseUnitCode}</span>
-          <span>DAMAGED {allocated(line.id,'DAMAGED')}/{line.baseDamagedQuantity} {line.baseUnitCode}</span>
-          <span>REJECTED {allocated(line.id,'REJECTED')}/{line.baseRejectedQuantity} {line.baseUnitCode}</span>
+          <span>AVAILABLE {allocated(line.id,'AVAILABLE')}/{roundQty4(line.baseAcceptedQuantity)} {line.baseUnitCode}</span>
+          <span>DAMAGED {allocated(line.id,'DAMAGED')}/{roundQty4(line.baseDamagedQuantity)} {line.baseUnitCode}</span>
+          <span>REJECTED {allocated(line.id,'REJECTED')}/{roundQty4(line.baseRejectedQuantity)} {line.baseUnitCode}</span>
           {line.expiryControl&&<span>Expiry bắt buộc{line.shelfLifeDays?` • shelf life ${line.shelfLifeDays} ngày`:''}</span>}
           {editable&&<button type="button" onClick={()=>addRow(line)}>Thêm {line.trackingType==='Serial'?'serial':'lot'}</button>}
         </div>

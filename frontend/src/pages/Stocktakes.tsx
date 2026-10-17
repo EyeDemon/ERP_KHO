@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
 import { currentRole, currentUserId, hasPermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { roundQty4 } from './productCatalog';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 import './Stocktakes.css';
 
@@ -396,7 +397,7 @@ const Stocktakes = () => {
     const actual = Number(actualQty);
     if (isNaN(actual)) return <span className="stocktake-variance neutral">Lỗi</span>;
 
-    const diff = actual - systemQty;
+    const diff = roundQty4(actual - systemQty);
     if (diff > 0) return <span className="stocktake-variance success">+{diff} (Thừa)</span>;
     if (diff < 0) return <span className="stocktake-variance danger">{diff} (Thiếu)</span>;
     return <span className="stocktake-variance neutral">0 (Khớp)</span>;

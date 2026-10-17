@@ -315,8 +315,8 @@ const ExportReceipts = () => {
     for (let i = 0; i < details.length; i++) {
       const d = details[i];
       if (d.productId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn sản phẩm`);
-      if (d.quantity === '' || Number(d.quantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng xuất phải > 0`);
-      if (d.unitPrice === '' || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
+      if (d.quantity === '' || !Number.isFinite(Number(d.quantity)) || Number(d.quantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng xuất phải > 0`);
+      if (d.unitPrice === '' || !Number.isFinite(Number(d.unitPrice)) || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
 
       const key = `${warehouseId}_${d.productId}`;
       const stock = stockCache[key];

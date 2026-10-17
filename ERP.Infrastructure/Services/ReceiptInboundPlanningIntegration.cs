@@ -158,9 +158,9 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
                 .Where(x => x.PurchaseOrderLineId == line.Id
                     && x.ImportReceiptId != receipt.Id
                     && x.ImportReceipt.Status == ReceiptStatus.Posted)
-                .SumAsync(x => (decimal?)x.BasePostedQuantity, token) ?? 0m;
+                .SumAsync(x => (decimal?)(x.BasePostedQuantity - x.BaseRejectedQuantity), token) ?? 0m;
             var maximum = line.BaseOrderedQuantity * (1m + line.AllowedOverReceiptPct / 100m);
-            if (previous + detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity > maximum)
+            if (previous + detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity > maximum)
                 throw Conflict($"Tổng số lượng POST vượt dung sai nhận của dòng PO {line.ExternalLineId}.");
         }
 
@@ -197,11 +197,14 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
                 .Where(x => x.PurchaseOrderLineId == line.Id
                     && x.ImportReceiptId != receipt.Id
                     && x.ImportReceipt.Status == ReceiptStatus.Posted)
-                .SumAsync(x => (decimal?)x.BasePostedQuantity, token) ?? 0m;
-            var current = receipt.Details.Where(x => x.PurchaseOrderLineId == line.Id).Sum(x => x.BasePostedQuantity);
+                .SumAsync(x => (decimal?)(x.BasePostedQuantity - x.BaseRejectedQuantity), token) ?? 0m;
+            var current = receipt.Details
+                .Where(x => x.PurchaseOrderLineId == line.Id)
+                .Sum(x => Math.Max(0m, (x.BasePostedQuantity > 0 ? x.BasePostedQuantity : x.BaseAcceptedQuantity + x.BaseDamagedQuantity) - x.BaseRejectedQuantity));
             var total = previous + current;
+            var minimumRequired = line.BaseOrderedQuantity * (1m - line.AllowedUnderReceiptPct / 100m);
             if (total > 0) anyReceived = true;
-            if (total < line.BaseOrderedQuantity) allReceived = false;
+            if (total <= 0 || total < minimumRequired) allReceived = false;
         }
 
         var target = allReceived ? PurchaseOrderStatus.Received : anyReceived ? PurchaseOrderStatus.PartiallyReceived : PurchaseOrderStatus.Open;

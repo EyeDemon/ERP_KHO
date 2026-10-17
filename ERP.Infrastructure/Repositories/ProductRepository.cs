@@ -67,7 +67,7 @@ namespace ERP.Infrastructure.Repositories
             var hasTransactions = await _context.InventoryTransactions.AnyAsync(t => t.ProductId == productId, cancellationToken);
             if (hasTransactions) return true;
 
-            var hasStocks = await _context.InventoryStocks.AnyAsync(s => s.ProductId == productId && s.Quantity > 0, cancellationToken);
+            var hasStocks = await _context.InventoryStocks.AnyAsync(s => s.ProductId == productId && (s.Quantity > 0 || s.ReservedQuantity > 0), cancellationToken);
             if (hasStocks) return true;
 
             return false;

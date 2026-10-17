@@ -815,7 +815,7 @@ export default function StockTransfers() {
                     value={line.quantity}
                     onChange={event => {
                       setLines(lines.map((entry, row) =>
-                        row === index ? { ...entry, quantity: Number(event.target.value) || '' } : entry));
+                        row === index ? { ...entry, quantity: event.target.value === '' ? '' : Number(event.target.value) } : entry));
                     }}
                   />
                   <input

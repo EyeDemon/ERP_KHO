@@ -469,10 +469,13 @@ WHEN NOT MATCHED THEN
     private async Task<StockTransfer> GetScopedAsync(int id, CancellationToken cancellationToken)
     {
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        return await context.StockTransfers.Include(x => x.SourceWarehouse).Include(x => x.DestinationWarehouse)
+        var entity = await context.StockTransfers.Include(x => x.SourceWarehouse).Include(x => x.DestinationWarehouse)
             .Include(x => x.Details).ThenInclude(x => x.Product)
-            .SingleOrDefaultAsync(x => x.Id == id && (allowed.Contains(x.SourceWarehouseId) || allowed.Contains(x.DestinationWarehouseId)), cancellationToken)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Không tìm thấy phiếu điều chuyển.");
+        if (!allowed.Contains(entity.SourceWarehouseId) && !allowed.Contains(entity.DestinationWarehouseId))
+            throw new ForbiddenException("Bạn không có quyền truy cập kho được yêu cầu.");
+        return entity;
     }
 
     private void EnsureWriteRole()

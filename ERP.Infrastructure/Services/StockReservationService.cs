@@ -473,6 +473,8 @@ public class StockReservationService(
     public async Task<StockReservationPageDto> GetPageAsync(int page, int pageSize, int? warehouseId, int? productId, string? status, CancellationToken cancellationToken = default)
     {
         page = Math.Max(1, page); pageSize = Math.Clamp(pageSize, 1, 100);
+        if (warehouseId.HasValue)
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
         var query = ScopedQuery().AsNoTracking();
         if (warehouseId.HasValue) query = query.Where(x => x.WarehouseId == warehouseId);
         if (productId.HasValue) query = query.Where(x => x.ProductId == productId);
@@ -485,7 +487,8 @@ public class StockReservationService(
 
     public async Task<StockReservationDto> GetAsync(int id, CancellationToken cancellationToken = default)
     {
-        var entity = await ScopedQuery().AsNoTracking().Include(x => x.Product).Include(x => x.Warehouse).FirstOrDefaultAsync(x => x.Id == id, cancellationToken) ?? throw new NotFoundException("Không tìm thấy reservation.");
+        var entity = await context.StockReservations.AsNoTracking().Include(x => x.Product).Include(x => x.Warehouse).FirstOrDefaultAsync(x => x.Id == id, cancellationToken) ?? throw new NotFoundException("Không tìm thấy reservation.");
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.WarehouseId, cancellationToken);
         return Map(entity);
     }
 

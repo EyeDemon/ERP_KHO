@@ -99,7 +99,8 @@ public sealed partial class ProductCatalogService(IProductCatalogRepository repo
 
     private static string NormalizeBarcode(string value)
     {
-        var normalized = (value ?? string.Empty).Trim();
+        var raw = value ?? string.Empty;
+        var normalized = new string(raw.Where(ch => ch >= 32 && ch != 127 && ch != '\u200b' && ch != '\ufeff').ToArray()).Trim();
         if (!BarcodePattern().IsMatch(normalized)) throw new BusinessRuleException("Barcode phải có từ 1 đến 64 ký tự hợp lệ.");
         return normalized;
     }

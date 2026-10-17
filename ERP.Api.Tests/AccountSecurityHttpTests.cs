@@ -32,7 +32,7 @@ public sealed partial class InboundHttpIntegrationTests
             using var response = await Send(client, HttpMethod.Get, path, actor.Id, "Admin");
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            Assert.Equal(new[] { "isActive", "isLocked", "lockoutEnd", "rowVersion" },
+            Assert.Equal(new[] { "activeSessionCount", "failedLoginCount", "isActive", "isLocked", "lockoutEnd", "roleName", "rowVersion", "securityStateVersion", "userId", "username" },
                 json.RootElement.EnumerateObject().Select(p => p.Name).Order().ToArray());
             return json.RootElement.GetProperty("rowVersion").GetString()!;
         }

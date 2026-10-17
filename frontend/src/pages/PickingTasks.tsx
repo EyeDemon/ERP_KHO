@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { currentUserId, usePermission } from '../services/authorization';
+import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
@@ -118,7 +119,7 @@ export default function PickingTasks(){
   const mobileReadyTasksCount=tasks.filter(x=>['Open','Assigned','InProgress'].includes(x.status)).length;
   const shortPickExceptionTasksCount=tasks.filter(x=>x.status==='ShortPick').length;
   const verifyMobileScan=async()=>{
-    const q=mobileScanInput.trim();
+    const q=sanitizeScannerCode(mobileScanInput);
     if(!q){setMobileScanResult('Vui lòng nhập hoặc quét mã vạch / vị trí.');return;}
     const matchedTask=tasks.find(t=>t.taskCode.toLowerCase().includes(q.toLowerCase())||(t.sourceCode??'').toLowerCase().includes(q.toLowerCase()));
     const matchedLine=(selected?.lines??[]).find(l=>l.productCode.toLowerCase()===q.toLowerCase()||l.sourceLocationCode.toLowerCase()===q.toLowerCase());
@@ -269,10 +270,10 @@ export default function PickingTasks(){
                   <input aria-label={`Pick quantity ${line.productCode}`} type="number" min="0" step="any" value={scan[line.id]?.quantity??''}
                     onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{location:'',product:''}),quantity:e.target.value}}))}/>
                 </label>
-                <button type="button" disabled={!!busy||!scan[line.id]?.location||!scan[line.id]?.product||!Number(scan[line.id]?.quantity)}
+                <button type="button" disabled={!!busy||!sanitizeScannerCode(scan[line.id]?.location??'')||!sanitizeScannerCode(scan[line.id]?.product??'')||!Number.isFinite(Number(scan[line.id]?.quantity))||Number(scan[line.id]?.quantity)<=0}
                   onClick={()=>void mutate(
                     `picking-pick-${selected.id}-${line.id}`,`/api/picking-tasks/${selected.id}/pick`,
-                    {taskLineId:line.id,locationBarcode:scan[line.id]?.location,productBarcode:scan[line.id]?.product,quantity:Number(scan[line.id]?.quantity),rowVersion:selected.rowVersion}
+                    {taskLineId:line.id,locationBarcode:sanitizeScannerCode(scan[line.id]?.location??''),productBarcode:sanitizeScannerCode(scan[line.id]?.product??''),quantity:roundQty4(Number(scan[line.id]?.quantity)),rowVersion:selected.rowVersion}
                   )}>Xác nhận Pick</button>
               </div>}
 

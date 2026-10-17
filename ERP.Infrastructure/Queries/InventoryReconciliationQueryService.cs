@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Data;
 using System.Security.Cryptography;
@@ -120,11 +120,15 @@ namespace ERP.Infrastructure.Queries
             if (warehouseName is null)
                 throw new NotFoundException("Không tìm thấy kho cần đối chiếu.");
 
-            var stocks = _context.InventoryStocks.AsNoTracking()
-                .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId &&
-                            x.Status == InventoryStatus.Available);
-            var allStatusStocks = _context.InventoryStocks.AsNoTracking()
-                .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId);
+            var baseStocks = _context.Database.IsSqlServer()
+                ? _context.InventoryStocks
+                    .FromSqlRaw("SELECT * FROM [InventoryStocks] WITH (INDEX(IX_InventoryStocks_CanonicalBucket))")
+                    .AsNoTracking()
+                : _context.InventoryStocks.AsNoTracking();
+            var allStatusStocks = baseStocks
+                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId);
+            var stocks = allStatusStocks
+                .Where(x => x.Status == InventoryStatus.Available);
             var selectedStatusStocks = allStatusStocks.Where(x => x.Status == selectedBucketStatus);
             var allStatusLedger = _context.InventoryTransactions.AsNoTracking()
                 .Where(x => x.WarehouseId == warehouseId && x.ProductId == productId);
@@ -152,7 +156,7 @@ namespace ERP.Infrastructure.Queries
             var anchoredAllStatusLedger = allStatusLedger.Where(x => x.Id <= anchor);
             var anchoredLedger = ledger.Where(x => x.Id <= anchor);
             // Recheck within the authorized scope on each page request.
-            var hasNewEvents = await allStatusLedger.AnyAsync(x => x.Id > anchor);
+            var hasNewEvents = latestScopedEventId > anchor;
 
             // Use a monotonically increasing identity cursor instead of OFFSET.
             // This bounds new bucket INSERTs, but does not freeze mutable stock
@@ -166,7 +170,7 @@ namespace ERP.Infrastructure.Queries
             var bucketAnchor = bucketAnchorId ?? latestScopedBucketId;
             var anchoredStocks = selectedStatusStocks.Where(x => x.Id <= bucketAnchor);
             var bucketCount = await anchoredStocks.CountAsync();
-            var bucketHasRowsAfterAnchor = await selectedStatusStocks.AnyAsync(x => x.Id > bucketAnchor);
+            var bucketHasRowsAfterAnchor = latestScopedBucketId > bucketAnchor;
             // Preserve selected-status keyset pages while detecting new stock
             // buckets in ANY status of the authorized warehouse/product.
             var latestAllStatusBucketId = await allStatusStocks.MaxAsync(x => (int?)x.Id) ?? 0;
@@ -174,8 +178,7 @@ namespace ERP.Infrastructure.Queries
                 allStatusBucketAnchorId.Value > latestAllStatusBucketId)
                 throw new BusinessRuleException("Mốc bucket toàn trạng thái vượt quá bucket hiện có của kho và sản phẩm.");
             var allStatusBucketAnchor = allStatusBucketAnchorId ?? latestAllStatusBucketId;
-            var allStatusBucketHasRowsAfterAnchor = await allStatusStocks
-                .AnyAsync(x => x.Id > allStatusBucketAnchor);
+            var allStatusBucketHasRowsAfterAnchor = latestAllStatusBucketId > allStatusBucketAnchor;
             var eventCount = await selectedEventLedger.CountAsync(x => x.Id <= anchor);
 
             // SQL aggregation bounds materialization to the status enum, rather

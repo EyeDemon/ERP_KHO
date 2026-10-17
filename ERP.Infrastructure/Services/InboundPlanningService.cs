@@ -188,30 +188,38 @@ public sealed class InboundPlanningService(
         MutateAsnAsync(id,dto,[AsnStatus.InTransit],AsnStatus.Arrived,"Asn.Arrived",token);
     public Task<AsnDto> StartReceivingAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
         MutateAsnAsync(id,dto,[AsnStatus.Arrived],AsnStatus.Receiving,"Asn.ReceivingStarted",token);
-    public async Task<AsnDto> CompleteAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)
-    {
-        if (await context.ImportReceipts.AsNoTracking().AnyAsync(
-                x => x.AsnId == id && x.Status != ReceiptStatus.Posted && x.Status != ReceiptStatus.Cancelled,
-                token))
-            throw Conflict("Không thể hoàn tất ASN khi còn phiếu nhập liên kết chưa được POST.");
-        return await MutateAsnAsync(id,dto,[AsnStatus.Receiving],AsnStatus.Completed,"Asn.Completed",token);
-    }
+    public Task<AsnDto> CompleteAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
+        MutateAsnAsync(id,dto,[AsnStatus.Receiving],AsnStatus.Completed,"Asn.Completed",token,async (asn,ct)=>
+        {
+            var hasOpenReceipts = await context.ImportReceipts.AsNoTracking().AnyAsync(
+                x => x.AsnId == asn.Id && x.Status != ReceiptStatus.Posted && x.Status != ReceiptStatus.Cancelled,
+                ct);
+            if (hasOpenReceipts)
+                throw Conflict("Không thể hoàn tất ASN khi còn phiếu nhập liên kết chưa được POST.");
+        });
     public Task<AsnDto> CancelAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
         MutateAsnAsync(id,dto,[AsnStatus.Draft,AsnStatus.Confirmed],AsnStatus.Cancelled,"Asn.Cancelled",token);
 
     private async Task<PurchaseOrderDto> MutatePurchaseOrderAsync(int id,InboundStateCommandDto dto,PurchaseOrderStatus[] allowedStates,PurchaseOrderStatus target,string action,CancellationToken token)
     {
+        var entity=await PurchaseOrderQuery().SingleOrDefaultAsync(x=>x.Id==id,token)??throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId,token);
         var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
-        var entity=await PurchaseOrderQuery().SingleOrDefaultAsync(x=>x.Id==id&&accessibleWarehouseIds.Contains(x.WarehouseId),token)??throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        if(!accessibleWarehouseIds.Contains(entity.WarehouseId))
+            throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
         await ApplyStateMutationAsync(entity.Status,allowedStates,target,entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion),
             ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;},"Trạng thái đơn mua không cho phép thao tác này.",action,"PurchaseOrder",entity.Id,entity.WarehouseId,token);
         return await GetPurchaseOrderAsync(id,token);
     }
 
-    private async Task<AsnDto> MutateAsnAsync(int id,InboundStateCommandDto dto,AsnStatus[] allowedStates,AsnStatus target,string action,CancellationToken token)
+    private async Task<AsnDto> MutateAsnAsync(int id,InboundStateCommandDto dto,AsnStatus[] allowedStates,AsnStatus target,string action,CancellationToken token,Func<Asn,CancellationToken,Task>? beforeMutate=null)
     {
+        var entity=await AsnQuery().SingleOrDefaultAsync(x=>x.Id==id,token)??throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId,token);
         var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
-        var entity=await AsnQuery().SingleOrDefaultAsync(x=>x.Id==id&&accessibleWarehouseIds.Contains(x.WarehouseId),token)??throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        if(!accessibleWarehouseIds.Contains(entity.WarehouseId))
+            throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        if(beforeMutate is not null) await beforeMutate(entity,token);
         await ApplyStateMutationAsync(entity.Status,allowedStates,target,entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion),
             ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;},"Trạng thái ASN không cho phép thao tác này.",action,"Asn",entity.Id,entity.WarehouseId,token);
         return await GetAsnAsync(id,token);
@@ -255,6 +263,8 @@ public sealed class InboundPlanningService(
 
     private async Task PopulatePurchaseOrderLinesAsync(PurchaseOrder entity,IReadOnlyList<CreatePurchaseOrderLineDto> lines,CancellationToken token)
     {
+        var productIds=lines.Select(x=>x.ProductId).Distinct().ToArray();
+        var productsById=await LoadProductsForLinesAsync(productIds,token);
         var lineNo=0;
         var externalIds=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach(var dto in lines)
@@ -263,7 +273,7 @@ public sealed class InboundPlanningService(
             var external=Required(dto.ExternalLineId,$"Mã dòng ngoài hệ thống #{lineNo}",100);
             if(!externalIds.Add(external)) throw new BusinessRuleException("Mã dòng ngoài hệ thống bị trùng trong đơn mua.");
             ValidateTolerance(dto.AllowedOverReceiptPct,dto.AllowedUnderReceiptPct);
-            var conversion=await ResolveConversionAsync(dto.ProductId,dto.OperationUnitId,dto.OrderedQuantity,token);
+            var conversion=ResolveConversion(productsById,dto.ProductId,dto.OperationUnitId,dto.OrderedQuantity);
             entity.Lines.Add(new PurchaseOrderLine
             {
                 ExternalLineId=external,LineNo=lineNo,ProductId=dto.ProductId,OrderedQuantity=dto.OrderedQuantity,
@@ -277,6 +287,22 @@ public sealed class InboundPlanningService(
 
     private async Task PopulateAsnLinesAsync(Asn entity,IReadOnlyList<CreateAsnLineDto> lines,int? excludeAsnId,CancellationToken token)
     {
+        var productIds=lines.Select(x=>x.ProductId).Distinct().ToArray();
+        var productsById=await LoadProductsForLinesAsync(productIds,token);
+        var poLineIds=lines.Where(x=>x.PurchaseOrderLineId.HasValue).Select(x=>x.PurchaseOrderLineId!.Value).Distinct().ToArray();
+        var poLinesById=poLineIds.Length==0
+            ? new Dictionary<int,PurchaseOrderLine>()
+            : await context.PurchaseOrderLines.AsNoTracking().Include(x=>x.PurchaseOrder)
+                .Where(x=>poLineIds.Contains(x.Id)&&x.PurchaseOrderId==entity.PurchaseOrderId)
+                .ToDictionaryAsync(x=>x.Id,token);
+        var existingByPoLineId=poLineIds.Length==0
+            ? new Dictionary<int,decimal>()
+            : await context.AsnLines.AsNoTracking()
+                .Where(x=>x.PurchaseOrderLineId.HasValue&&poLineIds.Contains(x.PurchaseOrderLineId.Value)&&x.Asn.Status!=AsnStatus.Cancelled&&(!excludeAsnId.HasValue||x.AsnId!=excludeAsnId.Value))
+                .GroupBy(x=>x.PurchaseOrderLineId!.Value)
+                .Select(g=>new{PoLineId=g.Key,Total=g.Sum(x=>x.BaseExpectedQuantity)})
+                .ToDictionaryAsync(x=>x.PoLineId,x=>x.Total,token);
+
         var lineNo=0;
         foreach(var dto in lines)
         {
@@ -284,21 +310,19 @@ public sealed class InboundPlanningService(
             PurchaseOrderLine? poLine=null;
             if(dto.PurchaseOrderLineId.HasValue)
             {
-                poLine=await context.PurchaseOrderLines.AsNoTracking().Include(x=>x.PurchaseOrder)
-                    .SingleOrDefaultAsync(x=>x.Id==dto.PurchaseOrderLineId.Value&&x.PurchaseOrderId==entity.PurchaseOrderId,token)
-                    ?? throw new NotFoundException("Không tìm thấy dòng đơn mua hoặc bạn không có quyền truy cập.");
+                if(!poLinesById.TryGetValue(dto.PurchaseOrderLineId.Value,out poLine))
+                    throw new NotFoundException("Không tìm thấy dòng đơn mua hoặc bạn không có quyền truy cập.");
                 if(poLine.ProductId!=dto.ProductId) throw new BusinessRuleException("Sản phẩm ASN không khớp dòng đơn mua.");
             }
             else if(entity.PurchaseOrderId.HasValue) throw new BusinessRuleException("ASN có đơn mua phải tham chiếu từng dòng đơn mua.");
 
-            var conversion=await ResolveConversionAsync(dto.ProductId,dto.OperationUnitId,dto.ExpectedQuantity,token);
+            var conversion=ResolveConversion(productsById,dto.ProductId,dto.OperationUnitId,dto.ExpectedQuantity);
             if(poLine is not null)
             {
-                var existing=await context.AsnLines.AsNoTracking()
-                    .Where(x=>x.PurchaseOrderLineId==poLine.Id&&x.Asn.Status!=AsnStatus.Cancelled&&(!excludeAsnId.HasValue||x.AsnId!=excludeAsnId.Value))
-                    .SumAsync(x=>(decimal?)x.BaseExpectedQuantity,token)??0m;
+                var existing=existingByPoLineId.GetValueOrDefault(poLine.Id);
                 var max=poLine.BaseOrderedQuantity*(1m+poLine.AllowedOverReceiptPct/100m);
                 if(existing+conversion.BaseQuantity>max) throw Conflict("Tổng số lượng ASN vượt giới hạn đơn mua.");
+                existingByPoLineId[poLine.Id]=existing+conversion.BaseQuantity;
             }
             entity.Lines.Add(new AsnLine
             {
@@ -310,11 +334,18 @@ public sealed class InboundPlanningService(
         }
     }
 
-    private async Task<Conversion> ResolveConversionAsync(int productId,int operationUnitId,decimal quantity,CancellationToken token)
+    private Task<Dictionary<int,Product>> LoadProductsForLinesAsync(IReadOnlyCollection<int> productIds,CancellationToken token)=>
+        context.Products.AsNoTracking()
+            .Include(x=>x.Unit)
+            .Include(x=>x.Uoms).ThenInclude(x=>x.Unit)
+            .Where(x=>productIds.Contains(x.Id))
+            .ToDictionaryAsync(x=>x.Id,token);
+
+    private static Conversion ResolveConversion(IReadOnlyDictionary<int,Product> productsById,int productId,int operationUnitId,decimal quantity)
     {
         if(quantity<=0) throw new BusinessRuleException("Số lượng phải lớn hơn 0.");
-        var product=await context.Products.AsNoTracking().Include(x=>x.Unit).Include(x=>x.Uoms).ThenInclude(x=>x.Unit).SingleOrDefaultAsync(x=>x.Id==productId,token);
-        if(product is null||!product.IsActive) throw new BusinessRuleException("Sản phẩm không tồn tại hoặc không hoạt động.");
+        if(!productsById.TryGetValue(productId,out var product)||!product.IsActive)
+            throw new BusinessRuleException("Sản phẩm không tồn tại hoặc không hoạt động.");
         var opId=operationUnitId>0?operationUnitId:product.UnitId;
         var now=DateTime.UtcNow;
         if(opId==product.UnitId)

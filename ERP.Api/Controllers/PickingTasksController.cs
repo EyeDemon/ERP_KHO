@@ -165,7 +165,8 @@ public sealed class PickingTasksController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var input = (request?.ScanInput ?? string.Empty).Trim();
+        var rawInput = request?.ScanInput ?? string.Empty;
+        var input = new string(rawInput.Where(ch => ch >= 32 && ch != 127 && ch != '\u200b' && ch != '\ufeff').ToArray()).Trim();
         var tasks = await service.ListAsync(warehouseId, null, cancellationToken);
         var match = string.IsNullOrWhiteSpace(input)
             ? null
