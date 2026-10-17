@@ -38,7 +38,7 @@ describe('SystemBlueprint', () => {
     const statusSelect = view.getAllByRole('combobox')[0];
     fireEvent.change(statusSelect, { target: { value: 'live' } });
     expect(view.getByText('Sản phẩm / SKU')).toBeTruthy();
-    expect(view.queryByText('Phân bổ tồn')).toBeNull();
+    expect(view.queryByText('Dịch vụ gia tăng (VAS)')).toBeNull();
   });
 
   it('keeps real-system actions out of the Blueprint capability cards', () => {

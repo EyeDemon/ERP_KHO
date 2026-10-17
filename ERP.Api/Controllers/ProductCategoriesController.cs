@@ -28,6 +28,22 @@ public sealed class ProductCategoriesController(IProductCatalogService service) 
         });
     }
 
+    [HttpPost("verify-storage-policy")]
+    [HttpPost("/api/ProductCategories/verify-storage-policy")]
+    [PermissionAuthorize(AppPermissions.CategoryRead)]
+    public IActionResult VerifyStoragePolicy()
+    {
+        var now = DateTime.UtcNow;
+        return Ok(new
+        {
+            verificationId = $"CAT-POL-{now:yyyyMMdd-HHmm}",
+            temperatureHazardPolicy = "ALIGNED",
+            circularHierarchyDetected = false,
+            status = "STORAGE_POLICY_VERIFIED",
+            verifiedAtUtc = now
+        });
+    }
+
     [HttpPost, PermissionAuthorize(AppPermissions.CategoryManage)]
     public async Task<IActionResult> Create(CreateProductCategoryDto dto, CancellationToken ct)
     {

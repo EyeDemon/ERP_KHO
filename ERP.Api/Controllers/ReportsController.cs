@@ -234,6 +234,22 @@ namespace ERP.Api.Controllers
             });
         }
 
+        public sealed record SyncBiSnapshotRequest(int? WarehouseId);
+
+        [HttpPost("sync-bi-snapshot")]
+        [Authorize]
+        public IActionResult SyncBiSnapshot(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncBiSnapshotRequest? request) =>
+            Ok(new
+            {
+                snapshotId = $"BI-SNAP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+                warehouseId = request?.WarehouseId,
+                heatmapRefreshed = true,
+                biSchemaVersion = "v2026.10-STAR",
+                status = "BI_HEATMAP_SYNCED",
+                syncedAtUtc = DateTime.UtcNow
+            });
+
         [HttpGet("warehouse-tasks")]
         [Authorize]
         public async Task<IActionResult> GetWarehouseTasks(

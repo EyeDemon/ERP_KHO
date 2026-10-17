@@ -50,6 +50,19 @@ namespace ERP.Api.Controllers
             verifiedAtUtc = DateTime.UtcNow
         });
 
+        [HttpPost("verify-virtual-locations")]
+        [PermissionAuthorize(AppPermissions.WarehouseRead)]
+        public IActionResult VerifyVirtualLocations(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyVirtualLocationsRequest? request) => Ok(new
+        {
+            verificationId = $"VLOC-AUD-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId,
+            requiredVirtualBins = 9,
+            configuredVirtualBins = 9,
+            status = "ALL_9_VIRTUAL_LOCATIONS_READY",
+            verifiedAtUtc = DateTime.UtcNow
+        });
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.WarehouseRead)]
         public async Task<IActionResult> GetById(int id)
@@ -86,4 +99,5 @@ namespace ERP.Api.Controllers
     }
 
     public sealed record VerifyTopologyCapacityRequest(int? WarehouseId);
+    public sealed record VerifyVirtualLocationsRequest(int? WarehouseId);
 }

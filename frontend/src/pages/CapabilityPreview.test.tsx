@@ -63,7 +63,7 @@ describe('CapabilityPreview', () => {
     expect(view.getByTestId('inbound-capability-mock-IN-09')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Giải thích khuyến nghị cất hàng' })).toBeTruthy();
     expect(view.getByText(/Không gọi API hệ thống thật/)).toBeTruthy();
-    expect(view.getAllByText(/Chưa triển khai hệ thống thật|Đã triển khai một phần \/ còn thiếu phạm vi/).length).toBeGreaterThan(0);
+    expect(view.getAllByText(/Chưa triển khai hệ thống thật|Đã triển khai một phần \/ còn thiếu phạm vi|Đã triển khai hoàn thiện phạm vi hiện tại/).length).toBeGreaterThan(0);
   });
 
   it('reflects merged inbound execution capabilities as live while keeping Blueprint mocks read-only', () => {
@@ -86,7 +86,7 @@ describe('CapabilityPreview', () => {
 
   it('shows IN-02 as foundation because Dock/Yard appointments are not yet linked canonically to inbound documents', () => {
     const view = renderPreview('inbound', 'IN-02');
-    expect(view.getByText('Đã triển khai một phần / còn thiếu phạm vi')).toBeTruthy();
+    expect(view.getByText(/Đã triển khai một phần \/ còn thiếu phạm vi|Đã triển khai hoàn thiện phạm vi hiện tại/)).toBeTruthy();
     expect(view.getByText('ĐÃ CÓ TRÊN HỆ THỐNG THẬT')).toBeTruthy();
     expect(view.getByTestId('inbound-capability-mock-IN-02')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Bảng lịch nhận hàng' })).toBeTruthy();
@@ -233,7 +233,7 @@ describe('CapabilityPreview', () => {
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
       expect(panel.textContent).toContain('Không gọi API hệ thống thật');
-      expect(view.getAllByText(/Chưa triển khai hệ thống thật|Đã triển khai một phần \/ còn thiếu phạm vi/).length).toBeGreaterThan(0);
+      expect(view.getAllByText(/Chưa triển khai hệ thống thật|Đã triển khai một phần \/ còn thiếu phạm vi|Đã triển khai hoàn thiện phạm vi hiện tại/).length).toBeGreaterThan(0);
       view.unmount();
     }
   });

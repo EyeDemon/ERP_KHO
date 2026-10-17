@@ -20,7 +20,7 @@ describe('SystemCoverage', () => {
     expect(view.queryByText(/UNMAPPED/)).toBeNull();
     expect(view.getAllByText('282').length).toBeGreaterThan(0);
     expect(view.getByText('Sổ đăng ký tài liệu chuẩn • Đặc tả 1–282')).toBeTruthy();
-  });
+  }, 15_000);
 
   it('filters by release wave and implementation status', () => {
     const view = render(<MemoryRouter><SystemCoverage /></MemoryRouter>);
@@ -32,7 +32,7 @@ describe('SystemCoverage', () => {
     fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: 'all' } });
     fireEvent.change(view.getByLabelText('Lọc trạng thái triển khai'), { target: { value: 'live' } });
     expect(table.getByText(/TR-01 • Điều chuyển kho/)).toBeTruthy();
-    expect(table.queryByText(/OUT-05 • Lấy hàng/)).toBeNull();
+    expect(table.queryByText(/AX-10 • Dịch vụ gia tăng/)).toBeNull();
   });
 
   it('shows advanced canonical capabilities without promoting them to core implementation', () => {

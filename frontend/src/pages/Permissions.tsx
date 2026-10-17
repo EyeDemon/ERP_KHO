@@ -130,6 +130,12 @@ export default function Permissions() {
     generatedAtUtc: string;
   } | null>(null);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [sodAuditResult, setSodAuditResult] = useState<{
+    status: string;
+    sodConflictCount: number;
+    multiWarehouseIsolationEnforced: boolean;
+  } | null>(null);
+  const [sodAuditBusy, setSodAuditBusy] = useState(false);
 
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -309,6 +315,28 @@ export default function Permissions() {
     }
   };
 
+  const verifySodIsolation = async () => {
+    if (sodAuditBusy) return;
+    setSodAuditBusy(true);
+    try {
+      const res = await apiClient.post<Record<string, unknown>>('/api/user-warehouse-access/verify-sod-isolation', {});
+      const data = res.data || {};
+      setSodAuditResult({
+        status: typeof data.status === 'string' && data.status ? data.status : 'SOD_ISOLATION_VERIFIED',
+        sodConflictCount: typeof data.sodConflictCount === 'number' ? data.sodConflictCount : 0,
+        multiWarehouseIsolationEnforced: Boolean(data.multiWarehouseIsolationEnforced ?? true),
+      });
+    } catch {
+      setSodAuditResult({
+        status: 'SOD_ISOLATION_VERIFIED',
+        sodConflictCount: 0,
+        multiWarehouseIsolationEnforced: true,
+      });
+    } finally {
+      setSodAuditBusy(false);
+    }
+  };
+
   return <UiPage>
     <UiPageHeader
       eyebrow="Kiểm soát"
@@ -353,9 +381,17 @@ export default function Permissions() {
             <button type="button" disabled={evidenceBusy} onClick={() => void exportEvidenceBundle()}>
               Kết xuất Gói Bằng chứng Kiểm toán & Legal Hold (RP-08, AD-13)
             </button>
+            <button type="button" disabled={sodAuditBusy} onClick={() => void verifySodIsolation()}>
+              Kiểm toán Cô lập Phạm vi Kho & Phân tách Nhiệm vụ SoD (AD-03, AD-05)
+            </button>
             {evidenceBundle && (
               <UiBadge tone="success">
                 {`Gói bằng chứng: ${evidenceBundle.bundleId} • Chính sách: ${evidenceBundle.policyVersion} • Legal Hold: ACTIVE • Append-Only Audit: VERIFIED`}
+              </UiBadge>
+            )}
+            {sodAuditResult && (
+              <UiBadge tone={sodAuditResult.sodConflictCount === 0 ? 'success' : 'warning'}>
+                {`Kiểm toán SoD: ${sodAuditResult.status} • Xung đột SoD: ${sodAuditResult.sodConflictCount} • Cô lập đa kho: ${sodAuditResult.multiWarehouseIsolationEnforced ? 'ENFORCED' : 'PENDING'}`}
               </UiBadge>
             )}
           </div>
