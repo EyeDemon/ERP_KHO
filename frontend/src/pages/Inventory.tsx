@@ -326,7 +326,50 @@ const Inventory = () => {
       if (analyticsFilter.days) params.append('days', analyticsFilter.days);
 
       const res = await apiClient.get('/api/Reports/analytics-summary?' + params.toString());
-      setAnalyticsReport(res.data ?? null);
+      const raw = res.data;
+      if (!raw) {
+        setAnalyticsReport(null);
+      } else {
+        const parsedDays = Number(raw.windowDays ?? analyticsFilter.days) || 30;
+        const rawItems: Array<Record<string, unknown>> = Array.isArray(raw.turnoverAndDaysOnHand)
+          ? raw.turnoverAndDaysOnHand
+          : Array.isArray(raw.turnoverItems)
+            ? raw.turnoverItems
+            : [];
+        const totalLines = Number(raw.stocktakeAccuracy?.totalLinesCounted ?? raw.stocktakeLineCount ?? 0);
+        const exactLines = Number(raw.stocktakeAccuracy?.exactMatchLinesCount ?? raw.stocktakeAccurateLineCount ?? 0);
+        setAnalyticsReport({
+          windowDays: parsedDays,
+          inboundOutboundSla: {
+            completedReceiptsCount: Number(raw.inboundOutboundSla?.completedReceiptsCount ?? raw.inboundPostedCount ?? 0),
+            avgInboundLeadTimeHours: Number(raw.inboundOutboundSla?.avgInboundLeadTimeHours ?? 0),
+            openPutawayBacklogCount: Number(raw.inboundOutboundSla?.openPutawayBacklogCount ?? raw.putawayOpenCount ?? 0),
+            dispatchedExportsCount: Number(raw.inboundOutboundSla?.dispatchedExportsCount ?? raw.outboundShippedCount ?? 0),
+            avgOutboundLeadTimeHours: Number(raw.inboundOutboundSla?.avgOutboundLeadTimeHours ?? 0),
+            openPickingBacklogCount: Number(raw.inboundOutboundSla?.openPickingBacklogCount ?? 0),
+          },
+          stocktakeAccuracy: {
+            approvedStocktakesCount: Number(raw.stocktakeAccuracy?.approvedStocktakesCount ?? raw.stocktakeApprovedCount ?? 0),
+            totalLinesCounted: totalLines,
+            exactMatchLinesCount: exactLines,
+            varianceLinesCount: Number(raw.stocktakeAccuracy?.varianceLinesCount ?? Math.max(0, totalLines - exactLines)),
+            accuracyRatePercent: Number(raw.stocktakeAccuracy?.accuracyRatePercent ?? raw.stocktakeAccuracyRatePct ?? 100),
+            totalAbsoluteVarianceQty: Number(raw.stocktakeAccuracy?.totalAbsoluteVarianceQty ?? 0),
+          },
+          turnoverAndDaysOnHand: rawItems.map((item) => ({
+            productId: Number(item.productId ?? 0),
+            productCode: String(item.productCode ?? ''),
+            productName: String(item.productName ?? ''),
+            unitName: String(item.unitName ?? 'ĐVT'),
+            onHandQuantity: Number(item.onHandQuantity ?? item.currentOnHand ?? 0),
+            periodInQuantity: Number(item.periodInQuantity ?? 0),
+            periodOutQuantity: Number(item.periodOutQuantity ?? item.issuedLastPeriod ?? 0),
+            turnoverRate: Number(item.turnoverRate ?? item.turnoverRatio ?? 0),
+            daysOnHand: item.daysOnHand === null || item.daysOnHand === undefined ? null : Number(item.daysOnHand),
+            velocityClass: String(item.velocityClass ?? item.movementClass ?? 'SLOW_MOVING'),
+          })),
+        });
+      }
     } catch {
       setAnalyticsError('Lỗi khi tải báo cáo hiệu suất và vòng quay tồn kho.');
       setAnalyticsReport(null);
@@ -814,8 +857,8 @@ const Inventory = () => {
   const renderAnalyticsTab = () => {
     const velocityBadge = (cls: string) => {
       if (cls === 'FAST_MOVING') return <UiBadge tone="success">Luân chuyển nhanh (Fast)</UiBadge>;
-      if (cls === 'NORMAL_MOVING') return <UiBadge tone="neutral">Bình thường (Normal)</UiBadge>;
-      if (cls === 'DEAD_STOCK') return <UiBadge tone="danger">Tồn đọng / Không xuất (Dead Stock)</UiBadge>;
+      if (cls === 'NORMAL_MOVING' || cls === 'NORMAL') return <UiBadge tone="neutral">Bình thường (Normal)</UiBadge>;
+      if (cls === 'DEAD_STOCK' || cls === 'NON_MOVING') return <UiBadge tone="danger">Tồn đọng / Không xuất (Dead Stock)</UiBadge>;
       return <UiBadge tone="warning">Luân chuyển chậm (Slow)</UiBadge>;
     };
 
