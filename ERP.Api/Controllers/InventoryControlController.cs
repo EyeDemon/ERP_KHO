@@ -146,7 +146,7 @@ public sealed class InventoryControlController(
     }
 
     [HttpGet("advanced-planning-suite")]
-    [Authorize]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> AdvancedPlanningSuite(
         [FromServices] ErpKhoDbContext db,
         [FromServices] IWarehouseAuthorizationService warehouseAuth,
@@ -268,7 +268,7 @@ public sealed class InventoryControlController(
         int HorizonDays = 14);
 
     [HttpPost("what-if-simulation")]
-    [Authorize]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> RunWhatIfSimulation(
         [FromServices] ErpKhoDbContext db,
         [FromServices] IWarehouseAuthorizationService warehouseAuth,

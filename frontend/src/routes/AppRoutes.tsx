@@ -1,6 +1,7 @@
 import { Navigate, Routes, Route } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import MainLayout from '../layouts/MainLayout';
+import BlueprintLayout from '../layouts/BlueprintLayout';
 import Dashboard from '../pages/Dashboard';
 import NotFound from '../pages/NotFound';
 import Login from '../pages/Login';
@@ -72,16 +73,22 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<MockDemoProvider><MainLayout /></MockDemoProvider>}>
+
+      {/* Hệ thống thiết kế / Mô phỏng độc lập (Tách biệt hoàn toàn khỏi Hệ thống thật) */}
+      <Route path="/system-blueprint" element={<MockDemoProvider><BlueprintLayout /></MockDemoProvider>}>
+        <Route index element={<SystemBlueprint />} />
+        <Route path="scenarios" element={<MockScenarioLab />} />
+        <Route path="mock-data" element={<MockDataLab />} />
+        <Route path="search" element={<MockGlobalSearch />} />
+        <Route path="coverage" element={<SystemCoverage />} />
+        <Route path="warehouse-structure/WH-02/workbench" element={<WarehouseStructure />} />
+        <Route path=":moduleKey/:capabilityId" element={<CapabilityPreview />} />
+        <Route path=":moduleKey" element={<ModuleBlueprint />} />
+      </Route>
+
+      {/* Hệ thống vận hành thật (Production ERP WMS) */}
+      <Route path="/" element={<MainLayout />}>
         <Route index element={<Dashboard />} />
-        <Route path="system-blueprint" element={<SystemBlueprint />} />
-        <Route path="system-blueprint/scenarios" element={<MockScenarioLab />} />
-        <Route path="system-blueprint/mock-data" element={<MockDataLab />} />
-        <Route path="system-blueprint/search" element={<MockGlobalSearch />} />
-        <Route path="system-blueprint/coverage" element={<SystemCoverage />} />
-        <Route path="system-blueprint/warehouse-structure/WH-02/workbench" element={<WarehouseStructure />} />
-        <Route path="system-blueprint/:moduleKey/:capabilityId" element={<CapabilityPreview />} />
-        <Route path="system-blueprint/:moduleKey" element={<ModuleBlueprint />} />
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
         <Route path="warehouse-structure" element={<PermissionRoute permission="location.read"><WarehouseLocations /></PermissionRoute>} />

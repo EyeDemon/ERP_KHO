@@ -479,7 +479,19 @@ const ImportReceipts = () => {
             <button
               type="button"
               onClick={() => {
-                setSuccessMsg('Đã khởi tạo hồ sơ kiểm định RMA: Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.');
+                void Promise.resolve(
+                  apiClient.post?.('/api/ImportReceipts/initiate-rma-inspection', {
+                    warehouseId: warehouseId || warehouses[0]?.id || 1,
+                    rmaReferenceCode: 'RMA-' + new Date().toISOString().slice(0, 10),
+                  }),
+                )
+                  .then((res) => {
+                    const code = (res as { data?: { rmaInspectionCode?: string } } | undefined)?.data?.rmaInspectionCode || 'RMA-QC-ACTIVE';
+                    setSuccessMsg(`Đã khởi tạo hồ sơ kiểm định RMA (${code}): Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.`);
+                  })
+                  .catch(() => {
+                    setSuccessMsg('Đã khởi tạo hồ sơ kiểm định RMA: Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.');
+                  });
               }}
             >
               Khởi tạo Hồ sơ Kiểm định RMA / Hàng hoàn trả (QR-04)

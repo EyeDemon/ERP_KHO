@@ -7,9 +7,6 @@ import {
   Circle,
   Clipboard,
   ClipboardCheck,
-  Database,
-  FlaskConical,
-  Gauge,
   Handshake,
   Home,
   Layers3,
@@ -24,7 +21,6 @@ import {
   Repeat2,
   Ruler,
   Scale,
-  Search,
   ShoppingCart,
   Shield,
   Warehouse,
@@ -32,9 +28,6 @@ import {
   X,
 } from 'lucide-react';
 import apiClient, { logout } from '../services/apiClient';
-import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
-import { mockUsers } from '../mocks/erpWmsMockData';
-import { useMockDemo } from '../context/MockDemoContext';
 import {
   beginPermissionRefresh,
   canViewApprovals,
@@ -85,21 +78,11 @@ const productionIcons: Record<string, LucideIcon> = {
   '/permissions': Shield,
 };
 
-const blueprintIcons: Record<string, LucideIcon> = {
-  '/system-blueprint': Layers3,
-  '/system-blueprint/search': Search,
-  '/system-blueprint/coverage': Gauge,
-  '/system-blueprint/mock-data': Database,
-  '/system-blueprint/scenarios': FlaskConical,
-};
-
 const MainLayout = () => {
   usePermissionSet();
   const { pathname } = useLocation();
-  const blueprintMode = pathname.startsWith('/system-blueprint');
   const demoRuntime = isBlueprintDemoRuntime();
-  const mockDemo = useMockDemo();
-  const pageMeta = blueprintMode ? undefined : resolveProductionPage(pathname);
+  const pageMeta = resolveProductionPage(pathname);
   const mainRef = useRef<HTMLElement>(null);
   const previousPathRef = useRef(pathname);
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -109,8 +92,8 @@ const MainLayout = () => {
     let active = true;
     const revision = beginPermissionRefresh();
 
-    if (blueprintMode || demoRuntime) {
-      setCurrentPermissions(demoRuntime ? [...blueprintDemoReadPermissions] : [], revision);
+    if (demoRuntime) {
+      setCurrentPermissions([...blueprintDemoReadPermissions], revision);
       setIdentityState('ready');
       return () => { active = false; };
     }
@@ -126,12 +109,12 @@ const MainLayout = () => {
       setIdentityState('error');
     });
     return () => { active = false; };
-  }, [blueprintMode, demoRuntime, pathname]);
+  }, [demoRuntime, pathname]);
 
   useEffect(() => {
-    const label = blueprintMode ? 'Bản đồ hệ thống' : (pageMeta?.label ?? 'ERP WMS');
+    const label = pageMeta?.label ?? 'ERP WMS';
     document.title = label + ' • ERP WMS';
-  }, [blueprintMode, pageMeta?.label]);
+  }, [pageMeta?.label]);
 
   useEffect(() => {
     if (previousPathRef.current !== pathname) {
@@ -163,7 +146,7 @@ const MainLayout = () => {
     label: string,
     options: { accent?: boolean; icon?: LucideIcon } = {},
   ) => {
-    const active = pathname === to || (to !== '/system-blueprint' && pathname.startsWith(to + '/'));
+    const active = pathname === to || (to !== '/' && pathname.startsWith(to + '/'));
     const Icon = options.icon ?? Circle;
 
     return (
@@ -201,57 +184,23 @@ const MainLayout = () => {
           </button>
         </div>
         <div className="app-brand-context">
-          {blueprintMode ? 'Bản thiết kế hệ thống / Mô phỏng' : 'Hệ thống quản lý kho'}
+          Hệ thống quản lý kho
         </div>
 
-        {blueprintMode ? (
-          <>
-            <Link to="/" className="sidebar-back-link">
-              <Home className="sidebar-nav-icon" aria-hidden="true" />
-              <span>Quay lại hệ thống thật</span>
-            </Link>
-
-            <div className="sidebar-section-label">Công cụ bản thiết kế</div>
-            <nav aria-label="Công cụ bản thiết kế">
-              <ul className="sidebar-nav">
-                {navLink('/system-blueprint', 'Bản đồ tổng thể', { accent: true, icon: blueprintIcons['/system-blueprint'] })}
-                {navLink('/system-blueprint/search', 'Tìm kiếm toàn hệ thống', { icon: blueprintIcons['/system-blueprint/search'] })}
-                {navLink('/system-blueprint/coverage', 'Độ phủ & mức sẵn sàng', { icon: blueprintIcons['/system-blueprint/coverage'] })}
-                {navLink('/system-blueprint/mock-data', 'Phòng dữ liệu mô phỏng', { icon: blueprintIcons['/system-blueprint/mock-data'] })}
-                {navLink('/system-blueprint/scenarios', 'Phòng kịch bản chuẩn', { icon: blueprintIcons['/system-blueprint/scenarios'] })}
-              </ul>
-            </nav>
-
-            <div className="sidebar-section-label">17 nhóm phân hệ</div>
-            <nav aria-label="Bản thiết kế theo phân hệ">
-              <ul className="sidebar-nav">
-                {erpWmsBlueprint.map((module) => navLink('/system-blueprint/' + module.key, module.name, { icon: Circle }))}
-              </ul>
-            </nav>
-          </>
-        ) : (
-          <>
-            <Link to="/system-blueprint" className="blueprint-entry-link">
-              <Layers3 className="sidebar-nav-icon" aria-hidden="true" />
-              <span>Bản đồ hệ thống</span>
-            </Link>
-
-            <nav aria-label="Điều hướng nghiệp vụ">
-              {productionSections.map((section) => {
-                const items = productionNavigation.filter((item) => item.section === section && canShowProductionItem(item));
-                if (items.length === 0) return null;
-                return (
-                  <div key={section}>
-                    <div className="sidebar-section-label">{section}</div>
-                    <ul className="sidebar-nav">
-                      {items.map((item) => navLink(item.path, item.label, { icon: productionIcons[item.path] }))}
-                    </ul>
-                  </div>
-                );
-              })}
-            </nav>
-          </>
-        )}
+        <nav aria-label="Điều hướng nghiệp vụ">
+          {productionSections.map((section) => {
+            const items = productionNavigation.filter((item) => item.section === section && canShowProductionItem(item));
+            if (items.length === 0) return null;
+            return (
+              <div key={section}>
+                <div className="sidebar-section-label">{section}</div>
+                <ul className="sidebar-nav">
+                  {items.map((item) => navLink(item.path, item.label, { icon: productionIcons[item.path] }))}
+                </ul>
+              </div>
+            );
+          })}
+        </nav>
       </aside>
 
       <div className="app-main-column">
@@ -268,38 +217,17 @@ const MainLayout = () => {
               {mobileNavOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
             </button>
 
-            {!blueprintMode && pageMeta && (
+            {pageMeta && (
               <div className="topbar-page-meta">
                 <div className="topbar-eyebrow">{pageMeta.section}</div>
                 <div className="topbar-title">{pageMeta.label}</div>
                 <div className="topbar-description">{pageMeta.description}</div>
               </div>
             )}
-
-            {blueprintMode && (
-              <>
-                <span className="blueprint-badge">MÔ PHỎNG • CHỈ ĐỌC</span>
-                <label className="persona-control">
-                  <span>Vai trò mô phỏng</span>
-                  <select
-                    aria-label="Vai trò mô phỏng"
-                    value={mockDemo.selectedUserCode}
-                    onChange={(event) => mockDemo.setSelectedUserCode(event.target.value)}
-                  >
-                    {mockUsers.map((user) => (
-                      <option key={user.code} value={user.code}>{user.name} • {user.role}</option>
-                    ))}
-                  </select>
-                  <span>{mockDemo.allowedWarehouses.length} kho trong phạm vi</span>
-                </label>
-              </>
-            )}
           </div>
 
           <div className="topbar-actions">
-            {blueprintMode ? (
-              <span className="topbar-context-text">Môi trường bản thiết kế</span>
-            ) : demoRuntime ? (
+            {demoRuntime ? (
               <>
                 <span className="runtime-badge">MÔI TRƯỜNG MÔ PHỎNG • PHÍA MÁY CHỦ MÔ PHỎNG</span>
                 <span className="topbar-context-text">Giao diện hệ thống thật</span>
@@ -325,9 +253,9 @@ const MainLayout = () => {
           id="main-content"
           ref={mainRef}
           tabIndex={-1}
-          className={(blueprintMode ? '' : 'production-ui ') + 'app-content'}
+          className="production-ui app-content"
         >
-          {demoRuntime && !blueprintMode && (
+          {demoRuntime && (
             <section role="note" className="demo-runtime-banner" aria-label="Thông tin môi trường demo">
               <div className="demo-runtime-copy">
                 <div className="demo-runtime-kicker">Bản mô phỏng Vercel • Chỉ đọc</div>
@@ -335,10 +263,6 @@ const MainLayout = () => {
                 <div className="demo-runtime-detail">
                   GET dùng dữ liệu mô phỏng có kiểm soát; POST/PUT/DELETE bị chặn với mã 405 và dữ liệu không được lưu sau phiên kiểm thử.
                 </div>
-              </div>
-              <div className="demo-runtime-actions">
-                <Link to="/system-blueprint">Mở bản đồ hệ thống</Link>
-                <Link to="/system-blueprint/coverage">Độ phủ & mức sẵn sàng</Link>
               </div>
             </section>
           )}

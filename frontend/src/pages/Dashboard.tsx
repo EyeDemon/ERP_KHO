@@ -183,7 +183,6 @@ const Dashboard = () => {
         eyebrow="Vận hành"
         title="Tổng quan vận hành"
         description="Điểm vào nhanh tới các work center đã có frontend và trạng thái môi trường đang kiểm thử."
-        actions={<Link className="dashboard-blueprint-link" to="/system-blueprint">Mở bản đồ hệ thống <ArrowRight size={16} aria-hidden="true" /></Link>}
       />
 
       {liveError && <p role="alert">{liveError}</p>}

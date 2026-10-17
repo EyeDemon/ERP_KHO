@@ -7,7 +7,6 @@ import {
   getBlueprintGovernanceRows,
   platformStandards,
   type Applicability,
-  type EvidenceStatus,
   type ReleaseWave,
 } from '../config/capabilityGovernance';
 import { getCanonicalDocumentationRegister } from '../config/documentationRegister';
@@ -45,17 +44,67 @@ const applicabilityLabels: Record<Applicability, string> = {
   IMPLEMENTATION_SPECIFIC: 'Phụ thuộc cách triển khai',
 };
 
-const evidenceClass = (status: EvidenceStatus) => 'evidence-badge evidence-' + status.replace('spec-only', 'spec');
+const rows = getBlueprintGovernanceRows(erpWmsBlueprint);
+const documentation = getCanonicalDocumentationRegister(erpWmsBlueprint);
+const capabilityLinkedDocs = documentation.filter((item) => item.representation === 'Capability-linked');
+const platformDocs = documentation.filter((item) => item.representation === 'Platform / Governance');
+const platformTitleBySpec = new Map(documentation.map((item) => [item.spec, item.displayTitle]));
+const reviewRequired = rows.filter((row) => row.profile.reviewStatus === 'Review Required');
+const traceabilityClosed = rows.filter((row) => row.profile.reviewStatus === 'Traceability Closed');
+const implemented = rows.filter((row) => row.capability.status === 'live').length;
+const foundation = rows.filter((row) => row.capability.status === 'foundation').length;
+const planned = rows.filter((row) => row.capability.status === 'planned').length;
+const optional = rows.filter((row) => row.capability.status === 'optional').length;
+const specOnly = rows.length - implemented - foundation;
+const staticPlatformStandardsSection = (
+  <section className="platform-standards-panel">
+    <div className="platform-standards-title">
+      <div><strong>Sổ đăng ký tài liệu chuẩn • Đặc tả 1–282</strong><span>Toàn bộ tài liệu Notion được lập chỉ mục; tài liệu không phải chức năng nghiệp vụ vẫn hiện như rào chắn nền tảng/quản trị.</span></div>
+      <span>{capabilityLinkedDocs.length} liên kết chức năng • {platformDocs.length} nền tảng/quản trị</span>
+    </div>
+    <details className="documentation-details">
+      <summary>Xem toàn bộ {documentation.length} tài liệu chuẩn</summary>
+      <div className="documentation-table-wrap">
+        <table className="documentation-table">
+          <thead><tr><th>Đặc tả</th><th>Tiêu đề</th><th>Phân loại &amp; Biểu diễn</th></tr></thead>
+          <tbody>
+            {documentation.map((item) => (
+              <tr key={item.spec}>
+                <td>{item.spec}</td>
+                <td>{item.displayTitle}</td>
+                <td>{categoryLabel(item.category)} • {representationLabel(item.representation)} • {item.capabilityIds.length ? item.capabilityIds.join(', ') : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    <div className="platform-standards-grid">
+      {platformStandards.map((item) => (
+        <article key={item.spec}>
+          <span>Đặc tả {item.spec} • {categoryLabel(item.category)} • {representationLabel(item.representation)}</span>
+          <strong>{platformTitleBySpec.get(item.spec) ?? item.title}</strong>
+        </article>
+      ))}
+    </div>
+  </section>
+);
+
+const precomputedRows = rows.map((row) => ({
+  ...row,
+  searchBlob: [
+    row.capability.id,
+    row.capability.name,
+    row.capability.goal,
+    row.capability.spec,
+    row.module.name,
+    row.profile.screenReference ?? '',
+  ].join(' ').toLocaleLowerCase('vi'),
+  specsText: row.profile.referencedSpecs.join(', '),
+  evidenceSummary: row.profile.evidence.map((item) => `${item.label}: ${evidenceStatusLabels[item.status]}`).join(' • '),
+}));
 
 const SystemCoverage = () => {
-  const rows = useMemo(() => getBlueprintGovernanceRows(erpWmsBlueprint), []);
-  const documentation = useMemo(() => getCanonicalDocumentationRegister(erpWmsBlueprint), []);
-  const capabilityLinkedDocs = documentation.filter((item) => item.representation === 'Capability-linked');
-  const platformDocs = documentation.filter((item) => item.representation === 'Platform / Governance');
-  const platformTitleBySpec = useMemo(
-    () => new Map(documentation.map((item) => [item.spec, item.displayTitle])),
-    [documentation],
-  );
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<BlueprintStatus | 'all'>('all');
   const [wave, setWave] = useState<ReleaseWave | 'all'>('all');
@@ -63,27 +112,13 @@ const SystemCoverage = () => {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('vi');
-    return rows.filter(({ module, capability, profile }) => {
-      const queryMatch = !q || [
-        capability.id,
-        capability.name,
-        capability.goal,
-        capability.spec,
-        module.name,
-        profile.screenReference ?? '',
-      ].join(' ').toLocaleLowerCase('vi').includes(q);
-      return queryMatch
-        && (status === 'all' || capability.status === status)
-        && (wave === 'all' || profile.releaseWave === wave)
-        && (applicability === 'all' || profile.applicability === applicability);
-    });
-  }, [applicability, query, rows, status, wave]);
-
-  const reviewRequired = rows.filter((row) => row.profile.reviewStatus === 'Review Required');
-  const traceabilityClosed = rows.filter((row) => row.profile.reviewStatus === 'Traceability Closed');
-  const implemented = rows.filter((row) => row.capability.status === 'live').length;
-  const foundation = rows.filter((row) => row.capability.status === 'foundation').length;
-  const specOnly = rows.length - implemented - foundation;
+    return precomputedRows.filter(({ capability, profile, searchBlob }) => (
+      (!q || searchBlob.includes(q))
+      && (status === 'all' || capability.status === status)
+      && (wave === 'all' || profile.releaseWave === wave)
+      && (applicability === 'all' || profile.applicability === applicability)
+    ));
+  }, [applicability, query, status, wave]);
 
   return (
     <div className="coverage-page">
@@ -94,7 +129,7 @@ const SystemCoverage = () => {
           <span className="coverage-eyebrow"><ShieldCheck size={16} /> Chuỗi hoàn thiện chuẩn</span>
           <h1>Độ phủ & mức sẵn sàng</h1>
           <p>
-            Tách rõ độ phủ tài liệu, độ phủ UI của bản thiết kế và bằng chứng triển khai hệ thống thật.
+            Tách rõ độ phủ tài liệu, độ phủ UI của bản thiết kế và bằng chứng triển khai hệ thống thật ({implemented} hoàn thiện live • {foundation} triển khai một phần • {planned} chưa triển khai (planned) • {optional} tùy chọn nâng cao AX-01..AX-42 đã gắn với Workbench Hoạch định &amp; Mô phỏng What-If tại /inventory).
             Có đặc tả không đồng nghĩa chức năng đã sẵn sàng trên hệ thống thật.
           </p>
         </div>
@@ -107,7 +142,10 @@ const SystemCoverage = () => {
       <section className="coverage-kpis">
         <article><strong>{implemented}</strong><span>Hệ thống thật hoàn thiện phạm vi hiện tại</span></article>
         <article><strong>{foundation}</strong><span>Hệ thống thật đã triển khai một phần</span></article>
-        <article><strong>{specOnly}</strong><span>Chưa triển khai / tùy chọn</span></article>
+        <article title={`${planned} Chưa triển khai (planned) • ${optional} Tùy chọn nâng cao (AX-01..AX-42 đã gắn với Workbench Hoạch định & Mô phỏng What-If tại /inventory)`}>
+          <strong>{specOnly}</strong>
+          <span>Chưa triển khai / tùy chọn ({planned} Chưa triển khai (planned) • {optional} Tùy chọn nâng cao AX-01..AX-42)</span>
+        </article>
         <article><strong>{rows.length}</strong><span>Bản mô phỏng hệ thống tương tác</span></article>
         <article className="traceability-kpi" title={rows.length + ' chức năng có bản xem trước tương tác theo ngữ cảnh'}><strong>{traceabilityClosed.length}</strong><span>Truy vết màn hình đã đóng</span></article>
         <article><strong>{documentation.length}</strong><span>Đặc tả chuẩn đã lập chỉ mục</span></article>
@@ -169,41 +207,7 @@ const SystemCoverage = () => {
         </section>
       )}
 
-      <section className="platform-standards-panel">
-        <div className="platform-standards-title">
-          <div><strong>Sổ đăng ký tài liệu chuẩn • Đặc tả 1–282</strong><span>Toàn bộ tài liệu Notion được lập chỉ mục; tài liệu không phải chức năng nghiệp vụ vẫn hiện như rào chắn nền tảng/quản trị.</span></div>
-          <span>{capabilityLinkedDocs.length} liên kết chức năng • {platformDocs.length} nền tảng/quản trị</span>
-        </div>
-        <details className="documentation-details">
-          <summary>Xem toàn bộ {documentation.length} tài liệu chuẩn</summary>
-          <div className="documentation-table-wrap">
-            <table className="documentation-table">
-              <thead><tr><th>Đặc tả</th><th>Tiêu đề</th><th>Phân loại</th><th>Cách biểu diễn</th><th>Mã chức năng</th></tr></thead>
-              <tbody>
-                {documentation.map((item) => (
-                  <tr key={item.spec}>
-                    <td>{item.spec}</td>
-                    <td>{item.displayTitle}</td>
-                    <td>{categoryLabel(item.category)}</td>
-                    <td><span className={'doc-representation ' + (item.representation === 'Capability-linked' ? 'doc-linked' : 'doc-standard')}>{representationLabel(item.representation)}</span></td>
-                    <td>{item.capabilityIds.length ? item.capabilityIds.join(', ') : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-        <div className="platform-standards-grid">
-          {platformStandards.map((item) => (
-            <article key={item.spec}>
-              <span>Đặc tả {item.spec} • {categoryLabel(item.category)}</span>
-              <strong>{platformTitleBySpec.get(item.spec) ?? item.title}</strong>
-              <small>{representationLabel(item.representation)}</small>
-              {item.mappedCapabilityIds?.length ? <p>Đã ánh xạ: {item.mappedCapabilityIds.join(', ')}</p> : null}
-            </article>
-          ))}
-        </div>
-      </section>
+      {staticPlatformStandardsSection}
 
       <section className="coverage-table-wrap">
         <table className="coverage-table" data-testid="coverage-table">
@@ -220,7 +224,7 @@ const SystemCoverage = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(({ module, capability, profile }) => (
+            {filtered.map(({ module, capability, profile, specsText, evidenceSummary }) => (
               <tr key={capability.id}>
                 <td>
                   <Link to={'/system-blueprint/' + module.key + '/' + capability.id}>{capability.id} • {capability.name}</Link>
@@ -232,16 +236,8 @@ const SystemCoverage = () => {
                 <td>{applicabilityLabels[profile.applicability]}</td>
                 <td>{profile.maturity}</td>
                 <td><span className={'impl-chip impl-' + capability.status}>{blueprintStatusLabels[capability.status]}</span></td>
-                <td>{profile.referencedSpecs.join(', ')}</td>
-                <td>
-                  <div className="evidence-mini">
-                    {profile.evidence.map((item) => (
-                      <span title={item.label + ': ' + item.note} className={evidenceClass(item.status)} key={item.key}>
-                        {item.label}: {evidenceStatusLabels[item.status]}
-                      </span>
-                    ))}
-                  </div>
-                </td>
+                <td>{specsText}</td>
+                <td className="evidence-mini">{evidenceSummary}</td>
               </tr>
             ))}
           </tbody>

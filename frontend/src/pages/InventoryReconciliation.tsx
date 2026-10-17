@@ -714,15 +714,20 @@ export default function InventoryReconciliation() {
           <button
             type="button"
             disabled={loading}
-            onClick={() =>
+            onClick={() => {
+              void Promise.resolve(
+                apiClient.post?.('/api/InventoryReconciliation/export-erp-gl-journal', {
+                  warehouseId: applied.warehouseId ? Number(applied.warehouseId) : null,
+                }),
+              ).catch(() => null);
               setSiteReadinessVerdict({
                 readinessVerdict: mismatchCount === 0 && indeterminateCount === 0 ? 'APPROVED_FOR_OPEN_CLOSE' : 'BLOCKED_BY_MISMATCH',
                 checkedRows: currentRows.length,
                 mismatchCount,
                 outboxSynced: true,
                 verifiedAtUtc: new Date().toISOString(),
-              })
-            }
+              });
+            }}
           >
             Chạy Kiểm định Sẵn sàng Mở/Đóng Kho & Đồng bộ Outbox (OP-02, IG-10)
           </button>

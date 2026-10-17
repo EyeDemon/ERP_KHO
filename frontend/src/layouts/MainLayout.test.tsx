@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import MainLayout from './MainLayout';
+import BlueprintLayout from './BlueprintLayout';
 import apiClient from '../services/apiClient';
 import { MockDemoProvider } from '../context/MockDemoContext';
 import { isBlueprintDemoRuntime } from '../services/runtimeMode';
@@ -28,18 +29,19 @@ vi.mock('../services/runtimeMode', () => ({
 
 const renderAt = (path: string) => render(
   <MemoryRouter initialEntries={[path]}>
-    <MockDemoProvider>
-      <Routes>
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<div>Trang chủ hệ thống thật</div>} />
-          <Route path="system-blueprint/*" element={<div>Nội dung bản thiết kế</div>} />
-        </Route>
-      </Routes>
-    </MockDemoProvider>
+    <Routes>
+      <Route path="/system-blueprint/*" element={<MockDemoProvider><BlueprintLayout /></MockDemoProvider>}>
+        <Route index element={<div>Nội dung bản thiết kế</div>} />
+        <Route path="*" element={<div>Nội dung bản thiết kế</div>} />
+      </Route>
+      <Route path="/" element={<MainLayout />}>
+        <Route index element={<div>Trang chủ hệ thống thật</div>} />
+      </Route>
+    </Routes>
   </MemoryRouter>,
 );
 
-describe('MainLayout blueprint navigation mode', () => {
+describe('MainLayout & BlueprintLayout separation', () => {
   beforeEach(() => {
     vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
   });
@@ -49,7 +51,7 @@ describe('MainLayout blueprint navigation mode', () => {
     vi.resetAllMocks();
   });
 
-  it('shows all blueprint modules and explicit read-only demo state', async () => {
+  it('shows all blueprint modules and explicit read-only demo state in BlueprintLayout', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/system-blueprint/inbound');
     await view.findByText('Nội dung bản thiết kế');
@@ -82,11 +84,11 @@ describe('MainLayout blueprint navigation mode', () => {
     expect(view.getByText('1 kho trong phạm vi')).toBeTruthy();
   });
 
-  it('keeps production navigation separate from blueprint-only module menu', async () => {
+  it('completely separates production navigation from blueprint links and module menu', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { permissions: [] } });
     const view = renderAt('/');
     await view.findByText('Trang chủ hệ thống thật');
-    expect(view.getByText('Bản đồ hệ thống')).toBeTruthy();
+    expect(view.queryByText('Bản đồ hệ thống')).toBeNull();
     expect(view.queryByText('17 nhóm phân hệ')).toBeNull();
     expect(view.queryByText('MÔ PHỎNG • CHỈ ĐỌC')).toBeNull();
   });
