@@ -32,9 +32,43 @@ type OperationalDashboardSummary = {
   recentActivities: RecentActivity[];
 };
 
+type WarehouseTaskItem = {
+  taskType: string;
+  code: string;
+  warehouseId: number;
+  warehouseName: string;
+  status: string;
+  priority: string;
+  createdAt: string;
+  route: string;
+};
+
+type OperationalExceptionItem = {
+  category: string;
+  code: string;
+  warehouseName: string;
+  severity: string;
+  summary: string;
+  route: string;
+};
+
+type GlobalSearchResultItem = {
+  entityType: string;
+  code: string;
+  title: string;
+  subtitle: string;
+  route: string;
+};
+
 const Dashboard = () => {
   const demoRuntime = isBlueprintDemoRuntime();
   const [liveSummary, setLiveSummary] = useState<OperationalDashboardSummary | null>(null);
+  const [liveTasks, setLiveTasks] = useState<WarehouseTaskItem[]>([]);
+  const [liveExceptions, setLiveExceptions] = useState<OperationalExceptionItem[]>([]);
+  const [taskTypeFilter, setTaskTypeFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<GlobalSearchResultItem[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [liveLoading, setLiveLoading] = useState(!demoRuntime);
   const [liveError, setLiveError] = useState('');
 
@@ -43,11 +77,18 @@ const Dashboard = () => {
     let active = true;
     setLiveLoading(true);
     setLiveError('');
-    apiClient.get<OperationalDashboardSummary>('/api/Reports/operational-dashboard')
-      .then((res) => {
-        if (active && res.data && typeof res.data.warehouseCount === 'number') {
-          setLiveSummary(res.data);
+    Promise.all([
+      apiClient.get<OperationalDashboardSummary>('/api/Reports/operational-dashboard'),
+      apiClient.get<WarehouseTaskItem[]>('/api/Reports/warehouse-tasks').catch(() => ({ data: [] as WarehouseTaskItem[] })),
+      apiClient.get<OperationalExceptionItem[]>('/api/Reports/operational-exceptions').catch(() => ({ data: [] as OperationalExceptionItem[] })),
+    ])
+      .then(([summaryRes, tasksRes, exRes]) => {
+        if (!active) return;
+        if (summaryRes.data && typeof summaryRes.data.warehouseCount === 'number') {
+          setLiveSummary(summaryRes.data);
         }
+        setLiveTasks(Array.isArray(tasksRes.data) ? tasksRes.data : []);
+        setLiveExceptions(Array.isArray(exRes.data) ? exRes.data : []);
       })
       .catch(() => {
         if (active) setLiveError('Không thể tải số liệu tổng quan trực tiếp.');
@@ -60,11 +101,33 @@ const Dashboard = () => {
     };
   }, [demoRuntime]);
 
+  const handleGlobalSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const res = await apiClient.get<GlobalSearchResultItem[]>(`/api/Reports/global-search?q=${encodeURIComponent(q)}`);
+      setSearchResults(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
   const operationalRecords = ['inbound', 'outbound', 'inventory-control', 'transfer-replenishment']
     .flatMap((key) => mockWorkCenters[key]?.records ?? []);
   const mismatchCount = demoRuntime
     ? demoReconciliationRows.filter((row) => row.status !== 'Match').length
     : (liveSummary?.invalidStockCount ?? 0);
+
+  const filteredTasks = taskTypeFilter
+    ? liveTasks.filter((t) => t.taskType === taskTypeFilter)
+    : liveTasks;
 
   const quickLinks = [
     { to: '/import-receipts', title: 'Inbound', detail: 'Nhận hàng, QC và posting', icon: ClipboardCheck },
@@ -83,6 +146,52 @@ const Dashboard = () => {
       />
 
       {liveError && <p role="alert">{liveError}</p>}
+
+      {!demoRuntime && (
+        <UiCard title="Tìm kiếm toàn doanh nghiệp (OV-07)">
+          <form onSubmit={handleGlobalSearch} className="ui-inline-actions">
+            <input
+              aria-label="Tìm kiếm toàn doanh nghiệp"
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm mã SKU, Barcode, Lô, Sê-ri, Vị trí, PO, ASN, Phiếu nhập/xuất, Lô giao..."
+            />
+            <button type="submit" disabled={searchLoading || searchQuery.trim().length < 2}>
+              {searchLoading ? 'Đang tìm...' : 'Tìm kiếm'}
+            </button>
+            {searchResults.length > 0 && (
+              <button type="button" onClick={() => { setSearchQuery(''); setSearchResults([]); }}>Xóa kết quả</button>
+            )}
+          </form>
+          {searchResults.length > 0 && (
+            <UiTableScroll>
+              <table aria-label="Kết quả tìm kiếm toàn doanh nghiệp">
+                <thead>
+                  <tr>
+                    <th>Loại</th>
+                    <th>Mã</th>
+                    <th>Thông tin</th>
+                    <th>Chi tiết</th>
+                    <th>Điều hướng</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {searchResults.map((item, idx) => (
+                    <tr key={`${item.entityType}-${item.code}-${idx}`}>
+                      <td><UiBadge>{item.entityType}</UiBadge></td>
+                      <td><strong>{item.code}</strong></td>
+                      <td>{item.title}</td>
+                      <td>{item.subtitle}</td>
+                      <td><Link to={item.route}>Mở màn hình →</Link></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </UiTableScroll>
+          )}
+        </UiCard>
+      )}
 
       <UiMetricGrid>
         <UiMetric
@@ -135,6 +244,98 @@ const Dashboard = () => {
           </div>
         </UiCard>
       </div>
+
+      {!demoRuntime && (
+        <div className="dashboard-grid">
+          <UiCard title={`Hàng đợi tác vụ kho đang mở (OV-02) • ${filteredTasks.length}`}>
+            <div className="ui-inline-actions">
+              <label>
+                Loại tác vụ:{' '}
+                <select aria-label="Lọc loại tác vụ kho" value={taskTypeFilter} onChange={(e) => setTaskTypeFilter(e.target.value)}>
+                  <option value="">Tất cả tác vụ</option>
+                  <option value="PUTAWAY">Cất hàng (Putaway)</option>
+                  <option value="PICKING">Lấy hàng (Picking)</option>
+                  <option value="PACKING">Đóng gói (Packing)</option>
+                  <option value="INBOUND_RECEIPT">Phiếu nhập nháp</option>
+                  <option value="STOCKTAKE">Kiểm kê nháp</option>
+                  <option value="DOCK_YARD">Lịch hẹn Dock/Yard</option>
+                </select>
+              </label>
+            </div>
+            {filteredTasks.length === 0 ? (
+              <p className="ui-muted-text">Không có tác vụ kho đang mở theo bộ lọc hiện tại.</p>
+            ) : (
+              <UiTableScroll>
+                <table aria-label="Hàng đợi tác vụ kho đang mở">
+                  <thead>
+                    <tr>
+                      <th>Loại</th>
+                      <th>Mã phiếu/nhiệm vụ</th>
+                      <th>Kho</th>
+                      <th>Trạng thái</th>
+                      <th>Ưu tiên</th>
+                      <th>Xử lý</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTasks.slice(0, 12).map((task, idx) => (
+                      <tr key={`${task.taskType}-${task.code}-${idx}`}>
+                        <td><UiBadge>{task.taskType}</UiBadge></td>
+                        <td><strong>{task.code}</strong></td>
+                        <td>{task.warehouseName}</td>
+                        <td>{task.status}</td>
+                        <td>
+                          <UiBadge tone={task.priority === 'HIGH' ? 'danger' : 'neutral'}>
+                            {task.priority}
+                          </UiBadge>
+                        </td>
+                        <td><Link to={task.route}>Thực thi →</Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </UiTableScroll>
+            )}
+          </UiCard>
+
+          <UiCard title={`Trung tâm ngoại lệ vận hành (OV-04) • ${liveExceptions.length}`}>
+            {liveExceptions.length === 0 ? (
+              <p className="ui-muted-text">Không có ngoại lệ vận hành mở trong phạm vi kho được phép.</p>
+            ) : (
+              <UiTableScroll>
+                <table aria-label="Trung tâm ngoại lệ vận hành">
+                  <thead>
+                    <tr>
+                      <th>Phân loại</th>
+                      <th>Mã</th>
+                      <th>Kho</th>
+                      <th>Mức độ</th>
+                      <th>Chi tiết ngoại lệ</th>
+                      <th>Xử lý</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {liveExceptions.slice(0, 12).map((ex, idx) => (
+                      <tr key={`${ex.category}-${ex.code}-${idx}`}>
+                        <td><code>{ex.category}</code></td>
+                        <td><strong>{ex.code}</strong></td>
+                        <td>{ex.warehouseName}</td>
+                        <td>
+                          <UiBadge tone={ex.severity === 'HIGH' ? 'danger' : 'warning'}>
+                            {ex.severity}
+                          </UiBadge>
+                        </td>
+                        <td>{ex.summary}</td>
+                        <td><Link to={ex.route}>Xử lý →</Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </UiTableScroll>
+            )}
+          </UiCard>
+        </div>
+      )}
 
       {!demoRuntime && (
         <UiCard title="Hoạt động vận hành gần đây">
@@ -195,3 +396,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+

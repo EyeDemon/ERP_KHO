@@ -22,5 +22,10 @@ public interface IInventoryStatusService
     Task<InventoryDispositionResultDto> ExecuteDispositionAsync(
         CreateInventoryDispositionDto request,
         CancellationToken cancellationToken = default);
+
+    Task<InventoryRecallBlockResultDto> ExecuteRecallBlockAsync(
+        CreateInventoryRecallBlockDto request,
+        CancellationToken cancellationToken = default);
 }
+
 

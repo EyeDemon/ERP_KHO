@@ -360,6 +360,40 @@ namespace ERP.Application.Tests
             captured!.Note.Should().Be("[BLIND] Kiểm kê kệ A1");
             captured.Details.Should().ContainSingle(d => d.ProductId == 10 && d.LocationId == 50 && d.SystemQuantity == 25m);
         }
+
+        [Fact]
+        public async Task RecountStocktakeDetailAsync_DraftStocktake_ResetsActualQuantityAndAppendsRecountMarker()
+        {
+            var detail = new StocktakeDetail
+            {
+                Id = 77,
+                StocktakeId = 15,
+                ProductId = 10,
+                SystemQuantity = 100m,
+                ActualQuantity = 95m,
+                DifferenceQuantity = -5m,
+                Note = "Đếm lần 1 lệch -5"
+            };
+            var stocktake = new Stocktake
+            {
+                Id = 15,
+                Code = "KK-2026-0015",
+                WarehouseId = 1,
+                Status = ReceiptStatus.Draft,
+                Details = new List<StocktakeDetail> { detail }
+            };
+
+            _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(15))
+                              .ReturnsAsync(stocktake);
+
+            await _service.RecountStocktakeDetailAsync(15, 77, "Nghi ngờ đếm thiếu pallet góc kệ", 99);
+
+            detail.ActualQuantity.Should().BeNull();
+            detail.DifferenceQuantity.Should().Be(0m);
+            detail.Note.Should().Contain("[RECOUNT: Nghi ngờ đếm thiếu pallet góc kệ]");
+            _mockStocktakeRepo.Verify(x => x.UpdateAsync(stocktake), Times.Once);
+            _mockUnitOfWork.Verify(x => x.CommitTransactionAsync(), Times.Once);
+        }
     }
 }
 

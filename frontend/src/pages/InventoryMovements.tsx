@@ -10,6 +10,12 @@ type Bucket={
   onHandQuantity:number;reservedQuantity:number;availableQuantity:number;
 };
 type Location={id:number;warehouseId:number;code:string;name:string;isActive:boolean;isBlocked:boolean;isSystemManaged:boolean};
+type ReplenishmentSuggestion={
+  inventoryStockId:number;productId:number;productCode:string;productName:string;
+  warehouseId:number;warehouseName:string;sourceLocationId:number;sourceLocationCode:string;
+  availableAtSource:number;targetLocationId:number;targetLocationCode:string;
+  currentAtTarget:number;suggestedQuantity:number;
+};
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
   if(r?.data?.code==='INV_STOCK_LOCKED')return r.data.message??'Inventory bucket đang bị lock.';
@@ -24,6 +30,7 @@ const errorMessage=(e:unknown)=>{
 export default function InventoryMovements(){
   const canMove=usePermission('inventory_movement.create');
   const [buckets,setBuckets]=useState<Bucket[]>([]);
+  const [suggestions,setSuggestions]=useState<ReplenishmentSuggestion[]>([]);
   const [locations,setLocations]=useState<Location[]>([]);
   const [selected,setSelected]=useState<Bucket|null>(null);
   const [form,setForm]=useState({destinationLocationId:'',quantity:'',reason:''});
@@ -34,19 +41,52 @@ export default function InventoryMovements(){
 
   const load=async()=>{
     setLoading(true);setError('');
-    try{setBuckets((await apiClient.get('/api/inventory/buckets?')).data)}
-    catch(e){setBuckets([]);setError(errorMessage(e))}
+    try{
+      const [bucketRes,suggestionRes]=await Promise.all([
+        apiClient.get('/api/inventory/buckets?'),
+        apiClient.get('/api/inventory/replenishment-suggestions').catch(()=>({data:[]})),
+      ]);
+      setBuckets(Array.isArray(bucketRes.data)?bucketRes.data:[]);
+      setSuggestions(Array.isArray(suggestionRes.data)?suggestionRes.data:[]);
+    }
+    catch(e){setBuckets([]);setSuggestions([]);setError(errorMessage(e))}
     finally{setLoading(false)}
   };
   useEffect(()=>{void load()},[]);
 
-  const select=async(bucket:Bucket)=>{
+  const select=async(bucket:Bucket,prefill?:{targetLocationId:number;suggestedQuantity:number;reason:string})=>{
     setSelected(bucket);setError('');
-    setForm({destinationLocationId:'',quantity:String(bucket.availableQuantity),reason:''});
+    setForm({
+      destinationLocationId:prefill?String(prefill.targetLocationId):'',
+      quantity:String(prefill?prefill.suggestedQuantity:bucket.availableQuantity),
+      reason:prefill?prefill.reason:'',
+    });
     try{
       const response=await apiClient.get(`/api/putaway-tasks/locations?warehouseId=${bucket.warehouseId}`);
       setLocations((response.data as Location[]).filter(x=>x.id!==bucket.locationId&&x.isActive&&!x.isBlocked&&!x.isSystemManaged));
     }catch(e){setLocations([]);setError(errorMessage(e))}
+  };
+
+  const applySuggestion=async(s:ReplenishmentSuggestion)=>{
+    const found=buckets.find(b=>b.inventoryStockId===s.inventoryStockId)??{
+      inventoryStockId:s.inventoryStockId,
+      productId:s.productId,
+      productCode:s.productCode,
+      productName:s.productName,
+      warehouseId:s.warehouseId,
+      warehouseName:s.warehouseName,
+      locationId:s.sourceLocationId,
+      locationCode:s.sourceLocationCode,
+      status:'AVAILABLE',
+      onHandQuantity:s.availableAtSource,
+      reservedQuantity:0,
+      availableQuantity:s.availableAtSource,
+    };
+    await select(found,{
+      targetLocationId:s.targetLocationId,
+      suggestedQuantity:s.suggestedQuantity,
+      reason:'Replenishment bổ sung vị trí lấy hàng',
+    });
   };
 
   const submit=async(e:FormEvent)=>{
@@ -74,6 +114,27 @@ export default function InventoryMovements(){
     <UiPageHeader eyebrow="Inventory Control" title="Internal Location Move"
       description="Source -Q / destination +Q trong cùng Warehouse; giữ nguyên Status/Lot/Serial và không cho di chuyển phần reserved."/>
     {error&&<p role="alert">{error}</p>}
+    <UiCard title="Gợi ý bổ sung vị trí lấy hàng (Replenishment — TR-05)">
+      <p className="ui-muted-text">Hệ thống tự động phát hiện vị trí lấy hàng (Pick Face) có tồn thấp và đề xuất di chuyển từ vị trí dự trữ (Reserve) trong cùng kho.</p>
+      {suggestions.length===0?<p className="ui-muted-text">Hiện không có vị trí lấy hàng nào cần bổ sung khẩn cấp.</p>:<UiTableScroll>
+        <table aria-label="Gợi ý bổ sung vị trí lấy hàng">
+          <thead><tr><th>Sản phẩm</th><th>Kho</th><th>Vị trí nguồn (Reserve)</th><th>Khả dụng nguồn</th><th>Vị trí đích (Pick Face)</th><th>Tồn tại đích</th><th>SL gợi ý</th>{canMove&&<th>Thao tác</th>}</tr></thead>
+          <tbody>
+            {suggestions.map(s=><tr key={`${s.inventoryStockId}-${s.targetLocationId}`}>
+              <td><strong>{s.productCode}</strong><br/><small>{s.productName}</small></td>
+              <td>{s.warehouseName}</td>
+              <td><code>{s.sourceLocationCode}</code></td>
+              <td>{s.availableAtSource}</td>
+              <td><code>{s.targetLocationCode}</code></td>
+              <td>{s.currentAtTarget}</td>
+              <td><strong>{s.suggestedQuantity}</strong></td>
+              {canMove&&<td><button type="button" onClick={()=>void applySuggestion(s)}>Chọn bổ sung</button></td>}
+            </tr>)}
+          </tbody>
+        </table>
+      </UiTableScroll>}
+    </UiCard>
+
     <UiCard title="Inventory buckets có thể di chuyển">
       <p className="ui-muted-text">Move re-check active locks và destination capacity trong cùng Serializable transaction. Reversal là capability riêng (INV-09), không nằm trong màn này.</p>
       {loading?<p role="status">Đang tải inventory bucket...</p>:<UiTableScroll>
@@ -110,3 +171,4 @@ export default function InventoryMovements(){
     </UiCard>}
   </UiPage>;
 }
+

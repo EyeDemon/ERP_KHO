@@ -51,16 +51,21 @@ const errorMessage=(e:unknown)=>{
 
 export default function InventoryLocks(){
   const canManage=usePermission('inventory_lock.manage');
+  const canRecallBlock=usePermission('inventory_status_change.create')||canManage;
   const [locks,setLocks]=useState<LockRow[]>([]);
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]);
   const [statuses,setStatuses]=useState<Status[]>([]);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState('');
+  const [recallMsg,setRecallMsg]=useState('');
   const [busy,setBusy]=useState(false);
   const [release,setRelease]=useState<LockRow|null>(null);
   const [releaseReason,setReleaseReason]=useState('');
   const [form,setForm]=useState({
     lockType:'ManualOperationalLock',warehouseId:'',locationId:'',productId:'',inventoryStatus:'',lotId:'',serialId:'',reason:'',expiresAt:''
+  });
+  const [recallForm,setRecallForm]=useState({
+    warehouseId:'',productId:'',lotNumber:'',reason:''
   });
   const guard=useRef(false);
 
@@ -104,6 +109,26 @@ export default function InventoryLocks(){
     finally{guard.current=false;setBusy(false)}
   };
 
+  const submitRecallBlock=async(e:FormEvent)=>{
+    e.preventDefault();
+    if(!canRecallBlock||guard.current||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim())return;
+    const key=`inventory-recall-block-${recallForm.warehouseId}-${recallForm.productId}-${recallForm.lotNumber.trim()}`;
+    guard.current=true;setBusy(true);setError('');setRecallMsg('');
+    try{
+      const res=await apiClient.post('/api/inventory/recall-block',{
+        warehouseId:Number(recallForm.warehouseId),
+        productId:Number(recallForm.productId),
+        lotNumber:recallForm.lotNumber.trim(),
+        reason:recallForm.reason.trim(),
+      },{headers:idempotencyHeaders(key)});
+      completeIdempotentAction(key);
+      setRecallMsg(`Đã kích hoạt khóa thu hồi lô ${recallForm.lotNumber.trim()} (${res.data?.blockedQuantity??0} đơn vị bị chặn).`);
+      setRecallForm({warehouseId:'',productId:'',lotNumber:'',reason:''});
+      await load();
+    }catch(e){setError(errorMessage(e))}
+    finally{guard.current=false;setBusy(false)}
+  };
+
   const releaseLock=async(e:FormEvent)=>{
     e.preventDefault();
     if(!release||!canManage||guard.current||!releaseReason.trim())return;
@@ -124,6 +149,7 @@ export default function InventoryLocks(){
     <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Khóa / đóng băng tồn kho"
       description="Khóa thay đổi điều kiện được phép thao tác nhưng không thay đổi số lượng. Khóa đang hiệu lực được kiểm tra lại ngay trong giao dịch thay đổi tồn kho."/>
     {error&&<p role="alert">{error}</p>}
+    {recallMsg&&<p role="status" className="ui-success-text">{recallMsg}</p>}
     <div className="ui-stack">
       {canManage&&<UiCard title="Tạo khóa tồn kho">
         <form onSubmit={create} className="ui-form-grid" aria-busy={busy}>
@@ -167,6 +193,27 @@ export default function InventoryLocks(){
         <p className="ui-muted-text">Giữ do chất lượng, giữ để điều tra và giữ do thu hồi phải được mở thủ công; không tự hết hiệu lực.</p>
       </UiCard>}
 
+      {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng (Recall Campaign Block — QR-05)">
+        <form onSubmit={submitRecallBlock} className="ui-form-grid" aria-busy={busy}>
+          <UiToolbarField label="Kho thu hồi">
+            <select aria-label="Kho thu hồi" value={recallForm.warehouseId} onChange={e=>setRecallForm(x=>({...x,warehouseId:e.target.value}))} required>
+              <option value="">Chọn kho</option>
+              {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="ID sản phẩm thu hồi">
+            <input aria-label="ID sản phẩm thu hồi" type="number" min="1" value={recallForm.productId} onChange={e=>setRecallForm(x=>({...x,productId:e.target.value}))} required/>
+          </UiToolbarField>
+          <UiToolbarField label="Mã lô thu hồi">
+            <input aria-label="Mã lô thu hồi" value={recallForm.lotNumber} onChange={e=>setRecallForm(x=>({...x,lotNumber:e.target.value}))} placeholder="LOT-..." required/>
+          </UiToolbarField>
+          <UiToolbarField label="Lý do thu hồi lô">
+            <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo thu hồi / bằng chứng QC" required/>
+          </UiToolbarField>
+          <button type="submit" disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
+        </form>
+      </UiCard>}
+
       <UiCard title="Danh sách khóa tồn kho">
         <p className="ui-muted-text">Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, HU, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
         {loading?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
@@ -202,3 +249,4 @@ export default function InventoryLocks(){
     </div>
   </UiPage>;
 }
+

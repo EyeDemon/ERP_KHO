@@ -306,5 +306,56 @@ namespace ERP.Application.Services
                 throw;
             }
         }
+
+        public async Task RecountStocktakeDetailAsync(int stocktakeId, int detailId, string? reason, int userId = 0)
+        {
+            if (_currentUser is not null && _currentUser.UserId > 0) userId = _currentUser.UserId;
+            var stocktake = await _stocktakeRepository.GetByIdWithDetailsAsync(stocktakeId);
+            if (stocktake == null)
+                throw new NotFoundException($"Không tìm thấy phiếu kiểm kê id {stocktakeId}");
+            if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(stocktake.WarehouseId);
+
+            if (stocktake.Status != ReceiptStatus.Draft)
+                throw new BusinessRuleException("Chỉ có thể yêu cầu đếm lại chi tiết phiếu ở trạng thái nháp");
+
+            var detail = stocktake.Details.FirstOrDefault(d => d.Id == detailId);
+            if (detail == null)
+                throw new NotFoundException($"Không tìm thấy chi tiết phiếu id {detailId}");
+
+            var oldActualQuantity = detail.ActualQuantity;
+            var cleanReason = string.IsNullOrWhiteSpace(reason) ? "Yêu cầu kiểm đếm lại" : reason.Trim();
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                detail.ActualQuantity = null;
+                detail.DifferenceQuantity = 0;
+                detail.Note = string.IsNullOrWhiteSpace(detail.Note)
+                    ? $"[RECOUNT: {cleanReason}]"
+                    : $"{detail.Note} | [RECOUNT: {cleanReason}]";
+
+                await _stocktakeRepository.UpdateAsync(stocktake);
+                await _auditLogRepository.AddAsync(new AuditLog
+                {
+                    UserId = userId > 0 ? userId : _currentUser?.UserId,
+                    Action = "RECOUNT_STOCKTAKE_LINE",
+                    EntityName = "Stocktake",
+                    EntityId = stocktake.Id,
+                    WarehouseId = stocktake.WarehouseId,
+                    OldValues = $"DetailId: {detail.Id}; ActualQuantity: {oldActualQuantity}",
+                    NewValues = $"DetailId: {detail.Id}; ActualQuantity: null; Note: {detail.Note}",
+                    Reason = cleanReason,
+                    Result = "Success",
+                    Severity = "Information",
+                    Timestamp = DateTime.UtcNow
+                });
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
+        }
     }
 }
+

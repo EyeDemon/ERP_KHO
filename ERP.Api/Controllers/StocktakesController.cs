@@ -66,8 +66,24 @@ namespace ERP.Api.Controllers
             await _stocktakeService.UpdateStocktakeDetailAsync(id, detailId, dto);
             return Ok(new { message = "Cập nhật chi tiết kiểm kê thành công" });
         }
+
+        [HttpPost("{id:int}/details/{detailId:int}/recount")]
+        [Authorize(Roles = "Admin,Manager")]
+        [IdempotentCommand("Stocktake.Recount")]
+        public async Task<IActionResult> Recount(
+            int id,
+            int detailId,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RecountStocktakeDetailDto? dto)
+        {
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("Id");
+            int.TryParse(userIdStr, out var userId);
+
+            await _stocktakeService.RecountStocktakeDetailAsync(id, detailId, dto?.Reason, userId);
+            return Ok(new { message = "Đã yêu cầu kiểm đếm lại dòng kiểm kê" });
+        }
     }
 }
+
 
 
 

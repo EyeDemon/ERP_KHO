@@ -86,3 +86,24 @@ public sealed class InventoryDispositionResultDto
     public int? SerialId { get; set; }
 }
 
+public sealed class CreateInventoryRecallBlockDto
+{
+    public int WarehouseId { get; set; }
+    public int ProductId { get; set; }
+    public string LotNumber { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class InventoryRecallBlockResultDto
+{
+    public int WarehouseId { get; set; }
+    public int ProductId { get; set; }
+    public int LotId { get; set; }
+    public string LotNumber { get; set; } = string.Empty;
+    public int AffectedBucketCount { get; set; }
+    public decimal BlockedQuantity { get; set; }
+    public int InventoryLockId { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
+

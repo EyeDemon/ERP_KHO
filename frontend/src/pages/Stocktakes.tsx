@@ -316,6 +316,26 @@ const Stocktakes = () => {
     }
   };
 
+  const handleRecount = async (row: StocktakeDetailRow) => {
+    if (!currentDetail || rowLoading) return;
+    setRowLoading(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const reason = 'Yêu cầu đếm lại chênh lệch kiểm kê';
+      const action = `stocktake-recount:${currentDetail.id}:${row.id}`;
+      await apiClient.post(`/api/stocktakes/${currentDetail.id}/details/${row.id}/recount`, { reason }, { headers: idempotencyHeaders(action) });
+      completeIdempotentAction(action);
+      const res = await apiClient.get(`/api/stocktakes/${currentDetail.id}`);
+      setCurrentDetail(res.data);
+      setSuccessMsg(`Đã yêu cầu kiểm đếm lại sản phẩm ${row.productCode}.`);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Không thể gửi yêu cầu kiểm đếm lại.');
+    } finally {
+      setRowLoading(false);
+    }
+  };
+
   const handleApprove = async () => {
     if (!currentDetail) return;
     const hasUnentered = currentDetail.details.some(d => d.actualQuantity === null || d.actualQuantity === undefined);
@@ -620,14 +640,32 @@ const Stocktakes = () => {
                           </td>
                           <td>
                             {isEditing ? (
-                              <input
-                                className="stocktake-editor-note"
-                                aria-label={'Ghi chú kiểm kê ' + row.productCode}
-                                type="text"
-                                value={editNote}
-                                onChange={(e) => setEditNote(e.target.value)}
-                                disabled={rowLoading}
-                              />
+                              <div className="ui-stack-xs">
+                                <select
+                                  aria-label={'Mã lý do chênh lệch ' + row.productCode}
+                                  value=""
+                                  onChange={(e) => {
+                                    if (!e.target.value) return;
+                                    const prefix = `[REASON: ${e.target.value}] `;
+                                    setEditNote(prev => prev.startsWith('[REASON:') ? prev.replace(/^\[REASON:\s*[^\]]+\]\s*/, prefix) : prefix + prev);
+                                  }}
+                                  disabled={rowLoading}
+                                >
+                                  <option value="">-- Chọn nhanh mã lý do (CT-06) --</option>
+                                  <option value="DAMAGED">DAMAGED (Hư hỏng)</option>
+                                  <option value="MISPLACED">MISPLACED (Thất lạc / Sai vị trí)</option>
+                                  <option value="SUPPLIER_SHORT">SUPPLIER_SHORT (Thiếu từ NCC)</option>
+                                  <option value="COUNT_ERROR">COUNT_ERROR (Sai sót kiểm đếm)</option>
+                                </select>
+                                <input
+                                  className="stocktake-editor-note"
+                                  aria-label={'Ghi chú kiểm kê ' + row.productCode}
+                                  type="text"
+                                  value={editNote}
+                                  onChange={(e) => setEditNote(e.target.value)}
+                                  disabled={rowLoading}
+                                />
+                              </div>
                             ) : (
                               row.note || '—'
                             )}
@@ -645,6 +683,11 @@ const Stocktakes = () => {
                               ) : (
                                 <div className="stocktake-row-actions">
                                   <button type="button" onClick={() => handleRowEdit(row)}>Nhập SL</button>
+                                  {canApprove && row.actualQuantity !== undefined && row.actualQuantity !== null && (
+                                    <button type="button" className="ui-btn-secondary" onClick={() => void handleRecount(row)} disabled={rowLoading}>
+                                      Yêu cầu đếm lại (Recount)
+                                    </button>
+                                  )}
                                   {rowSuccessId === row.id && <span role="status" className="stocktake-row-success">✓ Đã lưu</span>}
                                 </div>
                               )}

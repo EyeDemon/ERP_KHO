@@ -403,6 +403,60 @@ public sealed class PutawayServiceTests : IDisposable
                            t.Quantity == 4)).Should().BeTrue();
     }
 
+    [Fact]
+    public async Task ExecuteRecallBlockAsync_moves_unreserved_lot_stock_to_recall_blocked_and_creates_recall_lock()
+    {
+        var ids = await SeedAsync();
+        await using var db = Create();
+        var statusService = new InventoryStatusService(db, new Access(ids.WarehouseId), new Current(ids.UserId));
+
+        var recallLot = new InventoryLot
+        {
+            ProductId = ids.ProductId,
+            LotNumber = "LOT-RECALL-99",
+            ExpiryDate = DateTime.UtcNow.Date.AddDays(90)
+        };
+        db.InventoryLots.Add(recallLot);
+        await db.SaveChangesAsync();
+
+        var lotStock = new InventoryStock
+        {
+            ProductId = ids.ProductId,
+            WarehouseId = ids.WarehouseId,
+            LocationId = ids.Storage2,
+            LotId = recallLot.Id,
+            Status = InventoryStatus.Available,
+            Quantity = 10
+        };
+        db.InventoryStocks.Add(lotStock);
+        await db.SaveChangesAsync();
+
+        var result = await statusService.ExecuteRecallBlockAsync(new CreateInventoryRecallBlockDto
+        {
+            WarehouseId = ids.WarehouseId,
+            ProductId = ids.ProductId,
+            LotNumber = "LOT-RECALL-99",
+            Reason = "Thu hồi khẩn cấp chiến dịch RC-2026-99"
+        });
+
+        result.LotNumber.Should().Be("LOT-RECALL-99");
+        result.AffectedBucketCount.Should().Be(1);
+        result.BlockedQuantity.Should().Be(10);
+        result.InventoryLockId.Should().BeGreaterThan(0);
+
+        var remainingAvailable = await db.InventoryStocks.AsNoTracking()
+            .SingleAsync(x => x.Id == lotStock.Id);
+        remainingAvailable.Quantity.Should().Be(0);
+
+        var recallBlockedBucket = await db.InventoryStocks.AsNoTracking()
+            .SingleAsync(x => x.LotId == recallLot.Id && x.Status == InventoryStatus.RecallBlocked);
+        recallBlockedBucket.Quantity.Should().Be(10);
+
+        (await db.InventoryLocks.AsNoTracking()
+            .AnyAsync(x => x.Id == result.InventoryLockId && x.LotId == recallLot.Id && x.LockType == InventoryLockType.RecallHold))
+            .Should().BeTrue();
+    }
+
     private async Task<(int WarehouseId,int UserId,int ProductId,int TaskId,int ItemId,int Receiving,int Storage1,int Storage2,int Damaged)> SeedAsync()
     {
         await using var db=Create(); var role=new Role{RoleName="Manager"}; var user=new User{Username=Guid.NewGuid().ToString("N"),PasswordHash="x",FullName="QA",Role=role};

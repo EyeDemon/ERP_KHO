@@ -57,6 +57,8 @@ export default function PackingSessions(){
   const [huCode,setHuCode]=useState('');
   const [packForm,setPackForm]=useState<Record<number,{huId:string;barcode:string;quantity:string}>>({});
   const [parents,setParents]=useState<Record<number,string>>({});
+  const [huRegistry,setHuRegistry]=useState<HandlingUnit[]>([]);
+  const [labelPreviewHu,setLabelPreviewHu]=useState<HandlingUnit|null>(null);
   const lock=useRef(new Set<string>());
   const canExecute=usePermission('packing.execute');
   const canCreateHu=usePermission('handling_unit.create');
@@ -64,7 +66,14 @@ export default function PackingSessions(){
 
   const load=async()=>{
     setLoading(true);setError('');
-    try{setSessions((await apiClient.get('/api/packing-sessions')).data)}
+    try{
+      const [sessionsRes,husRes]=await Promise.all([
+        apiClient.get('/api/packing-sessions'),
+        apiClient.get('/api/handling-units').catch(()=>({data:[]})),
+      ]);
+      setSessions(Array.isArray(sessionsRes.data)?sessionsRes.data:[]);
+      setHuRegistry(Array.isArray(husRes.data)?husRes.data:[]);
+    }
     catch(e){setSessions([]);setSelected(null);setError(errorMessage(e))}
     finally{setLoading(false)}
   };
@@ -184,12 +193,14 @@ export default function PackingSessions(){
             <div className="ui-inline-wrap">
               <UiBadge tone={tone(hu.status)}>{huStateLabels[hu.status]??hu.status}</UiBadge>
               <span>Barcode: <strong>{hu.barcode}</strong></span>
+              {hu.sscc&&<span>SSCC: <code>{hu.sscc}</code></span>}
               {hu.parentHandlingUnitCode&&<span>Trong HU: {hu.parentHandlingUnitCode}</span>}
               <span>Content: {hu.contents.reduce((sum,item)=>sum+item.quantity,0)}</span>
             </div>
             {hu.contents.length>0&&<ul>{hu.contents.map(item=><li key={item.id}>{item.productCode}: {item.quantity}</li>)}</ul>}
 
             <div className="ui-inline-wrap">
+              <button type="button" className="ui-btn-secondary" onClick={()=>setLabelPreviewHu(hu)}>Xem / In nhãn HU</button>
               {canExecute&&['Open','InUse'].includes(hu.status)&&hu.contents.length>0&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
                 `packing-close-hu-${selected.id}-${hu.id}`,`/api/packing-sessions/${selected.id}/handling-units/${hu.id}/close`,
                 {rowVersion:selected.rowVersion}
@@ -230,6 +241,61 @@ export default function PackingSessions(){
           )}>Hủy session rỗng</button>}
         </div>
       </UiCard>}
+
+      {labelPreviewHu&&<UiCard title={`Nhãn Logistics / Barcode / SSCC — ${labelPreviewHu.huCode} (HU-03, HU-04)`}>
+        <div className="ui-stack-sm">
+          <div className="ui-inline-wrap">
+            <span><strong>HU Code:</strong> {labelPreviewHu.huCode}</span>
+            <span><strong>Barcode:</strong> <code>{labelPreviewHu.barcode}</code></span>
+            <span><strong>SSCC:</strong> <code>{labelPreviewHu.sscc || `003893${String(labelPreviewHu.id).padStart(12,'0')}`}</code></span>
+            <span><strong>Loại HU:</strong> {labelPreviewHu.type}</span>
+            <span><strong>Kho ID:</strong> #{labelPreviewHu.warehouseId}</span>
+            <UiBadge tone={tone(labelPreviewHu.status)}>{huStateLabels[labelPreviewHu.status]??labelPreviewHu.status}</UiBadge>
+          </div>
+          <div>
+            <strong>Danh sách SKU bên trong:</strong>
+            {(labelPreviewHu.contents??[]).length===0?<p className="ui-muted-text">Chưa có hàng hóa bên trong HU.</p>:<ul>
+              {labelPreviewHu.contents.map(c=><li key={c.id}>{c.productCode} — {c.productName}: <strong>{c.quantity}</strong></li>)}
+            </ul>}
+          </div>
+          <div className="ui-inline-wrap">
+            <button type="button" onClick={()=>window.print()}>In nhãn (Print)</button>
+            <button type="button" className="ui-btn-secondary" onClick={()=>setLabelPreviewHu(null)}>Đóng xem trước</button>
+          </div>
+        </div>
+      </UiCard>}
+
+      <UiCard title="Danh mục Đơn vị xử lý (HU Registry) & Trung tâm Nhãn Barcode/SSCC (HU-01..HU-04)">
+        <p className="ui-muted-text">Tra cứu toàn bộ Pallet / Thùng / Khay theo kho, trạng thái phân cấp và in nhãn mã vạch / SSCC.</p>
+        {huRegistry.length===0?<p className="ui-muted-text">Chưa có dữ liệu danh mục Handling Unit độc lập hoặc đang hiển thị theo Packing Session phía trên.</p>:<UiTableScroll>
+          <table aria-label="Danh mục Đơn vị xử lý HU Registry">
+            <thead>
+              <tr>
+                <th>Mã HU</th>
+                <th>Loại</th>
+                <th>Barcode / SSCC</th>
+                <th>HU cha</th>
+                <th>Trạng thái</th>
+                <th>Tổng SL</th>
+                <th>Thao tác nhãn</th>
+              </tr>
+            </thead>
+            <tbody>
+              {huRegistry.map(item=><tr key={item.id}>
+                <td><strong>{item.huCode}</strong></td>
+                <td>{item.type}</td>
+                <td><code>{item.barcode}</code>{item.sscc?<><br/><small>SSCC: {item.sscc}</small></>:null}</td>
+                <td>{item.parentHandlingUnitCode||'—'}</td>
+                <td><UiBadge tone={tone(item.status)}>{huStateLabels[item.status]??item.status}</UiBadge></td>
+                <td>{(item.contents??[]).reduce((sum,c)=>sum+c.quantity,0)}</td>
+                <td>
+                  <button type="button" className="ui-btn-secondary" onClick={()=>setLabelPreviewHu(item)}>Xem / In nhãn HU</button>
+                </td>
+              </tr>)}
+            </tbody>
+          </table>
+        </UiTableScroll>}
+      </UiCard>
     </div>
   </UiPage>;
 }

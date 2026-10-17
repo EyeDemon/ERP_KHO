@@ -80,6 +80,40 @@ interface InventoryExpiryAgingDto {
   expiryStatus: 'EXPIRED' | 'NEAR_EXPIRY' | 'GOOD' | 'NO_EXPIRY';
 }
 
+interface InventoryAnalyticsSkuItemDto {
+  productId: number;
+  productCode: string;
+  productName: string;
+  unitName: string;
+  onHandQuantity: number;
+  periodOutQuantity: number;
+  periodInQuantity: number;
+  turnoverRate: number;
+  daysOnHand?: number | null;
+  velocityClass: string;
+}
+
+interface InventoryAnalyticsSummaryDto {
+  windowDays: number;
+  inboundOutboundSla: {
+    completedReceiptsCount: number;
+    avgInboundLeadTimeHours: number;
+    openPutawayBacklogCount: number;
+    dispatchedExportsCount: number;
+    avgOutboundLeadTimeHours: number;
+    openPickingBacklogCount: number;
+  };
+  stocktakeAccuracy: {
+    approvedStocktakesCount: number;
+    totalLinesCounted: number;
+    exactMatchLinesCount: number;
+    varianceLinesCount: number;
+    accuracyRatePercent: number;
+    totalAbsoluteVarianceQty: number;
+  };
+  turnoverAndDaysOnHand: InventoryAnalyticsSkuItemDto[];
+}
+
 interface PagedResult<T> {
   items: T[];
   totalRecords: number;
@@ -120,7 +154,7 @@ const inventoryStatusLabel = (value: string) => ({
 }[value] ?? value);
 
 const Inventory = () => {
-  const [activeTab, setActiveTab] = useState<'stock' | 'buckets' | 'history' | 'inout' | 'expiry'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'buckets' | 'history' | 'inout' | 'expiry' | 'analytics'>('stock');
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
 
   // Stock State
@@ -186,6 +220,15 @@ const Inventory = () => {
   const [expiryReport, setExpiryReport] = useState<InventoryExpiryAgingDto[]>([]);
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [expiryError, setExpiryError] = useState('');
+
+  // Analytics Summary State (RP-03, RP-05, RP-09)
+  const [analyticsFilter, setAnalyticsFilter] = useState({
+    warehouseId: '',
+    days: '30'
+  });
+  const [analyticsReport, setAnalyticsReport] = useState<InventoryAnalyticsSummaryDto | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState('');
 
   const fetchStocks = async () => {
     setStockLoading(true);
@@ -274,6 +317,24 @@ const Inventory = () => {
     }
   };
 
+  const fetchAnalyticsSummary = async () => {
+    setAnalyticsLoading(true);
+    setAnalyticsError('');
+    try {
+      const params = new URLSearchParams();
+      if (analyticsFilter.warehouseId) params.append('warehouseId', analyticsFilter.warehouseId);
+      if (analyticsFilter.days) params.append('days', analyticsFilter.days);
+
+      const res = await apiClient.get('/api/Reports/analytics-summary?' + params.toString());
+      setAnalyticsReport(res.data ?? null);
+    } catch {
+      setAnalyticsError('Lỗi khi tải báo cáo hiệu suất và vòng quay tồn kho.');
+      setAnalyticsReport(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'stock') {
       fetchStocks();
@@ -285,6 +346,8 @@ const Inventory = () => {
       }
     } else if (activeTab === 'expiry') {
       fetchExpiryAging();
+    } else if (activeTab === 'analytics') {
+      fetchAnalyticsSummary();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, historyFilter.page]);
@@ -313,6 +376,11 @@ const Inventory = () => {
   const handleExpiryFilterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     void fetchExpiryAging();
+  };
+
+  const handleAnalyticsFilterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void fetchAnalyticsSummary();
   };
 
   const handleExportStock = async () => {
@@ -743,6 +811,123 @@ const Inventory = () => {
     );
   };
 
+  const renderAnalyticsTab = () => {
+    const velocityBadge = (cls: string) => {
+      if (cls === 'FAST_MOVING') return <UiBadge tone="success">Luân chuyển nhanh (Fast)</UiBadge>;
+      if (cls === 'NORMAL_MOVING') return <UiBadge tone="neutral">Bình thường (Normal)</UiBadge>;
+      if (cls === 'DEAD_STOCK') return <UiBadge tone="danger">Tồn đọng / Không xuất (Dead Stock)</UiBadge>;
+      return <UiBadge tone="warning">Luân chuyển chậm (Slow)</UiBadge>;
+    };
+
+    return (
+      <UiCard title="Phân tích Hiệu suất SLA, Độ chính xác Kiểm kê & Vòng quay Tồn kho (RP-03, RP-05, RP-09)">
+        <form onSubmit={handleAnalyticsFilterSubmit}>
+          <UiToolbar>
+            <UiToolbarField label="Kho">
+              <select
+                aria-label="Kho báo cáo hiệu suất"
+                value={analyticsFilter.warehouseId}
+                onChange={e => setAnalyticsFilter({ ...analyticsFilter, warehouseId: e.target.value })}
+              >
+                <option value="">Tất cả kho được phép</option>
+                {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+              </select>
+            </UiToolbarField>
+            <UiToolbarField label="Chu kỳ phân tích (ngày)">
+              <input
+                aria-label="Chu kỳ phân tích ngày"
+                type="number"
+                min={7}
+                max={365}
+                value={analyticsFilter.days}
+                onChange={e => setAnalyticsFilter({ ...analyticsFilter, days: e.target.value })}
+              />
+            </UiToolbarField>
+            <div className="inventory-toolbar-actions">
+              <button type="submit">Tải phân tích KPI</button>
+            </div>
+          </UiToolbar>
+        </form>
+
+        {analyticsError && <p role="alert">{analyticsError}</p>}
+        {analyticsLoading || !analyticsReport ? (
+          <p role="status">Đang tải dữ liệu phân tích hiệu suất & vòng quay...</p>
+        ) : (
+          <div className="ui-stack">
+            <div className="ui-grid-2">
+              <UiCard title={`Hiệu suất SLA Nhập / Xuất (${analyticsReport.windowDays} ngày qua — RP-03)`}>
+                <div className="ui-stack-xs">
+                  <div><strong>Phiếu nhập hoàn tất:</strong> {analyticsReport.inboundOutboundSla.completedReceiptsCount} phiếu</div>
+                  <div><strong>Lead-time Nhập kho TB:</strong> {analyticsReport.inboundOutboundSla.avgInboundLeadTimeHours} giờ</div>
+                  <div><strong>Tồn đọng chờ cất hàng (Putaway Backlog):</strong> {analyticsReport.inboundOutboundSla.openPutawayBacklogCount} task</div>
+                  <hr />
+                  <div><strong>Phiếu xuất đã giao (Dispatched):</strong> {analyticsReport.inboundOutboundSla.dispatchedExportsCount} phiếu</div>
+                  <div><strong>Lead-time Xuất kho TB:</strong> {analyticsReport.inboundOutboundSla.avgOutboundLeadTimeHours} giờ</div>
+                  <div><strong>Tồn đọng chờ lấy hàng (Picking Backlog):</strong> {analyticsReport.inboundOutboundSla.openPickingBacklogCount} task</div>
+                </div>
+              </UiCard>
+
+              <UiCard title={`Độ chính xác Kiểm kê & Chênh lệch (${analyticsReport.windowDays} ngày qua — RP-05)`}>
+                <div className="ui-stack-xs">
+                  <div><strong>Số đợt kiểm kê đã duyệt:</strong> {analyticsReport.stocktakeAccuracy.approvedStocktakesCount} đợt</div>
+                  <div><strong>Tổng số dòng kiểm đếm:</strong> {analyticsReport.stocktakeAccuracy.totalLinesCounted} dòng</div>
+                  <div><strong>Dòng khớp tuyệt đối:</strong> {analyticsReport.stocktakeAccuracy.exactMatchLinesCount} dòng</div>
+                  <div><strong>Dòng có lệch kiểm kê:</strong> {analyticsReport.stocktakeAccuracy.varianceLinesCount} dòng</div>
+                  <div>
+                    <strong>Tỷ lệ chính xác kiểm kê (Accuracy Rate):</strong>{' '}
+                    <UiBadge tone={analyticsReport.stocktakeAccuracy.accuracyRatePercent >= 98 ? 'success' : 'warning'}>
+                      {analyticsReport.stocktakeAccuracy.accuracyRatePercent}%
+                    </UiBadge>
+                  </div>
+                  <div><strong>Tổng trị tuyệt đối lệch SL:</strong> {analyticsReport.stocktakeAccuracy.totalAbsoluteVarianceQty}</div>
+                </div>
+              </UiCard>
+            </div>
+
+            <UiCard title={`Bảng Vòng quay Tồn kho & Số ngày tồn (Days On Hand — RP-09)`}>
+              <UiTableScroll>
+                <table aria-label="Bảng vòng quay tồn kho và số ngày tồn">
+                  <thead>
+                    <tr>
+                      <th>Mã SP</th>
+                      <th>Tên SP</th>
+                      <th>ĐVT</th>
+                      <th className="inventory-numeric">Tồn hiện tại</th>
+                      <th className="inventory-numeric">Nhập trong kỳ</th>
+                      <th className="inventory-numeric">Xuất trong kỳ</th>
+                      <th className="inventory-numeric">Hệ số vòng quay (Turnover)</th>
+                      <th className="inventory-numeric">Số ngày tồn (DOH)</th>
+                      <th>Phân nhóm tốc độ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analyticsReport.turnoverAndDaysOnHand.length === 0 ? (
+                      <tr><td colSpan={9} className="ui-empty-cell">Không có dữ liệu vòng quay SKU</td></tr>
+                    ) : (
+                      analyticsReport.turnoverAndDaysOnHand.map(item => (
+                        <tr key={item.productId}>
+                          <td><strong>{item.productCode}</strong></td>
+                          <td>{item.productName}</td>
+                          <td>{item.unitName}</td>
+                          <td className="inventory-numeric">{item.onHandQuantity}</td>
+                          <td className="inventory-numeric">{item.periodInQuantity}</td>
+                          <td className="inventory-numeric">{item.periodOutQuantity}</td>
+                          <td className="inventory-numeric"><strong>{item.turnoverRate}</strong></td>
+                          <td className="inventory-numeric">{item.daysOnHand !== null && item.daysOnHand !== undefined ? `${item.daysOnHand} ngày` : '∞'}</td>
+                          <td>{velocityBadge(item.velocityClass)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </UiTableScroll>
+            </UiCard>
+          </div>
+        )}
+      </UiCard>
+    );
+  };
+
   return (
     <UiPage>
       <div className="inventory-page">
@@ -803,6 +988,16 @@ const Inventory = () => {
           >
             Hạn dùng & Tuổi tồn
           </button>
+          <button
+            type="button"
+            role="tab"
+            className="inventory-tab"
+            aria-selected={activeTab === 'analytics'}
+            aria-controls="inventory-analytics-panel"
+            onClick={() => setActiveTab('analytics')}
+          >
+            Hiệu suất & Vòng quay
+          </button>
         </div>
 
         {activeTab === 'stock' && <section id="inventory-stock-panel" role="tabpanel">{renderStockTab()}</section>}
@@ -810,6 +1005,7 @@ const Inventory = () => {
         {activeTab === 'history' && <section id="inventory-history-panel" role="tabpanel">{renderHistoryTab()}</section>}
         {activeTab === 'inout' && <section id="inventory-inout-panel" role="tabpanel">{renderInOutTab()}</section>}
         {activeTab === 'expiry' && <section id="inventory-expiry-panel" role="tabpanel">{renderExpiryTab()}</section>}
+        {activeTab === 'analytics' && <section id="inventory-analytics-panel" role="tabpanel">{renderAnalyticsTab()}</section>}
       </div>
     </UiPage>
   );

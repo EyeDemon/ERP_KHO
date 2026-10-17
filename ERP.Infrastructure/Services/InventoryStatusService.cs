@@ -447,6 +447,156 @@ public sealed class InventoryStatusService(
         }
     }
 
+    public async Task<InventoryRecallBlockResultDto> ExecuteRecallBlockAsync(
+        CreateInventoryRecallBlockDto request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.WarehouseId <= 0 || request.ProductId <= 0)
+            throw new BusinessRuleException("WarehouseId và ProductId phải hợp lệ.");
+        if (string.IsNullOrWhiteSpace(request.LotNumber))
+            throw new BusinessRuleException("LotNumber là bắt buộc khi kích hoạt thu hồi lô.");
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new BusinessRuleException("Lý do thu hồi lô là bắt buộc.");
+
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(request.WarehouseId, cancellationToken);
+        var normalizedLot = request.LotNumber.Trim();
+        var cleanReason = request.Reason.Trim();
+
+        var ownTransaction = context.Database.CurrentTransaction is null;
+        await using var tx = ownTransaction
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : null;
+        try
+        {
+            var lot = await context.InventoryLots
+                .FirstOrDefaultAsync(x => x.ProductId == request.ProductId && x.LotNumber == normalizedLot, cancellationToken)
+                ?? throw new NotFoundException($"Không tìm thấy lô {normalizedLot} của sản phẩm #{request.ProductId}.");
+
+            var sources = await context.InventoryStocks
+                .Where(x => x.WarehouseId == request.WarehouseId &&
+                            x.ProductId == request.ProductId &&
+                            x.LotId == lot.Id &&
+                            x.Status != InventoryStatus.RecallBlocked &&
+                            x.Quantity - x.ReservedQuantity > 0)
+                .ToListAsync(cancellationToken);
+
+            decimal totalBlocked = 0m;
+            var affectedCount = 0;
+
+            foreach (var source in sources)
+            {
+                var moveQty = source.Quantity - source.ReservedQuantity;
+                if (moveQty <= 0) continue;
+
+                var fromStatus = source.Status;
+                var destination = await context.InventoryStocks.SingleOrDefaultAsync(
+                    x => x.ProductId == source.ProductId &&
+                         x.WarehouseId == source.WarehouseId &&
+                         x.LocationId == source.LocationId &&
+                         x.Status == InventoryStatus.RecallBlocked &&
+                         x.LotId == source.LotId &&
+                         x.SerialId == source.SerialId,
+                    cancellationToken);
+
+                source.Quantity -= moveQty;
+                source.LastUpdated = DateTime.UtcNow;
+
+                if (destination is null)
+                {
+                    destination = new InventoryStock
+                    {
+                        ProductId = source.ProductId,
+                        WarehouseId = source.WarehouseId,
+                        LocationId = source.LocationId,
+                        LotId = source.LotId,
+                        SerialId = source.SerialId,
+                        Status = InventoryStatus.RecallBlocked,
+                        Quantity = moveQty,
+                        ReservedQuantity = 0,
+                        LastUpdated = DateTime.UtcNow
+                    };
+                    context.InventoryStocks.Add(destination);
+                }
+                else
+                {
+                    destination.Quantity += moveQty;
+                    destination.LastUpdated = DateTime.UtcNow;
+                }
+
+                context.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = source.ProductId,
+                    WarehouseId = source.WarehouseId,
+                    LocationId = source.LocationId,
+                    LotId = source.LotId,
+                    SerialId = source.SerialId,
+                    InventoryStatus = InventoryStatus.RecallBlocked,
+                    FromInventoryStatus = fromStatus,
+                    ToInventoryStatus = InventoryStatus.RecallBlocked,
+                    TransactionType = TransactionType.StatusChange,
+                    Quantity = moveQty,
+                    ReferenceId = source.Id,
+                    ReferenceType = "RecallCampaignBlock",
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = currentUser.UserId,
+                    Note = cleanReason
+                });
+
+                totalBlocked += moveQty;
+                affectedCount++;
+            }
+
+            var recallLock = new InventoryLock
+            {
+                LockType = InventoryLockType.RecallHold,
+                Status = InventoryLockStatus.Active,
+                WarehouseId = request.WarehouseId,
+                ProductId = request.ProductId,
+                LotId = lot.Id,
+                InventoryStatus = InventoryStatus.RecallBlocked,
+                Reason = cleanReason,
+                CreatedBy = currentUser.UserId,
+                CreatedAt = DateTime.UtcNow
+            };
+            context.InventoryLocks.Add(recallLock);
+            await context.SaveChangesAsync(cancellationToken);
+
+            context.AuditLogs.Add(new AuditLog
+            {
+                UserId = currentUser.UserId,
+                Action = "Inventory.RecallCampaignBlocked",
+                EntityName = "InventoryLot",
+                EntityId = lot.Id,
+                WarehouseId = request.WarehouseId,
+                Timestamp = DateTime.UtcNow,
+                NewValues = $"LotNumber: {lot.LotNumber}; AffectedBuckets: {affectedCount}; BlockedQuantity: {totalBlocked}; LockId: {recallLock.Id}",
+                Reason = cleanReason,
+                Result = "Success",
+                Severity = "Warning"
+            });
+            await context.SaveChangesAsync(cancellationToken);
+
+            if (tx is not null) await tx.CommitAsync(cancellationToken);
+
+            return new InventoryRecallBlockResultDto
+            {
+                WarehouseId = request.WarehouseId,
+                ProductId = request.ProductId,
+                LotId = lot.Id,
+                LotNumber = lot.LotNumber,
+                AffectedBucketCount = affectedCount,
+                BlockedQuantity = totalBlocked,
+                InventoryLockId = recallLock.Id,
+                Reason = cleanReason
+            };
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
     private static void ValidateTransition(InventoryStatus fromStatus, InventoryStatus toStatus)
     {
         if (fromStatus is InventoryStatus.Expired or InventoryStatus.RecallBlocked)

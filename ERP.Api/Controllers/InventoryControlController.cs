@@ -2,8 +2,11 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Domain.Enums;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -53,4 +56,93 @@ public sealed class InventoryControlController(
         CreateInventoryMoveDto request,
         CancellationToken cancellationToken) =>
         Ok(await movementService.MoveAsync(request, cancellationToken));
+
+    [HttpGet("replenishment-suggestions")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public async Task<IActionResult> ReplenishmentSuggestions(
+        [FromServices] ErpKhoDbContext db,
+        [FromServices] IWarehouseAuthorizationService warehouseAuth,
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
+            return Ok(Array.Empty<object>());
+
+        var scopedWarehouseIds = warehouseId.HasValue
+            ? new[] { warehouseId.Value }
+            : accessibleIds.ToArray();
+
+        var pickLocations = await db.WarehouseLocations.AsNoTracking()
+            .Where(l => scopedWarehouseIds.Contains(l.WarehouseId) && l.IsActive && !l.IsBlocked && !l.IsSystemManaged && l.IsPickable)
+            .OrderBy(l => l.Code)
+            .Select(l => new { l.Id, l.WarehouseId, l.Code, l.Name })
+            .ToListAsync(cancellationToken);
+
+        var activeStocks = await db.InventoryStocks.AsNoTracking()
+            .Where(s => scopedWarehouseIds.Contains(s.WarehouseId) &&
+                        s.Status == InventoryStatus.Available &&
+                        s.LocationId.HasValue)
+            .Select(s => new
+            {
+                s.Id,
+                s.WarehouseId,
+                WarehouseName = s.Warehouse.Name,
+                s.ProductId,
+                ProductCode = s.Product.Code,
+                ProductName = s.Product.Name,
+                LocationId = s.LocationId!.Value,
+                LocationCode = s.Location != null ? s.Location.Code : "DEFAULT",
+                IsPickableLocation = s.Location != null && s.Location.IsPickable,
+                AvailableQty = s.Quantity - s.ReservedQuantity,
+                s.Quantity
+            })
+            .ToListAsync(cancellationToken);
+
+        var suggestions = new List<object>();
+        var sourceCandidates = activeStocks
+            .Where(s => s.AvailableQty > 0 && (!s.IsPickableLocation || s.AvailableQty >= 15m))
+            .OrderBy(s => s.IsPickableLocation ? 1 : 0)
+            .ThenByDescending(s => s.AvailableQty)
+            .ToList();
+
+        foreach (var src in sourceCandidates)
+        {
+            var candidatePickBins = pickLocations
+                .Where(l => l.WarehouseId == src.WarehouseId && l.Id != src.LocationId)
+                .ToList();
+
+            foreach (var targetBin in candidatePickBins)
+            {
+                var currentAtTarget = activeStocks
+                    .Where(s => s.WarehouseId == src.WarehouseId && s.ProductId == src.ProductId && s.LocationId == targetBin.Id)
+                    .Sum(s => s.Quantity);
+
+                if (currentAtTarget < 20m && src.AvailableQty > currentAtTarget)
+                {
+                    var suggestedQty = Math.Min(src.AvailableQty, Math.Max(5m, 25m - currentAtTarget));
+                    suggestions.Add(new
+                    {
+                        inventoryStockId = src.Id,
+                        productId = src.ProductId,
+                        productCode = src.ProductCode,
+                        productName = src.ProductName,
+                        warehouseId = src.WarehouseId,
+                        warehouseName = src.WarehouseName,
+                        sourceLocationId = src.LocationId,
+                        sourceLocationCode = src.LocationCode,
+                        availableAtSource = src.AvailableQty,
+                        targetLocationId = targetBin.Id,
+                        targetLocationCode = targetBin.Code,
+                        currentAtTarget,
+                        suggestedQuantity = suggestedQty
+                    });
+                    break;
+                }
+            }
+        }
+
+        return Ok(suggestions.Take(25).ToList());
+    }
 }
+

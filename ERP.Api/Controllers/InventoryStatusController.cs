@@ -44,5 +44,14 @@ public sealed class InventoryStatusController(IInventoryStatusService service) :
         CreateInventoryDispositionDto request,
         CancellationToken cancellationToken) =>
         Ok(await service.ExecuteDispositionAsync(request, cancellationToken));
+
+    [HttpPost("recall-block")]
+    [PermissionAuthorize(AppPermissions.InventoryStatusChangeCreate)]
+    [IdempotentCommand("InventoryStatus.RecallBlock")]
+    public async Task<ActionResult<InventoryRecallBlockResultDto>> RecallBlock(
+        CreateInventoryRecallBlockDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await service.ExecuteRecallBlockAsync(request, cancellationToken));
 }
+
 
