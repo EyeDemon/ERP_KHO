@@ -63,6 +63,15 @@ const Products = () => {
   }, [products, search]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visibleProducts = useMemo(() => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [filtered, currentPage]);
+  const governanceSummary = useMemo(() => {
+    const active = products.filter(p => p.isActive);
+    const lotCount = products.filter(p => p.trackingType === 'Lot').length;
+    const serialCount = products.filter(p => p.trackingType === 'Serial').length;
+    const expiryCount = products.filter(p => Boolean(p.expiryControl)).length;
+    const dimensionCount = products.filter(p => p.unitWeightKg != null || p.unitVolumeM3 != null || p.unitPalletEquivalent != null).length;
+    const incomplete = active.filter(p => (p.unitWeightKg == null && p.unitVolumeM3 == null) || (p.expiryControl && p.shelfLifeDays == null)).slice(0, 10);
+    return { activeCount: active.length, lotCount, serialCount, expiryCount, dimensionCount, incomplete };
+  }, [products]);
   useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
   const createMode = () => { setEditing(null); setForm({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', trackingType: 'None', expiryControl: false, shelfLifeDays: '', unitId: units[0]?.id || 0, categoryId: '', isActive: true }); };
   const editMode = (p: Product) => { setEditing(p); setForm({ code: p.code, name: p.name, description: p.description || '', storageClass: p.storageClass || '', unitWeightKg: p.unitWeightKg?.toString() || '', unitVolumeM3: p.unitVolumeM3?.toString() || '', unitPalletEquivalent: p.unitPalletEquivalent?.toString() || '', trackingType: p.trackingType || 'None', expiryControl: p.expiryControl || false, shelfLifeDays: p.shelfLifeDays?.toString() || '', unitId: p.unitId, categoryId: p.categoryId || '', isActive: p.isActive }); setBarcode(''); };
@@ -112,12 +121,27 @@ const Products = () => {
     <UiPageHeader
       eyebrow="Dữ liệu nền"
       title="Sản phẩm"
-      description="Quản lý SKU, danh mục, đơn vị tính và barcode. Tìm kiếm và tra mã vạch dùng cùng dữ liệu sản phẩm."
+      description="Quản lý SKU, danh mục, đơn vị tính, barcode, chính sách hạn dùng FEFO (MD-08) và quy cách đóng gói chuẩn (MD-09)."
     />
 
     {notice && <p role="status" className="ui-success-text">{notice}</p>}
     {error && <p role="alert">{error}</p>}
     {mutating && <p role="status">Đang xử lý...</p>}
+
+    <UiCard title="Chỉ số Chuẩn hóa Danh mục (MD-01), Chính sách Hạn dùng (MD-08) & Quy cách Đóng gói SKU (MD-09)">
+      <div className="ui-inline-wrap">
+        <UiBadge tone="success">{`SKU hoạt động: ${governanceSummary.activeCount}/${products.length}`}</UiBadge>
+        <UiBadge>{`Danh mục hoạt động (MD-01): ${categories.filter(c => c.isActive).length}/${categories.length}`}</UiBadge>
+        <UiBadge>{`Theo dõi Lot: ${governanceSummary.lotCount} • Serial: ${governanceSummary.serialCount}`}</UiBadge>
+        <UiBadge tone="warning">{`Kiểm soát HSD / FEFO (MD-08): ${governanceSummary.expiryCount} SKU`}</UiBadge>
+        <UiBadge tone="success">{`Đã chuẩn hóa Trọng lượng/Thể tích/Pallet (MD-09): ${governanceSummary.dimensionCount} SKU`}</UiBadge>
+      </div>
+      {governanceSummary.incomplete.length > 0 && (
+        <p className="ui-muted-text">
+          {`SKU cần bổ sung thông số đóng gói hoặc vòng đời HSD: ${governanceSummary.incomplete.map(item => `${item.code} (${item.name})`).join(', ')}`}
+        </p>
+      )}
+    </UiCard>
 
     <UiToolbar>
       <UiToolbarField label="Tra mã vạch">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import {
@@ -198,6 +198,7 @@ const WarehouseLocations = () => {
   const [form, setForm] = useState<LocationForm>(emptyForm);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const loadWarehouses = useCallback(async () => {
     const response = await apiClient.get('/api/putaway-tasks/location-warehouses');
@@ -344,14 +345,14 @@ const WarehouseLocations = () => {
   };
 
   const closeForm = () => {
-    if (saving) return;
+    if (saving || savingRef.current) return;
     setShowForm(false);
     setFormError('');
   };
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (saving || !warehouseId) return;
+    if (saving || savingRef.current || !warehouseId) return;
     setFormError('');
     setSuccess('');
 
@@ -380,6 +381,7 @@ const WarehouseLocations = () => {
     }
 
     const structurePath = hasAnyStructure ? structurePathOf(form) : null;
+    savingRef.current = true;
     setSaving(true);
     try {
       if (editing && form.id !== undefined) {
@@ -423,6 +425,7 @@ const WarehouseLocations = () => {
     } catch (failure) {
       setFormError(messageOf(failure, 'Không thể lưu vị trí.'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -451,6 +454,27 @@ const WarehouseLocations = () => {
         <UiMetric value={nearCapacityCount} label="Gần đầy" />
         <UiMetric value={capacityIssueCount} label="Capacity cần xử lý" />
       </UiMetricGrid>
+
+      <UiCard title="Tổng quan Phân bổ Vị trí & Sức chứa Bin (Location & Bin Capacity Governance — WH-02)">
+        <div className="warehouse-location-capacity-grid">
+          <div>
+            <strong>Tổng số vị trí & Đang hoạt động</strong><br />
+            {locations.length} vị trí ({locations.filter((location) => location.isActive && !location.isBlocked).length} Active)
+          </div>
+          <div>
+            <strong>Vị trí có giới hạn tải trọng / thể tích / pallet</strong><br />
+            {locations.filter((location) => location.maxWeightKg != null || location.maxVolumeM3 != null || location.maxPalletEquivalent != null).length} / {locations.length} vị trí đã áp ngưỡng
+          </div>
+          <div>
+            <strong>Vị trí cho phép lấy hàng (Pickable)</strong><br />
+            {locations.filter((location) => location.isPickable).length} vị trí lấy hàng
+          </div>
+          <div>
+            <strong>Vị trí cho phép tiếp nhận / cất hàng</strong><br />
+            {locations.filter((location) => location.isReceivable || (!location.isSystemManaged && location.isActive && !location.isBlocked)).length} vị trí khả dụng cất/nhận
+          </div>
+        </div>
+      </UiCard>
 
       <UiToolbar>
         <UiToolbarField label="Kho">

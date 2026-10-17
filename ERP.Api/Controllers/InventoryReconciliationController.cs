@@ -56,5 +56,23 @@ namespace ERP.Api.Controllers
 
             return Ok(result);
         }
+
+        [HttpGet("summary")]
+        [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+        public async Task<IActionResult> Summary([FromQuery] int? warehouseId = null)
+        {
+            var page = await _queryService.GetReconciliationsAsync(warehouseId, null, null, 1, 100);
+            var items = page.Items;
+            return Ok(new
+            {
+                totalRows = page.TotalRecords,
+                matchedCount = items.Count(x => x.Status == "Match" || x.Difference == 0m),
+                mismatchCount = items.Count(x => x.Status != "Match" && x.Difference != 0m),
+                totalStockQuantity = items.Sum(x => x.CurrentQuantity),
+                totalLedgerQuantity = items.Sum(x => x.ExpectedQuantity ?? 0m),
+                totalReservedQuantity = 0m,
+                invalidReservationBucketCount = items.Sum(x => x.InvalidReservationBucketCount),
+            });
+        }
     }
 }

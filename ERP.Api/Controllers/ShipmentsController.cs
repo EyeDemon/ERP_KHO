@@ -20,6 +20,23 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
         CancellationToken cancellationToken = default) =>
         Ok(await service.ListAsync(warehouseId, status, cancellationToken));
 
+    [HttpGet("delivery-sla-summary")]
+    [PermissionAuthorize(AppPermissions.ShipmentRead)]
+    public async Task<IActionResult> DeliverySlaSummary(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var list = await service.ListAsync(warehouseId, null, cancellationToken);
+        return Ok(new
+        {
+            totalShipments = list.Count,
+            preDispatchCount = list.Count(x => x.Status is "Ready" or "Staging" or "Loading" or "Loaded"),
+            inTransitCount = list.Count(x => x.Status is "Dispatched" or "InTransit"),
+            deliveredOrCompletedCount = list.Count(x => x.Status is "Delivered" or "Completed"),
+            exceptionOrReturnCount = list.Count(x => x.Status is "DeliveryFailed" or "ReturnToWarehouse"),
+        });
+    }
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.ShipmentRead)]
     public async Task<ActionResult<ShipmentDto>> Get(int id, CancellationToken cancellationToken) =>

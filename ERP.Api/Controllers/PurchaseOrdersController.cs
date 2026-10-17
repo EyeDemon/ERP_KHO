@@ -14,6 +14,21 @@ public sealed class PurchaseOrdersController(IInboundPlanningService service):Co
     [HttpGet,PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> List([FromQuery]PurchaseOrderStatus? status,CancellationToken ct)=>Ok(await service.ListPurchaseOrdersAsync(status,ct));
 
+    [HttpGet("fulfillment-summary"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
+    public async Task<IActionResult> FulfillmentSummary(CancellationToken ct)
+    {
+        var items=await service.ListPurchaseOrdersAsync(null,ct);
+        return Ok(new
+        {
+            totalPoCount=items.Count,
+            openPoCount=items.Count(x=>x.Status=="Open"),
+            partiallyReceivedCount=items.Count(x=>x.Status=="PartiallyReceived"),
+            receivedOrClosedCount=items.Count(x=>x.Status is "Received" or "Closed"),
+            overdueExpectedCount=items.Count(x=>(x.Status=="Open"||x.Status=="PartiallyReceived")&&x.ExpectedDate.HasValue&&x.ExpectedDate.Value.Date<DateTime.UtcNow.Date),
+            totalBaseOrderedQuantity=items.Sum(x=>x.BaseOrderedQuantity)
+        });
+    }
+
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetPurchaseOrderAsync(id,ct));
 

@@ -127,6 +127,22 @@ export default function Asns(){
     return items.filter(item=>[item.code,item.purchaseOrderCode??'',item.supplierCode,item.supplierName,item.warehouseName].join(' ').toLowerCase().includes(q));
   },[items,search]);
 
+  const arrivalSummary=useMemo(()=>{
+    const nowMs=Date.now();
+    const overdueArrivalCount=items.filter(x=>(x.status==='Confirmed'||x.status==='InTransit')&&x.expectedArrivalAtUtc&&new Date(x.expectedArrivalAtUtc).getTime()<nowMs).length;
+    const linkedPoAsnCount=items.filter(x=>x.purchaseOrderId!=null).length;
+    const unlinkedPoAsnCount=items.filter(x=>x.purchaseOrderId==null).length;
+    const inboundExpectedVolume=items
+      .filter(x=>['Confirmed','InTransit','Arrived','Receiving'].includes(x.status))
+      .reduce((sum,x)=>sum+(x.baseExpectedQuantity||0),0);
+    return {
+      overdueArrivalCount,
+      linkedPoAsnCount,
+      unlinkedPoAsnCount,
+      inboundExpectedVolume,
+    };
+  },[items]);
+
   const viewDetail=async(id:number)=>{
     setError('');setSuccess('');
     try{setSelected((await apiClient.get('/api/asns/'+id)).data);}
@@ -225,6 +241,25 @@ export default function Asns(){
       <UiMetric value={items.filter(x=>x.status==='Arrived').length} label="Đã đến kho"/>
       <UiMetric value={items.filter(x=>x.status==='Receiving').length} label="Đang tiếp nhận"/>
     </UiMetricGrid>
+
+    <UiCard title="Giám sát Lịch đến Kho & Liên kết PO của ASN (ASN Arrival & Linkage Monitor — IN-02)">
+      <div className="inbound-planning-detail-meta">
+        <div>
+          <strong>ASN trễ giờ dự kiến đến</strong><br/>
+          <UiBadge tone={arrivalSummary.overdueArrivalCount>0?'danger':'success'}>
+            {arrivalSummary.overdueArrivalCount} ASN trễ lịch
+          </UiBadge>
+        </div>
+        <div>
+          <strong>Liên kết PO nguồn</strong><br/>
+          {arrivalSummary.linkedPoAsnCount} gắn PO / {arrivalSummary.unlinkedPoAsnCount} chưa gắn PO
+        </div>
+        <div>
+          <strong>Tổng SL cơ sở đang về / chờ nhận</strong><br/>
+          {arrivalSummary.inboundExpectedVolume.toLocaleString('vi-VN')}
+        </div>
+      </div>
+    </UiCard>
 
     <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã ASN, PO, nhà cung cấp, kho"/>
 

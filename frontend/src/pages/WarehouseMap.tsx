@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import {
@@ -92,6 +92,7 @@ const WarehouseMap = () => {
   const [success, setSuccess] = useState('');
   const [layout, setLayout] = useState<LayoutForm | null>(null);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const loadWarehouses = useCallback(async () => {
     const response = await apiClient.get('/api/putaway-tasks/location-warehouses');
@@ -165,7 +166,8 @@ const WarehouseMap = () => {
   };
 
   const saveLayout = async (clear = false) => {
-    if (!layout || saving) return;
+    if (!layout || saving || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError('');
     setSuccess('');
@@ -194,6 +196,7 @@ const WarehouseMap = () => {
     } catch (failure) {
       setError(errorMessage(failure, 'Không thể cập nhật bố trí bản đồ.'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -216,6 +219,23 @@ const WarehouseMap = () => {
         <UiMetric value={busyCount} label="Khu vực có hoạt động" />
         <UiMetric value={criticalCount} label="Điểm cần chú ý" />
       </UiMetricGrid>
+
+      <UiCard title="Tổng quan Mật độ Sơ đồ Không gian Kho (Spatial Layout & Bin Occupancy — WH-03)">
+        <div className="warehouse-map-layout-form">
+          <div>
+            <strong>Độ phủ tọa độ sơ đồ không gian</strong><br />
+            {items.length > 0 ? Math.round((mappedItems.length / items.length) * 100) : 0}% ({mappedItems.length}/{items.length} vị trí)
+          </div>
+          <div>
+            <strong>Mật độ lấp đầy & Bin tải cao (≥75%)</strong><br />
+            TB {avgUtilization}% • {items.filter(item => (item.utilizationPercent ?? 0) >= 75).length} vị trí tải cao
+          </div>
+          <div>
+            <strong>Cường độ vận hành & Putaway chờ xử lý</strong><br />
+            {items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)} dịch chuyển 60p • {items.reduce((sum, item) => sum + (item.activePutawayCount || 0), 0)} putaway
+          </div>
+        </div>
+      </UiCard>
 
       <UiToolbar>
         <UiToolbarField label="Kho">

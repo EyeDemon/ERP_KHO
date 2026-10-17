@@ -14,6 +14,20 @@ public sealed class ProductCategoriesController(IProductCatalogService service) 
     [HttpGet, PermissionAuthorize(AppPermissions.CategoryRead)]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await service.GetCategoriesAsync(ct));
 
+    [HttpGet("governance-summary"), PermissionAuthorize(AppPermissions.CategoryRead)]
+    public async Task<IActionResult> GetGovernanceSummary(CancellationToken ct)
+    {
+        var categories = await service.GetCategoriesAsync(ct);
+        return Ok(new
+        {
+            totalCategories = categories.Count,
+            activeCategories = categories.Count(x => x.IsActive),
+            inactiveCategories = categories.Count(x => !x.IsActive),
+            withDescriptionCount = categories.Count(x => !string.IsNullOrWhiteSpace(x.Name)),
+            withoutDescriptionCount = categories.Count(x => string.IsNullOrWhiteSpace(x.Name))
+        });
+    }
+
     [HttpPost, PermissionAuthorize(AppPermissions.CategoryManage)]
     public async Task<IActionResult> Create(CreateProductCategoryDto dto, CancellationToken ct)
     {

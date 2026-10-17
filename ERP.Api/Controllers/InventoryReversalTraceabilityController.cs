@@ -36,6 +36,23 @@ public sealed class InventoryReversalTraceabilityController(
         CancellationToken cancellationToken = default) =>
         Ok(await reversalService.GetCandidatesAsync(warehouseId, page, pageSize, transactionId, isReversed, productCode, cancellationToken));
 
+    [HttpGet("reversal-summary")]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+    public async Task<IActionResult> ReversalSummary(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var page = await reversalService.GetCandidatesAsync(warehouseId, 1, 100, null, null, null, cancellationToken);
+        return Ok(new
+        {
+            totalCandidatesInWindow = page.TotalRecords,
+            reversibleCount = page.Items.Count(x => !x.IsReversed),
+            alreadyReversedCount = page.Items.Count(x => x.IsReversed),
+            moveTransactionCount = page.Items.Count(x => x.TransactionType == "Move"),
+            statusChangeTransactionCount = page.Items.Count(x => x.TransactionType == "StatusChange"),
+        });
+    }
+
     [HttpPost("reversals")]
     [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]
     [IdempotentCommand("InventoryReversal.Create")]
@@ -66,4 +83,24 @@ public sealed class InventoryReversalTraceabilityController(
         CancellationToken cancellationToken = default) =>
         Ok(await traceabilityService.TraceAsync(
             warehouseId, productId, lotNumber, serialNumber, referenceType, referenceId, limit, cancellationToken, bucketOffset, eventOffset, eventAnchorId));
+
+    [HttpGet("traceability-summary")]
+    [PermissionAuthorize(AppPermissions.InventoryTraceabilityRead)]
+    public async Task<IActionResult> TraceabilitySummary(
+        [FromQuery] int? warehouseId = null,
+        [FromQuery] int? productId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var trace = await traceabilityService.TraceAsync(
+            warehouseId, productId, null, null, null, null, 100, cancellationToken);
+        return Ok(new
+        {
+            totalBuckets = trace.CurrentBuckets.Count,
+            totalEvents = trace.Events.Count,
+            lotTrackedBucketCount = trace.CurrentBuckets.Count(x => x.LotId != null || !string.IsNullOrWhiteSpace(x.LotNumber)),
+            serialTrackedBucketCount = trace.CurrentBuckets.Count(x => x.SerialId != null || !string.IsNullOrWhiteSpace(x.SerialNumber)),
+            availableBucketCount = trace.CurrentBuckets.Count(x => x.InventoryStatus == "Available"),
+            nonAvailableBucketCount = trace.CurrentBuckets.Count(x => x.InventoryStatus != "Available"),
+        });
+    }
 }

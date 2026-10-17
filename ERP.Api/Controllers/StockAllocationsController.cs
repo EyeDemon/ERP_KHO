@@ -42,6 +42,24 @@ public sealed class StockAllocationsController(IStockAllocationService service) 
         CancellationToken cancellationToken = default) =>
         Ok(await service.GetCandidatesAsync(reservationId, cancellationToken));
 
+    [HttpGet("summary")]
+    [PermissionAuthorize(AppPermissions.AllocationRead)]
+    public async Task<IActionResult> GetSummary(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var page = await service.GetPageAsync(1, 200, warehouseId, null, null, cancellationToken);
+        var reservations = await service.GetReservationsAsync(warehouseId, cancellationToken);
+        return Ok(new
+        {
+            totalAllocations = page.TotalRecords,
+            activeAllocations = page.Items.Count(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking"),
+            totalAllocatedQuantity = page.Items.Where(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking").Sum(x => x.Quantity),
+            unallocatedReservationCount = reservations.Count(x => x.AllocatableQuantity > 0),
+            totalUnallocatedQuantity = reservations.Sum(x => x.AllocatableQuantity)
+        });
+    }
+
     [HttpPost]
     [PermissionAuthorize(AppPermissions.AllocationCreate)]
     [IdempotentCommand("InventoryAllocation.Create")]

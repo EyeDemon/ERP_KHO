@@ -26,6 +26,20 @@ namespace ERP.Api.Controllers
             return Ok(units);
         }
 
+        [HttpGet("governance-summary")]
+        [PermissionAuthorize(AppPermissions.UomRead)]
+        public async Task<IActionResult> GetGovernanceSummary()
+        {
+            var units = (await _unitService.GetAllUnitsAsync()).ToList();
+            return Ok(new
+            {
+                totalUnits = units.Count,
+                withDescriptionCount = units.Count(x => !string.IsNullOrWhiteSpace(x.Name)),
+                activeUnits = units.Count(x => x.IsActive),
+                fractionalUnitsCount = units.Count(x => x.DecimalPlaces > 0)
+            });
+        }
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.UomRead)]
         public async Task<IActionResult> GetById(int id)

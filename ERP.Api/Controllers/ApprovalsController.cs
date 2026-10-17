@@ -17,6 +17,20 @@ public sealed class ApprovalsController(IApprovalWorkflowService service) : Cont
     public async Task<IActionResult> Queue([FromQuery] ApprovalQueueQuery query, CancellationToken cancellationToken) =>
         Ok(await service.GetQueueAsync(query, cancellationToken));
 
+    [HttpGet("sla-summary")]
+    public async Task<IActionResult> SlaSummary(CancellationToken cancellationToken)
+    {
+        var queue = await service.GetQueueAsync(new ApprovalQueueQuery { PageIndex = 1, PageSize = 100 }, cancellationToken);
+        return Ok(new
+        {
+            totalPending = queue.TotalRecords,
+            normalCount = queue.Items.Count(x => x.SlaStatus == "Normal"),
+            warningCount = queue.Items.Count(x => x.SlaStatus == "Warning"),
+            overdueCount = queue.Items.Count(x => x.SlaStatus == "Overdue"),
+            maxWaitingMinutes = queue.Items.Any() ? queue.Items.Max(x => x.WaitingMinutes ?? 0) : 0,
+        });
+    }
+
     [HttpGet("history")]
     public async Task<IActionResult> History([FromQuery] ApprovalHistoryQuery query, CancellationToken cancellationToken) =>
         Ok(await service.GetHistoryAsync(query, cancellationToken));

@@ -461,6 +461,16 @@ const ImportReceipts = () => {
         {error && <p role="alert">{error}</p>}
         {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
 
+        <UiCard title="Tổng quan Pipeline Tiếp nhận, QC & Ghi sổ Phiếu nhập (Inbound Receiving Pipeline — IN-04..IN-07)">
+          <div className="ui-inline-wrap">
+            <UiBadge>{`Tổng số phiếu nhập: ${receipts.length}`}</UiBadge>
+            <UiBadge tone="warning">{`Đang soạn / Nhận tại cửa: ${receipts.filter(r => r.status === 'Draft' || r.status === 'Received' || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
+            <UiBadge tone="warning">{`Đang chờ QC / Chờ duyệt: ${receipts.filter(r => r.status === 'QcPending' || r.status === 'QcCompleted' || r.status === 'ReadyToPost').length}`}</UiBadge>
+            <UiBadge tone="success">{`Đã ghi sổ tồn kho (Posted): ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
+            <UiBadge tone="danger">{`Phiếu đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`}</UiBadge>
+          </div>
+        </UiCard>
+
         {canCreate && (
           <UiCard title="Tạo Phiếu Nhập (Nháp)">
             <form onSubmit={handleCreate} className="import-form">

@@ -146,6 +146,9 @@ export default function StockAllocations(){
 
   const pages=Math.max(1,Math.ceil(data.totalRecords/data.pageSize));
   const activeQuantity=data.items.filter(item=>['Active','Picking','Picked'].includes(item.status)).reduce((sum,item)=>sum+item.quantity,0);
+  const activeAllocationsCount=data.items.filter(item=>['Active','Allocated','Picking'].includes(item.status)).length;
+  const unallocatedReservationCount=reservations.filter(item=>item.allocatableQuantity>0).length;
+  const totalUnallocatedQuantity=reservations.reduce((sum,item)=>sum+item.allocatableQuantity,0);
 
   return <UiPage>
     <UiPageHeader eyebrow="Outbound" title="Allocation theo vị trí"
@@ -158,6 +161,14 @@ export default function StockAllocations(){
       <UiMetric value={activeQuantity} label="Qty đang cam kết trên trang"/>
       <UiMetric value={reservations.length} label="Reservation còn có thể Allocation"/>
     </UiMetricGrid>
+
+    <UiCard title="Tổng quan Phân bổ Tồn kho theo Vị trí & Cam kết Chưa phân bổ (Allocation & Bin Coverage — OUT-03)">
+      <UiMetricGrid>
+        <UiMetric value={activeAllocationsCount} label="Allocation đang hiệu lực / soạn hàng"/>
+        <UiMetric value={unallocatedReservationCount} label="Reservation chưa phân bổ hết"/>
+        <UiMetric value={totalUnallocatedQuantity} label="Tổng lượng cam kết chờ phân bổ vị trí"/>
+      </UiMetricGrid>
+    </UiCard>
 
     {canCreate&&<UiCard title="Tạo Allocation">
       <p className="ui-muted-text">Tự động hiện dùng thứ tự Location ổn định. FEFO/FIFO, Lot, Serial và Owner chưa được bật trong foundation này.</p>

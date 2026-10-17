@@ -375,6 +375,27 @@ export default function InventoryTraceability(){
       </form>
     </UiCard>
 
+    <UiCard title="Tổng quan Chuỗi Truy xuất Nguồn gốc Lô / Sê-ri / LPN (Genealogy & Traceability Summary — QR-01)">
+      <div className="ui-form-grid">
+        <div>
+          <strong>Nhóm tồn hiện tại & Tổng lượng thực tế</strong><br/>
+          {result?.currentBuckets.length ?? 0} nhóm tồn • Thực tế: {(result?.currentBuckets ?? []).reduce((sum, item) => sum + item.onHandQuantity, 0)} • Giữ chỗ: {(result?.currentBuckets ?? []).reduce((sum, item) => sum + item.reservedQuantity, 0)}
+        </div>
+        <div>
+          <strong>Định danh Lô / Sê-ri trong kết quả</strong><br/>
+          {new Set((result?.currentBuckets ?? []).map(item => item.lotNumber).filter(Boolean)).size} mã lô • {new Set((result?.currentBuckets ?? []).map(item => item.serialNumber).filter(Boolean)).size} sê-ri
+        </div>
+        <div>
+          <strong>Sự kiện sổ cái & Chuỗi đảo bất biến</strong><br/>
+          {result?.events.length ?? 0} sự kiện • {(result?.events ?? []).filter(item => item.transactionType === 'Reversal' || item.isReversed).length} giao dịch đảo/đã đảo
+        </div>
+        <div>
+          <strong>Chứng từ & Chuỗi kiện LPN/HU liên kết</strong><br/>
+          {(result?.relatedDocuments ?? []).length} chứng từ • {(result?.shipmentHuEvidence ?? []).length} chuỗi HU
+        </div>
+      </div>
+    </UiCard>
+
     {result&&<div className="ui-stack">
       <UiCard title="Nhóm tồn kho hiện tại">
         {result.bucketsTruncated&&<p role="status" className="ui-muted-text">

@@ -18,6 +18,19 @@ public sealed class PutawayTasksController(IPutawayService service) : Controller
     [HttpPut("locations/{locationId:int}"),PermissionAuthorize(AppPermissions.LocationManage)] public async Task<IActionResult> UpdateLocation(int locationId,UpdateWarehouseLocationDto dto,CancellationToken ct)=>Ok(await service.UpdateLocationAsync(locationId,dto,ct));
     [HttpPut("locations/{locationId:int}/layout"),PermissionAuthorize(AppPermissions.LocationManage)] public async Task<IActionResult> UpdateLocationLayout(int locationId,UpdateWarehouseLocationLayoutDto dto,CancellationToken ct)=>Ok(await service.UpdateLocationLayoutAsync(locationId,dto,ct));
     [HttpGet,PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> List(CancellationToken ct)=>Ok(await service.ListAsync(ct));
+    [HttpGet("sla-summary"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> SlaSummary(CancellationToken ct)
+    {
+        var tasks = await service.ListAsync(ct);
+        return Ok(new
+        {
+            totalTasks = tasks.Count,
+            openOrAssignedCount = tasks.Count(x => x.Status is "Open" or "Assigned"),
+            inProgressCount = tasks.Count(x => x.Status == "InProgress"),
+            completedCount = tasks.Count(x => x.Status == "Completed"),
+            exceptionCount = tasks.Count(x => x.Status == "Exception"),
+            totalRemainingQuantity = tasks.Sum(x => Math.Max(0m, x.RequiredBaseQuantity - x.MovedBaseQuantity)),
+        });
+    }
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetAsync(id,ct));
     [HttpGet("{id:int}/items/{itemId:int}/destinations"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Destinations(int id,int itemId,CancellationToken ct)=>Ok(await service.GetDestinationsAsync(id,itemId,ct));
     [HttpPost("{id:int}/assign"),IdempotentCommand("Putaway.Assign"),PermissionAuthorize(AppPermissions.PutawayAssign)] public async Task<IActionResult> Assign(int id,PutawayStateCommandDto dto,CancellationToken ct)=>Ok(await service.AssignAsync(id,dto,ct));

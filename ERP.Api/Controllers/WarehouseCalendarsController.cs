@@ -1,15 +1,38 @@
+using System.Security.Claims;
 using ERP.Api.Authorization;
 using ERP.Application.DTOs;
+using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
+using ERP.Domain.Entities;
+using ERP.Domain.Exceptions;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
+
+public sealed record CreateWarehouseCalendarExceptionRequest(
+    string ExceptionType,
+    string WindowDateOrRange,
+    string Reason);
+
+public sealed record WarehouseCalendarExceptionDto(
+    int Id,
+    int WarehouseId,
+    string ExceptionType,
+    string WindowSummary,
+    string Reason,
+    int? CreatedBy,
+    DateTime CreatedAtUtc);
 
 [Authorize]
 [ApiController]
 [Route("api/warehouses/{warehouseId:int}/calendar")]
-public sealed class WarehouseCalendarsController(IWarehouseCalendarService service) : ControllerBase
+public sealed class WarehouseCalendarsController(
+    IWarehouseCalendarService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
     [PermissionAuthorize(AppPermissions.WarehouseRead)]
@@ -30,4 +53,86 @@ public sealed class WarehouseCalendarsController(IWarehouseCalendarService servi
     [PermissionAuthorize(AppPermissions.WarehouseCalendarManage)]
     public async Task<IActionResult> UpdateShift(int warehouseId, int shiftId, UpsertWarehouseShiftDto dto, CancellationToken token) =>
         Ok(await service.UpdateShiftAsync(warehouseId, shiftId, dto, token));
+
+    [HttpGet("exceptions")]
+    [PermissionAuthorize(AppPermissions.WarehouseRead)]
+    public async Task<IActionResult> GetExceptions(int warehouseId, CancellationToken token)
+    {
+        if (warehouseAccess is not null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, token);
+        if (db is null)
+            return Ok(Array.Empty<WarehouseCalendarExceptionDto>());
+
+        var items = await db.AuditLogs.AsNoTracking()
+            .Where(a => a.EntityName == "WarehouseCalendarException" && a.WarehouseId == warehouseId)
+            .OrderByDescending(a => a.Timestamp)
+            .ThenByDescending(a => a.Id)
+            .Select(a => new WarehouseCalendarExceptionDto(
+                a.Id,
+                warehouseId,
+                a.Action,
+                a.OldValues ?? a.NewValues ?? string.Empty,
+                a.Reason ?? string.Empty,
+                a.UserId,
+                a.Timestamp))
+            .ToListAsync(token);
+
+        return Ok(items);
+    }
+
+    [HttpPost("exceptions")]
+    [PermissionAuthorize(AppPermissions.WarehouseCalendarManage)]
+    public async Task<IActionResult> CreateException(
+        int warehouseId,
+        [FromBody] CreateWarehouseCalendarExceptionRequest request,
+        CancellationToken token)
+    {
+        if (warehouseAccess is not null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, token);
+
+        var exceptionType = (request.ExceptionType ?? string.Empty).Trim().ToUpperInvariant();
+        if (exceptionType is not ("HOLIDAY_CLOSURE" or "MAINTENANCE_WINDOW" or "EMERGENCY_OPEN_OVERRIDE"))
+            throw new BusinessRuleException("Loại ngoại lệ lịch kho không hợp lệ (HOLIDAY_CLOSURE, MAINTENANCE_WINDOW, EMERGENCY_OPEN_OVERRIDE).");
+
+        var windowSummary = (request.WindowDateOrRange ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(windowSummary))
+            throw new BusinessRuleException("Khung thời gian hoặc ngày áp dụng ngoại lệ là bắt buộc.");
+
+        var reason = (request.Reason ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new BusinessRuleException("Lý do ghi nhận ngoại lệ lịch vận hành là bắt buộc.");
+
+        var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int? userId = int.TryParse(userIdClaim, out var parsedId) ? parsedId : null;
+
+        var log = new AuditLog
+        {
+            UserId = userId,
+            EntityName = "WarehouseCalendarException",
+            EntityId = warehouseId,
+            WarehouseId = warehouseId,
+            Action = exceptionType,
+            OldValues = windowSummary,
+            NewValues = windowSummary,
+            Reason = reason,
+            Result = "Success",
+            Timestamp = DateTime.UtcNow
+        };
+
+        if (db is not null)
+        {
+            db.AuditLogs.Add(log);
+            await db.SaveChangesAsync(token);
+        }
+
+        return Ok(new WarehouseCalendarExceptionDto(
+            log.Id,
+            warehouseId,
+            log.Action,
+            windowSummary,
+            log.Reason ?? string.Empty,
+            log.UserId,
+            log.Timestamp));
+    }
 }
+

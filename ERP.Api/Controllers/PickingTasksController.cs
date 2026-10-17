@@ -7,11 +7,32 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ERP.Api.Controllers;
 
+public sealed record WaveGroupDto(
+    string WaveCode,
+    int WarehouseId,
+    string WarehouseName,
+    string PickingType,
+    int Priority,
+    int TaskCount,
+    int OpenTaskCount,
+    decimal TotalRequestedQuantity,
+    decimal TotalPickedQuantity,
+    decimal TotalRemainingQuantity,
+    IReadOnlyList<string> TaskCodes);
+
 [ApiController]
 [Route("api/picking-tasks")]
 [Authorize]
 public sealed class PickingTasksController(IPickingService service) : ControllerBase
 {
+    private static readonly HashSet<string> ActiveWaveStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Open",
+        "Assigned",
+        "InProgress",
+        "ShortPick"
+    };
+
     [HttpGet]
     [PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<ActionResult<IReadOnlyList<PickingTaskListDto>>> List(
@@ -19,6 +40,42 @@ public sealed class PickingTasksController(IPickingService service) : Controller
         [FromQuery] string? status = null,
         CancellationToken cancellationToken = default) =>
         Ok(await service.ListAsync(warehouseId, status, cancellationToken));
+
+    [HttpGet("wave-summary")]
+    [PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<ActionResult<IReadOnlyList<WaveGroupDto>>> GetWaveSummary(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var tasks = await service.ListAsync(warehouseId, null, cancellationToken);
+        var waves = tasks
+            .Where(t => ActiveWaveStatuses.Contains(t.Status))
+            .GroupBy(t => new
+            {
+                t.WarehouseId,
+                t.WarehouseName,
+                PickingType = string.IsNullOrWhiteSpace(t.PickingType) ? "STANDARD" : t.PickingType.Trim().ToUpperInvariant(),
+                t.Priority
+            })
+            .OrderByDescending(g => g.Key.Priority)
+            .ThenBy(g => g.Key.WarehouseId)
+            .ThenBy(g => g.Key.PickingType)
+            .Select(g => new WaveGroupDto(
+                $"WAVE-W{g.Key.WarehouseId}-P{g.Key.Priority}-{g.Key.PickingType}",
+                g.Key.WarehouseId,
+                g.Key.WarehouseName,
+                g.Key.PickingType,
+                g.Key.Priority,
+                g.Count(),
+                g.Count(x => string.Equals(x.Status, "Open", StringComparison.OrdinalIgnoreCase)),
+                g.Sum(x => x.RequestedQuantity),
+                g.Sum(x => x.PickedQuantity),
+                g.Sum(x => x.RemainingQuantity),
+                g.Select(x => x.TaskCode).ToList()))
+            .ToList();
+
+        return Ok(waves);
+    }
 
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.PickingRead)]

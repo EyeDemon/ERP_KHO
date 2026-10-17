@@ -183,6 +183,13 @@ export default function OutboundDemand(){
   };
 
   const masterReady=canReadPartners&&canReadProducts&&canReadWarehouses;
+  const totalOrderedQty=orders.reduce((sum,item)=>sum+item.orderedQuantity,0);
+  const totalReservedQty=orders.reduce((sum,item)=>sum+item.reservedQuantity,0);
+  const totalAllocatedQty=orders.reduce((sum,item)=>sum+item.allocatedQuantity,0);
+  const totalShippedQty=orders.reduce((sum,item)=>sum+item.shippedQuantity,0);
+  const totalBackorderQty=orders.reduce((sum,item)=>sum+item.backorderQuantity,0);
+  const openBackorderRemaining=backorders.reduce((sum,item)=>sum+item.remainingQuantity,0);
+  const fulfillmentRatePct=totalOrderedQty>0?Math.round((totalShippedQty*10000)/totalOrderedQty)/100:100;
 
   if(loading)return <p role="status">Đang tải Demand & Backorder...</p>;
 
@@ -198,6 +205,15 @@ export default function OutboundDemand(){
     {canCreate&&!masterReady&&<p className="ui-muted-text">Tạo Sales Order trên UI cần thêm partner.read, product.read và warehouse.read để chọn master data.</p>}
 
     <div className="ui-stack">
+      <UiCard title="Tổng quan Tỷ lệ Đáp ứng Đơn hàng & Tồn thiếu Backorder (Demand & Backorder Summary — OUT-01 / OUT-09)">
+        <div className="ui-inline-wrap">
+          <span>Tổng cầu (Ordered): <strong>{totalOrderedQty}</strong></span>
+          <span>Đã giữ/Phân bổ (Reserved/Allocated): <strong>{totalReservedQty} / {totalAllocatedQty}</strong></span>
+          <span>Đã giao (Shipped): <strong>{totalShippedQty}</strong></span>
+          <span>Tồn thiếu (Backorder): <strong>{totalBackorderQty}</strong> (Còn mở: {openBackorderRemaining})</span>
+          <span>Tỷ lệ đáp ứng (%): <strong>{fulfillmentRatePct}%</strong></span>
+        </div>
+      </UiCard>
       {showCreate&&canCreate&&masterReady&&<UiCard title="Tạo Sales Order">
         <form onSubmit={createOrder} className="ui-stack">
           <div className="ui-inline-wrap">

@@ -22,6 +22,11 @@ export default function PutawayTasks(){
  useEffect(()=>{void load()},[]);
  const mutate=async(key:string,path:string,body:object)=>{if(lock.current.has(key))return;lock.current.add(key);setBusy(key);setError('');try{const t=(await apiClient.post(path,body,{headers:idempotencyHeaders(key)})).data as Task;completeIdempotentAction(key);setSelected(t);await load();await detail(t.id)}catch(e){if((e as {response?:{status?:number}})?.response?.status===409)setSelected(null);setError(message(e))}finally{lock.current.delete(key);setBusy('')}};
  if(loading)return <p role="status">Đang tải nhiệm vụ cất hàng...</p>;
+ const openOrAssignedCount=tasks.filter(x=>x.status==='Open'||x.status==='Assigned').length;
+ const inProgressCount=tasks.filter(x=>x.status==='InProgress').length;
+ const completedCount=tasks.filter(x=>x.status==='Completed').length;
+ const exceptionCount=tasks.filter(x=>x.status==='Exception').length;
+ const totalRemainingQuantity=tasks.reduce((sum,x)=>sum+Math.max(0,x.requiredBaseQuantity-x.movedBaseQuantity),0);
  return <UiPage>
    <UiPageHeader
      eyebrow="Nhập kho"
@@ -30,6 +35,17 @@ export default function PutawayTasks(){
    />
 
    {error&&<div role="alert" className="putaway-error">{error}</div>}
+
+   <UiCard title="Tổng quan Tiến độ Cất hàng & Ngoại lệ Putaway (Putaway Execution & SLA Summary — IN-08)">
+     <div className="ui-inline-wrap">
+       <span>Tổng nhiệm vụ: <strong>{tasks.length}</strong></span>
+       <span>Chờ / Đã phân công: <strong>{openOrAssignedCount}</strong></span>
+       <span>Đang thực hiện cất hàng: <strong>{inProgressCount}</strong></span>
+       <span>Đã hoàn tất: <strong>{completedCount}</strong></span>
+       <span>Ngoại lệ cần xử lý: <strong>{exceptionCount}</strong></span>
+       <span>Lượng còn cần cất: <strong>{totalRemainingQuantity}</strong></span>
+     </div>
+   </UiCard>
 
    <div className="putaway putaway-grid">
      <UiCard title="Danh sách nhiệm vụ">

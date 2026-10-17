@@ -419,6 +419,17 @@ export default function StockTransfers() {
   };
 
   const status = selected ? normalizeStatus(selected.status) : '';
+  const draftCount = items.filter(item => normalizeStatus(item.status) === 'Draft').length;
+  const approvedCount = items.filter(item => normalizeStatus(item.status) === 'Approved').length;
+  const inTransitCount = items.filter(item => normalizeStatus(item.status) === 'InTransit').length;
+  const completedCount = items.filter(item => {
+    const s = normalizeStatus(item.status);
+    return s === 'Received' || s === 'Completed';
+  }).length;
+  const closedExceptionCount = items.filter(item => {
+    const s = normalizeStatus(item.status);
+    return s === 'Cancelled' || s === 'Returned';
+  }).length;
 
   return (
     <UiPage>
@@ -444,6 +455,17 @@ export default function StockTransfers() {
             </button>
           </div>
         )}
+
+        <UiCard title="Tổng quan Chu trình Điều chuyển Nội bộ & SLA Vận chuyển (Transfer Pipeline — TR-01..TR-04)">
+          <div className="ui-inline-wrap">
+            <UiBadge>{`Tổng phiếu trên trang: ${items.length}`}</UiBadge>
+            <UiBadge>{`Phiếu nháp: ${draftCount}`}</UiBadge>
+            <UiBadge tone="warning">{`Chờ xuất kho (Đã duyệt): ${approvedCount}`}</UiBadge>
+            <UiBadge tone="warning">{`Đang vận chuyển (In-Transit): ${inTransitCount}`}</UiBadge>
+            <UiBadge tone="success">{`Đã nhận / Hoàn tất: ${completedCount}`}</UiBadge>
+            <UiBadge tone={closedExceptionCount > 0 ? 'danger' : 'neutral'}>{`Đã hủy / Hoàn trả: ${closedExceptionCount}`}</UiBadge>
+          </div>
+        </UiCard>
 
         <UiToolbar>
           <UiToolbarField label="Mã phiếu">

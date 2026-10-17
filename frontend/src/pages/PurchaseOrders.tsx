@@ -121,6 +121,25 @@ export default function PurchaseOrders(){
     return items.filter(item=>[item.code,item.externalPoId,item.supplierCode,item.supplierName,item.warehouseName].join(' ').toLowerCase().includes(q));
   },[items,search]);
 
+  const fulfillmentSummary=useMemo(()=>{
+    const todayMs=new Date(new Date().toISOString().slice(0,10)).getTime();
+    const overdueItems=items.filter(x=>(x.status==='Open'||x.status==='PartiallyReceived')&&x.expectedDate&&new Date(x.expectedDate).getTime()<todayMs);
+    const activePriorityItems=items
+      .filter(x=>x.status==='Open'||x.status==='PartiallyReceived')
+      .sort((a,b)=>(a.expectedDate||'9999-12-31').localeCompare(b.expectedDate||'9999-12-31'))
+      .slice(0,5);
+    const receivedOrClosedCount=items.filter(x=>x.status==='Received'||x.status==='Closed').length;
+    const totalBaseOrderedQuantity=items.reduce((sum,x)=>sum+(x.baseOrderedQuantity||0),0);
+    const completionRate=items.length>0?Math.round((receivedOrClosedCount/items.length)*100):0;
+    return {
+      overdueExpectedCount:overdueItems.length,
+      receivedOrClosedCount,
+      totalBaseOrderedQuantity,
+      completionRate,
+      activePriorityItems,
+    };
+  },[items]);
+
   const viewDetail=async(id:number)=>{
     setError('');setSuccess('');
     try{setSelected((await apiClient.get('/api/purchase-orders/'+id)).data);}
@@ -197,6 +216,31 @@ export default function PurchaseOrders(){
       <UiMetric value={items.filter(x=>x.status==='PartiallyReceived').length} label="Đã nhận một phần"/>
       <UiMetric value={items.filter(x=>x.status==='Received').length} label="Đã nhận đủ"/>
     </UiMetricGrid>
+
+    <UiCard title="Giám sát Tiến độ Tiếp nhận & SLA Đơn mua (PO Fulfillment & Overdue Monitor — IN-01)">
+      <div className="inbound-planning-detail-meta">
+        <div>
+          <strong>PO quá hạn ngày dự kiến</strong><br/>
+          <UiBadge tone={fulfillmentSummary.overdueExpectedCount>0?'danger':'success'}>
+            {fulfillmentSummary.overdueExpectedCount} PO quá hạn
+          </UiBadge>
+        </div>
+        <div>
+          <strong>Tổng SL cơ sở đặt hàng</strong><br/>
+          {fulfillmentSummary.totalBaseOrderedQuantity.toLocaleString('vi-VN')}
+        </div>
+        <div>
+          <strong>Tỷ lệ hoàn tất (Nhận đủ / Đóng)</strong><br/>
+          {fulfillmentSummary.completionRate}% ({fulfillmentSummary.receivedOrClosedCount}/{items.length})
+        </div>
+        <div>
+          <strong>PO sắp/quá hạn cần ưu tiên tiếp nhận</strong><br/>
+          {fulfillmentSummary.activePriorityItems.length===0
+            ?'Không có PO mở cần ưu tiên'
+            :fulfillmentSummary.activePriorityItems.map(po=>`${po.code} (${po.supplierCode} • Hạn: ${isoDay(po.expectedDate)})`).join(' | ')}
+        </div>
+      </div>
+    </UiCard>
 
     <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã PO, mã nguồn, nhà cung cấp, kho"/>
 

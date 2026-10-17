@@ -43,4 +43,19 @@ public class StockReservationsController(IStockReservationService service) : Con
     [HttpGet("reconciliation")]
     [Authorize(Roles = AppRoles.AdminOrManager)]
     public async Task<IActionResult> Reconciliation(CancellationToken cancellationToken) => Ok(await service.ReconcileAsync(cancellationToken));
+
+    [HttpGet("commitment-summary")]
+    public async Task<IActionResult> GetCommitmentSummary([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
+    {
+        var page = await service.GetPageAsync(1, 200, warehouseId, null, null, cancellationToken);
+        return Ok(new
+        {
+            totalReservations = page.TotalRecords,
+            activeCount = page.Items.Count(x => x.Status == "Active"),
+            consumedCount = page.Items.Count(x => x.Status == "Consumed"),
+            releasedOrExpiredCount = page.Items.Count(x => x.Status is "Released" or "Expired"),
+            totalActiveRemainingQuantity = page.Items.Where(x => x.Status == "Active").Sum(x => x.RemainingQuantity),
+            expiringSoonCount = page.Items.Count(x => x.Status == "Active" && x.ExpiresAt <= DateTime.UtcNow.AddHours(24))
+        });
+    }
 }

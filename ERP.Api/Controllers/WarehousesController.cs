@@ -26,6 +26,19 @@ namespace ERP.Api.Controllers
             return Ok(warehouses);
         }
 
+        [HttpGet("governance-summary")]
+        [PermissionAuthorize(AppPermissions.WarehouseRead)]
+        public async Task<IActionResult> GetGovernanceSummary()
+        {
+            var list = (await _warehouseService.GetAllWarehousesAsync()).ToList();
+            return Ok(new
+            {
+                totalWarehouses = list.Count,
+                activeWarehouses = list.Count(w => w.IsActive),
+                inactiveWarehouses = list.Count(w => !w.IsActive)
+            });
+        }
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.WarehouseRead)]
         public async Task<IActionResult> GetById(int id)

@@ -671,6 +671,23 @@ export default function InventoryReconciliation() {
           label="Lệch 8 trạng thái trang hiện tại" />}
       </UiMetricGrid>
 
+      <UiCard title="Tổng quan Đối soát Sổ cái — Số dư — Giữ hàng (Ledger vs Balance Reconciliation — RP-09)">
+        <div className="ui-form-grid">
+          <div>
+            <strong>Tỷ lệ khớp số dư trang hiện tại</strong><br />
+            {currentRows.filter(row => row.status === 'Match').length}/{currentRows.length} dòng khớp ({currentRows.length > 0 ? Math.round((currentRows.filter(row => row.status === 'Match').length / currentRows.length) * 100) : 0}%)
+          </div>
+          <div>
+            <strong>Tổng số dư hiện tại vs Tổng kỳ vọng</strong><br />
+            Số dư: {numberFormat.format(currentRows.reduce((sum, row) => sum + row.currentQuantity, 0))} • Kỳ vọng: {numberFormat.format(currentRows.reduce((sum, row) => sum + (row.expectedQuantity ?? 0), 0))}
+          </div>
+          <div>
+            <strong>Bucket cảnh báo giữ chỗ / âm / ngoài phạm vi</strong><br />
+            {numberFormat.format(currentRows.reduce((sum, row) => sum + (row.invalidReservationBucketCount ?? 0) + (row.negativePhysicalBucketCount ?? 0) + (row.unclassifiedStockBucketCount ?? 0), 0))} bucket cần kiểm tra
+          </div>
+        </div>
+      </UiCard>
+
       <form noValidate onSubmit={submit}>
         <UiToolbar>
           <UiToolbarField label="Kho">
@@ -701,7 +718,7 @@ export default function InventoryReconciliation() {
           <p role="status">Đang đối chiếu tồn kho...</p>
         ) : (
           <UiTableScroll>
-            <table className="reconciliation-table">
+            <table className="reconciliation-table" aria-label="Bảng đối chiếu tồn kho và sổ cái">
               <thead>
                 <tr>
                   <th>Kho</th>

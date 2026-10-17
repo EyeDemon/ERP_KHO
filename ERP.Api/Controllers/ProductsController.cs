@@ -26,6 +26,39 @@ namespace ERP.Api.Controllers
             return Ok(products);
         }
 
+        [HttpGet("governance-summary")]
+        [PermissionAuthorize(AppPermissions.ProductRead)]
+        public async Task<IActionResult> GetGovernanceSummary(CancellationToken cancellationToken = default)
+        {
+            var products = (await _productService.GetAllProductsAsync(cancellationToken)).ToList();
+            var activeProducts = products.Where(p => p.IsActive).ToList();
+
+            var summary = new
+            {
+                totalSkuCount = products.Count,
+                activeSkuCount = activeProducts.Count,
+                lotTrackedCount = products.Count(p => string.Equals(p.TrackingType, "Lot", StringComparison.OrdinalIgnoreCase)),
+                serialTrackedCount = products.Count(p => string.Equals(p.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase)),
+                expiryControlledCount = products.Count(p => p.ExpiryControl),
+                dimensionConfiguredCount = products.Count(p => p.UnitWeightKg.HasValue || p.UnitVolumeM3.HasValue || p.UnitPalletEquivalent.HasValue),
+                barcodeConfiguredCount = products.Count(p => p.Barcodes is { Count: > 0 }),
+                incompleteGovernanceSkus = activeProducts
+                    .Where(p => (p.UnitWeightKg == null && p.UnitVolumeM3 == null) || (p.ExpiryControl && p.ShelfLifeDays == null))
+                    .Take(20)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Code,
+                        p.Name,
+                        missingDimensions = p.UnitWeightKg == null && p.UnitVolumeM3 == null,
+                        missingShelfLifeDays = p.ExpiryControl && p.ShelfLifeDays == null
+                    })
+                    .ToList()
+            };
+
+            return Ok(summary);
+        }
+
         [HttpGet("paged")]
         [PermissionAuthorize(AppPermissions.ProductRead)]
         public async Task<IActionResult> GetPaged(

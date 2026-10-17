@@ -20,6 +20,30 @@ public sealed class SalesOrdersController(ISalesOrderBackorderService service) :
         CancellationToken cancellationToken = default) =>
         Ok(await service.ListSalesOrdersAsync(warehouseId, status, cancellationToken));
 
+    [HttpGet("fulfillment-summary")]
+    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    public async Task<IActionResult> FulfillmentSummary(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var orders = await service.ListSalesOrdersAsync(warehouseId, null, cancellationToken);
+        var totalOrderedQuantity = orders.Sum(x => x.OrderedQuantity);
+        var totalShippedQuantity = orders.Sum(x => x.ShippedQuantity);
+        return Ok(new
+        {
+            totalOrderCount = orders.Count,
+            releasedOrPartialCount = orders.Count(x => x.Status is "Released" or "PartiallyFulfilled"),
+            fulfilledCount = orders.Count(x => x.Status == "Fulfilled"),
+            totalOrderedQuantity,
+            totalShippedQuantity,
+            totalBackorderQuantity = orders.Sum(x => x.BackorderQuantity),
+            totalOpenQuantity = orders.Sum(x => x.OpenQuantity),
+            fulfillmentRatePct = totalOrderedQuantity > 0
+                ? Math.Round(totalShippedQuantity * 100m / totalOrderedQuantity, 2)
+                : 100m,
+        });
+    }
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<ActionResult<SalesOrderDto>> Get(int id, CancellationToken cancellationToken) =>

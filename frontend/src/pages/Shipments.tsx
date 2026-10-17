@@ -140,6 +140,11 @@ export default function Shipments(){
 
   if(loading)return <p role="status">Đang tải Shipment...</p>;
 
+  const preDispatchCount=rows.filter(x=>['Ready','Staging','Loading','Loaded'].includes(x.status)).length;
+  const inTransitCount=rows.filter(x=>['Dispatched','InTransit'].includes(x.status)).length;
+  const deliveredOrCompletedCount=rows.filter(x=>['Delivered','Completed'].includes(x.status)).length;
+  const exceptionOrReturnCount=rows.filter(x=>['DeliveryFailed','ReturnToWarehouse'].includes(x.status)).length;
+
   return <UiPage>
     <UiPageHeader
       eyebrow="Outbound"
@@ -148,6 +153,14 @@ export default function Shipments(){
     />
     {error&&<div role="alert">{error}</div>}
     <div className="ui-stack">
+      <UiCard title="Giám sát Chu trình Xuất giao & SLA Vận chuyển (Shipment Execution & Delivery SLA — OUT-08 / OUT-10)">
+        <div className="ui-inline-wrap">
+          <span>Chờ xuất (Ready/Staging/Loading/Loaded): <strong>{preDispatchCount}</strong></span>
+          <span>Đang vận chuyển (Dispatched/InTransit): <strong>{inTransitCount}</strong></span>
+          <span>Đã giao hoàn tất (Delivered/Completed): <strong>{deliveredOrCompletedCount}</strong></span>
+          <span>Giao thất bại / Hoàn kho (DeliveryFailed/ReturnToWarehouse): <strong>{exceptionOrReturnCount}</strong></span>
+        </div>
+      </UiCard>
       <UiCard title="Shipment">
         {rows.length===0?<p>Chưa có Shipment. Shipment được tạo khi Packing đạt PACKED.</p>:<UiTableScroll>
           <table aria-label="Danh sách Shipment">

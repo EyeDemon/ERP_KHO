@@ -16,6 +16,20 @@ public sealed class UserWarehouseAccessController(IUserWarehouseAccessService se
     public async Task<IActionResult> Get(int userId, CancellationToken cancellationToken) =>
         Ok(await service.GetForUserAsync(userId, cancellationToken));
 
+    [HttpGet("governance-summary"), PermissionAuthorize(AppPermissions.UserWarehouseRead)]
+    public async Task<IActionResult> GetGovernanceSummary(int userId, CancellationToken cancellationToken)
+    {
+        var access = await service.GetForUserAsync(userId, cancellationToken);
+        return Ok(new
+        {
+            userId,
+            assignedWarehouseCount = access.Memberships.Count,
+            hasWarehouseAccess = access.Memberships.Count > 0,
+            canMutate = !string.IsNullOrEmpty(access.RowVersion),
+            warehouses = access.Memberships.Select(x => x.WarehouseCode).ToArray()
+        });
+    }
+
     [HttpPost, IdempotentCommand("UserWarehouse.Grant"), PermissionAuthorize(AppPermissions.UserWarehouseManage)]
     public async Task<IActionResult> Grant(int userId, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GrantWarehouseAccessDto? request, CancellationToken cancellationToken)
     {

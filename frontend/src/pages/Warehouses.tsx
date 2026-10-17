@@ -200,6 +200,23 @@ const Warehouses = () => {
         <UiMetric value={filtered.length} label="Kết quả hiện tại" />
       </UiMetricGrid>
 
+      <UiCard title="Tổng quan Mạng lưới Kho & Trạng thái Vận hành (Warehouse Network Governance — WH-01)">
+        <div className="ui-form-grid">
+          <div>
+            <strong>Tỷ lệ kho đang vận hành</strong><br />
+            {activeCount}/{warehouses.length} kho hoạt động ({warehouses.length > 0 ? Math.round((activeCount / warehouses.length) * 100) : 0}%)
+          </div>
+          <div>
+            <strong>Chuẩn hóa địa chỉ vật lý</strong><br />
+            {warehouses.filter((warehouse) => Boolean(warehouse.address && warehouse.address.trim())).length}/{warehouses.length} kho đã khai báo địa chỉ
+          </div>
+          <div>
+            <strong>Kho tạm ngưng hoạt động</strong><br />
+            {warehouses.length - activeCount} kho ngừng hoạt động
+          </div>
+        </div>
+      </UiCard>
+
       <UiToolbar>
         <UiToolbarField label="Tìm kho">
           <input

@@ -76,6 +76,8 @@ const productionIcons: Record<string, LucideIcon> = {
   '/inventory': Boxes,
   '/inventory-locks': Lock,
   '/inventory-movements': Repeat2,
+  '/inventory-reversals': Repeat2,
+  '/inventory-traceability': ClipboardCheck,
   '/inventory-reconciliation': Scale,
   '/stocktakes': ClipboardCheck,
   '/stock-transfers': Repeat2,

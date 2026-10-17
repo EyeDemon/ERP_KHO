@@ -7,6 +7,22 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ERP.Api.Controllers;
 
+public sealed record YardDwellMonitorItemDto(
+    int AppointmentId,
+    string AppointmentCode,
+    int WarehouseId,
+    string WarehouseCode,
+    int Direction,
+    int Status,
+    string? CarrierName,
+    string? VehiclePlate,
+    string? DriverName,
+    string? YardSlotCode,
+    string? DockCode,
+    DateTime EntryAnchorUtc,
+    int DwellMinutes,
+    string SlaState);
+
 [Authorize]
 [ApiController]
 [Route("api/dock-yard")]
@@ -16,6 +32,47 @@ public sealed class DockYardController(IDockYardService service) : ControllerBas
     [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
     public async Task<IActionResult> GetWarehouses(CancellationToken token) =>
         Ok(await service.GetWarehousesAsync(token));
+
+    [HttpGet("dwell-monitor")]
+    [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
+    public async Task<IActionResult> GetDwellMonitor([FromQuery] int? warehouseId, CancellationToken token)
+    {
+        var appointments = await service.GetAppointmentsAsync(new DockAppointmentQueryDto { WarehouseId = warehouseId }, token);
+        var nowUtc = DateTime.UtcNow;
+
+        var items = appointments
+            .Where(a => (int)a.Status is 2 or 3 or 4 or 5 && a.CheckedOutAtUtc == null)
+            .Select(a =>
+            {
+                var anchorUtc = a.CheckedInAtUtc ?? a.ArrivedAtUtc ?? a.PlannedStartUtc;
+                var dwellMinutes = (int)Math.Max(0, (nowUtc - anchorUtc).TotalMinutes);
+                var slaState = dwellMinutes > 120
+                    ? "OVERDUE"
+                    : dwellMinutes >= 60
+                        ? "WARNING"
+                        : "NORMAL";
+                return new YardDwellMonitorItemDto(
+                    a.Id,
+                    a.Code,
+                    a.WarehouseId,
+                    a.WarehouseCode,
+                    (int)a.Direction,
+                    (int)a.Status,
+                    a.CarrierName ?? a.CarrierCode,
+                    a.VehiclePlate,
+                    a.DriverName,
+                    a.YardSlotCode,
+                    a.DockCode,
+                    anchorUtc,
+                    dwellMinutes,
+                    slaState);
+            })
+            .OrderByDescending(x => x.DwellMinutes)
+            .ThenBy(x => x.AppointmentCode)
+            .ToList();
+
+        return Ok(items);
+    }
 
     [HttpGet("docks")]
     [PermissionAuthorize(AppPermissions.DockRead)]

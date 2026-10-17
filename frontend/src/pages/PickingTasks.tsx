@@ -19,6 +19,11 @@ type PickingTask = {
   pickedQuantity:number; remainingQuantity:number; createdAt:string; startedAt?:string; completedAt?:string; rowVersion?:string;
   lines?:PickingLine[]; shortPicks?:ShortPick[];
 };
+type WaveGroup = {
+  waveCode:string; warehouseId:number; warehouseName:string; pickingType:string; priority:number;
+  taskCount:number; openTaskCount:number; totalRequestedQuantity:number; totalPickedQuantity:number;
+  totalRemainingQuantity:number; taskCodes:string[];
+};
 
 const states:Record<string,string>={
   Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang Picking',ShortPick:'Thiếu hàng',
@@ -45,6 +50,7 @@ const failureMessage=(e:unknown)=>{
 
 export default function PickingTasks(){
   const [tasks,setTasks]=useState<PickingTask[]>([]);
+  const [waves,setWaves]=useState<WaveGroup[]>([]);
   const [selected,setSelected]=useState<PickingTask|null>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState('');
@@ -61,8 +67,20 @@ export default function PickingTasks(){
 
   const load=async()=>{
     setLoading(true);setError('');
-    try{setTasks((await apiClient.get('/api/picking-tasks')).data)}
-    catch(e){setTasks([]);setSelected(null);setError(failureMessage(e))}
+    try{
+      const [tasksRes,waveRes]=await Promise.all([
+        apiClient.get('/api/picking-tasks'),
+        apiClient.get('/api/picking-tasks/wave-summary').catch(()=>({data:[]})),
+      ]);
+      const loadedTasks=Array.isArray(tasksRes.data)?(tasksRes.data as PickingTask[]):[];
+      setTasks(loadedTasks);
+      if(Array.isArray(waveRes?.data)){
+        setWaves(waveRes.data as WaveGroup[]);
+      }else{
+        setWaves([]);
+      }
+    }
+    catch(e){setTasks([]);setWaves([]);setSelected(null);setError(failureMessage(e))}
     finally{setLoading(false)}
   };
   const detail=async(id:number)=>{
@@ -93,11 +111,27 @@ export default function PickingTasks(){
     <UiPageHeader
       eyebrow="Outbound"
       title="Picking"
-      description="Scan-first Picking từ Allocation theo vị trí. Xác nhận Picking không trừ OnHand; tồn chỉ giảm tại dispatch/consume."
+      description="Scan-first Picking từ Allocation theo vị trí và điều phối theo đợt (Wave / Batch Picking — OUT-04). Xác nhận Picking không trừ OnHand; tồn chỉ giảm tại dispatch/consume."
     />
     {error&&<div role="alert">{error}</div>}
 
     <div className="ui-stack">
+      <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking — OUT-04)">
+        {waves.length===0?<p className="ui-muted-text">Chưa có đợt lấy hàng (Wave/Batch) đang hoạt động.</p>:<UiTableScroll>
+          <table aria-label="Tổng hợp đợt lấy hàng Wave Picking">
+            <thead><tr><th>Mã Đợt (Wave)</th><th>Kho</th><th>Loại Picking / Ưu tiên</th><th>Số nhiệm vụ</th><th>Tiến độ Đợt</th><th>Danh sách phiếu</th></tr></thead>
+            <tbody>{waves.map(wave=><tr key={wave.waveCode}>
+              <td><strong>{wave.waveCode}</strong></td>
+              <td>{wave.warehouseName}</td>
+              <td><UiBadge>{wave.pickingType}</UiBadge> • P{wave.priority}</td>
+              <td>{wave.taskCount} ({wave.openTaskCount} mở)</td>
+              <td><strong>{wave.totalPickedQuantity}</strong> / {wave.totalRequestedQuantity} (còn {wave.totalRemainingQuantity})</td>
+              <td><small>{`Phiếu: ${wave.taskCodes.join(', ')}`}</small></td>
+            </tr>)}</tbody>
+          </table>
+        </UiTableScroll>}
+      </UiCard>
+
       <UiCard title="Danh sách nhiệm vụ Picking">
         {tasks.length===0?<p>Chưa có nhiệm vụ Picking phù hợp.</p>:<UiTableScroll>
           <table aria-label="Danh sách nhiệm vụ Picking">

@@ -21,6 +21,27 @@ type ShiftForm = {
   inboundPalletsPerHour: string; outboundOrdersPerHour: string; dockSlots: string; laborHours: string; stagingCapacity: string;
   packingStations: string; equipmentAvailable: string; isActive: boolean; rowVersion?: string | null;
 };
+type CalendarException = {
+  id: number;
+  warehouseId: number;
+  exceptionType: string;
+  windowSummary: string;
+  reason: string;
+  createdBy?: number | null;
+  createdAtUtc: string;
+};
+
+const exceptionTypeLabel: Record<string, string> = {
+  HOLIDAY_CLOSURE: 'Nghỉ lễ (Đóng kho)',
+  MAINTENANCE_WINDOW: 'Bảo trì định kỳ',
+  EMERGENCY_OPEN_OVERRIDE: 'Ghi đè mở kho khẩn cấp',
+};
+
+const exceptionTypeTone = (type: string): 'danger' | 'warning' | 'success' | 'neutral' =>
+  type === 'HOLIDAY_CLOSURE' ? 'danger'
+    : type === 'MAINTENANCE_WINDOW' ? 'warning'
+      : type === 'EMERGENCY_OPEN_OVERRIDE' ? 'success'
+        : 'neutral';
 
 const emptyShift = (): ShiftForm => ({
   code: '', name: '', startTimeLocal: '06:00', endTimeLocal: '14:00', breakMinutes: '30', plannedHeadcount: '0',
@@ -44,6 +65,12 @@ const WarehouseCalendar = () => {
   const [timeZoneId, setTimeZoneId] = useState('Asia/Ho_Chi_Minh');
   const [days, setDays] = useState<DayForm[]>([]);
   const [shiftForm, setShiftForm] = useState<ShiftForm | null>(null);
+  const [exceptions, setExceptions] = useState<CalendarException[]>([]);
+  const [exceptionForm, setExceptionForm] = useState({
+    exceptionType: 'HOLIDAY_CLOSURE',
+    windowDateOrRange: '',
+    reason: '',
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -63,9 +90,13 @@ const WarehouseCalendar = () => {
   }, []);
 
   const loadCalendar = useCallback(async (targetWarehouseId: number) => {
-    if (!targetWarehouseId) { setCalendar(null); return; }
-    const response = await apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar');
+    if (!targetWarehouseId) { setCalendar(null); setExceptions([]); return; }
+    const [response, exceptionsResponse] = await Promise.all([
+      apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar'),
+      apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar/exceptions').catch(() => ({ data: [] })),
+    ]);
     applyCalendar(response.data as CalendarResponse);
+    setExceptions(Array.isArray(exceptionsResponse?.data) ? (exceptionsResponse.data as CalendarException[]) : []);
   }, [applyCalendar]);
 
   useEffect(() => {
@@ -144,13 +175,31 @@ const WarehouseCalendar = () => {
     } finally { setSaving(false); }
   };
 
+  const saveException = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!warehouseId || saving || !exceptionForm.windowDateOrRange.trim() || !exceptionForm.reason.trim()) return;
+    setSaving(true); setError(''); setSuccess('');
+    try {
+      await apiClient.post('/api/warehouses/' + warehouseId + '/calendar/exceptions', {
+        exceptionType: exceptionForm.exceptionType,
+        windowDateOrRange: exceptionForm.windowDateOrRange.trim(),
+        reason: exceptionForm.reason.trim(),
+      });
+      setSuccess('Đã ghi nhận ngoại lệ lịch vận hành (WH-07).');
+      setExceptionForm({ exceptionType: 'HOLIDAY_CLOSURE', windowDateOrRange: '', reason: '' });
+      await loadCalendar(warehouseId);
+    } catch (failure) {
+      setError(messageOf(failure, 'Không thể ghi nhận ngoại lệ lịch vận hành.'));
+    } finally { setSaving(false); }
+  };
+
   const activeShifts = calendar?.shifts.filter(shift => shift.isActive).length ?? 0;
   const openDays = calendar?.days.filter(day => day.isOpen).length ?? 0;
 
   return (
     <UiPage>
       <UiPageHeader eyebrow="Kho & Vị trí" title="Lịch vận hành & Ca kho"
-        description="Cấu hình timezone, lịch tuần, cutoff và capacity theo ca. Holiday, maintenance và emergency override được quản lý riêng ở WH-07." />
+        description="Cấu hình timezone, lịch tuần, cutoff, capacity theo ca và ngoại lệ lịch nghỉ lễ / bảo trì / ghi đè khẩn cấp (WH-07)." />
       {success && <p role="status" className="ui-success-text">{success}</p>}
       {error && <p role="alert">{error} <button type="button" onClick={() => void loadCalendar(warehouseId)}>Tải lại</button></p>}
 
@@ -236,6 +285,86 @@ const WarehouseCalendar = () => {
               <div className="ui-inline-actions"><button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu ca'}</button><button type="button" disabled={saving} onClick={() => setShiftForm(null)}>Hủy</button></div>
             </form>
           </UiCard>}
+
+          <UiCard title="Lịch nghỉ lễ, Bảo trì & Ghi đè khẩn cấp (WH-07)">
+            {canManage && (
+              <form className="ui-form-grid" onSubmit={saveException}>
+                <label className="ui-stack">
+                  <span>Loại ngoại lệ *</span>
+                  <select
+                    aria-label="Loại ngoại lệ lịch vận hành"
+                    value={exceptionForm.exceptionType}
+                    disabled={saving}
+                    onChange={event => setExceptionForm(current => ({ ...current, exceptionType: event.target.value }))}
+                  >
+                    <option value="HOLIDAY_CLOSURE">Nghỉ lễ (Đóng kho)</option>
+                    <option value="MAINTENANCE_WINDOW">Bảo trì định kỳ</option>
+                    <option value="EMERGENCY_OPEN_OVERRIDE">Ghi đè mở kho khẩn cấp</option>
+                  </select>
+                </label>
+                <label className="ui-stack">
+                  <span>Ngày / Khung giờ áp dụng *</span>
+                  <input
+                    aria-label="Khung giờ ngoại lệ lịch kho"
+                    value={exceptionForm.windowDateOrRange}
+                    disabled={saving}
+                    placeholder="VD: 2026-04-30 .. 2026-05-01 hoặc 2026-10-20 00:00–04:00"
+                    onChange={event => setExceptionForm(current => ({ ...current, windowDateOrRange: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="ui-stack">
+                  <span>Lý do điều hành *</span>
+                  <input
+                    aria-label="Lý do ngoại lệ lịch kho"
+                    value={exceptionForm.reason}
+                    disabled={saving}
+                    placeholder="Nhập lý do nghỉ lễ, bảo trì hệ thống hoặc mở kho khẩn cấp..."
+                    onChange={event => setExceptionForm(current => ({ ...current, reason: event.target.value }))}
+                    required
+                  />
+                </label>
+                <div className="ui-inline-actions">
+                  <button type="submit" disabled={saving || !exceptionForm.windowDateOrRange.trim() || !exceptionForm.reason.trim()}>
+                    {saving ? 'Đang lưu...' : 'Ghi nhận ngoại lệ WH-07'}
+                  </button>
+                </div>
+              </form>
+            )}
+            <UiTableScroll>
+              <table aria-label="Danh sách ngoại lệ lịch vận hành WH-07">
+                <thead>
+                  <tr>
+                    <th>Loại ngoại lệ</th>
+                    <th>Khung thời gian áp dụng</th>
+                    <th>Lý do điều hành</th>
+                    <th>Thời điểm ghi nhận</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exceptions.map(item => (
+                    <tr key={item.id}>
+                      <td>
+                        <UiBadge tone={exceptionTypeTone(item.exceptionType)}>
+                          {exceptionTypeLabel[item.exceptionType] ?? item.exceptionType}
+                        </UiBadge>
+                      </td>
+                      <td><strong>{item.windowSummary}</strong></td>
+                      <td>{item.reason}</td>
+                      <td>{new Date(item.createdAtUtc).toLocaleString('vi-VN')}</td>
+                    </tr>
+                  ))}
+                  {exceptions.length === 0 && (
+                    <tr>
+                      <td className="ui-empty-cell" colSpan={4}>
+                        Chưa có ngoại lệ nghỉ lễ, bảo trì hoặc ghi đè khẩn cấp nào được ghi nhận cho kho này.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </UiTableScroll>
+          </UiCard>
         </>
       ) : null}
     </UiPage>

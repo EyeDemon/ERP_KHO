@@ -231,6 +231,15 @@ const WarehouseStructure = () => {
               <UiMetric value={inactiveCount} label="Ngừng hoạt động" />
             </UiMetricGrid>
 
+            <UiCard title="Tổng quan Cấu trúc Phân cấp Kho & Định danh Vị trí (Warehouse Hierarchy Summary — WH-02 / WH-03)">
+              <div className="ui-inline-wrap">
+                <UiBadge tone="success">{`Vị trí cho phép lấy hàng (Pickable): ${allLocations.filter(l => l.isActive && !l.isBlocked && l.isPickable).length}`}</UiBadge>
+                <UiBadge tone="success">{`Vị trí cho phép nhận hàng (Receivable): ${allLocations.filter(l => l.isActive && !l.isBlocked && l.isReceivable).length}`}</UiBadge>
+                <UiBadge tone="warning">{`Vị trí hệ thống (System-managed): ${structure.systemLocations.length}`}</UiBadge>
+                <UiBadge tone="neutral">{`Vị trí chưa gắn cấu trúc (Unmapped): ${structure.unmappedLocations.length}`}</UiBadge>
+              </div>
+            </UiCard>
+
             <UiCard title="Cây cấu trúc vật lý">
               <UiTableScroll>
                 <table aria-label="Cấu trúc vị trí kho">

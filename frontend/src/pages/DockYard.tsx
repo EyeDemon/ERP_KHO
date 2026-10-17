@@ -45,6 +45,22 @@ type DockForm = {
   isTemperatureControlled: boolean; hazardAllowed: boolean; isActive: boolean; rowVersion?: string | null;
 };
 type YardForm = { id?: number; code: string; name: string; isActive: boolean; rowVersion?: string | null };
+type DwellMonitorItem = {
+  appointmentId: number;
+  appointmentCode: string;
+  warehouseId: number;
+  warehouseCode: string;
+  direction: number;
+  status: number;
+  carrierName?: string | null;
+  vehiclePlate?: string | null;
+  driverName?: string | null;
+  yardSlotCode?: string | null;
+  dockCode?: string | null;
+  entryAnchorUtc: string;
+  dwellMinutes: number;
+  slaState: 'NORMAL' | 'WARNING' | 'OVERDUE' | string;
+};
 type ActionPanel =
   | { mode: 'checkin'; appointment: Appointment; vehiclePlate: string; trailerPlate: string; driverName: string; driverPhone: string; sealNumber: string; yardSlotId: string; note: string }
   | { mode: 'assignDock'; appointment: Appointment; dockId: string; note: string }
@@ -162,6 +178,7 @@ const DockYard = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState(0);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [dwellItems, setDwellItems] = useState<DwellMonitorItem[]>([]);
   const [warehouseTimeZone, setWarehouseTimeZone] = useState('UTC');
   const [docks, setDocks] = useState<Dock[]>([]);
   const [yardSlots, setYardSlots] = useState<YardSlot[]>([]);
@@ -185,8 +202,9 @@ const DockYard = () => {
     setLoading(true);
     setError('');
     try {
-      const [appointmentResponse, dockResponse, yardResponse] = await Promise.all([
+      const [appointmentResponse, dwellResponse, dockResponse, yardResponse] = await Promise.all([
         apiClient.get('/api/dock-yard/appointments', { params: { warehouseId: targetWarehouseId } }),
+        apiClient.get('/api/dock-yard/dwell-monitor', { params: { warehouseId: targetWarehouseId } }).catch(() => ({ data: [] })),
         canReadDock
           ? apiClient.get('/api/dock-yard/docks', { params: { warehouseId: targetWarehouseId } })
           : Promise.resolve({ data: [] }),
@@ -196,6 +214,7 @@ const DockYard = () => {
       ]);
       if (revision !== loadRevisionRef.current) return;
       setAppointments(appointmentResponse.data as Appointment[]);
+      setDwellItems(Array.isArray(dwellResponse?.data) ? (dwellResponse.data as DwellMonitorItem[]) : []);
       setDocks(dockResponse.data as Dock[]);
       setYardSlots(yardResponse.data as YardSlot[]);
     } catch (failure) {
@@ -565,6 +584,60 @@ const DockYard = () => {
                   <td>{slot.occupied ? <UiBadge tone="warning">{slot.occupiedByAppointmentCode || 'Đang dùng'}</UiBadge> : <UiBadge tone="success">Trống</UiBadge>}</td>
                   {canManageDock && <td><button type="button" aria-label={'Sửa vị trí sân bãi ' + slot.code} onClick={() => setYardForm({ id: slot.id, code: slot.code, name: slot.name, isActive: slot.isActive, rowVersion: slot.rowVersion })}>Sửa</button></td>}
                 </tr>)}</tbody>
+              </table>
+            </UiTableScroll>
+          </UiCard>
+
+          <UiCard title="Giám sát Thời gian lưu bãi & SLA Phương tiện (Yard Dwell Monitor — DY-04)">
+            <UiTableScroll>
+              <table aria-label="Bảng giám sát thời gian lưu bãi phương tiện DY-04">
+                <thead>
+                  <tr>
+                    <th>Lịch hẹn</th>
+                    <th>Phương tiện / Đơn vị vận chuyển</th>
+                    <th>Vị trí Bãi / Cửa kho</th>
+                    <th>Thời gian lưu bãi</th>
+                    <th>Cảnh báo SLA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dwellItems.map(item => (
+                    <tr key={item.appointmentId}>
+                      <td>
+                        <strong>{`Phiếu hẹn: ${item.appointmentCode}`}</strong>
+                        <br />
+                        <small>{directionLabel(item.direction)} • {statusLabel[item.status] || item.status}</small>
+                      </td>
+                      <td>
+                        {item.vehiclePlate || 'Chưa khai báo biển số'}
+                        <br />
+                        <small>{item.carrierName || '—'}{item.driverName ? ' • ' + item.driverName : ''}</small>
+                      </td>
+                      <td>
+                        Bãi: {item.yardSlotCode || '—'} • Cửa: {item.dockCode || '—'}
+                      </td>
+                      <td>
+                        <strong>{item.dwellMinutes} phút</strong>
+                      </td>
+                      <td>
+                        <UiBadge tone={item.slaState === 'OVERDUE' ? 'danger' : item.slaState === 'WARNING' ? 'warning' : 'success'}>
+                          {item.slaState === 'OVERDUE'
+                            ? 'Quá hạn > 120p'
+                            : item.slaState === 'WARNING'
+                              ? 'Cảnh báo > 60p'
+                              : 'Bình thường'}
+                        </UiBadge>
+                      </td>
+                    </tr>
+                  ))}
+                  {dwellItems.length === 0 && (
+                    <tr>
+                      <td className="ui-empty-cell" colSpan={5}>
+                        Hiện không có phương tiện nào đang lưu bãi hoặc chờ phục vụ tại cửa kho.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
               </table>
             </UiTableScroll>
           </UiCard>

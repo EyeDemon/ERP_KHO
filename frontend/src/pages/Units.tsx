@@ -191,6 +191,23 @@ const Units = () => {
         <UiMetric value={filtered.length} label="Kết quả hiện tại" />
       </UiMetricGrid>
 
+      <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi (UOM Governance — MD-02)">
+        <div className="ui-form-grid">
+          <div>
+            <strong>Tỷ lệ đơn vị tính kích hoạt</strong><br />
+            {activeCount}/{units.length} ĐVT hoạt động ({units.length > 0 ? Math.round((activeCount / units.length) * 100) : 0}%)
+          </div>
+          <div>
+            <strong>Đơn vị tính ngừng hoạt động (bảo toàn lịch sử)</strong><br />
+            {units.length - activeCount} ĐVT ngừng hoạt động
+          </div>
+          <div>
+            <strong>Phạm vi hiển thị theo bộ lọc</strong><br />
+            {filtered.length}/{units.length} ĐVT khớp điều kiện tra cứu
+          </div>
+        </div>
+      </UiCard>
+
       <UiToolbar>
         <UiToolbarField label="Tìm đơn vị tính">
           <input

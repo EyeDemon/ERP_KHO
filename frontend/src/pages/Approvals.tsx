@@ -308,6 +308,10 @@ export default function Approvals() {
     }
   };
 
+  const normalCount = data.items.filter(item => item.slaStatus === 'Normal').length;
+  const warningCount = data.items.filter(item => item.slaStatus === 'Warning').length;
+  const overdueCount = data.items.filter(item => item.slaStatus === 'Overdue').length;
+
   return (
     <UiPage>
       <div className="approval-page">
@@ -318,6 +322,14 @@ export default function Approvals() {
         />
 
         {error && <div className="approval-error" role="alert">{error}</div>}
+
+        <UiCard title="Tóm tắt SLA phê duyệt (Approval SLA Governance — AD-05)">
+          <div className="ui-inline-wrap">
+            <span>Bình thường: <strong>{normalCount}</strong></span>
+            <span>Sắp đến hạn: <strong>{warningCount}</strong></span>
+            <span>Quá hạn: <strong>{overdueCount}</strong></span>
+          </div>
+        </UiCard>
 
         <UiToolbar>
           <UiToolbarField label="Loại chứng từ">

@@ -141,6 +141,11 @@ export default function InventoryReversals(){
     finally{guard.current=false;setBusy(false)}
   };
 
+  const reversibleCount=rows.filter(x=>!x.isReversed).length;
+  const alreadyReversedCount=rows.filter(x=>x.isReversed).length;
+  const moveTransactionCount=rows.filter(x=>x.transactionType==='Move').length;
+  const statusChangeTransactionCount=rows.filter(x=>x.transactionType==='StatusChange').length;
+
   return <UiPage>
     <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Đảo giao dịch tồn kho"
       description="Không sửa hoặc xóa sổ cái đã ghi. Thao tác đảo tạo một giao dịch hiệu chỉnh mới và một dấu mốc liên kết về giao dịch gốc."/>
@@ -148,6 +153,14 @@ export default function InventoryReversals(){
     {warehouseError&&<p role="alert">{warehouseError}</p>}
     {reasonsError&&<p role="alert">{reasonsError}</p>}
     {success&&<p role="status">{success}</p>}
+    <UiCard title="Tổng quan Giao dịch Đủ điều kiện Đảo & Kiểm soát Bất biến Sổ cái (Reversal Governance Summary — INV-09)">
+      <div className="ui-inline-wrap">
+        <span>Tổng giao dịch khớp lọc: <strong>{totalRecords}</strong></span>
+        <span>Khả dụng đảo trên trang: <strong>{reversibleCount}</strong></span>
+        <span>Đã tạo bút toán đảo trên trang: <strong>{alreadyReversedCount}</strong></span>
+        <span>Loại Move / StatusChange: <strong>{moveTransactionCount} / {statusChangeTransactionCount}</strong></span>
+      </div>
+    </UiCard>
     <UiCard title="Lịch sử giao dịch hỗ trợ đảo hiệu chỉnh">
       <p className="ui-muted-text">Chỉ hỗ trợ di chuyển vị trí nội bộ và đổi trạng thái tồn kho. Trạng thái “Chưa đảo” không bảo đảm đủ điều kiện thực hiện; hệ thống kiểm tra khóa, lượng tồn và các ràng buộc ngay khi xác nhận.</p>
       <UiToolbar>
@@ -196,7 +209,7 @@ export default function InventoryReversals(){
         </form>
         <button type="button" disabled={loading||busy} onClick={()=>void load(page)}>Tải lại danh sách</button>
       </UiToolbar>
-      <p role="status" className="ui-muted-text">{loading?'Đang tải giao dịch...':('Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch')}</p>
+      {!loading&&<p role="status" className="ui-muted-text">{'Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch'}</p>}
       {loading?<p role="status">Đang tải giao dịch...</p>:<UiTableScroll>
         <table aria-label="Danh sách giao dịch có thể đảo">
           <thead><tr><th>Giao dịch</th><th>Sản phẩm</th><th>Kho</th><th>Chi tiết theo dõi</th><th>Số lượng</th><th>Thời gian</th><th>Trạng thái đảo</th>{canReverse&&<th>Thao tác</th>}</tr></thead>
@@ -219,10 +232,10 @@ export default function InventoryReversals(){
           </tbody>
         </table>
       </UiTableScroll>}
-      <div className="ui-inline-actions" aria-label="Phân trang giao dịch đảo">
+      <nav className="ui-inline-actions" aria-label="Phân trang giao dịch đảo">
         <button type="button" disabled={loading||busy||page<=1} onClick={()=>{setSelected(null);setPage(p=>Math.max(1,p-1))}}>Trang trước</button>
         <button type="button" disabled={loading||busy||page>=totalPages} onClick={()=>{setSelected(null);setPage(p=>p+1)}}>Trang sau</button>
-      </div>
+      </nav>
     </UiCard>
 
     {selected&&canReverse&&<UiCard title={'Đảo giao dịch #'+selected.id}>

@@ -11,6 +11,19 @@ public sealed class BusinessPartnersController(IBusinessPartnerService service):
 {
     [HttpGet]
         [PermissionAuthorize(AppPermissions.PartnerRead)] public async Task<IActionResult> Get(int page=1,int pageSize=20,string? search=null,string? role=null,bool? active=null,CancellationToken ct=default)=>Ok(await service.GetAsync(page,pageSize,search,role,active,ct));
+    [HttpGet("governance-summary"),PermissionAuthorize(AppPermissions.PartnerRead)]
+    public async Task<IActionResult> GetGovernanceSummary(CancellationToken ct=default)
+    {
+        var page=await service.GetAsync(1,200,null,null,null,ct);
+        return Ok(new
+        {
+            totalPartners=page.TotalRecords,
+            activeSuppliers=page.Items.Count(x=>x.IsActive&&x.IsSupplier),
+            activeCustomers=page.Items.Count(x=>x.IsActive&&x.IsCustomer),
+            dualRolePartners=page.Items.Count(x=>x.IsSupplier&&x.IsCustomer),
+            missingContactInfoCount=page.Items.Count(x=>string.IsNullOrWhiteSpace(x.Phone)&&string.IsNullOrWhiteSpace(x.Email))
+        });
+    }
     [HttpPost,PermissionAuthorize(AppPermissions.PartnerCreate)] public async Task<IActionResult>Create(SaveBusinessPartnerDto dto,CancellationToken ct){var x=await service.CreateAsync(dto,ct);return Created($"/api/business-partners/{x.Id}",x);}
     [HttpPut("{id:int}"),PermissionAuthorize(AppPermissions.PartnerUpdate)] public async Task<IActionResult>Update(int id,SaveBusinessPartnerDto dto,CancellationToken ct){await service.UpdateAsync(id,dto,ct);return NoContent();}
     [HttpDelete("{id:int}"),PermissionAuthorize(AppPermissions.PartnerDeactivate)] public async Task<IActionResult>Delete(int id,CancellationToken ct){await service.DeleteAsync(id,ct);return NoContent();}

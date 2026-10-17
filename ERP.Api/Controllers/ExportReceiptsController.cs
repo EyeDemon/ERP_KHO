@@ -35,6 +35,21 @@ namespace ERP.Api.Controllers
             return Ok(receipts);
         }
 
+        [HttpGet("pipeline-summary")]
+        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+        public async Task<IActionResult> GetPipelineSummary()
+        {
+            var items = (await _exportReceiptService.GetAllAsync()).ToList();
+            return Ok(new
+            {
+                totalReceipts = items.Count,
+                draftCount = items.Count(x => string.Equals(x.Status, "Draft", StringComparison.OrdinalIgnoreCase)),
+                approvedReadyCount = items.Count(x => string.Equals(x.Status, "Approved", StringComparison.OrdinalIgnoreCase)),
+                dispatchedCount = items.Count(x => x.Status is "Dispatched" or "Completed"),
+                cancelledCount = items.Count(x => string.Equals(x.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            });
+        }
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> GetById(int id)

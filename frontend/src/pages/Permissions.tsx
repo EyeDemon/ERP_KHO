@@ -292,6 +292,17 @@ export default function Permissions() {
       <UiMetric value={roles.reduce((sum, role) => sum + role.permissions.length, 0)} label="Grant hiện tại" />
     </UiMetricGrid>
 
+    {(catalog.length > 0 || roles.length > 0) && (
+      <UiCard title="Tổng quan Tài khoản, Vai trò & Phân quyền Kho (User & Role Governance — AD-01)">
+        <div className="ui-inline-wrap">
+          <UiBadge tone="success">{`Danh mục quyền hệ thống: ${catalog.length}`}</UiBadge>
+          <UiBadge>{`Vai trò nghiệp vụ: ${roles.length}`}</UiBadge>
+          <UiBadge tone="warning">{`Tổng lượt cấp quyền (Grants): ${roles.reduce((sum, role) => sum + role.permissions.length, 0)}`}</UiBadge>
+          <UiBadge>{`Phạm vi kho đang tra cứu (AD-03): ${userWarehouses ? userWarehouses.warehouses.length : 0}`}</UiBadge>
+        </div>
+      </UiCard>
+    )}
+
     {loading ? <p role="status">Đang tải quyền truy cập...</p> : <>
       {catalog.length === 0 && <UiCard><p className="ui-muted-text">Chưa có quyền truy cập để hiển thị.</p></UiCard>}
 

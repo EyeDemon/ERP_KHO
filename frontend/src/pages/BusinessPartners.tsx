@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 export interface BusinessPartner {
   id: number; code: string; name: string; isSupplier: boolean; isCustomer: boolean;
@@ -25,6 +25,11 @@ const BusinessPartners = () => {
   const submit = async (e: React.FormEvent) => { e.preventDefault(); if (submitting.current) return; submitting.current = true; setLoading(true); setError(''); try { if (editing) await apiClient.put(`/api/business-partners/${editing}`, form); else await apiClient.post('/api/business-partners', form); setMessage(editing ? 'Đã cập nhật đối tác.' : 'Đã tạo đối tác.'); setShowForm(false); await load(); } catch (x: any) { const message=x.response?.data?.message || 'Không lưu được đối tác.'; setError(x.response?.status===409 ? `${message} Vui lòng tải lại danh sách rồi thử lại.` : message); } finally { submitting.current = false; setLoading(false); } };
   const remove = async (x: BusinessPartner) => { if (!confirm(`Xóa đối tác ${x.code}?`)) return; try { await apiClient.delete(`/api/business-partners/${x.id}`); setMessage('Đã xóa đối tác.'); await load(); } catch (e: any) { setError(e.response?.data?.message || 'Không xóa được đối tác.'); } };
   const field = (name: keyof BusinessPartner, value: unknown) => setForm(v => ({ ...v, [name]: value }));
+  const activeSuppliersCount = items.filter(x => x.isActive && x.isSupplier).length;
+  const activeCustomersCount = items.filter(x => x.isActive && x.isCustomer).length;
+  const dualRolePartnersCount = items.filter(x => x.isSupplier && x.isCustomer).length;
+  const addressDeclaredCount = items.filter(x => Boolean(x.address && x.address.trim())).length;
+  const missingContactInfoCount = items.filter(x => !x.phone?.trim() && !x.email?.trim()).length;
   return <UiPage>
     <UiPageHeader
       eyebrow="Dữ liệu nền"
@@ -37,6 +42,16 @@ const BusinessPartners = () => {
     {message && <p role="status" className="ui-success-text">{message}</p>}
 
     {!showForm && <>
+      <UiCard title="Tổng quan Hồ sơ Nhà cung cấp & Khách hàng (Partner Governance — MD-04..MD-06)">
+        <UiMetricGrid>
+          <UiMetric value={items.length} label="Tổng đối tác trên trang" />
+          <UiMetric value={activeSuppliersCount} label="NCC đang hoạt động (MD-04)" />
+          <UiMetric value={activeCustomersCount} label="KH đang hoạt động (MD-05)" />
+          <UiMetric value={dualRolePartnersCount} label="Đối tác kiêm nhiệm (NCC & KH)" />
+          <UiMetric value={addressDeclaredCount} label="Đã chuẩn hóa địa chỉ giao nhận" />
+          <UiMetric value={missingContactInfoCount} label="Thiếu thông tin liên hệ" />
+        </UiMetricGrid>
+      </UiCard>
       <UiToolbar>
         <UiToolbarField label="Tìm đối tác">
           <input aria-label="Tìm đối tác" placeholder="Mã hoặc tên" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} />

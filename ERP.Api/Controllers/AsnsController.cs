@@ -14,6 +14,21 @@ public sealed class AsnsController(IInboundPlanningService service):ControllerBa
     [HttpGet,PermissionAuthorize(AppPermissions.AsnRead)]
     public async Task<IActionResult> List([FromQuery]AsnStatus? status,CancellationToken ct)=>Ok(await service.ListAsnsAsync(status,ct));
 
+    [HttpGet("arrival-summary"),PermissionAuthorize(AppPermissions.AsnRead)]
+    public async Task<IActionResult> ArrivalSummary(CancellationToken ct)
+    {
+        var items=await service.ListAsnsAsync(null,ct);
+        return Ok(new
+        {
+            totalAsnCount=items.Count,
+            inTransitCount=items.Count(x=>x.Status=="InTransit"),
+            arrivedWaitingCount=items.Count(x=>x.Status=="Arrived"),
+            receivingCount=items.Count(x=>x.Status=="Receiving"),
+            overdueArrivalCount=items.Count(x=>(x.Status=="Confirmed"||x.Status=="InTransit")&&x.ExpectedArrivalAtUtc.HasValue&&x.ExpectedArrivalAtUtc.Value<DateTime.UtcNow),
+            unlinkedPoAsnCount=items.Count(x=>x.PurchaseOrderId==null)
+        });
+    }
+
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.AsnRead)]
     public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetAsnAsync(id,ct));
 

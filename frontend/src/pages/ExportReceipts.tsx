@@ -424,6 +424,16 @@ const ExportReceipts = () => {
           </div>
         )}
 
+        <UiCard title="Tổng quan Pipeline Phiếu xuất kho & Ranh giới Xuất giao (Export Receipt Pipeline — OUT-01)">
+          <div className="ui-inline-wrap">
+            <UiBadge>{`Tổng phiếu xuất: ${receipts.length}`}</UiBadge>
+            <UiBadge tone="warning">{`Đang soạn (Draft): ${receipts.filter(r => r.status === 'Draft').length}`}</UiBadge>
+            <UiBadge tone="warning">{`Đã duyệt & Giữ hàng chờ xuất: ${receipts.filter(r => r.status === 'Approved').length}`}</UiBadge>
+            <UiBadge tone="success">{`Đã xuất giao khỏi kho (Dispatched): ${receipts.filter(r => r.status === 'Dispatched' || r.status === 'Completed').length}`}</UiBadge>
+            <UiBadge tone="danger">{`Phiếu xuất đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`}</UiBadge>
+          </div>
+        </UiCard>
+
         {canCreate && (
           <UiCard title="Tạo Phiếu Xuất Kho">
             <form onSubmit={handleCreate} className="export-form">

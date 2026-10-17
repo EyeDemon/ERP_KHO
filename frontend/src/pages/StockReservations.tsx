@@ -111,6 +111,16 @@ export default function StockReservations() {
 
   const pages = Math.max(1, Math.ceil(data.totalRecords / data.pageSize));
   const remainingOnPage = data.items.reduce((sum, item) => sum + item.remainingQuantity, 0);
+  const activeCount = data.items.filter((item) => item.status === 'Active').length;
+  const activeRemainingQuantity = data.items
+    .filter((item) => item.status === 'Active')
+    .reduce((sum, item) => sum + item.remainingQuantity, 0);
+  const expiringSoonCount = data.items.filter(
+    (item) =>
+      item.status === 'Active' &&
+      Boolean(item.expiresAt) &&
+      new Date(item.expiresAt).getTime() <= Date.now() + 24 * 60 * 60 * 1000,
+  ).length;
 
   return (
     <UiPage>
@@ -132,6 +142,14 @@ export default function StockReservations() {
         <UiMetric value={data.items.length} label="Bản ghi trên trang" />
         <UiMetric value={remainingOnPage} label="Số lượng còn giữ trên trang" />
       </UiMetricGrid>
+
+      <UiCard title="Tổng quan Cam kết Giữ hàng & Rủi ro Hết hạn (Reservation Commitment Monitor — OUT-02)">
+        <UiMetricGrid>
+          <UiMetric value={activeCount} label="Bản ghi giữ hàng đang hiệu lực (Active)" />
+          <UiMetric value={activeRemainingQuantity} label="Tổng lượng đang giữ (Remaining)" />
+          <UiMetric value={expiringSoonCount} label="Bản ghi sắp hết hạn (24h)" />
+        </UiMetricGrid>
+      </UiCard>
 
       <UiToolbar>
         <UiToolbarField label="Trạng thái">
