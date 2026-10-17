@@ -26,8 +26,12 @@ public sealed class SalesOrdersController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteBackorderRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
+        IReadOnlyCollection<int>? accessibleIds = null;
         if (warehouseAccess != null)
         {
             if (warehouseId.HasValue)
@@ -36,22 +40,47 @@ public sealed class SalesOrdersController(
             }
             else
             {
-                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
                 if (accessibleIds.Count == 0)
                     return Forbid();
-                targetWarehouseId = accessibleIds[0];
+                targetWarehouseId = accessibleIds.First();
             }
         }
 
-        var backorderOrdersCount = db != null
-            ? await db.SalesOrders.AsNoTracking()
-                .CountAsync(o => !warehouseId.HasValue || o.WarehouseId == warehouseId.Value, cancellationToken)
-            : 0;
+        var backorderOrdersCount = 0;
+        if (db != null)
+        {
+            var query = db.SalesOrders.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(o => o.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(o => accessibleIds.Contains(o.WarehouseId));
+            backorderOrdersCount = await query.CountAsync(cancellationToken);
+        }
 
         var now = DateTime.UtcNow;
+        var expediteId = $"EXP-BO-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = targetWarehouseId,
+                Action = "SalesOrder.ExpediteBackorder",
+                EntityName = "SalesOrderExpedite",
+                NewValues = expediteId,
+                Result = "ALLOCATION_WAVE_QUEUED",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         return Ok(new
         {
-            expediteId = $"EXP-BO-{now:yyyyMMdd-HHmm}",
+            expediteId,
             warehouseId = targetWarehouseId,
             orderNumber = string.IsNullOrWhiteSpace(request?.OrderNumber) ? "SO-PRIORITY-QUEUE" : request.OrderNumber.Trim(),
             backorderOrdersCount,
@@ -68,13 +97,25 @@ public sealed class SalesOrdersController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var evaluatedOrdersCount = db != null
-            ? await db.SalesOrders.AsNoTracking()
-                .CountAsync(o => !warehouseId.HasValue || o.WarehouseId == warehouseId.Value, cancellationToken)
-            : 0;
+        var evaluatedOrdersCount = 0;
+        if (db != null)
+        {
+            var query = db.SalesOrders.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(o => o.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(o => accessibleIds.Contains(o.WarehouseId));
+            evaluatedOrdersCount = await query.CountAsync(cancellationToken);
+        }
 
         return Ok(new
         {

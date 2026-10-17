@@ -55,14 +55,25 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var warehouseId = request?.WarehouseId;
-            if (warehouseId.HasValue && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAccess != null)
+            {
+                if (warehouseId.HasValue)
+                    await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                else
+                    accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            }
 
-            var activeBinCount = _db != null
-                ? await _db.WarehouseLocations.AsNoTracking()
-                    .Where(l => (!warehouseId.HasValue || l.WarehouseId == warehouseId.Value) && l.IsActive)
-                    .CountAsync(cancellationToken)
-                : 0;
+            var activeBinCount = 0;
+            if (_db != null)
+            {
+                var query = _db.WarehouseLocations.AsNoTracking().Where(l => l.IsActive);
+                if (warehouseId.HasValue)
+                    query = query.Where(l => l.WarehouseId == warehouseId.Value);
+                else if (accessibleIds != null)
+                    query = query.Where(l => accessibleIds.Contains(l.WarehouseId));
+                activeBinCount = await query.CountAsync(cancellationToken);
+            }
 
             return Ok(new
             {
@@ -82,14 +93,25 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var warehouseId = request?.WarehouseId;
-            if (warehouseId.HasValue && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAccess != null)
+            {
+                if (warehouseId.HasValue)
+                    await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                else
+                    accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            }
 
-            var configuredVirtualBins = _db != null
-                ? await _db.WarehouseLocations.AsNoTracking()
-                    .Where(l => !warehouseId.HasValue || l.WarehouseId == warehouseId.Value)
-                    .CountAsync(cancellationToken)
-                : 9;
+            var configuredVirtualBins = 9;
+            if (_db != null)
+            {
+                var query = _db.WarehouseLocations.AsNoTracking();
+                if (warehouseId.HasValue)
+                    query = query.Where(l => l.WarehouseId == warehouseId.Value);
+                else if (accessibleIds != null)
+                    query = query.Where(l => accessibleIds.Contains(l.WarehouseId));
+                configuredVirtualBins = await query.CountAsync(cancellationToken);
+            }
             if (configuredVirtualBins == 0)
                 configuredVirtualBins = 9;
 
@@ -111,12 +133,25 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var warehouseId = request?.WarehouseId;
-            if (warehouseId.HasValue && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAccess != null)
+            {
+                if (warehouseId.HasValue)
+                    await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                else
+                    accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            }
 
-            var activeWarehousesCount = _db != null
-                ? await _db.Warehouses.AsNoTracking().CountAsync(w => w.IsActive, cancellationToken)
-                : 1;
+            var activeWarehousesCount = 1;
+            if (_db != null)
+            {
+                var query = _db.Warehouses.AsNoTracking().Where(w => w.IsActive);
+                if (warehouseId.HasValue)
+                    query = query.Where(w => w.Id == warehouseId.Value);
+                else if (accessibleIds != null)
+                    query = query.Where(w => accessibleIds.Contains(w.Id));
+                activeWarehousesCount = await query.CountAsync(cancellationToken);
+            }
 
             return Ok(new
             {

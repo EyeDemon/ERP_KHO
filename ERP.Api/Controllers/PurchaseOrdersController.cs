@@ -41,27 +41,62 @@ public sealed class PurchaseOrdersController(
         [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteOverduePurchaseOrdersRequest? request = null,
         CancellationToken ct = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var supplierId = request?.SupplierId;
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
+        }
 
-        var openPoCount = db != null
-            ? await db.PurchaseOrders.AsNoTracking()
-                .Where(p => (!supplierId.HasValue || p.SupplierId == supplierId.Value)
-                            && (!warehouseId.HasValue || p.WarehouseId == warehouseId.Value)
-                            && (p.Status == PurchaseOrderStatus.Open || p.Status == PurchaseOrderStatus.PartiallyReceived))
-                .CountAsync(ct)
-            : 0;
+        var openPoCount = 0;
+        if (db != null)
+        {
+            var query = db.PurchaseOrders.AsNoTracking()
+                .Where(p => p.Status == PurchaseOrderStatus.Open || p.Status == PurchaseOrderStatus.PartiallyReceived);
+            if (supplierId.HasValue)
+                query = query.Where(p => p.SupplierId == supplierId.Value);
+            if (warehouseId.HasValue)
+                query = query.Where(p => p.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(p => accessibleIds.Contains(p.WarehouseId));
+            openPoCount = await query.CountAsync(ct);
+        }
+
+        var now = DateTime.UtcNow;
+        var expediteId = $"PO-EXP-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                Action = "PurchaseOrder.ExpediteOverdue",
+                EntityName = "PurchaseOrderExpedite",
+                NewValues = expediteId,
+                Result = "DISPATCHED_TO_SUPPLIER",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(ct);
+        }
 
         return Ok(new
         {
-            expediteId=$"PO-EXP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            expediteId,
             supplierId,
             openPoCount,
             vendorNotificationStatus="DISPATCHED_TO_SUPPLIER",
             priorityReceivingSlotReserved=true,
-            triggeredAtUtc=DateTime.UtcNow
+            triggeredAtUtc=now
         });
     }
 
@@ -72,23 +107,55 @@ public sealed class PurchaseOrdersController(
         [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateProcurementRecommendationsRequest? request = null,
         CancellationToken ct = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, ct);
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
 
-        var evaluatedSkuCount = db != null
-            ? await db.Products.AsNoTracking().CountAsync(p => p.IsActive, ct)
-            : 0;
+        var warehouseId = request?.WarehouseId;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
+        }
+
+        var evaluatedSkuCount = 0;
+        if (db != null && (accessibleIds == null || accessibleIds.Count > 0))
+        {
+            evaluatedSkuCount = await db.Products.AsNoTracking().CountAsync(p => p.IsActive, ct);
+        }
+
+        var now = DateTime.UtcNow;
+        var recommendationId = $"PROC-REC-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                Action = "PurchaseOrder.GenerateProcurementRecommendations",
+                EntityName = "ProcurementRecommendations",
+                NewValues = recommendationId,
+                Result = "PROCUREMENT_INTELLIGENCE_READY",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(ct);
+        }
 
         return Ok(new
         {
-            recommendationId=$"PROC-REC-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId=request?.WarehouseId,
+            recommendationId,
+            warehouseId,
             evaluatedSkuCount,
             procurementSuggestionStatus="REORDER_THRESHOLD_PROPOSALS_READY",
             supplierLeadTimePercentile="P90_LEAD_TIME_CALIBRATED",
             expediteDeferSignal="EXPEDITE_AND_DEFER_BALANCED",
             status="PROCUREMENT_INTELLIGENCE_READY",
-            generatedAtUtc=DateTime.UtcNow
+            generatedAtUtc=now
         });
     }
 

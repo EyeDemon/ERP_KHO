@@ -55,17 +55,17 @@ namespace ERP.Infrastructure.Queries
                                          s.Product.Name.ToLower().Contains(lowerKeyword));
             }
 
-            if (lowStockThreshold.HasValue)
-            {
-                query = query.Where(s => s.Quantity - s.ReservedQuantity <= lowStockThreshold.Value);
-            }
-
             var projectedQuery = query.GroupBy(s=>new{s.ProductId,s.Product.Code,s.Product.Name,UnitName=s.Product.Unit!=null?s.Product.Unit.Name:string.Empty,s.WarehouseId,WarehouseName=s.Warehouse.Name}).Select(g => new InventoryStockDto
             {
                 ProductId = g.Key.ProductId, ProductCode=g.Key.Code, ProductName=g.Key.Name, UnitName=g.Key.UnitName,
                 WarehouseId=g.Key.WarehouseId, WarehouseName=g.Key.WarehouseName, Quantity=g.Sum(s=>s.Quantity), OnHandQuantity=g.Sum(s=>s.Quantity),
                 ReservedQuantity=g.Sum(s=>s.ReservedQuantity), AvailableQuantity=g.Sum(s=>s.Quantity-s.ReservedQuantity), LastUpdated=g.Max(s=>s.LastUpdated)
             });
+
+            if (lowStockThreshold.HasValue)
+            {
+                projectedQuery = projectedQuery.Where(x => x.AvailableQuantity <= lowStockThreshold.Value);
+            }
 
             return await projectedQuery.ToListAsync();
         }

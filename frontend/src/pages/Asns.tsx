@@ -80,7 +80,7 @@ export default function Asns(){
     setError('');
     try{
       const res=await apiClient.post('/api/asns/pre-allocate-staging',{
-        warehouseId:warehouseId||items[0]?.warehouseId||1,
+        warehouseId:warehouseId?Number(warehouseId):(items[0]?.warehouseId??undefined),
         asnNumber:selected?.code||items[0]?.code||'ASN-NEXT-ARRIVAL',
       });
       setStagingReservation({

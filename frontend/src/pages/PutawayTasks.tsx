@@ -6,7 +6,7 @@ import './PutawayTasks.css';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type Item={id:number;productCode:string;productName:string;inventoryStatus:string;sourceLocationCode:string;operationUnitCode:string;baseUnitCode:string;requiredOperationQuantity:number;requiredBaseQuantity:number;movedBaseQuantity:number;remainingBaseQuantity:number};
-type Task={id:number;receiptCode:string;warehouseName:string;status:string;assignedUserId:number|null;requiredBaseQuantity:number;movedBaseQuantity:number;rowVersion:string;exceptionReason?:string;items:Item[]};
+type Task={id:number;warehouseId?:number;receiptCode:string;warehouseName:string;status:string;assignedUserId:number|null;requiredBaseQuantity:number;movedBaseQuantity:number;rowVersion:string;exceptionReason?:string;items:Item[]};
 type Location={id:number;code:string;name:string;locationType:string;isPickable:boolean};
 const states:Record<string,string>={Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang thực hiện',Completed:'Đã hoàn thành',Cancelled:'Đã hủy',Exception:'Cần xử lý'};
 const inventory:Record<string,string>={Available:'Có thể sử dụng',Damaged:'Hư hỏng',Rejected:'Hàng bị từ chối'};
@@ -25,7 +25,7 @@ export default function PutawayTasks(){
  const evaluateSlotting=async()=>{
    setError('');
    try{
-     const res=await apiClient.post('/api/putaway-tasks/evaluate-slotting',{warehouseId:1});
+     const res=await apiClient.post('/api/putaway-tasks/evaluate-slotting',{warehouseId:selected?.warehouseId??tasks[0]?.warehouseId??undefined});
      const data=res?.data as {evaluationId?:string;optimalBinMatchRatePct?:number;fefoHazardCompliance?:string}|undefined;
      setSlottingEvaluationResult(`${data?.evaluationId??'SLOT-EVAL-OK'} • Khớp Bin tối ưu: ${data?.optimalBinMatchRatePct??96.4}% • FEFO/Hazard: ${data?.fefoHazardCompliance??'VERIFIED'}`);
    }catch(e){

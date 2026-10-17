@@ -146,20 +146,38 @@ public sealed class StockTransfersController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SimulateNetworkRebalancingRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        var warehouseId = request?.WarehouseId;
+        var sourceWarehouseId = request?.SourceWarehouseId;
+        var destinationWarehouseId = request?.DestinationWarehouseId;
+        IReadOnlyCollection<int>? accessibleIds = null;
         if (warehouseAccess != null)
         {
-            if (request?.WarehouseId.HasValue == true)
-                await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
-            if (request?.SourceWarehouseId.HasValue == true)
-                await warehouseAccess.EnsureWarehouseAccessAsync(request.SourceWarehouseId.Value, cancellationToken);
-            if (request?.DestinationWarehouseId.HasValue == true)
-                await warehouseAccess.EnsureWarehouseAccessAsync(request.DestinationWarehouseId.Value, cancellationToken);
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            if (sourceWarehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(sourceWarehouseId.Value, cancellationToken);
+            if (destinationWarehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(destinationWarehouseId.Value, cancellationToken);
+            if (!warehouseId.HasValue && !sourceWarehouseId.HasValue && !destinationWarehouseId.HasValue)
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var inTransitTransfersCount = db != null
-            ? await db.StockTransfers.AsNoTracking()
-                .CountAsync(t => t.Status == StockTransferStatus.InTransit, cancellationToken)
-            : 0;
+        var inTransitTransfersCount = 0;
+        if (db != null)
+        {
+            var query = db.StockTransfers.AsNoTracking()
+                .Where(t => t.Status == StockTransferStatus.InTransit);
+            if (warehouseId.HasValue)
+                query = query.Where(t => t.SourceWarehouseId == warehouseId.Value || t.DestinationWarehouseId == warehouseId.Value);
+            if (sourceWarehouseId.HasValue)
+                query = query.Where(t => t.SourceWarehouseId == sourceWarehouseId.Value);
+            if (destinationWarehouseId.HasValue)
+                query = query.Where(t => t.DestinationWarehouseId == destinationWarehouseId.Value);
+            if (!warehouseId.HasValue && !sourceWarehouseId.HasValue && !destinationWarehouseId.HasValue && accessibleIds != null)
+                query = query.Where(t => accessibleIds.Contains(t.SourceWarehouseId) || accessibleIds.Contains(t.DestinationWarehouseId));
+
+            inTransitTransfersCount = await query.CountAsync(cancellationToken);
+        }
 
         return Ok(new
         {

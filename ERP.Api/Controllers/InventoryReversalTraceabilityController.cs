@@ -124,14 +124,25 @@ public sealed class InventoryReversalTraceabilityController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var ledgerEventsCount = db != null
-            ? await db.InventoryTransactions.AsNoTracking()
-                .Where(t => !warehouseId.HasValue || t.WarehouseId == warehouseId.Value)
-                .CountAsync(cancellationToken)
-            : 0;
+        var ledgerEventsCount = 0;
+        if (db != null)
+        {
+            var query = db.InventoryTransactions.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(t => t.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(t => accessibleIds.Contains(t.WarehouseId));
+            ledgerEventsCount = await query.CountAsync(cancellationToken);
+        }
 
         return Ok(new
         {
@@ -154,13 +165,30 @@ public sealed class InventoryReversalTraceabilityController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
         var queryText = string.IsNullOrWhiteSpace(request?.BatchOrSerialQuery) ? "BATCH-FEFO-2026" : request.BatchOrSerialQuery.Trim();
-        var matchedLotCount = db != null
-            ? await db.InventoryLots.AsNoTracking().CountAsync(l => l.LotNumber.Contains(queryText), cancellationToken)
-            : 0;
+        var matchedLotCount = 0;
+        if (db != null)
+        {
+            var lotQuery = db.InventoryLots.AsNoTracking().Where(l => l.LotNumber.Contains(queryText));
+            if (warehouseId.HasValue)
+            {
+                lotQuery = lotQuery.Where(l => db.InventoryStocks.Any(s => s.LotId == l.Id && s.WarehouseId == warehouseId.Value));
+            }
+            else if (accessibleIds != null)
+            {
+                lotQuery = lotQuery.Where(l => db.InventoryStocks.Any(s => s.LotId == l.Id && accessibleIds.Contains(s.WarehouseId)));
+            }
+            matchedLotCount = await lotQuery.CountAsync(cancellationToken);
+        }
 
         return Ok(new
         {

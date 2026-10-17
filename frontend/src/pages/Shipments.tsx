@@ -188,7 +188,7 @@ export default function Shipments(){
               setError('');
               void apiClient
                 .post<Record<string,unknown>>('/api/shipments/sync-tms-manifest',{
-                  warehouseId:rows[0]?.warehouseId??1,
+                  warehouseId:rows[0]?.warehouseId??undefined,
                   carrierCode:rows[0]?.carrierName??'VTP-EXPRESS',
                 })
                 .then(res=>{

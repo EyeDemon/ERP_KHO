@@ -54,8 +54,14 @@ public sealed class StockAllocationsController(
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
         var reservations = await service.GetReservationsAsync(warehouseId, cancellationToken);
 
@@ -64,6 +70,8 @@ public sealed class StockAllocationsController(
             var query = db.StockAllocations.AsNoTracking();
             if (warehouseId.HasValue)
                 query = query.Where(a => a.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(a => accessibleIds.Contains(a.WarehouseId));
 
             var totalAllocations = await query.CountAsync(cancellationToken);
             var activeAllocations = await query.CountAsync(
@@ -110,16 +118,27 @@ public sealed class StockAllocationsController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var binLockConflictCount = db != null
-            ? await db.StockAllocations.AsNoTracking()
-                .Where(a => (!warehouseId.HasValue || a.WarehouseId == warehouseId.Value)
-                            && (a.Status == StockAllocationStatus.Active || a.Status == StockAllocationStatus.Picking)
-                            && a.Location.IsBlocked)
-                .CountAsync(cancellationToken)
-            : 0;
+        var binLockConflictCount = 0;
+        if (db != null)
+        {
+            var query = db.StockAllocations.AsNoTracking()
+                .Where(a => (a.Status == StockAllocationStatus.Active || a.Status == StockAllocationStatus.Picking)
+                            && a.Location.IsBlocked);
+            if (warehouseId.HasValue)
+                query = query.Where(a => a.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(a => accessibleIds.Contains(a.WarehouseId));
+            binLockConflictCount = await query.CountAsync(cancellationToken);
+        }
 
         return Ok(new
         {

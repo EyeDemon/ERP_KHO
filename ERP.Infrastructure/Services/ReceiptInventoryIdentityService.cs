@@ -167,14 +167,24 @@ public sealed class ReceiptInventoryIdentityService(
                 context.InventorySerials.Add(serial);
             }
 
-            var stock = await context.InventoryStocks.SingleOrDefaultAsync(
+            var stock = context.InventoryStocks.Local.FirstOrDefault(
                 x => x.ProductId == product.Id &&
                      x.WarehouseId == receipt.WarehouseId &&
                      x.LocationId == locationId &&
                      x.Status == status &&
-                     x.LotId == (lot == null ? null : lot.Id) &&
-                     x.SerialId == (serial == null ? null : serial.Id),
-                cancellationToken);
+                     (lot == null ? x.LotId == null && x.Lot == null : (lot.Id > 0 ? x.LotId == lot.Id : ReferenceEquals(x.Lot, lot))) &&
+                     (serial == null ? x.SerialId == null && x.Serial == null : (serial.Id > 0 ? x.SerialId == serial.Id : ReferenceEquals(x.Serial, serial))));
+            if (stock is null && (lot is null || lot.Id > 0) && (serial is null || serial.Id > 0))
+            {
+                stock = await context.InventoryStocks.SingleOrDefaultAsync(
+                    x => x.ProductId == product.Id &&
+                         x.WarehouseId == receipt.WarehouseId &&
+                         x.LocationId == locationId &&
+                         x.Status == status &&
+                         x.LotId == (lot == null ? null : lot.Id) &&
+                         x.SerialId == (serial == null ? null : serial.Id),
+                    cancellationToken);
+            }
             if (stock is null)
             {
                 stock = new InventoryStock

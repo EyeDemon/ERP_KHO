@@ -61,4 +61,52 @@ describe('quản trị quyền truy cập', () => {
     act(() => setCurrentPermissions([]));
     await waitFor(() => expect(view.queryByText('Quản lý')).toBeNull());
   });
+
+  it('hiển thị đúng trạng thái Đang khóa tạm thời sau khi khóa tài khoản và đọc sodPolicyStatus từ backend', async () => {
+    get.mockImplementation(async url => {
+      if (url === '/api/permissions') return { data: catalog } as never;
+      if (url === '/api/auth/me') return { data: { permissions: grants } } as never;
+      if (url === '/api/users/2/security') {
+        return {
+          data: {
+            userId: 2,
+            username: 'staff01',
+            roleName: 'WarehouseStaff',
+            isActive: true,
+            isLocked: true,
+            lockoutEnd: '2026-10-17T15:00:00Z',
+            securityRevision: 3,
+            activeSessions: 0,
+            rowVersion: 'v3',
+          },
+        } as never;
+      }
+      return { data: [role] } as never;
+    });
+    post.mockImplementation(async url => {
+      if (url === '/api/user-warehouse-access/verify-sod-isolation') {
+        return {
+          data: {
+            auditId: 'RBAC-SOD-01',
+            sodPolicyStatus: 'ZERO_PRIVILEGE_ESCALATION_VERIFIED',
+            crossSiteLeakageDetected: false,
+          },
+        } as never;
+      }
+      return { data: {} } as never;
+    });
+
+    const view = render(<Permissions />);
+    const sodButton = await view.findByText(/Kiểm toán Cô lập Phạm vi Kho/i);
+    fireEvent.click(sodButton);
+    expect(await view.findByText(/ZERO_PRIVILEGE_ESCALATION_VERIFIED/)).toBeTruthy();
+
+    fireEvent.click(view.getByText('Quản trị bảo mật, phạm vi kho & kiểm toán'));
+    fireEvent.change(view.getByLabelText('ID người dùng cần kiểm tra bảo mật'), { target: { value: '2' } });
+    fireEvent.click(view.getByText('Tra cứu bảo mật'));
+
+    expect(await view.findByText('Đang khóa tạm thời')).toBeTruthy();
+    expect((view.getByText('Khóa tài khoản') as HTMLButtonElement).disabled).toBe(true);
+    expect((view.getByText('Mở khóa tài khoản') as HTMLButtonElement).disabled).toBe(false);
+  });
 });

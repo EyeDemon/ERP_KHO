@@ -81,6 +81,9 @@ public sealed class WarehouseCalendarsController(
     [PermissionAuthorize(AppPermissions.WarehouseRead)]
     public async Task<IActionResult> OptimizeLaborInterleaving(int warehouseId, CancellationToken token = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         if (warehouseAccess is not null)
             await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, token);
 
@@ -92,9 +95,28 @@ public sealed class WarehouseCalendarsController(
             : 0;
 
         var now = DateTime.UtcNow;
+        var optimizationId = $"WLM-INT-{now:yyyyMMdd-HHmm}";
+        if (db is not null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                Action = "WarehouseCalendar.OptimizeLaborInterleaving",
+                EntityName = "LaborInterleaving",
+                NewValues = optimizationId,
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(token);
+        }
+
         return Ok(new
         {
-            optimizationId = $"WLM-INT-{now:yyyyMMdd-HHmm}",
+            optimizationId,
             warehouseId,
             interleavedTasksEvaluated = openPutawayCount + openPickingCount,
             interleavingMode = "PUTAWAY_REPLENISH_PICK_CYCLE_COUNT_INTERLEAVED",

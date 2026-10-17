@@ -330,14 +330,25 @@ public sealed class InventoryControlController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var evaluatedStockBucketsCount = db != null
-            ? await db.InventoryStocks.AsNoTracking()
-                .Where(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
-                .CountAsync(cancellationToken)
-            : 0;
+        var evaluatedStockBucketsCount = 0;
+        if (db != null)
+        {
+            var query = db.InventoryStocks.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(s => s.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+            evaluatedStockBucketsCount = await query.CountAsync(cancellationToken);
+        }
 
         return Ok(new
         {

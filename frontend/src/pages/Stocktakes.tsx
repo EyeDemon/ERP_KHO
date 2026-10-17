@@ -97,7 +97,7 @@ const Stocktakes = () => {
   const [proposalStatus, setProposalStatus] = useState<string>('');
 
   const handleQuickAdjustmentProposal = async () => {
-    const targetWh = warehouses[0]?.id ?? stocktakes[0]?.warehouseId ?? 1;
+    const targetWh = warehouses[0]?.id ?? stocktakes[0]?.warehouseId ?? undefined;
     setError('');
     try {
       const res = await apiClient.post('/api/stocktakes/adjustment-proposals', {
@@ -421,7 +421,7 @@ const Stocktakes = () => {
               <div className="stocktake-detail-meta">
                 <div>
                   <strong>Mã lý do chuẩn hóa toàn hệ thống (MD-07):</strong><br />
-                  <code>DAMAGED</code> (Hư hỏng vật lý) • <code>MISPLACED</code> (Thất lạc / Sai vị trí) • <code>SUPPLIER_SHORT</code> (Thiếu từ NCC) • <code>COUNT_ERROR</code> (Sai sót kiểm đếm) • <code>EXPIRY_SCRAP</code> (Hủy hết hạn)
+                  <code>COUNT_VARIANCE</code> / <code>COUNT_ERROR</code> (Sai sót / Chênh lệch kiểm đếm) • <code>DAMAGED_FOUND</code> / <code>DAMAGED</code> (Hư hỏng vật lý) • <code>MISPLACED_STOCK</code> / <code>MISPLACED</code> (Thất lạc / Sai vị trí) • <code>SUPPLIER_SHORTAGE</code> / <code>SUPPLIER_SHORT</code> (Thiếu từ NCC) • <code>EXPIRY_WRITE_OFF</code> / <code>EXPIRY_SCRAP</code> (Hủy hết hạn) • <code>RECALL_QUARANTINE</code> (Cô lập thu hồi)
                 </div>
                 <div>
                   <strong>Loại bút toán điều chỉnh sổ cái (CT-07):</strong><br />
@@ -700,6 +700,12 @@ const Stocktakes = () => {
                                   disabled={rowLoading}
                                 >
                                   <option value="">-- Chọn nhanh mã lý do (CT-06) --</option>
+                                  <option value="COUNT_VARIANCE">COUNT_VARIANCE (Chênh lệch kiểm đếm định kỳ)</option>
+                                  <option value="DAMAGED_FOUND">DAMAGED_FOUND (Phát hiện hàng hư hỏng vật lý)</option>
+                                  <option value="EXPIRY_WRITE_OFF">EXPIRY_WRITE_OFF (Hủy hàng hết hạn sử dụng)</option>
+                                  <option value="SUPPLIER_SHORTAGE">SUPPLIER_SHORTAGE (Thiếu hụt nguồn giao từ NCC)</option>
+                                  <option value="MISPLACED_STOCK">MISPLACED_STOCK (Sai lệch vị trí lưu kho nội bộ)</option>
+                                  <option value="RECALL_QUARANTINE">RECALL_QUARANTINE (Cô lập thu hồi lô hàng khẩn cấp)</option>
                                   <option value="DAMAGED">DAMAGED (Hư hỏng)</option>
                                   <option value="MISPLACED">MISPLACED (Thất lạc / Sai vị trí)</option>
                                   <option value="SUPPLIER_SHORT">SUPPLIER_SHORT (Thiếu từ NCC)</option>

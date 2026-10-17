@@ -76,6 +76,9 @@ public sealed class PackingSessionsController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteKittingVasRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
         if (warehouseAccess != null)
@@ -98,9 +101,29 @@ public sealed class PackingSessionsController(
                 .CountAsync(s => s.WarehouseId == targetWarehouseId, cancellationToken)
             : 0;
 
+        var now = DateTime.UtcNow;
+        var workOrderId = $"KIT-VAS-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = targetWarehouseId,
+                Action = "Packing.ExecuteKittingVas",
+                EntityName = "KittingVas",
+                NewValues = workOrderId,
+                Result = "KITTING_VAS_READY",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         return Ok(new
         {
-            workOrderId = $"KIT-VAS-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            workOrderId,
             warehouseId = targetWarehouseId,
             activeSessionsCount,
             kitSkuCode = request?.KitSkuCode ?? "KIT-BUNDLE-STD",
@@ -109,7 +132,7 @@ public sealed class PackingSessionsController(
             transformationLedgerMode = "EXPLICIT_COMPONENT_TO_KIT_POSTING",
             billingHookStatus = "3PL_BILLABLE_EVENT_CAPTURED",
             status = "KITTING_VAS_READY",
-            executedAtUtc = DateTime.UtcNow
+            executedAtUtc = now
         });
     }
 

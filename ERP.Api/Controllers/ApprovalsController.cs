@@ -25,21 +25,43 @@ public sealed class ApprovalsController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EscalateOverdueApprovalsRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         if (warehouseId.HasValue && warehouseAccess != null)
             await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var queue = await service.GetQueueAsync(
-            new ApprovalQueueQuery { WarehouseId = request?.WarehouseId, PageIndex = 1, PageSize = int.MaxValue },
+            new ApprovalQueueQuery { WarehouseId = request?.WarehouseId, PageIndex = 1, PageSize = 100 },
             cancellationToken);
         var overdueCount = queue.Items.Count(x => x.SlaStatus == "Overdue");
         var recentAuditCount = db != null
             ? await db.AuditLogs.AsNoTracking().CountAsync(x => x.Action.Contains("Approve") || x.Action.Contains("Reject"), cancellationToken)
             : 0;
         var now = DateTime.UtcNow;
+        var escalationBatchId = $"ESC-SLA-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                Action = "Approval.EscalateOverdue",
+                EntityName = "ApprovalQueue",
+                NewValues = escalationBatchId,
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         return Ok(new
         {
-            escalationBatchId = $"ESC-SLA-{now:yyyyMMdd-HHmm}",
+            escalationBatchId,
             warehouseId = request?.WarehouseId,
             overdueCount,
             recentAuditCount,
@@ -62,7 +84,7 @@ public sealed class ApprovalsController(
             await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var queue = await service.GetQueueAsync(
-            new ApprovalQueueQuery { WarehouseId = warehouseId, PageIndex = 1, PageSize = int.MaxValue },
+            new ApprovalQueueQuery { WarehouseId = warehouseId, PageIndex = 1, PageSize = 100 },
             cancellationToken);
         return Ok(new
         {

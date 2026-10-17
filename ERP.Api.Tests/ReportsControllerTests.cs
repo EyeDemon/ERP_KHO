@@ -469,5 +469,108 @@ namespace ERP.Api.Tests
             var viewerProposalRes = await stocktakeController.CreateAdjustmentProposal(new StocktakesController.CreateAdjustmentProposalRequest(1));
             viewerProposalRes.Should().BeOfType<ForbidResult>();
         }
+
+        [Fact]
+        public async Task Wave3_Rem11_MultiWarehouseScoping_AccountSecurity_ViewerGuard_AndAnalyticsParity()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            // Seed 2 warehouses: WH 1 (accessible) and WH 2 (restricted)
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock { Id = 1, WarehouseId = 1, ProductId = 10, Quantity = 50m, ReservedQuantity = 0m, Status = ERP.Domain.Enums.InventoryStatus.Available },
+                new ERP.Domain.Entities.InventoryStock { Id = 2, WarehouseId = 2, ProductId = 10, Quantity = 80m, ReservedQuantity = 0m, Status = ERP.Domain.Enums.InventoryStatus.Available });
+
+            var role = new ERP.Domain.Entities.Role { Id = 1, RoleName = "Manager" };
+            var user = new ERP.Domain.Entities.User
+            {
+                Id = 77,
+                Username = "manager77",
+                FullName = "Manager 77",
+                Email = "m77@test.local",
+                PasswordHash = "old-hash",
+                RoleId = 1,
+                Role = role,
+                IsActive = true,
+                FailedLoginCount = 3,
+                SecurityRevision = 2
+            };
+            db.Roles.Add(role);
+            db.Users.Add(user);
+            db.UserSessions.Add(new ERP.Domain.Entities.UserSession
+            {
+                Id = Guid.NewGuid(),
+                UserId = 77,
+                RefreshTokenHash = "tok-1",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                ExpiresAt = DateTime.UtcNow.AddHours(2)
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new int[] { 1 });
+
+            // 1. W3-CTL-01: InventoryControlController scopes to accessibleIds when warehouseId is null
+            var invControl = new InventoryControlController(
+                new Mock<IInventoryLockService>().Object,
+                new Mock<IInventoryMovementService>().Object,
+                db,
+                warehouseAuth.Object);
+            var evalRes = await invControl.EvaluateDecisionPolicyGovernance(null);
+            var evalJson = System.Text.Json.JsonSerializer.Serialize(evalRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            evalJson.Should().Contain("\"evaluatedStockBucketsCount\":1");
+
+            // 2. W3-CTL-02 & W3-CTL-03: AccountSecurityController Lock & ResetPassword
+            var secController = new AccountSecurityController(
+                new Mock<IAccountAdminService>().Object,
+                new Mock<IUserSessionService>().Object,
+                db);
+            var lockRes = await secController.Lock(77, null);
+            lockRes.Should().BeOfType<OkObjectResult>();
+            var lockedUser = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleAsync(db.Users, u => u.Id == 77);
+            lockedUser.LockoutEnd.Should().NotBeNull();
+            lockedUser.SecurityRevision.Should().Be(3);
+            var revokedSession = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleAsync(db.UserSessions, s => s.UserId == 77);
+            revokedSession.RevokedAt.Should().NotBeNull();
+
+            var shortPwAct = async () => await secController.ResetPassword(77, new ResetPasswordAdminRequest("short"));
+            await shortPwAct.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>();
+
+            var resetRes = await secController.ResetPassword(77, new ResetPasswordAdminRequest("NewSecurePass#2026", "Admin reset"));
+            resetRes.Should().BeOfType<OkObjectResult>();
+            lockedUser.PasswordHash.Should().NotBe("old-hash");
+            lockedUser.FailedLoginCount.Should().Be(0);
+            lockedUser.LockoutEnd.Should().BeNull();
+            lockedUser.SecurityRevision.Should().Be(4);
+
+            // 3. W3-FE-02: VerifySodIsolation includes status, sodConflictCount, multiWarehouseIsolationEnforced
+            var uwController = new UserWarehouseAccessController(new Mock<IUserWarehouseAccessService>().Object, db, warehouseAuth.Object);
+            var sodRes = await uwController.VerifySodIsolation(null);
+            var sodJson = System.Text.Json.JsonSerializer.Serialize(sodRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            sodJson.Should().Contain("ZERO_PRIVILEGE_ESCALATION_VERIFIED")
+                .And.Contain("sodConflictCount")
+                .And.Contain("multiWarehouseIsolationEnforced");
+
+            // 4. W3-CTL-05: Viewer role receives ForbidResult on command-named POST endpoints
+            var viewerContext = new ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                {
+                    User = new System.Security.Claims.ClaimsPrincipal(
+                        new System.Security.Claims.ClaimsIdentity(
+                            new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, ERP.Api.Authorization.AppRoles.Viewer) },
+                            "Test"))
+                }
+            };
+            var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db, warehouseAuth.Object)
+            {
+                ControllerContext = viewerContext
+            };
+            (await importController.RmaIntakeCheck(null)).Should().BeOfType<ForbidResult>();
+            (await importController.ExecuteRtvRefurbish(null)).Should().BeOfType<ForbidResult>();
+        }
     }
 }

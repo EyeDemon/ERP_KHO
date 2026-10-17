@@ -67,14 +67,27 @@ public sealed class InventoryStatusController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var violationCount = db != null
-            ? await db.InventoryStocks.AsNoTracking()
-                .Where(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
-                .CountAsync(s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity, cancellationToken)
-            : 0;
+        var violationCount = 0;
+        if (db != null)
+        {
+            var query = db.InventoryStocks.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(s => s.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+            violationCount = await query.CountAsync(
+                s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity,
+                cancellationToken);
+        }
 
         return Ok(new
         {
@@ -96,14 +109,27 @@ public sealed class InventoryStatusController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var leakCount = db != null
-            ? await db.InventoryStocks.AsNoTracking()
-                .Where(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
-                .CountAsync(s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity, cancellationToken)
-            : 0;
+        var leakCount = 0;
+        if (db != null)
+        {
+            var query = db.InventoryStocks.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(s => s.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+            leakCount = await query.CountAsync(
+                s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity,
+                cancellationToken);
+        }
 
         return Ok(new
         {

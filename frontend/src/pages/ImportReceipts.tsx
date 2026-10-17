@@ -488,7 +488,7 @@ const ImportReceipts = () => {
                 const refCode = 'RMA-' + new Date().toISOString().slice(0, 10);
                 void apiClient
                   .post('/api/ImportReceipts/initiate-rma-inspection', {
-                    warehouseId: warehouseId || warehouses[0]?.id || 1,
+                    warehouseId: warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined),
                     rmaReferenceCode: refCode,
                     returnReference: refCode,
                     reasonCode: 'CUSTOMER_RETURN',
@@ -512,7 +512,7 @@ const ImportReceipts = () => {
                 setSuccessMsg('');
                 void apiClient
                   .post('/api/ImportReceipts/execute-rtv-refurbish', {
-                    warehouseId: warehouseId || warehouses[0]?.id || 1,
+                    warehouseId: warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined),
                     dispositionType: 'REFURBISH_AND_RTV_SPLIT',
                   })
                   .then((res) => {

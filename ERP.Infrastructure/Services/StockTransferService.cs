@@ -208,6 +208,8 @@ public sealed partial class StockTransferService(
             await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
             if (entity.Status != StockTransferStatus.Approved)
                 throw Conflict("Phiếu không còn ở trạng thái có thể xuất kho.");
+            if (entity.Details.Any(x => x.Product.TrackingType != ProductTrackingType.None))
+                throw new BusinessRuleException("Phiếu điều chuyển kho chưa hỗ trợ sản phẩm quản lý theo Lô/Serial.");
             var now = DateTime.UtcNow;
             var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.Approved &&
                 x.SourceWarehouseId == entity.SourceWarehouseId && x.DestinationWarehouseId == entity.DestinationWarehouseId)
@@ -339,7 +341,13 @@ public sealed partial class StockTransferService(
             throw new BusinessRuleException("Ghi chú phiếu hoặc từng sản phẩm không được quá 500 ký tự.");
         if (request.Details.GroupBy(x => x.ProductId).Any(x => x.Count() > 1)) throw new BusinessRuleException("Một sản phẩm không được lặp nhiều dòng.");
         var ids = request.Details.Select(x => x.ProductId).Distinct().ToList();
-        if (await context.Products.CountAsync(x => ids.Contains(x.Id), cancellationToken) != ids.Count) throw new BusinessRuleException("Có sản phẩm không tồn tại.");
+        var products = await context.Products.AsNoTracking()
+            .Where(x => ids.Contains(x.Id))
+            .Select(x => new { x.Id, x.TrackingType })
+            .ToListAsync(cancellationToken);
+        if (products.Count != ids.Count) throw new BusinessRuleException("Có sản phẩm không tồn tại.");
+        if (products.Any(x => x.TrackingType != ProductTrackingType.None))
+            throw new BusinessRuleException("Phiếu điều chuyển kho chưa hỗ trợ sản phẩm quản lý theo Lô/Serial.");
     }
 
     private static void ValidateReceipt(StockTransfer entity, ReceiveStockTransferDto request)

@@ -108,6 +108,9 @@ public sealed class DockYardController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] DispatchCrossdockRequest? request = null,
         CancellationToken token = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
         if (warehouseAccess != null)
@@ -129,14 +132,34 @@ public sealed class DockYardController(
             ? await db.HandlingUnits.AsNoTracking().CountAsync(h => h.WarehouseId == targetWarehouseId, token)
             : 4;
 
+        var now = DateTime.UtcNow;
+        var dispatchId = $"XDOCK-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = targetWarehouseId,
+                Action = "DockYard.DispatchCrossdock",
+                EntityName = "CrossdockDispatch",
+                NewValues = dispatchId,
+                Result = "CROSSDOCK_ROUTED",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(token);
+        }
+
         return Ok(new
         {
-            dispatchId = $"XDOCK-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            dispatchId,
             warehouseId = targetWarehouseId,
             dockDoorCode = string.IsNullOrWhiteSpace(request?.DockDoorCode) ? "DOCK-XD-01" : request.DockDoorCode.Trim(),
             stagedHuCount,
             status = "CROSSDOCK_ROUTED",
-            routedAtUtc = DateTime.UtcNow,
+            routedAtUtc = now,
         });
     }
 

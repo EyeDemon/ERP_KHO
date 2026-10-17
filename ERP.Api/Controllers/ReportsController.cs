@@ -785,6 +785,25 @@ namespace ERP.Api.Controllers
                     stocktakeLineCount = 0,
                     stocktakeAccurateLineCount = 0,
                     stocktakeAccuracyRatePct = 100m,
+                    inboundOutboundSla = new
+                    {
+                        inboundTotalReceipts = 0,
+                        inboundPostedReceipts = 0,
+                        inboundCompletedPutawayTasks = 0,
+                        inboundTotalPutawayTasks = 0,
+                        inboundCompletionRatePercent = 100m,
+                        outboundTotalShipments = 0,
+                        outboundDeliveredShipments = 0,
+                        outboundDeliverySuccessRatePercent = 100m
+                    },
+                    stocktakeAccuracy = new
+                    {
+                        totalStocktakes = 0,
+                        approvedStocktakes = 0,
+                        totalLinesCounted = 0,
+                        accurateLinesCount = 0,
+                        lineAccuracyPercent = 100m
+                    },
                     turnoverItems = Array.Empty<object>()
                 });
 
@@ -829,12 +848,13 @@ namespace ERP.Api.Controllers
 
             var onHandByProduct = await db.InventoryStocks.AsNoTracking()
                 .Where(s => scopedIds.Contains(s.WarehouseId) && s.Quantity > 0)
-                .GroupBy(s => new { s.ProductId, s.Product.Code, s.Product.Name })
+                .GroupBy(s => new { s.ProductId, s.Product.Code, s.Product.Name, UnitName = s.Product.Unit != null ? s.Product.Unit.Name : null })
                 .Select(g => new
                 {
                     g.Key.ProductId,
                     ProductCode = g.Key.Code,
                     ProductName = g.Key.Name,
+                    g.Key.UnitName,
                     CurrentOnHand = g.Sum(x => x.Quantity)
                 })
                 .ToListAsync(cancellationToken);
@@ -853,11 +873,27 @@ namespace ERP.Api.Controllers
                 })
                 .ToListAsync(cancellationToken);
 
+            var periodInByProduct = await db.InventoryTransactions.AsNoTracking()
+                .Where(t => scopedIds.Contains(t.WarehouseId) &&
+                            t.TransactionDate >= since &&
+                            (t.TransactionType == TransactionType.Import ||
+                             t.TransactionType == TransactionType.TransferIn ||
+                             t.TransactionType == TransactionType.AdjustmentIncrease))
+                .GroupBy(t => t.ProductId)
+                .Select(g => new
+                {
+                    ProductId = g.Key,
+                    InboundQty = g.Sum(x => x.Quantity < 0 ? -x.Quantity : x.Quantity)
+                })
+                .ToListAsync(cancellationToken);
+
             var issuedMap = issuedByProduct.ToDictionary(x => x.ProductId, x => x.IssuedQty);
+            var periodInMap = periodInByProduct.ToDictionary(x => x.ProductId, x => x.InboundQty);
             var turnoverItems = onHandByProduct
                 .Select(p =>
                 {
                     var issued = issuedMap.GetValueOrDefault(p.ProductId, 0m);
+                    var periodIn = periodInMap.GetValueOrDefault(p.ProductId, 0m);
                     var ratio = p.CurrentOnHand > 0 ? Math.Round(issued / p.CurrentOnHand, 2) : (issued > 0 ? 1m : 0m);
                     var daysOnHand = issued > 0 ? Math.Round((p.CurrentOnHand / issued) * days, 1) : 999m;
                     var movementClass = issued <= 0
@@ -872,7 +908,9 @@ namespace ERP.Api.Controllers
                         productId = p.ProductId,
                         productCode = p.ProductCode,
                         productName = p.ProductName,
+                        unitName = string.IsNullOrWhiteSpace(p.UnitName) ? "ĐVT" : p.UnitName,
                         currentOnHand = p.CurrentOnHand,
+                        periodInQuantity = periodIn,
                         issuedLastPeriod = issued,
                         turnoverRatio = ratio,
                         daysOnHand,
@@ -884,6 +922,7 @@ namespace ERP.Api.Controllers
                 .Take(30)
                 .ToList();
 
+            var totalPutawayTasks = putawayCompletedCount + putawayOpenCount;
             return Ok(new
             {
                 inboundPostedCount,
@@ -896,6 +935,27 @@ namespace ERP.Api.Controllers
                 stocktakeLineCount,
                 stocktakeAccurateLineCount,
                 stocktakeAccuracyRatePct,
+                inboundOutboundSla = new
+                {
+                    inboundTotalReceipts = inboundPostedCount,
+                    inboundPostedReceipts = inboundPostedCount,
+                    inboundCompletedPutawayTasks = putawayCompletedCount,
+                    inboundTotalPutawayTasks = totalPutawayTasks,
+                    inboundCompletionRatePercent = totalPutawayTasks > 0
+                        ? Math.Round(putawayCompletedCount * 100m / totalPutawayTasks, 1)
+                        : 100m,
+                    outboundTotalShipments = totalTrackedShipments,
+                    outboundDeliveredShipments = deliveredShipments,
+                    outboundDeliverySuccessRatePercent = deliverySuccessRatePct
+                },
+                stocktakeAccuracy = new
+                {
+                    totalStocktakes = stocktakeTotalCount,
+                    approvedStocktakes = stocktakeApprovedCount,
+                    totalLinesCounted = stocktakeLineCount,
+                    accurateLinesCount = stocktakeAccurateLineCount,
+                    lineAccuracyPercent = stocktakeAccuracyRatePct
+                },
                 turnoverItems
             });
         }

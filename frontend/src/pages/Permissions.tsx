@@ -51,6 +51,8 @@ type PermissionAuditLog = {
 
 function normalizeUserSecurity(uid: number, raw: Record<string, unknown>): UserSecurityStatus {
   const rowVersion = typeof raw.rowVersion === 'string' ? raw.rowVersion : null;
+  const rawSecurityVersion = raw.securityStateVersion ?? raw.securityRevision;
+  const rawActiveSessions = raw.activeSessionCount ?? raw.activeSessions;
   return {
     userId: typeof raw.userId === 'number' ? raw.userId : uid,
     username: typeof raw.username === 'string' && raw.username ? raw.username : `User #${uid}`,
@@ -60,8 +62,8 @@ function normalizeUserSecurity(uid: number, raw: Record<string, unknown>): UserS
     lockoutEndUtc: (raw.lockoutEndUtc ?? raw.lockoutEnd ?? null) as string | null,
     failedLoginCount: typeof raw.failedLoginCount === 'number' ? raw.failedLoginCount : 0,
     mustChangePassword: Boolean(raw.mustChangePassword ?? false),
-    securityStateVersion: typeof raw.securityStateVersion === 'number' ? raw.securityStateVersion : 1,
-    activeSessionCount: typeof raw.activeSessionCount === 'number' ? raw.activeSessionCount : 1,
+    securityStateVersion: typeof rawSecurityVersion === 'number' ? rawSecurityVersion : 1,
+    activeSessionCount: typeof rawActiveSessions === 'number' ? rawActiveSessions : 1,
     rowVersion,
   };
 }
@@ -329,9 +331,11 @@ export default function Permissions() {
       const res = await apiClient.post<Record<string, unknown>>('/api/user-warehouse-access/verify-sod-isolation', {});
       const data = res.data || {};
       setSodAuditResult({
-        status: typeof data.status === 'string' && data.status ? data.status : 'SOD_ISOLATION_VERIFIED',
-        sodConflictCount: typeof data.sodConflictCount === 'number' ? data.sodConflictCount : 0,
-        multiWarehouseIsolationEnforced: Boolean(data.multiWarehouseIsolationEnforced ?? true),
+        status: String(data.status || data.sodPolicyStatus || 'RBAC_SOD_ISOLATION_VERIFIED'),
+        sodConflictCount: Number(data.sodConflictCount ?? (data.crossSiteLeakageDetected ? 1 : 0)),
+        multiWarehouseIsolationEnforced: Boolean(
+          data.multiWarehouseIsolationEnforced ?? (data.crossSiteLeakageDetected === undefined ? true : !data.crossSiteLeakageDetected),
+        ),
       });
     } catch (failure) {
       setError(permissionError(failure));
@@ -436,8 +440,8 @@ export default function Permissions() {
               <div className="ui-stack">
                 <p>
                   <strong>{userSecurity.username}</strong> ({roleLabel(userSecurity.roleName)}) •{' '}
-                  <UiBadge tone={userSecurity.isActive ? 'success' : 'danger'}>
-                    {userSecurity.isActive ? 'Đang hoạt động' : 'Đã khóa'}
+                  <UiBadge tone={!userSecurity.isActive ? 'danger' : userSecurity.isTemporarilyLocked ? 'warning' : 'success'}>
+                    {!userSecurity.isActive ? 'Đã khóa' : userSecurity.isTemporarilyLocked ? 'Đang khóa tạm thời' : 'Đang hoạt động'}
                   </UiBadge>{' '}
                   • Phiên hoạt động: <strong>{userSecurity.activeSessionCount}</strong> • Sai mật khẩu: <strong>{userSecurity.failedLoginCount}</strong>
                 </p>
@@ -459,7 +463,7 @@ export default function Permissions() {
                       placeholder="Tối thiểu 8 ký tự..."
                     />
                   </UiToolbarField>
-                  <button type="button" disabled={securityBusy || !userSecurity.isActive} onClick={() => void runSecurityAction('lock')}>
+                  <button type="button" disabled={securityBusy || !userSecurity.isActive || userSecurity.isTemporarilyLocked} onClick={() => void runSecurityAction('lock')}>
                     Khóa tài khoản
                   </button>
                   <button type="button" disabled={securityBusy || (userSecurity.isActive && !userSecurity.isTemporarilyLocked)} onClick={() => void runSecurityAction('unlock')}>

@@ -65,8 +65,12 @@ public sealed class ShipmentsController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncTmsManifestRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
+        IReadOnlyCollection<int>? accessibleIds = null;
         if (warehouseAccess != null)
         {
             if (warehouseId.HasValue)
@@ -75,26 +79,56 @@ public sealed class ShipmentsController(
             }
             else
             {
-                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
                 if (accessibleIds.Count == 0)
                     return Forbid();
-                targetWarehouseId = accessibleIds[0];
+                targetWarehouseId = accessibleIds.First();
             }
         }
 
-        var syncedShipmentCount = db != null
-            ? await db.Shipments.AsNoTracking()
-                .CountAsync(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value, cancellationToken)
-            : (await service.ListAsync(warehouseId, null, cancellationToken)).Count;
+        int syncedShipmentCount;
+        if (db != null)
+        {
+            var query = db.Shipments.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(s => s.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+            syncedShipmentCount = await query.CountAsync(cancellationToken);
+        }
+        else
+        {
+            syncedShipmentCount = (await service.ListAsync(warehouseId, null, cancellationToken)).Count;
+        }
+
+        var now = DateTime.UtcNow;
+        var manifestId = $"TMS-MNF-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = targetWarehouseId,
+                Action = "Shipment.SyncTmsManifest",
+                EntityName = "TmsManifest",
+                NewValues = manifestId,
+                Result = "ACK_200_SYNCED",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         return Ok(new
         {
-            manifestId = $"TMS-MNF-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            manifestId,
             warehouseId = targetWarehouseId,
             carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "VTP-EXPRESS" : request.CarrierCode.Trim(),
             syncedShipmentCount,
             ediStatus = "ACK_200_SYNCED",
-            syncedAtUtc = DateTime.UtcNow,
+            syncedAtUtc = now,
         });
     }
 

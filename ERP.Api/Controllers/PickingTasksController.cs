@@ -89,8 +89,14 @@ public sealed class PickingTasksController(
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
         int mobileReadyTasksCount;
         int shortPickExceptionTasksCount;
@@ -99,6 +105,8 @@ public sealed class PickingTasksController(
             var query = db.PickingTasks.AsNoTracking();
             if (warehouseId.HasValue)
                 query = query.Where(t => t.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(t => accessibleIds.Contains(t.WarehouseId));
 
             mobileReadyTasksCount = await query.CountAsync(
                 x => x.Status == PickingTaskStatus.Open
@@ -139,19 +147,26 @@ public sealed class PickingTasksController(
         });
     }
 
-    public sealed record MobileScanVerifyRequest(string ScanInput, int? WarehouseId = null);
+    public sealed record MobileScanVerifyRequest(string? ScanInput = null, int? WarehouseId = null);
 
     [HttpPost("mobile-scan-verify")]
     [PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> MobileScanVerify(
-        [FromBody] MobileScanVerifyRequest request,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] MobileScanVerifyRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
         var input = (request?.ScanInput ?? string.Empty).Trim();
-        var tasks = await service.ListAsync(request?.WarehouseId, null, cancellationToken);
+        var tasks = await service.ListAsync(warehouseId, null, cancellationToken);
         var match = string.IsNullOrWhiteSpace(input)
             ? null
             : tasks.FirstOrDefault(x =>
@@ -169,8 +184,10 @@ public sealed class PickingTasksController(
                     .ThenInclude(l => l.SourceLocation)
                 .AsQueryable();
 
-            if (request?.WarehouseId.HasValue == true)
-                dbQuery = dbQuery.Where(t => t.WarehouseId == request.WarehouseId.Value);
+            if (warehouseId.HasValue)
+                dbQuery = dbQuery.Where(t => t.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                dbQuery = dbQuery.Where(t => accessibleIds.Contains(t.WarehouseId));
 
             var dbMatch = await dbQuery.FirstOrDefaultAsync(
                 t => t.TaskCode == input
@@ -217,20 +234,54 @@ public sealed class PickingTasksController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncAutomationTelemetryRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
 
-        var activeTasksCount = db != null
-            ? await db.PickingTasks.AsNoTracking()
-                .Where(t => !warehouseId.HasValue || t.WarehouseId == warehouseId.Value)
-                .CountAsync(t => t.Status != PickingTaskStatus.Completed && t.Status != PickingTaskStatus.Cancelled, cancellationToken)
-            : 0;
+        var warehouseId = request?.WarehouseId;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        var activeTasksCount = 0;
+        if (db != null)
+        {
+            var query = db.PickingTasks.AsNoTracking()
+                .Where(t => t.Status != PickingTaskStatus.Completed && t.Status != PickingTaskStatus.Cancelled);
+            if (warehouseId.HasValue)
+                query = query.Where(t => t.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(t => accessibleIds.Contains(t.WarehouseId));
+            activeTasksCount = await query.CountAsync(cancellationToken);
+        }
 
         var now = DateTime.UtcNow;
+        var telemetrySyncId = $"WCS-IOT-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                Action = "Picking.SyncAutomationTelemetry",
+                EntityName = "AutomationTelemetry",
+                NewValues = telemetrySyncId,
+                Result = "AMR_ASRS_CONVEYOR_SYNCHRONIZED",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         return Ok(new
         {
-            telemetrySyncId = $"WCS-IOT-{now:yyyyMMdd-HHmm}",
+            telemetrySyncId,
             warehouseId,
             activePickingTasksCount = activeTasksCount,
             wcsRoboticsState = "AMR_ASRS_CONVEYOR_SYNCHRONIZED",

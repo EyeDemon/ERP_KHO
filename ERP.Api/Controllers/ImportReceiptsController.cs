@@ -176,26 +176,60 @@ namespace ERP.Api.Controllers
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RmaIntakeCheckRequest? request = null,
             CancellationToken cancellationToken = default)
         {
-            var warehouseId = request?.WarehouseId;
-            if (warehouseId.HasValue && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
 
-            var quarantineBucketCount = _db != null
-                ? await _db.InventoryStocks.AsNoTracking()
-                    .Where(s => (!warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
-                                && s.Status == ERP.Domain.Enums.InventoryStatus.Quarantine)
-                    .CountAsync(cancellationToken)
-                : 0;
+            var warehouseId = request?.WarehouseId;
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAccess != null)
+            {
+                if (warehouseId.HasValue)
+                    await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                else
+                    accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            }
+
+            var quarantineBucketCount = 0;
+            if (_db != null)
+            {
+                var query = _db.InventoryStocks.AsNoTracking()
+                    .Where(s => s.Status == ERP.Domain.Enums.InventoryStatus.Quarantine);
+                if (warehouseId.HasValue)
+                    query = query.Where(s => s.WarehouseId == warehouseId.Value);
+                else if (accessibleIds != null)
+                    query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+                quarantineBucketCount = await query.CountAsync(cancellationToken);
+            }
 
             var now = DateTime.UtcNow;
+            var rmaInspectionCode = $"RMA-INSP-{now:yyyyMMdd-HHmm}";
             var rmaReferenceCode = string.IsNullOrWhiteSpace(request?.RmaReferenceCode)
                 ? "RMA-AUTO"
                 : request.RmaReferenceCode.Trim();
 
+            if (_db != null)
+            {
+                var actorUserId = int.TryParse(
+                    User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                    out var uid) ? uid : (int?)null;
+                _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    UserId = actorUserId,
+                    WarehouseId = warehouseId,
+                    Action = "ImportReceipt.RmaIntakeCheck",
+                    EntityName = "RmaInspection",
+                    NewValues = rmaInspectionCode,
+                    Reason = request?.ReasonCode,
+                    Result = "QUARANTINE",
+                    Timestamp = now
+                });
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
             return Ok(new
             {
                 rmaCode = $"RMA-{now:yyyyMMdd}-01",
-                rmaInspectionCode = $"RMA-INSP-{now:yyyyMMdd-HHmm}",
+                rmaInspectionCode,
                 rmaReferenceCode,
                 returnReference = request?.ReturnReference ?? string.Empty,
                 reasonCode = request?.ReasonCode ?? string.Empty,
@@ -214,21 +248,54 @@ namespace ERP.Api.Controllers
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteRtvRefurbishRequest? request = null,
             CancellationToken cancellationToken = default)
         {
-            var warehouseId = request?.WarehouseId;
-            if (warehouseId.HasValue && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
 
-            var nonAvailableBucketsCount = _db != null
-                ? await _db.InventoryStocks.AsNoTracking()
-                    .Where(s => (!warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
-                                && s.Status != ERP.Domain.Enums.InventoryStatus.Available)
-                    .CountAsync(cancellationToken)
-                : 0;
+            var warehouseId = request?.WarehouseId;
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAccess != null)
+            {
+                if (warehouseId.HasValue)
+                    await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                else
+                    accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            }
+
+            var nonAvailableBucketsCount = 0;
+            if (_db != null)
+            {
+                var query = _db.InventoryStocks.AsNoTracking()
+                    .Where(s => s.Status != ERP.Domain.Enums.InventoryStatus.Available);
+                if (warehouseId.HasValue)
+                    query = query.Where(s => s.WarehouseId == warehouseId.Value);
+                else if (accessibleIds != null)
+                    query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+                nonAvailableBucketsCount = await query.CountAsync(cancellationToken);
+            }
 
             var now = DateTime.UtcNow;
+            var dispositionCode = $"DISP-RTV-{now:yyyyMMdd-HHmm}";
+            if (_db != null)
+            {
+                var actorUserId = int.TryParse(
+                    User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                    out var uid) ? uid : (int?)null;
+                _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    UserId = actorUserId,
+                    WarehouseId = warehouseId,
+                    Action = "ImportReceipt.ExecuteRtvRefurbish",
+                    EntityName = "RtvRefurbish",
+                    NewValues = dispositionCode,
+                    Result = "Success",
+                    Timestamp = now
+                });
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
             return Ok(new
             {
-                dispositionCode = $"DISP-RTV-{now:yyyyMMdd-HHmm}",
+                dispositionCode,
                 warehouseId,
                 nonAvailableBucketsCount,
                 dispositionType = string.IsNullOrWhiteSpace(request?.DispositionType) ? "REFURBISH_AND_RTV_SPLIT" : request.DispositionType,

@@ -296,10 +296,15 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       }
       if (path === '/api/user-warehouse-access/verify-sod-isolation') {
         return ok(config, {
-          status: 'SOD_ISOLATION_VERIFIED',
-          sodPolicyStatus: 'STRICT_ISOLATION_VERIFIED',
+          auditId: 'RBAC-SOD-DEMO-01',
+          warehouseId: 1,
+          activeMemberships: 4,
+          crossSiteLeakageDetected: false,
+          sodPolicyStatus: 'ZERO_PRIVILEGE_ESCALATION_VERIFIED',
+          status: 'ZERO_PRIVILEGE_ESCALATION_VERIFIED',
           sodConflictCount: 0,
           multiWarehouseIsolationEnforced: true,
+          auditedAtUtc: '2026-10-17T08:00:00Z',
         });
       }
     }
@@ -697,20 +702,60 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
 
     if (path === '/api/purchase-orders') {
       const status = params.get('status');
-      return ok(config, demoPurchaseOrders.filter(item => !status || item.status === status));
+      return ok(config, demoPurchaseOrders
+        .filter(item => !status || item.status === status)
+        .map(item => ({
+          ...item,
+          lines: (item.lines ?? []).map(line => ({
+            ...line,
+            lineNumber: line.lineNo,
+            unitName: line.operationUnitCode,
+            receivedQuantity: item.status === 'PartiallyReceived' ? Math.floor(line.orderedQuantity / 2) : 0,
+            remainingQuantity: item.status === 'PartiallyReceived' ? line.orderedQuantity - Math.floor(line.orderedQuantity / 2) : line.orderedQuantity,
+          })),
+        })));
     }
     if (/^\/api\/purchase-orders\/\d+$/.test(path)) {
       const item = demoPurchaseOrders.find(order => order.id === findNumericId(path));
-      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy đơn mua demo.');
+      return item ? ok(config, {
+        ...item,
+        lines: (item.lines ?? []).map(line => ({
+          ...line,
+          lineNumber: line.lineNo,
+          unitName: line.operationUnitCode,
+          receivedQuantity: item.status === 'PartiallyReceived' ? Math.floor(line.orderedQuantity / 2) : 0,
+          remainingQuantity: item.status === 'PartiallyReceived' ? line.orderedQuantity - Math.floor(line.orderedQuantity / 2) : line.orderedQuantity,
+        })),
+      }) : fail(config, 404, 'Không tìm thấy đơn mua demo.');
     }
 
     if (path === '/api/asns') {
       const status = params.get('status');
-      return ok(config, demoAsns.filter(item => !status || item.status === status));
+      return ok(config, demoAsns
+        .filter(item => !status || item.status === status)
+        .map(item => ({
+          ...item,
+          lines: (item.lines ?? []).map(line => ({
+            ...line,
+            lineNumber: line.lineNo,
+            unitName: line.operationUnitCode,
+            receivedQuantity: 0,
+            remainingQuantity: line.expectedQuantity,
+          })),
+        })));
     }
     if (/^\/api\/asns\/\d+$/.test(path)) {
       const item = demoAsns.find(asn => asn.id === findNumericId(path));
-      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy ASN demo.');
+      return item ? ok(config, {
+        ...item,
+        lines: (item.lines ?? []).map(line => ({
+          ...line,
+          lineNumber: line.lineNo,
+          unitName: line.operationUnitCode,
+          receivedQuantity: 0,
+          remainingQuantity: line.expectedQuantity,
+        })),
+      }) : fail(config, 404, 'Không tìm thấy ASN demo.');
     }
 
     if (path === '/api/importreceipts') return ok(config, demoImportReceipts);
@@ -927,25 +972,45 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     }
 
     if (path === '/api/reports/expiry-aging') {
-      return ok(config, demoInventoryBuckets.map(item => ({
+      const items = demoInventoryBuckets.map(item => ({
+        inventoryStockId: item.inventoryStockId,
         bucketId: item.inventoryStockId,
         warehouseId: item.warehouseId,
         warehouseName: item.warehouseName,
+        locationId: item.locationId,
         locationCode: item.locationCode,
         productId: item.productId,
         productCode: item.productCode,
         productName: item.productName,
         unitName: 'EA',
+        status: item.status,
         inventoryStatus: item.status,
+        lotId: item.lotId,
         lotNumber: item.lotNumber,
+        manufactureDate: item.manufactureDate,
         expiryDate: item.expiryDate,
         daysToExpiry: item.expiryDate ? 45 : null,
-        expiryStatus: item.expiryDate ? 'VALID' : 'NO_EXPIRY',
+        expiryBucket: item.expiryDate ? '31_TO_90_DAYS' : 'NO_EXPIRY',
+        expiryStatus: item.expiryDate ? 'GOOD' : 'NO_EXPIRY',
+        receivedAt: item.lastUpdated,
+        ageDays: 14,
         ageInDays: 14,
         agingBucket: '0_30_DAYS',
+        isSlowMoving: false,
+        onHandQuantity: item.onHandQuantity,
         quantity: item.onHandQuantity,
+        reservedQuantity: item.reservedQuantity,
         availableQuantity: item.availableQuantity,
-      })));
+      }));
+      const summary = {
+        expiredLotsCount: 0,
+        expiringIn7DaysCount: 0,
+        expiringIn30DaysCount: 0,
+        expiringIn90DaysCount: items.filter(x => x.expiryDate !== null).length,
+        slowMovingLotsCount: 0,
+        totalTrackedLots: items.filter(x => x.lotNumber !== null).length,
+      };
+      return ok(config, Object.assign(items, { summary, items }));
     }
     if (path === '/api/reports/analytics-summary') {
       return ok(config, {
@@ -987,6 +1052,15 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
         completedTodayCount: 12,
         heatmapHotspotsCount: 2,
         biExportStatus: 'READY',
+        completedPutawaysCount: 5,
+        completedPicksCount: 4,
+        completedPacksCount: 3,
+        totalMovesCount: 12,
+        stockSnapshotRowCount: demoInventoryBuckets.length,
+        ledgerWatermarkId: demoInventoryTransactions.length,
+        auditWatermarkId: 108,
+        readyForBiExport: true,
+        generatedAtUtc: '2026-10-17T08:00:00Z',
       });
     }
     if (path === '/api/reports/operational-dashboard') {

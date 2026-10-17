@@ -13,7 +13,20 @@ public sealed class AccountAdminService(ErpKhoDbContext context, ICurrentUser cu
         await AccountSecurityState.AuthorizeAsync(context, currentUser, cancellationToken);
         var user = await AccountSecurityState.ReadAsync(context, userId, cancellationToken);
         var now = DateTime.UtcNow;
-        return new(user.IsActive, user.LockoutEnd > now, user.LockoutEnd, AccountSecurityState.Token(user, now));
+        var activeSessions = await context.UserSessions
+            .AsNoTracking()
+            .CountAsync(s => s.UserId == userId && s.RevokedAt == null && s.ExpiresAt > now, cancellationToken);
+        return new(
+            user.IsActive,
+            user.LockoutEnd > now,
+            user.LockoutEnd,
+            AccountSecurityState.Token(user, now),
+            user.Id,
+            user.Username,
+            user.Role?.RoleName,
+            user.FailedLoginCount,
+            user.SecurityRevision,
+            activeSessions);
     }
 
     public async Task UnlockAsync(int userId, string? rowVersion, CancellationToken cancellationToken = default)

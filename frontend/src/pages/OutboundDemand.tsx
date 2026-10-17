@@ -196,7 +196,7 @@ export default function OutboundDemand(){
     setError('');
     try{
       const res=await apiClient.post('/api/sales-orders/expedite-backorder',{
-        warehouseId:orders[0]?.warehouseId??1,
+        warehouseId:orders[0]?.warehouseId??undefined,
         orderNumber:backorders[0]?.orderCode??orders[0]?.orderCode??'SO-PRIORITY-QUEUE',
       });
       setExpediteResult({
@@ -213,7 +213,7 @@ export default function OutboundDemand(){
     setError('');
     try{
       const res=await apiClient.post('/api/sales-orders/evaluate-atp-routing',{
-        warehouseId:orders[0]?.warehouseId??1,
+        warehouseId:orders[0]?.warehouseId??undefined,
       });
       setAtpRoutingResult({
         evaluationId:res?.data?.evaluationId||`ATP-ROUTE-${new Date().toISOString().slice(0,10).replace(/-/g,'')}`,

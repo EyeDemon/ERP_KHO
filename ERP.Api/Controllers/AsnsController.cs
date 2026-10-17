@@ -41,6 +41,9 @@ public sealed class AsnsController(
         [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] PreAllocateAsnStagingRequest? request = null,
         CancellationToken ct = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
         if (warehouseAccess != null)
@@ -66,14 +69,34 @@ public sealed class AsnsController(
                 .FirstOrDefaultAsync(ct) ?? "STAGE-IN-01"
             : "STAGE-IN-01";
 
+        var now = DateTime.UtcNow;
+        var stagingReservationId = $"ASN-STG-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = targetWarehouseId,
+                Action = "Asn.PreAllocateStaging",
+                EntityName = "AsnStaging",
+                NewValues = stagingReservationId,
+                Result = "STAGE_PRE_ALLOCATED",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
         return Ok(new
         {
-            stagingReservationId=$"ASN-STG-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            stagingReservationId,
             warehouseId=targetWarehouseId,
             asnNumber=string.IsNullOrWhiteSpace(request?.AsnNumber)?"ASN-NEXT-ARRIVAL":request.AsnNumber.Trim(),
             stagingLaneCode=stagingLocationCode,
             dockPreAssigned=true,
-            reservedAtUtc=DateTime.UtcNow
+            reservedAtUtc=now
         });
     }
 

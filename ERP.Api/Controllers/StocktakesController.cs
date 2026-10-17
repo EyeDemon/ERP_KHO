@@ -114,7 +114,7 @@ namespace ERP.Api.Controllers
         }
 
         public sealed record CreateAdjustmentProposalRequest(
-            int WarehouseId,
+            int? WarehouseId = null,
             string? ProductCode = null,
             decimal DeltaQuantity = 0m,
             string ReasonCode = "COUNT_VARIANCE",
@@ -124,20 +124,34 @@ namespace ERP.Api.Controllers
         [HttpPost("adjustment-proposals")]
         [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
         public async Task<IActionResult> CreateAdjustmentProposal(
-            [FromBody] CreateAdjustmentProposalRequest request,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CreateAdjustmentProposalRequest? request = null,
             CancellationToken cancellationToken = default)
         {
             if (User?.IsInRole(AppRoles.Viewer) == true)
                 return Forbid();
 
+            var resolvedWarehouseId = request?.WarehouseId;
             if (_warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId, cancellationToken);
+            {
+                if (resolvedWarehouseId.HasValue)
+                {
+                    await _warehouseAccess.EnsureWarehouseAccessAsync(resolvedWarehouseId.Value, cancellationToken);
+                }
+                else
+                {
+                    var accessible = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                    if (accessible.Count == 0)
+                        return Forbid();
+                    resolvedWarehouseId = accessible.First();
+                }
+            }
 
-            var reasonCode = string.IsNullOrWhiteSpace(request.ReasonCode)
+            var reasonCode = string.IsNullOrWhiteSpace(request?.ReasonCode)
                 ? "COUNT_VARIANCE"
                 : request.ReasonCode.Trim().ToUpperInvariant();
-            var productCode = request.ProductCode?.Trim() ?? string.Empty;
-            var resolvedProductId = request.ProductId;
+            var productCode = request?.ProductCode?.Trim() ?? string.Empty;
+            var resolvedProductId = request?.ProductId;
+            var deltaQuantity = request?.DeltaQuantity ?? 0m;
 
             if (_db != null)
             {
@@ -172,11 +186,11 @@ namespace ERP.Api.Controllers
                     UserId = userId,
                     EntityName = "StocktakeAdjustmentProposal",
                     EntityId = resolvedProductId,
-                    WarehouseId = request.WarehouseId,
+                    WarehouseId = resolvedWarehouseId,
                     Action = reasonCode,
-                    OldValues = request.DeltaQuantity.ToString(CultureInfo.InvariantCulture),
+                    OldValues = deltaQuantity.ToString(CultureInfo.InvariantCulture),
                     NewValues = proposalCode,
-                    Reason = request.Note?.Trim() ?? reasonCode,
+                    Reason = request?.Note?.Trim() ?? reasonCode,
                     CorrelationId = string.IsNullOrWhiteSpace(productCode) ? null : productCode,
                     Result = "PENDING_SOD_APPROVAL",
                     Timestamp = now
@@ -188,10 +202,10 @@ namespace ERP.Api.Controllers
             return Ok(new
             {
                 proposalCode,
-                warehouseId = request.WarehouseId,
+                warehouseId = resolvedWarehouseId,
                 productId = resolvedProductId,
                 productCode,
-                deltaQuantity = request.DeltaQuantity,
+                deltaQuantity,
                 reasonCode,
                 status = "PENDING_SOD_APPROVAL",
                 createdAtUtc = now

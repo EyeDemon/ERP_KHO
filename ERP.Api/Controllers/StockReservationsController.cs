@@ -53,14 +53,22 @@ public class StockReservationsController(
     [HttpGet("commitment-summary")]
     public async Task<IActionResult> GetCommitmentSummary([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
     {
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
         if (db != null)
         {
             var query = db.StockReservations.AsNoTracking();
             if (warehouseId.HasValue)
                 query = query.Where(r => r.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(r => accessibleIds.Contains(r.WarehouseId));
 
             var activeThresholdUtc = DateTime.UtcNow.AddHours(24);
             var totalReservations = await query.CountAsync(cancellationToken);
@@ -119,20 +127,55 @@ public class StockReservationsController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SweepExpiredReservationsRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
         var now = DateTime.UtcNow;
-        var expiredCandidateCount = db != null
-            ? await db.StockReservations.AsNoTracking()
-                .Where(r => !warehouseId.HasValue || r.WarehouseId == warehouseId.Value)
-                .CountAsync(r => r.Status == StockReservationStatus.Active && r.SourceType == "Manual" && r.ExpiresAt <= now, cancellationToken)
-            : 0;
+        var expiredCandidateCount = 0;
+        if (db != null)
+        {
+            var query = db.StockReservations.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(r => r.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(r => accessibleIds.Contains(r.WarehouseId));
+            expiredCandidateCount = await query.CountAsync(
+                r => r.Status == StockReservationStatus.Active && r.SourceType == "Manual" && r.ExpiresAt <= now,
+                cancellationToken);
+        }
+
+        var sweepId = $"RSV-SWP-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                Action = "StockReservation.SweepExpiredPreview",
+                EntityName = "StockReservationSweep",
+                NewValues = sweepId,
+                Result = "COMMITMENT_TTL_VERIFIED",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         return Ok(new
         {
-            sweepId = $"RSV-SWP-{now:yyyyMMdd-HHmm}",
+            sweepId,
             warehouseId,
             expiredCandidateCount,
             status = "COMMITMENT_TTL_VERIFIED",

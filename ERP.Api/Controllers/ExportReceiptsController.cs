@@ -160,14 +160,25 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var warehouseId = request?.WarehouseId;
-            if (warehouseId.HasValue && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAccess != null)
+            {
+                if (warehouseId.HasValue)
+                    await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                else
+                    accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            }
 
-            var checkedExportReceiptsCount = _db != null
-                ? await _db.ExportReceipts.AsNoTracking()
-                    .Where(r => !warehouseId.HasValue || r.WarehouseId == warehouseId.Value)
-                    .CountAsync(cancellationToken)
-                : 0;
+            var checkedExportReceiptsCount = 0;
+            if (_db != null)
+            {
+                var query = _db.ExportReceipts.AsNoTracking();
+                if (warehouseId.HasValue)
+                    query = query.Where(r => r.WarehouseId == warehouseId.Value);
+                else if (accessibleIds != null)
+                    query = query.Where(r => accessibleIds.Contains(r.WarehouseId));
+                checkedExportReceiptsCount = await query.CountAsync(cancellationToken);
+            }
 
             return Ok(new
             {

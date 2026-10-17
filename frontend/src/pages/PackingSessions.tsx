@@ -118,7 +118,7 @@ export default function PackingSessions(){
   const executeKittingVas=async()=>{
     setError('');
     try{
-      const res=await apiClient.post('/api/packing-sessions/execute-kitting-vas',{warehouseId:selected?.warehouseId??1,kitSkuCode:'KIT-BUNDLE-STD',vasServiceType:'LABELING_SHRINKWRAP_BUNDLE'});
+      const res=await apiClient.post('/api/packing-sessions/execute-kitting-vas',{warehouseId:selected?.warehouseId??sessions[0]?.warehouseId??undefined,kitSkuCode:'KIT-BUNDLE-STD',vasServiceType:'LABELING_SHRINKWRAP_BUNDLE'});
       const data=res?.data as {workOrderId?:string;status?:string;vasServiceType?:string}|undefined;
       setKittingVasResult(`${data?.workOrderId??'KIT-VAS-OK'} • ${data?.status??'KITTING_VAS_READY'} (${data?.vasServiceType??'LABELING_SHRINKWRAP_BUNDLE'})`);
     }catch(e){

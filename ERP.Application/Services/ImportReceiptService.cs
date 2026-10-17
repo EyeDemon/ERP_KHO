@@ -518,10 +518,11 @@ namespace ERP.Application.Services
             var stock = locationId.HasValue ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, receipt.WarehouseId, status, locationId.Value) : status == InventoryStatus.Available
                 ? await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId)
                 : await _inventoryStockRepository.GetByProductWarehouseAndStatusAsync(detail.ProductId, receipt.WarehouseId, status);
+            var effectiveLocationId = locationId ?? stock?.LocationId;
             if (stock is null)
-                await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Status = status, LocationId = locationId, Quantity = quantity, LastUpdated = DateTime.UtcNow });
+                await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Status = status, LocationId = effectiveLocationId, Quantity = quantity, LastUpdated = DateTime.UtcNow });
             else { stock.Quantity += quantity; stock.LastUpdated = DateTime.UtcNow; await _inventoryStockRepository.UpdateAsync(stock); }
-            await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, LocationId = locationId, InventoryStatus = status, TransactionType = TransactionType.Import, Quantity = quantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = userId, Note = detail.Note });
+            await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, LocationId = effectiveLocationId, InventoryStatus = status, TransactionType = TransactionType.Import, Quantity = quantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = userId, Note = detail.Note });
         }
 
         private static decimal ConvertToBase(decimal quantity, decimal factor, ImportReceiptDetail detail)

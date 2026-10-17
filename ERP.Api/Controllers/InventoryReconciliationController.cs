@@ -156,6 +156,7 @@ namespace ERP.Api.Controllers
         public sealed record VerifySiteReadinessRequest(int? WarehouseId = null);
 
         [HttpPost("verify-site-readiness")]
+        [HttpPost("export-gl-journal")]
         [HttpPost("export-erp-gl-journal")]
         [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
         public async Task<IActionResult> VerifySiteReadiness(

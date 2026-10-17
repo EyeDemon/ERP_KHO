@@ -22,7 +22,8 @@ public sealed record ResetPasswordAdminRequest(
 public sealed class AccountSecurityController(
     IAccountAdminService service,
     IUserSessionService sessionService,
-    ErpKhoDbContext db = null!) : ControllerBase
+    ErpKhoDbContext db = null!,
+    IPasswordHasherService? passwordHasher = null) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get(int userId, CancellationToken cancellationToken) =>
@@ -38,20 +39,41 @@ public sealed class AccountSecurityController(
         if (sessionService is not null && !string.IsNullOrWhiteSpace(request?.RowVersion))
             await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
 
-        var lockoutEnd = DateTime.UtcNow.AddMinutes(30);
+        var now = DateTime.UtcNow;
+        var lockoutEnd = now.AddMinutes(30);
         if (db is not null)
         {
             var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+            if (user is null && await db.Users.AnyAsync(cancellationToken))
+                throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
+
             if (user is not null)
+            {
                 user.LockoutEnd = lockoutEnd;
+                user.SecurityRevision++;
+            }
+
+            var activeSessions = await db.UserSessions
+                .Where(s => s.UserId == userId && s.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var session in activeSessions)
+            {
+                session.RevokedAt = now;
+                session.RevokeReason = "AdminLock";
+            }
+
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
 
             db.AuditLogs.Add(new AuditLog
             {
-                Action = "User.Locked",
+                UserId = actorUserId,
+                Action = "Authentication.AccountLocked",
                 EntityName = "User",
                 EntityId = userId,
                 Result = "Success",
-                Timestamp = DateTime.UtcNow
+                Timestamp = now
             });
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -87,16 +109,51 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ResetPasswordAdminRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(request?.TemporaryPassword) || request.TemporaryPassword.Trim().Length < 8)
+            throw new ERP.Application.Exceptions.BusinessRuleException("Mật khẩu tạm thời phải có tối thiểu 8 ký tự.");
+
+        if (sessionService is not null && !string.IsNullOrWhiteSpace(request.RowVersion))
+            await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
+
+        var now = DateTime.UtcNow;
         if (db is not null)
         {
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+            if (user is null && await db.Users.AnyAsync(cancellationToken))
+                throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
+
+            if (user is not null)
+            {
+                var trimmedPassword = request.TemporaryPassword.Trim();
+                user.PasswordHash = (passwordHasher ?? new ERP.Infrastructure.Services.PasswordHasherService()).HashPassword(trimmedPassword);
+                user.FailedLoginCount = 0;
+                user.LastFailedLoginAt = null;
+                user.LockoutEnd = null;
+                user.SecurityRevision++;
+            }
+
+            var activeSessions = await db.UserSessions
+                .Where(s => s.UserId == userId && s.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var session in activeSessions)
+            {
+                session.RevokedAt = now;
+                session.RevokeReason = "PasswordReset";
+            }
+
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+
             db.AuditLogs.Add(new AuditLog
             {
+                UserId = actorUserId,
                 Action = "User.PasswordReset",
                 EntityName = "User",
                 EntityId = userId,
-                Reason = request?.Reason,
+                Reason = request.Reason,
                 Result = "Success",
-                Timestamp = DateTime.UtcNow
+                Timestamp = now
             });
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -105,7 +162,7 @@ public sealed class AccountSecurityController(
         {
             userId,
             status = "PASSWORD_RESET_COMPLETED",
-            resetAtUtc = DateTime.UtcNow
+            resetAtUtc = now
         });
     }
 }

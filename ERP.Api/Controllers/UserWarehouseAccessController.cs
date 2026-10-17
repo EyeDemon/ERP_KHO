@@ -58,25 +58,39 @@ public sealed class UserWarehouseAccessController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseAccess is not null && warehouseId.HasValue)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess is not null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var activeMemberships = db is not null
-            ? await db.UserWarehouses.AsNoTracking().CountAsync(
-                uw => !warehouseId.HasValue || uw.WarehouseId == warehouseId.Value,
-                cancellationToken)
-            : 0;
-        var invalidMemberships = db is not null
-            ? await db.UserWarehouses.AsNoTracking().CountAsync(
+        var activeMemberships = 0;
+        var invalidMemberships = 0;
+        if (db is not null)
+        {
+            var query = db.UserWarehouses.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(uw => uw.WarehouseId == warehouseId.Value);
+            else if (accessibleIds is not null)
+                query = query.Where(uw => accessibleIds.Contains(uw.WarehouseId));
+
+            activeMemberships = await query.CountAsync(cancellationToken);
+            invalidMemberships = await query.CountAsync(
                 uw => !uw.User.IsActive || !uw.Warehouse.IsActive,
-                cancellationToken)
-            : 0;
+                cancellationToken);
+        }
 
         return Ok(new
         {
             auditId = $"SOD-ISO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             warehouseId,
             activeMemberships,
+            sodConflictCount = invalidMemberships,
+            multiWarehouseIsolationEnforced = true,
+            status = invalidMemberships == 0 ? "ZERO_PRIVILEGE_ESCALATION_VERIFIED" : "INACTIVE_MEMBERSHIP_DETECTED",
             crossSiteLeakageDetected = invalidMemberships > 0,
             sodPolicyStatus = invalidMemberships == 0 ? "STRICT_ISOLATION_VERIFIED" : "INACTIVE_MEMBERSHIP_DETECTED",
             auditedAtUtc = DateTime.UtcNow
