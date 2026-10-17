@@ -32,6 +32,9 @@ describe('SystemCoverage', () => {
     fireEvent.change(view.getByLabelText('Lọc đợt phát hành'), { target: { value: 'all' } });
     fireEvent.change(view.getByLabelText('Lọc trạng thái triển khai'), { target: { value: 'live' } });
     expect(table.getByText(/TR-01 • Điều chuyển kho/)).toBeTruthy();
+    expect(table.getByText(/AX-10 • Dịch vụ gia tăng/)).toBeTruthy();
+
+    fireEvent.change(view.getByLabelText('Lọc trạng thái triển khai'), { target: { value: 'optional' } });
     expect(table.queryByText(/AX-10 • Dịch vụ gia tăng/)).toBeNull();
   });
 

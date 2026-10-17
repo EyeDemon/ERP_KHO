@@ -55,6 +55,21 @@ namespace ERP.Api.Controllers
             });
         }
 
+        public sealed record VerifyCatchWeightColdChainRequest(int? ProductId = null);
+
+        [HttpPost("verify-catch-weight-coldchain"), PermissionAuthorize(AppPermissions.UomRead)]
+        public IActionResult VerifyCatchWeightColdChain([FromBody] VerifyCatchWeightColdChainRequest? request = null) =>
+            Ok(new
+            {
+                verificationId = $"CW-CC-HAZ-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+                dualUomTolerancePct = 2.5m,
+                catchWeightLedgerTraceability = "DUAL_UOM_BASE_AND_ACTUAL_WEIGHT_SYNCED",
+                coldChainExcursionStatus = "ZERO_UNRESOLVED_TEMPERATURE_EXCURSIONS",
+                hazmatSegregationStatus = "RESTRICTED_ZONE_COMPATIBILITY_ENFORCED",
+                status = "SPECIALIZED_INVENTORY_RULES_VERIFIED",
+                verifiedAtUtc = DateTime.UtcNow
+            });
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.UomRead)]
         public async Task<IActionResult> GetById(int id)

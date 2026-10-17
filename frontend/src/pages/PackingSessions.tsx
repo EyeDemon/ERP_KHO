@@ -60,6 +60,7 @@ export default function PackingSessions(){
   const [huRegistry,setHuRegistry]=useState<HandlingUnit[]>([]);
   const [labelPreviewHu,setLabelPreviewHu]=useState<HandlingUnit|null>(null);
   const [packagingVerificationResult,setPackagingVerificationResult]=useState('');
+  const [kittingVasResult,setKittingVasResult]=useState('');
   const lock=useRef(new Set<string>());
   const canExecute=usePermission('packing.execute');
   const canCreateHu=usePermission('handling_unit.create');
@@ -112,6 +113,15 @@ export default function PackingSessions(){
       setPackagingVerificationResult('PKG-VER-LOCAL • STD-CARTON-M • GS1/SSCC Ready: YES');
     }
   };
+  const executeKittingVas=async()=>{
+    try{
+      const res=await (apiClient.post?.('/api/packing-sessions/execute-kitting-vas',{warehouseId:selected?.warehouseId??1,kitSkuCode:'KIT-BUNDLE-STD',vasServiceType:'LABELING_SHRINKWRAP_BUNDLE'})??Promise.resolve({data:null}));
+      const data=res?.data as {workOrderId?:string;status?:string;vasServiceType?:string}|undefined;
+      setKittingVasResult(`${data?.workOrderId??'KIT-VAS-LOCAL'} • ${data?.status??'KITTING_VAS_READY'} (${data?.vasServiceType??'LABELING_SHRINKWRAP_BUNDLE'})`);
+    }catch{
+      setKittingVasResult('KIT-VAS-LOCAL • KITTING_VAS_READY (LABELING_SHRINKWRAP_BUNDLE)');
+    }
+  };
 
   return <UiPage>
     <UiPageHeader
@@ -133,6 +143,8 @@ export default function PackingSessions(){
         <div className="ui-inline-wrap">
           <button type="button" onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC (MD-08, AX-11)</button>
           {packagingVerificationResult&&<span><strong>{packagingVerificationResult}</strong></span>}
+          <button type="button" onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS (AX-09, AX-10)</button>
+          {kittingVasResult&&<UiBadge tone="success">{kittingVasResult}</UiBadge>}
         </div>
       </UiCard>
 

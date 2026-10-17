@@ -23,8 +23,8 @@ describe('SystemBlueprint', () => {
   it('separates mock coverage from production maturity in the visible labels', () => {
     const view = render(<MemoryRouter><SystemBlueprint /></MemoryRouter>);
     expect(view.getByText('Chức năng có bản xem trước mô phỏng')).toBeTruthy();
-    expect(view.getAllByText('Có mô phỏng tương tác • hệ thống thật chưa triển khai').length).toBeGreaterThan(0);
-    expect(view.getAllByText('Có mô phỏng nâng cao • bật khi cần').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Có mô phỏng + hệ thống thật đã hoàn thiện phạm vi hiện tại').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Hệ thống thật hoàn thiện phạm vi hiện tại').length).toBeGreaterThan(0);
   });
 
   it('filters capability cards by text and implementation status', () => {
@@ -38,6 +38,9 @@ describe('SystemBlueprint', () => {
     const statusSelect = view.getAllByRole('combobox')[0];
     fireEvent.change(statusSelect, { target: { value: 'live' } });
     expect(view.getByText('Sản phẩm / SKU')).toBeTruthy();
+    expect(view.getByText('Dịch vụ gia tăng (VAS)')).toBeTruthy();
+
+    fireEvent.change(statusSelect, { target: { value: 'optional' } });
     expect(view.queryByText('Dịch vụ gia tăng (VAS)')).toBeNull();
   });
 

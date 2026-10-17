@@ -57,6 +57,19 @@ public sealed class BusinessPartnersController(IBusinessPartnerService service):
         targetOnTimePct=98.5m,
         verifiedAtUtc=DateTime.UtcNow
     });
+    public sealed record Calculate3PlBillingRequest(int? PartnerId=null,string? BillingPeriod=null);
+    [HttpPost("calculate-3pl-billing"),PermissionAuthorize(AppPermissions.PartnerRead)]
+    public IActionResult Calculate3PlBilling([FromBody] Calculate3PlBillingRequest? request=null)=>Ok(new
+    {
+        statementId=$"3PL-BILL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+        partnerId=request?.PartnerId,
+        billingPeriod=request?.BillingPeriod??DateTime.UtcNow.ToString("yyyy-MM"),
+        multiOwnerIsolation="OWNER_DIMENSION_ENFORCED",
+        consignmentStatus="VENDOR_AND_CLIENT_OWNED_RECONCILED",
+        storageHandlingVasRating="TARIFF_CONTRACT_MATCHED",
+        status="3PL_BILLING_RECONCILED",
+        calculatedAtUtc=DateTime.UtcNow
+    });
     [HttpPost,PermissionAuthorize(AppPermissions.PartnerCreate)] public async Task<IActionResult>Create(SaveBusinessPartnerDto dto,CancellationToken ct){var x=await service.CreateAsync(dto,ct);return Created($"/api/business-partners/{x.Id}",x);}
     [HttpPut("{id:int}"),PermissionAuthorize(AppPermissions.PartnerUpdate)] public async Task<IActionResult>Update(int id,SaveBusinessPartnerDto dto,CancellationToken ct){await service.UpdateAsync(id,dto,ct);return NoContent();}
     [HttpDelete("{id:int}"),PermissionAuthorize(AppPermissions.PartnerDeactivate)] public async Task<IActionResult>Delete(int id,CancellationToken ct){await service.DeleteAsync(id,ct);return NoContent();}

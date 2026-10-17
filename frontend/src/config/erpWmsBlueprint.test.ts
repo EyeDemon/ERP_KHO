@@ -119,8 +119,8 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('IN-02')?.goal).toMatch(/liên kết canonical.*PO\/ASN\/Receipt.*hoàn thiện/i);
 
     expect(byId.get('IN-06')?.status).toBe('live');
-    expect(['live', 'foundation', 'planned']).toContain(byId.get('QR-01')?.status);
-    expect(byId.get('QR-01')?.goal).toMatch(/Inbound QC.*IN-06.*chưa.*live/i);
+    expect(byId.get('QR-01')?.status).toBe('live');
+    expect(byId.get('QR-01')?.goal).toMatch(/Inbound QC.*IN-06.*hệ thống thật/i);
 
     expect(byId.get('TR-02')?.status).toBe('live');
     expect(byId.get('TR-02')?.route).toBe('/stock-transfers');
@@ -132,29 +132,29 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('INV-05')?.status).toBe('live');
     expect(byId.get('INV-05')?.route).toBe('/inventory');
     expect(byId.get('INV-05')?.name).toBe('Trạng thái tồn kho');
-    expect(byId.get('INV-05')?.goal).toMatch(/bộ trạng thái chuẩn.*đổi trạng thái.*bảo toàn tổng Tồn thực tế.*STATUS_CHANGE.*đã giữ\/phân bổ.*giải phóng thu hồi.*chưa/i);
+    expect(byId.get('INV-05')?.goal).toMatch(/bộ trạng thái chuẩn.*đổi trạng thái.*bảo toàn tổng Tồn thực tế.*STATUS_CHANGE.*đã giữ\/phân bổ.*giải phóng thu hồi.*hoàn thiện/i);
 
     expect(byId.get('INV-06')?.status).toBe('live');
     expect(byId.get('INV-06')?.route).toBe('/inventory');
     expect(byId.get('INV-06')?.name).toBe('Lô / Sê-ri / Hạn dùng');
-    expect(byId.get('INV-06')?.goal).toMatch(/Product Tracking.*disposition phiếu nhập.*chống trùng sê-ri.*mỗi sê-ri = 1 Base UOM.*FEFO.*Quét lấy hàng.*Shipment\/sổ cái.*Phả hệ\/điều phối thu hồi.*chưa/i);
+    expect(byId.get('INV-06')?.goal).toMatch(/Product Tracking.*disposition phiếu nhập.*chống trùng sê-ri.*mỗi sê-ri = 1 Base UOM.*FEFO.*Quét lấy hàng.*Shipment\/sổ cái.*phả hệ\/điều phối thu hồi.*hoàn thiện/i);
 
     expect(byId.get('INV-11')?.status).toBe('live');
     expect(byId.get('INV-11')?.name).toBe('Bộ máy toàn vẹn & đối chiếu tồn kho');
-    expect(byId.get('INV-11')?.goal).toMatch(/đối chiếu chỉ đọc.*rebuild\/remediation có kiểm soát.*chưa/i);
+    expect(byId.get('INV-11')?.goal).toMatch(/đối chiếu chỉ đọc.*rebuild\/remediation có kiểm soát.*hoàn thiện/i);
     expect(byId.get('OUT-01')?.goal).toMatch(/không đồng nghĩa Shipment LOADED\/DISPATCHED/i);
     expect(byId.get('OUT-03')?.status).toBe('live');
     expect(byId.get('OUT-03')?.route).toBe('/stock-allocations');
-    expect(byId.get('OUT-03')?.goal).toMatch(/Location.*FEFO\/FIFO.*chưa/i);
+    expect(byId.get('OUT-03')?.goal).toMatch(/Location.*FEFO\/FIFO.*hoàn thiện/i);
     expect(byId.get('OUT-05')?.status).toBe('live');
     expect(byId.get('OUT-05')?.route).toBe('/picking-tasks');
-    expect(byId.get('OUT-05')?.goal).toMatch(/scan location.*Short Pick.*không trừ OnHand.*Lot\/Serial.*chưa/i);
+    expect(byId.get('OUT-05')?.goal).toMatch(/scan location.*Short Pick.*không trừ OnHand.*Lot\/Serial/i);
     expect(byId.get('OUT-06')?.status).toBe('live');
     expect(byId.get('OUT-06')?.route).toBe('/packing-sessions');
-    expect(byId.get('OUT-06')?.goal).toMatch(/PickedQuantity.*nested HU.*không trừ OnHand.*OUT-07 foundation.*split\/merge\/repack.*chưa/i);
+    expect(byId.get('OUT-06')?.goal).toMatch(/PickedQuantity.*nested HU.*không trừ OnHand.*OUT-07.*split\/merge\/repack.*hoàn thiện/i);
     expect(byId.get('OUT-07')?.status).toBe('live');
     expect(byId.get('OUT-07')?.route).toBe('/shipments');
-    expect(byId.get('OUT-07')?.goal).toMatch(/Shipment READY.*staging location.*HU hierarchy.*IN_SERVICE.*LOADED.*không trừ OnHand.*OUT-08 foundation/i);
+    expect(byId.get('OUT-07')?.goal).toMatch(/Shipment READY.*staging location.*HU hierarchy.*IN_SERVICE.*LOADED.*không trừ OnHand.*OUT-08/i);
     expect(byId.get('OUT-08')?.status).toBe('live');
     expect(byId.get('INV-07')?.status).toBe('live');
     expect(byId.get('INV-07')?.route).toBe('/inventory-locks');
@@ -173,16 +173,17 @@ describe('ERP WMS blueprint registry', () => {
     expect(byId.get('INV-08')?.name).toBe('Di chuyển vị trí nội bộ');
     expect(byId.get('INV-08')?.goal).toMatch(/tồn chưa được giữ.*sổ cái MOVE.*Di chuyển xuyên kho/i);
     expect(byId.get('OUT-08')?.route).toBe('/shipments');
-    expect(byId.get('OUT-08')?.goal).toMatch(/Shipment LOADED.*root-HU.*Allocation.*Reservation.*SHIP ledger.*OnHand đúng một lần.*ExportReceipt legacy dispatch bị chặn.*TransactionType\.Ship.*POD.*chưa/i);
+    expect(byId.get('OUT-08')?.goal).toMatch(/Shipment LOADED.*root-HU.*Allocation.*Reservation.*SHIP ledger.*OnHand đúng một lần.*ExportReceipt legacy dispatch bị chặn.*TransactionType\.Ship.*POD.*hoàn thiện/i);
     expect(byId.get('OUT-09')?.status).toBe('live');
     expect(byId.get('OUT-09')?.route).toBe('/backorders');
-    expect(byId.get('OUT-09')?.goal).toMatch(/Sales Order demand.*release không đổi OnHand.*reserve.*auto-allocate.*Backorder.*recover trước khi Picking.*Ordered\/Reserved\/Allocated\/Picked\/Shipped\/Backorder\/Cancelled.*multi-shipment.*chưa/i);
+    expect(byId.get('OUT-09')?.goal).toMatch(/Sales Order demand.*release không đổi OnHand.*reserve.*auto-allocate.*Backorder.*recover trước khi Picking.*Ordered\/Reserved\/Allocated\/Picked\/Shipped\/Backorder\/Cancelled.*multi-shipment/i);
     expect(byId.get('OUT-10')?.status).toBe('live');
     expect(byId.get('OUT-10')?.route).toBe('/shipments');
-    expect(byId.get('OUT-10')?.goal).toMatch(/IN_TRANSIT.*DELIVERY_FAILED.*POD metadata.*COMPLETED.*RETURN_TO_WAREHOUSE.*không tạo thêm SHIP ledger.*OnHand lần hai.*webhook.*chưa hoàn tất/i);
+    expect(byId.get('OUT-10')?.goal).toMatch(/IN_TRANSIT.*DELIVERY_FAILED.*POD metadata.*COMPLETED.*RETURN_TO_WAREHOUSE.*không tạo thêm SHIP ledger.*OnHand lần hai.*webhook.*hoàn thiện/i);
 
-    for (const id of ['OUT-03', 'OUT-05', 'OUT-06', 'OUT-07', 'OUT-08', 'OUT-09', 'OUT-10']) {
-      expect(byId.get(id)?.status).toBe('live');
+    for (const capability of capabilities) {
+      expect(capability.status).toBe('live');
+      expect(capability.route).toBeTruthy();
     }
   });
 

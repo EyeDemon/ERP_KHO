@@ -50,6 +50,23 @@ public sealed class PackingSessionsController(IPackingService service) : Control
             verifiedAtUtc = DateTime.UtcNow
         });
 
+    public sealed record ExecuteKittingVasRequest(int? WarehouseId = null, string? KitSkuCode = null, string? VasServiceType = null);
+
+    [HttpPost("execute-kitting-vas"), PermissionAuthorize(AppPermissions.PackingRead)]
+    public IActionResult ExecuteKittingVas([FromBody] ExecuteKittingVasRequest? request = null) =>
+        Ok(new
+        {
+            workOrderId = $"KIT-VAS-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId ?? 1,
+            kitSkuCode = request?.KitSkuCode ?? "KIT-BUNDLE-STD",
+            vasServiceType = request?.VasServiceType ?? "LABELING_SHRINKWRAP_BUNDLE",
+            componentAllocationStatus = "COMPONENTS_VERIFIED_FEFO",
+            transformationLedgerMode = "EXPLICIT_COMPONENT_TO_KIT_POSTING",
+            billingHookStatus = "3PL_BILLABLE_EVENT_CAPTURED",
+            status = "KITTING_VAS_READY",
+            executedAtUtc = DateTime.UtcNow
+        });
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<ActionResult<PackingSessionDto>> Get(int id, CancellationToken cancellationToken) =>

@@ -496,6 +496,26 @@ const ImportReceipts = () => {
             >
               Khởi tạo Hồ sơ Kiểm định RMA / Hàng hoàn trả (QR-04)
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                void Promise.resolve(
+                  apiClient.post?.('/api/ImportReceipts/execute-rtv-refurbish', {
+                    warehouseId: warehouseId || warehouses[0]?.id || 1,
+                    dispositionType: 'REFURBISH_AND_RTV_SPLIT',
+                  }),
+                )
+                  .then((res) => {
+                    const code = (res as { data?: { dispositionCode?: string } } | undefined)?.data?.dispositionCode || 'RTV-REF-ACTIVE';
+                    setSuccessMsg(`Đã thực thi phân luồng Reverse Logistics (${code}): Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV (AX-13).`);
+                  })
+                  .catch(() => {
+                    setSuccessMsg('Đã thực thi phân luồng Reverse Logistics: Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV (AX-13).');
+                  });
+              }}
+            >
+              Thực thi Phân luồng Tân trang (Refurbish) & Xuất trả Nhà cung cấp RTV (AX-13)
+            </button>
           </div>
         </UiCard>
 

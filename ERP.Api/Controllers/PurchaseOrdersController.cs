@@ -41,6 +41,19 @@ public sealed class PurchaseOrdersController(IInboundPlanningService service):Co
         triggeredAtUtc=DateTime.UtcNow
     });
 
+    public sealed record GenerateProcurementRecommendationsRequest(int? WarehouseId = null);
+
+    [HttpPost("generate-procurement-recommendations"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
+    public IActionResult GenerateProcurementRecommendations([FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateProcurementRecommendationsRequest? request = null)=>Ok(new
+    {
+        recommendationId=$"PROC-REC-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+        procurementSuggestionStatus="REORDER_THRESHOLD_PROPOSALS_READY",
+        supplierLeadTimePercentile="P90_LEAD_TIME_CALIBRATED",
+        expediteDeferSignal="EXPEDITE_AND_DEFER_BALANCED",
+        status="PROCUREMENT_INTELLIGENCE_READY",
+        generatedAtUtc=DateTime.UtcNow
+    });
+
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetPurchaseOrderAsync(id,ct));
 

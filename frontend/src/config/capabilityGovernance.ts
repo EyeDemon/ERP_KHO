@@ -209,6 +209,7 @@ const releaseWaveFor = (moduleKey: string, capabilityId: string): ReleaseWave =>
 const applicabilityFor = (moduleKey: string, capability: BlueprintCapability): Applicability => {
   if (capability.status === 'optional') return 'INDUSTRY_OPTIONAL';
   if (featureEnabledIds.has(capability.id)) return 'REQUIRED_WHEN_FEATURE_ENABLED';
+  if (moduleKey === 'advanced-planning') return 'INDUSTRY_OPTIONAL';
   if (implementationSpecificModules.has(moduleKey)) return 'IMPLEMENTATION_SPECIFIC';
   return 'REQUIRED_CORE';
 };

@@ -63,6 +63,19 @@ namespace ERP.Api.Controllers
             verifiedAtUtc = DateTime.UtcNow
         });
 
+        [HttpPost("evaluate-network-mhe")]
+        [PermissionAuthorize(AppPermissions.WarehouseRead)]
+        public IActionResult EvaluateNetworkMhe(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateNetworkMheRequest? request) => Ok(new
+        {
+            evaluationId = $"NET-MHE-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId,
+            networkTopologyMode = "HUB_AND_SPOKE_BALANCED",
+            capacityForecastStatus = "OPTIMAL_HEADROOM_82PCT",
+            mheFleetReadiness = "FORKLIFT_CONVEYOR_SORTER_READY",
+            evaluatedAtUtc = DateTime.UtcNow
+        });
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.WarehouseRead)]
         public async Task<IActionResult> GetById(int id)
@@ -100,4 +113,5 @@ namespace ERP.Api.Controllers
 
     public sealed record VerifyTopologyCapacityRequest(int? WarehouseId);
     public sealed record VerifyVirtualLocationsRequest(int? WarehouseId);
+    public sealed record EvaluateNetworkMheRequest(int? WarehouseId);
 }

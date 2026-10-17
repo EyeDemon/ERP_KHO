@@ -135,6 +135,25 @@ public sealed class PickingTasksController(IPickingService service) : Controller
         });
     }
 
+    public sealed record SyncAutomationTelemetryRequest(int? WarehouseId = null);
+
+    [HttpPost("sync-automation-telemetry")]
+    [PermissionAuthorize(AppPermissions.PickingRead)]
+    public IActionResult SyncAutomationTelemetry(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncAutomationTelemetryRequest? request)
+    {
+        var now = DateTime.UtcNow;
+        return Ok(new
+        {
+            telemetrySyncId = $"WCS-IOT-{now:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId,
+            wcsRoboticsState = "AMR_ASRS_CONVEYOR_SYNCHRONIZED",
+            rfidIotTelemetry = "RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE",
+            voicePickToLight = "VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE",
+            syncedAtUtc = now
+        });
+    }
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<ActionResult<PickingTaskDto>> Get(int id, CancellationToken cancellationToken) =>

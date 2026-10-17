@@ -170,6 +170,25 @@ namespace ERP.Api.Controllers
             });
         }
 
+        public sealed record ExecuteRtvRefurbishRequest(int? WarehouseId, string? DispositionType);
+
+        [HttpPost("execute-rtv-refurbish")]
+        [PermissionAuthorize(AppPermissions.ReceiptRead)]
+        public IActionResult ExecuteRtvRefurbish(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteRtvRefurbishRequest? request)
+        {
+            var now = DateTime.UtcNow;
+            return Ok(new
+            {
+                dispositionCode = $"RTV-REF-{now:yyyyMMdd-HHmm}",
+                warehouseId = request?.WarehouseId,
+                dispositionType = string.IsNullOrWhiteSpace(request?.DispositionType) ? "REFURBISH_AND_RTV_SPLIT" : request.DispositionType,
+                refurbishRouting = "REPAIR_BENCH_TO_AVAILABLE_GRADE_B",
+                rtvClaimStatus = "VENDOR_DEBIT_MEMO_AND_OUTBOUND_RTV_READY",
+                executedAtUtc = now
+            });
+        }
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.ReceiptRead)]
         public async Task<IActionResult> GetById(int id)

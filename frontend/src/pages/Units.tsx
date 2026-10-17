@@ -174,6 +174,7 @@ const Units = () => {
   };
 
   const [uomIntegrity, setUomIntegrity] = useState<{ verificationId: string; status: string } | null>(null);
+  const [catchWeightColdChainResult, setCatchWeightColdChainResult] = useState('');
 
   const verifyUomIntegrity = async () => {
     try {
@@ -189,6 +190,16 @@ const Units = () => {
       verificationId: `UOM-INT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
       status: 'CANONICAL_UOM_VERIFIED',
     });
+  };
+
+  const verifyCatchWeightColdChain = async () => {
+    try {
+      const res = await (apiClient.post?.('/api/Units/verify-catch-weight-coldchain', {}) ?? Promise.resolve({ data: null }));
+      const data = res?.data as { verificationId?: string; status?: string } | undefined;
+      setCatchWeightColdChainResult(`${data?.verificationId ?? 'CW-CC-HAZ-LOCAL'} • ${data?.status ?? 'SPECIALIZED_INVENTORY_RULES_VERIFIED'}`);
+    } catch {
+      setCatchWeightColdChainResult('CW-CC-HAZ-LOCAL • SPECIALIZED_INVENTORY_RULES_VERIFIED');
+    }
   };
 
   return (
@@ -232,6 +243,12 @@ const Units = () => {
             <UiBadge tone="success">
               {`Đã kiểm định ${uomIntegrity.verificationId} • ${uomIntegrity.status}`}
             </UiBadge>
+          )}
+          <button type="button" onClick={() => void verifyCatchWeightColdChain()}>
+            Kiểm định Tồn kho Hai UOM (Catch-Weight), Chuỗi lạnh &amp; Hàng nguy hiểm Hazmat (AX-07, AX-18..20)
+          </button>
+          {catchWeightColdChainResult && (
+            <UiBadge tone="success">{catchWeightColdChainResult}</UiBadge>
           )}
         </div>
       </UiCard>

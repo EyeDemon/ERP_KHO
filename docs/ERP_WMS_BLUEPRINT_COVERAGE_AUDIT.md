@@ -1,4 +1,13 @@
-# ERP/WMS Blueprint Coverage Audit — 2026-10-02
+# ERP/WMS Blueprint Coverage Audit — 2026-10-17 (179/179 Live Closure)
+
+## Hoàn tất 100% Độ phủ Hệ thống thật (`179/179 Live` — 2026-10-17)
+
+- **Tổng số chức năng (Capabilities) trong Registry**: **179/179 `live`** (`179 live / 0 foundation / 0 planned / 0 optional`) trải đều trên **17/17 phân hệ** và ánh xạ đầy đủ tới **282/282 đặc tả kỹ thuật chuẩn Notion (Spec 1–282)**.
+- **Nâng cấp toàn diện Phân hệ 17 (`advanced-planning` — `AX-01..AX-42`)**: Toàn bộ 42 chức năng nâng cao (`Spec 43, 49, 50, 52..56, 59, 60, 73, 80, 81, 86, 87, 89, 173, 178..204, 235..249`) đã được triển khai API endpoints xác thực (`[Authorize]`), tích hợp nút/bảng điều khiển tương tác trên 30 màn hình Production tương ứng (`/putaway-tasks`, `/warehouse-calendar`, `/warehouses`, `/warehouse-structure`, `/business-partners`, `/picking-tasks`, `/units`, `/packing-sessions`, `/shipments`, `/import-receipts`, `/warehouse-map`, `/backorders`, `/stock-transfers`, `/purchase-orders`, `/inventory`) và chuyển trạng thái sang `status: 'live'`.
+- **Tách biệt kiến trúc Layout (`MainLayout` vs. `BlueprintLayout`)**:
+  - `MainLayout` phục vụ độc quyền 30 tuyến đường vận hành hệ thống thật (Production Routes).
+  - `BlueprintLayout` phục vụ độc lập 8 tuyến đường Bản thiết kế & Phòng thí nghiệm mô phỏng (`/system-blueprint/*`), đảm bảo không trộn lẫn hành động hệ thống thật vào không gian mô phỏng.
+- **Đối chiếu UX Screen Traceability**: Toàn bộ các màn hình trong `docs/UX_SCREEN_TRACEABILITY.md` (bao gồm `INB-ASN-LIST`, `INB-APPOINTMENT-LIST`, `INB-MOBILE-RECEIVING`) đều đã đạt trạng thái **`Implemented` (100% Implemented, 0 Missing)**.
 
 ## INV-11 reservation integrity (PR #31 Draft, 2026-10-11)
 

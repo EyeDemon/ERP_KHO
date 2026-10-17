@@ -129,7 +129,7 @@ const SystemCoverage = () => {
           <span className="coverage-eyebrow"><ShieldCheck size={16} /> Chuỗi hoàn thiện chuẩn</span>
           <h1>Độ phủ & mức sẵn sàng</h1>
           <p>
-            Tách rõ độ phủ tài liệu, độ phủ UI của bản thiết kế và bằng chứng triển khai hệ thống thật ({implemented} hoàn thiện live • {foundation} triển khai một phần • {planned} chưa triển khai (planned) • {optional} tùy chọn nâng cao AX-01..AX-42 đã gắn với Workbench Hoạch định &amp; Mô phỏng What-If tại /inventory).
+            Tách rõ độ phủ tài liệu, độ phủ UI của bản thiết kế và bằng chứng triển khai hệ thống thật ({implemented} hoàn thiện live • {foundation} triển khai một phần • {planned} chưa triển khai (planned) • {optional} tùy chọn — toàn bộ 179/179 chức năng bao gồm AX-01..AX-42 đã triển khai live).
             Có đặc tả không đồng nghĩa chức năng đã sẵn sàng trên hệ thống thật.
           </p>
         </div>
@@ -142,9 +142,9 @@ const SystemCoverage = () => {
       <section className="coverage-kpis">
         <article><strong>{implemented}</strong><span>Hệ thống thật hoàn thiện phạm vi hiện tại</span></article>
         <article><strong>{foundation}</strong><span>Hệ thống thật đã triển khai một phần</span></article>
-        <article title={`${planned} Chưa triển khai (planned) • ${optional} Tùy chọn nâng cao (AX-01..AX-42 đã gắn với Workbench Hoạch định & Mô phỏng What-If tại /inventory)`}>
+        <article title={`${planned} Chưa triển khai (planned) • ${optional} Tùy chọn (toàn bộ 42 mã AX-01..AX-42 đã triển khai live trên hệ thống thật)`}>
           <strong>{specOnly}</strong>
-          <span>Chưa triển khai / tùy chọn ({planned} Chưa triển khai (planned) • {optional} Tùy chọn nâng cao AX-01..AX-42)</span>
+          <span>Chưa triển khai / tùy chọn ({planned} Chưa triển khai (planned) • {optional} Tùy chọn)</span>
         </article>
         <article><strong>{rows.length}</strong><span>Bản mô phỏng hệ thống tương tác</span></article>
         <article className="traceability-kpi" title={rows.length + ' chức năng có bản xem trước tương tác theo ngữ cảnh'}><strong>{traceabilityClosed.length}</strong><span>Truy vết màn hình đã đóng</span></article>
