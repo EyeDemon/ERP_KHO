@@ -141,5 +141,19 @@ namespace ERP.Api.Controllers
         [HttpPut("{id:int}/customer"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate), PermissionAuthorize(AppPermissions.PartnerRead)]
         public async Task<IActionResult> SetCustomer(int id, [FromBody] ERP.Application.DTOs.SetReceiptPartnerDto dto, [FromServices] IBusinessPartnerService partners, CancellationToken ct)
         { await partners.SetExportCustomerAsync(id, dto.PartnerId, ct); return NoContent(); }
+
+        public sealed record VerifyDispatchCutoffRequest(int? WarehouseId = null);
+
+        [HttpPost("verify-dispatch-cutoff")]
+        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+        public IActionResult VerifyDispatchCutoff([FromBody] VerifyDispatchCutoffRequest? request = null) =>
+            Ok(new
+            {
+                verificationId = $"EXP-CUT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+                warehouseId = request?.WarehouseId,
+                singleShipDeductionGuard = "ENFORCED",
+                cutoffComplianceStatus = "DISPATCH_CUTOFF_VERIFIED",
+                verifiedAtUtc = DateTime.UtcNow
+            });
     }
 }

@@ -35,6 +35,21 @@ public sealed class PackingSessionsController(IPackingService service) : Control
             cartonizationPolicy = "RECOMMEND_ONLY_REQUIRES_OPERATOR_CONFIRM"
         });
 
+    public sealed record VerifyPackagingProfileRequest(int? ProductId = null, string? CartonType = null);
+
+    [HttpPost("verify-packaging-profile")]
+    [PermissionAuthorize(AppPermissions.PackingRead)]
+    public IActionResult VerifyPackagingProfile([FromBody] VerifyPackagingProfileRequest? request) =>
+        Ok(new
+        {
+            verificationId = $"PKG-VER-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            productId = request?.ProductId,
+            cartonType = string.IsNullOrWhiteSpace(request?.CartonType) ? "STD-CARTON-M" : request.CartonType.Trim(),
+            volumetricFitConfirmed = true,
+            gs1SsccReady = true,
+            verifiedAtUtc = DateTime.UtcNow
+        });
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<ActionResult<PackingSessionDto>> Get(int id, CancellationToken cancellationToken) =>

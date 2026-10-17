@@ -467,6 +467,45 @@ namespace ERP.Api.Controllers
             return Ok(exceptions.Take(50).ToList());
         }
 
+        public sealed record AcknowledgeOperationalExceptionDto(string ExceptionCode, int? WarehouseId, string? ResolutionNote);
+
+        [HttpPost("operational-exceptions/acknowledge")]
+        [Authorize]
+        public async Task<IActionResult> AcknowledgeOperationalException(
+            [FromBody] AcknowledgeOperationalExceptionDto request,
+            [FromServices] ErpKhoDbContext db,
+            [FromServices] IWarehouseAuthorizationService warehouseAuth,
+            CancellationToken cancellationToken = default)
+        {
+            var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            if (request.WarehouseId.HasValue && !accessibleIds.Contains(request.WarehouseId.Value))
+                return Forbid();
+
+            var now = DateTime.UtcNow;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                EntityName = "OperationalException",
+                EntityId = request.WarehouseId ?? 0,
+                WarehouseId = request.WarehouseId,
+                Action = "Exception.Acknowledged",
+                OldValues = request.ExceptionCode,
+                NewValues = "ACKNOWLEDGED",
+                Reason = string.IsNullOrWhiteSpace(request.ResolutionNote)
+                    ? "Đã tiếp nhận và phân công xử lý ngoại lệ"
+                    : request.ResolutionNote.Trim(),
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+
+            return Ok(new
+            {
+                acknowledged = true,
+                exceptionCode = request.ExceptionCode,
+                acknowledgedAtUtc = now
+            });
+        }
+
         [HttpGet("global-search")]
         [Authorize]
         public async Task<IActionResult> GlobalSearch(

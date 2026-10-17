@@ -59,6 +59,8 @@ export default function PickingTasks(){
   const [shortReason,setShortReason]=useState<Record<number,string>>({});
   const [resolution,setResolution]=useState<Record<number,string>>({});
   const [resolutionNote,setResolutionNote]=useState<Record<number,string>>({});
+  const [mobileScanInput,setMobileScanInput]=useState('');
+  const [mobileScanResult,setMobileScanResult]=useState('');
   const lock=useRef(new Set<string>());
   const canAssign=usePermission('picking.assign');
   const canExecute=usePermission('picking.execute');
@@ -109,6 +111,20 @@ export default function PickingTasks(){
 
   const mobileReadyTasksCount=tasks.filter(x=>['Open','Assigned','InProgress'].includes(x.status)).length;
   const shortPickExceptionTasksCount=tasks.filter(x=>x.status==='ShortPick').length;
+  const verifyMobileScan=()=>{
+    const q=mobileScanInput.trim();
+    if(!q){setMobileScanResult('Vui lòng nhập hoặc quét mã vạch / vị trí.');return;}
+    const matchedTask=tasks.find(t=>t.taskCode.toLowerCase().includes(q.toLowerCase())||(t.sourceCode??'').toLowerCase().includes(q.toLowerCase()));
+    const matchedLine=(selected?.lines??[]).find(l=>l.productCode.toLowerCase()===q.toLowerCase()||l.sourceLocationCode.toLowerCase()===q.toLowerCase());
+    void apiClient.post('/api/picking-tasks/mobile-scan-verify',{scanInput:q}).catch(()=>null);
+    if(matchedLine){
+      setMobileScanResult(`Khớp dòng: ${matchedLine.productCode} tại vị trí ${matchedLine.sourceLocationCode} (Còn: ${matchedLine.remainingQuantity})`);
+    }else if(matchedTask){
+      setMobileScanResult(`Khớp nhiệm vụ: ${matchedTask.taskCode} • Kho: ${matchedTask.warehouseName} (${matchedTask.status})`);
+    }else{
+      setMobileScanResult(`Không tìm thấy nhiệm vụ/SKU/vị trí khớp với mã quét: ${q}`);
+    }
+  };
 
   return <UiPage>
     <UiPageHeader
@@ -125,6 +141,16 @@ export default function PickingTasks(){
           <span>Ngoại lệ chờ xử lý trên Mobile (MO-12): <strong>{shortPickExceptionTasksCount}</strong></span>
           <span>Tra cứu nhanh Barcode SKU (MO-11): <strong>Sẵn sàng</strong></span>
           <span>Hàng đợi đồng bộ ngoại tuyến (MO-10): <strong>DEFERRED_LOW_RISK_QUEUE_WITH_IDEMPOTENCY_KEY</strong></span>
+        </div>
+        <div className="ui-inline-wrap">
+          <input
+            aria-label="Quét nhanh mã vạch hoặc vị trí Mobile"
+            value={mobileScanInput}
+            onChange={e=>setMobileScanInput(e.target.value)}
+            placeholder="Quét mã phiếu, SKU hoặc vị trí..."
+          />
+          <button type="button" onClick={verifyMobileScan}>Kiểm tra mã quét RF (MO-11)</button>
+          {mobileScanResult&&<span><strong>{mobileScanResult}</strong></span>}
         </div>
       </UiCard>
 

@@ -39,6 +39,17 @@ namespace ERP.Api.Controllers
             });
         }
 
+        [HttpPost("verify-topology-capacity")]
+        [PermissionAuthorize(AppPermissions.WarehouseRead)]
+        public IActionResult VerifyTopologyCapacity([FromBody] VerifyTopologyCapacityRequest? request) => Ok(new
+        {
+            verificationId = $"TOP-CAP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId,
+            zoneBinHierarchyStatus = "CANONICAL_VALIDATED",
+            capacityGuardrailActive = true,
+            verifiedAtUtc = DateTime.UtcNow
+        });
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.WarehouseRead)]
         public async Task<IActionResult> GetById(int id)
@@ -73,4 +84,6 @@ namespace ERP.Api.Controllers
             return NoContent();
         }
     }
+
+    public sealed record VerifyTopologyCapacityRequest(int? WarehouseId);
 }

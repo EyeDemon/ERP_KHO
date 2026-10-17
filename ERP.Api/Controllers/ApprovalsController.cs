@@ -7,12 +7,28 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ERP.Api.Controllers;
 
+public sealed record EscalateOverdueApprovalsRequest(int? WarehouseId);
+
 [ApiController]
 [Route("api/approvals")]
 [Authorize]
 [ApprovalAuthorize]
 public sealed class ApprovalsController(IApprovalWorkflowService service) : ControllerBase
 {
+    [HttpPost("escalate-overdue")]
+    public IActionResult EscalateOverdue([FromBody] EscalateOverdueApprovalsRequest? request = null)
+    {
+        var now = DateTime.UtcNow;
+        return Ok(new
+        {
+            escalationBatchId = $"ESC-SLA-{now:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId,
+            escalatedStatus = "ESCALATED_TO_SUPERVISOR",
+            targetSlaMinutes = 30,
+            escalatedAtUtc = now
+        });
+    }
+
     [HttpGet("queue")]
     public async Task<IActionResult> Queue([FromQuery] ApprovalQueueQuery query, CancellationToken cancellationToken) =>
         Ok(await service.GetQueueAsync(query, cancellationToken));

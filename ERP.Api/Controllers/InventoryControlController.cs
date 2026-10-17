@@ -261,5 +261,62 @@ public sealed class InventoryControlController(
             }
         });
     }
+
+    public sealed record WhatIfSimulationRequest(
+        int? WarehouseId = null,
+        decimal DemandMultiplier = 1.5m,
+        int HorizonDays = 14);
+
+    [HttpPost("what-if-simulation")]
+    [Authorize]
+    public async Task<IActionResult> RunWhatIfSimulation(
+        [FromServices] ErpKhoDbContext db,
+        [FromServices] IWarehouseAuthorizationService warehouseAuth,
+        [FromBody] WhatIfSimulationRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var req = request ?? new WhatIfSimulationRequest();
+        var clampedMultiplier = Math.Clamp(req.DemandMultiplier, 0.5m, 5.0m);
+        var horizonDays = Math.Clamp(req.HorizonDays, 1, 90);
+        var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+
+        if (req.WarehouseId.HasValue && !accessibleIds.Contains(req.WarehouseId.Value))
+        {
+            return Ok(new
+            {
+                warehouseId = req.WarehouseId,
+                demandMultiplier = clampedMultiplier,
+                horizonDays,
+                totalAvailable = 0m,
+                simulatedDemand = 0m,
+                projectedNetBalance = 0m,
+                scenarioStatus = "RESTRICTED_SCOPE",
+                immutableSnapshotGuarantee = true
+            });
+        }
+
+        var scopedWarehouseIds = req.WarehouseId.HasValue
+            ? new[] { req.WarehouseId.Value }
+            : accessibleIds.ToArray();
+
+        var totalAvailable = await db.InventoryStocks.AsNoTracking()
+            .Where(s => scopedWarehouseIds.Contains(s.WarehouseId) && s.Status == InventoryStatus.Available)
+            .SumAsync(s => (decimal?)(s.Quantity - s.ReservedQuantity), cancellationToken) ?? 0m;
+
+        var simulatedDemand = Math.Round(totalAvailable * clampedMultiplier, 2);
+        var projectedNetBalance = totalAvailable - simulatedDemand;
+
+        return Ok(new
+        {
+            warehouseId = req.WarehouseId,
+            demandMultiplier = clampedMultiplier,
+            horizonDays,
+            totalAvailable,
+            simulatedDemand,
+            projectedNetBalance,
+            scenarioStatus = projectedNetBalance < 0m ? "PROJECTED_SHORTAGE" : "PROJECTED_SUFFICIENT",
+            immutableSnapshotGuarantee = true
+        });
+    }
 }
 

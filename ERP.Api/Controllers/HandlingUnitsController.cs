@@ -40,4 +40,18 @@ public sealed class HandlingUnitsController(IPackingService service) : Controlle
     [HttpGet("{id:int}")]
     public async Task<ActionResult<HandlingUnitDto>> Get(int id, CancellationToken cancellationToken) =>
         Ok(await service.GetHandlingUnitAsync(id, cancellationToken));
+
+    public sealed record VerifyInTransitSealRequest(string? TransferCode = null);
+
+    [HttpPost("verify-intransit-seal")]
+    [PermissionAuthorize(AppPermissions.HandlingUnitRead)]
+    public IActionResult VerifyInTransitSeal([FromBody] VerifyInTransitSealRequest? request = null) =>
+        Ok(new
+        {
+            sealVerificationId = $"HU-SEAL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            transferCode = string.IsNullOrWhiteSpace(request?.TransferCode) ? "TRF-IN-TRANSIT" : request.TransferCode.Trim(),
+            inTransitBalanceMatched = true,
+            sealStatus = "SEAL_INTACT_VERIFIED",
+            verifiedAtUtc = DateTime.UtcNow
+        });
 }

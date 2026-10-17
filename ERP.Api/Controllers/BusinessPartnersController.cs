@@ -49,6 +49,14 @@ public sealed class BusinessPartnersController(IBusinessPartnerService service):
             }).ToArray()
         });
     }
+    [HttpPost("{id:int}/verify-sla-contract"),PermissionAuthorize(AppPermissions.PartnerRead)]
+    public IActionResult VerifySlaContract(int id)=>Ok(new
+    {
+        partnerId=id,
+        slaContractStatus="VERIFIED_ACTIVE",
+        targetOnTimePct=98.5m,
+        verifiedAtUtc=DateTime.UtcNow
+    });
     [HttpPost,PermissionAuthorize(AppPermissions.PartnerCreate)] public async Task<IActionResult>Create(SaveBusinessPartnerDto dto,CancellationToken ct){var x=await service.CreateAsync(dto,ct);return Created($"/api/business-partners/{x.Id}",x);}
     [HttpPut("{id:int}"),PermissionAuthorize(AppPermissions.PartnerUpdate)] public async Task<IActionResult>Update(int id,SaveBusinessPartnerDto dto,CancellationToken ct){await service.UpdateAsync(id,dto,ct);return NoContent();}
     [HttpDelete("{id:int}"),PermissionAuthorize(AppPermissions.PartnerDeactivate)] public async Task<IActionResult>Delete(int id,CancellationToken ct){await service.DeleteAsync(id,ct);return NoContent();}

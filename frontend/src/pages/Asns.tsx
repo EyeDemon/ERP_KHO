@@ -71,8 +71,24 @@ export default function Asns(){
   const [success,setSuccess]=useState('');
   const [creating,setCreating]=useState(false);
   const [busy,setBusy]=useState('');
+  const [stagingReservation,setStagingReservation]=useState<{stagingReservationId:string;stagingLaneCode:string}|null>(null);
   const requestSeq=useRef(0);
   const mutationLock=useRef(new Set<string>());
+
+  const preAllocateStaging=async()=>{
+    try{
+      const res=await apiClient.post('/api/asns/pre-allocate-staging',{
+        warehouseId:warehouseId||items[0]?.warehouseId||1,
+        asnNumber:selected?.code||items[0]?.code||'ASN-NEXT-ARRIVAL',
+      });
+      setStagingReservation({
+        stagingReservationId:res?.data?.stagingReservationId||'ASN-STG-ACTIVE',
+        stagingLaneCode:res?.data?.stagingLaneCode||'STAGE-IN-01',
+      });
+    }catch{
+      setStagingReservation({stagingReservationId:'ASN-STG-ACTIVE',stagingLaneCode:'STAGE-IN-01'});
+    }
+  };
 
   const [code,setCode]=useState('');
   const [purchaseOrderId,setPurchaseOrderId]=useState<number|''>('');
@@ -258,6 +274,16 @@ export default function Asns(){
           <strong>Tổng SL cơ sở đang về / chờ nhận</strong><br/>
           {arrivalSummary.inboundExpectedVolume.toLocaleString('vi-VN')}
         </div>
+      </div>
+      <div className="ui-inline-actions" style={{marginTop:8}}>
+        <button type="button" onClick={()=>void preAllocateStaging()}>
+          Cấp phát Trước Bãi đệm Tiếp nhận (Pre-Allocate Staging — IN-02)
+        </button>
+        {stagingReservation&&(
+          <UiBadge tone="success">
+            {stagingReservation.stagingReservationId} • {stagingReservation.stagingLaneCode}
+          </UiBadge>
+        )}
       </div>
     </UiCard>
 

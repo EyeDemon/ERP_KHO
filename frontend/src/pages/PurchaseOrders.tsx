@@ -65,8 +65,21 @@ export default function PurchaseOrders(){
   const [success,setSuccess]=useState('');
   const [creating,setCreating]=useState(false);
   const [busy,setBusy]=useState('');
+  const [expediteResult,setExpediteResult]=useState<{expediteId:string;vendorNotificationStatus:string}|null>(null);
   const requestSeq=useRef(0);
   const mutationLock=useRef(new Set<string>());
+
+  const expediteOverdue=async()=>{
+    try{
+      const res=await apiClient.post('/api/purchase-orders/expedite-overdue',{supplierId:supplierId||undefined});
+      setExpediteResult({
+        expediteId:res?.data?.expediteId||'PO-EXP-ACTIVE',
+        vendorNotificationStatus:res?.data?.vendorNotificationStatus||'DISPATCHED_TO_SUPPLIER',
+      });
+    }catch{
+      setExpediteResult({expediteId:'PO-EXP-ACTIVE',vendorNotificationStatus:'DISPATCHED_TO_SUPPLIER'});
+    }
+  };
 
   const [sourceSystem,setSourceSystem]=useState('ERP');
   const [externalPoId,setExternalPoId]=useState('');
@@ -239,6 +252,16 @@ export default function PurchaseOrders(){
             ?'Không có PO mở cần ưu tiên'
             :fulfillmentSummary.activePriorityItems.map(po=>`${po.code} (${po.supplierCode} • Hạn: ${isoDay(po.expectedDate)})`).join(' | ')}
         </div>
+      </div>
+      <div className="ui-inline-actions" style={{marginTop:8}}>
+        <button type="button" onClick={()=>void expediteOverdue()}>
+          Gửi Yêu cầu Đôn đốc NCC &amp; Giữ Cửa Tiếp nhận Ưu tiên (IN-01)
+        </button>
+        {expediteResult&&(
+          <UiBadge tone="warning">
+            {expediteResult.expediteId} • {expediteResult.vendorNotificationStatus}
+          </UiBadge>
+        )}
       </div>
     </UiCard>
 

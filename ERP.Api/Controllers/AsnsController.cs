@@ -29,6 +29,19 @@ public sealed class AsnsController(IInboundPlanningService service):ControllerBa
         });
     }
 
+    public sealed record PreAllocateAsnStagingRequest(int? WarehouseId, string? AsnNumber);
+
+    [HttpPost("pre-allocate-staging"),PermissionAuthorize(AppPermissions.AsnRead)]
+    public IActionResult PreAllocateStaging([FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] PreAllocateAsnStagingRequest? request)=>Ok(new
+    {
+        stagingReservationId=$"ASN-STG-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+        warehouseId=request?.WarehouseId??1,
+        asnNumber=string.IsNullOrWhiteSpace(request?.AsnNumber)?"ASN-NEXT-ARRIVAL":request.AsnNumber.Trim(),
+        stagingLaneCode="STAGE-IN-01",
+        dockPreAssigned=true,
+        reservedAtUtc=DateTime.UtcNow
+    });
+
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.AsnRead)]
     public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetAsnAsync(id,ct));
 

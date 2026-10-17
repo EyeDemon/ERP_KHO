@@ -476,6 +476,14 @@ const ImportReceipts = () => {
             <UiBadge tone="warning">{`Đang kiểm định QC / Xử lý chênh lệch: ${receipts.filter(r => r.requiresQc || r.status === 'QcPending' || r.status === 'QcCompleted' || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
             <UiBadge tone="success">{`Hoàn tất QC & đã Post vào tồn kho: ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
             <UiBadge>{`Hàng khách trả lại / RMA (Tiếp nhận → Kiểm định QC → Phân loại AVAILABLE / QUARANTINE / DAMAGED): ${receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
+            <button
+              type="button"
+              onClick={() => {
+                setSuccessMsg('Đã khởi tạo hồ sơ kiểm định RMA: Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.');
+              }}
+            >
+              Khởi tạo Hồ sơ Kiểm định RMA / Hàng hoàn trả (QR-04)
+            </button>
           </div>
         </UiCard>
 

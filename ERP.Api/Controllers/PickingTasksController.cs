@@ -107,6 +107,34 @@ public sealed class PickingTasksController(IPickingService service) : Controller
         });
     }
 
+    public sealed record MobileScanVerifyRequest(string ScanInput, int? WarehouseId = null);
+
+    [HttpPost("mobile-scan-verify")]
+    [PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<IActionResult> MobileScanVerify(
+        [FromBody] MobileScanVerifyRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var input = (request?.ScanInput ?? string.Empty).Trim();
+        var tasks = await service.ListAsync(request?.WarehouseId, null, cancellationToken);
+        var match = string.IsNullOrWhiteSpace(input)
+            ? null
+            : tasks.FirstOrDefault(x =>
+                string.Equals(x.TaskCode, input, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(x.SourceCode, input, StringComparison.OrdinalIgnoreCase)
+                || x.TaskCode.Contains(input, StringComparison.OrdinalIgnoreCase));
+
+        return Ok(new
+        {
+            matched = match != null,
+            scanInput = request?.ScanInput ?? string.Empty,
+            matchedTaskCode = match?.TaskCode,
+            matchedProductCode = match?.SourceCode,
+            matchedLocationCode = match?.WarehouseName,
+            status = match?.Status ?? "NOT_FOUND"
+        });
+    }
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<ActionResult<PickingTaskDto>> Get(int id, CancellationToken cancellationToken) =>

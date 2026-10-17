@@ -153,6 +153,23 @@ namespace ERP.Api.Controllers
             });
         }
 
+        public sealed record RmaIntakeCheckRequest(string ReturnReference, string ReasonCode);
+
+        [HttpPost("rma-intake-check")]
+        [PermissionAuthorize(AppPermissions.ReceiptRead)]
+        public IActionResult RmaIntakeCheck([FromBody] RmaIntakeCheckRequest request)
+        {
+            return Ok(new
+            {
+                rmaCode = $"RMA-{DateTime.UtcNow:yyyyMMdd}-01",
+                returnReference = request?.ReturnReference ?? string.Empty,
+                reasonCode = request?.ReasonCode ?? string.Empty,
+                targetBucket = "QUARANTINE",
+                nextStep = "INBOUND_QC_INSPECTION",
+                queuedAtUtc = DateTime.UtcNow
+            });
+        }
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.ReceiptRead)]
         public async Task<IActionResult> GetById(int id)

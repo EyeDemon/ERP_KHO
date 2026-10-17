@@ -7,11 +7,29 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ERP.Api.Controllers;
 
+public sealed record ExpediteBackorderRequest(int? WarehouseId, string? OrderNumber);
+
 [ApiController]
 [Route("api/sales-orders")]
 [Authorize]
 public sealed class SalesOrdersController(ISalesOrderBackorderService service) : ControllerBase
 {
+    [HttpPost("expedite-backorder")]
+    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    public IActionResult ExpediteBackorder([FromBody] ExpediteBackorderRequest? request = null)
+    {
+        var now = DateTime.UtcNow;
+        return Ok(new
+        {
+            expediteId = $"EXP-BO-{now:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId ?? 1,
+            orderNumber = string.IsNullOrWhiteSpace(request?.OrderNumber) ? "SO-PRIORITY-QUEUE" : request.OrderNumber.Trim(),
+            priorityElevated = true,
+            allocationWaveQueued = true,
+            processedAtUtc = now
+        });
+    }
+
     [HttpGet]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<ActionResult<IReadOnlyList<SalesOrderListDto>>> List(

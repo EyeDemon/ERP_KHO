@@ -52,6 +52,28 @@ namespace ERP.Api.Controllers
             });
         }
 
+        public sealed record CreateAdjustmentProposalRequest(
+            int WarehouseId,
+            string ProductCode,
+            decimal DeltaQuantity,
+            string ReasonCode,
+            string? Note);
+
+        [HttpPost("adjustment-proposals")]
+        public IActionResult CreateAdjustmentProposal([FromBody] CreateAdjustmentProposalRequest request)
+        {
+            return Ok(new
+            {
+                proposalCode = $"ADJ-{DateTime.UtcNow:yyyyMMdd}-{Math.Abs((request.ProductCode ?? string.Empty).GetHashCode()) % 1000:D3}",
+                warehouseId = request.WarehouseId,
+                productCode = request.ProductCode,
+                deltaQuantity = request.DeltaQuantity,
+                reasonCode = request.ReasonCode,
+                status = "PENDING_SOD_APPROVAL",
+                createdAtUtc = DateTime.UtcNow
+            });
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {

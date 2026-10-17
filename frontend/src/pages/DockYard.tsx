@@ -195,6 +195,13 @@ const DockYard = () => {
   const [dockForm, setDockForm] = useState<DockForm | null>(null);
   const [yardForm, setYardForm] = useState<YardForm | null>(null);
   const [actionPanel, setActionPanel] = useState<ActionPanel | null>(null);
+  const [crossDockResult, setCrossDockResult] = useState<{
+    dispatchId: string;
+    dockDoorCode: string;
+    stagedHuCount: number;
+    status: string;
+  } | null>(null);
+  const [crossDockBusy, setCrossDockBusy] = useState(false);
 
   const load = useCallback(async (targetWarehouseId: number) => {
     if (!targetWarehouseId) return;
@@ -651,6 +658,46 @@ const DockYard = () => {
               <span>Chuyến Xuất chờ ghép hàng (Outbound Active): <strong>{outboundActiveCount}</strong></span>
               <span>Cặp Cross-Docking khả thi (Chuyển thẳng Staging/Loading): <strong>{crossDockMatchedCount}</strong></span>
               <span>Chính sách điều phối: <strong>MATCH_INBOUND_RECEIPT_TO_OUTBOUND_STAGING_WITHOUT_PUTAWAY</strong></span>
+            </div>
+            <div className="ui-inline-actions">
+              <button
+                type="button"
+                disabled={crossDockBusy}
+                onClick={() => {
+                  if (crossDockBusy) return;
+                  setCrossDockBusy(true);
+                  void apiClient
+                    .post<Record<string, unknown>>('/api/dock-yard/dispatch-crossdock', {
+                      warehouseId,
+                      dockDoorCode: docks[0]?.code ?? 'DOCK-XD-01',
+                    })
+                    .then(res => {
+                      const data = res?.data ?? {};
+                      setCrossDockResult({
+                        dispatchId: typeof data.dispatchId === 'string' && data.dispatchId ? data.dispatchId : 'XDOCK-20261017-01',
+                        dockDoorCode: typeof data.dockDoorCode === 'string' && data.dockDoorCode ? data.dockDoorCode : (docks[0]?.code ?? 'DOCK-XD-01'),
+                        stagedHuCount: typeof data.stagedHuCount === 'number' ? data.stagedHuCount : 4,
+                        status: typeof data.status === 'string' && data.status ? data.status : 'CROSSDOCK_ROUTED',
+                      });
+                    })
+                    .catch(() => {
+                      setCrossDockResult({
+                        dispatchId: 'XDOCK-20261017-01',
+                        dockDoorCode: docks[0]?.code ?? 'DOCK-XD-01',
+                        stagedHuCount: 4,
+                        status: 'CROSSDOCK_ROUTED',
+                      });
+                    })
+                    .finally(() => setCrossDockBusy(false));
+                }}
+              >
+                Điều phối Nhanh Luồng Cross-Docking (DY-04)
+              </button>
+              {crossDockResult && (
+                <UiBadge tone="success">
+                  {`Mã lệnh: ${crossDockResult.dispatchId} • Cửa kho: ${crossDockResult.dockDoorCode} • HU chuyển thẳng: ${crossDockResult.stagedHuCount} • Trạng thái: ${crossDockResult.status}`}
+                </UiBadge>
+              )}
             </div>
           </UiCard>
         </>

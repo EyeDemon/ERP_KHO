@@ -14,7 +14,7 @@ type ReplenishmentSuggestion={
   inventoryStockId:number;productId:number;productCode:string;productName:string;
   warehouseId:number;warehouseName:string;sourceLocationId:number;sourceLocationCode:string;
   availableAtSource:number;targetLocationId:number;targetLocationCode:string;
-  currentAtTarget:number;suggestedQuantity:number;
+  currentAtTarget:number;suggestedQuantity:number;suggestedMoveQuantity?:number;
 };
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
@@ -68,6 +68,7 @@ export default function InventoryMovements(){
   };
 
   const applySuggestion=async(s:ReplenishmentSuggestion)=>{
+    const moveQty=s.suggestedMoveQuantity??s.suggestedQuantity;
     const found=buckets.find(b=>b.inventoryStockId===s.inventoryStockId)??{
       inventoryStockId:s.inventoryStockId,
       productId:s.productId,
@@ -84,8 +85,8 @@ export default function InventoryMovements(){
     };
     await select(found,{
       targetLocationId:s.targetLocationId,
-      suggestedQuantity:s.suggestedQuantity,
-      reason:'Replenishment bổ sung vị trí lấy hàng',
+      suggestedQuantity:moveQty,
+      reason:'Bổ sung mặt lấy hàng (TR-05)',
     });
   };
 
@@ -114,11 +115,11 @@ export default function InventoryMovements(){
     <UiPageHeader eyebrow="Inventory Control" title="Internal Location Move"
       description="Source -Q / destination +Q trong cùng Warehouse; giữ nguyên Status/Lot/Serial và không cho di chuyển phần reserved."/>
     {error&&<p role="alert">{error}</p>}
-    <UiCard title="Gợi ý bổ sung vị trí lấy hàng (Replenishment — TR-05)">
+    <UiCard title="Gợi ý Bổ sung Tồn kho mặt lấy hàng (Replenishment Suggestions — TR-05)">
       <p className="ui-muted-text">Hệ thống tự động phát hiện vị trí lấy hàng (Pick Face) có tồn thấp và đề xuất di chuyển từ vị trí dự trữ (Reserve) trong cùng kho.</p>
       {suggestions.length===0?<p className="ui-muted-text">Hiện không có vị trí lấy hàng nào cần bổ sung khẩn cấp.</p>:<UiTableScroll>
         <table aria-label="Gợi ý bổ sung vị trí lấy hàng">
-          <thead><tr><th>Sản phẩm</th><th>Kho</th><th>Vị trí nguồn (Reserve)</th><th>Khả dụng nguồn</th><th>Vị trí đích (Pick Face)</th><th>Tồn tại đích</th><th>SL gợi ý</th>{canMove&&<th>Thao tác</th>}</tr></thead>
+          <thead><tr><th>Sản phẩm</th><th>Kho</th><th>Vị trí nguồn (Reserve)</th><th>Khả dụng nguồn</th><th>Vị trí đích (Pick Face)</th><th>Tồn tại đích</th><th>SL gợi ý</th>{canMove&&<th>Thao tác nhanh</th>}</tr></thead>
           <tbody>
             {suggestions.map(s=><tr key={`${s.inventoryStockId}-${s.targetLocationId}`}>
               <td><strong>{s.productCode}</strong><br/><small>{s.productName}</small></td>
@@ -127,8 +128,8 @@ export default function InventoryMovements(){
               <td>{s.availableAtSource}</td>
               <td><code>{s.targetLocationCode}</code></td>
               <td>{s.currentAtTarget}</td>
-              <td><strong>{s.suggestedQuantity}</strong></td>
-              {canMove&&<td><button type="button" onClick={()=>void applySuggestion(s)}>Chọn bổ sung</button></td>}
+              <td><strong>{s.suggestedMoveQuantity??s.suggestedQuantity}</strong></td>
+              {canMove&&<td><button type="button" onClick={()=>void applySuggestion(s)}>Điền lệnh bổ sung</button></td>}
             </tr>)}
           </tbody>
         </table>

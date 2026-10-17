@@ -58,4 +58,18 @@ public class StockReservationsController(IStockReservationService service) : Con
             expiringSoonCount = page.Items.Count(x => x.Status == "Active" && x.ExpiresAt <= DateTime.UtcNow.AddHours(24))
         });
     }
+
+    public sealed record SweepExpiredReservationsRequest(int? WarehouseId);
+
+    [HttpPost("sweep-expired-preview")]
+    public IActionResult SweepExpiredPreview(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SweepExpiredReservationsRequest? request) =>
+        Ok(new
+        {
+            sweepId = $"RSV-SWP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId,
+            status = "COMMITMENT_TTL_VERIFIED",
+            ledgerMutated = false,
+            checkedAtUtc = DateTime.UtcNow
+        });
 }

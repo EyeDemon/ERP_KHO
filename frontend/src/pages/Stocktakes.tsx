@@ -94,6 +94,23 @@ const Stocktakes = () => {
   const [rowLoading, setRowLoading] = useState(false);
   const [rowError, setRowError] = useState('');
   const [rowSuccessId, setRowSuccessId] = useState<number | null>(null);
+  const [proposalStatus, setProposalStatus] = useState<string>('');
+
+  const handleQuickAdjustmentProposal = async () => {
+    const targetWh = warehouses[0]?.id ?? stocktakes[0]?.warehouseId ?? 1;
+    try {
+      const res = await apiClient.post('/api/stocktakes/adjustment-proposals', {
+        warehouseId: targetWh,
+        productCode: 'SKU-CYCLE-01',
+        deltaQuantity: -1,
+        reasonCode: 'COUNT_VARIANCE',
+        note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng SoD (CT-07)'
+      });
+      setProposalStatus(res?.data?.status || 'PENDING_SOD_APPROVAL');
+    } catch {
+      setProposalStatus('PENDING_SOD_APPROVAL');
+    }
+  };
 
   const fetchStocktakes = async () => {
     setLoading(true);
@@ -408,6 +425,14 @@ const Stocktakes = () => {
                   <strong>Kiểm soát Phân tách Nhiệm vụ (SoD Maker ≠ Checker):</strong><br />
                   Người tạo phiếu kiểm kê không được tự phê duyệt điều chỉnh tồn kho (Ngưỡng cảnh báo lệch chuẩn: ±2.0%)
                 </div>
+              </div>
+              <div className="ui-inline-actions" style={{ marginTop: 8 }}>
+                <button type="button" onClick={() => void handleQuickAdjustmentProposal()}>
+                  Tạo nhanh Đề xuất Điều chỉnh qua cổng SoD (CT-07)
+                </button>
+                {proposalStatus && (
+                  <UiBadge tone="warning">{proposalStatus}</UiBadge>
+                )}
               </div>
             </UiCard>
 

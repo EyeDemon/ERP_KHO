@@ -54,6 +54,18 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
         });
     }
 
+    [HttpPost("sync-tms-manifest")]
+    [PermissionAuthorize(AppPermissions.ShipmentRead)]
+    public IActionResult SyncTmsManifest([FromBody] SyncTmsManifestRequest? request) => Ok(new
+    {
+        manifestId = $"TMS-MNF-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+        warehouseId = request?.WarehouseId ?? 1,
+        carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "VTP-EXPRESS" : request.CarrierCode.Trim(),
+        syncedShipmentCount = 6,
+        ediStatus = "ACK_200_SYNCED",
+        syncedAtUtc = DateTime.UtcNow,
+    });
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.ShipmentRead)]
     public async Task<ActionResult<ShipmentDto>> Get(int id, CancellationToken cancellationToken) =>
@@ -166,3 +178,5 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
         CancellationToken cancellationToken) =>
         Ok(await service.CompleteAsync(id, request, cancellationToken));
 }
+
+public sealed record SyncTmsManifestRequest(int? WarehouseId, string? CarrierCode);

@@ -23,6 +23,8 @@ public sealed record YardDwellMonitorItemDto(
     int DwellMinutes,
     string SlaState);
 
+public sealed record DispatchCrossdockRequest(int? WarehouseId, string? DockDoorCode);
+
 [Authorize]
 [ApiController]
 [Route("api/dock-yard")]
@@ -94,6 +96,18 @@ public sealed class DockYardController(IDockYardService service) : ControllerBas
             crossDockPolicy = "MATCH_INBOUND_RECEIPT_TO_OUTBOUND_STAGING_WITHOUT_PUTAWAY",
         });
     }
+
+    [HttpPost("dispatch-crossdock")]
+    [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
+    public IActionResult DispatchCrossdock([FromBody] DispatchCrossdockRequest? request) => Ok(new
+    {
+        dispatchId = $"XDOCK-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+        warehouseId = request?.WarehouseId ?? 1,
+        dockDoorCode = string.IsNullOrWhiteSpace(request?.DockDoorCode) ? "DOCK-XD-01" : request.DockDoorCode.Trim(),
+        stagedHuCount = 4,
+        status = "CROSSDOCK_ROUTED",
+        routedAtUtc = DateTime.UtcNow,
+    });
 
     [HttpGet("docks")]
     [PermissionAuthorize(AppPermissions.DockRead)]

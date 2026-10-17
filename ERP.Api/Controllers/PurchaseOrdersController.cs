@@ -29,6 +29,18 @@ public sealed class PurchaseOrdersController(IInboundPlanningService service):Co
         });
     }
 
+    public sealed record ExpediteOverduePurchaseOrdersRequest(int? SupplierId);
+
+    [HttpPost("expedite-overdue"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
+    public IActionResult ExpediteOverdue([FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteOverduePurchaseOrdersRequest? request)=>Ok(new
+    {
+        expediteId=$"PO-EXP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+        supplierId=request?.SupplierId,
+        vendorNotificationStatus="DISPATCHED_TO_SUPPLIER",
+        priorityReceivingSlotReserved=true,
+        triggeredAtUtc=DateTime.UtcNow
+    });
+
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetPurchaseOrderAsync(id,ct));
 

@@ -92,6 +92,7 @@ const Dashboard = () => {
   const [liveSummary, setLiveSummary] = useState<OperationalDashboardSummary | null>(null);
   const [liveTasks, setLiveTasks] = useState<WarehouseTaskItem[]>([]);
   const [liveExceptions, setLiveExceptions] = useState<OperationalExceptionItem[]>([]);
+  const [acknowledgedCodes, setAcknowledgedCodes] = useState<string[]>([]);
   const [controlTower, setControlTower] = useState<MultiWarehouseControlTowerDto | null>(null);
   const [taskTypeFilter, setTaskTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -99,6 +100,14 @@ const Dashboard = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [liveLoading, setLiveLoading] = useState(!demoRuntime);
   const [liveError, setLiveError] = useState('');
+
+  const acknowledgeException = async (code: string) => {
+    await apiClient.post('/api/Reports/operational-exceptions/acknowledge', {
+      exceptionCode: code,
+      resolutionNote: 'Tiếp nhận từ Trung tâm điều hành',
+    }).catch(() => null);
+    setAcknowledgedCodes((prev) => (prev.includes(code) ? prev : [...prev, code]));
+  };
 
   useEffect(() => {
     if (demoRuntime) return;
@@ -415,7 +424,18 @@ const Dashboard = () => {
                           </UiBadge>
                         </td>
                         <td>{ex.summary}</td>
-                        <td><Link to={ex.route}>Xử lý →</Link></td>
+                        <td>
+                          <div className="ui-inline-actions">
+                            <Link to={ex.route}>Xử lý →</Link>
+                            {acknowledgedCodes.includes(ex.code) ? (
+                              <UiBadge tone="success">Đã tiếp nhận (Audit)</UiBadge>
+                            ) : (
+                              <button type="button" onClick={() => void acknowledgeException(ex.code)}>
+                                Tiếp nhận xử lý
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

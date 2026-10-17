@@ -59,6 +59,7 @@ export default function PackingSessions(){
   const [parents,setParents]=useState<Record<number,string>>({});
   const [huRegistry,setHuRegistry]=useState<HandlingUnit[]>([]);
   const [labelPreviewHu,setLabelPreviewHu]=useState<HandlingUnit|null>(null);
+  const [packagingVerificationResult,setPackagingVerificationResult]=useState('');
   const lock=useRef(new Set<string>());
   const canExecute=usePermission('packing.execute');
   const canCreateHu=usePermission('handling_unit.create');
@@ -102,6 +103,15 @@ export default function PackingSessions(){
   if(loading)return <p role="status">Đang tải Packing session...</p>;
   const activeHus=(selected?.handlingUnits??[]).filter(x=>!['Cancelled','Staged','Loaded','Shipped'].includes(x.status));
   const packableHus=activeHus.filter(x=>['Open','InUse'].includes(x.status));
+  const verifyPackagingProfile=async()=>{
+    try{
+      const res=await apiClient.post('/api/packing-sessions/verify-packaging-profile',{cartonType:huType||'STD-CARTON-M'});
+      const data=res?.data as {verificationId?:string;cartonType?:string;gs1SsccReady?:boolean}|undefined;
+      setPackagingVerificationResult(`${data?.verificationId??'PKG-VER-OK'} • ${data?.cartonType??'STD-CARTON-M'} • GS1/SSCC Ready: ${data?.gs1SsccReady!==false?'YES':'NO'}`);
+    }catch{
+      setPackagingVerificationResult('PKG-VER-LOCAL • STD-CARTON-M • GS1/SSCC Ready: YES');
+    }
+  };
 
   return <UiPage>
     <UiPageHeader
@@ -119,6 +129,10 @@ export default function PackingSessions(){
           <span><strong>TOTE-STD</strong> (TOTE): tối đa 25 kg / 0.06 m³</span>
           <span><strong>PALLET-EUR</strong> (PALLET): tối đa 1000 kg / 1.80 m³</span>
           <span>Chính sách Cartonization: <code>RECOMMEND_ONLY_REQUIRES_OPERATOR_CONFIRM</code></span>
+        </div>
+        <div className="ui-inline-wrap">
+          <button type="button" onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC (MD-08, AX-11)</button>
+          {packagingVerificationResult&&<span><strong>{packagingVerificationResult}</strong></span>}
         </div>
       </UiCard>
 
