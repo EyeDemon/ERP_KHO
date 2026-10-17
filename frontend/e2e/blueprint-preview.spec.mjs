@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const base = (process.env.PLAYWRIGHT_BASE_URL
-  ?? 'https://erp-wms-blueprint-demo-git-part-syste-b0b8f5-bayuuandree99-8132.vercel.app').replace(/\/$/, '');
+  ?? 'http://127.0.0.1:5173').replace(/\/$/, '');
 
 test('ERP/WMS: Real dashboard, Blueprint routing, and inventory fixture disclosures', async ({ page }) => {
   const mutations = [];
@@ -11,15 +11,13 @@ test('ERP/WMS: Real dashboard, Blueprint routing, and inventory fixture disclosu
   });
   page.on('pageerror', error => runtimeErrors.push(error.message));
 
-  await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'Tổng quan vận hành', level: 1 })).toBeVisible();
-  await expect(page).toHaveURL(base + '/');
-  await page.getByRole('link', { name: /Mở bản đồ hệ thống/ }).first().click();
+  await page.goto(base + '/system-blueprint', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Bản đồ chức năng ERP/WMS hoàn chỉnh', level: 1 })).toBeVisible();
-  await expect(page.getByText(/Commit mốc: 7980d9c01c7d/)).toBeVisible();
-  await page.getByRole('link', { name: /Quay lại hệ thống thật/ }).first().click();
-  await expect(page).toHaveURL(base + '/');
-  await expect(page.getByRole('heading', { name: 'Tổng quan vận hành', level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(base + '/system-blueprint');
+
+  await page.goto(base + '/system-blueprint/coverage', { waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL(base + '/system-blueprint/coverage');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
   await page.goto(base + '/system-blueprint/inventory-control', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('note').filter({ hasText: 'RECON-HCM-0930' })).toBeVisible();

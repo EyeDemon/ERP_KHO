@@ -2,15 +2,20 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/packing-sessions")]
 [Authorize]
-public sealed class PackingSessionsController(IPackingService service) : ControllerBase
+public sealed class PackingSessionsController(
+    IPackingService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
     [PermissionAuthorize(AppPermissions.PackingRead)]
@@ -35,29 +40,55 @@ public sealed class PackingSessionsController(IPackingService service) : Control
             cartonizationPolicy = "RECOMMEND_ONLY_REQUIRES_OPERATOR_CONFIRM"
         });
 
-    public sealed record VerifyPackagingProfileRequest(int? ProductId = null, string? CartonType = null);
+    public sealed record VerifyPackagingProfileRequest(int? ProductId = null, string? CartonType = null, int? WarehouseId = null);
 
     [HttpPost("verify-packaging-profile")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
-    public IActionResult VerifyPackagingProfile([FromBody] VerifyPackagingProfileRequest? request) =>
-        Ok(new
+    public async Task<IActionResult> VerifyPackagingProfile(
+        [FromBody] VerifyPackagingProfileRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var dimensionConfiguredProductsCount = db != null
+            ? await db.Products.AsNoTracking()
+                .CountAsync(p => p.UnitWeightKg.HasValue || p.UnitVolumeM3.HasValue || p.UnitPalletEquivalent.HasValue, cancellationToken)
+            : 0;
+
+        return Ok(new
         {
             verificationId = $"PKG-VER-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             productId = request?.ProductId,
+            dimensionConfiguredProductsCount,
             cartonType = string.IsNullOrWhiteSpace(request?.CartonType) ? "STD-CARTON-M" : request.CartonType.Trim(),
             volumetricFitConfirmed = true,
             gs1SsccReady = true,
             verifiedAtUtc = DateTime.UtcNow
         });
+    }
 
     public sealed record ExecuteKittingVasRequest(int? WarehouseId = null, string? KitSkuCode = null, string? VasServiceType = null);
 
     [HttpPost("execute-kitting-vas"), PermissionAuthorize(AppPermissions.PackingRead)]
-    public IActionResult ExecuteKittingVas([FromBody] ExecuteKittingVasRequest? request = null) =>
-        Ok(new
+    public async Task<IActionResult> ExecuteKittingVas(
+        [FromBody] ExecuteKittingVasRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var targetWarehouseId = request?.WarehouseId ?? 1;
+        var activeSessionsCount = db != null
+            ? await db.PackingSessions.AsNoTracking()
+                .CountAsync(s => s.WarehouseId == targetWarehouseId, cancellationToken)
+            : 0;
+
+        return Ok(new
         {
             workOrderId = $"KIT-VAS-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId ?? 1,
+            warehouseId = targetWarehouseId,
+            activeSessionsCount,
             kitSkuCode = request?.KitSkuCode ?? "KIT-BUNDLE-STD",
             vasServiceType = request?.VasServiceType ?? "LABELING_SHRINKWRAP_BUNDLE",
             componentAllocationStatus = "COMPONENTS_VERIFIED_FEFO",
@@ -66,6 +97,7 @@ public sealed class PackingSessionsController(IPackingService service) : Control
             status = "KITTING_VAS_READY",
             executedAtUtc = DateTime.UtcNow
         });
+    }
 
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.PackingRead)]

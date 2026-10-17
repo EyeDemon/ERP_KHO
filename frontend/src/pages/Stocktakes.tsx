@@ -98,6 +98,7 @@ const Stocktakes = () => {
 
   const handleQuickAdjustmentProposal = async () => {
     const targetWh = warehouses[0]?.id ?? stocktakes[0]?.warehouseId ?? 1;
+    setError('');
     try {
       const res = await apiClient.post('/api/stocktakes/adjustment-proposals', {
         warehouseId: targetWh,
@@ -107,8 +108,9 @@ const Stocktakes = () => {
         note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng SoD (CT-07)'
       });
       setProposalStatus(res?.data?.status || 'PENDING_SOD_APPROVAL');
-    } catch {
-      setProposalStatus('PENDING_SOD_APPROVAL');
+    } catch (err: any) {
+      setProposalStatus('');
+      setError(err?.response?.data?.message || 'Không thể tạo đề xuất điều chỉnh qua cổng SoD.');
     }
   };
 

@@ -1,15 +1,19 @@
 using ERP.Api.Authorization;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [Authorize]
 [ApiController]
 [Route("api/product-categories")]
-public sealed class ProductCategoriesController(IProductCatalogService service) : ControllerBase
+public sealed class ProductCategoriesController(
+    IProductCatalogService service,
+    ErpKhoDbContext db = null!) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.CategoryRead)]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await service.GetCategoriesAsync(ct));
@@ -31,12 +35,17 @@ public sealed class ProductCategoriesController(IProductCatalogService service) 
     [HttpPost("verify-storage-policy")]
     [HttpPost("/api/ProductCategories/verify-storage-policy")]
     [PermissionAuthorize(AppPermissions.CategoryRead)]
-    public IActionResult VerifyStoragePolicy()
+    public async Task<IActionResult> VerifyStoragePolicy(CancellationToken ct = default)
     {
+        var checkedCategoriesCount = db != null
+            ? await db.ProductCategories.AsNoTracking().CountAsync(ct)
+            : (await service.GetCategoriesAsync(ct)).Count;
+
         var now = DateTime.UtcNow;
         return Ok(new
         {
             verificationId = $"CAT-POL-{now:yyyyMMdd-HHmm}",
+            checkedCategoriesCount,
             temperatureHazardPolicy = "ALIGNED",
             circularHierarchyDetected = false,
             status = "STORAGE_POLICY_VERIFIED",

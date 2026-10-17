@@ -105,21 +105,25 @@ export default function PackingSessions(){
   const activeHus=(selected?.handlingUnits??[]).filter(x=>!['Cancelled','Staged','Loaded','Shipped'].includes(x.status));
   const packableHus=activeHus.filter(x=>['Open','InUse'].includes(x.status));
   const verifyPackagingProfile=async()=>{
+    setError('');
     try{
       const res=await apiClient.post('/api/packing-sessions/verify-packaging-profile',{cartonType:huType||'STD-CARTON-M'});
       const data=res?.data as {verificationId?:string;cartonType?:string;gs1SsccReady?:boolean}|undefined;
       setPackagingVerificationResult(`${data?.verificationId??'PKG-VER-OK'} • ${data?.cartonType??'STD-CARTON-M'} • GS1/SSCC Ready: ${data?.gs1SsccReady!==false?'YES':'NO'}`);
-    }catch{
-      setPackagingVerificationResult('PKG-VER-LOCAL • STD-CARTON-M • GS1/SSCC Ready: YES');
+    }catch(e){
+      setPackagingVerificationResult('');
+      setError(errorMessage(e));
     }
   };
   const executeKittingVas=async()=>{
+    setError('');
     try{
-      const res=await (apiClient.post?.('/api/packing-sessions/execute-kitting-vas',{warehouseId:selected?.warehouseId??1,kitSkuCode:'KIT-BUNDLE-STD',vasServiceType:'LABELING_SHRINKWRAP_BUNDLE'})??Promise.resolve({data:null}));
+      const res=await apiClient.post('/api/packing-sessions/execute-kitting-vas',{warehouseId:selected?.warehouseId??1,kitSkuCode:'KIT-BUNDLE-STD',vasServiceType:'LABELING_SHRINKWRAP_BUNDLE'});
       const data=res?.data as {workOrderId?:string;status?:string;vasServiceType?:string}|undefined;
-      setKittingVasResult(`${data?.workOrderId??'KIT-VAS-LOCAL'} • ${data?.status??'KITTING_VAS_READY'} (${data?.vasServiceType??'LABELING_SHRINKWRAP_BUNDLE'})`);
-    }catch{
-      setKittingVasResult('KIT-VAS-LOCAL • KITTING_VAS_READY (LABELING_SHRINKWRAP_BUNDLE)');
+      setKittingVasResult(`${data?.workOrderId??'KIT-VAS-OK'} • ${data?.status??'KITTING_VAS_READY'} (${data?.vasServiceType??'LABELING_SHRINKWRAP_BUNDLE'})`);
+    }catch(e){
+      setKittingVasResult('');
+      setError(errorMessage(e));
     }
   };
 

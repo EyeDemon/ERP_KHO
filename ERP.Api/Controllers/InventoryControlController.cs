@@ -15,7 +15,9 @@ namespace ERP.Api.Controllers;
 [Route("api/inventory")]
 public sealed class InventoryControlController(
     IInventoryLockService lockService,
-    IInventoryMovementService movementService) : ControllerBase
+    IInventoryMovementService movementService,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet("locks")]
     [PermissionAuthorize(AppPermissions.InventoryLockRead)]
@@ -323,11 +325,24 @@ public sealed class InventoryControlController(
 
     [HttpPost("evaluate-decision-policy-governance")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
-    public IActionResult EvaluateDecisionPolicyGovernance([FromBody] EvaluateDecisionPolicyRequest? request = null) =>
-        Ok(new
+    public async Task<IActionResult> EvaluateDecisionPolicyGovernance(
+        [FromBody] EvaluateDecisionPolicyRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var evaluatedStockBucketsCount = db != null
+            ? await db.InventoryStocks.AsNoTracking()
+                .Where(s => !request!.WarehouseId.HasValue || s.WarehouseId == request.WarehouseId.Value)
+                .CountAsync(cancellationToken)
+            : 0;
+
+        return Ok(new
         {
             policyRegistryId = $"DEC-POL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             warehouseId = request?.WarehouseId,
+            evaluatedStockBucketsCount,
             forecastBiasMapeStatus = "MAPE_WITHIN_TOLERANCE_BAND",
             demandAnomalyDetector = "SPIKE_AND_DROP_GUARD_ACTIVE",
             inventoryRiskScoreStatus = "EXPLAINABLE_RISK_SCORING_READY",
@@ -335,5 +350,6 @@ public sealed class InventoryControlController(
             status = "DECISION_POLICY_GOVERNANCE_VERIFIED",
             evaluatedAtUtc = DateTime.UtcNow
         });
+    }
 }
 

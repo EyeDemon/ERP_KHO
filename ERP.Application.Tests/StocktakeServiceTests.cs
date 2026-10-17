@@ -394,6 +394,62 @@ namespace ERP.Application.Tests
             _mockStocktakeRepo.Verify(x => x.UpdateAsync(stocktake), Times.Once);
             _mockUnitOfWork.Verify(x => x.CommitTransactionAsync(), Times.Once);
         }
+
+        [Fact]
+        public async Task CreateStocktakeAsync_FiltersAvailableStatusAndAggregatesByProductAndLocation()
+        {
+            var dto = new DTOs.CreateStocktakeDto { WarehouseId = 1 };
+            var warehouse = new Warehouse { Id = 1, Name = "Kho Tổng" };
+            var stocks = new List<InventoryStock>
+            {
+                new InventoryStock { ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 101, Status = InventoryStatus.Available, Quantity = 15m },
+                new InventoryStock { ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 102, Status = InventoryStatus.Available, Quantity = 10m },
+                new InventoryStock { ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 103, Status = InventoryStatus.Quarantine, Quantity = 99m }
+            };
+
+            _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(warehouse);
+            _mockStockRepo.Setup(x => x.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<InventoryStock, bool>>>(), It.IsAny<CancellationToken>()))
+                           .ReturnsAsync(stocks);
+
+            Stocktake? captured = null;
+            _mockStocktakeRepo.Setup(x => x.AddAsync(It.IsAny<Stocktake>(), It.IsAny<CancellationToken>()))
+                              .Callback<Stocktake, CancellationToken>((s, _) => captured = s)
+                              .ReturnsAsync((Stocktake s, CancellationToken _) => s);
+
+            await _service.CreateStocktakeAsync(dto, 99);
+
+            captured.Should().NotBeNull();
+            captured!.Details.Should().ContainSingle();
+            captured.Details.Single().SystemQuantity.Should().Be(25m);
+        }
+
+        [Fact]
+        public async Task ApproveStocktakeAsync_WithMultipleLotBuckets_AggregatesAndDistributesDecrease()
+        {
+            var stocktake = new Stocktake
+            {
+                Id = 25,
+                WarehouseId = 1,
+                Status = ReceiptStatus.Draft,
+                CreatedBy = 10,
+                Details = new List<StocktakeDetail>
+                {
+                    new StocktakeDetail { ProductId = 10, LocationId = 50, SystemQuantity = 25m, ActualQuantity = 18m }
+                }
+            };
+            var bucket1 = new InventoryStock { Id = 1, ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 101, Status = InventoryStatus.Available, Quantity = 15m, ReservedQuantity = 10m };
+            var bucket2 = new InventoryStock { Id = 2, ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 102, Status = InventoryStatus.Available, Quantity = 10m, ReservedQuantity = 0m };
+
+            _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(25)).ReturnsAsync(stocktake);
+            _mockStockRepo.Setup(x => x.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<InventoryStock, bool>>>(), It.IsAny<CancellationToken>()))
+                           .ReturnsAsync(new List<InventoryStock> { bucket1, bucket2 });
+
+            await _service.ApproveStocktakeAsync(25, 99);
+
+            bucket1.Quantity.Should().Be(10m);
+            bucket2.Quantity.Should().Be(8m);
+            stocktake.Details.Single().DifferenceQuantity.Should().Be(-7m);
+        }
     }
 }
 

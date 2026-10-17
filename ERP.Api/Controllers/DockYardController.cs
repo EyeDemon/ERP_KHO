@@ -2,8 +2,10 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -28,7 +30,10 @@ public sealed record DispatchCrossdockRequest(int? WarehouseId, string? DockDoor
 [Authorize]
 [ApiController]
 [Route("api/dock-yard")]
-public sealed class DockYardController(IDockYardService service) : ControllerBase
+public sealed class DockYardController(
+    IDockYardService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet("warehouses")]
     [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
@@ -99,15 +104,28 @@ public sealed class DockYardController(IDockYardService service) : ControllerBas
 
     [HttpPost("dispatch-crossdock")]
     [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
-    public IActionResult DispatchCrossdock([FromBody] DispatchCrossdockRequest? request) => Ok(new
+    public async Task<IActionResult> DispatchCrossdock(
+        [FromBody] DispatchCrossdockRequest? request,
+        CancellationToken token = default)
     {
-        dispatchId = $"XDOCK-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-        warehouseId = request?.WarehouseId ?? 1,
-        dockDoorCode = string.IsNullOrWhiteSpace(request?.DockDoorCode) ? "DOCK-XD-01" : request.DockDoorCode.Trim(),
-        stagedHuCount = 4,
-        status = "CROSSDOCK_ROUTED",
-        routedAtUtc = DateTime.UtcNow,
-    });
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, token);
+
+        var targetWarehouseId = request?.WarehouseId ?? 1;
+        var stagedHuCount = db != null
+            ? await db.HandlingUnits.AsNoTracking().CountAsync(h => h.WarehouseId == targetWarehouseId, token)
+            : 4;
+
+        return Ok(new
+        {
+            dispatchId = $"XDOCK-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = targetWarehouseId,
+            dockDoorCode = string.IsNullOrWhiteSpace(request?.DockDoorCode) ? "DOCK-XD-01" : request.DockDoorCode.Trim(),
+            stagedHuCount,
+            status = "CROSSDOCK_ROUTED",
+            routedAtUtc = DateTime.UtcNow,
+        });
+    }
 
     [HttpGet("docks")]
     [PermissionAuthorize(AppPermissions.DockRead)]

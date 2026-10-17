@@ -458,13 +458,13 @@ const Inventory = () => {
       link.click();
       link.remove();
     } catch {
-      alert('Lỗi khi xuất Excel tồn kho');
+      setStockError('Lỗi khi xuất Excel tồn kho');
     }
   };
 
   const handleExportInOut = async () => {
     if (inoutFilter.fromDate && inoutFilter.toDate && new Date(inoutFilter.fromDate) > new Date(inoutFilter.toDate)) {
-      alert('Từ ngày không được lớn hơn Đến ngày');
+      setInoutError('Từ ngày không được lớn hơn Đến ngày');
       return;
     }
     try {
@@ -483,7 +483,7 @@ const Inventory = () => {
       link.click();
       link.remove();
     } catch {
-      alert('Lỗi khi xuất Excel xuất nhập tồn');
+      setInoutError('Lỗi khi xuất Excel xuất nhập tồn');
     }
   };
 
@@ -1045,6 +1045,7 @@ const Inventory = () => {
                       className="btn-primary"
                       onClick={async () => {
                         const baselineAvailable = analyticsReport.turnoverAndDaysOnHand.reduce((sum, x) => sum + x.onHandQuantity, 0);
+                        setAnalyticsError('');
                         try {
                           const res = await apiClient.post('/api/inventory/what-if-simulation', {
                             warehouseId: analyticsFilter.warehouseId ? Number(analyticsFilter.warehouseId) : null,
@@ -1055,19 +1056,20 @@ const Inventory = () => {
                             setWhatIfResult(res.data);
                             return;
                           }
+                          const simulatedDemand = Math.round(baselineAvailable * whatIfMultiplier * 100) / 100;
+                          const projectedNetBalance = Math.round((baselineAvailable - simulatedDemand) * 100) / 100;
+                          setWhatIfResult({
+                            demandMultiplier: whatIfMultiplier,
+                            totalAvailable: baselineAvailable,
+                            simulatedDemand,
+                            projectedNetBalance,
+                            scenarioStatus: projectedNetBalance < 0 ? 'PROJECTED_SHORTAGE' : 'PROJECTED_SUFFICIENT',
+                            immutableSnapshotGuarantee: true,
+                          });
                         } catch {
-                          // Fallback to deterministic client-side snapshot projection when offline or in unit tests
+                          setWhatIfResult(null);
+                          setAnalyticsError('Không thể chạy mô phỏng kịch bản giả định What-If.');
                         }
-                        const simulatedDemand = Math.round(baselineAvailable * whatIfMultiplier * 100) / 100;
-                        const projectedNetBalance = Math.round((baselineAvailable - simulatedDemand) * 100) / 100;
-                        setWhatIfResult({
-                          demandMultiplier: whatIfMultiplier,
-                          totalAvailable: baselineAvailable,
-                          simulatedDemand,
-                          projectedNetBalance,
-                          scenarioStatus: projectedNetBalance < 0 ? 'PROJECTED_SHORTAGE' : 'PROJECTED_SUFFICIENT',
-                          immutableSnapshotGuarantee: true,
-                        });
                       }}
                     >
                       Chạy Mô phỏng What-If
@@ -1076,8 +1078,9 @@ const Inventory = () => {
                       type="button"
                       className="btn-secondary"
                       onClick={() => {
-                        apiClient
-                          .post?.('/api/inventory/evaluate-decision-policy-governance', {
+                        setAnalyticsError('');
+                        void apiClient
+                          .post('/api/inventory/evaluate-decision-policy-governance', {
                             warehouseId: analyticsFilter.warehouseId ? Number(analyticsFilter.warehouseId) : null,
                           })
                           .then((res) => {
@@ -1092,14 +1095,8 @@ const Inventory = () => {
                             });
                           })
                           .catch(() => {
-                            setDecisionPolicyAudit({
-                              policyRegistryId: 'DEC-POL-20261017',
-                              forecastBiasMapeStatus: 'MAPE_WITHIN_TOLERANCE_BAND',
-                              demandAnomalyDetector: 'SPIKE_AND_DROP_GUARD_ACTIVE',
-                              inventoryRiskScoreStatus: 'EXPLAINABLE_RISK_SCORING_READY',
-                              humanInTheLoopBoundary: 'APPROVAL_REQUIRED_BEFORE_LEDGER_MUTATION',
-                              status: 'DECISION_POLICY_GOVERNANCE_VERIFIED',
-                            });
+                            setDecisionPolicyAudit(null);
+                            setAnalyticsError('Không thể kiểm định sổ đăng ký chính sách quyết định và rủi ro.');
                           });
                       }}
                     >

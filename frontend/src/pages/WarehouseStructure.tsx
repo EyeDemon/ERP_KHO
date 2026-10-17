@@ -68,16 +68,19 @@ const WarehouseStructure = () => {
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedLocationCode, setSelectedLocationCode] = useState<string | null>(null);
   const [virtualVerification, setVirtualVerification] = useState<{ verificationId: string; status: string } | null>(null);
+  const [error, setError] = useState('');
 
   const verifyVirtualLocations = async () => {
+    setError('');
     try {
       const res = await apiClient.post('/api/Warehouses/verify-virtual-locations', { warehouseId });
       setVirtualVerification({
         verificationId: res?.data?.verificationId || 'VLOC-AUD-ACTIVE',
         status: res?.data?.status || 'ALL_9_VIRTUAL_LOCATIONS_READY',
       });
-    } catch {
-      setVirtualVerification({ verificationId: 'VLOC-AUD-ACTIVE', status: 'ALL_9_VIRTUAL_LOCATIONS_READY' });
+    } catch (err: any) {
+      setVirtualVerification(null);
+      setError(err?.response?.data?.message || 'Không thể kiểm định hệ thống kho chuẩn và 9 vị trí ảo.');
     }
   };
 
@@ -185,6 +188,8 @@ const WarehouseStructure = () => {
           title="Cấu trúc vị trí kho"
           description="Mock tương tác Warehouse → Zone → Aisle → Rack → Level → Bin / Location để kiểm tra IA, trạng thái và quy tắc WH-02 trước khi triển khai production."
         />
+
+        {error && <p role="alert">{error}</p>}
 
         <UiCard title="Phạm vi Blueprint WH-02">
           <p className="ui-muted-text">

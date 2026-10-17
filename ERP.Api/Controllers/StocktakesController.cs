@@ -1,9 +1,13 @@
 using ERP.Application.Interfaces;
 using ERP.Application.DTOs;
+using ERP.Domain.Entities;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
+using System.Globalization;
 using System.Security.Claims;
 
 namespace ERP.Api.Controllers
@@ -15,11 +19,19 @@ namespace ERP.Api.Controllers
     {
         private readonly IStocktakeService _stocktakeService;
         private readonly IStocktakeQueryService _stocktakeQueryService;
+        private readonly ErpKhoDbContext? _db;
+        private readonly IWarehouseAuthorizationService? _warehouseAccess;
 
-        public StocktakesController(IStocktakeService stocktakeService, IStocktakeQueryService stocktakeQueryService)
+        public StocktakesController(
+            IStocktakeService stocktakeService,
+            IStocktakeQueryService stocktakeQueryService,
+            ErpKhoDbContext db = null!,
+            IWarehouseAuthorizationService warehouseAccess = null!)
         {
             _stocktakeService = stocktakeService;
             _stocktakeQueryService = stocktakeQueryService;
+            _db = db;
+            _warehouseAccess = warehouseAccess;
         }
 
         [HttpGet]
@@ -30,8 +42,48 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("reason-codes-and-adjustments")]
-        public IActionResult GetReasonCodesAndAdjustments()
+        public async Task<IActionResult> GetReasonCodesAndAdjustments(
+            [FromQuery] int? warehouseId = null,
+            CancellationToken cancellationToken = default)
         {
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+            var recentProposals = new List<object>();
+            if (_db != null)
+            {
+                var query = _db.AuditLogs.AsNoTracking()
+                    .Where(a => a.EntityName == "StocktakeAdjustmentProposal");
+                if (warehouseId.HasValue)
+                    query = query.Where(a => a.WarehouseId == warehouseId.Value);
+
+                var logs = await query
+                    .OrderByDescending(a => a.Timestamp)
+                    .ThenByDescending(a => a.Id)
+                    .Take(50)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var a in logs)
+                {
+                    decimal.TryParse(a.OldValues, NumberStyles.Any, CultureInfo.InvariantCulture, out var deltaQty);
+                    recentProposals.Add(new
+                    {
+                        id = a.Id,
+                        proposalCode = a.NewValues ?? $"ADJ-{a.Timestamp:yyyyMMdd}-{a.Id:D3}",
+                        warehouseId = a.WarehouseId ?? 0,
+                        productId = a.EntityId,
+                        productCode = !string.IsNullOrWhiteSpace(a.CorrelationId)
+                            ? a.CorrelationId
+                            : (a.EntityId.HasValue ? $"SKU-{a.EntityId.Value}" : "SKU-CYCLE-01"),
+                        deltaQuantity = deltaQty,
+                        reasonCode = a.Action,
+                        note = a.Reason,
+                        status = string.IsNullOrWhiteSpace(a.Result) ? "PENDING_SOD_APPROVAL" : a.Result,
+                        createdAtUtc = a.Timestamp
+                    });
+                }
+            }
+
             return Ok(new
             {
                 reasonCodes = new object[]
@@ -48,29 +100,89 @@ namespace ERP.Api.Controllers
                     sodRequired = true,
                     approvalThresholdPct = 2.0m,
                     supportedTransactionTypes = new[] { "AdjustmentIncrease", "AdjustmentDecrease" }
-                }
+                },
+                recentProposals
             });
         }
 
         public sealed record CreateAdjustmentProposalRequest(
             int WarehouseId,
-            string ProductCode,
-            decimal DeltaQuantity,
-            string ReasonCode,
-            string? Note);
+            string? ProductCode = null,
+            decimal DeltaQuantity = 0m,
+            string ReasonCode = "COUNT_VARIANCE",
+            string? Note = null,
+            int? ProductId = null);
 
         [HttpPost("adjustment-proposals")]
-        public IActionResult CreateAdjustmentProposal([FromBody] CreateAdjustmentProposalRequest request)
+        public async Task<IActionResult> CreateAdjustmentProposal(
+            [FromBody] CreateAdjustmentProposalRequest request,
+            CancellationToken cancellationToken = default)
         {
+            if (_warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId, cancellationToken);
+
+            var reasonCode = string.IsNullOrWhiteSpace(request.ReasonCode)
+                ? "COUNT_VARIANCE"
+                : request.ReasonCode.Trim().ToUpperInvariant();
+            var productCode = request.ProductCode?.Trim() ?? string.Empty;
+            var resolvedProductId = request.ProductId;
+
+            if (_db != null)
+            {
+                if (!resolvedProductId.HasValue && !string.IsNullOrWhiteSpace(productCode))
+                {
+                    resolvedProductId = await _db.Products.AsNoTracking()
+                        .Where(p => p.Code == productCode)
+                        .Select(p => (int?)p.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+                else if (resolvedProductId.HasValue && string.IsNullOrWhiteSpace(productCode))
+                {
+                    productCode = await _db.Products.AsNoTracking()
+                        .Where(p => p.Id == resolvedProductId.Value)
+                        .Select(p => p.Code)
+                        .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+                }
+            }
+
+            var now = DateTime.UtcNow;
+            var seedKey = !string.IsNullOrWhiteSpace(productCode)
+                ? productCode
+                : (resolvedProductId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+            var proposalCode = $"ADJ-{now:yyyyMMdd}-{Math.Abs(seedKey.GetHashCode()) % 1000:D3}";
+            var userIdStr = User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("Id");
+            int? userId = int.TryParse(userIdStr, out var parsedUserId) ? parsedUserId : null;
+
+            if (_db != null)
+            {
+                var log = new AuditLog
+                {
+                    UserId = userId,
+                    EntityName = "StocktakeAdjustmentProposal",
+                    EntityId = resolvedProductId,
+                    WarehouseId = request.WarehouseId,
+                    Action = reasonCode,
+                    OldValues = request.DeltaQuantity.ToString(CultureInfo.InvariantCulture),
+                    NewValues = proposalCode,
+                    Reason = request.Note?.Trim() ?? reasonCode,
+                    CorrelationId = string.IsNullOrWhiteSpace(productCode) ? null : productCode,
+                    Result = "PENDING_SOD_APPROVAL",
+                    Timestamp = now
+                };
+                _db.AuditLogs.Add(log);
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
             return Ok(new
             {
-                proposalCode = $"ADJ-{DateTime.UtcNow:yyyyMMdd}-{Math.Abs((request.ProductCode ?? string.Empty).GetHashCode()) % 1000:D3}",
+                proposalCode,
                 warehouseId = request.WarehouseId,
-                productCode = request.ProductCode,
+                productId = resolvedProductId,
+                productCode,
                 deltaQuantity = request.DeltaQuantity,
-                reasonCode = request.ReasonCode,
+                reasonCode,
                 status = "PENDING_SOD_APPROVAL",
-                createdAtUtc = DateTime.UtcNow
+                createdAtUtc = now
             });
         }
 

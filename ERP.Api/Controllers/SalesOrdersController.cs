@@ -2,8 +2,10 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -13,18 +15,33 @@ public sealed record EvaluateAtpRoutingRequest(int? WarehouseId = null);
 [ApiController]
 [Route("api/sales-orders")]
 [Authorize]
-public sealed class SalesOrdersController(ISalesOrderBackorderService service) : ControllerBase
+public sealed class SalesOrdersController(
+    ISalesOrderBackorderService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpPost("expedite-backorder")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
-    public IActionResult ExpediteBackorder([FromBody] ExpediteBackorderRequest? request = null)
+    public async Task<IActionResult> ExpediteBackorder(
+        [FromBody] ExpediteBackorderRequest? request = null,
+        CancellationToken cancellationToken = default)
     {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var targetWarehouseId = request?.WarehouseId ?? 1;
+        var backorderOrdersCount = db != null
+            ? await db.SalesOrders.AsNoTracking()
+                .CountAsync(o => !request!.WarehouseId.HasValue || o.WarehouseId == request.WarehouseId.Value, cancellationToken)
+            : 0;
+
         var now = DateTime.UtcNow;
         return Ok(new
         {
             expediteId = $"EXP-BO-{now:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId ?? 1,
+            warehouseId = targetWarehouseId,
             orderNumber = string.IsNullOrWhiteSpace(request?.OrderNumber) ? "SO-PRIORITY-QUEUE" : request.OrderNumber.Trim(),
+            backorderOrdersCount,
             priorityElevated = true,
             allocationWaveQueued = true,
             processedAtUtc = now
@@ -33,11 +50,23 @@ public sealed class SalesOrdersController(ISalesOrderBackorderService service) :
 
     [HttpPost("evaluate-atp-routing")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
-    public IActionResult EvaluateAtpRouting([FromBody] EvaluateAtpRoutingRequest? request = null)
+    public async Task<IActionResult> EvaluateAtpRouting(
+        [FromBody] EvaluateAtpRoutingRequest? request = null,
+        CancellationToken cancellationToken = default)
     {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var evaluatedOrdersCount = db != null
+            ? await db.SalesOrders.AsNoTracking()
+                .CountAsync(o => !request!.WarehouseId.HasValue || o.WarehouseId == request.WarehouseId.Value, cancellationToken)
+            : 0;
+
         return Ok(new
         {
             evaluationId = $"ATP-ROUTE-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId,
+            evaluatedOrdersCount,
             atpCtpPromiseStatus = "PROMISE_DATE_VERIFIED_READONLY",
             fulfillmentNodeRouting = "OPTIMAL_WAREHOUSE_NODE_SELECTED",
             allocationFairnessPolicy = "PROPORTIONAL_SERVICE_TIER_FAIRNESS",

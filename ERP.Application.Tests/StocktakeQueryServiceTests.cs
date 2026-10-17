@@ -150,5 +150,39 @@ namespace ERP.Application.Tests
             Assert.Null(result.ApprovedByName);
             Assert.Null(result.ApprovedAt);
         }
+
+        [Fact]
+        public async Task GetStocktakeByIdAsync_WhenDraftBlindCount_MasksUncountedSystemQuantity()
+        {
+            var context = GetContext();
+            context.Warehouses.Add(new Warehouse { Id = 1, Name = "W1", Code = "W1" });
+            context.Users.Add(new User { Id = 1, FullName = "Creator", Username = "Creator" });
+            context.Units.Add(new Unit { Id = 1, Name = "Cái", Code = "CAI" });
+            context.Products.Add(new Product { Id = 1, Code = "P1", Name = "Product 1", UnitId = 1 });
+
+            var s = new Stocktake
+            {
+                Id = 20,
+                Code = "ST-BLIND",
+                WarehouseId = 1,
+                Status = ReceiptStatus.Draft,
+                Note = "[BLIND] Kiểm kê mù định kỳ",
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow,
+                Details = new List<StocktakeDetail>
+                {
+                    new StocktakeDetail { Id = 201, ProductId = 1, SystemQuantity = 50, ActualQuantity = null, DifferenceQuantity = -50 }
+                }
+            };
+            context.Stocktakes.Add(s);
+            await context.SaveChangesAsync();
+
+            var service = new StocktakeQueryService(context);
+            var result = await service.GetStocktakeByIdAsync(20);
+
+            var detail = Assert.Single(result.Details);
+            Assert.Equal(0m, detail.SystemQuantity);
+            Assert.Equal(0m, detail.DifferenceQuantity);
+        }
     }
 }

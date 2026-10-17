@@ -7,10 +7,11 @@ using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using System.IO;
+using System.Security.Claims;
 
 namespace ERP.Api.Controllers
 {
-    [Authorize(Roles = AppRoles.AdminManagerOrViewer)]
+    [Authorize(Roles = AppRoles.AllRoles)]
     [ApiController]
     [Route("api/[controller]")]
     public class ReportsController : ControllerBase
@@ -214,8 +215,10 @@ namespace ERP.Api.Controllers
                 .CountAsync(m => scopedIds.Contains(m.WarehouseId), cancellationToken);
 
             var ledgerWatermarkId = await db.InventoryTransactions.AsNoTracking()
+                .Where(t => scopedIds.Contains(t.WarehouseId))
                 .MaxAsync(t => (int?)t.Id, cancellationToken) ?? 0;
             var auditWatermarkId = await db.AuditLogs.AsNoTracking()
+                .Where(a => a.WarehouseId.HasValue && scopedIds.Contains(a.WarehouseId.Value))
                 .MaxAsync(a => (long?)a.Id, cancellationToken) ?? 0L;
             var stockSnapshotRowCount = await db.InventoryStocks.AsNoTracking()
                 .CountAsync(s => scopedIds.Contains(s.WarehouseId), cancellationToken);
@@ -237,10 +240,22 @@ namespace ERP.Api.Controllers
         public sealed record SyncBiSnapshotRequest(int? WarehouseId);
 
         [HttpPost("sync-bi-snapshot")]
-        [Authorize]
-        public IActionResult SyncBiSnapshot(
-            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncBiSnapshotRequest? request) =>
-            Ok(new
+        [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+        public async Task<IActionResult> SyncBiSnapshot(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncBiSnapshotRequest? request,
+            [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+            if (request?.WarehouseId.HasValue == true && warehouseAuth != null)
+            {
+                var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                if (!accessibleIds.Contains(request.WarehouseId.Value))
+                    return Forbid();
+            }
+
+            return Ok(new
             {
                 snapshotId = $"BI-SNAP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
                 warehouseId = request?.WarehouseId,
@@ -249,6 +264,7 @@ namespace ERP.Api.Controllers
                 status = "BI_HEATMAP_SYNCED",
                 syncedAtUtc = DateTime.UtcNow
             });
+        }
 
         [HttpGet("warehouse-tasks")]
         [Authorize]
@@ -384,6 +400,7 @@ namespace ERP.Api.Controllers
             [FromServices] ErpKhoDbContext db,
             [FromServices] IWarehouseAuthorizationService warehouseAuth,
             [FromQuery] int? warehouseId = null,
+            [FromQuery] bool includeAcknowledged = false,
             CancellationToken cancellationToken = default)
         {
             var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
@@ -392,7 +409,15 @@ namespace ERP.Api.Controllers
 
             var scopedIds = warehouseId.HasValue ? new[] { warehouseId.Value } : accessibleIds.ToArray();
             var today = DateTime.UtcNow.Date;
-            var exceptions = new List<object>();
+            var acknowledgedCodes = (await db.AuditLogs.AsNoTracking()
+                .Where(a => a.EntityName == "OperationalException" &&
+                            (a.Action == "ACKNOWLEDGE" || a.Action == "Exception.Acknowledged") &&
+                            (!a.WarehouseId.HasValue || scopedIds.Contains(a.WarehouseId.Value)) &&
+                            a.OldValues != null)
+                .Select(a => a.OldValues!)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var putawayEx = await db.PutawayTasks.AsNoTracking()
                 .Where(t => scopedIds.Contains(t.WarehouseId) && t.Status == PutawayTaskStatus.Exception)
@@ -407,7 +432,6 @@ namespace ERP.Api.Controllers
                 })
                 .Take(20)
                 .ToListAsync(cancellationToken);
-            exceptions.AddRange(putawayEx);
 
             var shortPicks = await db.ShortPickExceptions.AsNoTracking()
                 .Where(e => scopedIds.Contains(e.PickingTaskLine.PickingTask.WarehouseId) &&
@@ -423,7 +447,6 @@ namespace ERP.Api.Controllers
                 })
                 .Take(20)
                 .ToListAsync(cancellationToken);
-            exceptions.AddRange(shortPicks);
 
             var discrepancies = await db.ReceivingDiscrepancies.AsNoTracking()
                 .Where(d => scopedIds.Contains(d.ImportReceipt.WarehouseId) &&
@@ -439,7 +462,6 @@ namespace ERP.Api.Controllers
                 })
                 .Take(20)
                 .ToListAsync(cancellationToken);
-            exceptions.AddRange(discrepancies);
 
             var shipmentEx = await db.Shipments.AsNoTracking()
                 .Where(s => scopedIds.Contains(s.WarehouseId) &&
@@ -455,7 +477,6 @@ namespace ERP.Api.Controllers
                 })
                 .Take(20)
                 .ToListAsync(cancellationToken);
-            exceptions.AddRange(shipmentEx);
 
             var heldStocks = await db.InventoryStocks.AsNoTracking()
                 .Where(s => scopedIds.Contains(s.WarehouseId) &&
@@ -478,33 +499,61 @@ namespace ERP.Api.Controllers
                 })
                 .Take(30)
                 .ToListAsync(cancellationToken);
-            exceptions.AddRange(heldStocks);
 
-            return Ok(exceptions.Take(50).ToList());
+            var allExceptions = putawayEx
+                .Concat(shortPicks)
+                .Concat(discrepancies)
+                .Concat(shipmentEx)
+                .Concat(heldStocks)
+                .Select(x => new
+                {
+                    x.category,
+                    x.code,
+                    x.warehouseName,
+                    x.severity,
+                    x.summary,
+                    x.route,
+                    acknowledged = acknowledgedCodes.Contains(x.code)
+                })
+                .Where(x => includeAcknowledged || !x.acknowledged)
+                .Take(50)
+                .ToList();
+
+            return Ok(allExceptions);
         }
 
         public sealed record AcknowledgeOperationalExceptionDto(string ExceptionCode, int? WarehouseId, string? ResolutionNote);
 
         [HttpPost("operational-exceptions/acknowledge")]
-        [Authorize]
+        [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
         public async Task<IActionResult> AcknowledgeOperationalException(
             [FromBody] AcknowledgeOperationalExceptionDto request,
             [FromServices] ErpKhoDbContext db,
             [FromServices] IWarehouseAuthorizationService warehouseAuth,
             CancellationToken cancellationToken = default)
         {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+            if (request is null || string.IsNullOrWhiteSpace(request.ExceptionCode))
+                return BadRequest(new { message = "Mã ngoại lệ không được để trống." });
+
             var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            if (accessibleIds.Count == 0)
+                return Forbid();
             if (request.WarehouseId.HasValue && !accessibleIds.Contains(request.WarehouseId.Value))
                 return Forbid();
 
+            var effectiveWarehouseId = request.WarehouseId ?? accessibleIds.First();
+            int? userId = int.TryParse(User?.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null;
             var now = DateTime.UtcNow;
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
+                UserId = userId,
                 EntityName = "OperationalException",
-                EntityId = request.WarehouseId ?? 0,
-                WarehouseId = request.WarehouseId,
+                EntityId = effectiveWarehouseId,
+                WarehouseId = effectiveWarehouseId,
                 Action = "Exception.Acknowledged",
-                OldValues = request.ExceptionCode,
+                OldValues = request.ExceptionCode.Trim(),
                 NewValues = "ACKNOWLEDGED",
                 Reason = string.IsNullOrWhiteSpace(request.ResolutionNote)
                     ? "Đã tiếp nhận và phân công xử lý ngoại lệ"
@@ -517,7 +566,9 @@ namespace ERP.Api.Controllers
             return Ok(new
             {
                 acknowledged = true,
-                exceptionCode = request.ExceptionCode,
+                exceptionCode = request.ExceptionCode.Trim(),
+                warehouseId = effectiveWarehouseId,
+                userId,
                 acknowledgedAtUtc = now
             });
         }
@@ -581,7 +632,8 @@ namespace ERP.Api.Controllers
             results.AddRange(locations);
 
             var lots = await db.InventoryLots.AsNoTracking()
-                .Where(l => l.LotNumber.Contains(term))
+                .Where(l => l.LotNumber.Contains(term) &&
+                            db.InventoryStocks.Any(st => st.LotId == l.Id && accessibleIds.Contains(st.WarehouseId)))
                 .Take(8)
                 .Select(l => new
                 {
@@ -595,7 +647,8 @@ namespace ERP.Api.Controllers
             results.AddRange(lots);
 
             var serials = await db.InventorySerials.AsNoTracking()
-                .Where(s => s.SerialNumber.Contains(term))
+                .Where(s => s.SerialNumber.Contains(term) &&
+                            db.InventoryStocks.Any(st => st.SerialId == s.Id && accessibleIds.Contains(st.WarehouseId)))
                 .Take(8)
                 .Select(s => new
                 {
@@ -762,15 +815,14 @@ namespace ERP.Api.Controllers
                 .CountAsync(s => scopedIds.Contains(s.WarehouseId), cancellationToken);
             var stocktakeApprovedCount = await db.Stocktakes.AsNoTracking()
                 .CountAsync(s => scopedIds.Contains(s.WarehouseId) && s.Status == ReceiptStatus.Approved, cancellationToken);
-            var stocktakeLines = await db.StocktakeDetails.AsNoTracking()
-                .Where(d => scopedIds.Contains(d.Stocktake.WarehouseId))
-                .Select(d => new { d.ActualQuantity, d.DifferenceQuantity })
-                .ToListAsync(cancellationToken);
-            var countedLines = stocktakeLines.Where(l => l.ActualQuantity.HasValue).ToList();
-            var stocktakeLineCount = countedLines.Count > 0 ? countedLines.Count : stocktakeLines.Count;
-            var stocktakeAccurateLineCount = countedLines.Count > 0
-                ? countedLines.Count(l => l.DifferenceQuantity == 0)
-                : stocktakeLines.Count;
+            var stocktakeDetailsQuery = db.StocktakeDetails.AsNoTracking()
+                .Where(d => scopedIds.Contains(d.Stocktake.WarehouseId));
+            var totalStocktakeLines = await stocktakeDetailsQuery.CountAsync(cancellationToken);
+            var countedLineCount = await stocktakeDetailsQuery.CountAsync(d => d.ActualQuantity.HasValue, cancellationToken);
+            var stocktakeLineCount = countedLineCount > 0 ? countedLineCount : totalStocktakeLines;
+            var stocktakeAccurateLineCount = countedLineCount > 0
+                ? await stocktakeDetailsQuery.CountAsync(d => d.ActualQuantity.HasValue && d.DifferenceQuantity == 0, cancellationToken)
+                : totalStocktakeLines;
             var stocktakeAccuracyRatePct = stocktakeLineCount > 0
                 ? Math.Round(stocktakeAccurateLineCount * 100m / stocktakeLineCount, 1)
                 : 100m;
@@ -1008,6 +1060,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("inventory-in-out-stock")]
+        [Authorize(Roles = AppRoles.AdminManagerOrViewer)]
         public async Task<IActionResult> GetInventoryInOutReport(
             [FromQuery] DateTime? fromDate, 
             [FromQuery] DateTime? toDate, 
@@ -1027,6 +1080,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("inventory-in-out-stock/export")]
+        [Authorize(Roles = AppRoles.AdminManagerOrViewer)]
         public async Task<IActionResult> ExportInventoryInOutReport(
             [FromQuery] DateTime? fromDate, 
             [FromQuery] DateTime? toDate, 

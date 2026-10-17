@@ -76,6 +76,7 @@ export default function Asns(){
   const mutationLock=useRef(new Set<string>());
 
   const preAllocateStaging=async()=>{
+    setError('');
     try{
       const res=await apiClient.post('/api/asns/pre-allocate-staging',{
         warehouseId:warehouseId||items[0]?.warehouseId||1,
@@ -85,8 +86,9 @@ export default function Asns(){
         stagingReservationId:res?.data?.stagingReservationId||'ASN-STG-ACTIVE',
         stagingLaneCode:res?.data?.stagingLaneCode||'STAGE-IN-01',
       });
-    }catch{
-      setStagingReservation({stagingReservationId:'ASN-STG-ACTIVE',stagingLaneCode:'STAGE-IN-01'});
+    }catch(err:unknown){
+      setStagingReservation(null);
+      setError(permissionError(err,'Không thể cấp phát trước bãi đệm tiếp nhận.'));
     }
   };
 

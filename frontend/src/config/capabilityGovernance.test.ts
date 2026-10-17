@@ -60,6 +60,9 @@ describe('capability governance metadata', () => {
     const scenario = findCapability('AX-41');
     expect(getCapabilityGovernanceProfile(scenario.module, scenario.capability).releaseWave).toBe(6);
 
+    const wavePicking = findCapability('OUT-04');
+    expect(getCapabilityGovernanceProfile(wavePicking.module, wavePicking.capability).applicability).toBe('INDUSTRY_OPTIONAL');
+
     const finance = findCapability('IG-09');
     expect(getCapabilityGovernanceProfile(finance.module, finance.capability).applicability).toBe('REQUIRED_WHEN_FEATURE_ENABLED');
   });

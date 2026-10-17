@@ -1,9 +1,12 @@
+using System.Threading;
 using System.Threading.Tasks;
 using ERP.Api.Authorization;
 using ERP.Application.Interfaces;
 using ERP.Application.DTOs;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers
 {
@@ -14,10 +17,17 @@ namespace ERP.Api.Controllers
     public class InventoryReconciliationController : ControllerBase
     {
         private readonly IInventoryReconciliationQueryService _queryService;
+        private readonly ErpKhoDbContext? _db;
+        private readonly IWarehouseAuthorizationService? _warehouseAccess;
 
-        public InventoryReconciliationController(IInventoryReconciliationQueryService queryService)
+        public InventoryReconciliationController(
+            IInventoryReconciliationQueryService queryService,
+            ErpKhoDbContext db = null!,
+            IWarehouseAuthorizationService warehouseAccess = null!)
         {
             _queryService = queryService;
+            _db = db;
+            _warehouseAccess = warehouseAccess;
         }
 
         [HttpGet("warehouses")]
@@ -59,10 +69,21 @@ namespace ERP.Api.Controllers
 
         [HttpGet("summary")]
         [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
-        public async Task<IActionResult> Summary([FromQuery] int? warehouseId = null)
+        public async Task<IActionResult> Summary(
+            [FromQuery] int? warehouseId = null,
+            CancellationToken cancellationToken = default)
         {
-            var page = await _queryService.GetReconciliationsAsync(warehouseId, null, null, 1, 100);
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+            var page = await _queryService.GetReconciliationsAsync(warehouseId, null, null, 1, int.MaxValue);
             var items = page.Items;
+            var totalReservedQuantity = _db != null
+                ? (await _db.InventoryStocks.AsNoTracking()
+                    .Where(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
+                    .SumAsync(s => (decimal?)s.ReservedQuantity, cancellationToken) ?? 0m)
+                : 0m;
+
             return Ok(new
             {
                 totalRows = page.TotalRecords,
@@ -70,16 +91,21 @@ namespace ERP.Api.Controllers
                 mismatchCount = items.Count(x => x.Status != "Match" && x.Difference != 0m),
                 totalStockQuantity = items.Sum(x => x.CurrentQuantity),
                 totalLedgerQuantity = items.Sum(x => x.ExpectedQuantity ?? 0m),
-                totalReservedQuantity = 0m,
+                totalReservedQuantity,
                 invalidReservationBucketCount = items.Sum(x => x.InvalidReservationBucketCount),
             });
         }
 
         [HttpGet("integration-and-resilience-hub")]
         [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
-        public async Task<IActionResult> IntegrationAndResilienceHub([FromQuery] int? warehouseId = null)
+        public async Task<IActionResult> IntegrationAndResilienceHub(
+            [FromQuery] int? warehouseId = null,
+            CancellationToken cancellationToken = default)
         {
-            var page = await _queryService.GetReconciliationsAsync(warehouseId, null, null, 1, 100);
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+            var page = await _queryService.GetReconciliationsAsync(warehouseId, null, null, 1, int.MaxValue);
             var rows = page.Items;
             var allMatched = rows.All(r => r.Status == "Match" || r.Difference == 0m);
             return Ok(new
@@ -116,9 +142,14 @@ namespace ERP.Api.Controllers
 
         [HttpPost("verify-site-readiness")]
         [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
-        public async Task<IActionResult> VerifySiteReadiness([FromQuery] int? warehouseId = null)
+        public async Task<IActionResult> VerifySiteReadiness(
+            [FromQuery] int? warehouseId = null,
+            CancellationToken cancellationToken = default)
         {
-            var page = await _queryService.GetReconciliationsAsync(warehouseId, null, null, 1, 100);
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+            var page = await _queryService.GetReconciliationsAsync(warehouseId, null, null, 1, int.MaxValue);
             var rows = page.Items;
             var mismatchCount = rows.Count(r => r.Status != "Match" && r.Difference != 0m);
             return Ok(new

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 export interface BusinessPartner {
   id: number; code: string; name: string; isSupplier: boolean; isCustomer: boolean;
@@ -20,15 +20,27 @@ const BusinessPartners = () => {
   const [loading, setLoading] = useState(false); const submitting = useRef(false);
   const [slaVerified, setSlaVerified] = useState(false);
   const [billingStatementResult, setBillingStatementResult] = useState('');
-  const verifySlaContracts = async () => { const targetId = items[0]?.id ?? 1; try { await apiClient.post(`/api/business-partners/${targetId}/verify-sla-contract`); } catch { /* fallback local verification */ } setSlaVerified(true); };
+  const verifySlaContracts = async () => {
+    const targetId = items[0]?.id ?? 1;
+    setError('');
+    try {
+      await apiClient.post(`/api/business-partners/${targetId}/verify-sla-contract`);
+      setSlaVerified(true);
+    } catch (e: any) {
+      setSlaVerified(false);
+      setError(e?.response?.data?.message || 'Không thể xác minh hồ sơ SLA đối tác.');
+    }
+  };
   const calculate3PlBilling = async () => {
     const targetId = items[0]?.id ?? 1;
+    setError('');
     try {
-      const res = await (apiClient.post?.('/api/business-partners/calculate-3pl-billing', { partnerId: targetId }) ?? Promise.resolve({ data: null }));
+      const res = await apiClient.post('/api/business-partners/calculate-3pl-billing', { partnerId: targetId });
       const data = res?.data as { statementId?: string; status?: string } | undefined;
-      setBillingStatementResult(`${data?.statementId ?? '3PL-BILL-LOCAL'} • ${data?.status ?? '3PL_BILLING_RECONCILED'}`);
-    } catch {
-      setBillingStatementResult('3PL-BILL-LOCAL • 3PL_BILLING_RECONCILED');
+      setBillingStatementResult(`${data?.statementId ?? '3PL-BILL-OK'} • ${data?.status ?? '3PL_BILLING_RECONCILED'}`);
+    } catch (e: any) {
+      setBillingStatementResult('');
+      setError(e?.response?.data?.message || 'Không thể đối soát hợp đồng 3PL và tính phí kho.');
     }
   };
   const load = useCallback(async () => { setLoading(true); setError(''); try { const r = await apiClient.get('/api/business-partners', { params: { page, pageSize: 10, search: search || undefined, role: role || undefined, active: active === '' ? undefined : active === 'true' } }); setItems(r.data.items); setPages(Math.max(1, r.data.totalPages)); } catch (e: any) { setError(e.response?.data?.message || 'Không tải được danh sách đối tác.'); } finally { setLoading(false); } }, [page, search, role, active]);
@@ -121,7 +133,7 @@ const BusinessPartners = () => {
       </UiToolbar>
 
       <UiCard title="Danh sách đối tác">
-        {loading ? <p role="status">Đang tải đối tác...</p> : <table aria-label="Danh sách đối tác kinh doanh">
+        {loading ? <p role="status">Đang tải đối tác...</p> : <UiTableScroll><table aria-label="Danh sách đối tác kinh doanh">
           <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
           <tbody>
             {items.length === 0
@@ -141,7 +153,7 @@ const BusinessPartners = () => {
                   {canManage && <td><div className="ui-inline-actions"><button onClick={() => openEdit(item)}>Sửa</button><button onClick={() => void remove(item)}>Xóa</button></div></td>}
                 </tr>)}
           </tbody>
-        </table>}
+        </table></UiTableScroll>}
         <div className="ui-pagination">
           <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Trước</button>
           <span>Trang {page}/{pages}</span>

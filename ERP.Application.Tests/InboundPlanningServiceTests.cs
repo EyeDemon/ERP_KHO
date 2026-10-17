@@ -61,6 +61,42 @@ public sealed class InboundPlanningServiceTests : IDisposable
         audits.Should().OnlyContain(x=>x.EntityId>0, "mọi audit PO/ASN phải trỏ tới entity đã được persist");
     }
 
+    [Fact]
+    public async Task CompleteAsnAsync_WhenUnpostedReceiptExists_ThrowsConflict()
+    {
+        var ids = await SeedAsync();
+        await using var db = Create();
+        var service = new InboundPlanningService(db, new Access(ids.WarehouseId), new Current(ids.UserId));
+
+        var asn = await service.CreateAsnAsync(new CreateAsnDto
+        {
+            Code = "ASN-UNPOSTED-01",
+            SupplierId = ids.SupplierId,
+            WarehouseId = ids.WarehouseId,
+            ExpectedArrivalAtUtc = DateTime.UtcNow.AddDays(1),
+            Lines = [new CreateAsnLineDto { ProductId = ids.ProductId, OperationUnitId = ids.UnitId, ExpectedQuantity = 5 }]
+        });
+        asn = await service.ConfirmAsnAsync(asn.Id, new InboundStateCommandDto { RowVersion = asn.RowVersion! });
+        asn = await service.MarkAsnInTransitAsync(asn.Id, new InboundStateCommandDto { RowVersion = asn.RowVersion! });
+        asn = await service.ArriveAsnAsync(asn.Id, new InboundStateCommandDto { RowVersion = asn.RowVersion! });
+        asn = await service.StartReceivingAsnAsync(asn.Id, new InboundStateCommandDto { RowVersion = asn.RowVersion! });
+
+        db.ImportReceipts.Add(new ImportReceipt
+        {
+            Code = "PN-UNPOSTED-01",
+            AsnId = asn.Id,
+            WarehouseId = ids.WarehouseId,
+            SupplierId = ids.SupplierId,
+            Status = ReceiptStatus.Approved,
+            CreatedBy = ids.UserId
+        });
+        await db.SaveChangesAsync();
+
+        var act = async () => await service.CompleteAsnAsync(asn.Id, new InboundStateCommandDto { RowVersion = asn.RowVersion! });
+        await act.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
+            .WithMessage("*chưa được POST*");
+    }
+
     private async Task<(int WarehouseId,int SupplierId,int ProductId,int UnitId,int UserId)> SeedAsync()
     {
         await using var db=Create();

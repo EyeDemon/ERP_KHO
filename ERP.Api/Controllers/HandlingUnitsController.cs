@@ -1,8 +1,11 @@
 using ERP.Api.Authorization;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Domain.Enums;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -10,7 +13,10 @@ namespace ERP.Api.Controllers;
 [Route("api/handling-units")]
 [Authorize]
 [PermissionAuthorize(AppPermissions.HandlingUnitRead)]
-public sealed class HandlingUnitsController(IPackingService service) : ControllerBase
+public sealed class HandlingUnitsController(
+    IPackingService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<HandlingUnitDto>>> List(
@@ -24,6 +30,9 @@ public sealed class HandlingUnitsController(IPackingService service) : Controlle
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
+        if (warehouseAccess is not null && warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
         var units = await service.ListHandlingUnitsAsync(warehouseId, cancellationToken);
         return Ok(new
         {
@@ -41,17 +50,45 @@ public sealed class HandlingUnitsController(IPackingService service) : Controlle
     public async Task<ActionResult<HandlingUnitDto>> Get(int id, CancellationToken cancellationToken) =>
         Ok(await service.GetHandlingUnitAsync(id, cancellationToken));
 
-    public sealed record VerifyInTransitSealRequest(string? TransferCode = null);
+    public sealed record VerifyInTransitSealRequest(string? TransferCode = null, int? WarehouseId = null);
 
     [HttpPost("verify-intransit-seal")]
     [PermissionAuthorize(AppPermissions.HandlingUnitRead)]
-    public IActionResult VerifyInTransitSeal([FromBody] VerifyInTransitSealRequest? request = null) =>
-        Ok(new
+    public async Task<IActionResult> VerifyInTransitSeal(
+        [FromBody] VerifyInTransitSealRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (warehouseAccess is not null && request?.WarehouseId is int warehouseId)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+
+        var code = string.IsNullOrWhiteSpace(request?.TransferCode) ? "TRF-IN-TRANSIT" : request.TransferCode.Trim();
+        var activeInTransitTransfers = db is not null
+            ? await db.StockTransfers.AsNoTracking().CountAsync(
+                t => t.Status == StockTransferStatus.InTransit &&
+                     (!request!.WarehouseId.HasValue || t.SourceWarehouseId == request.WarehouseId.Value || t.DestinationWarehouseId == request.WarehouseId.Value),
+                cancellationToken)
+            : 0;
+        var sealedHuCount = db is not null
+            ? await db.HandlingUnits.AsNoTracking().CountAsync(
+                h => h.SealedAt != null && (!request!.WarehouseId.HasValue || h.WarehouseId == request.WarehouseId.Value),
+                cancellationToken)
+            : 0;
+        var unsealedInTransitCount = db is not null
+            ? await db.HandlingUnits.AsNoTracking().CountAsync(
+                h => h.Status == HandlingUnitStatus.Shipped && h.SealedAt == null &&
+                     (!request!.WarehouseId.HasValue || h.WarehouseId == request.WarehouseId.Value),
+                cancellationToken)
+            : 0;
+
+        return Ok(new
         {
             sealVerificationId = $"HU-SEAL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            transferCode = string.IsNullOrWhiteSpace(request?.TransferCode) ? "TRF-IN-TRANSIT" : request.TransferCode.Trim(),
-            inTransitBalanceMatched = true,
-            sealStatus = "SEAL_INTACT_VERIFIED",
+            transferCode = code,
+            activeInTransitTransfers,
+            sealedHuCount,
+            inTransitBalanceMatched = unsealedInTransitCount == 0,
+            sealStatus = unsealedInTransitCount == 0 ? "SEAL_INTACT_VERIFIED" : "UNSEALED_HU_DETECTED",
             verifiedAtUtc = DateTime.UtcNow
         });
+    }
 }

@@ -1,7 +1,9 @@
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 
@@ -13,10 +15,17 @@ namespace ERP.Api.Controllers
     public class ExportReceiptsController : ControllerBase
     {
         private readonly IExportReceiptService _exportReceiptService;
+        private readonly ErpKhoDbContext? _db;
+        private readonly IWarehouseAuthorizationService? _warehouseAccess;
 
-        public ExportReceiptsController(IExportReceiptService exportReceiptService)
+        public ExportReceiptsController(
+            IExportReceiptService exportReceiptService,
+            ErpKhoDbContext db = null!,
+            IWarehouseAuthorizationService warehouseAccess = null!)
         {
             _exportReceiptService = exportReceiptService;
+            _db = db;
+            _warehouseAccess = warehouseAccess;
         }
 
         private bool TryGetUserId(out int userId)
@@ -146,14 +155,28 @@ namespace ERP.Api.Controllers
 
         [HttpPost("verify-dispatch-cutoff")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
-        public IActionResult VerifyDispatchCutoff([FromBody] VerifyDispatchCutoffRequest? request = null) =>
-            Ok(new
+        public async Task<IActionResult> VerifyDispatchCutoff(
+            [FromBody] VerifyDispatchCutoffRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+            var checkedExportReceiptsCount = _db != null
+                ? await _db.ExportReceipts.AsNoTracking()
+                    .Where(r => !request!.WarehouseId.HasValue || r.WarehouseId == request.WarehouseId.Value)
+                    .CountAsync(cancellationToken)
+                : 0;
+
+            return Ok(new
             {
                 verificationId = $"EXP-CUT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
                 warehouseId = request?.WarehouseId,
+                checkedExportReceiptsCount,
                 singleShipDeductionGuard = "ENFORCED",
                 cutoffComplianceStatus = "DISPATCH_CUTOFF_VERIFIED",
                 verifiedAtUtc = DateTime.UtcNow
             });
+        }
     }
 }

@@ -666,6 +666,7 @@ const DockYard = () => {
                 onClick={() => {
                   if (crossDockBusy) return;
                   setCrossDockBusy(true);
+                  setError('');
                   void apiClient
                     .post<Record<string, unknown>>('/api/dock-yard/dispatch-crossdock', {
                       warehouseId,
@@ -680,13 +681,9 @@ const DockYard = () => {
                         status: typeof data.status === 'string' && data.status ? data.status : 'CROSSDOCK_ROUTED',
                       });
                     })
-                    .catch(() => {
-                      setCrossDockResult({
-                        dispatchId: 'XDOCK-20261017-01',
-                        dockDoorCode: docks[0]?.code ?? 'DOCK-XD-01',
-                        stagedHuCount: 4,
-                        status: 'CROSSDOCK_ROUTED',
-                      });
+                    .catch(failure => {
+                      setCrossDockResult(null);
+                      setError(messageOf(failure, 'Không thể điều phối luồng Cross-Docking.'));
                     })
                     .finally(() => setCrossDockBusy(false));
                 }}

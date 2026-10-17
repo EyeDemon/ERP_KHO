@@ -43,7 +43,7 @@ import MockGlobalSearch from '../pages/MockGlobalSearch';
 import CapabilityPreview from '../pages/CapabilityPreview';
 import SystemCoverage from '../pages/SystemCoverage';
 import { MockDemoProvider } from '../context/MockDemoContext';
-import { canViewApprovals, canViewStocktakes, usePermission, usePermissionSet } from '../services/authorization';
+import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
 import { isBlueprintDemoRuntime } from '../services/runtimeMode';
 import { UiCard, UiPage } from '../ui/ProductionUi';
 
@@ -59,8 +59,13 @@ const AccessDenied = () => (
   </UiPage>
 );
 
-const PermissionRoute = ({ permission, children }: { permission: string; children: ReactNode }) =>
-  usePermission(permission) ? children : <AccessDenied />;
+const PermissionRoute = ({ permission, children }: { permission: string | string[]; children: ReactNode }) => {
+  usePermissionSet();
+  const allowed = Array.isArray(permission)
+    ? permission.some(code => hasPermission(code))
+    : hasPermission(permission);
+  return allowed ? children : <AccessDenied />;
+};
 
 const StocktakeRoute = ({ children }: { children: ReactNode }) =>
   (isBlueprintDemoRuntime() || canViewStocktakes()) ? children : <Navigate to="/" replace />;
@@ -114,7 +119,7 @@ const AppRoutes = () => {
         <Route path="picking-tasks" element={<PermissionRoute permission="picking.read"><PickingTasks /></PermissionRoute>} />
         <Route path="packing-sessions" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
         <Route path="shipments" element={<PermissionRoute permission="shipment.read"><Shipments /></PermissionRoute>} />
-        <Route path="backorders" element={<PermissionRoute permission="backorder.read"><OutboundDemand /></PermissionRoute>} />
+        <Route path="backorders" element={<PermissionRoute permission={['backorder.read', 'sales_order.read']}><OutboundDemand /></PermissionRoute>} />
         <Route path="approvals" element={<ApprovalRoute />} />
         <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
         <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />

@@ -2,8 +2,10 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -13,16 +15,33 @@ public sealed record EscalateOverdueApprovalsRequest(int? WarehouseId);
 [Route("api/approvals")]
 [Authorize]
 [ApprovalAuthorize]
-public sealed class ApprovalsController(IApprovalWorkflowService service) : ControllerBase
+public sealed class ApprovalsController(
+    IApprovalWorkflowService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpPost("escalate-overdue")]
-    public IActionResult EscalateOverdue([FromBody] EscalateOverdueApprovalsRequest? request = null)
+    public async Task<IActionResult> EscalateOverdue(
+        [FromBody] EscalateOverdueApprovalsRequest? request = null,
+        CancellationToken cancellationToken = default)
     {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var queue = await service.GetQueueAsync(
+            new ApprovalQueueQuery { WarehouseId = request?.WarehouseId, PageIndex = 1, PageSize = int.MaxValue },
+            cancellationToken);
+        var overdueCount = queue.Items.Count(x => x.SlaStatus == "Overdue");
+        var recentAuditCount = db != null
+            ? await db.AuditLogs.AsNoTracking().CountAsync(x => x.Action.Contains("Approve") || x.Action.Contains("Reject"), cancellationToken)
+            : 0;
         var now = DateTime.UtcNow;
         return Ok(new
         {
             escalationBatchId = $"ESC-SLA-{now:yyyyMMdd-HHmm}",
             warehouseId = request?.WarehouseId,
+            overdueCount,
+            recentAuditCount,
             escalatedStatus = "ESCALATED_TO_SUPERVISOR",
             targetSlaMinutes = 30,
             escalatedAtUtc = now
@@ -34,9 +53,16 @@ public sealed class ApprovalsController(IApprovalWorkflowService service) : Cont
         Ok(await service.GetQueueAsync(query, cancellationToken));
 
     [HttpGet("sla-summary")]
-    public async Task<IActionResult> SlaSummary(CancellationToken cancellationToken)
+    public async Task<IActionResult> SlaSummary(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
     {
-        var queue = await service.GetQueueAsync(new ApprovalQueueQuery { PageIndex = 1, PageSize = 100 }, cancellationToken);
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+        var queue = await service.GetQueueAsync(
+            new ApprovalQueueQuery { WarehouseId = warehouseId, PageIndex = 1, PageSize = int.MaxValue },
+            cancellationToken);
         return Ok(new
         {
             totalPending = queue.TotalRecords,

@@ -206,8 +206,10 @@ const parseSpecNumbers = (spec: string) =>
 const releaseWaveFor = (moduleKey: string, capabilityId: string): ReleaseWave =>
   waveOverrides[capabilityId] ?? moduleWaveDefaults[moduleKey] ?? 0;
 
+const optionalCapabilityIds = new Set(['OUT-04']);
+
 const applicabilityFor = (moduleKey: string, capability: BlueprintCapability): Applicability => {
-  if (capability.status === 'optional') return 'INDUSTRY_OPTIONAL';
+  if (capability.status === 'optional' || optionalCapabilityIds.has(capability.id)) return 'INDUSTRY_OPTIONAL';
   if (featureEnabledIds.has(capability.id)) return 'REQUIRED_WHEN_FEATURE_ENABLED';
   if (moduleKey === 'advanced-planning') return 'INDUSTRY_OPTIONAL';
   if (implementationSpecificModules.has(moduleKey)) return 'IMPLEMENTATION_SPECIFIC';

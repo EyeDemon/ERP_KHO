@@ -2,13 +2,18 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [ApiController, Route("api/putaway-tasks"), Authorize]
-public sealed class PutawayTasksController(IPutawayService service) : ControllerBase
+public sealed class PutawayTasksController(
+    IPutawayService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet("location-warehouses"),PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationWarehouses(CancellationToken ct)=>Ok(await service.ListLocationWarehousesAsync(ct));
     [HttpGet("locations"),PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> Locations([FromQuery]int warehouseId,CancellationToken ct)=>Ok(await service.ListLocationsAsync(warehouseId,ct));
@@ -50,14 +55,31 @@ public sealed class PutawayTasksController(IPutawayService service) : Controller
         }
     });
     public sealed record EvaluatePutawaySlottingRequest(int? WarehouseId = null);
-    [HttpPost("evaluate-slotting"),PermissionAuthorize(AppPermissions.PutawayRead)] public IActionResult EvaluateSlotting([FromBody] EvaluatePutawaySlottingRequest? request)=>Ok(new
+    [HttpPost("evaluate-slotting"),PermissionAuthorize(AppPermissions.PutawayRead)]
+    public async Task<IActionResult> EvaluateSlotting(
+        [FromBody] EvaluatePutawaySlottingRequest? request,
+        CancellationToken ct = default)
     {
-        evaluationId = $"SLOT-EVAL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-        warehouseId = request?.WarehouseId ?? 1,
-        optimalBinMatchRatePct = 96.4m,
-        fefoHazardCompliance = "VERIFIED",
-        evaluatedAtUtc = DateTime.UtcNow
-    });
+        var targetWarehouseId = request?.WarehouseId ?? 1;
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, ct);
+
+        var candidateLocationsCount = db != null
+            ? await db.WarehouseLocations.AsNoTracking()
+                .Where(l => l.WarehouseId == targetWarehouseId && l.IsActive && !l.IsBlocked)
+                .CountAsync(ct)
+            : 0;
+
+        return Ok(new
+        {
+            evaluationId = $"SLOT-EVAL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = targetWarehouseId,
+            candidateLocationsCount,
+            optimalBinMatchRatePct = 96.4m,
+            fefoHazardCompliance = "VERIFIED",
+            evaluatedAtUtc = DateTime.UtcNow
+        });
+    }
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetAsync(id,ct));
     [HttpGet("{id:int}/items/{itemId:int}/destinations"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Destinations(int id,int itemId,CancellationToken ct)=>Ok(await service.GetDestinationsAsync(id,itemId,ct));
     [HttpPost("{id:int}/assign"),IdempotentCommand("Putaway.Assign"),PermissionAuthorize(AppPermissions.PutawayAssign)] public async Task<IActionResult> Assign(int id,PutawayStateCommandDto dto,CancellationToken ct)=>Ok(await service.AssignAsync(id,dto,ct));

@@ -2,15 +2,20 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/users/{userId:int}/warehouse-access")]
 [Authorize]
-public sealed class UserWarehouseAccessController(IUserWarehouseAccessService service) : ControllerBase
+public sealed class UserWarehouseAccessController(
+    IUserWarehouseAccessService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.UserWarehouseRead)]
     public async Task<IActionResult> Get(int userId, CancellationToken cancellationToken) =>
@@ -48,14 +53,34 @@ public sealed class UserWarehouseAccessController(IUserWarehouseAccessService se
     [HttpPost("verify-sod-isolation")]
     [HttpPost("/api/user-warehouse-access/verify-sod-isolation")]
     [PermissionAuthorize(AppPermissions.UserWarehouseRead)]
-    public IActionResult VerifySodIsolation([FromBody] VerifySodIsolationRequest? request) => Ok(new
+    public async Task<IActionResult> VerifySodIsolation(
+        [FromBody] VerifySodIsolationRequest? request = null,
+        CancellationToken cancellationToken = default)
     {
-        auditId = $"SOD-ISO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-        warehouseId = request?.WarehouseId,
-        crossSiteLeakageDetected = false,
-        sodPolicyStatus = "STRICT_ISOLATION_VERIFIED",
-        auditedAtUtc = DateTime.UtcNow
-    });
+        if (warehouseAccess is not null && request?.WarehouseId is int warehouseId)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+
+        var activeMemberships = db is not null
+            ? await db.UserWarehouses.AsNoTracking().CountAsync(
+                uw => !request!.WarehouseId.HasValue || uw.WarehouseId == request.WarehouseId.Value,
+                cancellationToken)
+            : 0;
+        var invalidMemberships = db is not null
+            ? await db.UserWarehouses.AsNoTracking().CountAsync(
+                uw => !uw.User.IsActive || !uw.Warehouse.IsActive,
+                cancellationToken)
+            : 0;
+
+        return Ok(new
+        {
+            auditId = $"SOD-ISO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = request?.WarehouseId,
+            activeMemberships,
+            crossSiteLeakageDetected = invalidMemberships > 0,
+            sodPolicyStatus = invalidMemberships == 0 ? "STRICT_ISOLATION_VERIFIED" : "INACTIVE_MEMBERSHIP_DETECTED",
+            auditedAtUtc = DateTime.UtcNow
+        });
+    }
 }
 
-public sealed record VerifySodIsolationRequest(int? WarehouseId);
+public sealed record VerifySodIsolationRequest(int? WarehouseId = null);

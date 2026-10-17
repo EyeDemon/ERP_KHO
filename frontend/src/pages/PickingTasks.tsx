@@ -117,37 +117,41 @@ export default function PickingTasks(){
 
   const mobileReadyTasksCount=tasks.filter(x=>['Open','Assigned','InProgress'].includes(x.status)).length;
   const shortPickExceptionTasksCount=tasks.filter(x=>x.status==='ShortPick').length;
-  const verifyMobileScan=()=>{
+  const verifyMobileScan=async()=>{
     const q=mobileScanInput.trim();
     if(!q){setMobileScanResult('Vui lòng nhập hoặc quét mã vạch / vị trí.');return;}
     const matchedTask=tasks.find(t=>t.taskCode.toLowerCase().includes(q.toLowerCase())||(t.sourceCode??'').toLowerCase().includes(q.toLowerCase()));
     const matchedLine=(selected?.lines??[]).find(l=>l.productCode.toLowerCase()===q.toLowerCase()||l.sourceLocationCode.toLowerCase()===q.toLowerCase());
-    void apiClient.post('/api/picking-tasks/mobile-scan-verify',{scanInput:q}).catch(()=>null);
-    if(matchedLine){
-      setMobileScanResult(`Khớp dòng: ${matchedLine.productCode} tại vị trí ${matchedLine.sourceLocationCode} (Còn: ${matchedLine.remainingQuantity})`);
-    }else if(matchedTask){
-      setMobileScanResult(`Khớp nhiệm vụ: ${matchedTask.taskCode} • Kho: ${matchedTask.warehouseName} (${matchedTask.status})`);
-    }else{
-      setMobileScanResult(`Không tìm thấy nhiệm vụ/SKU/vị trí khớp với mã quét: ${q}`);
+    setError('');
+    try{
+      await apiClient.post('/api/picking-tasks/mobile-scan-verify',{scanInput:q});
+      if(matchedLine){
+        setMobileScanResult(`Khớp dòng: ${matchedLine.productCode} tại vị trí ${matchedLine.sourceLocationCode} (Còn: ${matchedLine.remainingQuantity})`);
+      }else if(matchedTask){
+        setMobileScanResult(`Khớp nhiệm vụ: ${matchedTask.taskCode} • Kho: ${matchedTask.warehouseName} (${matchedTask.status})`);
+      }else{
+        setMobileScanResult(`Không tìm thấy nhiệm vụ/SKU/vị trí khớp với mã quét: ${q}`);
+      }
+    }catch(e){
+      setMobileScanResult('');
+      setError(failureMessage(e));
     }
   };
 
   const syncAutomationTelemetry=async()=>{
+    setError('');
     try{
       const res=await apiClient.post('/api/picking-tasks/sync-automation-telemetry',{});
-      if(res?.data?.telemetrySyncId){
-        setAutomationTelemetry(res.data);
-        return;
-      }
-    }catch{
-      // Fallback for offline/mocked environments
+      setAutomationTelemetry({
+        telemetrySyncId:res?.data?.telemetrySyncId||`WCS-IOT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}`,
+        wcsRoboticsState:res?.data?.wcsRoboticsState||'AMR_ASRS_CONVEYOR_SYNCHRONIZED',
+        rfidIotTelemetry:res?.data?.rfidIotTelemetry||'RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE',
+        voicePickToLight:res?.data?.voicePickToLight||'VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE',
+      });
+    }catch(e){
+      setAutomationTelemetry(null);
+      setError(failureMessage(e));
     }
-    setAutomationTelemetry({
-      telemetrySyncId:`WCS-IOT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}`,
-      wcsRoboticsState:'AMR_ASRS_CONVEYOR_SYNCHRONIZED',
-      rfidIotTelemetry:'RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE',
-      voicePickToLight:'VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE',
-    });
   };
 
   return <UiPage>

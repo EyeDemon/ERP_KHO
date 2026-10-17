@@ -2,15 +2,20 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/shipments")]
 [Authorize]
-public sealed class ShipmentsController(IShipmentService service) : ControllerBase
+public sealed class ShipmentsController(
+    IShipmentService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
     [PermissionAuthorize(AppPermissions.ShipmentRead)]
@@ -56,15 +61,29 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
 
     [HttpPost("sync-tms-manifest")]
     [PermissionAuthorize(AppPermissions.ShipmentRead)]
-    public IActionResult SyncTmsManifest([FromBody] SyncTmsManifestRequest? request) => Ok(new
+    public async Task<IActionResult> SyncTmsManifest(
+        [FromBody] SyncTmsManifestRequest? request,
+        CancellationToken cancellationToken = default)
     {
-        manifestId = $"TMS-MNF-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-        warehouseId = request?.WarehouseId ?? 1,
-        carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "VTP-EXPRESS" : request.CarrierCode.Trim(),
-        syncedShipmentCount = 6,
-        ediStatus = "ACK_200_SYNCED",
-        syncedAtUtc = DateTime.UtcNow,
-    });
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var targetWarehouseId = request?.WarehouseId ?? 1;
+        var syncedShipmentCount = db != null
+            ? await db.Shipments.AsNoTracking()
+                .CountAsync(s => !request!.WarehouseId.HasValue || s.WarehouseId == request.WarehouseId.Value, cancellationToken)
+            : (await service.ListAsync(request?.WarehouseId, null, cancellationToken)).Count;
+
+        return Ok(new
+        {
+            manifestId = $"TMS-MNF-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId = targetWarehouseId,
+            carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "VTP-EXPRESS" : request.CarrierCode.Trim(),
+            syncedShipmentCount,
+            ediStatus = "ACK_200_SYNCED",
+            syncedAtUtc = DateTime.UtcNow,
+        });
+    }
 
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.ShipmentRead)]

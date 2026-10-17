@@ -457,6 +457,48 @@ public sealed class PutawayServiceTests : IDisposable
             .Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Move_with_multiple_lot_buckets_at_source_location_preserves_lot_ids_at_destination()
+    {
+        var ids = await SeedAsync();
+        await using var db = Create();
+
+        var unLottedReceiving = await db.InventoryStocks.SingleAsync(x => x.WarehouseId == ids.WarehouseId && x.LocationId == ids.Receiving);
+        db.InventoryStocks.Remove(unLottedReceiving);
+
+        var lotA = new InventoryLot { ProductId = ids.ProductId, LotNumber = "LOT-PUT-A", ExpiryDate = DateTime.UtcNow.Date.AddDays(30) };
+        var lotB = new InventoryLot { ProductId = ids.ProductId, LotNumber = "LOT-PUT-B", ExpiryDate = DateTime.UtcNow.Date.AddDays(60) };
+        db.InventoryLots.AddRange(lotA, lotB);
+        await db.SaveChangesAsync();
+
+        db.InventoryStocks.AddRange(
+            new InventoryStock { ProductId = ids.ProductId, WarehouseId = ids.WarehouseId, LocationId = ids.Receiving, LotId = lotA.Id, Status = InventoryStatus.Available, Quantity = 6 },
+            new InventoryStock { ProductId = ids.ProductId, WarehouseId = ids.WarehouseId, LocationId = ids.Receiving, LotId = lotB.Id, Status = InventoryStatus.Available, Quantity = 4 });
+        await db.SaveChangesAsync();
+
+        var svc = Service(db, ids.WarehouseId, ids.UserId);
+        var current = await svc.GetAsync(ids.TaskId);
+        var result = await svc.MoveAsync(ids.TaskId, new MovePutawayItemDto
+        {
+            ItemId = ids.ItemId,
+            DestinationLocationId = ids.Storage1,
+            Quantity = 5,
+            UnitCode = "BOX",
+            RowVersion = current.RowVersion!
+        });
+
+        result.Status.Should().Be(nameof(PutawayTaskStatus.Completed));
+        var destBuckets = await db.InventoryStocks.AsNoTracking()
+            .Where(x => x.LocationId == ids.Storage1 && x.Quantity > 0)
+            .OrderBy(x => x.LotId)
+            .ToListAsync();
+        destBuckets.Should().HaveCount(2);
+        destBuckets[0].LotId.Should().Be(lotA.Id);
+        destBuckets[0].Quantity.Should().Be(6);
+        destBuckets[1].LotId.Should().Be(lotB.Id);
+        destBuckets[1].Quantity.Should().Be(4);
+    }
+
     private async Task<(int WarehouseId,int UserId,int ProductId,int TaskId,int ItemId,int Receiving,int Storage1,int Storage2,int Damaged)> SeedAsync()
     {
         await using var db=Create(); var role=new Role{RoleName="Manager"}; var user=new User{Username=Guid.NewGuid().ToString("N"),PasswordHash="x",FullName="QA",Role=role};

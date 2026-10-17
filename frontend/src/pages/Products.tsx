@@ -4,7 +4,7 @@ import apiClient from '../services/apiClient';
 import { hasPermission, usePermission } from '../services/authorization';
 import { categoryChanged, categoryRequest, normalizeBarcodeInput } from './productCatalog';
 import { permissionError } from '../services/permissionPresentation';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 interface Barcode { id: number; productId: number; value: string }
 interface Category { id: number; code: string; name: string; isActive: boolean }
@@ -119,30 +119,28 @@ const Products = () => {
   const [skuAuditResult, setSkuAuditResult] = useState<{ auditId: string; fefoPolicyStatus: string; packagingHierarchyStatus: string } | null>(null);
   const [categoryPolicyResult, setCategoryPolicyResult] = useState<{ verificationId: string; status: string } | null>(null);
   const triggerAutoAuditGovernance = async () => {
+    setError('');
     try {
       const res = await apiClient.post('/api/Products/auto-audit-governance', {});
       if (res?.data?.auditId) {
         setSkuAuditResult(res.data);
-        return;
       }
-    } catch {
-      // Fallback for offline/mocked environments
+    } catch (failure) {
+      setError(messageOf(failure, 'Không thể thực hiện kiểm định.'));
     }
-    setSkuAuditResult({
-      auditId: `SKU-AUD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
-      fefoPolicyStatus: 'FEFO_SHELF_LIFE_VALIDATED',
-      packagingHierarchyStatus: 'UOM_DIM_VERIFIED',
-    });
   };
   const verifyCategoryStoragePolicy = async () => {
+    setError('');
     try {
       const res = await apiClient.post('/api/ProductCategories/verify-storage-policy', {});
-      setCategoryPolicyResult({
-        verificationId: res?.data?.verificationId || 'CAT-POL-VERIFIED',
-        status: res?.data?.status || 'STORAGE_POLICY_VERIFIED',
-      });
-    } catch {
-      setCategoryPolicyResult({ verificationId: 'CAT-POL-VERIFIED', status: 'STORAGE_POLICY_VERIFIED' });
+      if (res?.data) {
+        setCategoryPolicyResult({
+          verificationId: res.data.verificationId || 'CAT-POL-VERIFIED',
+          status: res.data.status || 'STORAGE_POLICY_VERIFIED',
+        });
+      }
+    } catch (failure) {
+      setError(messageOf(failure, 'Không thể thực hiện kiểm định.'));
     }
   };
 
@@ -207,8 +205,8 @@ const Products = () => {
       <div className="ui-stack">
         <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" />
         <form onSubmit={addCategory} className="ui-inline-wrap">
-          <input value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
-          <input value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required />
+          <input aria-label="Mã danh mục" name="categoryCode" value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
+          <input aria-label="Tên danh mục" name="categoryName" value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required />
           <button type="submit" disabled={mutating}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>
           {editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }}>Hủy sửa</button>}
         </form>
@@ -284,7 +282,7 @@ const Products = () => {
     </UiCard>}
 
     <UiCard title="Danh sách sản phẩm">
-      {loading ? <p role="status">Đang tải sản phẩm...</p> : <table>
+      {loading ? <p role="status">Đang tải sản phẩm...</p> : <UiTableScroll><table>
         <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Storage profile</th><th>Tracking</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th>Thao tác</th>}</tr></thead>
         <tbody>
           {visibleProducts.length === 0
@@ -306,7 +304,7 @@ const Products = () => {
                 </td>}
               </tr>)}
         </tbody>
-      </table>}
+      </table></UiTableScroll>}
       <div className="ui-pagination">
         <button disabled={currentPage === 1} onClick={() => setCurrentPage(value => value - 1)}>Trước</button>
         <span>Trang {currentPage}/{totalPages}</span>

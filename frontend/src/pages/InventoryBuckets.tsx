@@ -65,6 +65,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
   const verifyBucketInvariants=async()=>{
     if(invariantVerifying)return;
     setInvariantVerifying(true);
+    setError('');
     const parsedWarehouseId=filters.warehouseId?Number(filters.warehouseId):null;
     try{
       const response=await apiClient.post<BucketInvariantsResult>('/api/inventory/verify-bucket-invariants',{warehouseId:parsedWarehouseId});
@@ -79,14 +80,9 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
           verifiedAtUtc:new Date().toISOString(),
         });
       }
-    }catch{
-      setInvariantVerification({
-        verificationId:'BCK-INV-FALLBACK',
-        warehouseId:parsedWarehouseId,
-        fiveBucketEquationStatus:'BALANCED_EXACT',
-        scrapApprovalGuard:'SOD_ENFORCED',
-        verifiedAtUtc:new Date().toISOString(),
-      });
+    }catch(e){
+      setInvariantVerification(null);
+      setError(messageOf(e));
     }finally{
       setInvariantVerifying(false);
     }

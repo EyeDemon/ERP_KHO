@@ -35,7 +35,11 @@ namespace ERP.Api.Controllers
             try
             {
                 var response = await _authService.LoginAsync(request, RequestContext(), cancellationToken);
-                if (!string.IsNullOrEmpty(response.RefreshToken)) SetRefreshCookie(response.RefreshToken, response.RefreshTokenExpiresAtUtc);
+                if (!string.IsNullOrEmpty(response.RefreshToken))
+                {
+                    SetRefreshCookie(response.RefreshToken, response.RefreshTokenExpiresAtUtc);
+                    response.RefreshToken = string.Empty;
+                }
                 return Ok(response);
             }
             catch (UnauthorizedAccessException ex)

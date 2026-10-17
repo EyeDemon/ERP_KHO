@@ -66,7 +66,9 @@ namespace ERP.Application.Services
             if (warehouse == null)
                 throw new NotFoundException($"Không tìm thấy kho id {dto.WarehouseId}");
 
-            var stocks = (await _inventoryStockRepository.FindAsync(s => s.WarehouseId == dto.WarehouseId)).ToList();
+            var stocks = (await _inventoryStockRepository.FindAsync(s => s.WarehouseId == dto.WarehouseId && s.Status == InventoryStatus.Available))
+                .Where(s => s.Status == InventoryStatus.Available)
+                .ToList();
             if (dto.LocationId.HasValue)
             {
                 stocks = stocks.Where(s => s.LocationId == dto.LocationId.Value).ToList();
@@ -95,13 +97,15 @@ namespace ERP.Application.Services
                 CreatedBy = createdByUserId,
                 CreatedAt = DateTime.UtcNow,
                 Note = normalizedNote,
-                Details = stocks.Select(s => new StocktakeDetail
-                {
-                    ProductId = s.ProductId,
-                    LocationId = s.LocationId,
-                    SystemQuantity = s.Quantity,
-                    DifferenceQuantity = 0
-                }).ToList()
+                Details = stocks
+                    .GroupBy(s => new { s.ProductId, s.LocationId })
+                    .Select(g => new StocktakeDetail
+                    {
+                        ProductId = g.Key.ProductId,
+                        LocationId = g.Key.LocationId,
+                        SystemQuantity = g.Sum(s => s.Quantity),
+                        DifferenceQuantity = 0
+                    }).ToList()
             };
 
             await _unitOfWork.BeginTransactionAsync();
@@ -162,6 +166,23 @@ namespace ERP.Application.Services
                         ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, stocktake.WarehouseId, InventoryStatus.Available, detail.LocationId.Value)
                         : await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, stocktake.WarehouseId);
 
+                    var matchingStocks = (await _inventoryStockRepository.FindAsync(s =>
+                            s.ProductId == detail.ProductId &&
+                            s.WarehouseId == stocktake.WarehouseId &&
+                            s.Status == InventoryStatus.Available &&
+                            (!detail.LocationId.HasValue || s.LocationId == detail.LocationId.Value)))
+                        ?.Where(s => s.Status == InventoryStatus.Available && (!detail.LocationId.HasValue || s.LocationId == detail.LocationId.Value))
+                        .OrderBy(s => s.LotId)
+                        .ThenBy(s => s.SerialId)
+                        .ThenBy(s => s.Id)
+                        .ToList() ?? new List<InventoryStock>();
+
+                    if (matchingStocks.Count == 0 && currentStock != null)
+                    {
+                        matchingStocks.Add(currentStock);
+                    }
+                    currentStock ??= matchingStocks.FirstOrDefault();
+
                     var targetLocationId = detail.LocationId ?? currentStock?.LocationId;
                     if ((_inventoryLocks is not null && await _inventoryLocks.HasActiveLockAsync(stocktake.WarehouseId, targetLocationId, detail.ProductId, InventoryStatus.Available, currentStock?.LotId, currentStock?.SerialId)) ||
                         await _inventoryStockRepository.IsLockedAsync(stocktake.WarehouseId, detail.ProductId, targetLocationId, currentStock?.LotId, currentStock?.SerialId))
@@ -169,14 +190,15 @@ namespace ERP.Application.Services
                         ThrowConflict($"Không thể duyệt kiểm kê: tồn kho của sản phẩm ID {detail.ProductId} đang bị khóa bởi InventoryLock.");
                     }
 
-                    var currentQuantity = currentStock?.Quantity ?? 0m;
+                    var currentQuantity = matchingStocks.Sum(s => s.Quantity);
                     if (currentQuantity != detail.SystemQuantity)
                     {
                         ThrowConflict($"Không thể duyệt kiểm kê: tồn kho hiện tại ({currentQuantity}) của sản phẩm ID {detail.ProductId} đã thay đổi so với ảnh chụp kiểm kê ({detail.SystemQuantity}). Vui lòng kiểm đếm hoặc chụp lại phiếu.");
                     }
 
-                    if (detail.ActualQuantity.Value < (currentStock?.ReservedQuantity ?? 0m))
-                        ThrowConflict($"Không thể duyệt kiểm kê: sản phẩm ID {detail.ProductId} có tồn thực tế {detail.ActualQuantity.Value} thấp hơn số lượng đang giữ {currentStock?.ReservedQuantity ?? 0m}. Hãy xử lý reservation trước.");
+                    var totalReserved = matchingStocks.Sum(s => s.ReservedQuantity);
+                    if (detail.ActualQuantity.Value < totalReserved)
+                        ThrowConflict($"Không thể duyệt kiểm kê: sản phẩm ID {detail.ProductId} có tồn thực tế {detail.ActualQuantity.Value} thấp hơn số lượng đang giữ {totalReserved}. Hãy xử lý reservation trước.");
 
                     var diff = detail.ActualQuantity.Value - currentQuantity;
                     if (diff != 0)
@@ -189,16 +211,32 @@ namespace ERP.Application.Services
                                 ProductId = detail.ProductId,
                                 WarehouseId = stocktake.WarehouseId,
                                 LocationId = locationId,
+                                Status = InventoryStatus.Available,
                                 Quantity = diff,
                                 LastUpdated = DateTime.UtcNow
                             };
                             await _inventoryStockRepository.AddAsync(currentStock);
                         }
-                        else
+                        else if (diff > 0)
                         {
                             currentStock.Quantity += diff;
                             currentStock.LastUpdated = DateTime.UtcNow;
                             await _inventoryStockRepository.UpdateAsync(currentStock);
+                        }
+                        else
+                        {
+                            var remainingDecrease = -diff;
+                            foreach (var bucket in matchingStocks)
+                            {
+                                if (remainingDecrease <= 0) break;
+                                var availableInBucket = bucket.Quantity - bucket.ReservedQuantity;
+                                if (availableInBucket <= 0) continue;
+                                var take = Math.Min(remainingDecrease, availableInBucket);
+                                bucket.Quantity -= take;
+                                bucket.LastUpdated = DateTime.UtcNow;
+                                await _inventoryStockRepository.UpdateAsync(bucket);
+                                remainingDecrease -= take;
+                            }
                         }
 
                         // Create Transaction

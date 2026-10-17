@@ -92,7 +92,7 @@ public sealed class StockAllocationService(
         return await context.StockReservations.AsNoTracking()
             .Where(x => accessible.Contains(x.WarehouseId) &&
                         AllocatableReservationStatuses.Contains(x.Status) &&
-                        x.ExpiresAt > now &&
+                        (x.SourceType != "Manual" || x.ExpiresAt > now) &&
                         x.Quantity - x.ConsumedQuantity - x.ReleasedQuantity - x.AllocatedQuantity > 0)
             .OrderBy(x => x.ExpiresAt).ThenBy(x => x.Id)
             .Select(x => new AllocatableReservationDto
@@ -296,7 +296,7 @@ public sealed class StockAllocationService(
     {
         if (!AllocatableReservationStatuses.Contains(reservation.Status))
             throw new ConcurrencyException("Reservation không còn ở trạng thái có thể Allocation.");
-        if (reservation.ExpiresAt <= DateTime.UtcNow)
+        if (string.Equals(reservation.SourceType, "Manual", StringComparison.OrdinalIgnoreCase) && reservation.ExpiresAt <= DateTime.UtcNow)
             throw new ConcurrencyException("Reservation đã hết hạn.");
         var remaining = reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity;
         if (remaining <= 0)

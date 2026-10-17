@@ -3,13 +3,18 @@ using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [ApiController,Route("api/asns"),Authorize]
-public sealed class AsnsController(IInboundPlanningService service):ControllerBase
+public sealed class AsnsController(
+    IInboundPlanningService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!):ControllerBase
 {
     [HttpGet,PermissionAuthorize(AppPermissions.AsnRead)]
     public async Task<IActionResult> List([FromQuery]AsnStatus? status,CancellationToken ct)=>Ok(await service.ListAsnsAsync(status,ct));
@@ -32,15 +37,32 @@ public sealed class AsnsController(IInboundPlanningService service):ControllerBa
     public sealed record PreAllocateAsnStagingRequest(int? WarehouseId, string? AsnNumber);
 
     [HttpPost("pre-allocate-staging"),PermissionAuthorize(AppPermissions.AsnRead)]
-    public IActionResult PreAllocateStaging([FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] PreAllocateAsnStagingRequest? request)=>Ok(new
+    public async Task<IActionResult> PreAllocateStaging(
+        [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] PreAllocateAsnStagingRequest? request,
+        CancellationToken ct = default)
     {
-        stagingReservationId=$"ASN-STG-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-        warehouseId=request?.WarehouseId??1,
-        asnNumber=string.IsNullOrWhiteSpace(request?.AsnNumber)?"ASN-NEXT-ARRIVAL":request.AsnNumber.Trim(),
-        stagingLaneCode="STAGE-IN-01",
-        dockPreAssigned=true,
-        reservedAtUtc=DateTime.UtcNow
-    });
+        var targetWarehouseId = request?.WarehouseId ?? 1;
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, ct);
+
+        var stagingLocationCode = db != null
+            ? await db.WarehouseLocations.AsNoTracking()
+                .Where(l => l.WarehouseId == targetWarehouseId && l.IsActive)
+                .OrderBy(l => l.Code)
+                .Select(l => l.Code)
+                .FirstOrDefaultAsync(ct) ?? "STAGE-IN-01"
+            : "STAGE-IN-01";
+
+        return Ok(new
+        {
+            stagingReservationId=$"ASN-STG-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId=targetWarehouseId,
+            asnNumber=string.IsNullOrWhiteSpace(request?.AsnNumber)?"ASN-NEXT-ARRIVAL":request.AsnNumber.Trim(),
+            stagingLaneCode=stagingLocationCode,
+            dockPreAssigned=true,
+            reservedAtUtc=DateTime.UtcNow
+        });
+    }
 
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.AsnRead)]
     public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetAsnAsync(id,ct));

@@ -3,8 +3,10 @@ using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Common;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -13,7 +15,9 @@ namespace ERP.Api.Controllers;
 [Route("api/inventory")]
 public sealed class InventoryReversalTraceabilityController(
     IInventoryReversalService reversalService,
-    IInventoryTraceabilityQueryService traceabilityService) : ControllerBase
+    IInventoryTraceabilityQueryService traceabilityService,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet("reversal-reasons")]
     [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
@@ -42,7 +46,10 @@ public sealed class InventoryReversalTraceabilityController(
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
-        var page = await reversalService.GetCandidatesAsync(warehouseId, 1, 100, null, null, null, cancellationToken);
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+        var page = await reversalService.GetCandidatesAsync(warehouseId, 1, int.MaxValue, null, null, null, cancellationToken);
         return Ok(new
         {
             totalCandidatesInWindow = page.TotalRecords,
@@ -91,8 +98,11 @@ public sealed class InventoryReversalTraceabilityController(
         [FromQuery] int? productId = null,
         CancellationToken cancellationToken = default)
     {
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
         var trace = await traceabilityService.TraceAsync(
-            warehouseId, productId, null, null, null, null, 100, cancellationToken);
+            warehouseId, productId, null, null, null, null, int.MaxValue, cancellationToken);
         return Ok(new
         {
             totalBuckets = trace.CurrentBuckets.Count,
@@ -109,29 +119,52 @@ public sealed class InventoryReversalTraceabilityController(
     [HttpPost("reversals/verify-chain-integrity")]
     [HttpPost("verify-chain-integrity")]
     [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
-    public IActionResult VerifyReversalChainIntegrity([FromBody] VerifyReversalChainRequest? request = null)
+    public async Task<IActionResult> VerifyReversalChainIntegrity(
+        [FromBody] VerifyReversalChainRequest? request = null,
+        CancellationToken cancellationToken = default)
     {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var ledgerEventsCount = db != null
+            ? await db.InventoryTransactions.AsNoTracking()
+                .Where(t => !request!.WarehouseId.HasValue || t.WarehouseId == request.WarehouseId.Value)
+                .CountAsync(cancellationToken)
+            : 0;
+
         return Ok(new
         {
             verificationId = $"REV-INT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             warehouseId = request?.WarehouseId,
+            ledgerEventsCount,
             duplicateReversalBlocked = true,
             appendOnlyLedgerStatus = "IMMUTABLE_VERIFIED",
             verifiedAtUtc = DateTime.UtcNow
         });
     }
 
-    public sealed record SimulateRecallTreeRequest(string? BatchOrSerialQuery = null);
+    public sealed record SimulateRecallTreeRequest(string? BatchOrSerialQuery = null, int? WarehouseId = null);
 
     [HttpPost("traceability/simulate-recall-tree")]
     [HttpPost("simulate-recall-tree")]
     [PermissionAuthorize(AppPermissions.InventoryTraceabilityRead)]
-    public IActionResult SimulateRecallTree([FromBody] SimulateRecallTreeRequest? request = null)
+    public async Task<IActionResult> SimulateRecallTree(
+        [FromBody] SimulateRecallTreeRequest? request = null,
+        CancellationToken cancellationToken = default)
     {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var queryText = string.IsNullOrWhiteSpace(request?.BatchOrSerialQuery) ? "BATCH-FEFO-2026" : request.BatchOrSerialQuery.Trim();
+        var matchedLotCount = db != null
+            ? await db.InventoryLots.AsNoTracking().CountAsync(l => l.LotNumber.Contains(queryText), cancellationToken)
+            : 0;
+
         return Ok(new
         {
             simulationId = $"TRC-RCL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            query = string.IsNullOrWhiteSpace(request?.BatchOrSerialQuery) ? "BATCH-FEFO-2026" : request.BatchOrSerialQuery.Trim(),
+            query = queryText,
+            matchedLotCount,
             upstreamPoLinked = true,
             downstreamShipmentLinked = true,
             recallContainmentReady = true,

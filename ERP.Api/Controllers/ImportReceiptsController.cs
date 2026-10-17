@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 
@@ -14,13 +16,21 @@ namespace ERP.Api.Controllers
     {
         private readonly IImportReceiptService _importReceiptService;
         private readonly IReceivingDiscrepancyService? _discrepancies;
+        private readonly ErpKhoDbContext? _db;
+        private readonly IWarehouseAuthorizationService? _warehouseAccess;
         private IReceivingDiscrepancyService Discrepancies => _discrepancies
             ?? throw new InvalidOperationException("Receiving discrepancy service is not configured.");
 
-        public ImportReceiptsController(IImportReceiptService importReceiptService, IReceivingDiscrepancyService? discrepancies = null)
+        public ImportReceiptsController(
+            IImportReceiptService importReceiptService,
+            IReceivingDiscrepancyService? discrepancies = null,
+            ErpKhoDbContext db = null!,
+            IWarehouseAuthorizationService warehouseAccess = null!)
         {
             _importReceiptService = importReceiptService;
             _discrepancies = discrepancies;
+            _db = db;
+            _warehouseAccess = warehouseAccess;
         }
 
         private bool TryGetUserId(out int userId)
@@ -153,17 +163,30 @@ namespace ERP.Api.Controllers
             });
         }
 
-        public sealed record RmaIntakeCheckRequest(string ReturnReference, string ReasonCode);
+        public sealed record RmaIntakeCheckRequest(string ReturnReference, string ReasonCode, int? WarehouseId = null);
 
         [HttpPost("rma-intake-check")]
         [PermissionAuthorize(AppPermissions.ReceiptRead)]
-        public IActionResult RmaIntakeCheck([FromBody] RmaIntakeCheckRequest request)
+        public async Task<IActionResult> RmaIntakeCheck(
+            [FromBody] RmaIntakeCheckRequest request,
+            CancellationToken cancellationToken = default)
         {
+            if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+            var quarantineBucketCount = _db != null
+                ? await _db.InventoryStocks.AsNoTracking()
+                    .Where(s => (!request!.WarehouseId.HasValue || s.WarehouseId == request.WarehouseId.Value)
+                                && s.Status == ERP.Domain.Enums.InventoryStatus.Quarantine)
+                    .CountAsync(cancellationToken)
+                : 0;
+
             return Ok(new
             {
                 rmaCode = $"RMA-{DateTime.UtcNow:yyyyMMdd}-01",
                 returnReference = request?.ReturnReference ?? string.Empty,
                 reasonCode = request?.ReasonCode ?? string.Empty,
+                quarantineBucketCount,
                 targetBucket = "QUARANTINE",
                 nextStep = "INBOUND_QC_INSPECTION",
                 queuedAtUtc = DateTime.UtcNow
@@ -174,14 +197,26 @@ namespace ERP.Api.Controllers
 
         [HttpPost("execute-rtv-refurbish")]
         [PermissionAuthorize(AppPermissions.ReceiptRead)]
-        public IActionResult ExecuteRtvRefurbish(
-            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteRtvRefurbishRequest? request)
+        public async Task<IActionResult> ExecuteRtvRefurbish(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteRtvRefurbishRequest? request,
+            CancellationToken cancellationToken = default)
         {
+            if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+            var nonAvailableBucketsCount = _db != null
+                ? await _db.InventoryStocks.AsNoTracking()
+                    .Where(s => (!request!.WarehouseId.HasValue || s.WarehouseId == request.WarehouseId.Value)
+                                && s.Status != ERP.Domain.Enums.InventoryStatus.Available)
+                    .CountAsync(cancellationToken)
+                : 0;
+
             var now = DateTime.UtcNow;
             return Ok(new
             {
                 dispositionCode = $"RTV-REF-{now:yyyyMMdd-HHmm}",
                 warehouseId = request?.WarehouseId,
+                nonAvailableBucketsCount,
                 dispositionType = string.IsNullOrWhiteSpace(request?.DispositionType) ? "REFURBISH_AND_RTV_SPLIT" : request.DispositionType,
                 refurbishRouting = "REPAIR_BENCH_TO_AVAILABLE_GRADE_B",
                 rtvClaimStatus = "VENDOR_DEBIT_MEMO_AND_OUTBOUND_RTV_READY",

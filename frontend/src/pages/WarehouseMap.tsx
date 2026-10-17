@@ -108,14 +108,16 @@ const WarehouseMap = () => {
   const [biSyncResult, setBiSyncResult] = useState<{ snapshotId: string; status: string } | null>(null);
 
   const syncBiSnapshot = async () => {
+    setError('');
     try {
       const res = await apiClient.post('/api/Reports/sync-bi-snapshot', { warehouseId });
       setBiSyncResult({
         snapshotId: res?.data?.snapshotId || 'BI-SNAP-ACTIVE',
         status: res?.data?.status || 'BI_HEATMAP_SYNCED',
       });
-    } catch {
-      setBiSyncResult({ snapshotId: 'BI-SNAP-ACTIVE', status: 'BI_HEATMAP_SYNCED' });
+    } catch (failure) {
+      setBiSyncResult(null);
+      setError(errorMessage(failure, 'Không thể đồng bộ ảnh chụp bản đồ nhiệt và chuẩn dữ liệu BI.'));
     }
   };
 

@@ -314,21 +314,19 @@ export default function Approvals() {
   const [escalationResult, setEscalationResult] = useState<{ escalationBatchId: string; escalatedStatus: string } | null>(null);
 
   const triggerEscalateOverdue = async () => {
+    setError('');
     try {
       const res = await apiClient.post('/api/approvals/escalate-overdue', {
         warehouseId: warehouseId ? Number(warehouseId) : undefined,
       });
-      if (res?.data?.escalationBatchId) {
-        setEscalationResult(res.data);
-        return;
-      }
-    } catch {
-      // Fallback for offline/mocked environments
+      setEscalationResult({
+        escalationBatchId: res?.data?.escalationBatchId || `ESC-SLA-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
+        escalatedStatus: res?.data?.escalatedStatus || 'ESCALATED_TO_SUPERVISOR',
+      });
+    } catch (failure) {
+      setEscalationResult(null);
+      setError(errorText(failure));
     }
-    setEscalationResult({
-      escalationBatchId: `ESC-SLA-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
-      escalatedStatus: 'ESCALATED_TO_SUPERVISOR',
-    });
   };
 
   return (

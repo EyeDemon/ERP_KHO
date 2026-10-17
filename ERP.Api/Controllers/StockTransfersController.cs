@@ -14,21 +14,24 @@ namespace ERP.Api.Controllers;
 [ApiController]
 [Route("api/stock-transfers")]
 [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff},{AppRoles.Viewer}")]
-public sealed class StockTransfersController(IStockTransferService service) : ControllerBase
+public sealed class StockTransfersController(
+    IStockTransferService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] StockTransferQueryDto query, CancellationToken cancellationToken) => Ok(await service.GetAsync(query, cancellationToken));
 
     [HttpGet("in-transit")]
     public async Task<IActionResult> GetInTransitInventory(
-        [FromServices] ErpKhoDbContext db,
+        [FromServices] ErpKhoDbContext dbContext,
         [FromServices] IWarehouseAuthorizationService warehouseAuthorization,
         [FromQuery] int? sourceWarehouseId = null,
         [FromQuery] int? destinationWarehouseId = null,
         CancellationToken cancellationToken = default)
     {
         var allowedIds = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        var query = db.StockTransferDetails.AsNoTracking()
+        var query = dbContext.StockTransferDetails.AsNoTracking()
             .Where(d => d.StockTransfer.Status == StockTransferStatus.InTransit
                         && d.DispatchedQuantity - d.ReceivedQuantity > 0
                         && (allowedIds.Contains(d.StockTransfer.SourceWarehouseId)
@@ -135,15 +138,33 @@ public sealed class StockTransfersController(IStockTransferService service) : Co
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
     public async Task<IActionResult> Cancel(int id, CancellationToken cancellationToken) { await service.CancelAsync(id, cancellationToken); return NoContent(); }
 
-    public sealed record SimulateNetworkRebalancingRequest(int? SourceWarehouseId = null, int? DestinationWarehouseId = null);
+    public sealed record SimulateNetworkRebalancingRequest(int? SourceWarehouseId = null, int? DestinationWarehouseId = null, int? WarehouseId = null);
 
     [HttpPost("simulate-network-rebalancing")]
     [Authorize(Roles = AppRoles.AllRoles)]
-    public IActionResult SimulateNetworkRebalancing([FromBody] SimulateNetworkRebalancingRequest? request = null)
+    public async Task<IActionResult> SimulateNetworkRebalancing(
+        [FromBody] SimulateNetworkRebalancingRequest? request = null,
+        CancellationToken cancellationToken = default)
     {
+        if (warehouseAccess != null)
+        {
+            if (request?.WarehouseId.HasValue == true)
+                await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+            if (request?.SourceWarehouseId.HasValue == true)
+                await warehouseAccess.EnsureWarehouseAccessAsync(request.SourceWarehouseId.Value, cancellationToken);
+            if (request?.DestinationWarehouseId.HasValue == true)
+                await warehouseAccess.EnsureWarehouseAccessAsync(request.DestinationWarehouseId.Value, cancellationToken);
+        }
+
+        var inTransitTransfersCount = db != null
+            ? await db.StockTransfers.AsNoTracking()
+                .CountAsync(t => t.Status == StockTransferStatus.InTransit, cancellationToken)
+            : 0;
+
         return Ok(new
         {
             simulationId = $"NET-BAL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            inTransitTransfersCount,
             networkSurplusShortageStatus = "SURPLUS_TO_SHORTAGE_LANES_MAPPED",
             interWarehouseReplenishment = "RESPECTS_RESERVATION_AND_TRANSFER_SEMANTICS",
             replenishmentExceptionTriage = "ZERO_SILENT_STOCKOUT_CONFLICTS",

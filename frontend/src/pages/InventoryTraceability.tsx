@@ -157,11 +157,10 @@ export default function InventoryTraceability(){
   const simulateRecallTree=async()=>{
     if(recallSimulating)return;
     setRecallSimulating(true);
+    setRequestError('');
     const queryValue=form.lotNumber.trim()||form.serialNumber.trim()||'BATCH-FEFO-2026';
     try{
-      const response=typeof apiClient.post==='function'
-        ? await apiClient.post<RecallTreeSimulationResult>('/api/inventory/traceability/simulate-recall-tree',{batchOrSerialQuery:queryValue})
-        : null;
+      const response=await apiClient.post<RecallTreeSimulationResult>('/api/inventory/traceability/simulate-recall-tree',{batchOrSerialQuery:queryValue});
       if(response?.data?.simulationId){
         setRecallSimulation(response.data);
       }else{
@@ -174,15 +173,9 @@ export default function InventoryTraceability(){
           simulatedAtUtc:new Date().toISOString(),
         });
       }
-    }catch{
-      setRecallSimulation({
-        simulationId:'TRC-RCL-FALLBACK',
-        query:queryValue,
-        upstreamPoLinked:true,
-        downstreamShipmentLinked:true,
-        recallContainmentReady:true,
-        simulatedAtUtc:new Date().toISOString(),
-      });
+    }catch(e){
+      setRecallSimulation(null);
+      setRequestError(errorMessage(e));
     }finally{
       setRecallSimulating(false);
     }

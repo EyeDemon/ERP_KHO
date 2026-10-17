@@ -4,6 +4,10 @@
 !/.agent/encoding-baseline.json
 /.agents/
 /.local-backups/
+/.staging-rehearsal/
+/.skills/
+/ponytail/
+/%SystemDrive%/
 /docs/CHAT_HISTORY.md
 
 # .NET and IDE artifacts

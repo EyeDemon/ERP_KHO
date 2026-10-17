@@ -357,7 +357,7 @@ namespace ERP.Api.Tests
         public void ReportsController_Get_RequiresAdminManagerOrViewer()
         {
             var classAttr = typeof(ReportsController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AdminManagerOrViewer);
+            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
         }
 
         [Fact]

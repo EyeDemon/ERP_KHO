@@ -300,6 +300,7 @@ export default function Permissions() {
   const exportEvidenceBundle = async () => {
     if (evidenceBusy) return;
     setEvidenceBusy(true);
+    setError('');
     try {
       const res = await apiClient.get<Record<string, unknown>>('/api/permissions/compliance-evidence-bundle');
       const data = res.data || {};
@@ -310,14 +311,8 @@ export default function Permissions() {
         appendOnlyAuditVerified: Boolean(data.appendOnlyAuditVerified ?? true),
         generatedAtUtc: typeof data.generatedAtUtc === 'string' ? data.generatedAtUtc : new Date().toISOString(),
       });
-    } catch {
-      setEvidenceBundle({
-        bundleId: 'EVD-20261017-CANONICAL',
-        policyVersion: 'v2026.10-CANONICAL',
-        legalHoldActive: true,
-        appendOnlyAuditVerified: true,
-        generatedAtUtc: new Date().toISOString(),
-      });
+    } catch (failure) {
+      setError(permissionError(failure));
     } finally {
       setEvidenceBusy(false);
     }
@@ -326,6 +321,7 @@ export default function Permissions() {
   const verifySodIsolation = async () => {
     if (sodAuditBusy) return;
     setSodAuditBusy(true);
+    setError('');
     try {
       const res = await apiClient.post<Record<string, unknown>>('/api/user-warehouse-access/verify-sod-isolation', {});
       const data = res.data || {};
@@ -334,12 +330,8 @@ export default function Permissions() {
         sodConflictCount: typeof data.sodConflictCount === 'number' ? data.sodConflictCount : 0,
         multiWarehouseIsolationEnforced: Boolean(data.multiWarehouseIsolationEnforced ?? true),
       });
-    } catch {
-      setSodAuditResult({
-        status: 'SOD_ISOLATION_VERIFIED',
-        sodConflictCount: 0,
-        multiWarehouseIsolationEnforced: true,
-      });
+    } catch (failure) {
+      setError(permissionError(failure));
     } finally {
       setSodAuditBusy(false);
     }
@@ -408,35 +400,6 @@ export default function Permissions() {
     )}
 
     {loading ? <p role="status">Đang tải quyền truy cập...</p> : <>
-      {catalog.length === 0 && <UiCard><p className="ui-muted-text">Chưa có quyền truy cập để hiển thị.</p></UiCard>}
-
-      {!canReadRoles && catalog.length > 0 && <UiCard title="Danh mục quyền truy cập">
-        <table aria-label="Danh mục quyền truy cập">
-          <thead><tr><th>Quyền</th><th>Mô tả</th></tr></thead>
-          <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td>{permission.description || 'Quyền truy cập hệ thống'}</td></tr>)}</tbody>
-        </table>
-      </UiCard>}
-
-      {roles.map(role => <UiCard key={role.id} title={roleLabel(role.roleName)}>
-        <table aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
-          <thead><tr><th>Quyền</th><th>Mã permission</th><th>Trạng thái</th>{canAssign && <th>Thao tác</th>}</tr></thead>
-          <tbody>{catalog.map(permission => {
-            const granted = role.permissions.includes(permission.code);
-            return <tr key={permission.code}>
-              <td>{permissionLabel(permission.code)}</td>
-              <td><code>{permission.code}</code></td>
-              <td><UiBadge tone={granted ? 'success' : 'neutral'}>{granted ? 'Đã cấp' : 'Chưa cấp'}</UiBadge></td>
-              {canAssign && <td>
-                <button type="button" disabled={pending} onClick={() => void change(role, permission.code, granted)}
-                  aria-label={`${granted ? 'Thu hồi' : 'Cấp'} ${permissionLabel(permission.code)} cho ${roleLabel(role.roleName)}`}>
-                  {pending ? 'Đang lưu...' : granted ? 'Thu hồi quyền' : 'Cấp quyền'}
-                </button>
-              </td>}
-            </tr>;
-          })}</tbody>
-        </table>
-      </UiCard>)}
-
       {(canAssign || canReadCatalog) && (
         <div className="ui-inline-actions">
           <button type="button" onClick={() => setShowGovernance(v => !v)}>
@@ -601,38 +564,21 @@ export default function Permissions() {
                 disabled={selfSessionsBusy}
                 onClick={async () => {
                   setSelfSessionsBusy(true);
+                  setError('');
                   try {
-                    const res = await apiClient.get?.('/api/Auth/sessions');
+                    const res = await apiClient.get('/api/Auth/sessions');
                     const rawList = Array.isArray(res?.data) ? res.data : [];
                     setSelfSessions(
-                      rawList.length > 0
-                        ? rawList.map((s: Record<string, unknown>, idx: number) => ({
-                            sessionId: String(s.sessionId ?? s.id ?? `SES-${idx + 1}`),
-                            deviceInfo: String(s.deviceInfo ?? s.userAgent ?? 'Web Browser (Windows)'),
-                            ipAddress: String(s.ipAddress ?? '127.0.0.1'),
-                            isCurrent: Boolean(s.isCurrent ?? idx === 0),
-                            createdAtUtc: String(s.createdAtUtc ?? s.createdAt ?? new Date().toISOString()),
-                          }))
-                        : [
-                            {
-                              sessionId: 'SES-CURRENT-PRIMARY',
-                              deviceInfo: 'Current Authenticated Browser Session',
-                              ipAddress: '127.0.0.1',
-                              isCurrent: true,
-                              createdAtUtc: new Date().toISOString(),
-                            },
-                          ]
+                      rawList.map((s: Record<string, unknown>, idx: number) => ({
+                        sessionId: String(s.sessionId ?? s.id ?? `SES-${idx + 1}`),
+                        deviceInfo: String(s.deviceInfo ?? s.userAgent ?? 'Web Browser (Windows)'),
+                        ipAddress: String(s.ipAddress ?? '127.0.0.1'),
+                        isCurrent: Boolean(s.isCurrent ?? idx === 0),
+                        createdAtUtc: String(s.createdAtUtc ?? s.createdAt ?? new Date().toISOString()),
+                      }))
                     );
-                  } catch {
-                    setSelfSessions([
-                      {
-                        sessionId: 'SES-CURRENT-PRIMARY',
-                        deviceInfo: 'Current Authenticated Browser Session',
-                        ipAddress: '127.0.0.1',
-                        isCurrent: true,
-                        createdAtUtc: new Date().toISOString(),
-                      },
-                    ]);
+                  } catch (failure) {
+                    setError(permissionError(failure));
                   } finally {
                     setSelfSessionsBusy(false);
                   }
@@ -670,12 +616,13 @@ export default function Permissions() {
                             disabled={selfSessionsBusy}
                             onClick={async () => {
                               setSelfSessionsBusy(true);
+                              setError('');
                               try {
-                                await apiClient.delete?.(`/api/Auth/sessions/${encodeURIComponent(ses.sessionId)}`);
-                              } catch {
-                                // Fallback when offline or in unit tests
-                              } finally {
+                                await apiClient.delete(`/api/Auth/sessions/${encodeURIComponent(ses.sessionId)}`);
                                 setSelfSessions((prev) => prev.filter((item) => item.sessionId !== ses.sessionId));
+                              } catch (failure) {
+                                setError(permissionError(failure));
+                              } finally {
                                 setSelfSessionsBusy(false);
                               }
                             }}
@@ -730,6 +677,39 @@ export default function Permissions() {
           </UiCard>
         </>
       )}
+
+      {catalog.length === 0 && <UiCard><p className="ui-muted-text">Chưa có quyền truy cập để hiển thị.</p></UiCard>}
+
+      {!canReadRoles && catalog.length > 0 && <UiCard title="Danh mục quyền truy cập">
+        <UiTableScroll>
+          <table className="permissions-table" aria-label="Danh mục quyền truy cập">
+            <thead><tr><th>Quyền</th><th>Mô tả</th></tr></thead>
+            <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td>{permission.description || 'Quyền truy cập hệ thống'}</td></tr>)}</tbody>
+          </table>
+        </UiTableScroll>
+      </UiCard>}
+
+      {roles.map(role => <UiCard key={role.id} title={roleLabel(role.roleName)}>
+        <UiTableScroll>
+          <table className="permissions-table" aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
+            <thead><tr><th>Quyền</th><th>Mã permission</th><th>Trạng thái</th>{canAssign && <th>Thao tác</th>}</tr></thead>
+            <tbody>{catalog.map(permission => {
+              const granted = role.permissions.includes(permission.code);
+              return <tr key={permission.code}>
+                <td>{permissionLabel(permission.code)}</td>
+                <td><code>{permission.code}</code></td>
+                <td><UiBadge tone={granted ? 'success' : 'neutral'}>{granted ? 'Đã cấp' : 'Chưa cấp'}</UiBadge></td>
+                {canAssign && <td>
+                  <button type="button" disabled={pending} onClick={() => void change(role, permission.code, granted)}
+                    aria-label={`${granted ? 'Thu hồi' : 'Cấp'} ${permissionLabel(permission.code)} cho ${roleLabel(role.roleName)}`}>
+                    {pending ? 'Đang lưu...' : granted ? 'Thu hồi quyền' : 'Cấp quyền'}
+                  </button>
+                </td>}
+              </tr>;
+            })}</tbody>
+          </table>
+        </UiTableScroll>
+      </UiCard>)}
     </>}
   </UiPage>;
 }

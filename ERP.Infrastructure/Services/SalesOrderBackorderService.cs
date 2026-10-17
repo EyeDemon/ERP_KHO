@@ -560,7 +560,11 @@ public sealed class SalesOrderBackorderService(
         var packingSessionIds = await context.Shipments.AsNoTracking()
             .Where(x => x.SourceType == "SalesOrder" &&
                         x.SourceId == order.Id &&
-                        x.Status == ShipmentStatus.Dispatched)
+                        (x.Status == ShipmentStatus.Dispatched ||
+                         x.Status == ShipmentStatus.InTransit ||
+                         x.Status == ShipmentStatus.Delivered ||
+                         x.Status == ShipmentStatus.Completed ||
+                         x.Status == ShipmentStatus.DeliveryFailed))
             .Select(x => x.PackingSessionId)
             .ToArrayAsync(token);
 

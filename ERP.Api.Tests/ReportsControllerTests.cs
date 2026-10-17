@@ -4,6 +4,7 @@ using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
 using System.Threading.Tasks;
@@ -236,6 +237,181 @@ namespace ERP.Api.Tests
 
             var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
             badRequest.Value.Should().BeEquivalentTo(new { message = "Từ ngày lỗi." });
+        }
+
+        [Fact]
+        public async Task AcknowledgeOperationalException_ForbidsViewerAndRecordsUserIdAndWarehouseIdForStaff()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new int[] { 7 });
+
+            var viewerController = new ReportsController(_mockService.Object)
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                    {
+                        User = new System.Security.Claims.ClaimsPrincipal(
+                            new System.Security.Claims.ClaimsIdentity(
+                                new[]
+                                {
+                                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "99"),
+                                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, ERP.Api.Authorization.AppRoles.Viewer)
+                                },
+                                "Test"))
+                    }
+                }
+            };
+
+            var viewerRes = await viewerController.AcknowledgeOperationalException(
+                new ReportsController.AcknowledgeOperationalExceptionDto("EX-001", null, "test"),
+                db,
+                warehouseAuth.Object);
+            viewerRes.Should().BeOfType<ForbidResult>();
+
+            var staffController = new ReportsController(_mockService.Object)
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                    {
+                        User = new System.Security.Claims.ClaimsPrincipal(
+                            new System.Security.Claims.ClaimsIdentity(
+                                new[]
+                                {
+                                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "42"),
+                                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, ERP.Api.Authorization.AppRoles.WarehouseStaff)
+                                },
+                                "Test"))
+                    }
+                }
+            };
+
+            var wrongWhRes = await staffController.AcknowledgeOperationalException(
+                new ReportsController.AcknowledgeOperationalExceptionDto("EX-001", 999, "test"),
+                db,
+                warehouseAuth.Object);
+            wrongWhRes.Should().BeOfType<ForbidResult>();
+
+            var okRes = await staffController.AcknowledgeOperationalException(
+                new ReportsController.AcknowledgeOperationalExceptionDto("EX-001", null, "Handled"),
+                db,
+                warehouseAuth.Object);
+            okRes.Should().BeOfType<OkObjectResult>();
+
+            var audit = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleAsync(db.AuditLogs);
+            audit.UserId.Should().Be(42);
+            audit.WarehouseId.Should().Be(7);
+            audit.OldValues.Should().Be("EX-001");
+        }
+
+        [Fact]
+        public async Task ErpKhoDbContext_EnforcesAppendOnlyAuditLogs()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var log = new ERP.Domain.Entities.AuditLog
+            {
+                EntityName = "Test",
+                EntityId = 1,
+                Action = "Create",
+                Timestamp = DateTime.UtcNow
+            };
+            db.AuditLogs.Add(log);
+            await db.SaveChangesAsync();
+
+            log.Action = "Tampered";
+            var actModify = async () => await db.SaveChangesAsync();
+            await actModify.Should().ThrowAsync<InvalidOperationException>()
+                .WithMessage("*AuditLog is append-only*");
+
+            db.Entry(log).State = Microsoft.EntityFrameworkCore.EntityState.Unchanged;
+            db.AuditLogs.Remove(log);
+            var actDelete = async () => await db.SaveChangesAsync();
+            await actDelete.Should().ThrowAsync<InvalidOperationException>()
+                .WithMessage("*AuditLog is append-only*");
+        }
+
+        [Fact]
+        public async Task PermissionsController_ScopesAuditLogsByWarehouseForNonAdmin_AndReportsHonestTenancy()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+            db.AuditLogs.AddRange(
+                new ERP.Domain.Entities.AuditLog { EntityName = "A", EntityId = 1, WarehouseId = 1, Action = "Act1", Timestamp = DateTime.UtcNow },
+                new ERP.Domain.Entities.AuditLog { EntityName = "B", EntityId = 2, WarehouseId = 2, Action = "Act2", Timestamp = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new int[] { 1 });
+
+            var controller = new PermissionsController(db, warehouseAuth.Object)
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                    {
+                        User = new System.Security.Claims.ClaimsPrincipal(
+                            new System.Security.Claims.ClaimsIdentity(
+                                new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, ERP.Api.Authorization.AppRoles.Manager) },
+                                "Test"))
+                    }
+                }
+            };
+
+            var logsRes = await controller.AuditLogs(CancellationToken.None);
+            var okLogs = logsRes.Should().BeOfType<OkObjectResult>().Subject;
+            var json = System.Text.Json.JsonSerializer.Serialize(okLogs.Value);
+            json.Should().Contain("Act1").And.NotContain("Act2");
+
+            var suiteRes = controller.EnterpriseGovernanceSuite().Should().BeOfType<OkObjectResult>().Subject;
+            System.Text.Json.JsonSerializer.Serialize(suiteRes.Value)
+                .Should().Contain("ROW_LEVEL_WAREHOUSE_SCOPE_AND_DEDICATED_DB_TENANCY");
+        }
+
+        [Fact]
+        public async Task AuthController_Login_StripsRefreshTokenFromJsonResponseBody()
+        {
+            var authService = new Mock<IAuthService>();
+            var sessionService = new Mock<IUserSessionService>();
+            var env = new Mock<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+            env.Setup(x => x.EnvironmentName).Returns("Testing");
+
+            authService.Setup(x => x.LoginAsync(It.IsAny<LoginRequestDto>(), It.IsAny<SessionContextDto>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new LoginResponseDto
+                {
+                    Token = "access-jwt",
+                    RefreshToken = "secret-refresh-token",
+                    RefreshTokenExpiresAtUtc = DateTime.UtcNow.AddDays(7),
+                    Username = "staff",
+                    Role = "WarehouseStaff"
+                });
+
+            var controller = new AuthController(authService.Object, sessionService.Object, env.Object, new ERP.Application.Common.SessionSecurityOptions())
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext()
+                }
+            };
+
+            var res = await controller.Login(new LoginRequestDto { Username = "staff", Password = "pw" });
+            var ok = res.Should().BeOfType<OkObjectResult>().Subject;
+            var dto = ok.Value.Should().BeOfType<LoginResponseDto>().Subject;
+            dto.RefreshToken.Should().BeEmpty();
+            controller.Response.Headers.SetCookie.ToString().Should().Contain("erp_refresh=secret-refresh-token");
         }
     }
 }

@@ -185,6 +185,7 @@ export default function Shipments(){
             onClick={()=>{
               if(tmsBusy)return;
               setTmsBusy(true);
+              setError('');
               void apiClient
                 .post<Record<string,unknown>>('/api/shipments/sync-tms-manifest',{
                   warehouseId:rows[0]?.warehouseId??1,
@@ -199,13 +200,9 @@ export default function Shipments(){
                     ediStatus:typeof data.ediStatus==='string'&&data.ediStatus?data.ediStatus:'ACK_200_SYNCED',
                   });
                 })
-                .catch(()=>{
-                  setTmsManifestResult({
-                    manifestId:'TMS-MNF-20261017-01',
-                    carrierCode:'VTP-EXPRESS',
-                    syncedShipmentCount:6,
-                    ediStatus:'ACK_200_SYNCED',
-                  });
+                .catch(e=>{
+                  setTmsManifestResult(null);
+                  setError(messageFor(e));
                 })
                 .finally(()=>setTmsBusy(false));
             }}

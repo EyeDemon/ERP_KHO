@@ -89,3 +89,39 @@ Membership UI is **DEFERRED_BY_OWNER**; its browser HTTP API/token matrix passes
 Two requested BrowserQA findings closed: capture failure/deadline propagation and mounted late receipt list/detail/print. Runner **18/18** automated checks pass, including four child-process FAIL/cleanup regressions. Negative actual-browser Run **f72d11d9b6344f10aaa05f7d7e7f9773** deliberately fails on 403 and cleans; it is not a passing run. Fresh Run **42464f71903e4898ad347ae047ab1d43** passes all three mounted subcases with original 200 responses, the same heading node retained across revoke/regrant/release, real production apiClient 403 identity refresh and no old data/dialog restoration. Test-only `frontend/e2e/mounted-receipts.html/.tsx` hosts unchanged production components outside the production bundle; this is component-in-browser coverage, not an unmodified production route staying mounted. The earlier run navigated to Tổng quan/unmounted and must not be cited for this new scope.
 
 Each subcase adds exactly two administration audits/claims; stock 100, receipt ledger 1 and movement 0 stay fixed. Runtime/model unchanged; local frontend 72/72, lint/type-check/build/audit PASS. Final pushed-head CI is recorded separately in Draft PR #1. Exact hashes, timestamps, failure evidence and cleanup are in PERMISSION_CODE_AUTHORIZATION.md. Notion unchanged, Drive metadata-only NOT REVIEWED; both exact-run resources cleaned. No production hook, configuration or new business feature.
+
+## Canonical Production Route Map (30 Operational Routes)
+
+| # | Route | Component | Section | Primary APIs | Required Permission / Gate |
+|---|---|---|---|---|---|
+| 1 | `/` | `Dashboard.tsx` | Vận hành | `GET /api/Reports/*`, `GET /api/Warehouses`, `GET /api/Approvals` | Authenticated (`access: always`) |
+| 2 | `/dock-yard` | `DockYard.tsx` | Vận hành | `GET/POST /api/dock-yard/*` | `dock_appointment.read` |
+| 3 | `/products` | `Products.tsx` | Dữ liệu nền | `GET/POST/PUT/DELETE /api/products`, `/api/product-categories`, `/api/product-barcodes` | `product.read` |
+| 4 | `/warehouses` | `Warehouses.tsx` | Dữ liệu nền | `GET/POST/PUT/DELETE /api/Warehouses` | `warehouse.read` |
+| 5 | `/warehouse-structure` | `WarehouseLocations.tsx` | Dữ liệu nền | `GET/POST/PUT /api/WarehouseLocations` | `location.read` |
+| 6 | `/warehouse-map` | `WarehouseMap.tsx` | Dữ liệu nền | `GET /api/WarehouseLocations`, `GET /api/InventoryStocks/current` | `location.read` |
+| 7 | `/warehouse-calendar` | `WarehouseCalendar.tsx` | Dữ liệu nền | `GET/PUT/POST /api/warehouse-calendars/*` | `warehouse.read` |
+| 8 | `/units` | `Units.tsx` | Dữ liệu nền | `GET/POST/PUT/DELETE /api/Units` | `uom.read` |
+| 9 | `/business-partners` | `BusinessPartners.tsx` | Dữ liệu nền | `GET/POST/PUT/DELETE /api/BusinessPartners` | `partner.read` |
+| 10 | `/purchase-orders` | `PurchaseOrders.tsx` | Nhập kho | `GET/POST /api/purchase-orders/*` | `purchase_order.read` |
+| 11 | `/asns` | `Asns.tsx` | Nhập kho | `GET/POST /api/asns/*` | `asn.read` |
+| 12 | `/import-receipts` | `ImportReceipts.tsx` | Nhập kho | `GET/POST/PUT /api/importreceipts/*` | `receipt.read` |
+| 13 | `/putaway-tasks` | `PutawayTasks.tsx` | Nhập kho | `GET/POST /api/putaway-tasks/*` | `putaway.read` |
+| 14 | `/export-receipts` | `ExportReceipts.tsx` | Xuất kho | `GET/POST /api/ExportReceipts/*` | `export_receipt.read` |
+| 15 | `/stock-reservations` | `StockReservations.tsx` | Xuất kho | `GET/POST /api/stock-reservations/*` | Authenticated (`access: always`) |
+| 16 | `/stock-allocations` | `StockAllocations.tsx` | Xuất kho | `GET/POST /api/stock-allocations/*` | `allocation.read` |
+| 17 | `/picking-tasks` | `PickingTasks.tsx` | Xuất kho | `GET/POST /api/picking-tasks/*` | `picking.read` |
+| 18 | `/packing-sessions` | `PackingSessions.tsx` | Xuất kho | `GET/POST /api/packing-sessions/*`, `/api/handling-units/*` | `packing.read` |
+| 19 | `/shipments` | `Shipments.tsx` | Xuất kho | `GET/POST /api/shipments/*` | `shipment.read` |
+| 20 | `/backorders` | `OutboundDemand.tsx` | Xuất kho | `GET/POST /api/sales-orders/*`, `/api/backorders/*` | `backorder.read` OR `sales_order.read` |
+| 21 | `/inventory` | `Inventory.tsx` | Kiểm soát tồn kho | `GET /api/InventoryStocks/current`, `/api/InventoryTransactions`, `/api/Reports/*`, `/api/inventory-control/*` | `inventory.read` |
+| 22 | `/inventory-locks` | `InventoryLocks.tsx` | Kiểm soát tồn kho | `GET/POST /api/inventory-locks/*` | `inventory_lock.read` |
+| 23 | `/inventory-movements` | `InventoryMovements.tsx` | Kiểm soát tồn kho | `GET/POST /api/inventory-movements/*` | `inventory.read` |
+| 24 | `/inventory-reversals` | `InventoryReversals.tsx` | Kiểm soát tồn kho | `GET/POST /api/inventory-reversals/*` | `inventory_ledger.read` |
+| 25 | `/inventory-traceability` | `InventoryTraceability.tsx` | Kiểm soát tồn kho | `GET /api/inventory-traceability/*` | `inventory_traceability.read` |
+| 26 | `/inventory-reconciliation` | `InventoryReconciliation.tsx` | Kiểm soát tồn kho | `GET /api/InventoryReconciliation` | `inventory_ledger.read` |
+| 27 | `/stocktakes` | `Stocktakes.tsx` | Kiểm soát tồn kho | `GET/POST/PUT /api/Stocktakes/*` | `canViewStocktakes()` |
+| 28 | `/stock-transfers` | `StockTransfers.tsx` | Kiểm soát tồn kho | `GET/POST/PUT /api/stock-transfers/*` | Authenticated (`access: always`) |
+| 29 | `/approvals` | `Approvals.tsx` | Kiểm soát | `GET/POST /api/Approvals/*` | `canViewApprovals()` |
+| 30 | `/permissions` | `Permissions.tsx` | Kiểm soát | `GET/POST/DELETE /api/permissions/*`, `/api/users/{id}/security`, `/api/users/{id}/warehouse-access`, `/api/Auth/sessions` | `permission.read` |
+

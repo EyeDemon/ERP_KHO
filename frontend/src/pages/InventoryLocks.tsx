@@ -77,6 +77,7 @@ export default function InventoryLocks(){
   const verifyLockPrecedence=async()=>{
     if(lockPrecedenceBusy)return;
     setLockPrecedenceBusy(true);
+    setError('');
     const parsedWarehouseId=form.warehouseId?Number(form.warehouseId):null;
     try{
       const response=await apiClient.post<LockPrecedenceResult>('/api/inventory/verify-lock-precedence',{warehouseId:parsedWarehouseId});
@@ -92,15 +93,9 @@ export default function InventoryLocks(){
           verifiedAtUtc:new Date().toISOString(),
         });
       }
-    }catch{
-      setLockPrecedenceResult({
-        verificationId:'LCK-PRC-FALLBACK',
-        warehouseId:parsedWarehouseId,
-        overlappingHoldPrecedence:'RECALL_GT_QC_GT_COUNT',
-        leakCount:0,
-        status:'LOCK_PRECEDENCE_VERIFIED',
-        verifiedAtUtc:new Date().toISOString(),
-      });
+    }catch(e){
+      setLockPrecedenceResult(null);
+      setError(errorMessage(e));
     }finally{
       setLockPrecedenceBusy(false);
     }

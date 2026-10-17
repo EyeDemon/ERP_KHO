@@ -77,36 +77,36 @@ export default function PurchaseOrders(){
   const mutationLock=useRef(new Set<string>());
 
   const expediteOverdue=async()=>{
+    setError('');
     try{
       const res=await apiClient.post('/api/purchase-orders/expedite-overdue',{supplierId:supplierId||undefined});
       setExpediteResult({
         expediteId:res?.data?.expediteId||'PO-EXP-ACTIVE',
         vendorNotificationStatus:res?.data?.vendorNotificationStatus||'DISPATCHED_TO_SUPPLIER',
       });
-    }catch{
-      setExpediteResult({expediteId:'PO-EXP-ACTIVE',vendorNotificationStatus:'DISPATCHED_TO_SUPPLIER'});
+    }catch(err:unknown){
+      setExpediteResult(null);
+      setError(permissionError(err,'Không thể phát tín hiệu đôn đốc nhà cung cấp.'));
     }
   };
 
   const generateProcurementRecommendations=async()=>{
+    setError('');
     try{
-      const res=await apiClient.post?.('/api/purchase-orders/generate-procurement-recommendations',{
+      const res=await apiClient.post('/api/purchase-orders/generate-procurement-recommendations',{
         warehouseId:warehouseId||items[0]?.warehouseId||undefined,
       });
-      if(res?.data?.recommendationId){
-        setProcurementRecResult(res.data);
-        return;
-      }
-    }catch{
-      // Fallback for offline/mocked environments
+      setProcurementRecResult({
+        recommendationId:res?.data?.recommendationId||'PROC-REC-ACTIVE',
+        procurementSuggestionStatus:res?.data?.procurementSuggestionStatus||'REORDER_THRESHOLD_PROPOSALS_READY',
+        supplierLeadTimePercentile:res?.data?.supplierLeadTimePercentile||'P90_LEAD_TIME_CALIBRATED',
+        expediteDeferSignal:res?.data?.expediteDeferSignal||'EXPEDITE_AND_DEFER_BALANCED',
+        status:res?.data?.status||'PROCUREMENT_INTELLIGENCE_READY',
+      });
+    }catch(err:unknown){
+      setProcurementRecResult(null);
+      setError(permissionError(err,'Không thể phân tích đề xuất đặt hàng thông minh.'));
     }
-    setProcurementRecResult({
-      recommendationId:'PROC-REC-ACTIVE',
-      procurementSuggestionStatus:'REORDER_THRESHOLD_PROPOSALS_READY',
-      supplierLeadTimePercentile:'P90_LEAD_TIME_CALIBRATED',
-      expediteDeferSignal:'EXPEDITE_AND_DEFER_BALANCED',
-      status:'PROCUREMENT_INTELLIGENCE_READY',
-    });
   };
 
   const [sourceSystem,setSourceSystem]=useState('ERP');

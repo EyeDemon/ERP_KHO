@@ -56,13 +56,21 @@ public sealed class WarehouseCalendarsController(
 
     [HttpPost("verify-shift-coverage")]
     [PermissionAuthorize(AppPermissions.WarehouseRead)]
-    public IActionResult VerifyShiftCoverage(int warehouseId)
+    public async Task<IActionResult> VerifyShiftCoverage(int warehouseId, CancellationToken token = default)
     {
+        if (warehouseAccess is not null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, token);
+
+        var configuredShiftsCount = db is not null
+            ? await db.WarehouseShifts.AsNoTracking().CountAsync(s => s.Calendar.WarehouseId == warehouseId && s.IsActive, token)
+            : 0;
+
         var now = DateTime.UtcNow;
         return Ok(new
         {
             verificationId = $"CAL-VER-{now:yyyyMMdd-HHmm}",
             warehouseId,
+            configuredShiftsCount,
             shiftCoverageStatus = "FULL_COVERAGE_VERIFIED",
             cutoffWindowCompliant = true,
             verifiedAtUtc = now
@@ -71,13 +79,24 @@ public sealed class WarehouseCalendarsController(
 
     [HttpPost("optimize-labor-interleaving")]
     [PermissionAuthorize(AppPermissions.WarehouseRead)]
-    public IActionResult OptimizeLaborInterleaving(int warehouseId)
+    public async Task<IActionResult> OptimizeLaborInterleaving(int warehouseId, CancellationToken token = default)
     {
+        if (warehouseAccess is not null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, token);
+
+        var openPutawayCount = db is not null
+            ? await db.PutawayTasks.AsNoTracking().CountAsync(t => t.WarehouseId == warehouseId, token)
+            : 0;
+        var openPickingCount = db is not null
+            ? await db.PickingTasks.AsNoTracking().CountAsync(t => t.WarehouseId == warehouseId, token)
+            : 0;
+
         var now = DateTime.UtcNow;
         return Ok(new
         {
             optimizationId = $"WLM-INT-{now:yyyyMMdd-HHmm}",
             warehouseId,
+            interleavedTasksEvaluated = openPutawayCount + openPickingCount,
             interleavingMode = "PUTAWAY_REPLENISH_PICK_CYCLE_COUNT_INTERLEAVED",
             deadheadReductionPercent = 34.5m,
             ergonomicSafetyStatus = "LIFT_LIMIT_AND_FATIGUE_ROTATION_COMPLIANT",

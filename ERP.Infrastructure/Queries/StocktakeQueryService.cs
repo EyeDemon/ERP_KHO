@@ -103,6 +103,20 @@ namespace ERP.Infrastructure.Queries
                 throw new NotFoundException("Stocktake", id);
             }
 
+            if (stocktake.Status == ERP.Domain.Enums.ReceiptStatus.Draft &&
+                !string.IsNullOrWhiteSpace(stocktake.Note) &&
+                stocktake.Note.StartsWith("[BLIND]", System.StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var detail in stocktake.Details)
+                {
+                    if (!detail.ActualQuantity.HasValue)
+                    {
+                        detail.SystemQuantity = 0m;
+                        detail.DifferenceQuantity = 0m;
+                    }
+                }
+            }
+
             return stocktake;
         }
     }

@@ -423,8 +423,18 @@ public sealed class PutawayService(
             var baseQty=ToBase(dto.Quantity,dto.UnitCode,item); if(baseQty>item.RemainingBaseQuantity) throw new BusinessRuleException("Số lượng cất vượt quá số lượng còn lại.");
             var product=await ProductForCapacity(item.ProductId,token)??throw new NotFoundException("Không tìm thấy sản phẩm.");
             await EnsurePutawayCapacityAsync(destination, product, baseQty, token);
-            var source=await context.InventoryStocks.SingleOrDefaultAsync(x=>x.ProductId==item.ProductId&&x.WarehouseId==task.WarehouseId&&x.Status==item.InventoryStatus&&x.LocationId==item.SourceLocationId,token);
-            if(source is null||source.Quantity-source.ReservedQuantity<baseQty) throw Conflict("Tồn tại vị trí nguồn đã thay đổi. Vui lòng tải lại.");
+            var sourceBuckets = await context.InventoryStocks
+                .Where(x => x.ProductId == item.ProductId &&
+                            x.WarehouseId == task.WarehouseId &&
+                            x.Status == item.InventoryStatus &&
+                            x.LocationId == item.SourceLocationId &&
+                            x.Quantity > x.ReservedQuantity)
+                .OrderBy(x => x.LotId)
+                .ThenBy(x => x.SerialId)
+                .ThenBy(x => x.Id)
+                .ToListAsync(token);
+            if (sourceBuckets.Count == 0 || sourceBuckets.Sum(x => x.Quantity - x.ReservedQuantity) < baseQty)
+                throw Conflict("Tồn tại vị trí nguồn đã thay đổi. Vui lòng tải lại.");
             if (inventoryLocks is not null)
             {
                 var now = DateTime.UtcNow;
@@ -446,10 +456,54 @@ public sealed class PutawayService(
                     throw locked;
                 }
             }
-            var dest=await context.InventoryStocks.SingleOrDefaultAsync(x=>x.ProductId==item.ProductId&&x.WarehouseId==task.WarehouseId&&x.Status==item.InventoryStatus&&x.LocationId==destination.Id,token);
-            source.Quantity-=baseQty; source.LastUpdated=DateTime.UtcNow;
-            if(dest is null) context.InventoryStocks.Add(new InventoryStock{ProductId=item.ProductId,WarehouseId=task.WarehouseId,Status=item.InventoryStatus,LocationId=destination.Id,Quantity=baseQty,LastUpdated=DateTime.UtcNow}); else {dest.Quantity+=baseQty;dest.LastUpdated=DateTime.UtcNow;}
-            item.MovedBaseQuantity+=baseQty; task.Status=task.Items.All(x=>x.RemainingBaseQuantity==0)?PutawayTaskStatus.Completed:PutawayTaskStatus.InProgress; task.StartedAt??=DateTime.UtcNow; if(task.Status==PutawayTaskStatus.Completed)task.CompletedAt=DateTime.UtcNow;
+            var nowUtc = DateTime.UtcNow;
+            var remainingToMove = baseQty;
+            foreach (var sourceBucket in sourceBuckets)
+            {
+                if (remainingToMove <= 0) break;
+                var availableInBucket = sourceBucket.Quantity - sourceBucket.ReservedQuantity;
+                if (availableInBucket <= 0) continue;
+                var chunk = Math.Min(remainingToMove, availableInBucket);
+                sourceBucket.Quantity -= chunk;
+                sourceBucket.LastUpdated = nowUtc;
+
+                var dest = context.InventoryStocks.Local.FirstOrDefault(x =>
+                               x.ProductId == item.ProductId &&
+                               x.WarehouseId == task.WarehouseId &&
+                               x.Status == item.InventoryStatus &&
+                               x.LocationId == destination.Id &&
+                               x.LotId == sourceBucket.LotId &&
+                               x.SerialId == sourceBucket.SerialId)
+                           ?? await context.InventoryStocks.FirstOrDefaultAsync(x =>
+                               x.ProductId == item.ProductId &&
+                               x.WarehouseId == task.WarehouseId &&
+                               x.Status == item.InventoryStatus &&
+                               x.LocationId == destination.Id &&
+                               x.LotId == sourceBucket.LotId &&
+                               x.SerialId == sourceBucket.SerialId, token);
+                if (dest is null)
+                {
+                    context.InventoryStocks.Add(new InventoryStock
+                    {
+                        ProductId = item.ProductId,
+                        WarehouseId = task.WarehouseId,
+                        Status = item.InventoryStatus,
+                        LocationId = destination.Id,
+                        LotId = sourceBucket.LotId,
+                        SerialId = sourceBucket.SerialId,
+                        Quantity = chunk,
+                        LastUpdated = nowUtc
+                    });
+                }
+                else
+                {
+                    dest.Quantity += chunk;
+                    dest.LastUpdated = nowUtc;
+                }
+
+                remainingToMove -= chunk;
+            }
+            item.MovedBaseQuantity+=baseQty; task.Status=task.Items.All(x=>x.RemainingBaseQuantity==0)?PutawayTaskStatus.Completed:PutawayTaskStatus.InProgress; task.StartedAt??=nowUtc; if(task.Status==PutawayTaskStatus.Completed)task.CompletedAt=nowUtc;
             context.InventoryLocationMovements.Add(new InventoryLocationMovement{WarehouseId=task.WarehouseId,ProductId=item.ProductId,InventoryStatus=item.InventoryStatus,FromLocationId=item.SourceLocationId,ToLocationId=destination.Id,BaseQuantity=baseQty,EnteredQuantity=dto.Quantity,EnteredUnitCode=dto.UnitCode.Trim().ToUpperInvariant(),PutawayTaskId=task.Id,PutawayTaskItemId=item.Id,ReceiptId=task.ReceiptId,ReceiptLineId=item.ReceiptLineId,CreatedBy=currentUser.UserId});
             context.AuditLogs.Add(Audit(currentUser.UserId,"PutawayTask.Moved",task.Id,task.WarehouseId,$"ItemId: {item.Id}; BaseQuantity: {baseQty}; DestinationId: {destination.Id}"));
             await context.SaveChangesAsync(token); if(tx is not null)await tx.CommitAsync(token); return await GetAsync(id,token);

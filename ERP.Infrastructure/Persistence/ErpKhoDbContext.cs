@@ -85,6 +85,7 @@ public class ErpKhoDbContext : DbContext
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         EnforceAppendOnlyInventoryLedger();
+        EnforceAppendOnlyAuditLogs();
         EnrichAuditLogs();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
@@ -95,8 +96,20 @@ public class ErpKhoDbContext : DbContext
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         EnforceAppendOnlyInventoryLedger();
+        EnforceAppendOnlyAuditLogs();
         EnrichAuditLogs();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void EnforceAppendOnlyAuditLogs()
+    {
+        foreach (var entry in ChangeTracker.Entries<AuditLog>())
+        {
+            if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException("AuditLog is append-only and cannot be modified or deleted.");
+            }
+        }
     }
 
     private void EnforceAppendOnlyInventoryLedger()

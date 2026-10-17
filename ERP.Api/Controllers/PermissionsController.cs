@@ -13,7 +13,9 @@ using Microsoft.EntityFrameworkCore;
 namespace ERP.Api.Controllers;
 
 [ApiController, Route("api/permissions"), Authorize]
-public sealed class PermissionsController(ErpKhoDbContext db) : ControllerBase
+public sealed class PermissionsController(
+    ErpKhoDbContext db,
+    ERP.Application.Interfaces.IWarehouseAuthorizationService? warehouseAuth = null) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.PermissionRead)]
     public async Task<IActionResult> Catalog(CancellationToken ct) => Ok(await db.Permissions.AsNoTracking()
@@ -25,15 +27,26 @@ public sealed class PermissionsController(ErpKhoDbContext db) : ControllerBase
             Permissions = x.Permissions.OrderBy(p => p.Permission.Code).Select(p => p.Permission.Code).ToArray() }).ToListAsync(ct));
 
     [HttpGet("audit-logs"), PermissionAuthorize(AppPermissions.PermissionRead)]
-    public async Task<IActionResult> AuditLogs(CancellationToken ct) => Ok(await db.AuditLogs.AsNoTracking()
-        .OrderByDescending(x => x.Timestamp)
-        .Take(20)
-        .Select(x => new { x.Id, x.UserId, x.Action, x.EntityName, x.EntityId, x.WarehouseId, x.NewValues, x.Result, x.Timestamp })
-        .ToListAsync(ct));
+    public async Task<IActionResult> AuditLogs(CancellationToken ct)
+    {
+        var query = db.AuditLogs.AsNoTracking();
+        if (warehouseAuth is not null && User?.IsInRole(AppRoles.Admin) != true)
+        {
+            var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(ct);
+            query = query.Where(x => x.WarehouseId == null || accessibleIds.Contains(x.WarehouseId.Value));
+        }
+
+        return Ok(await query
+            .OrderByDescending(x => x.Timestamp)
+            .Take(20)
+            .Select(x => new { x.Id, x.UserId, x.Action, x.EntityName, x.EntityId, x.WarehouseId, x.NewValues, x.Result, x.Timestamp })
+            .ToListAsync(ct));
+    }
 
     [HttpGet("enterprise-governance-suite"), PermissionAuthorize(AppPermissions.PermissionRead)]
     public IActionResult EnterpriseGovernanceSuite() => Ok(new
     {
+        tenantIsolationMode = "ROW_LEVEL_WAREHOUSE_SCOPE_AND_DEDICATED_DB_TENANCY",
         featureFlags = new[]
         {
             new { key = "WMS_STRICT_SOD_APPROVAL", enabled = true },

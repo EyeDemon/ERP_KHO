@@ -62,14 +62,16 @@ export default function StockReservations() {
   const [sweepPreview, setSweepPreview] = useState<{ sweepId: string; status: string } | null>(null);
 
   const sweepExpiredPreview = async () => {
+    setError('');
     try {
       const res = await apiClient.post('/api/stock-reservations/sweep-expired-preview', {});
       setSweepPreview({
         sweepId: res?.data?.sweepId || 'RSV-SWP-ACTIVE',
         status: res?.data?.status || 'COMMITMENT_TTL_VERIFIED',
       });
-    } catch {
-      setSweepPreview({ sweepId: 'RSV-SWP-ACTIVE', status: 'COMMITMENT_TTL_VERIFIED' });
+    } catch (failure) {
+      setSweepPreview(null);
+      setError(messageOf(failure, 'Không thể rà soát giữ hàng sắp hết hạn.'));
     }
   };
 

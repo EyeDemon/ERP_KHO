@@ -715,18 +715,24 @@ export default function InventoryReconciliation() {
             type="button"
             disabled={loading}
             onClick={() => {
-              void Promise.resolve(
-                apiClient.post?.('/api/InventoryReconciliation/export-erp-gl-journal', {
+              setError('');
+              void apiClient
+                .post('/api/InventoryReconciliation/export-erp-gl-journal', {
                   warehouseId: applied.warehouseId ? Number(applied.warehouseId) : null,
-                }),
-              ).catch(() => null);
-              setSiteReadinessVerdict({
-                readinessVerdict: mismatchCount === 0 && indeterminateCount === 0 ? 'APPROVED_FOR_OPEN_CLOSE' : 'BLOCKED_BY_MISMATCH',
-                checkedRows: currentRows.length,
-                mismatchCount,
-                outboxSynced: true,
-                verifiedAtUtc: new Date().toISOString(),
-              });
+                })
+                .then(() => {
+                  setSiteReadinessVerdict({
+                    readinessVerdict: mismatchCount === 0 && indeterminateCount === 0 ? 'APPROVED_FOR_OPEN_CLOSE' : 'BLOCKED_BY_MISMATCH',
+                    checkedRows: currentRows.length,
+                    mismatchCount,
+                    outboxSynced: true,
+                    verifiedAtUtc: new Date().toISOString(),
+                  });
+                })
+                .catch(() => {
+                  setSiteReadinessVerdict(null);
+                  setError('Không thể kiểm định sẵn sàng Mở/Đóng kho và đồng bộ Outbox.');
+                });
             }}
           >
             Chạy Kiểm định Sẵn sàng Mở/Đóng Kho & Đồng bộ Outbox (OP-02, IG-10)

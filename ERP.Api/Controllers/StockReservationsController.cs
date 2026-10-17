@@ -2,15 +2,21 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Domain.Enums;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/stock-reservations")]
 [Authorize(Roles = AppRoles.AllRoles)]
-public class StockReservationsController(IStockReservationService service) : ControllerBase
+public class StockReservationsController(
+    IStockReservationService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<StockReservationPageDto>> GetPage([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] int? warehouseId = null, [FromQuery] int? productId = null, [FromQuery] string? status = null, CancellationToken cancellationToken = default) =>
@@ -47,14 +53,61 @@ public class StockReservationsController(IStockReservationService service) : Con
     [HttpGet("commitment-summary")]
     public async Task<IActionResult> GetCommitmentSummary([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
     {
-        var page = await service.GetPageAsync(1, 200, warehouseId, null, null, cancellationToken);
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+        if (db != null)
+        {
+            var query = db.StockReservations.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(r => r.WarehouseId == warehouseId.Value);
+
+            var activeThresholdUtc = DateTime.UtcNow.AddHours(24);
+            var totalReservations = await query.CountAsync(cancellationToken);
+            var activeCount = await query.CountAsync(
+                x => x.Status == StockReservationStatus.Active
+                     || x.Status == StockReservationStatus.PartiallyConsumed
+                     || x.Status == StockReservationStatus.PartiallyAllocated
+                     || x.Status == StockReservationStatus.Allocated,
+                cancellationToken);
+            var consumedCount = await query.CountAsync(x => x.Status == StockReservationStatus.Consumed, cancellationToken);
+            var releasedCount = await query.CountAsync(
+                x => x.Status == StockReservationStatus.Released
+                     || x.Status == StockReservationStatus.Expired
+                     || x.Status == StockReservationStatus.Cancelled,
+                cancellationToken);
+            var totalActiveRemainingQuantity = await query
+                .Where(x => x.Status == StockReservationStatus.Active
+                            || x.Status == StockReservationStatus.PartiallyConsumed
+                            || x.Status == StockReservationStatus.PartiallyAllocated
+                            || x.Status == StockReservationStatus.Allocated)
+                .SumAsync(x => (decimal?)(x.Quantity - x.ConsumedQuantity - x.ReleasedQuantity), cancellationToken) ?? 0m;
+            var expiringSoonCount = await query.CountAsync(
+                x => x.Status == StockReservationStatus.Active && x.ExpiresAt <= activeThresholdUtc,
+                cancellationToken);
+
+            return Ok(new
+            {
+                totalReservations,
+                activeCount,
+                consumedCount,
+                releasedCount,
+                releasedOrExpiredCount = releasedCount,
+                totalActiveRemainingQuantity,
+                expiringSoonCount
+            });
+        }
+
+        var page = await service.GetPageAsync(1, int.MaxValue, warehouseId, null, null, cancellationToken);
+        var fallbackReleased = page.Items.Count(x => x.Status is "Released" or "Expired" or "Cancelled");
         return Ok(new
         {
             totalReservations = page.TotalRecords,
-            activeCount = page.Items.Count(x => x.Status == "Active"),
+            activeCount = page.Items.Count(x => x.Status is "Active" or "PartiallyConsumed" or "PartiallyAllocated" or "Allocated"),
             consumedCount = page.Items.Count(x => x.Status == "Consumed"),
-            releasedOrExpiredCount = page.Items.Count(x => x.Status is "Released" or "Expired"),
-            totalActiveRemainingQuantity = page.Items.Where(x => x.Status == "Active").Sum(x => x.RemainingQuantity),
+            releasedCount = fallbackReleased,
+            releasedOrExpiredCount = fallbackReleased,
+            totalActiveRemainingQuantity = page.Items.Where(x => x.Status is "Active" or "PartiallyConsumed" or "PartiallyAllocated" or "Allocated").Sum(x => x.RemainingQuantity),
             expiringSoonCount = page.Items.Count(x => x.Status == "Active" && x.ExpiresAt <= DateTime.UtcNow.AddHours(24))
         });
     }
@@ -62,14 +115,28 @@ public class StockReservationsController(IStockReservationService service) : Con
     public sealed record SweepExpiredReservationsRequest(int? WarehouseId);
 
     [HttpPost("sweep-expired-preview")]
-    public IActionResult SweepExpiredPreview(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SweepExpiredReservationsRequest? request) =>
-        Ok(new
+    public async Task<IActionResult> SweepExpiredPreview(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SweepExpiredReservationsRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var expiredCandidateCount = db != null
+            ? await db.StockReservations.AsNoTracking()
+                .Where(r => !request!.WarehouseId.HasValue || r.WarehouseId == request.WarehouseId.Value)
+                .CountAsync(r => r.Status == StockReservationStatus.Active && r.SourceType == "Manual" && r.ExpiresAt <= now, cancellationToken)
+            : 0;
+
+        return Ok(new
         {
-            sweepId = $"RSV-SWP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            sweepId = $"RSV-SWP-{now:yyyyMMdd-HHmm}",
             warehouseId = request?.WarehouseId,
+            expiredCandidateCount,
             status = "COMMITMENT_TTL_VERIFIED",
             ledgerMutated = false,
-            checkedAtUtc = DateTime.UtcNow
+            checkedAtUtc = now
         });
+    }
 }

@@ -188,8 +188,14 @@ public sealed class InboundPlanningService(
         MutateAsnAsync(id,dto,[AsnStatus.InTransit],AsnStatus.Arrived,"Asn.Arrived",token);
     public Task<AsnDto> StartReceivingAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
         MutateAsnAsync(id,dto,[AsnStatus.Arrived],AsnStatus.Receiving,"Asn.ReceivingStarted",token);
-    public Task<AsnDto> CompleteAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
-        MutateAsnAsync(id,dto,[AsnStatus.Receiving],AsnStatus.Completed,"Asn.Completed",token);
+    public async Task<AsnDto> CompleteAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)
+    {
+        if (await context.ImportReceipts.AsNoTracking().AnyAsync(
+                x => x.AsnId == id && x.Status != ReceiptStatus.Posted && x.Status != ReceiptStatus.Cancelled,
+                token))
+            throw Conflict("Không thể hoàn tất ASN khi còn phiếu nhập liên kết chưa được POST.");
+        return await MutateAsnAsync(id,dto,[AsnStatus.Receiving],AsnStatus.Completed,"Asn.Completed",token);
+    }
     public Task<AsnDto> CancelAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
         MutateAsnAsync(id,dto,[AsnStatus.Draft,AsnStatus.Confirmed],AsnStatus.Cancelled,"Asn.Cancelled",token);
 

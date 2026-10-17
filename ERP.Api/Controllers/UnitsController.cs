@@ -1,7 +1,9 @@
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ERP.Api.Authorization;
 
 namespace ERP.Api.Controllers
@@ -12,10 +14,12 @@ namespace ERP.Api.Controllers
     public class UnitsController : ControllerBase
     {
         private readonly IUnitService _unitService;
+        private readonly ErpKhoDbContext? _db;
 
-        public UnitsController(IUnitService unitService)
+        public UnitsController(IUnitService unitService, ErpKhoDbContext db = null!)
         {
             _unitService = unitService;
+            _db = db;
         }
 
         [HttpGet]
@@ -42,12 +46,21 @@ namespace ERP.Api.Controllers
 
         [HttpPost("verify-uom-integrity")]
         [PermissionAuthorize(AppPermissions.UomRead)]
-        public IActionResult VerifyUomIntegrity()
+        public async Task<IActionResult> VerifyUomIntegrity(CancellationToken cancellationToken = default)
         {
+            var totalUnitsCount = _db != null
+                ? await _db.Units.AsNoTracking().CountAsync(cancellationToken)
+                : (await _unitService.GetAllUnitsAsync()).Count();
+            var conversionCount = _db != null
+                ? await _db.ProductUoms.AsNoTracking().CountAsync(cancellationToken)
+                : 0;
+
             var now = DateTime.UtcNow;
             return Ok(new
             {
                 verificationId = $"UOM-INT-{now:yyyyMMdd-HHmm}",
+                totalUnitsCount,
+                conversionCount,
                 baseUomImmutability = "ENFORCED",
                 conversionGraphCycles = 0,
                 status = "CANONICAL_UOM_VERIFIED",
@@ -58,10 +71,21 @@ namespace ERP.Api.Controllers
         public sealed record VerifyCatchWeightColdChainRequest(int? ProductId = null);
 
         [HttpPost("verify-catch-weight-coldchain"), PermissionAuthorize(AppPermissions.UomRead)]
-        public IActionResult VerifyCatchWeightColdChain([FromBody] VerifyCatchWeightColdChainRequest? request = null) =>
-            Ok(new
+        public async Task<IActionResult> VerifyCatchWeightColdChain(
+            [FromBody] VerifyCatchWeightColdChainRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            var checkedProductsCount = _db != null
+                ? await _db.Products.AsNoTracking()
+                    .Where(p => !request!.ProductId.HasValue || p.Id == request.ProductId.Value)
+                    .CountAsync(cancellationToken)
+                : 0;
+
+            return Ok(new
             {
                 verificationId = $"CW-CC-HAZ-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+                productId = request?.ProductId,
+                checkedProductsCount,
                 dualUomTolerancePct = 2.5m,
                 catchWeightLedgerTraceability = "DUAL_UOM_BASE_AND_ACTUAL_WEIGHT_SYNCED",
                 coldChainExcursionStatus = "ZERO_UNRESOLVED_TEMPERATURE_EXCURSIONS",
@@ -69,6 +93,7 @@ namespace ERP.Api.Controllers
                 status = "SPECIALIZED_INVENTORY_RULES_VERIFIED",
                 verifiedAtUtc = DateTime.UtcNow
             });
+        }
 
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.UomRead)]

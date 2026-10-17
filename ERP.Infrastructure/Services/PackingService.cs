@@ -113,8 +113,6 @@ public sealed class PackingService(
             EnsureSessionMutable(session);
             if (request.Quantity <= 0)
                 throw new BusinessRuleException("Số lượng đóng gói phải lớn hơn 0.");
-            if (!string.IsNullOrWhiteSpace(request.LotNumber) || !string.IsNullOrWhiteSpace(request.SerialNumber))
-                throw Conflict("HU_CONTENT_MISMATCH", "Lot/Serial canonical chưa được triển khai nên chưa thể xác nhận content theo Lot/Serial.");
 
             var hu = session.HandlingUnits.SingleOrDefault(x => x.Id == request.HandlingUnitId)
                 ?? throw HuNotFound();
@@ -123,6 +121,20 @@ public sealed class PackingService(
 
             var line = session.PickingTask.Lines.SingleOrDefault(x => x.Id == request.PickingTaskLineId)
                 ?? throw Conflict("HU_CONTENT_MISMATCH", "Dòng Picking không thuộc Packing session này.");
+            if (!string.IsNullOrWhiteSpace(request.LotNumber))
+            {
+                var expectedLot = line.Allocation?.Lot?.LotNumber;
+                if (string.IsNullOrWhiteSpace(expectedLot) ||
+                    !string.Equals(expectedLot, request.LotNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+                    throw Conflict("HU_CONTENT_MISMATCH", "LotNumber không khớp với dòng Picking đã phân bổ.");
+            }
+            if (!string.IsNullOrWhiteSpace(request.SerialNumber))
+            {
+                var expectedSerial = line.Allocation?.Serial?.SerialNumber;
+                if (string.IsNullOrWhiteSpace(expectedSerial) ||
+                    !string.Equals(expectedSerial, request.SerialNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+                    throw Conflict("HU_CONTENT_MISMATCH", "SerialNumber không khớp với dòng Picking đã phân bổ.");
+            }
             if (line.PickedQuantity <= 0)
                 throw Conflict("PACK_QUANTITY_EXCEEDS_PICKED", "Dòng Picking chưa có số lượng thực tế để đóng gói.");
             ValidateQuantityPrecision(line, request.Quantity);
@@ -434,6 +446,8 @@ public sealed class PackingService(
             .AsSplitQuery()
             .Include(x => x.Warehouse)
             .Include(x => x.PickingTask).ThenInclude(x => x.Lines).ThenInclude(x => x.Product).ThenInclude(x => x.Unit)
+            .Include(x => x.PickingTask).ThenInclude(x => x.Lines).ThenInclude(x => x.Allocation).ThenInclude(x => x.Lot)
+            .Include(x => x.PickingTask).ThenInclude(x => x.Lines).ThenInclude(x => x.Allocation).ThenInclude(x => x.Serial)
             .Include(x => x.HandlingUnits).ThenInclude(x => x.ParentHandlingUnit)
             .Include(x => x.HandlingUnits).ThenInclude(x => x.Children)
             .Include(x => x.HandlingUnits).ThenInclude(x => x.Contents).ThenInclude(x => x.Product);

@@ -61,14 +61,16 @@ export default function StockAllocations(){
   const [fefoVerification,setFefoVerification]=useState<{verificationId:string;fefoComplianceStatus:string}|null>(null);
 
   const verifyFefoCompliance=async()=>{
+    setError('');
     try{
       const res=await apiClient.post('/api/inventory/allocations/verify-fefo-compliance',{});
       setFefoVerification({
         verificationId:res?.data?.verificationId||'ALC-FEFO-ACTIVE',
         fefoComplianceStatus:res?.data?.fefoComplianceStatus||'STRICT_FEFO_FIFO_ALIGNED',
       });
-    }catch{
-      setFefoVerification({verificationId:'ALC-FEFO-ACTIVE',fefoComplianceStatus:'STRICT_FEFO_FIFO_ALIGNED'});
+    }catch(failure){
+      setFefoVerification(null);
+      setError(messageOf(failure,'Không thể kiểm định tuân thủ phân bổ FEFO/FIFO.'));
     }
   };
 

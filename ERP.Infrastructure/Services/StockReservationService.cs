@@ -147,7 +147,7 @@ public class StockReservationService(
 
         if (reservation.WarehouseId != warehouseId)
             throw new ConcurrencyException("Reservation nguồn không cùng kho.");
-        if (reservation.ExpiresAt <= DateTime.UtcNow)
+        if (string.Equals(reservation.SourceType, "Manual", StringComparison.OrdinalIgnoreCase) && reservation.ExpiresAt <= DateTime.UtcNow)
             throw new ConcurrencyException("Reservation nguồn đã hết hạn.");
         if (reservation.Status is not StockReservationStatus.Active and
             not StockReservationStatus.PartiallyAllocated and

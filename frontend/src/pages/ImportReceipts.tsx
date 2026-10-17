@@ -479,18 +479,19 @@ const ImportReceipts = () => {
             <button
               type="button"
               onClick={() => {
-                void Promise.resolve(
-                  apiClient.post?.('/api/ImportReceipts/initiate-rma-inspection', {
+                setError('');
+                setSuccessMsg('');
+                void apiClient
+                  .post('/api/ImportReceipts/initiate-rma-inspection', {
                     warehouseId: warehouseId || warehouses[0]?.id || 1,
                     rmaReferenceCode: 'RMA-' + new Date().toISOString().slice(0, 10),
-                  }),
-                )
+                  })
                   .then((res) => {
                     const code = (res as { data?: { rmaInspectionCode?: string } } | undefined)?.data?.rmaInspectionCode || 'RMA-QC-ACTIVE';
                     setSuccessMsg(`Đã khởi tạo hồ sơ kiểm định RMA (${code}): Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.`);
                   })
-                  .catch(() => {
-                    setSuccessMsg('Đã khởi tạo hồ sơ kiểm định RMA: Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.');
+                  .catch((err) => {
+                    setError(permissionError(err, 'Không thể khởi tạo hồ sơ kiểm định RMA / hàng hoàn trả.'));
                   });
               }}
             >
@@ -499,18 +500,19 @@ const ImportReceipts = () => {
             <button
               type="button"
               onClick={() => {
-                void Promise.resolve(
-                  apiClient.post?.('/api/ImportReceipts/execute-rtv-refurbish', {
+                setError('');
+                setSuccessMsg('');
+                void apiClient
+                  .post('/api/ImportReceipts/execute-rtv-refurbish', {
                     warehouseId: warehouseId || warehouses[0]?.id || 1,
                     dispositionType: 'REFURBISH_AND_RTV_SPLIT',
-                  }),
-                )
+                  })
                   .then((res) => {
                     const code = (res as { data?: { dispositionCode?: string } } | undefined)?.data?.dispositionCode || 'RTV-REF-ACTIVE';
                     setSuccessMsg(`Đã thực thi phân luồng Reverse Logistics (${code}): Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV (AX-13).`);
                   })
-                  .catch(() => {
-                    setSuccessMsg('Đã thực thi phân luồng Reverse Logistics: Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV (AX-13).');
+                  .catch((err) => {
+                    setError(permissionError(err, 'Không thể thực thi phân luồng tân trang (Refurbish) & xuất trả RTV.'));
                   });
               }}
             >

@@ -32,7 +32,7 @@ export const UiToolbarField = ({
   label: string;
   children: ReactNode;
 }) => (
-  <label className="ui-toolbar-group">
+  <label className="ui-toolbar-group ui-toolbar-field">
     <span>{label}</span>
     {children}
   </label>

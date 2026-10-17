@@ -2,15 +2,21 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Domain.Enums;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/inventory/allocations")]
 [Authorize]
-public sealed class StockAllocationsController(IStockAllocationService service) : ControllerBase
+public sealed class StockAllocationsController(
+    IStockAllocationService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
     [PermissionAuthorize(AppPermissions.AllocationRead)]
@@ -48,13 +54,48 @@ public sealed class StockAllocationsController(IStockAllocationService service) 
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
-        var page = await service.GetPageAsync(1, 200, warehouseId, null, null, cancellationToken);
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
         var reservations = await service.GetReservationsAsync(warehouseId, cancellationToken);
+
+        if (db != null)
+        {
+            var query = db.StockAllocations.AsNoTracking();
+            if (warehouseId.HasValue)
+                query = query.Where(a => a.WarehouseId == warehouseId.Value);
+
+            var totalAllocations = await query.CountAsync(cancellationToken);
+            var activeAllocations = await query.CountAsync(
+                x => x.Status == StockAllocationStatus.Active || x.Status == StockAllocationStatus.Picking,
+                cancellationToken);
+            var pickedAllocations = await query.CountAsync(
+                x => x.Status == StockAllocationStatus.Picked,
+                cancellationToken);
+            var totalAllocatedQuantity = await query
+                .Where(x => x.Status == StockAllocationStatus.Active
+                            || x.Status == StockAllocationStatus.Picking
+                            || x.Status == StockAllocationStatus.Picked)
+                .SumAsync(x => (decimal?)x.Quantity, cancellationToken) ?? 0m;
+
+            return Ok(new
+            {
+                totalAllocations,
+                activeAllocations,
+                pickedAllocations,
+                totalAllocatedQuantity,
+                unallocatedReservationCount = reservations.Count(x => x.AllocatableQuantity > 0),
+                totalUnallocatedQuantity = reservations.Sum(x => x.AllocatableQuantity)
+            });
+        }
+
+        var page = await service.GetPageAsync(1, int.MaxValue, warehouseId, null, null, cancellationToken);
         return Ok(new
         {
             totalAllocations = page.TotalRecords,
             activeAllocations = page.Items.Count(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking"),
-            totalAllocatedQuantity = page.Items.Where(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking").Sum(x => x.Quantity),
+            pickedAllocations = page.Items.Count(x => x.Status == "Picked"),
+            totalAllocatedQuantity = page.Items.Where(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking" || x.Status == "Picked").Sum(x => x.Quantity),
             unallocatedReservationCount = reservations.Count(x => x.AllocatableQuantity > 0),
             totalUnallocatedQuantity = reservations.Sum(x => x.AllocatableQuantity)
         });
@@ -64,16 +105,30 @@ public sealed class StockAllocationsController(IStockAllocationService service) 
 
     [HttpPost("verify-fefo-compliance")]
     [PermissionAuthorize(AppPermissions.AllocationRead)]
-    public IActionResult VerifyFefoCompliance(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyAllocationFefoRequest? request) =>
-        Ok(new
+    public async Task<IActionResult> VerifyFefoCompliance(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyAllocationFefoRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+
+        var binLockConflictCount = db != null
+            ? await db.StockAllocations.AsNoTracking()
+                .Where(a => (!request!.WarehouseId.HasValue || a.WarehouseId == request.WarehouseId.Value)
+                            && (a.Status == StockAllocationStatus.Active || a.Status == StockAllocationStatus.Picking)
+                            && a.Location.IsBlocked)
+                .CountAsync(cancellationToken)
+            : 0;
+
+        return Ok(new
         {
             verificationId = $"ALC-FEFO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             warehouseId = request?.WarehouseId,
-            fefoComplianceStatus = "STRICT_FEFO_FIFO_ALIGNED",
-            binLockConflictCount = 0,
+            fefoComplianceStatus = binLockConflictCount == 0 ? "STRICT_FEFO_FIFO_ALIGNED" : "CONFLICT_DETECTED",
+            binLockConflictCount,
             verifiedAtUtc = DateTime.UtcNow
         });
+    }
 
     [HttpPost]
     [PermissionAuthorize(AppPermissions.AllocationCreate)]

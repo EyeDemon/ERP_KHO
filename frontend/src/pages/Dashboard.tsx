@@ -102,11 +102,16 @@ const Dashboard = () => {
   const [liveError, setLiveError] = useState('');
 
   const acknowledgeException = async (code: string) => {
-    await apiClient.post('/api/Reports/operational-exceptions/acknowledge', {
-      exceptionCode: code,
-      resolutionNote: 'Tiếp nhận từ Trung tâm điều hành',
-    }).catch(() => null);
-    setAcknowledgedCodes((prev) => (prev.includes(code) ? prev : [...prev, code]));
+    setLiveError('');
+    try {
+      await apiClient.post('/api/Reports/operational-exceptions/acknowledge', {
+        exceptionCode: code,
+        resolutionNote: 'Tiếp nhận từ Trung tâm điều hành',
+      });
+      setAcknowledgedCodes((prev) => (prev.includes(code) ? prev : [...prev, code]));
+    } catch {
+      setLiveError('Không thể xác nhận xử lý ngoại lệ vận hành.');
+    }
   };
 
   useEffect(() => {

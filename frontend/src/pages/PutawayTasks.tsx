@@ -3,7 +3,7 @@ import apiClient from '../services/apiClient';
 import { usePermission, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import './PutawayTasks.css';
-import { UiBadge, UiCard, UiPage, UiPageHeader } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type Item={id:number;productCode:string;productName:string;inventoryStatus:string;sourceLocationCode:string;operationUnitCode:string;baseUnitCode:string;requiredOperationQuantity:number;requiredBaseQuantity:number;movedBaseQuantity:number;remainingBaseQuantity:number};
 type Task={id:number;receiptCode:string;warehouseName:string;status:string;assignedUserId:number|null;requiredBaseQuantity:number;movedBaseQuantity:number;rowVersion:string;exceptionReason?:string;items:Item[]};
@@ -23,12 +23,14 @@ export default function PutawayTasks(){
  useEffect(()=>{void load()},[]);
  const mutate=async(key:string,path:string,body:object)=>{if(lock.current.has(key))return;lock.current.add(key);setBusy(key);setError('');try{const t=(await apiClient.post(path,body,{headers:idempotencyHeaders(key)})).data as Task;completeIdempotentAction(key);setSelected(t);await load();await detail(t.id)}catch(e){if((e as {response?:{status?:number}})?.response?.status===409)setSelected(null);setError(message(e))}finally{lock.current.delete(key);setBusy('')}};
  const evaluateSlotting=async()=>{
+   setError('');
    try{
      const res=await apiClient.post('/api/putaway-tasks/evaluate-slotting',{warehouseId:1});
      const data=res?.data as {evaluationId?:string;optimalBinMatchRatePct?:number;fefoHazardCompliance?:string}|undefined;
      setSlottingEvaluationResult(`${data?.evaluationId??'SLOT-EVAL-OK'} • Khớp Bin tối ưu: ${data?.optimalBinMatchRatePct??96.4}% • FEFO/Hazard: ${data?.fefoHazardCompliance??'VERIFIED'}`);
-   }catch{
-     setSlottingEvaluationResult('SLOT-EVAL-LOCAL • Khớp Bin tối ưu: 96.4% • FEFO/Hazard: VERIFIED');
+   }catch(e){
+     setSlottingEvaluationResult('');
+     setError(message(e));
    }
  };
  if(loading)return <p role="status">Đang tải nhiệm vụ cất hàng...</p>;
@@ -70,7 +72,7 @@ export default function PutawayTasks(){
 
    <div className="putaway putaway-grid">
      <UiCard title="Danh sách nhiệm vụ">
-       {tasks.length===0?<p>Chưa có nhiệm vụ cất hàng phù hợp.</p>:<table>
+       {tasks.length===0?<p>Chưa có nhiệm vụ cất hàng phù hợp.</p>:<UiTableScroll><table>
          <thead><tr><th>Phiếu nhập</th><th>Kho</th><th>Trạng thái</th><th>Tiến độ</th></tr></thead>
          <tbody>{tasks.map(task=><tr key={task.id}>
            <td><button onClick={()=>void detail(task.id)}>{task.receiptCode}</button></td>
@@ -78,7 +80,7 @@ export default function PutawayTasks(){
            <td><UiBadge tone={task.status==='Completed'?'success':task.status==='Exception'?'danger':task.status==='InProgress'?'warning':'neutral'}>{states[task.status]??'Không xác định'}</UiBadge></td>
            <td><strong>{task.movedBaseQuantity}</strong> / {task.requiredBaseQuantity}</td>
          </tr>)}</tbody>
-       </table>}
+       </table></UiTableScroll>}
      </UiCard>
 
      {selected&&<UiCard title={'Chi tiết nhiệm vụ ' + selected.receiptCode}>

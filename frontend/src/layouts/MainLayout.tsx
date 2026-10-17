@@ -109,7 +109,7 @@ const MainLayout = () => {
       setIdentityState('error');
     });
     return () => { active = false; };
-  }, [demoRuntime, pathname]);
+  }, [demoRuntime]);
 
   useEffect(() => {
     const label = pageMeta?.label ?? 'ERP WMS';
@@ -135,6 +135,7 @@ const MainLayout = () => {
 
   const showStocktakes = demoRuntime || canViewStocktakes();
   const canShowProductionItem = (item: ProductionNavItem) => {
+    if (item.path === '/backorders') return hasPermission('backorder.read') || hasPermission('sales_order.read');
     if (item.permission) return hasPermission(item.permission);
     if (item.access === 'stocktake') return showStocktakes;
     if (item.access === 'approvals') return canViewApprovals();

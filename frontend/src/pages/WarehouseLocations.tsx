@@ -491,6 +491,7 @@ const WarehouseLocations = () => {
             onClick={() => {
               if (topologyAuditBusy) return;
               setTopologyAuditBusy(true);
+              setError('');
               void apiClient
                 .post<Record<string, unknown>>('/api/warehouses/verify-topology-capacity', { warehouseId })
                 .then((res) => {
@@ -501,12 +502,9 @@ const WarehouseLocations = () => {
                     capacityGuardrailActive: Boolean(data.capacityGuardrailActive ?? true),
                   });
                 })
-                .catch(() => {
-                  setTopologyAuditResult({
-                    verificationId: 'TOP-CAP-20261017-01',
-                    zoneBinHierarchyStatus: 'CANONICAL_VALIDATED',
-                    capacityGuardrailActive: true,
-                  });
+                .catch((failure) => {
+                  setTopologyAuditResult(null);
+                  setError(messageOf(failure, 'Không thể kiểm định cấu trúc Zone/Bin và giới hạn sức chứa.'));
                 })
                 .finally(() => setTopologyAuditBusy(false));
             }}
@@ -521,9 +519,9 @@ const WarehouseLocations = () => {
           <button
             type="button"
             onClick={() => {
-              void Promise.resolve(
-                apiClient.post?.('/api/Warehouses/verify-virtual-locations', { warehouseId }),
-              )
+              setError('');
+              void apiClient
+                .post('/api/Warehouses/verify-virtual-locations', { warehouseId })
                 .then((res) => {
                   const data = (res as { data?: { verificationId?: string; status?: string } } | undefined)?.data;
                   setVirtualVerification({
@@ -531,11 +529,9 @@ const WarehouseLocations = () => {
                     status: data?.status || 'ALL_9_VIRTUAL_LOCATIONS_READY',
                   });
                 })
-                .catch(() => {
-                  setVirtualVerification({
-                    verificationId: 'VLOC-AUD-ACTIVE',
-                    status: 'ALL_9_VIRTUAL_LOCATIONS_READY',
-                  });
+                .catch((failure) => {
+                  setVirtualVerification(null);
+                  setError(messageOf(failure, 'Không thể kiểm định 9 vị trí ảo của kho.'));
                 });
             }}
           >

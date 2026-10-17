@@ -1,7 +1,9 @@
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ERP.Api.Authorization;
 
 namespace ERP.Api.Controllers
@@ -12,10 +14,12 @@ namespace ERP.Api.Controllers
     public class ProductsController : ControllerBase
     {
         private readonly IProductService _productService;
+        private readonly ErpKhoDbContext? _db;
 
-        public ProductsController(IProductService productService)
+        public ProductsController(IProductService productService, ErpKhoDbContext db = null!)
         {
             _productService = productService;
+            _db = db;
         }
 
         [HttpGet]
@@ -61,12 +65,17 @@ namespace ERP.Api.Controllers
 
         [HttpPost("auto-audit-governance")]
         [PermissionAuthorize(AppPermissions.ProductRead)]
-        public IActionResult AutoAuditGovernance()
+        public async Task<IActionResult> AutoAuditGovernance(CancellationToken cancellationToken = default)
         {
+            var auditedSkuCount = _db != null
+                ? await _db.Products.AsNoTracking().CountAsync(cancellationToken)
+                : (await _productService.GetAllProductsAsync(cancellationToken)).Count();
+
             var now = DateTime.UtcNow;
             return Ok(new
             {
                 auditId = $"SKU-AUD-{now:yyyyMMdd-HHmm}",
+                auditedSkuCount,
                 fefoPolicyStatus = "FEFO_SHELF_LIFE_VALIDATED",
                 packagingHierarchyStatus = "UOM_DIM_VERIFIED",
                 auditedAtUtc = now

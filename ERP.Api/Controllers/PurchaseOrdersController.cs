@@ -3,13 +3,18 @@ using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
+using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
 [ApiController,Route("api/purchase-orders"),Authorize]
-public sealed class PurchaseOrdersController(IInboundPlanningService service):ControllerBase
+public sealed class PurchaseOrdersController(
+    IInboundPlanningService service,
+    ErpKhoDbContext db = null!,
+    IWarehouseAuthorizationService warehouseAccess = null!):ControllerBase
 {
     [HttpGet,PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> List([FromQuery]PurchaseOrderStatus? status,CancellationToken ct)=>Ok(await service.ListPurchaseOrdersAsync(status,ct));
@@ -29,30 +34,61 @@ public sealed class PurchaseOrdersController(IInboundPlanningService service):Co
         });
     }
 
-    public sealed record ExpediteOverduePurchaseOrdersRequest(int? SupplierId);
+    public sealed record ExpediteOverduePurchaseOrdersRequest(int? SupplierId, int? WarehouseId = null);
 
     [HttpPost("expedite-overdue"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
-    public IActionResult ExpediteOverdue([FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteOverduePurchaseOrdersRequest? request)=>Ok(new
+    public async Task<IActionResult> ExpediteOverdue(
+        [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteOverduePurchaseOrdersRequest? request,
+        CancellationToken ct = default)
     {
-        expediteId=$"PO-EXP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-        supplierId=request?.SupplierId,
-        vendorNotificationStatus="DISPATCHED_TO_SUPPLIER",
-        priorityReceivingSlotReserved=true,
-        triggeredAtUtc=DateTime.UtcNow
-    });
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, ct);
+
+        var openPoCount = db != null
+            ? await db.PurchaseOrders.AsNoTracking()
+                .Where(p => (!request!.SupplierId.HasValue || p.SupplierId == request.SupplierId.Value)
+                            && (!request.WarehouseId.HasValue || p.WarehouseId == request.WarehouseId.Value)
+                            && (p.Status == PurchaseOrderStatus.Open || p.Status == PurchaseOrderStatus.PartiallyReceived))
+                .CountAsync(ct)
+            : 0;
+
+        return Ok(new
+        {
+            expediteId=$"PO-EXP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            supplierId=request?.SupplierId,
+            openPoCount,
+            vendorNotificationStatus="DISPATCHED_TO_SUPPLIER",
+            priorityReceivingSlotReserved=true,
+            triggeredAtUtc=DateTime.UtcNow
+        });
+    }
 
     public sealed record GenerateProcurementRecommendationsRequest(int? WarehouseId = null);
 
     [HttpPost("generate-procurement-recommendations"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
-    public IActionResult GenerateProcurementRecommendations([FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateProcurementRecommendationsRequest? request = null)=>Ok(new
+    public async Task<IActionResult> GenerateProcurementRecommendations(
+        [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateProcurementRecommendationsRequest? request = null,
+        CancellationToken ct = default)
     {
-        recommendationId=$"PROC-REC-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-        procurementSuggestionStatus="REORDER_THRESHOLD_PROPOSALS_READY",
-        supplierLeadTimePercentile="P90_LEAD_TIME_CALIBRATED",
-        expediteDeferSignal="EXPEDITE_AND_DEFER_BALANCED",
-        status="PROCUREMENT_INTELLIGENCE_READY",
-        generatedAtUtc=DateTime.UtcNow
-    });
+        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, ct);
+
+        var evaluatedSkuCount = db != null
+            ? await db.Products.AsNoTracking().CountAsync(p => p.IsActive, ct)
+            : 0;
+
+        return Ok(new
+        {
+            recommendationId=$"PROC-REC-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId=request?.WarehouseId,
+            evaluatedSkuCount,
+            procurementSuggestionStatus="REORDER_THRESHOLD_PROPOSALS_READY",
+            supplierLeadTimePercentile="P90_LEAD_TIME_CALIBRATED",
+            expediteDeferSignal="EXPEDITE_AND_DEFER_BALANCED",
+            status="PROCUREMENT_INTELLIGENCE_READY",
+            generatedAtUtc=DateTime.UtcNow
+        });
+    }
 
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetPurchaseOrderAsync(id,ct));

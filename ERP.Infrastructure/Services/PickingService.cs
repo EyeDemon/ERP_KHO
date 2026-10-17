@@ -353,7 +353,7 @@ public sealed class PickingService(
             .UnlockedAt(context, DateTime.UtcNow)
             .Where(x => x.ProductId == allocation.ProductId &&
                         x.WarehouseId == allocation.WarehouseId &&
-                        x.Status == InventoryStatus.Available &&
+                        x.Status == allocation.InventoryStatus &&
                         x.LocationId.HasValue &&
                         x.LocationId != allocation.LocationId &&
                         x.Location != null &&
@@ -362,14 +362,21 @@ public sealed class PickingService(
                         x.Location.IsPickable &&
                         x.ReservedQuantity > 0)
             .OrderBy(x => x.LocationId)
+            .ThenBy(x => x.LotId)
+            .ThenBy(x => x.SerialId)
             .Select(x => new
             {
                 LocationId = x.LocationId!.Value,
+                x.LotId,
+                x.SerialId,
                 Available = x.ReservedQuantity -
                     (context.StockAllocations
                         .Where(a => a.WarehouseId == x.WarehouseId &&
                                     a.ProductId == x.ProductId &&
                                     a.LocationId == x.LocationId &&
+                                    a.InventoryStatus == x.Status &&
+                                    a.LotId == x.LotId &&
+                                    a.SerialId == x.SerialId &&
                                     CapacityStatuses.Contains(a.Status))
                         .Sum(a => (decimal?)a.Quantity) ?? 0m)
             })
@@ -407,6 +414,8 @@ public sealed class PickingService(
                 ProductId = allocation.ProductId,
                 LocationId = candidate.LocationId,
                 InventoryStatus = allocation.InventoryStatus,
+                LotId = candidate.LotId,
+                SerialId = candidate.SerialId,
                 Quantity = take,
                 Status = StockAllocationStatus.Picking,
                 Strategy = AllocationStrategy.LocationOrder,

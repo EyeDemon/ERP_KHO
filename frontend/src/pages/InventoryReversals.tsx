@@ -79,6 +79,7 @@ export default function InventoryReversals(){
   const verifyReversalChainIntegrity=async()=>{
     if(chainIntegrityBusy)return;
     setChainIntegrityBusy(true);
+    setError('');
     try{
       const response=await apiClient.post<ReversalChainIntegrityResult>('/api/inventory/reversals/verify-chain-integrity',{warehouseId});
       if(response?.data?.verificationId){
@@ -92,14 +93,9 @@ export default function InventoryReversals(){
           verifiedAtUtc:new Date().toISOString(),
         });
       }
-    }catch{
-      setChainIntegrityResult({
-        verificationId:'REV-INT-FALLBACK',
-        warehouseId,
-        duplicateReversalBlocked:true,
-        appendOnlyLedgerStatus:'IMMUTABLE_VERIFIED',
-        verifiedAtUtc:new Date().toISOString(),
-      });
+    }catch(e){
+      setChainIntegrityResult(null);
+      setError(errorMessage(e));
     }finally{
       setChainIntegrityBusy(false);
     }

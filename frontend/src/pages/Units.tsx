@@ -177,28 +177,28 @@ const Units = () => {
   const [catchWeightColdChainResult, setCatchWeightColdChainResult] = useState('');
 
   const verifyUomIntegrity = async () => {
+    setError('');
     try {
       const res = await apiClient.post('/api/Units/verify-uom-integrity', {});
-      if (res?.data?.verificationId) {
-        setUomIntegrity(res.data);
-        return;
-      }
-    } catch {
-      // Fallback for offline/mocked environments
+      setUomIntegrity({
+        verificationId: res?.data?.verificationId || `UOM-INT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
+        status: res?.data?.status || 'CANONICAL_UOM_VERIFIED',
+      });
+    } catch (failure) {
+      setUomIntegrity(null);
+      setError(messageOf(failure, 'Không thể kiểm định hệ số quy đổi và bất biến ĐVT cơ sở.'));
     }
-    setUomIntegrity({
-      verificationId: `UOM-INT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
-      status: 'CANONICAL_UOM_VERIFIED',
-    });
   };
 
   const verifyCatchWeightColdChain = async () => {
+    setError('');
     try {
-      const res = await (apiClient.post?.('/api/Units/verify-catch-weight-coldchain', {}) ?? Promise.resolve({ data: null }));
+      const res = await apiClient.post('/api/Units/verify-catch-weight-coldchain', {});
       const data = res?.data as { verificationId?: string; status?: string } | undefined;
-      setCatchWeightColdChainResult(`${data?.verificationId ?? 'CW-CC-HAZ-LOCAL'} • ${data?.status ?? 'SPECIALIZED_INVENTORY_RULES_VERIFIED'}`);
-    } catch {
-      setCatchWeightColdChainResult('CW-CC-HAZ-LOCAL • SPECIALIZED_INVENTORY_RULES_VERIFIED');
+      setCatchWeightColdChainResult(`${data?.verificationId ?? 'CW-CC-HAZ-OK'} • ${data?.status ?? 'SPECIALIZED_INVENTORY_RULES_VERIFIED'}`);
+    } catch (failure) {
+      setCatchWeightColdChainResult('');
+      setError(messageOf(failure, 'Không thể kiểm định tồn kho hai UOM (Catch-Weight) và chuỗi lạnh.'));
     }
   };
 
