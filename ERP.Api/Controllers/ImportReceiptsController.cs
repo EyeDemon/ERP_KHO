@@ -134,6 +134,25 @@ namespace ERP.Api.Controllers
             });
         }
 
+        [HttpGet("qc-and-rma-summary")]
+        [PermissionAuthorize(AppPermissions.ReceiptRead)]
+        public async Task<IActionResult> GetQcAndRmaSummary()
+        {
+            var items = (await _importReceiptService.GetAllAsync(null)).ToList();
+            return Ok(new
+            {
+                totalReceiptsInspected = items.Count,
+                pendingQcOrPostingCount = items.Count(x =>
+                    x.Status is "Draft" or "Approved" or "Received" or "QcPending" or "QcCompleted" or "ReadyToPost" or "0" or "3" or "4" or "5"
+                    || x.Status.StartsWith("Discrepancy", StringComparison.OrdinalIgnoreCase)),
+                postedWithLotOrQcCount = items.Count(x => x.Status is "Posted" or "Approved" or "1"),
+                rmaEligibleReceiptsCount = items.Count(x =>
+                    (!string.IsNullOrWhiteSpace(x.Note) && (x.Note.Contains("RMA", StringComparison.OrdinalIgnoreCase) || x.Note.Contains("RETURN", StringComparison.OrdinalIgnoreCase) || x.Note.Contains("trả", StringComparison.OrdinalIgnoreCase)))
+                    || x.Status.StartsWith("Discrepancy", StringComparison.OrdinalIgnoreCase)),
+                qcWorkCenterModes = new[] { "INBOUND_RECEIVING_QC", "RETURN_RMA_INSPECTION", "DAMAGE_QUARANTINE_REVIEW" }
+            });
+        }
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.ReceiptRead)]
         public async Task<IActionResult> GetById(int id)

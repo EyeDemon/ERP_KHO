@@ -263,6 +263,9 @@ const DockYard = () => {
   const exceptionCount = appointments.filter(x => [8, 9].includes(x.status)).length;
   const activeDockCount = docks.filter(x => x.isActive).length;
   const occupiedYardCount = yardSlots.filter(x => x.occupied).length;
+  const inboundActiveCount = appointments.filter(x => x.direction === 0 && ![6, 7, 8].includes(x.status)).length;
+  const outboundActiveCount = appointments.filter(x => x.direction !== 0 && ![6, 7, 8].includes(x.status)).length;
+  const crossDockMatchedCount = Math.min(inboundActiveCount, outboundActiveCount);
 
   const refresh = async () => {
     await load(warehouseId);
@@ -640,6 +643,15 @@ const DockYard = () => {
                 </tbody>
               </table>
             </UiTableScroll>
+          </UiCard>
+
+          <UiCard title="Điều phối Trung chuyển thẳng (Cross-Docking Inbound → Outbound — DY-04)">
+            <div className="ui-inline-wrap">
+              <span>Chuyến Nhập tại cổng / cửa kho (Inbound Active): <strong>{inboundActiveCount}</strong></span>
+              <span>Chuyến Xuất chờ ghép hàng (Outbound Active): <strong>{outboundActiveCount}</strong></span>
+              <span>Cặp Cross-Docking khả thi (Chuyển thẳng Staging/Loading): <strong>{crossDockMatchedCount}</strong></span>
+              <span>Chính sách điều phối: <strong>MATCH_INBOUND_RECEIPT_TO_OUTBOUND_STAGING_WITHOUT_PUTAWAY</strong></span>
+            </div>
           </UiCard>
         </>
       )}

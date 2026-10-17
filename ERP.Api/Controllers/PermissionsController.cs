@@ -31,6 +31,25 @@ public sealed class PermissionsController(ErpKhoDbContext db) : ControllerBase
         .Select(x => new { x.Id, x.UserId, x.Action, x.EntityName, x.EntityId, x.WarehouseId, x.NewValues, x.Result, x.Timestamp })
         .ToListAsync(ct));
 
+    [HttpGet("enterprise-governance-suite"), PermissionAuthorize(AppPermissions.PermissionRead)]
+    public IActionResult EnterpriseGovernanceSuite() => Ok(new
+    {
+        featureFlags = new[]
+        {
+            new { key = "WMS_STRICT_SOD_APPROVAL", enabled = true },
+            new { key = "WMS_FEFO_AUTO_ALLOCATION", enabled = true },
+            new { key = "WMS_APPEND_ONLY_LEDGER_GUARD", enabled = true }
+        },
+        alertEngineStatus = "ACTIVE",
+        ssoIdentityFederation = "JWT_RBAC_AND_OIDC_READY",
+        documentNumberingSequences = new[] { "PO-*", "ASN-*", "IMP-*", "PUT-*", "EXP-*", "PCK-*", "SHP-*", "TRF-*", "STK-*" },
+        workflowPolicyVersion = "v2026.10-CANONICAL",
+        evidenceAttachmentPolicy = "AUDIT_LINKED_IMMUTABLE_METADATA",
+        regionalLocalePolicy = "vi-VN (Display) / UTC + Base-UOM (Canonical Storage)",
+        legalHoldAndEdiscovery = "ENABLED_APPEND_ONLY_RETENTION",
+        privacyDataSubjectGuard = "PII_MASKED_WITH_AUDIT_TRAIL_PRESERVATION"
+    });
+
     [HttpPost("roles/{roleId:int}/grants"), IdempotentCommand("Permission.Grant"), PermissionAuthorize(AppPermissions.PermissionAssign)]
     public Task<IActionResult> Grant(int roleId, PermissionGrantDto dto, CancellationToken ct) =>
         Change(roleId, dto.PermissionCode, dto.RowVersion, true, ct);

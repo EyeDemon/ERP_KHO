@@ -52,6 +52,26 @@ const BusinessPartners = () => {
           <UiMetric value={missingContactInfoCount} label="Thiếu thông tin liên hệ" />
         </UiMetricGrid>
       </UiCard>
+      <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết SLA Đối tác (Carrier & SLA Contracts — MD-06, MD-09)">
+        <div className="ui-form-grid">
+          <div>
+            <strong>Hồ sơ SLA Nhà cung cấp (SUPPLIER_INBOUND_SLA)</strong><br />
+            {activeSuppliersCount} hồ sơ • Cam kết Lead-time tiếp nhận chuẩn: 24h
+          </div>
+          <div>
+            <strong>Hồ sơ SLA Khách hàng (CUSTOMER_FULFILLMENT_SLA)</strong><br />
+            {activeCustomersCount} hồ sơ • Cam kết Lead-time xuất giao chuẩn: 12h
+          </div>
+          <div>
+            <strong>Đối tác Vai trò kép / Vận chuyển 3PL (ENTERPRISE_3PL_CARRIER)</strong><br />
+            {dualRolePartnersCount} đối tác vận chuyển & hậu cần hai chiều
+          </div>
+          <div>
+            <strong>Mục tiêu tỷ lệ giao nhận đúng hạn (On-Time SLA)</strong><br />
+            98.5% (24h Inbound / 12h Outbound)
+          </div>
+        </div>
+      </UiCard>
       <UiToolbar>
         <UiToolbarField label="Tìm đối tác">
           <input aria-label="Tìm đối tác" placeholder="Mã hoặc tên" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} />
@@ -74,7 +94,7 @@ const BusinessPartners = () => {
       </UiToolbar>
 
       <UiCard title="Danh sách đối tác">
-        {loading ? <p role="status">Đang tải đối tác...</p> : <table>
+        {loading ? <p role="status">Đang tải đối tác...</p> : <table aria-label="Danh sách đối tác kinh doanh">
           <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
           <tbody>
             {items.length === 0

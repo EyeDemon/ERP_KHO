@@ -197,7 +197,7 @@ const implementedCapabilityDemos = implementedCapabilityDemoCatalog as Record<st
 const getImplementedCapabilityDemo = (
   capability: BlueprintCapability,
 ): CapabilityDemoDefinition => {
-  const exact = implementedCapabilityDemos[capability.id];
+  const exact = implementedCapabilityDemos[capability.id] ?? coreCapabilityDemos[capability.id];
   if (exact) return exact;
 
   return {

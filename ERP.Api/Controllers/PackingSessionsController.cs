@@ -20,6 +20,21 @@ public sealed class PackingSessionsController(IPackingService service) : Control
         CancellationToken cancellationToken = default) =>
         Ok(await service.ListAsync(warehouseId, status, cancellationToken));
 
+    [HttpGet("packaging-profiles")]
+    [PermissionAuthorize(AppPermissions.PackingRead)]
+    public IActionResult GetPackagingProfiles() =>
+        Ok(new
+        {
+            profiles = new[]
+            {
+                new { code = "CARTON-S", type = "CARTON", maxWeightKg = 15m, maxVolumeM3 = 0.04m },
+                new { code = "CARTON-L", type = "CARTON", maxWeightKg = 30m, maxVolumeM3 = 0.12m },
+                new { code = "TOTE-STD", type = "TOTE", maxWeightKg = 25m, maxVolumeM3 = 0.06m },
+                new { code = "PALLET-EUR", type = "PALLET", maxWeightKg = 1000m, maxVolumeM3 = 1.80m }
+            },
+            cartonizationPolicy = "RECOMMEND_ONLY_REQUIRES_OPERATOR_CONFIRM"
+        });
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<ActionResult<PackingSessionDto>> Get(int id, CancellationToken cancellationToken) =>

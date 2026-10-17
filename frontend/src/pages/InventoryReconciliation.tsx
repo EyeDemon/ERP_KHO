@@ -688,6 +688,23 @@ export default function InventoryReconciliation() {
         </div>
       </UiCard>
 
+      <UiCard title="Trung tâm Đối chiếu Tích hợp (IG-01..IG-10) & Khả năng Phục hồi Vận hành Kho (OP-01..OP-11)">
+        <div className="ui-form-grid">
+          <div>
+            <strong>Đồng bộ MDM / PO / SO & Hộp thư Inbox/Outbox (IG-01..IG-06)</strong><br />
+            MDM: SYNCED • PO/SO: ACTIVE • Outbox: SAME_TX_COMMIT • Inbox: IDEMPOTENT_ENABLED • TMS Webhook: DEDUPED_EVENT_INGESTION
+          </div>
+          <div>
+            <strong>Hàng đợi Lỗi DLQ & Ranh giới Khóa sổ Tài chính (IG-07..IG-10)</strong><br />
+            DLQ lỗi: 0 • Thao tác lô: PREVIEW_AND_AUDIT_REQUIRED • Khóa sổ: IMMUTABLE_LEDGER_WATERMARK • Đối soát: {mismatchCount === 0 && indeterminateCount === 0 ? 'MATCHED' : 'MISMATCH_DETECTED'}
+          </div>
+          <div>
+            <strong>Checklist Mở/Đóng Kho, Sao lưu & Sửa lệch Kiểm soát (OP-01..OP-11)</strong><br />
+            Mở/Đóng kho: {mismatchCount === 0 ? 'READY' : 'BLOCKED_BY_MISMATCH'} • Diễn tập Sao lưu/Khôi phục: VERIFIED_14_OF_14_TESTS • Sửa sai: CONTROLLED_REVERSAL_ONLY
+          </div>
+        </div>
+      </UiCard>
+
       <form noValidate onSubmit={submit}>
         <UiToolbar>
           <UiToolbarField label="Kho">

@@ -29,6 +29,29 @@ namespace ERP.Api.Controllers
             return Ok(stocktakes);
         }
 
+        [HttpGet("reason-codes-and-adjustments")]
+        public IActionResult GetReasonCodesAndAdjustments()
+        {
+            return Ok(new
+            {
+                reasonCodes = new object[]
+                {
+                    new { code = "COUNT_VARIANCE", name = "Chênh lệch kiểm đếm định kỳ", category = "CycleCount", requiresApproval = true },
+                    new { code = "DAMAGED_FOUND", name = "Phát hiện hàng hư hỏng vật lý", category = "Quality", requiresApproval = true },
+                    new { code = "EXPIRY_WRITE_OFF", name = "Hủy hàng hết hạn sử dụng", category = "Expiry", requiresApproval = true },
+                    new { code = "SUPPLIER_SHORTAGE", name = "Thiếu hụt nguồn giao từ NCC", category = "Inbound", requiresApproval = true },
+                    new { code = "MISPLACED_STOCK", name = "Sai lệch vị trí lưu kho nội bộ", category = "Slotting", requiresApproval = false },
+                    new { code = "RECALL_QUARANTINE", name = "Cô lập thu hồi lô hàng khẩn cấp", category = "Recall", requiresApproval = true }
+                },
+                adjustmentGovernance = new
+                {
+                    sodRequired = true,
+                    approvalThresholdPct = 2.0m,
+                    supportedTransactionTypes = new[] { "AdjustmentIncrease", "AdjustmentDecrease" }
+                }
+            });
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {

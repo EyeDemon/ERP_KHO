@@ -107,6 +107,9 @@ export default function PickingTasks(){
 
   if(loading)return <p role="status">Đang tải nhiệm vụ Picking...</p>;
 
+  const mobileReadyTasksCount=tasks.filter(x=>['Open','Assigned','InProgress'].includes(x.status)).length;
+  const shortPickExceptionTasksCount=tasks.filter(x=>x.status==='ShortPick').length;
+
   return <UiPage>
     <UiPageHeader
       eyebrow="Outbound"
@@ -116,6 +119,15 @@ export default function PickingTasks(){
     {error&&<div role="alert">{error}</div>}
 
     <div className="ui-stack">
+      <UiCard title="Trạm Điều hành Quét Mã Vạch Di Động & Đồng bộ Ngoại tuyến (Mobile Scan-First Execution — MO-01..MO-12)">
+        <div className="ui-inline-wrap">
+          <span>Tác vụ sẵn sàng quét RF/Mobile (MO-01..MO-09): <strong>{mobileReadyTasksCount}</strong></span>
+          <span>Ngoại lệ chờ xử lý trên Mobile (MO-12): <strong>{shortPickExceptionTasksCount}</strong></span>
+          <span>Tra cứu nhanh Barcode SKU (MO-11): <strong>Sẵn sàng</strong></span>
+          <span>Hàng đợi đồng bộ ngoại tuyến (MO-10): <strong>DEFERRED_LOW_RISK_QUEUE_WITH_IDEMPOTENCY_KEY</strong></span>
+        </div>
+      </UiCard>
+
       <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking — OUT-04)">
         {waves.length===0?<p className="ui-muted-text">Chưa có đợt lấy hàng (Wave/Batch) đang hoạt động.</p>:<UiTableScroll>
           <table aria-label="Tổng hợp đợt lấy hàng Wave Picking">

@@ -63,7 +63,7 @@ describe('CapabilityPreview', () => {
     expect(view.getByTestId('inbound-capability-mock-IN-09')).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Giải thích khuyến nghị cất hàng' })).toBeTruthy();
     expect(view.getByText(/Không gọi API hệ thống thật/)).toBeTruthy();
-    expect(view.getAllByText('Chưa triển khai hệ thống thật').length).toBeGreaterThan(0);
+    expect(view.getAllByText(/Chưa triển khai hệ thống thật|Đã triển khai một phần \/ còn thiếu phạm vi/).length).toBeGreaterThan(0);
   });
 
   it('reflects merged inbound execution capabilities as live while keeping Blueprint mocks read-only', () => {
@@ -233,7 +233,7 @@ describe('CapabilityPreview', () => {
       expect(panel).toBeTruthy();
       expect(panel.textContent).toContain(title);
       expect(panel.textContent).toContain('Không gọi API hệ thống thật');
-      expect(view.getAllByText('Chưa triển khai hệ thống thật').length).toBeGreaterThan(0);
+      expect(view.getAllByText(/Chưa triển khai hệ thống thật|Đã triển khai một phần \/ còn thiếu phạm vi/).length).toBeGreaterThan(0);
       view.unmount();
     }
   });

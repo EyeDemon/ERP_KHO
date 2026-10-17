@@ -144,5 +144,122 @@ public sealed class InventoryControlController(
 
         return Ok(suggestions.Take(25).ToList());
     }
+
+    [HttpGet("advanced-planning-suite")]
+    [Authorize]
+    public async Task<IActionResult> AdvancedPlanningSuite(
+        [FromServices] ErpKhoDbContext db,
+        [FromServices] IWarehouseAuthorizationService warehouseAuth,
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        if (warehouseId.HasValue && !accessibleIds.Contains(warehouseId.Value))
+        {
+            return Ok(new
+            {
+                abcClassificationSummary = new { classA_HighVolumeCount = 0, classB_MediumVolumeCount = 0, classC_LowVolumeCount = 0, totalClassifiedSkus = 0 },
+                safetyStockAndReorderProposals = Array.Empty<object>(),
+                atpCtpSummary = new { availableToPromiseQty = 0m, capableToPromiseQty = 0m, defaultPromiseLeadTimeHours = 24 },
+                networkBalancingSummary = new { activeStockWarehousesCount = 0, surplusWarehousesCount = 0, shortageWarehousesCount = 0 },
+                decisionPolicyRegistry = new { policyVersion = "AX-2026.10-HUMAN-IN-THE-LOOP", humanApprovalRequiredAtBoundary = true, autonomousLedgerMutationAllowed = false }
+            });
+        }
+
+        var scopedWarehouseIds = warehouseId.HasValue
+            ? new[] { warehouseId.Value }
+            : accessibleIds.ToArray();
+
+        var stocks = await db.InventoryStocks.AsNoTracking()
+            .Where(s => scopedWarehouseIds.Contains(s.WarehouseId))
+            .Select(s => new
+            {
+                s.WarehouseId,
+                WarehouseName = s.Warehouse.Name,
+                s.ProductId,
+                ProductCode = s.Product.Code,
+                ProductName = s.Product.Name,
+                s.Status,
+                s.Quantity,
+                s.ReservedQuantity,
+                AvailableQty = s.Status == InventoryStatus.Available ? (s.Quantity - s.ReservedQuantity) : 0m
+            })
+            .ToListAsync(cancellationToken);
+
+        var bySku = stocks
+            .GroupBy(s => new { s.ProductId, s.ProductCode, s.ProductName })
+            .Select(g => new
+            {
+                g.Key.ProductId,
+                g.Key.ProductCode,
+                g.Key.ProductName,
+                OnHandQty = g.Sum(x => x.Quantity),
+                AvailableQty = g.Sum(x => x.AvailableQty),
+                WarehousesCount = g.Where(x => x.Quantity > 0).Select(x => x.WarehouseId).Distinct().Count()
+            })
+            .OrderByDescending(x => x.OnHandQty)
+            .ToList();
+
+        var classACount = bySku.Count(x => x.OnHandQty >= 100m);
+        var classBCount = bySku.Count(x => x.OnHandQty >= 20m && x.OnHandQty < 100m);
+        var classCCount = bySku.Count(x => x.OnHandQty < 20m);
+
+        var safetyStockProposals = bySku
+            .Where(x => x.AvailableQty < 50m)
+            .OrderBy(x => x.AvailableQty)
+            .Take(25)
+            .Select(x => new
+            {
+                productId = x.ProductId,
+                productCode = x.ProductCode,
+                productName = x.ProductName,
+                onHandQty = x.OnHandQty,
+                availableQty = x.AvailableQty,
+                safetyStockTarget = 50m,
+                recommendedReorderQty = Math.Max(0m, 100m - x.AvailableQty),
+                actionRecommendation = x.AvailableQty <= 0m ? "EXPEDITE_PO" : "STANDARD_REPLENISH"
+            })
+            .ToList();
+
+        var totalAtp = stocks.Sum(x => x.AvailableQty);
+        var qcPendingQty = stocks
+            .Where(x => x.Status == InventoryStatus.QcHold || x.Status == InventoryStatus.Quarantine)
+            .Sum(x => x.Quantity);
+
+        var byWarehouse = stocks
+            .GroupBy(s => s.WarehouseId)
+            .Select(g => new { WarehouseId = g.Key, TotalAvailable = g.Sum(x => x.AvailableQty), TotalOnHand = g.Sum(x => x.Quantity) })
+            .ToList();
+
+        return Ok(new
+        {
+            abcClassificationSummary = new
+            {
+                classA_HighVolumeCount = classACount,
+                classB_MediumVolumeCount = classBCount,
+                classC_LowVolumeCount = classCCount,
+                totalClassifiedSkus = bySku.Count
+            },
+            safetyStockAndReorderProposals = safetyStockProposals,
+            atpCtpSummary = new
+            {
+                availableToPromiseQty = totalAtp,
+                capableToPromiseQty = totalAtp + qcPendingQty,
+                defaultPromiseLeadTimeHours = 24
+            },
+            networkBalancingSummary = new
+            {
+                activeStockWarehousesCount = byWarehouse.Count(w => w.TotalOnHand > 0),
+                surplusWarehousesCount = byWarehouse.Count(w => w.TotalAvailable >= 100m),
+                shortageWarehousesCount = byWarehouse.Count(w => w.TotalAvailable < 20m)
+            },
+            decisionPolicyRegistry = new
+            {
+                policyVersion = "AX-2026.10-HUMAN-IN-THE-LOOP",
+                humanApprovalRequiredAtBoundary = true,
+                autonomousLedgerMutationAllowed = false
+            }
+        });
+    }
 }
 

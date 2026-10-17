@@ -965,6 +965,51 @@ const Inventory = () => {
                 </table>
               </UiTableScroll>
             </UiCard>
+
+            <UiCard title="Hoạch định & Tối ưu hóa WMS Nâng cao: Phân loại ABC/XYZ, Tồn an toàn (Safety Stock), ATP/CTP & Cân bằng Mạng lưới (AX-01..AX-42)">
+              <div className="ui-stack-sm">
+                <div className="ui-grid-2">
+                  <div>
+                    <strong>Phân nhóm ABC/XYZ & Điểm đặt hàng lại (AX-28, AX-29, AX-34):</strong>
+                    <div className="ui-stack-xs">
+                      <div>
+                        • Nhóm <strong>A (Luân chuyển cao)</strong>:{' '}
+                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'FAST_MOVING').length} SKU
+                      </div>
+                      <div>
+                        • Nhóm <strong>B (Luân chuyển vừa)</strong>:{' '}
+                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'NORMAL_MOVING' || x.velocityClass === 'NORMAL').length} SKU
+                      </div>
+                      <div>
+                        • Nhóm <strong>C / Z (Chậm & Tồn đọng)</strong>:{' '}
+                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass !== 'FAST_MOVING' && x.velocityClass !== 'NORMAL_MOVING' && x.velocityClass !== 'NORMAL').length} SKU
+                      </div>
+                      <div>
+                        • Đề xuất bổ sung Tồn an toàn (Safety Stock &lt; 50):{' '}
+                        <strong>{analyticsReport.turnoverAndDaysOnHand.filter(x => x.onHandQuantity < 50).length} SKU</strong> cần tạo PO / Điều chuyển
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <strong>Cam kết ATP / CTP, Cân bằng Mạng lưới & Quản trị Quyết định (AX-23, AX-24, AX-31, AX-42):</strong>
+                    <div className="ui-stack-xs">
+                      <div>
+                        • Tổng lượng <strong>ATP (Available-to-Promise)</strong> khả dụng cam kết ngay:{' '}
+                        <strong>{analyticsReport.turnoverAndDaysOnHand.reduce((sum, x) => sum + x.onHandQuantity, 0)}</strong> đvt (Lead-time chuẩn: 24h)
+                      </div>
+                      <div>
+                        • Số kho đang hoạt động trong mạng lưới cân bằng tồn (Network Balancing):{' '}
+                        <strong>{warehouses.length} kho</strong>
+                      </div>
+                      <div>
+                        • Chính sách quyết định (<strong>AX-42 Human-in-the-Loop</strong>):{' '}
+                        <UiBadge tone="success">AX-2026.10-HUMAN-IN-THE-LOOP</UiBadge> — Mọi đề xuất Slotting, Mua hàng, Điều chuyển và Cân bằng mạng lưới chỉ mang tính khuyến nghị trên ảnh chụp bất biến; bắt buộc qua bước con người phê duyệt trước khi sinh chứng từ.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </UiCard>
           </div>
         )}
       </UiCard>

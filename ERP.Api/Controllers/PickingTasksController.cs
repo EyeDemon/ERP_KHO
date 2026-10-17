@@ -77,6 +77,36 @@ public sealed class PickingTasksController(IPickingService service) : Controller
         return Ok(waves);
     }
 
+    [HttpGet("mobile-scan-queue")]
+    [PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<IActionResult> GetMobileScanQueue(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var tasks = await service.ListAsync(warehouseId, null, cancellationToken);
+        return Ok(new
+        {
+            mobileReadyTasksCount = tasks.Count(x => x.Status is "Open" or "Assigned" or "InProgress"),
+            shortPickExceptionTasksCount = tasks.Count(x => x.Status == "ShortPick"),
+            supportedMobileCapabilities = new[]
+            {
+                "MO-01:MyTasks",
+                "MO-02:ReceiveScan",
+                "MO-03:PutawayScan",
+                "MO-04:PickScan",
+                "MO-05:PackScan",
+                "MO-06:CountScan",
+                "MO-07:TransferScan",
+                "MO-08:ReplenishScan",
+                "MO-09:ReturnScan",
+                "MO-10:OfflineSyncQueue",
+                "MO-11:SkuBarcodeLookup",
+                "MO-12:MobileExceptionTriage"
+            },
+            offlineSyncPolicy = "DEFERRED_LOW_RISK_QUEUE_WITH_IDEMPOTENCY_KEY"
+        });
+    }
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<ActionResult<PickingTaskDto>> Get(int id, CancellationToken cancellationToken) =>

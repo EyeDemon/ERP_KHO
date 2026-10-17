@@ -37,6 +37,17 @@ type MapItem = {
 };
 type MapResponse = { warehouseId: number; generatedAtUtc: string; items: MapItem[] };
 type LayoutForm = { locationId: number; code: string; x: string; y: string; width: string; height: string; rowVersion: string };
+type ProductivityAndBiSnapshot = {
+  completedPutawaysCount: number;
+  completedPicksCount: number;
+  completedPacksCount: number;
+  totalMovesCount: number;
+  ledgerWatermarkId: number;
+  auditWatermarkId: number;
+  stockSnapshotRowCount: number;
+  readyForBiExport: boolean;
+  generatedAtUtc?: string;
+};
 
 const mapped = (item: MapItem) =>
   item.mapX != null && item.mapY != null && item.mapWidth != null && item.mapHeight != null;
@@ -85,6 +96,7 @@ const WarehouseMap = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState(0);
   const [snapshot, setSnapshot] = useState<MapResponse | null>(null);
+  const [biSnapshot, setBiSnapshot] = useState<ProductivityAndBiSnapshot | null>(null);
   const [mode, setMode] = useState<'utilization' | 'activity'>('utilization');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -107,8 +119,14 @@ const WarehouseMap = () => {
       setSnapshot(null);
       return;
     }
-    const response = await apiClient.get('/api/putaway-tasks/location-map', { params: { warehouseId: targetWarehouseId } });
+    const [response, biRes] = await Promise.all([
+      apiClient.get('/api/putaway-tasks/location-map', { params: { warehouseId: targetWarehouseId } }),
+      apiClient.get<ProductivityAndBiSnapshot>('/api/Reports/productivity-and-bi-snapshot', { params: { warehouseId: targetWarehouseId } }).catch(() => null),
+    ]);
     setSnapshot(response.data as MapResponse);
+    if (biRes?.data && typeof biRes.data.completedPutawaysCount === 'number') {
+      setBiSnapshot(biRes.data);
+    }
   }, []);
 
   useEffect(() => {
@@ -234,6 +252,19 @@ const WarehouseMap = () => {
             <strong>Cường độ vận hành & Putaway chờ xử lý</strong><br />
             {items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)} dịch chuyển 60p • {items.reduce((sum, item) => sum + (item.activePutawayCount || 0), 0)} putaway
           </div>
+        </div>
+      </UiCard>
+
+      <UiCard title="Năng suất Tác vụ Kho, Bản đồ Nhiệt & Điểm chuẩn Xuất BI (RP-07, RP-10)">
+        <div className="ui-inline-wrap">
+          <UiBadge tone="success">{`Putaway hoàn tất: ${biSnapshot?.completedPutawaysCount ?? 0}`}</UiBadge>
+          <UiBadge tone="success">{`Pick hoàn tất: ${biSnapshot?.completedPicksCount ?? 0}`}</UiBadge>
+          <UiBadge tone="success">{`Pack hoàn tất: ${biSnapshot?.completedPacksCount ?? 0}`}</UiBadge>
+          <UiBadge>{`Tổng dịch chuyển nội bộ (Move): ${biSnapshot?.totalMovesCount ?? items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)}`}</UiBadge>
+          <UiBadge tone="warning">{`CDC Ledger Watermark: #${biSnapshot?.ledgerWatermarkId ?? 0} • Audit Watermark: #${biSnapshot?.auditWatermarkId ?? 0}`}</UiBadge>
+          <UiBadge tone={biSnapshot?.readyForBiExport !== false ? 'success' : 'neutral'}>
+            {biSnapshot?.readyForBiExport !== false ? `Sẵn sàng đồng bộ BI (${biSnapshot?.stockSnapshotRowCount ?? items.length} dòng)` : 'Đang đồng bộ BI'}
+          </UiBadge>
         </div>
       </UiCard>
 

@@ -81,6 +81,159 @@ namespace ERP.Api.Controllers
             });
         }
 
+        [HttpGet("multi-warehouse-control-tower")]
+        [Authorize]
+        public async Task<IActionResult> GetMultiWarehouseControlTower(
+            [FromServices] ErpKhoDbContext db,
+            [FromServices] IWarehouseAuthorizationService warehouseAuth,
+            CancellationToken cancellationToken = default)
+        {
+            var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            var whRows = await db.Warehouses.AsNoTracking()
+                .Where(w => accessibleIds.Contains(w.Id))
+                .OrderBy(w => w.Code)
+                .Select(w => new
+                {
+                    warehouseId = w.Id,
+                    warehouseCode = w.Code,
+                    warehouseName = w.Name,
+                    isActive = w.IsActive
+                })
+                .ToListAsync(cancellationToken);
+
+            var stockAgg = await db.InventoryStocks.AsNoTracking()
+                .Where(s => accessibleIds.Contains(s.WarehouseId))
+                .GroupBy(s => s.WarehouseId)
+                .Select(g => new
+                {
+                    WarehouseId = g.Key,
+                    OnHandQuantity = g.Sum(x => x.Quantity),
+                    ReservedQuantity = g.Sum(x => x.ReservedQuantity)
+                })
+                .ToListAsync(cancellationToken);
+            var stockByWh = stockAgg.ToDictionary(x => x.WarehouseId);
+
+            var putawayAgg = await db.PutawayTasks.AsNoTracking()
+                .Where(t => accessibleIds.Contains(t.WarehouseId) && t.Status != PutawayTaskStatus.Completed && t.Status != PutawayTaskStatus.Cancelled)
+                .GroupBy(t => t.WarehouseId)
+                .Select(g => new { WarehouseId = g.Key, Count = g.Count() })
+                .ToListAsync(cancellationToken);
+            var putawayByWh = putawayAgg.ToDictionary(x => x.WarehouseId, x => x.Count);
+
+            var pickingAgg = await db.PickingTasks.AsNoTracking()
+                .Where(t => accessibleIds.Contains(t.WarehouseId) && t.Status != PickingTaskStatus.Completed && t.Status != PickingTaskStatus.Cancelled)
+                .GroupBy(t => t.WarehouseId)
+                .Select(g => new { WarehouseId = g.Key, Count = g.Count() })
+                .ToListAsync(cancellationToken);
+            var pickingByWh = pickingAgg.ToDictionary(x => x.WarehouseId, x => x.Count);
+
+            var locksAgg = await db.InventoryLocks.AsNoTracking()
+                .Where(l => accessibleIds.Contains(l.WarehouseId) && l.Status == InventoryLockStatus.Active)
+                .GroupBy(l => l.WarehouseId)
+                .Select(g => new { WarehouseId = g.Key, Count = g.Count() })
+                .ToListAsync(cancellationToken);
+            var locksByWh = locksAgg.ToDictionary(x => x.WarehouseId, x => x.Count);
+
+            var warehouses = whRows.Select(w =>
+            {
+                var stock = stockByWh.GetValueOrDefault(w.warehouseId);
+                var openPutawayCount = putawayByWh.GetValueOrDefault(w.warehouseId, 0);
+                var openPickingCount = pickingByWh.GetValueOrDefault(w.warehouseId, 0);
+                var activeLocksCount = locksByWh.GetValueOrDefault(w.warehouseId, 0);
+                var healthStatus = activeLocksCount > 0 ? "ATTENTION" : "HEALTHY";
+                return new
+                {
+                    w.warehouseId,
+                    w.warehouseCode,
+                    w.warehouseName,
+                    w.isActive,
+                    onHandQuantity = stock?.OnHandQuantity ?? 0m,
+                    reservedQuantity = stock?.ReservedQuantity ?? 0m,
+                    openPutawayCount,
+                    openPickingCount,
+                    activeLocksCount,
+                    healthStatus
+                };
+            }).ToList();
+
+            var openPackCount = await db.PackingSessions.AsNoTracking()
+                .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && (s.Status == PackingSessionStatus.Open || s.Status == PackingSessionStatus.InProgress), cancellationToken);
+            var openStocktakeCount = await db.Stocktakes.AsNoTracking()
+                .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && s.Status == ReceiptStatus.Draft, cancellationToken);
+            var openTransferCount = await db.StockTransfers.AsNoTracking()
+                .CountAsync(t => (accessibleIds.Contains(t.SourceWarehouseId) || accessibleIds.Contains(t.DestinationWarehouseId)) &&
+                                 (t.Status == StockTransferStatus.Draft || t.Status == StockTransferStatus.Approved || t.Status == StockTransferStatus.InTransit), cancellationToken);
+            var openDockYardCount = await db.DockAppointments.AsNoTracking()
+                .CountAsync(a => accessibleIds.Contains(a.WarehouseId) &&
+                                 (a.Status == DockAppointmentStatus.Confirmed ||
+                                  a.Status == DockAppointmentStatus.Arrived ||
+                                  a.Status == DockAppointmentStatus.CheckedIn ||
+                                  a.Status == DockAppointmentStatus.DockAssigned ||
+                                  a.Status == DockAppointmentStatus.InService), cancellationToken);
+
+            var taskEngineQueues = new[]
+            {
+                new { taskType = "PUTAWAY", openCount = warehouses.Sum(x => x.openPutawayCount), route = "/putaway-tasks" },
+                new { taskType = "PICK", openCount = warehouses.Sum(x => x.openPickingCount), route = "/picking-tasks" },
+                new { taskType = "PACK", openCount = openPackCount, route = "/packing-sessions" },
+                new { taskType = "STOCKTAKE", openCount = openStocktakeCount, route = "/stocktakes" },
+                new { taskType = "TRANSFER", openCount = openTransferCount, route = "/stock-transfers" },
+                new { taskType = "DOCK_YARD", openCount = openDockYardCount, route = "/dock-yard" }
+            };
+
+            return Ok(new
+            {
+                totalWarehouses = warehouses.Count,
+                healthyWarehousesCount = warehouses.Count(w => w.healthStatus == "HEALTHY"),
+                attentionWarehousesCount = warehouses.Count(w => w.healthStatus == "ATTENTION"),
+                warehouses,
+                taskEngineQueues
+            });
+        }
+
+        [HttpGet("productivity-and-bi-snapshot")]
+        [Authorize]
+        public async Task<IActionResult> GetProductivityAndBiSnapshot(
+            [FromServices] ErpKhoDbContext db,
+            [FromServices] IWarehouseAuthorizationService warehouseAuth,
+            [FromQuery] int? warehouseId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            var scopedIds = warehouseId.HasValue
+                ? (accessibleIds.Contains(warehouseId.Value) ? new[] { warehouseId.Value } : Array.Empty<int>())
+                : accessibleIds.ToArray();
+
+            var completedPutawaysCount = await db.PutawayTasks.AsNoTracking()
+                .CountAsync(t => scopedIds.Contains(t.WarehouseId) && t.Status == PutawayTaskStatus.Completed, cancellationToken);
+            var completedPicksCount = await db.PickingTasks.AsNoTracking()
+                .CountAsync(t => scopedIds.Contains(t.WarehouseId) && t.Status == PickingTaskStatus.Completed, cancellationToken);
+            var completedPacksCount = await db.PackingSessions.AsNoTracking()
+                .CountAsync(s => scopedIds.Contains(s.WarehouseId) && (s.Status == PackingSessionStatus.Packed || s.Status == PackingSessionStatus.Closed), cancellationToken);
+            var totalMovesCount = await db.InventoryLocationMovements.AsNoTracking()
+                .CountAsync(m => scopedIds.Contains(m.WarehouseId), cancellationToken);
+
+            var ledgerWatermarkId = await db.InventoryTransactions.AsNoTracking()
+                .MaxAsync(t => (int?)t.Id, cancellationToken) ?? 0;
+            var auditWatermarkId = await db.AuditLogs.AsNoTracking()
+                .MaxAsync(a => (long?)a.Id, cancellationToken) ?? 0L;
+            var stockSnapshotRowCount = await db.InventoryStocks.AsNoTracking()
+                .CountAsync(s => scopedIds.Contains(s.WarehouseId), cancellationToken);
+
+            return Ok(new
+            {
+                completedPutawaysCount,
+                completedPicksCount,
+                completedPacksCount,
+                totalMovesCount,
+                ledgerWatermarkId,
+                auditWatermarkId,
+                stockSnapshotRowCount,
+                readyForBiExport = true,
+                generatedAtUtc = DateTime.UtcNow
+            });
+        }
+
         [HttpGet("warehouse-tasks")]
         [Authorize]
         public async Task<IActionResult> GetWarehouseTasks(

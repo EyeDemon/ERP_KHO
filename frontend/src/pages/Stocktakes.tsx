@@ -394,6 +394,23 @@ const Stocktakes = () => {
             {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
             {error && <p role="alert">{error} <button type="button" onClick={() => void fetchStocktakes()}>Thử lại</button></p>}
 
+            <UiCard title="Danh mục Mã lý do Chuẩn (MD-07) & Chính sách Điều chỉnh Tồn kho có Phê duyệt SoD (CT-07)">
+              <div className="stocktake-detail-meta">
+                <div>
+                  <strong>Mã lý do chuẩn hóa toàn hệ thống (MD-07):</strong><br />
+                  <code>DAMAGED</code> (Hư hỏng vật lý) • <code>MISPLACED</code> (Thất lạc / Sai vị trí) • <code>SUPPLIER_SHORT</code> (Thiếu từ NCC) • <code>COUNT_ERROR</code> (Sai sót kiểm đếm) • <code>EXPIRY_SCRAP</code> (Hủy hết hạn)
+                </div>
+                <div>
+                  <strong>Loại bút toán điều chỉnh sổ cái (CT-07):</strong><br />
+                  <code>AdjustmentIncrease</code> (Điều chỉnh tăng) &amp; <code>AdjustmentDecrease</code> (Điều chỉnh giảm)
+                </div>
+                <div>
+                  <strong>Kiểm soát Phân tách Nhiệm vụ (SoD Maker ≠ Checker):</strong><br />
+                  Người tạo phiếu kiểm kê không được tự phê duyệt điều chỉnh tồn kho (Ngưỡng cảnh báo lệch chuẩn: ±2.0%)
+                </div>
+              </div>
+            </UiCard>
+
             <UiToolbar>
               <UiToolbarField label="Tìm kiếm">
                 <input

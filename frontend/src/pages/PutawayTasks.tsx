@@ -47,6 +47,13 @@ export default function PutawayTasks(){
      </div>
    </UiCard>
 
+   <UiCard title="Bộ máy Quy tắc Đề xuất Vị trí Cất hàng (Putaway Rule Engine — IN-09)">
+     <div className="ui-inline-wrap">
+       <span>Tiêu chí xếp hạng (5 mức): <strong>1_EXACT_SKU_AFFINITY → 2_STORAGE_GROUP_COMPATIBILITY → 3_REMAINING_CAPACITY_FIT → 4_PICK_FACE_PROXIMITY → 5_FEFO_LOT_CONSOLIDATION</strong></span>
+       <span>Ràng buộc cứng (4 mức): <strong>ACTIVE_BIN_ONLY • UNBLOCKED_BIN_ONLY • NO_INVENTORY_LOCK • CAPACITY_WEIGHT_VOLUME_PALLET_GUARD</strong></span>
+     </div>
+   </UiCard>
+
    <div className="putaway putaway-grid">
      <UiCard title="Danh sách nhiệm vụ">
        {tasks.length===0?<p>Chưa có nhiệm vụ cất hàng phù hợp.</p>:<table>

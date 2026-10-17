@@ -74,6 +74,27 @@ public sealed class DockYardController(IDockYardService service) : ControllerBas
         return Ok(items);
     }
 
+    [HttpGet("crossdock-candidates")]
+    [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
+    public async Task<IActionResult> GetCrossDockCandidates([FromQuery] int? warehouseId, CancellationToken token)
+    {
+        var appointments = await service.GetAppointmentsAsync(new DockAppointmentQueryDto { WarehouseId = warehouseId }, token);
+        var active = appointments
+            .Where(a => (int)a.Status is 1 or 2 or 3 or 4 or 5 && a.CheckedOutAtUtc == null)
+            .ToList();
+        var inboundActiveCount = active.Count(a => (int)a.Direction == 0);
+        var outboundActiveCount = active.Count(a => (int)a.Direction != 0);
+        var crossDockMatchedCount = Math.Min(inboundActiveCount, outboundActiveCount);
+
+        return Ok(new
+        {
+            inboundActiveCount,
+            outboundActiveCount,
+            crossDockMatchedCount,
+            crossDockPolicy = "MATCH_INBOUND_RECEIPT_TO_OUTBOUND_STAGING_WITHOUT_PUTAWAY",
+        });
+    }
+
     [HttpGet("docks")]
     [PermissionAuthorize(AppPermissions.DockRead)]
     public async Task<IActionResult> GetDocks([FromQuery] int warehouseId, CancellationToken token) =>

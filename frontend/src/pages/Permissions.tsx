@@ -293,14 +293,30 @@ export default function Permissions() {
     </UiMetricGrid>
 
     {(catalog.length > 0 || roles.length > 0) && (
-      <UiCard title="Tổng quan Tài khoản, Vai trò & Phân quyền Kho (User & Role Governance — AD-01)">
-        <div className="ui-inline-wrap">
-          <UiBadge tone="success">{`Danh mục quyền hệ thống: ${catalog.length}`}</UiBadge>
-          <UiBadge>{`Vai trò nghiệp vụ: ${roles.length}`}</UiBadge>
-          <UiBadge tone="warning">{`Tổng lượt cấp quyền (Grants): ${roles.reduce((sum, role) => sum + role.permissions.length, 0)}`}</UiBadge>
-          <UiBadge>{`Phạm vi kho đang tra cứu (AD-03): ${userWarehouses ? userWarehouses.warehouses.length : 0}`}</UiBadge>
-        </div>
-      </UiCard>
+      <>
+        <UiCard title="Tổng quan Tài khoản, Vai trò & Phân quyền Kho (User & Role Governance — AD-01)">
+          <div className="ui-inline-wrap">
+            <UiBadge tone="success">{`Danh mục quyền hệ thống: ${catalog.length}`}</UiBadge>
+            <UiBadge>{`Vai trò nghiệp vụ: ${roles.length}`}</UiBadge>
+            <UiBadge tone="warning">{`Tổng lượt cấp quyền (Grants): ${roles.reduce((sum, role) => sum + role.permissions.length, 0)}`}</UiBadge>
+            <UiBadge>{`Phạm vi kho đang tra cứu (AD-03): ${userWarehouses ? userWarehouses.warehouses.length : 0}`}</UiBadge>
+          </div>
+        </UiCard>
+
+        <UiCard title="Cấu hình Quản trị Doanh nghiệp Mở rộng: Cờ chức năng, Chuỗi số Chứng từ, SSO, Giữ pháp lý & Bảo vệ Dữ liệu (AD-05, AD-07..AD-14)">
+          <div className="ui-inline-wrap">
+            <UiBadge tone="success">Cờ chức năng (AD-05): WMS_STRICT_SOD_APPROVAL • WMS_FEFO_AUTO_ALLOCATION • WMS_APPEND_ONLY_LEDGER_GUARD</UiBadge>
+            <UiBadge tone="success">Cảnh báo vận hành (AD-07): ACTIVE</UiBadge>
+            <UiBadge>Liên kết định danh SSO (AD-08): JWT_RBAC_AND_OIDC_READY</UiBadge>
+            <UiBadge>Chuỗi đánh số chứng từ (AD-09): PO/ASN/IMP/PUT/EXP/PCK/SHP/TRF/STK</UiBadge>
+            <UiBadge>Chính sách luồng duyệt (AD-10): v2026.10-CANONICAL</UiBadge>
+            <UiBadge>Hồ sơ đính kèm (AD-11): AUDIT_LINKED_IMMUTABLE_METADATA</UiBadge>
+            <UiBadge>Đa ngôn ngữ & chuẩn lưu trữ (AD-12): vi-VN / UTC + Base-UOM</UiBadge>
+            <UiBadge tone="warning">Giữ pháp lý & eDiscovery (AD-13): ENABLED_APPEND_ONLY_RETENTION</UiBadge>
+            <UiBadge tone="success">Bảo vệ dữ liệu cá nhân (AD-14): PII_MASKED_WITH_AUDIT_TRAIL_PRESERVATION</UiBadge>
+          </div>
+        </UiCard>
+      </>
     )}
 
     {loading ? <p role="status">Đang tải quyền truy cập...</p> : <>

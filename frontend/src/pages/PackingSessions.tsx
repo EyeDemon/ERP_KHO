@@ -112,6 +112,16 @@ export default function PackingSessions(){
     {error&&<div role="alert">{error}</div>}
 
     <div className="ui-stack">
+      <UiCard title="Danh mục Loại Bao bì Chuẩn (MD-08) & Gợi ý Tối ưu Đóng thùng Cartonization (AX-11)">
+        <div className="ui-inline-wrap">
+          <span><strong>CARTON-S</strong> (CARTON): tối đa 15 kg / 0.04 m³</span>
+          <span><strong>CARTON-L</strong> (CARTON): tối đa 30 kg / 0.12 m³</span>
+          <span><strong>TOTE-STD</strong> (TOTE): tối đa 25 kg / 0.06 m³</span>
+          <span><strong>PALLET-EUR</strong> (PALLET): tối đa 1000 kg / 1.80 m³</span>
+          <span>Chính sách Cartonization: <code>RECOMMEND_ONLY_REQUIRES_OPERATOR_CONFIRM</code></span>
+        </div>
+      </UiCard>
+
       <UiCard title="Packing sessions">
         {sessions.length===0?<p>Chưa có Packing session. Session được tạo khi Picking hoàn tất.</p>:<UiTableScroll>
           <table aria-label="Danh sách Packing session">

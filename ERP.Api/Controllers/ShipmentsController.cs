@@ -37,6 +37,23 @@ public sealed class ShipmentsController(IShipmentService service) : ControllerBa
         });
     }
 
+    [HttpGet("load-planning-and-tms")]
+    [PermissionAuthorize(AppPermissions.ShipmentRead)]
+    public async Task<IActionResult> LoadPlanningAndTms(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var list = await service.ListAsync(warehouseId, null, cancellationToken);
+        return Ok(new
+        {
+            totalShipments = list.Count,
+            stagingOrLoadingCount = list.Count(x => x.Status is "Ready" or "Staging" or "Loading" or "Loaded"),
+            carrierAssignedCount = list.Count(x => !string.IsNullOrWhiteSpace(x.VehiclePlate) || x.DockAppointmentId.HasValue),
+            sealVerifiedCount = list.Count(x => !string.IsNullOrWhiteSpace(x.SealNumber)),
+            tmsIntegrationMode = "IDEMPOTENT_CARRIER_WEBHOOK_AND_POD_SYNC",
+        });
+    }
+
     [HttpGet("{id:int}")]
     [PermissionAuthorize(AppPermissions.ShipmentRead)]
     public async Task<ActionResult<ShipmentDto>> Get(int id, CancellationToken cancellationToken) =>

@@ -31,6 +31,24 @@ public sealed class PutawayTasksController(IPutawayService service) : Controller
             totalRemainingQuantity = tasks.Sum(x => Math.Max(0m, x.RequiredBaseQuantity - x.MovedBaseQuantity)),
         });
     }
+    [HttpGet("rule-engine-policy"),PermissionAuthorize(AppPermissions.PutawayRead)] public IActionResult RuleEnginePolicy()=>Ok(new
+    {
+        rankingFactors = new[]
+        {
+            "1_EXACT_SKU_AFFINITY",
+            "2_STORAGE_GROUP_COMPATIBILITY",
+            "3_REMAINING_CAPACITY_FIT",
+            "4_PICK_FACE_PROXIMITY",
+            "5_FEFO_LOT_CONSOLIDATION"
+        },
+        hardConstraints = new[]
+        {
+            "ACTIVE_BIN_ONLY",
+            "UNBLOCKED_BIN_ONLY",
+            "NO_INVENTORY_LOCK",
+            "CAPACITY_WEIGHT_VOLUME_PALLET_GUARD"
+        }
+    });
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetAsync(id,ct));
     [HttpGet("{id:int}/items/{itemId:int}/destinations"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Destinations(int id,int itemId,CancellationToken ct)=>Ok(await service.GetDestinationsAsync(id,itemId,ct));
     [HttpPost("{id:int}/assign"),IdempotentCommand("Putaway.Assign"),PermissionAuthorize(AppPermissions.PutawayAssign)] public async Task<IActionResult> Assign(int id,PutawayStateCommandDto dto,CancellationToken ct)=>Ok(await service.AssignAsync(id,dto,ct));

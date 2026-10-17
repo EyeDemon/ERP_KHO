@@ -60,11 +60,39 @@ type GlobalSearchResultItem = {
   route: string;
 };
 
+type ControlTowerWarehouseItem = {
+  warehouseId: number;
+  warehouseCode: string;
+  warehouseName: string;
+  isActive: boolean;
+  onHandQuantity: number;
+  reservedQuantity: number;
+  openPutawayCount: number;
+  openPickingCount: number;
+  activeLocksCount: number;
+  healthStatus: string;
+};
+
+type TaskEngineQueueItem = {
+  taskType: string;
+  openCount: number;
+  route: string;
+};
+
+type MultiWarehouseControlTowerDto = {
+  totalWarehouses: number;
+  healthyWarehousesCount: number;
+  attentionWarehousesCount: number;
+  warehouses: ControlTowerWarehouseItem[];
+  taskEngineQueues: TaskEngineQueueItem[];
+};
+
 const Dashboard = () => {
   const demoRuntime = isBlueprintDemoRuntime();
   const [liveSummary, setLiveSummary] = useState<OperationalDashboardSummary | null>(null);
   const [liveTasks, setLiveTasks] = useState<WarehouseTaskItem[]>([]);
   const [liveExceptions, setLiveExceptions] = useState<OperationalExceptionItem[]>([]);
+  const [controlTower, setControlTower] = useState<MultiWarehouseControlTowerDto | null>(null);
   const [taskTypeFilter, setTaskTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<GlobalSearchResultItem[]>([]);
@@ -81,14 +109,18 @@ const Dashboard = () => {
       apiClient.get<OperationalDashboardSummary>('/api/Reports/operational-dashboard'),
       apiClient.get<WarehouseTaskItem[]>('/api/Reports/warehouse-tasks').catch(() => ({ data: [] as WarehouseTaskItem[] })),
       apiClient.get<OperationalExceptionItem[]>('/api/Reports/operational-exceptions').catch(() => ({ data: [] as OperationalExceptionItem[] })),
+      apiClient.get<MultiWarehouseControlTowerDto>('/api/Reports/multi-warehouse-control-tower').catch(() => null),
     ])
-      .then(([summaryRes, tasksRes, exRes]) => {
+      .then(([summaryRes, tasksRes, exRes, towerRes]) => {
         if (!active) return;
         if (summaryRes.data && typeof summaryRes.data.warehouseCount === 'number') {
           setLiveSummary(summaryRes.data);
         }
         setLiveTasks(Array.isArray(tasksRes.data) ? tasksRes.data : []);
         setLiveExceptions(Array.isArray(exRes.data) ? exRes.data : []);
+        if (towerRes?.data && Array.isArray(towerRes.data.warehouses)) {
+          setControlTower(towerRes.data);
+        }
       })
       .catch(() => {
         if (active) setLiveError('Không thể tải số liệu tổng quan trực tiếp.');
@@ -244,6 +276,63 @@ const Dashboard = () => {
           </div>
         </UiCard>
       </div>
+
+      {!demoRuntime && (
+        <UiCard title="Trung tâm Điều hành Kho phân tán & Bộ máy Hàng đợi Nhiệm vụ (OV-05, OV-06)">
+          <div className="ui-inline-wrap">
+            <UiBadge tone="success">{`Kho ổn định (HEALTHY): ${controlTower?.healthyWarehousesCount ?? 0}/${controlTower?.totalWarehouses ?? (liveSummary?.warehouseCount ?? 0)}`}</UiBadge>
+            <UiBadge tone={(controlTower?.attentionWarehousesCount ?? 0) > 0 ? 'warning' : 'neutral'}>
+              {`Kho cần chú ý (ATTENTION): ${controlTower?.attentionWarehousesCount ?? 0}`}
+            </UiBadge>
+            {(controlTower?.taskEngineQueues ?? [
+              { taskType: 'PUTAWAY', openCount: liveSummary?.openPutawayCount ?? 0, route: '/putaway-tasks' },
+              { taskType: 'PICK', openCount: 0, route: '/picking-tasks' },
+              { taskType: 'PACK', openCount: 0, route: '/packing-sessions' },
+              { taskType: 'STOCKTAKE', openCount: 0, route: '/stocktakes' },
+              { taskType: 'TRANSFER', openCount: liveSummary?.openTransferCount ?? 0, route: '/stock-transfers' },
+              { taskType: 'DOCK_YARD', openCount: 0, route: '/dock-yard' },
+            ]).map((queue) => (
+              <UiBadge key={queue.taskType} tone={queue.openCount > 0 ? 'warning' : 'neutral'}>
+                {`Hàng đợi ${queue.taskType} (OV-06): ${queue.openCount}`}
+              </UiBadge>
+            ))}
+          </div>
+          {controlTower && controlTower.warehouses.length > 0 && (
+            <UiTableScroll>
+              <table aria-label="Bảng sức khỏe kho phân tán">
+                <thead>
+                  <tr>
+                    <th>Kho</th>
+                    <th>Tồn thực tế</th>
+                    <th>Đã giữ</th>
+                    <th>Putaway mở</th>
+                    <th>Picking mở</th>
+                    <th>Khóa tồn</th>
+                    <th>Trạng thái sức khỏe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {controlTower.warehouses.map((wh) => (
+                    <tr key={wh.warehouseId}>
+                      <td><strong>{wh.warehouseCode}</strong> — {wh.warehouseName}</td>
+                      <td>{wh.onHandQuantity}</td>
+                      <td>{wh.reservedQuantity}</td>
+                      <td>{wh.openPutawayCount}</td>
+                      <td>{wh.openPickingCount}</td>
+                      <td>{wh.activeLocksCount}</td>
+                      <td>
+                        <UiBadge tone={wh.healthStatus === 'ATTENTION' ? 'warning' : 'success'}>
+                          {wh.healthStatus}
+                        </UiBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </UiTableScroll>
+          )}
+        </UiCard>
+      )}
 
       {!demoRuntime && (
         <div className="dashboard-grid">

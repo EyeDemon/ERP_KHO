@@ -19,7 +19,7 @@ type ShipmentProofOfDelivery = {
 type Shipment = {
   id:number; shipmentCode:string; packingSessionId:number; packingSessionCode:string; warehouseId:number; warehouseName:string;
   sourceType:string; sourceId?:number; sourceCode?:string; status:string; stagingLocationId?:number; stagingLocationCode?:string;
-  handlingUnitCount:number; loadedHandlingUnitCount:number; dockAppointmentId?:number; dockAppointmentCode?:string; dockId?:number; dockCode?:string; vehiclePlate?:string; trailerPlate?:string;
+  handlingUnitCount:number; loadedHandlingUnitCount:number; dockAppointmentId?:number; dockAppointmentCode?:string; dockId?:number; dockCode?:string; carrierName?:string; vehiclePlate?:string; trailerPlate?:string;
   sealNumber?:string; createdAt:string; stagedAt?:string; loadingStartedAt?:string; loadedAt?:string;
   dispatchedAt?:string; dispatchedBy?:number; dispatchedByName?:string; inTransitAt?:string; deliveryFailedAt?:string;
   returnInitiatedAt?:string; deliveredAt?:string; completedAt?:string; rowVersion?:string;
@@ -144,6 +144,9 @@ export default function Shipments(){
   const inTransitCount=rows.filter(x=>['Dispatched','InTransit'].includes(x.status)).length;
   const deliveredOrCompletedCount=rows.filter(x=>['Delivered','Completed'].includes(x.status)).length;
   const exceptionOrReturnCount=rows.filter(x=>['DeliveryFailed','ReturnToWarehouse'].includes(x.status)).length;
+  const stagingOrLoadingCount=preDispatchCount;
+  const carrierAssignedCount=rows.filter(x=>Boolean(x.carrierName||x.vehiclePlate||x.dockAppointmentId||x.dockAppointmentCode)).length;
+  const sealVerifiedCount=rows.filter(x=>Boolean(x.sealNumber)).length;
 
   return <UiPage>
     <UiPageHeader
@@ -159,6 +162,14 @@ export default function Shipments(){
           <span>Đang vận chuyển (Dispatched/InTransit): <strong>{inTransitCount}</strong></span>
           <span>Đã giao hoàn tất (Delivered/Completed): <strong>{deliveredOrCompletedCount}</strong></span>
           <span>Giao thất bại / Hoàn kho (DeliveryFailed/ReturnToWarehouse): <strong>{exceptionOrReturnCount}</strong></span>
+        </div>
+      </UiCard>
+      <UiCard title="Lập kế hoạch Xếp tải Xe (AX-12) & Tích hợp Đơn vị Vận chuyển / TMS (IG-06)">
+        <div className="ui-inline-wrap">
+          <span>Khu vực Tập kết / Xếp tải (Staging/Loading): <strong>{stagingOrLoadingCount}</strong></span>
+          <span>Đã gán Hãng vận chuyển / Phương tiện (Carrier): <strong>{carrierAssignedCount}</strong></span>
+          <span>Đã niêm phong kẹp chì (Seal): <strong>{sealVerifiedCount}</strong></span>
+          <span>Đồng bộ sự kiện TMS / POD: <strong>IDEMPOTENT_CARRIER_WEBHOOK_AND_POD_SYNC</strong></span>
         </div>
       </UiCard>
       <UiCard title="Shipment">
