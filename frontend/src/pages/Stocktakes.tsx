@@ -132,7 +132,7 @@ const Stocktakes = () => {
       setCreateLocationId('');
       return;
     }
-    apiClient.get(`/api/locations?warehouseId=${createWarehouseId}`)
+    apiClient.get(`/api/putaway-tasks/locations?warehouseId=${createWarehouseId}`)
       .then(res => setCreateLocations(Array.isArray(res.data) ? res.data : []))
       .catch(() => setCreateLocations([]));
   }, [createWarehouseId]);

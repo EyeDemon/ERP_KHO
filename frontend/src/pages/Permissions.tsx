@@ -18,6 +18,7 @@ type UserSecurityStatus = {
   mustChangePassword: boolean;
   securityStateVersion: number;
   activeSessionCount: number;
+  rowVersion?: string | null;
 };
 type WarehouseAccessDto = {
   warehouseId: number;
@@ -33,6 +34,7 @@ type UserWarehouseAccessListDto = {
   fullName: string;
   roleName: string;
   isActive: boolean;
+  rowVersion?: string | null;
   warehouses: WarehouseAccessDto[];
 };
 type PermissionAuditLog = {
@@ -46,6 +48,48 @@ type PermissionAuditLog = {
   result?: string | null;
   timestamp: string;
 };
+
+function normalizeUserSecurity(uid: number, raw: Record<string, unknown>): UserSecurityStatus {
+  const rowVersion = typeof raw.rowVersion === 'string' ? raw.rowVersion : null;
+  return {
+    userId: typeof raw.userId === 'number' ? raw.userId : uid,
+    username: typeof raw.username === 'string' && raw.username ? raw.username : `User #${uid}`,
+    roleName: typeof raw.roleName === 'string' && raw.roleName ? raw.roleName : 'User',
+    isActive: Boolean(raw.isActive ?? true),
+    isTemporarilyLocked: Boolean(raw.isTemporarilyLocked ?? raw.isLocked ?? false),
+    lockoutEndUtc: (raw.lockoutEndUtc ?? raw.lockoutEnd ?? null) as string | null,
+    failedLoginCount: typeof raw.failedLoginCount === 'number' ? raw.failedLoginCount : 0,
+    mustChangePassword: Boolean(raw.mustChangePassword ?? false),
+    securityStateVersion: typeof raw.securityStateVersion === 'number' ? raw.securityStateVersion : 1,
+    activeSessionCount: typeof raw.activeSessionCount === 'number' ? raw.activeSessionCount : 1,
+    rowVersion,
+  };
+}
+
+function normalizeUserWarehouses(uid: number, raw: Record<string, unknown>): UserWarehouseAccessListDto {
+  const rawList = Array.isArray(raw.warehouses)
+    ? raw.warehouses
+    : Array.isArray(raw.memberships)
+      ? raw.memberships
+      : [];
+  const warehouses: WarehouseAccessDto[] = rawList.map((item: Record<string, unknown>) => ({
+    warehouseId: Number(item.warehouseId ?? 0),
+    warehouseCode: String(item.warehouseCode ?? ''),
+    warehouseName: String(item.warehouseName ?? ''),
+    warehouseIsActive: Boolean(item.warehouseIsActive ?? true),
+    grantedByUserId: typeof item.grantedByUserId === 'number' ? item.grantedByUserId : null,
+    grantedAt: String(item.grantedAt ?? item.createdAt ?? new Date().toISOString()),
+  }));
+  return {
+    userId: typeof raw.userId === 'number' ? raw.userId : uid,
+    username: typeof raw.username === 'string' && raw.username ? raw.username : `User #${uid}`,
+    fullName: typeof raw.fullName === 'string' && raw.fullName ? raw.fullName : `User #${uid}`,
+    roleName: typeof raw.roleName === 'string' && raw.roleName ? raw.roleName : 'User',
+    isActive: Boolean(raw.isActive ?? true),
+    rowVersion: typeof raw.rowVersion === 'string' ? raw.rowVersion : null,
+    warehouses,
+  };
+}
 
 export default function Permissions() {
   const canReadCatalog = usePermission('permission.read');
@@ -119,8 +163,8 @@ export default function Permissions() {
     if (!Number.isInteger(uid) || uid <= 0 || securityBusy) return;
     setSecurityBusy(true); setError(''); setSuccess('');
     try {
-      const res = await apiClient.get<UserSecurityStatus>(`/api/users/${uid}/security`);
-      setUserSecurity(res.data);
+      const res = await apiClient.get<Record<string, unknown>>(`/api/users/${uid}/security`);
+      setUserSecurity(normalizeUserSecurity(uid, res.data));
     } catch (failure) {
       setUserSecurity(null);
       setError(permissionError(failure));
@@ -133,23 +177,25 @@ export default function Permissions() {
     if (!userSecurity || securityBusy) return;
     setSecurityBusy(true); setError(''); setSuccess('');
     const uid = userSecurity.userId;
-    const actionKey = `user-sec-${endpoint}:${uid}:${userSecurity.securityStateVersion}`;
+    const actionKey = `user-sec-${endpoint}:${uid}:${userSecurity.rowVersion || userSecurity.securityStateVersion}`;
     try {
       const headers = idempotencyHeaders(actionKey);
       if (endpoint === 'reset-password') {
         await apiClient.post(`/api/users/${uid}/security/reset-password`, {
           temporaryPassword: tempPassword,
           reason: securityReason.trim() || 'Quản trị viên đặt lại mật khẩu tạm thời',
+          rowVersion: userSecurity.rowVersion,
         }, { headers });
         setTempPassword('');
       } else {
         await apiClient.post(`/api/users/${uid}/security/${endpoint}`, {
           reason: securityReason.trim() || `Thao tác quản trị bảo mật (${endpoint})`,
+          rowVersion: userSecurity.rowVersion,
         }, { headers });
       }
       completeIdempotentAction(actionKey);
-      const refreshed = await apiClient.get<UserSecurityStatus>(`/api/users/${uid}/security`);
-      setUserSecurity(refreshed.data);
+      const refreshed = await apiClient.get<Record<string, unknown>>(`/api/users/${uid}/security`);
+      setUserSecurity(normalizeUserSecurity(uid, refreshed.data));
       setSuccess('Đã thực thi thao tác bảo mật tài khoản.');
     } catch (failure) {
       setError(permissionError(failure));
@@ -163,8 +209,8 @@ export default function Permissions() {
     if (!Number.isInteger(uid) || uid <= 0 || whBusy) return;
     setWhBusy(true); setError(''); setSuccess('');
     try {
-      const res = await apiClient.get<UserWarehouseAccessListDto>(`/api/users/${uid}/warehouse-access`);
-      setUserWarehouses(res.data);
+      const res = await apiClient.get<Record<string, unknown>>(`/api/users/${uid}/warehouse-access`);
+      setUserWarehouses(normalizeUserWarehouses(uid, res.data));
     } catch (failure) {
       setUserWarehouses(null);
       setError(permissionError(failure));
@@ -179,13 +225,13 @@ export default function Permissions() {
     if (!Number.isInteger(warehouseId) || warehouseId <= 0) return;
     setWhBusy(true); setError(''); setSuccess('');
     const uid = userWarehouses.userId;
-    const actionKey = `user-wh-grant:${uid}:${warehouseId}`;
+    const actionKey = `user-wh-grant:${uid}:${warehouseId}:${userWarehouses.rowVersion || ''}`;
     try {
-      await apiClient.post(`/api/users/${uid}/warehouse-access`, { warehouseId }, { headers: idempotencyHeaders(actionKey) });
+      await apiClient.post(`/api/users/${uid}/warehouse-access`, { warehouseId, rowVersion: userWarehouses.rowVersion }, { headers: idempotencyHeaders(actionKey) });
       completeIdempotentAction(actionKey);
       setGrantWarehouseIdInput('');
-      const refreshed = await apiClient.get<UserWarehouseAccessListDto>(`/api/users/${uid}/warehouse-access`);
-      setUserWarehouses(refreshed.data);
+      const refreshed = await apiClient.get<Record<string, unknown>>(`/api/users/${uid}/warehouse-access`);
+      setUserWarehouses(normalizeUserWarehouses(uid, refreshed.data));
       setSuccess('Đã cấp quyền truy cập kho cho người dùng.');
     } catch (failure) {
       setError(permissionError(failure));
@@ -198,12 +244,15 @@ export default function Permissions() {
     if (!userWarehouses || whBusy) return;
     setWhBusy(true); setError(''); setSuccess('');
     const uid = userWarehouses.userId;
-    const actionKey = `user-wh-revoke:${uid}:${warehouseId}`;
+    const actionKey = `user-wh-revoke:${uid}:${warehouseId}:${userWarehouses.rowVersion || ''}`;
     try {
-      await apiClient.delete(`/api/users/${uid}/warehouse-access/${warehouseId}`, { headers: idempotencyHeaders(actionKey) });
+      await apiClient.delete(`/api/users/${uid}/warehouse-access/${warehouseId}`, {
+        headers: idempotencyHeaders(actionKey),
+        data: { rowVersion: userWarehouses.rowVersion },
+      });
       completeIdempotentAction(actionKey);
-      const refreshed = await apiClient.get<UserWarehouseAccessListDto>(`/api/users/${uid}/warehouse-access`);
-      setUserWarehouses(refreshed.data);
+      const refreshed = await apiClient.get<Record<string, unknown>>(`/api/users/${uid}/warehouse-access`);
+      setUserWarehouses(normalizeUserWarehouses(uid, refreshed.data));
       setSuccess('Đã thu hồi quyền truy cập kho của người dùng.');
     } catch (failure) {
       setError(permissionError(failure));
