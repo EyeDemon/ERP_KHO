@@ -46,8 +46,14 @@ namespace ERP.Api.Controllers
             [FromQuery] int? warehouseId = null,
             CancellationToken cancellationToken = default)
         {
-            if (warehouseId.HasValue && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAccess != null)
+            {
+                if (warehouseId.HasValue)
+                    await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                else
+                    accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+            }
 
             var recentProposals = new List<object>();
             if (_db != null)
@@ -56,6 +62,8 @@ namespace ERP.Api.Controllers
                     .Where(a => a.EntityName == "StocktakeAdjustmentProposal");
                 if (warehouseId.HasValue)
                     query = query.Where(a => a.WarehouseId == warehouseId.Value);
+                else if (accessibleIds != null)
+                    query = query.Where(a => a.WarehouseId.HasValue && accessibleIds.Contains(a.WarehouseId.Value));
 
                 var logs = await query
                     .OrderByDescending(a => a.Timestamp)
@@ -114,10 +122,14 @@ namespace ERP.Api.Controllers
             int? ProductId = null);
 
         [HttpPost("adjustment-proposals")]
+        [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
         public async Task<IActionResult> CreateAdjustmentProposal(
             [FromBody] CreateAdjustmentProposalRequest request,
             CancellationToken cancellationToken = default)
         {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+
             if (_warehouseAccess != null)
                 await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId, cancellationToken);
 

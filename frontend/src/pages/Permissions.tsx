@@ -95,8 +95,11 @@ export default function Permissions() {
   const canReadCatalog = usePermission('permission.read');
   const canReadRoles = usePermission('role.read');
   const canAssign = usePermission('permission.assign');
+  const canReadUserWarehouse = usePermission('user_warehouse.read');
   const [catalog, setCatalog] = useState<Permission[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [roleFilter, setRoleFilter] = useState('');
+  const [permissionSearch, setPermissionSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -381,9 +384,11 @@ export default function Permissions() {
             <button type="button" disabled={evidenceBusy} onClick={() => void exportEvidenceBundle()}>
               Kết xuất Gói Bằng chứng Kiểm toán & Legal Hold (RP-08, AD-13)
             </button>
-            <button type="button" disabled={sodAuditBusy} onClick={() => void verifySodIsolation()}>
-              Kiểm toán Cô lập Phạm vi Kho & Phân tách Nhiệm vụ SoD (AD-03, AD-05)
-            </button>
+            {(canReadUserWarehouse || canAssign) && (
+              <button type="button" disabled={sodAuditBusy} onClick={() => void verifySodIsolation()}>
+                Kiểm toán Cô lập Phạm vi Kho & Phân tách Nhiệm vụ SoD (AD-03, AD-05)
+              </button>
+            )}
             {evidenceBundle && (
               <UiBadge tone="success">
                 {`Gói bằng chứng: ${evidenceBundle.bundleId} • Chính sách: ${evidenceBundle.policyVersion} • Legal Hold: ACTIVE • Append-Only Audit: VERIFIED`}
@@ -689,27 +694,66 @@ export default function Permissions() {
         </UiTableScroll>
       </UiCard>}
 
-      {roles.map(role => <UiCard key={role.id} title={roleLabel(role.roleName)}>
-        <UiTableScroll>
-          <table className="permissions-table" aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
-            <thead><tr><th>Quyền</th><th>Mã permission</th><th>Trạng thái</th>{canAssign && <th>Thao tác</th>}</tr></thead>
-            <tbody>{catalog.map(permission => {
-              const granted = role.permissions.includes(permission.code);
-              return <tr key={permission.code}>
-                <td>{permissionLabel(permission.code)}</td>
-                <td><code>{permission.code}</code></td>
-                <td><UiBadge tone={granted ? 'success' : 'neutral'}>{granted ? 'Đã cấp' : 'Chưa cấp'}</UiBadge></td>
-                {canAssign && <td>
-                  <button type="button" disabled={pending} onClick={() => void change(role, permission.code, granted)}
-                    aria-label={`${granted ? 'Thu hồi' : 'Cấp'} ${permissionLabel(permission.code)} cho ${roleLabel(role.roleName)}`}>
-                    {pending ? 'Đang lưu...' : granted ? 'Thu hồi quyền' : 'Cấp quyền'}
-                  </button>
-                </td>}
-              </tr>;
-            })}</tbody>
-          </table>
-        </UiTableScroll>
-      </UiCard>)}
+      {roles.length > 0 && (
+        <UiToolbar aria-label="Bộ lọc ma trận phân quyền">
+          <UiToolbarField label="Lọc theo vai trò">
+            <select
+              aria-label="Lọc theo vai trò"
+              value={roleFilter}
+              onChange={e => setRoleFilter(e.target.value)}
+            >
+              <option value="">Tất cả vai trò ({roles.length})</option>
+              {roles.map(role => (
+                <option key={role.id} value={role.roleName}>
+                  {`${roleLabel(role.roleName)} (${role.roleName})`}
+                </option>
+              ))}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Tìm kiếm quyền">
+            <input
+              aria-label="Tìm kiếm quyền"
+              placeholder="Nhập tên quyền hoặc mã permission..."
+              value={permissionSearch}
+              onChange={e => setPermissionSearch(e.target.value)}
+            />
+          </UiToolbarField>
+        </UiToolbar>
+      )}
+
+      {roles
+        .filter(role => !roleFilter || role.roleName === roleFilter)
+        .map(role => {
+          const normalizedQuery = permissionSearch.trim().toLowerCase();
+          const filteredCatalog = normalizedQuery
+            ? catalog.filter(
+                permission =>
+                  permission.code.toLowerCase().includes(normalizedQuery) ||
+                  permissionLabel(permission.code).toLowerCase().includes(normalizedQuery)
+              )
+            : catalog;
+          return <UiCard key={role.id} title={roleLabel(role.roleName)}>
+            <UiTableScroll>
+              <table className="permissions-table" aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
+                <thead><tr><th>Quyền</th><th>Mã permission</th><th>Trạng thái</th>{canAssign && <th>Thao tác</th>}</tr></thead>
+                <tbody>{filteredCatalog.map(permission => {
+                  const granted = role.permissions.includes(permission.code);
+                  return <tr key={permission.code}>
+                    <td>{permissionLabel(permission.code)}</td>
+                    <td><code>{permission.code}</code></td>
+                    <td><UiBadge tone={granted ? 'success' : 'neutral'}>{granted ? 'Đã cấp' : 'Chưa cấp'}</UiBadge></td>
+                    {canAssign && <td>
+                      <button type="button" disabled={pending} onClick={() => void change(role, permission.code, granted)}
+                        aria-label={`${granted ? 'Thu hồi' : 'Cấp'} ${permissionLabel(permission.code)} cho ${roleLabel(role.roleName)}`}>
+                        {pending ? 'Đang lưu...' : granted ? 'Thu hồi quyền' : 'Cấp quyền'}
+                      </button>
+                    </td>}
+                  </tr>;
+                })}</tbody>
+              </table>
+            </UiTableScroll>
+          </UiCard>;
+        })}
     </>}
   </UiPage>;
 }

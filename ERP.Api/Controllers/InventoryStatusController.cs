@@ -63,22 +63,23 @@ public sealed class InventoryStatusController(
     [HttpPost("verify-bucket-invariants")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> VerifyBucketInvariants(
-        [FromBody] VerifyBucketInvariantsRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyBucketInvariantsRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var violationCount = db != null
             ? await db.InventoryStocks.AsNoTracking()
-                .Where(s => !request!.WarehouseId.HasValue || s.WarehouseId == request.WarehouseId.Value)
+                .Where(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
                 .CountAsync(s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity, cancellationToken)
             : 0;
 
         return Ok(new
         {
             verificationId = $"BCK-INV-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             violationCount,
             fiveBucketEquationStatus = violationCount == 0 ? "BALANCED_EXACT" : "VIOLATION_DETECTED",
             scrapApprovalGuard = "SOD_ENFORCED",
@@ -91,22 +92,23 @@ public sealed class InventoryStatusController(
     [HttpPost("verify-lock-precedence")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> VerifyLockPrecedence(
-        [FromBody] VerifyLockPrecedenceRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyLockPrecedenceRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var leakCount = db != null
             ? await db.InventoryStocks.AsNoTracking()
-                .Where(s => !request!.WarehouseId.HasValue || s.WarehouseId == request.WarehouseId.Value)
+                .Where(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
                 .CountAsync(s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity, cancellationToken)
             : 0;
 
         return Ok(new
         {
             verificationId = $"LCK-PRC-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             overlappingHoldPrecedence = "RECALL_GT_QC_GT_COUNT",
             leakCount,
             status = leakCount == 0 ? "LOCK_PRECEDENCE_VERIFIED" : "LEAK_DETECTED",

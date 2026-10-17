@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import apiClient from '../services/apiClient';
-import { currentRole, currentUserId } from '../services/authorization';
+import { currentRole, currentUserId, hasPermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 import './Stocktakes.css';
@@ -128,6 +128,10 @@ const Stocktakes = () => {
   };
 
   const fetchWarehouses = async () => {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('permissions') !== null && !hasPermission('warehouse.read')) {
+      setWarehouses([]);
+      return;
+    }
     setWarehousesLoading(true);
     setWarehousesError('');
     try {
@@ -359,7 +363,7 @@ const Stocktakes = () => {
     if (!currentDetail) return;
     const hasUnentered = currentDetail.details.some(d => d.actualQuantity === null || d.actualQuantity === undefined);
     if (hasUnentered) {
-      alert('Tất cả sản phẩm phải được nhập Số lượng thực tế trước khi duyệt.');
+      setError('Tất cả sản phẩm phải được nhập Số lượng thực tế trước khi duyệt.');
       return;
     }
     if (!confirm('Bạn có chắc chắn muốn duyệt phiếu kiểm kê này? Thao tác này sẽ cập nhật trực tiếp tồn kho và không thể hoàn tác.')) return;

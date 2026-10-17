@@ -55,28 +55,29 @@ public sealed class HandlingUnitsController(
     [HttpPost("verify-intransit-seal")]
     [PermissionAuthorize(AppPermissions.HandlingUnitRead)]
     public async Task<IActionResult> VerifyInTransitSeal(
-        [FromBody] VerifyInTransitSealRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyInTransitSealRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (warehouseAccess is not null && request?.WarehouseId is int warehouseId)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseAccess is not null && warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var code = string.IsNullOrWhiteSpace(request?.TransferCode) ? "TRF-IN-TRANSIT" : request.TransferCode.Trim();
         var activeInTransitTransfers = db is not null
             ? await db.StockTransfers.AsNoTracking().CountAsync(
                 t => t.Status == StockTransferStatus.InTransit &&
-                     (!request!.WarehouseId.HasValue || t.SourceWarehouseId == request.WarehouseId.Value || t.DestinationWarehouseId == request.WarehouseId.Value),
+                     (!warehouseId.HasValue || t.SourceWarehouseId == warehouseId.Value || t.DestinationWarehouseId == warehouseId.Value),
                 cancellationToken)
             : 0;
         var sealedHuCount = db is not null
             ? await db.HandlingUnits.AsNoTracking().CountAsync(
-                h => h.SealedAt != null && (!request!.WarehouseId.HasValue || h.WarehouseId == request.WarehouseId.Value),
+                h => h.SealedAt != null && (!warehouseId.HasValue || h.WarehouseId == warehouseId.Value),
                 cancellationToken)
             : 0;
         var unsealedInTransitCount = db is not null
             ? await db.HandlingUnits.AsNoTracking().CountAsync(
                 h => h.Status == HandlingUnitStatus.Shipped && h.SealedAt == null &&
-                     (!request!.WarehouseId.HasValue || h.WarehouseId == request.WarehouseId.Value),
+                     (!warehouseId.HasValue || h.WarehouseId == warehouseId.Value),
                 cancellationToken)
             : 0;
 

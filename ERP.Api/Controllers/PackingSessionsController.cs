@@ -45,11 +45,12 @@ public sealed class PackingSessionsController(
     [HttpPost("verify-packaging-profile")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<IActionResult> VerifyPackagingProfile(
-        [FromBody] VerifyPackagingProfileRequest? request,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyPackagingProfileRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var dimensionConfiguredProductsCount = db != null
             ? await db.Products.AsNoTracking()
@@ -72,13 +73,26 @@ public sealed class PackingSessionsController(
 
     [HttpPost("execute-kitting-vas"), PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<IActionResult> ExecuteKittingVas(
-        [FromBody] ExecuteKittingVasRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteKittingVasRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        var targetWarehouseId = warehouseId ?? 1;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+            {
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            }
+            else
+            {
+                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                if (accessibleIds.Count == 0)
+                    return Forbid();
+                targetWarehouseId = accessibleIds[0];
+            }
+        }
 
-        var targetWarehouseId = request?.WarehouseId ?? 1;
         var activeSessionsCount = db != null
             ? await db.PackingSessions.AsNoTracking()
                 .CountAsync(s => s.WarehouseId == targetWarehouseId, cancellationToken)

@@ -111,7 +111,7 @@ public sealed class BusinessPartnersController(
     }
     public sealed record Calculate3PlBillingRequest(int? PartnerId=null,string? BillingPeriod=null);
     [HttpPost("calculate-3pl-billing"),PermissionAuthorize(AppPermissions.PartnerRead)]
-    public async Task<IActionResult> Calculate3PlBilling([FromBody] Calculate3PlBillingRequest? request=null, CancellationToken ct = default)
+    public async Task<IActionResult> Calculate3PlBilling([FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] Calculate3PlBillingRequest? request=null, CancellationToken ct = default)
     {
         var activePartnersCount = db != null
             ? await db.BusinessPartners.AsNoTracking().CountAsync(x => x.IsActive, ct)

@@ -72,19 +72,20 @@ namespace ERP.Api.Controllers
 
         [HttpPost("verify-catch-weight-coldchain"), PermissionAuthorize(AppPermissions.UomRead)]
         public async Task<IActionResult> VerifyCatchWeightColdChain(
-            [FromBody] VerifyCatchWeightColdChainRequest? request = null,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyCatchWeightColdChainRequest? request = null,
             CancellationToken cancellationToken = default)
         {
+            var productId = request?.ProductId;
             var checkedProductsCount = _db != null
                 ? await _db.Products.AsNoTracking()
-                    .Where(p => !request!.ProductId.HasValue || p.Id == request.ProductId.Value)
+                    .Where(p => !productId.HasValue || p.Id == productId.Value)
                     .CountAsync(cancellationToken)
                 : 0;
 
             return Ok(new
             {
                 verificationId = $"CW-CC-HAZ-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-                productId = request?.ProductId,
+                productId,
                 checkedProductsCount,
                 dualUomTolerancePct = 2.5m,
                 catchWeightLedgerTraceability = "DUAL_UOM_BASE_AND_ACTUAL_WEIGHT_SYNCED",

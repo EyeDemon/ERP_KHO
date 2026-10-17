@@ -34,16 +34,29 @@ public sealed class AsnsController(
         });
     }
 
-    public sealed record PreAllocateAsnStagingRequest(int? WarehouseId, string? AsnNumber);
+    public sealed record PreAllocateAsnStagingRequest(int? WarehouseId = null, string? AsnNumber = null);
 
     [HttpPost("pre-allocate-staging"),PermissionAuthorize(AppPermissions.AsnRead)]
     public async Task<IActionResult> PreAllocateStaging(
-        [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] PreAllocateAsnStagingRequest? request,
+        [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] PreAllocateAsnStagingRequest? request = null,
         CancellationToken ct = default)
     {
-        var targetWarehouseId = request?.WarehouseId ?? 1;
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, ct);
+        var warehouseId = request?.WarehouseId;
+        var targetWarehouseId = warehouseId ?? 1;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+            {
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+            }
+            else
+            {
+                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
+                if (accessibleIds.Count == 0)
+                    return Forbid();
+                targetWarehouseId = accessibleIds[0];
+            }
+        }
 
         var stagingLocationCode = db != null
             ? await db.WarehouseLocations.AsNoTracking()

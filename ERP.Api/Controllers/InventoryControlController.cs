@@ -274,7 +274,7 @@ public sealed class InventoryControlController(
     public async Task<IActionResult> RunWhatIfSimulation(
         [FromServices] ErpKhoDbContext db,
         [FromServices] IWarehouseAuthorizationService warehouseAuth,
-        [FromBody] WhatIfSimulationRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] WhatIfSimulationRequest? request = null,
         CancellationToken cancellationToken = default)
     {
         var req = request ?? new WhatIfSimulationRequest();
@@ -326,22 +326,23 @@ public sealed class InventoryControlController(
     [HttpPost("evaluate-decision-policy-governance")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> EvaluateDecisionPolicyGovernance(
-        [FromBody] EvaluateDecisionPolicyRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateDecisionPolicyRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var evaluatedStockBucketsCount = db != null
             ? await db.InventoryStocks.AsNoTracking()
-                .Where(s => !request!.WarehouseId.HasValue || s.WarehouseId == request.WarehouseId.Value)
+                .Where(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value)
                 .CountAsync(cancellationToken)
             : 0;
 
         return Ok(new
         {
             policyRegistryId = $"DEC-POL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             evaluatedStockBucketsCount,
             forecastBiasMapeStatus = "MAPE_WITHIN_TOLERANCE_BAND",
             demandAnomalyDetector = "SPIKE_AND_DROP_GUARD_ACTIVE",

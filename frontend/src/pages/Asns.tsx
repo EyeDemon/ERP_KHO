@@ -70,6 +70,7 @@ export default function Asns(){
   const [error,setError]=useState('');
   const [success,setSuccess]=useState('');
   const [creating,setCreating]=useState(false);
+  const [showCreateForm,setShowCreateForm]=useState(true);
   const [busy,setBusy]=useState('');
   const [stagingReservation,setStagingReservation]=useState<{stagingReservationId:string;stagingLaneCode:string}|null>(null);
   const requestSeq=useRef(0);
@@ -345,8 +346,13 @@ export default function Asns(){
         </UiCard>}
 
         {canCreate&&<UiCard title="Tạo ASN nháp">
-          {!canPrepareCreate&&<div className="inbound-planning-notice"><strong>Thiếu quyền dữ liệu tham khảo.</strong><br/>Cần quyền đọc kho, sản phẩm và đối tác để tạo ASN an toàn.</div>}
-          {canPrepareCreate&&<form className="inbound-planning-form" onSubmit={submitCreate}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: showCreateForm ? 12 : 0 }}>
+            <button type="button" onClick={() => setShowCreateForm(prev => !prev)}>
+              {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
+            </button>
+          </div>
+          {showCreateForm&&!canPrepareCreate&&<div className="inbound-planning-notice"><strong>Thiếu quyền dữ liệu tham khảo.</strong><br/>Cần quyền đọc kho, sản phẩm và đối tác để tạo ASN an toàn.</div>}
+          {showCreateForm&&canPrepareCreate&&<form className="inbound-planning-form" onSubmit={submitCreate}>
             <div className="inbound-planning-form-grid">
               <label>Mã ASN<input required value={code} onChange={e=>setCode(e.target.value)}/></label>
               <label>PO nguồn

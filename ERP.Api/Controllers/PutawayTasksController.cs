@@ -57,12 +57,25 @@ public sealed class PutawayTasksController(
     public sealed record EvaluatePutawaySlottingRequest(int? WarehouseId = null);
     [HttpPost("evaluate-slotting"),PermissionAuthorize(AppPermissions.PutawayRead)]
     public async Task<IActionResult> EvaluateSlotting(
-        [FromBody] EvaluatePutawaySlottingRequest? request,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluatePutawaySlottingRequest? request = null,
         CancellationToken ct = default)
     {
-        var targetWarehouseId = request?.WarehouseId ?? 1;
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, ct);
+        var warehouseId = request?.WarehouseId;
+        var targetWarehouseId = warehouseId ?? 1;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+            {
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+            }
+            else
+            {
+                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
+                if (accessibleIds.Count == 0)
+                    return Forbid();
+                targetWarehouseId = accessibleIds[0];
+            }
+        }
 
         var candidateLocationsCount = db != null
             ? await db.WarehouseLocations.AsNoTracking()

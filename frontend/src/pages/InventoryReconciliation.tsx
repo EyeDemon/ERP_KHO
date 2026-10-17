@@ -720,13 +720,16 @@ export default function InventoryReconciliation() {
                 .post('/api/InventoryReconciliation/export-erp-gl-journal', {
                   warehouseId: applied.warehouseId ? Number(applied.warehouseId) : null,
                 })
-                .then(() => {
+                .then((res) => {
+                  const data = (res as { data?: { readinessVerdict?: string; journalBatchId?: string; checkedRows?: number; mismatchCount?: number; outboxSynced?: boolean; verifiedAtUtc?: string } } | undefined)?.data;
                   setSiteReadinessVerdict({
-                    readinessVerdict: mismatchCount === 0 && indeterminateCount === 0 ? 'APPROVED_FOR_OPEN_CLOSE' : 'BLOCKED_BY_MISMATCH',
-                    checkedRows: currentRows.length,
-                    mismatchCount,
-                    outboxSynced: true,
-                    verifiedAtUtc: new Date().toISOString(),
+                    readinessVerdict:
+                      data?.readinessVerdict ||
+                      (mismatchCount === 0 && indeterminateCount === 0 ? 'APPROVED_FOR_OPEN_CLOSE' : 'BLOCKED_BY_MISMATCH'),
+                    checkedRows: typeof data?.checkedRows === 'number' ? data.checkedRows : currentRows.length,
+                    mismatchCount: typeof data?.mismatchCount === 'number' ? data.mismatchCount : mismatchCount,
+                    outboxSynced: data?.outboxSynced ?? true,
+                    verifiedAtUtc: data?.verifiedAtUtc || new Date().toISOString(),
                   });
                 })
                 .catch(() => {

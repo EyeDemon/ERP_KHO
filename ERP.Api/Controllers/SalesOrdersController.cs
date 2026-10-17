@@ -23,16 +23,29 @@ public sealed class SalesOrdersController(
     [HttpPost("expedite-backorder")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<IActionResult> ExpediteBackorder(
-        [FromBody] ExpediteBackorderRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteBackorderRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        var targetWarehouseId = warehouseId ?? 1;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+            {
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            }
+            else
+            {
+                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                if (accessibleIds.Count == 0)
+                    return Forbid();
+                targetWarehouseId = accessibleIds[0];
+            }
+        }
 
-        var targetWarehouseId = request?.WarehouseId ?? 1;
         var backorderOrdersCount = db != null
             ? await db.SalesOrders.AsNoTracking()
-                .CountAsync(o => !request!.WarehouseId.HasValue || o.WarehouseId == request.WarehouseId.Value, cancellationToken)
+                .CountAsync(o => !warehouseId.HasValue || o.WarehouseId == warehouseId.Value, cancellationToken)
             : 0;
 
         var now = DateTime.UtcNow;
@@ -51,21 +64,22 @@ public sealed class SalesOrdersController(
     [HttpPost("evaluate-atp-routing")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<IActionResult> EvaluateAtpRouting(
-        [FromBody] EvaluateAtpRoutingRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateAtpRoutingRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var evaluatedOrdersCount = db != null
             ? await db.SalesOrders.AsNoTracking()
-                .CountAsync(o => !request!.WarehouseId.HasValue || o.WarehouseId == request.WarehouseId.Value, cancellationToken)
+                .CountAsync(o => !warehouseId.HasValue || o.WarehouseId == warehouseId.Value, cancellationToken)
             : 0;
 
         return Ok(new
         {
             evaluationId = $"ATP-ROUTE-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             evaluatedOrdersCount,
             atpCtpPromiseStatus = "PROMISE_DATE_VERIFIED_READONLY",
             fulfillmentNodeRouting = "OPTIMAL_WAREHOUSE_NODE_SELECTED",

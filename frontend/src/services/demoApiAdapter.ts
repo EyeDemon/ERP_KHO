@@ -86,12 +86,227 @@ const findNumericId = (path: string) => Number(path.match(/\/(\d+)(?:\/|$)/)?.[1
 export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfig) => {
   return async (config: InternalAxiosRequestConfig = request) => {
     const method = (config.method ?? 'get').toLowerCase();
+    const path = normalizePath(config.url);
+    const params = urlParams(config);
+
+    if (method === 'post') {
+      if (path === '/api/warehouses/verify-topology-capacity') {
+        return ok(config, { verificationId: 'TOP-CAP-DEMO-01', zoneBinHierarchyStatus: 'CANONICAL_VALIDATED', capacityGuardrailActive: true });
+      }
+      if (path === '/api/warehouses/verify-virtual-locations') {
+        return ok(config, { verificationId: 'VLOC-AUD-DEMO', status: 'ALL_9_VIRTUAL_LOCATIONS_READY' });
+      }
+      if (path === '/api/warehouses/evaluate-network-mhe') {
+        return ok(config, {
+          evaluationId: 'NET-MHE-DEMO-01',
+          networkTopologyMode: 'HUB_AND_SPOKE_BALANCED',
+          capacityForecastStatus: 'OPTIMAL_HEADROOM_82PCT',
+          mheFleetReadiness: 'FORKLIFT_CONVEYOR_SORTER_READY',
+        });
+      }
+      if (/^\/api\/warehouses\/\d+\/calendar\/verify-shift-coverage$/.test(path)) {
+        return ok(config, { verificationId: 'CAL-VER-DEMO-01', shiftCoverageStatus: 'FULL_COVERAGE_VERIFIED' });
+      }
+      if (/^\/api\/warehouses\/\d+\/calendar\/optimize-labor-interleaving$/.test(path)) {
+        return ok(config, {
+          optimizationId: 'WLM-INT-DEMO-01',
+          interleavingMode: 'PUTAWAY_REPLENISH_PICK_CYCLE_COUNT_INTERLEAVED',
+          ergonomicSafetyStatus: 'LIFT_LIMIT_AND_FATIGUE_ROTATION_COMPLIANT',
+        });
+      }
+      if (path === '/api/reports/sync-bi-snapshot') {
+        return ok(config, { snapshotId: 'BI-SNAP-DEMO', status: 'BI_HEATMAP_SYNCED' });
+      }
+      if (path === '/api/reports/operational-exceptions/acknowledge') {
+        return ok(config, { status: 'ACKNOWLEDGED' });
+      }
+      if (path === '/api/units/verify-uom-integrity') {
+        return ok(config, { verificationId: 'UOM-INT-DEMO-01', status: 'CANONICAL_UOM_VERIFIED' });
+      }
+      if (path === '/api/units/verify-catch-weight-coldchain') {
+        return ok(config, { verificationId: 'CW-CC-HAZ-DEMO', status: 'SPECIALIZED_INVENTORY_RULES_VERIFIED' });
+      }
+      if (path === '/api/products/auto-audit-governance') {
+        return ok(config, { auditId: 'PRD-GOV-DEMO', status: 'MASTER_DATA_GOVERNANCE_VERIFIED' });
+      }
+      if (path === '/api/productcategories/verify-storage-policy' || path === '/api/product-categories/verify-storage-policy') {
+        return ok(config, { verificationId: 'CAT-POL-DEMO', status: 'STORAGE_TEMP_HAZARD_FEFO_VERIFIED' });
+      }
+      if (/^\/api\/business-partners\/\d+\/verify-sla-contract$/.test(path)) {
+        return ok(config, { partnerId: findNumericId(path), slaContractStatus: 'VERIFIED_ACTIVE' });
+      }
+      if (path === '/api/business-partners/calculate-3pl-billing') {
+        return ok(config, { statementId: '3PL-BILL-DEMO', status: '3PL_BILLING_RECONCILED' });
+      }
+      if (path === '/api/purchase-orders/expedite-overdue') {
+        return ok(config, { expediteId: 'PO-EXP-DEMO', vendorNotificationStatus: 'DISPATCHED_TO_SUPPLIER' });
+      }
+      if (path === '/api/purchase-orders/generate-procurement-recommendations') {
+        return ok(config, {
+          recommendationId: 'PROC-REC-DEMO',
+          procurementSuggestionStatus: 'REORDER_THRESHOLD_PROPOSALS_READY',
+          supplierLeadTimePercentile: 'P90_LEAD_TIME_CALIBRATED',
+          expediteDeferSignal: 'EXPEDITE_AND_DEFER_BALANCED',
+          status: 'PROCUREMENT_INTELLIGENCE_READY',
+        });
+      }
+      if (path === '/api/asns/pre-allocate-staging') {
+        return ok(config, { stagingReservationId: 'ASN-STG-DEMO', stagingLaneCode: 'STAGE-IN-01' });
+      }
+      if (path === '/api/dock-yard/dispatch-crossdock') {
+        return ok(config, { dispatchId: 'XDOCK-DEMO-01', dockDoorCode: 'D-02', stagedHuCount: 4, status: 'CROSSDOCK_ROUTED' });
+      }
+      if (path === '/api/importreceipts/initiate-rma-inspection' || path === '/api/importreceipts/rma-intake-check') {
+        return ok(config, { rmaInspectionCode: 'RMA-QC-DEMO', rmaCode: 'RMA-QC-DEMO', status: 'INBOUND_QC_INSPECTION' });
+      }
+      if (path === '/api/importreceipts/execute-rtv-refurbish') {
+        return ok(config, { dispositionCode: 'RTV-REF-DEMO', executionId: 'RTV-REF-DEMO', status: 'REFURBISH_AND_RTV_SPLIT' });
+      }
+      if (path === '/api/putaway-tasks/evaluate-slotting') {
+        return ok(config, { evaluationId: 'SLOT-EVAL-DEMO', optimalBinMatchRatePct: 96.4, fefoHazardCompliance: 'VERIFIED' });
+      }
+      if (path === '/api/exportreceipts/verify-dispatch-cutoff') {
+        return ok(config, { verificationId: 'EXP-CUT-DEMO', cutoffComplianceStatus: 'DISPATCH_CUTOFF_VERIFIED' });
+      }
+      if (path === '/api/sales-orders/expedite-backorder') {
+        return ok(config, { expediteId: 'EXP-BO-DEMO', orderNumber: 'SO-2026-041', allocationWaveQueued: true });
+      }
+      if (path === '/api/sales-orders/evaluate-atp-routing') {
+        return ok(config, {
+          evaluationId: 'ATP-ROUTE-DEMO',
+          atpCtpPromiseStatus: 'PROMISE_DATE_VERIFIED_READONLY',
+          fulfillmentNodeRouting: 'OPTIMAL_WAREHOUSE_NODE_SELECTED',
+          allocationFairnessPolicy: 'PROPORTIONAL_SERVICE_TIER_FAIRNESS',
+          serviceSegmentation: 'TIER_1_VIP_AND_STANDARD_SLA_ACTIVE',
+          status: 'ATP_ROUTING_FAIRNESS_READY',
+        });
+      }
+      if (path === '/api/stock-reservations/sweep-expired-preview') {
+        return ok(config, { sweepId: 'RSV-SWP-DEMO', status: 'COMMITMENT_TTL_VERIFIED' });
+      }
+      if (path === '/api/inventory/allocations/verify-fefo-compliance') {
+        return ok(config, { verificationId: 'ALC-FEFO-DEMO', fefoComplianceStatus: 'STRICT_FEFO_FIFO_ALIGNED' });
+      }
+      if (path === '/api/picking-tasks/mobile-scan-verify') {
+        return ok(config, { verified: true, status: 'SCAN_VERIFIED' });
+      }
+      if (path === '/api/picking-tasks/sync-automation-telemetry') {
+        return ok(config, {
+          telemetrySyncId: 'WCS-IOT-DEMO',
+          wcsRoboticsState: 'AMR_ASRS_CONVEYOR_SYNCHRONIZED',
+          rfidIotTelemetry: 'RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE',
+          voicePickToLight: 'VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE',
+        });
+      }
+      if (path === '/api/packing-sessions/verify-packaging-profile') {
+        return ok(config, { verificationId: 'PKG-VER-DEMO', cartonType: 'STD-CARTON-M', gs1SsccReady: true });
+      }
+      if (path === '/api/packing-sessions/execute-kitting-vas') {
+        return ok(config, { workOrderId: 'KIT-VAS-DEMO', status: 'KITTING_VAS_READY', vasServiceType: 'LABELING_SHRINKWRAP_BUNDLE' });
+      }
+      if (path === '/api/shipments/sync-tms-manifest') {
+        return ok(config, { manifestId: 'TMS-MNF-DEMO', carrierCode: 'VTP-EXPRESS', syncedShipmentCount: 6, ediStatus: 'ACK_200_SYNCED' });
+      }
+      if (path === '/api/handling-units/verify-intransit-seal') {
+        return ok(config, { sealVerificationId: 'HU-SEAL-DEMO', sealStatus: 'SEAL_INTACT_VERIFIED', transferCode: 'TRF-2026-0001' });
+      }
+      if (path === '/api/stock-transfers/simulate-network-rebalancing') {
+        return ok(config, {
+          simulationId: 'NET-BAL-DEMO',
+          networkSurplusShortageStatus: 'SURPLUS_TO_SHORTAGE_LANES_MAPPED',
+          interWarehouseReplenishment: 'RESPECTS_RESERVATION_AND_TRANSFER_SEMANTICS',
+          replenishmentExceptionTriage: 'ZERO_SILENT_STOCKOUT_CONFLICTS',
+          status: 'NETWORK_REBALANCING_SIMULATED',
+        });
+      }
+      if (path === '/api/stocktakes/adjustment-proposals') {
+        return ok(config, { proposalCode: 'ADJ-DEMO-001', status: 'PENDING_SOD_APPROVAL' });
+      }
+      if (path === '/api/inventory/verify-bucket-invariants') {
+        return ok(config, {
+          verificationId: 'BCK-INV-DEMO',
+          warehouseId: 1,
+          fiveBucketEquationStatus: 'BALANCED_EXACT',
+          scrapApprovalGuard: 'SOD_ENFORCED',
+          verifiedAtUtc: '2026-10-17T08:00:00Z',
+        });
+      }
+      if (path === '/api/inventory/verify-lock-precedence') {
+        return ok(config, {
+          verificationId: 'LCK-PRC-DEMO',
+          warehouseId: 1,
+          overlappingHoldPrecedence: 'RECALL_GT_QC_GT_COUNT',
+          leakCount: 0,
+          status: 'LOCK_PRECEDENCE_VERIFIED',
+          verifiedAtUtc: '2026-10-17T08:00:00Z',
+        });
+      }
+      if (path === '/api/inventory/reversals/verify-chain-integrity') {
+        return ok(config, {
+          verificationId: 'REV-INT-DEMO',
+          warehouseId: 1,
+          duplicateReversalBlocked: true,
+          appendOnlyLedgerStatus: 'IMMUTABLE_VERIFIED',
+          verifiedAtUtc: '2026-10-17T08:00:00Z',
+        });
+      }
+      if (path === '/api/inventory/traceability/simulate-recall-tree') {
+        return ok(config, {
+          simulationId: 'TRC-RCL-DEMO',
+          query: 'LOT-ARABICA-2609',
+          upstreamPoLinked: true,
+          downstreamShipmentLinked: true,
+          recallContainmentReady: true,
+          simulatedAtUtc: '2026-10-17T08:00:00Z',
+        });
+      }
+      if (path === '/api/inventory/what-if-simulation' || path === '/api/inventory/run-what-if-simulation') {
+        return ok(config, {
+          demandMultiplier: 1.5,
+          totalAvailable: 420,
+          simulatedDemand: 630,
+          projectedNetBalance: -210,
+          scenarioStatus: 'PROJECTED_SHORTAGE',
+          immutableSnapshotGuarantee: true,
+        });
+      }
+      if (path === '/api/inventory/evaluate-decision-policy-governance') {
+        return ok(config, {
+          policyRegistryId: 'DEC-POL-DEMO',
+          forecastBiasMapeStatus: 'MAPE_WITHIN_TOLERANCE_BAND',
+          demandAnomalyDetector: 'SPIKE_AND_DROP_GUARD_ACTIVE',
+          inventoryRiskScoreStatus: 'EXPLAINABLE_RISK_SCORING_READY',
+          humanInTheLoopBoundary: 'APPROVAL_REQUIRED_BEFORE_LEDGER_MUTATION',
+          status: 'DECISION_POLICY_GOVERNANCE_VERIFIED',
+        });
+      }
+      if (path === '/api/inventoryreconciliation/export-erp-gl-journal' || path === '/api/inventoryreconciliation/verify-site-readiness') {
+        const mismatchCount = demoReconciliationRows.filter(r => r.status !== 'Match').length;
+        return ok(config, {
+          readinessVerdict: mismatchCount === 0 ? 'APPROVED_FOR_OPEN_CLOSE' : 'BLOCKED_BY_MISMATCH',
+          journalBatchId: 'GL-JRN-DEMO-01',
+          checkedRows: demoReconciliationRows.length,
+          mismatchCount,
+          outboxSynced: true,
+          verifiedAtUtc: '2026-10-17T08:00:00Z',
+        });
+      }
+      if (path === '/api/approvals/escalate-overdue') {
+        return ok(config, { escalationBatchId: 'ESC-SLA-DEMO', escalatedStatus: 'ESCALATED_TO_SUPERVISOR' });
+      }
+      if (path === '/api/user-warehouse-access/verify-sod-isolation') {
+        return ok(config, {
+          status: 'SOD_ISOLATION_VERIFIED',
+          sodPolicyStatus: 'STRICT_ISOLATION_VERIFIED',
+          sodConflictCount: 0,
+          multiWarehouseIsolationEnforced: true,
+        });
+      }
+    }
+
     if (method !== 'get') {
       return fail(config, 405, 'Vercel Blueprint demo là môi trường chỉ đọc. Thao tác ghi đã bị chặn.');
     }
-
-    const path = normalizePath(config.url);
-    const params = urlParams(config);
 
     if (path === '/api/auth/me') {
       return ok(config, {
@@ -671,6 +886,240 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       return ok(config, paged(items, Number(params.get('page') ?? 1), Number(params.get('pageSize') ?? 20)));
     }
     if (path === '/api/inventoryreconciliation/warehouses') return ok(config, demoReconciliationWarehouses);
+    if (path === '/api/inventoryreconciliation/investigation') {
+      const warehouseId = Number(params.get('warehouseId') ?? 1);
+      const productId = Number(params.get('productId') ?? 1);
+      const row = demoReconciliationRows.find(r => r.warehouseId === warehouseId && r.productId === productId) ?? demoReconciliationRows[0];
+      return ok(config, {
+        warehouseId: row.warehouseId,
+        warehouseName: row.warehouseName,
+        productId: row.productId,
+        productCode: row.productCode,
+        productName: row.productName,
+        unitName: 'EA',
+        stockRowExists: true,
+        currentQuantity: row.currentQuantity,
+        reservedQuantity: 0,
+        bucketTotalQuantity: row.currentQuantity,
+        ledgerMovementNetQuantity: row.expectedQuantity ?? row.currentQuantity,
+        allStatusBucketQuantity: row.currentQuantity,
+        allStatusEventDeltaQuantity: row.expectedQuantity ?? row.currentQuantity,
+        allStatusBucketCount: 1,
+        allStatusBucketsTruncated: false,
+        bucketsTruncated: false,
+        eventsTruncated: false,
+        buckets: [],
+        events: [],
+      });
+    }
+
+    if (path === '/api/approvals/queue') {
+      return ok(config, paged(demoApprovalQueue, Number(params.get('pageIndex') ?? 1), Number(params.get('pageSize') ?? 20)));
+    }
+    if (path === '/api/approvals/history') return ok(config, []);
+
+    if (path === '/api/stock-transfers') {
+      return ok(config, paged(demoTransfers, Number(params.get('pageIndex') ?? 1), Number(params.get('pageSize') ?? 15)));
+    }
+    if (/^\/api\/stock-transfers\/\d+$/.test(path)) {
+      const item = demoTransfers.find(transfer => transfer.id === findNumericId(path));
+      return item ? ok(config, item) : fail(config, 404, 'Không tìm thấy phiếu điều chuyển demo.');
+    }
+
+    if (path === '/api/reports/expiry-aging') {
+      return ok(config, demoInventoryBuckets.map(item => ({
+        bucketId: item.inventoryStockId,
+        warehouseId: item.warehouseId,
+        warehouseName: item.warehouseName,
+        locationCode: item.locationCode,
+        productId: item.productId,
+        productCode: item.productCode,
+        productName: item.productName,
+        unitName: 'EA',
+        inventoryStatus: item.status,
+        lotNumber: item.lotNumber,
+        expiryDate: item.expiryDate,
+        daysToExpiry: item.expiryDate ? 45 : null,
+        expiryStatus: item.expiryDate ? 'VALID' : 'NO_EXPIRY',
+        ageInDays: 14,
+        agingBucket: '0_30_DAYS',
+        quantity: item.onHandQuantity,
+        availableQuantity: item.availableQuantity,
+      })));
+    }
+    if (path === '/api/reports/analytics-summary') {
+      return ok(config, {
+        windowDays: Number(params.get('days') ?? 30) || 30,
+        inboundOutboundSla: {
+          completedReceiptsCount: 12,
+          avgInboundLeadTimeHours: 4.2,
+          openPutawayBacklogCount: 1,
+          dispatchedExportsCount: 18,
+          avgOutboundLeadTimeHours: 3.5,
+          openPickingBacklogCount: 1,
+        },
+        stocktakeAccuracy: {
+          approvedStocktakesCount: 4,
+          totalLinesCounted: 32,
+          exactMatchLinesCount: 31,
+          varianceLinesCount: 1,
+          accuracyRatePercent: 96.88,
+          totalAbsoluteVarianceQty: 2,
+        },
+        turnoverAndDaysOnHand: demoProducts.map(item => ({
+          productId: item.id,
+          productCode: item.code,
+          productName: item.name,
+          unitName: item.unitName,
+          onHandQuantity: 120,
+          periodInQuantity: 60,
+          periodOutQuantity: 45,
+          turnoverRate: 1.5,
+          daysOnHand: 20,
+          velocityClass: 'FAST_MOVING',
+        })),
+      });
+    }
+    if (path === '/api/reports/productivity-and-bi-snapshot') {
+      return ok(config, {
+        warehouseId: Number(params.get('warehouseId') ?? 1),
+        activeTasksCount: 3,
+        completedTodayCount: 12,
+        heatmapHotspotsCount: 2,
+        biExportStatus: 'READY',
+      });
+    }
+    if (path === '/api/reports/operational-dashboard') {
+      return ok(config, {
+        warehouseCount: demoWarehouses.length,
+        productCount: demoProducts.length,
+        inventoryBucketCount: demoInventoryBuckets.length,
+        openTaskCount: 4,
+        invalidStockCount: demoReconciliationRows.filter(r => r.status !== 'Match').length,
+        openInboundCount: 1,
+        openPutawayCount: 1,
+        openOutboundCount: 1,
+        openTransferCount: 1,
+        recentActivities: [],
+      });
+    }
+    if (path === '/api/reports/warehouse-tasks' || path === '/api/reports/operational-exceptions') {
+      return ok(config, []);
+    }
+    if (path === '/api/reports/multi-warehouse-control-tower') {
+      return ok(config, {
+        totalWarehouses: demoWarehouses.length,
+        healthyWarehousesCount: demoWarehouses.length,
+        attentionWarehousesCount: 0,
+        warehouses: [],
+        taskEngineQueues: [],
+      });
+    }
+    if (path === '/api/reports/global-search') {
+      const q = (params.get('q') ?? '').toLowerCase();
+      return ok(
+        config,
+        demoProducts
+          .filter(p => !q || p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+          .map(p => ({ entityType: 'Product', code: p.code, title: p.name, subtitle: p.categoryName, route: '/products' })),
+      );
+    }
+
+    if (path === '/api/stock-transfers/in-transit') {
+      const items = demoTransfers
+        .filter(t => t.status === 'InTransit')
+        .flatMap(t =>
+          t.details.map(d => ({
+            transferId: t.id,
+            transferCode: t.code,
+            sourceWarehouseName: t.sourceWarehouseName,
+            destinationWarehouseName: t.destinationWarehouseName,
+            productId: d.productId,
+            productCode: d.productCode,
+            productName: d.productName,
+            unitName: 'EA',
+            inTransitQuantity: d.dispatchedQuantity,
+            dispatchedAt: t.dispatchedAt,
+          })),
+        );
+      return ok(config, { items });
+    }
+    if (path === '/api/stock-transfers/return-reasons') {
+      return ok(config, [
+        { code: 'DAMAGED_IN_TRANSIT', name: 'Hàng hư hỏng khi vận chuyển' },
+        { code: 'WRONG_DESTINATION', name: 'Điều chuyển nhầm kho nhận' },
+      ]);
+    }
+
+    if (path === '/api/permissions/audit-logs') {
+      return ok(config, [
+        {
+          id: 1,
+          userId: 1,
+          action: 'Permission.CatalogView',
+          entityName: 'RolePermission',
+          entityId: 1,
+          newValues: 'Blueprint read-only audit',
+          timestamp: '2026-10-17T08:00:00Z',
+        },
+      ]);
+    }
+    if (path === '/api/permissions/compliance-evidence-bundle') {
+      return ok(config, {
+        bundleId: 'EVD-DEMO-20261017',
+        policyVersion: 'v2026.10-CANONICAL',
+        legalHoldActive: true,
+        appendOnlyAuditVerified: true,
+        generatedAtUtc: '2026-10-17T08:00:00Z',
+      });
+    }
+    if (path === '/api/auth/sessions') {
+      return ok(config, [
+        {
+          sessionId: '00000000-0000-0000-0000-000000000001',
+          deviceInfo: 'Blueprint Demo Browser Session',
+          ipAddress: '127.0.0.1',
+          isCurrent: true,
+          createdAtUtc: '2026-10-17T08:00:00Z',
+        },
+      ]);
+    }
+    if (/^\/api\/users\/\d+\/security$/.test(path)) {
+      return ok(config, {
+        userId: findNumericId(path),
+        username: 'demo.operator',
+        roleName: 'WarehouseStaff',
+        isActive: true,
+        isTemporarilyLocked: false,
+        failedLoginCount: 0,
+        activeSessionCount: 1,
+      });
+    }
+    if (/^\/api\/users\/\d+\/warehouse-access$/.test(path)) {
+      return ok(config, {
+        userId: findNumericId(path),
+        username: 'demo.operator',
+        fullName: 'Nhân viên vận hành Demo',
+        roleName: 'WarehouseStaff',
+        rowVersion: 'AAAAAAAADEMOWH',
+        warehouses: demoWarehouses.map(w => ({
+          warehouseId: w.id,
+          warehouseCode: w.code,
+          warehouseName: w.name,
+          warehouseIsActive: w.isActive,
+          grantedAt: '2026-10-01T08:00:00Z',
+        })),
+      });
+    }
+
+    if (
+      path === '/api/dock-yard/dwell-monitor'
+      || path === '/api/inventory/replenishment-suggestions'
+      || path === '/api/picking-tasks/wave-summary'
+      || /^\/api\/warehouses\/\d+\/calendar\/exceptions$/.test(path)
+    ) {
+      return ok(config, []);
+    }
 
     return fail(config, 404, 'Endpoint demo chưa được ánh xạ: ' + (config.url ?? 'unknown'));
   };

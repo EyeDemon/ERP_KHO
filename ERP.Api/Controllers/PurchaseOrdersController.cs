@@ -34,20 +34,22 @@ public sealed class PurchaseOrdersController(
         });
     }
 
-    public sealed record ExpediteOverduePurchaseOrdersRequest(int? SupplierId, int? WarehouseId = null);
+    public sealed record ExpediteOverduePurchaseOrdersRequest(int? SupplierId = null, int? WarehouseId = null);
 
     [HttpPost("expedite-overdue"),PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> ExpediteOverdue(
-        [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteOverduePurchaseOrdersRequest? request,
+        [FromBody(EmptyBodyBehavior=Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteOverduePurchaseOrdersRequest? request = null,
         CancellationToken ct = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, ct);
+        var supplierId = request?.SupplierId;
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
 
         var openPoCount = db != null
             ? await db.PurchaseOrders.AsNoTracking()
-                .Where(p => (!request!.SupplierId.HasValue || p.SupplierId == request.SupplierId.Value)
-                            && (!request.WarehouseId.HasValue || p.WarehouseId == request.WarehouseId.Value)
+                .Where(p => (!supplierId.HasValue || p.SupplierId == supplierId.Value)
+                            && (!warehouseId.HasValue || p.WarehouseId == warehouseId.Value)
                             && (p.Status == PurchaseOrderStatus.Open || p.Status == PurchaseOrderStatus.PartiallyReceived))
                 .CountAsync(ct)
             : 0;
@@ -55,7 +57,7 @@ public sealed class PurchaseOrdersController(
         return Ok(new
         {
             expediteId=$"PO-EXP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            supplierId=request?.SupplierId,
+            supplierId,
             openPoCount,
             vendorNotificationStatus="DISPATCHED_TO_SUPPLIER",
             priorityReceivingSlotReserved=true,

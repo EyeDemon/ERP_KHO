@@ -64,6 +64,7 @@ export default function PurchaseOrders(){
   const [error,setError]=useState('');
   const [success,setSuccess]=useState('');
   const [creating,setCreating]=useState(false);
+  const [showCreateForm,setShowCreateForm]=useState(true);
   const [busy,setBusy]=useState('');
   const [expediteResult,setExpediteResult]=useState<{expediteId:string;vendorNotificationStatus:string}|null>(null);
   const [procurementRecResult,setProcurementRecResult]=useState<{
@@ -353,8 +354,13 @@ export default function PurchaseOrders(){
         </UiCard>}
 
         {canCreate&&<UiCard title="Tạo đơn mua nháp">
-          {!canPrepareCreate&&<div className="inbound-planning-notice"><strong>Thiếu quyền dữ liệu tham khảo.</strong><br/>Cần quyền đọc kho, sản phẩm và đối tác để tạo PO an toàn.</div>}
-          {canPrepareCreate&&<form className="inbound-planning-form" onSubmit={submitCreate}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: showCreateForm ? 12 : 0 }}>
+            <button type="button" onClick={() => setShowCreateForm(prev => !prev)}>
+              {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
+            </button>
+          </div>
+          {showCreateForm&&!canPrepareCreate&&<div className="inbound-planning-notice"><strong>Thiếu quyền dữ liệu tham khảo.</strong><br/>Cần quyền đọc kho, sản phẩm và đối tác để tạo PO an toàn.</div>}
+          {showCreateForm&&canPrepareCreate&&<form className="inbound-planning-form" onSubmit={submitCreate}>
             <div className="inbound-planning-form-grid">
               <label>Hệ thống nguồn<input required value={sourceSystem} onChange={e=>setSourceSystem(e.target.value)} /></label>
               <label>Mã PO ngoài hệ thống<input required value={externalPoId} onChange={e=>setExternalPoId(e.target.value)} /></label>

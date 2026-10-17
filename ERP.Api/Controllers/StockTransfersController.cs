@@ -143,7 +143,7 @@ public sealed class StockTransfersController(
     [HttpPost("simulate-network-rebalancing")]
     [Authorize(Roles = AppRoles.AllRoles)]
     public async Task<IActionResult> SimulateNetworkRebalancing(
-        [FromBody] SimulateNetworkRebalancingRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SimulateNetworkRebalancingRequest? request = null,
         CancellationToken cancellationToken = default)
     {
         if (warehouseAccess != null)

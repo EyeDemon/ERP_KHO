@@ -413,5 +413,61 @@ namespace ERP.Api.Tests
             dto.RefreshToken.Should().BeEmpty();
             controller.Response.Headers.SetCookie.ToString().Should().Contain("erp_refresh=secret-refresh-token");
         }
+
+        [Fact]
+        public async Task Wave2_Rem07_Controllers_HandleNullRequestInEfCoreQueries_AndEnforceContracts()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var exportController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db);
+            var cutoffRes = await exportController.VerifyDispatchCutoff(null);
+            cutoffRes.Should().BeOfType<OkObjectResult>();
+
+            var huController = new HandlingUnitsController(new Mock<IPackingService>().Object, db);
+            var sealRes = await huController.VerifyInTransitSeal(null);
+            sealRes.Should().BeOfType<OkObjectResult>();
+
+            var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db);
+            var rmaRes = await importController.RmaIntakeCheck(null);
+            var rmaOk = rmaRes.Should().BeOfType<OkObjectResult>().Subject;
+            System.Text.Json.JsonSerializer.Serialize(rmaOk.Value)
+                .Should().Contain("rmaInspectionCode").And.Contain("RMA-INSP-");
+
+            var rtvRes = await importController.ExecuteRtvRefurbish(null);
+            var rtvOk = rtvRes.Should().BeOfType<OkObjectResult>().Subject;
+            System.Text.Json.JsonSerializer.Serialize(rtvOk.Value)
+                .Should().Contain("DISP-RTV-");
+
+            var reconQuery = new Mock<IInventoryReconciliationQueryService>();
+            reconQuery.Setup(x => x.GetReconciliationsAsync(It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ReturnsAsync(new ERP.Application.Common.PagedResult<InventoryReconciliationDto> { Items = Array.Empty<InventoryReconciliationDto>(), TotalRecords = 0 });
+            var reconController = new InventoryReconciliationController(reconQuery.Object, db);
+            var glRes = await reconController.VerifySiteReadiness(null, null);
+            var glOk = glRes.Should().BeOfType<OkObjectResult>().Subject;
+            System.Text.Json.JsonSerializer.Serialize(glOk.Value)
+                .Should().Contain("GL-JRN-").And.Contain("OUTBOX_IDEMPOTENT_SYNCED").And.Contain("SUBLEDGER_TO_GL_BALANCED");
+
+            var stocktakeController = new StocktakesController(
+                new Mock<IStocktakeService>().Object,
+                new Mock<IStocktakeQueryService>().Object,
+                db)
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                    {
+                        User = new System.Security.Claims.ClaimsPrincipal(
+                            new System.Security.Claims.ClaimsIdentity(
+                                new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, ERP.Api.Authorization.AppRoles.Viewer) },
+                                "Test"))
+                    }
+                }
+            };
+            var viewerProposalRes = await stocktakeController.CreateAdjustmentProposal(new StocktakesController.CreateAdjustmentProposalRequest(1));
+            viewerProposalRes.Should().BeOfType<ForbidResult>();
+        }
     }
 }

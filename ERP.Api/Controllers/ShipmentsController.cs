@@ -62,17 +62,30 @@ public sealed class ShipmentsController(
     [HttpPost("sync-tms-manifest")]
     [PermissionAuthorize(AppPermissions.ShipmentRead)]
     public async Task<IActionResult> SyncTmsManifest(
-        [FromBody] SyncTmsManifestRequest? request,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncTmsManifestRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        var targetWarehouseId = warehouseId ?? 1;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+            {
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            }
+            else
+            {
+                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                if (accessibleIds.Count == 0)
+                    return Forbid();
+                targetWarehouseId = accessibleIds[0];
+            }
+        }
 
-        var targetWarehouseId = request?.WarehouseId ?? 1;
         var syncedShipmentCount = db != null
             ? await db.Shipments.AsNoTracking()
-                .CountAsync(s => !request!.WarehouseId.HasValue || s.WarehouseId == request.WarehouseId.Value, cancellationToken)
-            : (await service.ListAsync(request?.WarehouseId, null, cancellationToken)).Count;
+                .CountAsync(s => !warehouseId.HasValue || s.WarehouseId == warehouseId.Value, cancellationToken)
+            : (await service.ListAsync(warehouseId, null, cancellationToken)).Count;
 
         return Ok(new
         {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../services/apiClient';
+import { hasPermission } from '../services/authorization';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 import InventoryBuckets from './InventoryBuckets';
 import './Inventory.css';
@@ -170,6 +171,10 @@ const Inventory = () => {
   const paginatedStocks = stocks.slice((currentStockPage - 1) * stockPageSize, currentStockPage * stockPageSize);
 
   useEffect(() => {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('permissions') !== null && !hasPermission('warehouse.read')) {
+      setWarehouses([]);
+      return;
+    }
     apiClient.get('/api/warehouses')
       .then(response => setWarehouses(response.data.filter((warehouse: WarehouseOption) => warehouse.isActive)))
       .catch(() => setWarehouses([]));

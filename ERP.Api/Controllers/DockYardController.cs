@@ -105,13 +105,26 @@ public sealed class DockYardController(
     [HttpPost("dispatch-crossdock")]
     [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
     public async Task<IActionResult> DispatchCrossdock(
-        [FromBody] DispatchCrossdockRequest? request,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] DispatchCrossdockRequest? request = null,
         CancellationToken token = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, token);
+        var warehouseId = request?.WarehouseId;
+        var targetWarehouseId = warehouseId ?? 1;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+            {
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, token);
+            }
+            else
+            {
+                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(token);
+                if (accessibleIds.Count == 0)
+                    return Forbid();
+                targetWarehouseId = accessibleIds[0];
+            }
+        }
 
-        var targetWarehouseId = request?.WarehouseId ?? 1;
         var stagedHuCount = db != null
             ? await db.HandlingUnits.AsNoTracking().CountAsync(h => h.WarehouseId == targetWarehouseId, token)
             : 4;

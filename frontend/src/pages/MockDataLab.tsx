@@ -12,6 +12,7 @@ import {
   mockWarehouses,
 } from '../mocks/erpWmsMockData';
 import { useMockDemo } from '../context/MockDemoContext';
+import { UiTableScroll } from '../ui/ProductionUi';
 import { mockDisplayText, mockStatusLabel } from '../utils/mockDisplayLabels';
 import './MockDataLab.css';
 
@@ -85,62 +86,78 @@ const MockDataLab = () => {
 
         <div className="data-lab-table-wrap">
           {tab === 'warehouses' && (
-            <table className="data-lab-table">
-              <thead><tr><th>Mã</th><th>Tên kho</th><th>Thành phố</th><th>Loại</th></tr></thead>
-              <tbody>{mockWarehouses.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.city}</td><td>{mockDisplayText(item.type)}</td></tr>)}</tbody>
-            </table>
+            <UiTableScroll>
+              <table className="data-lab-table">
+                <thead><tr><th>Mã</th><th>Tên kho</th><th>Thành phố</th><th>Loại</th></tr></thead>
+                <tbody>{mockWarehouses.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.city}</td><td>{mockDisplayText(item.type)}</td></tr>)}</tbody>
+              </table>
+            </UiTableScroll>
           )}
 
           {tab === 'products' && (
-            <table className="data-lab-table">
-              <thead><tr><th>SKU</th><th>Tên</th><th>Danh mục</th><th>Đơn vị cơ sở (UOM)</th><th>Kiểu theo dõi</th><th>Mã vạch</th></tr></thead>
-              <tbody>{mockProducts.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.category}</td><td>{item.baseUom}</td><td>{mockDisplayText(item.tracking)}</td><td>{item.barcodes.join(', ')}</td></tr>)}</tbody>
-            </table>
+            <UiTableScroll>
+              <table className="data-lab-table">
+                <thead><tr><th>SKU</th><th>Tên</th><th>Danh mục</th><th>Đơn vị cơ sở (UOM)</th><th>Kiểu theo dõi</th><th>Mã vạch</th></tr></thead>
+                <tbody>{mockProducts.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.category}</td><td>{item.baseUom}</td><td>{mockDisplayText(item.tracking)}</td><td>{item.barcodes.join(', ')}</td></tr>)}</tbody>
+              </table>
+            </UiTableScroll>
           )}
 
           {tab === 'capabilities' && (
-            <table className="data-lab-table">
-              <thead><tr><th>Bộ dữ liệu mẫu</th><th>Chức năng</th><th>Phân hệ</th><th>Triển khai</th><th>Đặc tả</th><th>Tham chiếu mẫu</th><th>Kho</th><th>Trạng thái mẫu</th></tr></thead>
-              <tbody>{Object.values(mockCapabilityFixtures).map((item) => <tr key={item.fixtureId}><td>{item.fixtureId}</td><td>{item.capabilityId} — {item.capabilityName}</td><td>{item.moduleKey}</td><td>{mockDisplayText(item.implementationStatus)}</td><td>{item.spec}</td><td>{item.sampleReference}</td><td>{item.sampleWarehouse}</td><td>{mockStatusLabel(item.sampleStatus)}</td></tr>)}</tbody>
-            </table>
+            <UiTableScroll>
+              <table className="data-lab-table">
+                <thead><tr><th>Bộ dữ liệu mẫu</th><th>Chức năng</th><th>Phân hệ</th><th>Triển khai</th><th>Đặc tả</th><th>Tham chiếu mẫu</th><th>Kho</th><th>Trạng thái mẫu</th></tr></thead>
+                <tbody>{Object.values(mockCapabilityFixtures).map((item) => <tr key={item.fixtureId}><td>{item.fixtureId}</td><td>{item.capabilityId} — {item.capabilityName}</td><td>{item.moduleKey}</td><td>{mockDisplayText(item.implementationStatus)}</td><td>{item.spec}</td><td>{item.sampleReference}</td><td>{item.sampleWarehouse}</td><td>{mockStatusLabel(item.sampleStatus)}</td></tr>)}</tbody>
+              </table>
+            </UiTableScroll>
           )}
 
           {tab === 'partners' && (
-            <table className="data-lab-table">
-              <thead><tr><th>Mã</th><th>Tên đối tác</th><th>Vai trò</th></tr></thead>
-              <tbody>{mockPartners.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.roles.map(mockDisplayText).join(' / ')}</td></tr>)}</tbody>
-            </table>
+            <UiTableScroll>
+              <table className="data-lab-table">
+                <thead><tr><th>Mã</th><th>Tên đối tác</th><th>Vai trò</th></tr></thead>
+                <tbody>{mockPartners.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{item.roles.map(mockDisplayText).join(' / ')}</td></tr>)}</tbody>
+              </table>
+            </UiTableScroll>
           )}
 
           {tab === 'users' && (
-            <table className="data-lab-table">
-              <thead><tr><th>Người dùng</th><th>Họ tên</th><th>Vai trò</th><th>Phạm vi kho</th></tr></thead>
-              <tbody>{mockUsers.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{mockDisplayText(item.role)}</td><td>{item.warehouses.join(', ')}</td></tr>)}</tbody>
-            </table>
+            <UiTableScroll>
+              <table className="data-lab-table">
+                <thead><tr><th>Người dùng</th><th>Họ tên</th><th>Vai trò</th><th>Phạm vi kho</th></tr></thead>
+                <tbody>{mockUsers.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.name}</td><td>{mockDisplayText(item.role)}</td><td>{item.warehouses.join(', ')}</td></tr>)}</tbody>
+              </table>
+            </UiTableScroll>
           )}
 
           {tab === 'inventory' && (
-            <table className="data-lab-table numeric-table">
-              <thead><tr><th>Kho</th><th>SKU</th><th>Tồn thực tế</th><th>Đã giữ</th><th>Đã phân bổ</th><th>Khả dụng</th><th>Chờ QC</th><th>Cách ly</th><th>Đang vận chuyển</th></tr></thead>
-              <tbody>{mockInventoryBalances.map((item) => <tr key={item.warehouse + item.productCode}><td>{item.warehouse}</td><td>{item.productCode}</td><td>{item.onHand}</td><td>{item.reserved}</td><td>{item.allocated}</td><td>{item.available}</td><td>{item.qcHold}</td><td>{item.quarantine}</td><td>{item.inTransit}</td></tr>)}</tbody>
-            </table>
+            <UiTableScroll>
+              <table className="data-lab-table numeric-table">
+                <thead><tr><th>Kho</th><th>SKU</th><th>Tồn thực tế</th><th>Đã giữ</th><th>Đã phân bổ</th><th>Khả dụng</th><th>Chờ QC</th><th>Cách ly</th><th>Đang vận chuyển</th></tr></thead>
+                <tbody>{mockInventoryBalances.map((item) => <tr key={item.warehouse + item.productCode}><td>{item.warehouse}</td><td>{item.productCode}</td><td>{item.onHand}</td><td>{item.reserved}</td><td>{item.allocated}</td><td>{item.available}</td><td>{item.qcHold}</td><td>{item.quarantine}</td><td>{item.inTransit}</td></tr>)}</tbody>
+              </table>
+            </UiTableScroll>
           )}
 
           {tab === 'transfers' && (
-            <table className="data-lab-table numeric-table">
-              <thead><tr><th>Điều chuyển</th><th>SKU</th><th>Yêu cầu</th><th>Nguồn</th><th>Đang vận chuyển</th><th>Đích</th><th>Kiểm tra</th></tr></thead>
-              <tbody>{mockTransferConservation.map((item) => {
-                const total = item.source + item.transit + item.destination;
-                return <tr key={item.reference}><td>{item.reference}</td><td>{item.productCode}</td><td>{item.requested}</td><td>{item.source}</td><td>{item.transit}</td><td>{item.destination}</td><td><span className={total === item.requested ? 'check-pass' : 'check-fail'}>{total === item.requested ? 'ĐẠT' : 'LỖI'}</span></td></tr>;
-              })}</tbody>
-            </table>
+            <UiTableScroll>
+              <table className="data-lab-table numeric-table">
+                <thead><tr><th>Điều chuyển</th><th>SKU</th><th>Yêu cầu</th><th>Nguồn</th><th>Đang vận chuyển</th><th>Đích</th><th>Kiểm tra</th></tr></thead>
+                <tbody>{mockTransferConservation.map((item) => {
+                  const total = item.source + item.transit + item.destination;
+                  return <tr key={item.reference}><td>{item.reference}</td><td>{item.productCode}</td><td>{item.requested}</td><td>{item.source}</td><td>{item.transit}</td><td>{item.destination}</td><td><span className={total === item.requested ? 'check-pass' : 'check-fail'}>{total === item.requested ? 'ĐẠT' : 'LỖI'}</span></td></tr>;
+                })}</tbody>
+              </table>
+            </UiTableScroll>
           )}
 
           {tab === 'recounts' && (
-            <table className="data-lab-table">
-              <thead><tr><th>Phiếu kiểm kê</th><th>SKU</th><th>Số lượng hệ thống</th><th>Các lần đếm</th><th>Số lượng chấp nhận cuối</th></tr></thead>
-              <tbody>{mockRecountAttempts.map((item) => <tr key={item.countRef}><td>{item.countRef}</td><td>{item.productCode}</td><td>{item.systemQty}</td><td>{item.attempts.map((attempt) => `#${attempt.attempt}: ${attempt.countedQty}${attempt.accepted ? ' ✓' : ''}`).join(' → ')}</td><td>{item.finalAccepted}</td></tr>)}</tbody>
-            </table>
+            <UiTableScroll>
+              <table className="data-lab-table">
+                <thead><tr><th>Phiếu kiểm kê</th><th>SKU</th><th>Số lượng hệ thống</th><th>Các lần đếm</th><th>Số lượng chấp nhận cuối</th></tr></thead>
+                <tbody>{mockRecountAttempts.map((item) => <tr key={item.countRef}><td>{item.countRef}</td><td>{item.productCode}</td><td>{item.systemQty}</td><td>{item.attempts.map((attempt) => `#${attempt.attempt}: ${attempt.countedQty}${attempt.accepted ? ' ✓' : ''}`).join(' → ')}</td><td>{item.finalAccepted}</td></tr>)}</tbody>
+              </table>
+            </UiTableScroll>
           )}
 
           {tab === 'scenario' && (
@@ -156,14 +173,16 @@ const MockDataLab = () => {
                     </div>
                   </div>
                   {mockDemo.scenarioBalances.length > 0 ? (
-                    <table className="data-lab-table numeric-table">
-                      <thead><tr><th>Kho</th><th>Vị trí</th><th>SKU</th><th>Tồn thực tế</th><th>Đã giữ</th><th>Đã phân bổ</th><th>Đã lấy</th><th>Khả dụng</th><th>Chờ QC</th><th>Cách ly</th><th>Đang vận chuyển</th></tr></thead>
-                      <tbody>{mockDemo.scenarioBalances.map((item) => (
-                        <tr key={item.warehouse + item.location + item.productCode}>
-                          <td>{item.warehouse}</td><td>{item.location}</td><td>{item.productCode}</td><td>{item.onHand}</td><td>{item.reserved}</td><td>{item.allocated}</td><td>{item.picked}</td><td>{item.available ?? '—'}</td><td>{item.qcHold}</td><td>{item.quarantine}</td><td>{item.inTransit}</td>
-                        </tr>
-                      ))}</tbody>
-                    </table>
+                    <UiTableScroll>
+                      <table className="data-lab-table numeric-table">
+                        <thead><tr><th>Kho</th><th>Vị trí</th><th>SKU</th><th>Tồn thực tế</th><th>Đã giữ</th><th>Đã phân bổ</th><th>Đã lấy</th><th>Khả dụng</th><th>Chờ QC</th><th>Cách ly</th><th>Đang vận chuyển</th></tr></thead>
+                        <tbody>{mockDemo.scenarioBalances.map((item) => (
+                          <tr key={item.warehouse + item.location + item.productCode}>
+                            <td>{item.warehouse}</td><td>{item.location}</td><td>{item.productCode}</td><td>{item.onHand}</td><td>{item.reserved}</td><td>{item.allocated}</td><td>{item.picked}</td><td>{item.available ?? '—'}</td><td>{item.qcHold}</td><td>{item.quarantine}</td><td>{item.inTransit}</td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </UiTableScroll>
                   ) : (
                     <div className="scenario-runtime-empty">Kịch bản này có phiên sự kiện dùng chung nhưng chưa có ảnh chụp tồn kho chuyên biệt.</div>
                   )}

@@ -31,6 +31,68 @@ test('ERP/WMS: Real dashboard, Blueprint routing, and inventory fixture disclosu
 test('ERP/WMS: reconciliation layout, table scroll and usable mobile nav', async ({ page }) => {
   const mutations = [];
   const runtimeErrors = [];
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('token')) {
+      localStorage.setItem('token', 'e2e-preview-token');
+      localStorage.setItem('role', 'Admin');
+      localStorage.setItem('userId', '1');
+      localStorage.setItem('permissions', JSON.stringify(['warehouse.read', 'inventory.read', 'inventory_ledger.read']));
+    }
+  });
+  await page.route('**/api/Warehouses**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { id: 1, name: 'Distribution Center - South (WH-HCM-01)', isActive: true },
+        { id: 2, name: 'Northern Hub (WH-HN-01)', isActive: true },
+      ]),
+    });
+  });
+  await page.route('**/api/InventoryReconciliation**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          {
+            warehouseId: 1,
+            warehouseName: 'Distribution Center - South (WH-HCM-01)',
+            productId: 1008,
+            productCode: 'SKU-1008',
+            productName: 'Industrial Barcode Scanner Gun',
+            unitName: 'EA',
+            currentQuantity: 28,
+            expectedQuantity: 28,
+            difference: 0,
+            lastUpdated: '2026-04-12T08:30:00Z',
+            lastTransactionAt: '2026-04-12T08:15:00Z',
+            status: 'Match',
+            allStatusStatus: 'Match',
+          },
+          {
+            warehouseId: 1,
+            warehouseName: 'Distribution Center - South (WH-HCM-01)',
+            productId: 2012,
+            productCode: 'SKU-2012',
+            productName: 'Cold-Chain Temperature Logger',
+            unitName: 'EA',
+            currentQuantity: 18,
+            expectedQuantity: 20,
+            difference: -2,
+            lastUpdated: '2026-04-12T07:55:00Z',
+            lastTransactionAt: '2026-04-12T07:50:00Z',
+            status: 'Mismatch',
+            allStatusStatus: 'Mismatch',
+          },
+        ],
+        totalRecords: 2,
+        pageIndex: 1,
+        pageSize: 20,
+        totalPages: 1,
+      }),
+    });
+  });
   page.on('request', request => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) mutations.push(request.method() + ' ' + request.url());
   });
@@ -40,7 +102,7 @@ test('ERP/WMS: reconciliation layout, table scroll and usable mobile nav', async
     await page.setViewportSize({ width, height: 900 });
     await page.goto(base + '/inventory-reconciliation', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /Đối chiếu tồn kho & ledger/, level: 1 })).toBeVisible();
-    await expect(page.getByRole('note').filter({ hasText: /không phải kết quả từ SQL Server thật/ })).toBeVisible();
+    await expect(page.getByRole('note').filter({ hasText: /không phải kết quả từ SQL Server thật|Kết quả này chỉ để phát hiện sai lệch/ }).first()).toBeVisible();
     await expect(page.getByText(/Độ lệch (tuyệt đối|đã xác định)/)).toBeVisible();
     await expect(page.locator('.reconciliation-table')).toContainText('SKU-1008');
     await expect(page.locator('.reconciliation-table')).toContainText('SKU-2012');

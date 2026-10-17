@@ -103,6 +103,7 @@ internal sealed class OwnedTemporaryMigrationDatabase : IAsyncDisposable
             verify.Parameters.AddWithValue("@database", _databaseName);
             var markerCount = Convert.ToInt32(await verify.ExecuteScalarAsync());
             OwnedDatabasePolicy.EnsureOwnership(_databaseName, _runId, database.Database, OwnedDatabasePolicy.MarkerType, _runId, _databaseName, markerCount);
+            SqlConnection.ClearPool(database);
         }
 
         await using var master = new SqlConnection(_masterConnection);

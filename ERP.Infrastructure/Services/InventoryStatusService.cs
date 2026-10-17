@@ -489,14 +489,21 @@ public sealed class InventoryStatusService(
                 if (moveQty <= 0) continue;
 
                 var fromStatus = source.Status;
-                var destination = await context.InventoryStocks.SingleOrDefaultAsync(
-                    x => x.ProductId == source.ProductId &&
-                         x.WarehouseId == source.WarehouseId &&
-                         x.LocationId == source.LocationId &&
-                         x.Status == InventoryStatus.RecallBlocked &&
-                         x.LotId == source.LotId &&
-                         x.SerialId == source.SerialId,
-                    cancellationToken);
+                var destination = context.InventoryStocks.Local.FirstOrDefault(
+                                      x => x.ProductId == source.ProductId &&
+                                           x.WarehouseId == source.WarehouseId &&
+                                           x.LocationId == source.LocationId &&
+                                           x.Status == InventoryStatus.RecallBlocked &&
+                                           x.LotId == source.LotId &&
+                                           x.SerialId == source.SerialId)
+                                  ?? await context.InventoryStocks.SingleOrDefaultAsync(
+                                      x => x.ProductId == source.ProductId &&
+                                           x.WarehouseId == source.WarehouseId &&
+                                           x.LocationId == source.LocationId &&
+                                           x.Status == InventoryStatus.RecallBlocked &&
+                                           x.LotId == source.LotId &&
+                                           x.SerialId == source.SerialId,
+                                      cancellationToken);
 
                 source.Quantity -= moveQty;
                 source.LastUpdated = DateTime.UtcNow;

@@ -94,6 +94,7 @@ const ExportReceipts = () => {
   const canDispatch = hasPermission('export_receipt.dispatch');
   const canCancel = hasPermission('export_receipt.cancel');
   const canReadPartners = hasPermission('partner.read');
+  const [showCreateForm, setShowCreateForm] = useState(true);
   const [receipts, setReceipts] = useState<ExportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -466,6 +467,12 @@ const ExportReceipts = () => {
 
         {canCreate && (
           <UiCard title="Tạo Phiếu Xuất Kho">
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: showCreateForm ? 12 : 0 }}>
+              <button type="button" onClick={() => setShowCreateForm(prev => !prev)}>
+                {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
+              </button>
+            </div>
+            {showCreateForm && (
             <form onSubmit={handleCreate} className="export-form">
               <div className="export-form-grid">
                 <label className="ui-stack">
@@ -572,6 +579,7 @@ const ExportReceipts = () => {
                 </button>
               </div>
             </form>
+            )}
           </UiCard>
         )}
 

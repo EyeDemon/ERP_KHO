@@ -594,24 +594,26 @@ export default function Approvals() {
 
                 {detail && detail.lines.length > 0 && (
                   <div className="approval-detail-table">
-                    <table aria-label={`Chi tiết ${selected.documentCode}`}>
-                      <thead>
-                        <tr>
-                          <th>Sản phẩm</th>
-                          <th>Đơn vị</th>
-                          <th>Số lượng</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detail.lines.map(line => (
-                          <tr key={line.productCode}>
-                            <td>{line.productCode} · {line.productName}</td>
-                            <td>{line.unitName}</td>
-                            <td className="approval-duration">{line.quantity}</td>
+                    <UiTableScroll>
+                      <table aria-label={`Chi tiết ${selected.documentCode}`}>
+                        <thead>
+                          <tr>
+                            <th>Sản phẩm</th>
+                            <th>Đơn vị</th>
+                            <th>Số lượng</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {detail.lines.map(line => (
+                            <tr key={line.productCode}>
+                              <td>{line.productCode} · {line.productName}</td>
+                              <td>{line.unitName}</td>
+                              <td className="approval-duration">{line.quantity}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </UiTableScroll>
                   </div>
                 )}
 

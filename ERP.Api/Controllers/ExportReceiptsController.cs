@@ -156,22 +156,23 @@ namespace ERP.Api.Controllers
         [HttpPost("verify-dispatch-cutoff")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> VerifyDispatchCutoff(
-            [FromBody] VerifyDispatchCutoffRequest? request = null,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyDispatchCutoffRequest? request = null,
             CancellationToken cancellationToken = default)
         {
-            if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+            var warehouseId = request?.WarehouseId;
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
             var checkedExportReceiptsCount = _db != null
                 ? await _db.ExportReceipts.AsNoTracking()
-                    .Where(r => !request!.WarehouseId.HasValue || r.WarehouseId == request.WarehouseId.Value)
+                    .Where(r => !warehouseId.HasValue || r.WarehouseId == warehouseId.Value)
                     .CountAsync(cancellationToken)
                 : 0;
 
             return Ok(new
             {
                 verificationId = $"EXP-CUT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-                warehouseId = request?.WarehouseId,
+                warehouseId,
                 checkedExportReceiptsCount,
                 singleShipDeductionGuard = "ENFORCED",
                 cutoffComplianceStatus = "DISPATCH_CUTOFF_VERIFIED",

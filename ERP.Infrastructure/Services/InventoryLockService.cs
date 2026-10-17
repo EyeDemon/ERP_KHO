@@ -99,11 +99,13 @@ public sealed class InventoryLockService(
                 ExpiresAt = request.ExpiresAt
             };
             context.InventoryLocks.Add(entity);
+            await context.SaveChangesAsync(cancellationToken);
             var audit = new AuditLog
             {
                 UserId = currentUser.UserId,
                 Action = "InventoryLock.Created",
                 EntityName = "InventoryLock",
+                EntityId = entity.Id,
                 WarehouseId = request.WarehouseId,
                 Timestamp = DateTime.UtcNow,
                 NewValues = ScopeText(entity),
@@ -112,8 +114,6 @@ public sealed class InventoryLockService(
                 Severity = "Warning"
             };
             context.AuditLogs.Add(audit);
-            await context.SaveChangesAsync(cancellationToken);
-            audit.EntityId = entity.Id;
             await context.SaveChangesAsync(cancellationToken);
             if (tx is not null) await tx.CommitAsync(cancellationToken);
             return await GetAsync(entity.Id, cancellationToken);

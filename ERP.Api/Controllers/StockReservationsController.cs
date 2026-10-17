@@ -112,27 +112,28 @@ public class StockReservationsController(
         });
     }
 
-    public sealed record SweepExpiredReservationsRequest(int? WarehouseId);
+    public sealed record SweepExpiredReservationsRequest(int? WarehouseId = null);
 
     [HttpPost("sweep-expired-preview")]
     public async Task<IActionResult> SweepExpiredPreview(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SweepExpiredReservationsRequest? request,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SweepExpiredReservationsRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var now = DateTime.UtcNow;
         var expiredCandidateCount = db != null
             ? await db.StockReservations.AsNoTracking()
-                .Where(r => !request!.WarehouseId.HasValue || r.WarehouseId == request.WarehouseId.Value)
+                .Where(r => !warehouseId.HasValue || r.WarehouseId == warehouseId.Value)
                 .CountAsync(r => r.Status == StockReservationStatus.Active && r.SourceType == "Manual" && r.ExpiresAt <= now, cancellationToken)
             : 0;
 
         return Ok(new
         {
             sweepId = $"RSV-SWP-{now:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             expiredCandidateCount,
             status = "COMMITMENT_TTL_VERIFIED",
             ledgerMutated = false,

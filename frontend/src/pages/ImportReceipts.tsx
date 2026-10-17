@@ -102,6 +102,7 @@ const ImportReceipts = () => {
   const [suppliers, setSuppliers] = useState<Partner[]>([]);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(true);
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceipt | null>(null);
   const [receiveLines, setReceiveLines] = useState<Record<number, ReceiveLineForm>>({});
   const [qcExcludedLines, setQcExcludedLines] = useState<number[]>([]);
@@ -194,11 +195,12 @@ const ImportReceipts = () => {
     approveInFlight.current = id;
     setApprovingId(id);
     setError('');
+    setSuccessMsg('');
     try {
       const action = `import-approve:${id}`;
       await apiClient.post(`/api/importreceipts/${id}/approve`, undefined, { headers: idempotencyHeaders(action) });
       completeIdempotentAction(action);
-      alert('Duyệt thành công');
+      setSuccessMsg('Duyệt thành công');
       await fetchReceipts();
       if (selectedReceipt?.id === id) {
         await handleViewDetails(id);
@@ -216,14 +218,16 @@ const ImportReceipts = () => {
     if (!canCancel || cancelInFlight.current !== null) return;
     if (!window.confirm('Bạn có chắc chắn muốn hủy phiếu nhập này?')) return;
     cancelInFlight.current = id;
+    setError('');
+    setSuccessMsg('');
     try {
       const action = `import-cancel:${id}`;
       await apiClient.put(`/api/importreceipts/${id}/cancel`, undefined, { headers: idempotencyHeaders(action) });
       completeIdempotentAction(action);
-      alert('Hủy thành công');
-      fetchReceipts();
+      setSuccessMsg('Hủy thành công');
+      await fetchReceipts();
       if (selectedReceipt?.id === id) {
-          handleViewDetails(id);
+        await handleViewDetails(id);
       }
     } catch (err: any) {
       if (selectedReceipt?.id === id) setSelectedReceipt(null);
@@ -481,13 +485,17 @@ const ImportReceipts = () => {
               onClick={() => {
                 setError('');
                 setSuccessMsg('');
+                const refCode = 'RMA-' + new Date().toISOString().slice(0, 10);
                 void apiClient
                   .post('/api/ImportReceipts/initiate-rma-inspection', {
                     warehouseId: warehouseId || warehouses[0]?.id || 1,
-                    rmaReferenceCode: 'RMA-' + new Date().toISOString().slice(0, 10),
+                    rmaReferenceCode: refCode,
+                    returnReference: refCode,
+                    reasonCode: 'CUSTOMER_RETURN',
                   })
                   .then((res) => {
-                    const code = (res as { data?: { rmaInspectionCode?: string } } | undefined)?.data?.rmaInspectionCode || 'RMA-QC-ACTIVE';
+                    const data = (res as { data?: { rmaInspectionCode?: string; rmaCode?: string } } | undefined)?.data;
+                    const code = data?.rmaInspectionCode || data?.rmaCode || 'RMA-QC-ACTIVE';
                     setSuccessMsg(`Đã khởi tạo hồ sơ kiểm định RMA (${code}): Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.`);
                   })
                   .catch((err) => {
@@ -508,7 +516,8 @@ const ImportReceipts = () => {
                     dispositionType: 'REFURBISH_AND_RTV_SPLIT',
                   })
                   .then((res) => {
-                    const code = (res as { data?: { dispositionCode?: string } } | undefined)?.data?.dispositionCode || 'RTV-REF-ACTIVE';
+                    const data = (res as { data?: { dispositionCode?: string; executionId?: string } } | undefined)?.data;
+                    const code = data?.dispositionCode || data?.executionId || 'RTV-REF-ACTIVE';
                     setSuccessMsg(`Đã thực thi phân luồng Reverse Logistics (${code}): Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV (AX-13).`);
                   })
                   .catch((err) => {
@@ -523,7 +532,12 @@ const ImportReceipts = () => {
 
         {canCreate && (
           <UiCard title="Tạo Phiếu Nhập (Nháp)">
-            <form onSubmit={handleCreate} className="import-form">
+            <div className="ui-inline-actions" style={{ marginBottom: showCreateForm ? 12 : 0 }}>
+              <button type="button" onClick={() => setShowCreateForm(v => !v)}>
+                {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
+              </button>
+            </div>
+            {showCreateForm && <form onSubmit={handleCreate} className="import-form">
               <div className="import-form-grid">
                 <label className="ui-stack">
                   <span>Mã phiếu</span>
@@ -637,7 +651,7 @@ const ImportReceipts = () => {
                 <button type="button" onClick={handleAddDetail}>+ Thêm dòng</button>
                 <button type="submit" disabled={creating}>{creating ? 'Đang lưu...' : 'Lưu Phiếu Nháp'}</button>
               </div>
-            </form>
+            </form>}
           </UiCard>
         )}
 

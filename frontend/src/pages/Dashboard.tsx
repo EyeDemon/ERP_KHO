@@ -5,6 +5,7 @@ import { mockInventoryBalances, mockProducts, mockWarehouses, mockWorkCenters } 
 import { demoReconciliationRows } from '../mocks/inventoryReconciliationDemo';
 import { productionNavigation } from '../config/productionNavigation';
 import apiClient from '../services/apiClient';
+import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
 import { isBlueprintDemoRuntime } from '../services/runtimeMode';
 import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import './Dashboard.css';
@@ -155,14 +156,26 @@ const Dashboard = () => {
       return;
     }
     setSearchLoading(true);
+    setLiveError('');
     try {
       const res = await apiClient.get<GlobalSearchResultItem[]>(`/api/Reports/global-search?q=${encodeURIComponent(q)}`);
       setSearchResults(Array.isArray(res.data) ? res.data : []);
     } catch {
       setSearchResults([]);
+      setLiveError('Không thể thực hiện tìm kiếm toàn doanh nghiệp.');
     } finally {
       setSearchLoading(false);
     }
+  };
+
+  usePermissionSet();
+  const hasExplicitPermissions = typeof localStorage !== 'undefined' && localStorage.getItem('permissions') !== null;
+  const canAccessNavItem = (item: { permission?: string; access?: 'always' | 'stocktake' | 'approvals' }) => {
+    if (demoRuntime || !hasExplicitPermissions) return true;
+    if (item.access === 'stocktake') return canViewStocktakes();
+    if (item.access === 'approvals') return canViewApprovals();
+    if (item.permission) return hasPermission(item.permission);
+    return true;
   };
 
   const operationalRecords = ['inbound', 'outbound', 'inventory-control', 'transfer-replenishment']
@@ -176,11 +189,13 @@ const Dashboard = () => {
     : liveTasks;
 
   const quickLinks = [
-    { to: '/import-receipts', title: 'Inbound', detail: 'Nhận hàng, QC và posting', icon: ClipboardCheck },
-    { to: '/inventory', title: 'Tồn kho', detail: 'Số dư, biến động và báo cáo', icon: Boxes },
+    { to: '/import-receipts', title: 'Inbound', detail: 'Nhận hàng, QC và posting', icon: ClipboardCheck, permission: 'receipt.read' },
+    { to: '/inventory', title: 'Tồn kho', detail: 'Số dư, biến động và báo cáo', icon: Boxes, permission: 'inventory.read' },
     { to: '/inventory-reconciliation', title: 'Đối chiếu', detail: 'Kiểm tra ledger / balance mismatch', icon: PackageSearch },
     { to: '/stock-transfers', title: 'Điều chuyển', detail: 'Theo dõi hàng đang vận chuyển giữa các kho', icon: Warehouse },
-  ];
+  ].filter((link) => canAccessNavItem(link));
+
+  const visibleProductionNavigation = productionNavigation.filter((item) => item.path !== '/' && canAccessNavItem(item));
 
   return (
     <UiPage>
@@ -278,9 +293,9 @@ const Dashboard = () => {
         </UiCard>
 
         <UiCard title="Màn production UI đã có route">
-          <div className="dashboard-screen-count">{productionNavigation.length}</div>
+          <div className="dashboard-screen-count">{visibleProductionNavigation.length + 1}</div>
           <div className="dashboard-screen-list">
-            {productionNavigation.filter((item) => item.path !== '/').map((item) => (
+            {visibleProductionNavigation.map((item) => (
               <Link key={item.path} to={item.path}>
                 <span>{item.label}</span>
                 <small>{item.section}</small>

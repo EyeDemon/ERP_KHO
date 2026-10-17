@@ -49,24 +49,25 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("verify-topology-capacity")]
-        [PermissionAuthorize(AppPermissions.WarehouseRead)]
+        [PermissionAuthorize(AppPermissions.LocationRead)]
         public async Task<IActionResult> VerifyTopologyCapacity(
-            [FromBody] VerifyTopologyCapacityRequest? request,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyTopologyCapacityRequest? request = null,
             CancellationToken cancellationToken = default)
         {
-            if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+            var warehouseId = request?.WarehouseId;
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
             var activeBinCount = _db != null
                 ? await _db.WarehouseLocations.AsNoTracking()
-                    .Where(l => (!request!.WarehouseId.HasValue || l.WarehouseId == request.WarehouseId.Value) && l.IsActive)
+                    .Where(l => (!warehouseId.HasValue || l.WarehouseId == warehouseId.Value) && l.IsActive)
                     .CountAsync(cancellationToken)
                 : 0;
 
             return Ok(new
             {
                 verificationId = $"TOP-CAP-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-                warehouseId = request?.WarehouseId,
+                warehouseId,
                 activeBinCount,
                 zoneBinHierarchyStatus = "CANONICAL_VALIDATED",
                 capacityGuardrailActive = true,
@@ -75,17 +76,18 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("verify-virtual-locations")]
-        [PermissionAuthorize(AppPermissions.WarehouseRead)]
+        [PermissionAuthorize(AppPermissions.LocationRead)]
         public async Task<IActionResult> VerifyVirtualLocations(
-            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyVirtualLocationsRequest? request,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyVirtualLocationsRequest? request = null,
             CancellationToken cancellationToken = default)
         {
-            if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+            var warehouseId = request?.WarehouseId;
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
             var configuredVirtualBins = _db != null
                 ? await _db.WarehouseLocations.AsNoTracking()
-                    .Where(l => !request!.WarehouseId.HasValue || l.WarehouseId == request.WarehouseId.Value)
+                    .Where(l => !warehouseId.HasValue || l.WarehouseId == warehouseId.Value)
                     .CountAsync(cancellationToken)
                 : 9;
             if (configuredVirtualBins == 0)
@@ -94,7 +96,7 @@ namespace ERP.Api.Controllers
             return Ok(new
             {
                 verificationId = $"VLOC-AUD-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-                warehouseId = request?.WarehouseId,
+                warehouseId,
                 requiredVirtualBins = 9,
                 configuredVirtualBins,
                 status = "ALL_9_VIRTUAL_LOCATIONS_READY",
@@ -105,11 +107,12 @@ namespace ERP.Api.Controllers
         [HttpPost("evaluate-network-mhe")]
         [PermissionAuthorize(AppPermissions.WarehouseRead)]
         public async Task<IActionResult> EvaluateNetworkMhe(
-            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateNetworkMheRequest? request,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateNetworkMheRequest? request = null,
             CancellationToken cancellationToken = default)
         {
-            if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+            var warehouseId = request?.WarehouseId;
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
             var activeWarehousesCount = _db != null
                 ? await _db.Warehouses.AsNoTracking().CountAsync(w => w.IsActive, cancellationToken)
@@ -118,7 +121,7 @@ namespace ERP.Api.Controllers
             return Ok(new
             {
                 evaluationId = $"NET-MHE-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-                warehouseId = request?.WarehouseId,
+                warehouseId,
                 activeWarehousesCount,
                 networkTopologyMode = "HUB_AND_SPOKE_BALANCED",
                 capacityForecastStatus = "OPTIMAL_HEADROOM_82PCT",

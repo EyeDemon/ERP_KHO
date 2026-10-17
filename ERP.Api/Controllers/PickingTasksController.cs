@@ -214,15 +214,16 @@ public sealed class PickingTasksController(
     [HttpPost("sync-automation-telemetry")]
     [PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> SyncAutomationTelemetry(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncAutomationTelemetryRequest? request,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncAutomationTelemetryRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var activeTasksCount = db != null
             ? await db.PickingTasks.AsNoTracking()
-                .Where(t => !request!.WarehouseId.HasValue || t.WarehouseId == request.WarehouseId.Value)
+                .Where(t => !warehouseId.HasValue || t.WarehouseId == warehouseId.Value)
                 .CountAsync(t => t.Status != PickingTaskStatus.Completed && t.Status != PickingTaskStatus.Cancelled, cancellationToken)
             : 0;
 
@@ -230,7 +231,7 @@ public sealed class PickingTasksController(
         return Ok(new
         {
             telemetrySyncId = $"WCS-IOT-{now:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             activePickingTasksCount = activeTasksCount,
             wcsRoboticsState = "AMR_ASRS_CONVEYOR_SYNCHRONIZED",
             rfidIotTelemetry = "RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE",

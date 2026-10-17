@@ -22,11 +22,12 @@ public sealed class ApprovalsController(
 {
     [HttpPost("escalate-overdue")]
     public async Task<IActionResult> EscalateOverdue(
-        [FromBody] EscalateOverdueApprovalsRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EscalateOverdueApprovalsRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var queue = await service.GetQueueAsync(
             new ApprovalQueueQuery { WarehouseId = request?.WarehouseId, PageIndex = 1, PageSize = int.MaxValue },

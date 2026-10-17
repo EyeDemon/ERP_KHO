@@ -120,22 +120,23 @@ public sealed class InventoryReversalTraceabilityController(
     [HttpPost("verify-chain-integrity")]
     [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
     public async Task<IActionResult> VerifyReversalChainIntegrity(
-        [FromBody] VerifyReversalChainRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyReversalChainRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var ledgerEventsCount = db != null
             ? await db.InventoryTransactions.AsNoTracking()
-                .Where(t => !request!.WarehouseId.HasValue || t.WarehouseId == request.WarehouseId.Value)
+                .Where(t => !warehouseId.HasValue || t.WarehouseId == warehouseId.Value)
                 .CountAsync(cancellationToken)
             : 0;
 
         return Ok(new
         {
             verificationId = $"REV-INT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             ledgerEventsCount,
             duplicateReversalBlocked = true,
             appendOnlyLedgerStatus = "IMMUTABLE_VERIFIED",
@@ -149,11 +150,12 @@ public sealed class InventoryReversalTraceabilityController(
     [HttpPost("simulate-recall-tree")]
     [PermissionAuthorize(AppPermissions.InventoryTraceabilityRead)]
     public async Task<IActionResult> SimulateRecallTree(
-        [FromBody] SimulateRecallTreeRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SimulateRecallTreeRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var queryText = string.IsNullOrWhiteSpace(request?.BatchOrSerialQuery) ? "BATCH-FEFO-2026" : request.BatchOrSerialQuery.Trim();
         var matchedLotCount = db != null

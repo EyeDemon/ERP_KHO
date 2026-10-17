@@ -152,8 +152,9 @@ export default function StockTransfers() {
       if (filters.destinationWarehouseId) params.destinationWarehouseId = filters.destinationWarehouseId;
       const res = await apiClient.get('/api/stock-transfers/in-transit', { params });
       setInTransitItems(Array.isArray(res.data?.items) ? (res.data.items as InTransitItem[]) : []);
-    } catch {
+    } catch (failure: any) {
       setInTransitItems([]);
+      setError(failure?.response?.data?.message || 'Không thể tải dữ liệu tồn kho đang vận chuyển.');
     } finally {
       setInTransitLoading(false);
     }
@@ -171,16 +172,19 @@ export default function StockTransfers() {
     setError('');
     try {
       const params = { ...filters, pageIndex: requestedPage, pageSize: 15 };
+      const hasExplicitPermissions = typeof localStorage !== 'undefined' && localStorage.getItem('permissions') !== null;
+      const canReadWarehouses = !hasExplicitPermissions || hasPermission('warehouse.read');
+      const canReadProducts = !hasExplicitPermissions || hasPermission('product.read');
       const [transfers, warehouseResult, productResult] = await Promise.all([
         apiClient.get('/api/stock-transfers', { params }),
-        apiClient.get('/api/warehouses'),
-        apiClient.get('/api/products'),
+        canReadWarehouses ? apiClient.get('/api/warehouses').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+        canReadProducts ? apiClient.get('/api/products').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       ]);
       if (requestSequence !== listRequestSequence.current) return;
       setItems(transfers.data.items);
       setTotalPages(transfers.data.totalPages || 1);
-      setWarehouses(warehouseResult.data);
-      setProducts(productResult.data);
+      setWarehouses(Array.isArray(warehouseResult.data) ? warehouseResult.data : []);
+      setProducts(Array.isArray(productResult.data) ? productResult.data : []);
     } catch (failure: any) {
       if (requestSequence === listRequestSequence.current) {
         setError(failure.response?.data?.message || 'Không thể tải dữ liệu điều chuyển.');

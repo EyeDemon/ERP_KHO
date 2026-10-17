@@ -101,20 +101,21 @@ public sealed class StockAllocationsController(
         });
     }
 
-    public sealed record VerifyAllocationFefoRequest(int? WarehouseId);
+    public sealed record VerifyAllocationFefoRequest(int? WarehouseId = null);
 
     [HttpPost("verify-fefo-compliance")]
     [PermissionAuthorize(AppPermissions.AllocationRead)]
     public async Task<IActionResult> VerifyFefoCompliance(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyAllocationFefoRequest? request,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyAllocationFefoRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (request?.WarehouseId.HasValue == true && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseId.HasValue && warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var binLockConflictCount = db != null
             ? await db.StockAllocations.AsNoTracking()
-                .Where(a => (!request!.WarehouseId.HasValue || a.WarehouseId == request.WarehouseId.Value)
+                .Where(a => (!warehouseId.HasValue || a.WarehouseId == warehouseId.Value)
                             && (a.Status == StockAllocationStatus.Active || a.Status == StockAllocationStatus.Picking)
                             && a.Location.IsBlocked)
                 .CountAsync(cancellationToken)
@@ -123,7 +124,7 @@ public sealed class StockAllocationsController(
         return Ok(new
         {
             verificationId = $"ALC-FEFO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             fefoComplianceStatus = binLockConflictCount == 0 ? "STRICT_FEFO_FIFO_ALIGNED" : "CONFLICT_DETECTED",
             binLockConflictCount,
             verifiedAtUtc = DateTime.UtcNow

@@ -217,6 +217,39 @@ describe('Blueprint demo API adapter', () => {
     });
   });
 
+  it('serves newly mapped report, reconciliation, transfer, permission, and diagnostic endpoints', async () => {
+    const getEndpoints = [
+      '/api/reports/expiry-aging',
+      '/api/reports/analytics-summary',
+      '/api/reports/productivity-and-bi-snapshot?warehouseId=1',
+      '/api/inventoryreconciliation/investigation?warehouseId=1&productId=1',
+      '/api/stock-transfers/in-transit',
+      '/api/stock-transfers/return-reasons',
+      '/api/permissions/audit-logs',
+      '/api/permissions/compliance-evidence-bundle',
+      '/api/auth/sessions',
+      '/api/users/1/security',
+      '/api/users/1/warehouse-access',
+    ];
+    for (const url of getEndpoints) {
+      const config = request(url, 'get');
+      const res = await createBlueprintDemoApiAdapter(config)(config);
+      expect(res.status).toBe(200);
+    }
+
+    const postDiagnostics = [
+      '/api/warehouses/verify-topology-capacity',
+      '/api/ImportReceipts/initiate-rma-inspection',
+      '/api/InventoryReconciliation/export-erp-gl-journal',
+      '/api/user-warehouse-access/verify-sod-isolation',
+    ];
+    for (const url of postDiagnostics) {
+      const config = request(url, 'post');
+      const res = await createBlueprintDemoApiAdapter(config)(config);
+      expect(res.status).toBe(200);
+    }
+  });
+
   it('fails visibly when a read endpoint has not been mapped', async () => {
     const config = request('/api/not-mapped');
     await expect(createBlueprintDemoApiAdapter(config)(config)).rejects.toMatchObject({

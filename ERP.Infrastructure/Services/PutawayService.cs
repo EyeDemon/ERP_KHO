@@ -435,35 +435,41 @@ public sealed class PutawayService(
                 .ToListAsync(token);
             if (sourceBuckets.Count == 0 || sourceBuckets.Sum(x => x.Quantity - x.ReservedQuantity) < baseQty)
                 throw Conflict("Tồn tại vị trí nguồn đã thay đổi. Vui lòng tải lại.");
-            if (inventoryLocks is not null)
-            {
-                var now = DateTime.UtcNow;
-                var sourceLocked = await context.InventoryLocks.EffectiveAt(now).AnyAsync(l =>
-                    l.WarehouseId == task.WarehouseId &&
-                    (!l.LocationId.HasValue || l.LocationId == item.SourceLocationId) &&
-                    (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
-                    (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus), token);
-                var destinationLocked = await context.InventoryLocks.EffectiveAt(now).AnyAsync(l =>
-                    l.WarehouseId == task.WarehouseId &&
-                    (!l.LocationId.HasValue || l.LocationId == destination.Id) &&
-                    (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
-                    (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus), token);
-                if (sourceLocked || destinationLocked)
-                {
-                    var locked = new BusinessRuleException("Inventory bucket đang bị khóa bởi Inventory Lock.");
-                    locked.Data["HttpStatusCode"] = 409;
-                    locked.Data["ErrorCode"] = "INV_STOCK_LOCKED";
-                    throw locked;
-                }
-            }
             var nowUtc = DateTime.UtcNow;
             var remainingToMove = baseQty;
+            var enteredUnitCode = dto.UnitCode.Trim().ToUpperInvariant();
             foreach (var sourceBucket in sourceBuckets)
             {
                 if (remainingToMove <= 0) break;
                 var availableInBucket = sourceBucket.Quantity - sourceBucket.ReservedQuantity;
                 if (availableInBucket <= 0) continue;
                 var chunk = Math.Min(remainingToMove, availableInBucket);
+
+                if (inventoryLocks is not null)
+                {
+                    var sourceLocked = await context.InventoryLocks.EffectiveAt(nowUtc).AnyAsync(l =>
+                        l.WarehouseId == task.WarehouseId &&
+                        (!l.LocationId.HasValue || l.LocationId == item.SourceLocationId) &&
+                        (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
+                        (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus) &&
+                        (!l.LotId.HasValue || l.LotId == sourceBucket.LotId) &&
+                        (!l.SerialId.HasValue || l.SerialId == sourceBucket.SerialId), token);
+                    var destinationLocked = await context.InventoryLocks.EffectiveAt(nowUtc).AnyAsync(l =>
+                        l.WarehouseId == task.WarehouseId &&
+                        (!l.LocationId.HasValue || l.LocationId == destination.Id) &&
+                        (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
+                        (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus) &&
+                        (!l.LotId.HasValue || l.LotId == sourceBucket.LotId) &&
+                        (!l.SerialId.HasValue || l.SerialId == sourceBucket.SerialId), token);
+                    if (sourceLocked || destinationLocked)
+                    {
+                        var locked = new BusinessRuleException("Inventory bucket đang bị khóa bởi Inventory Lock.");
+                        locked.Data["HttpStatusCode"] = 409;
+                        locked.Data["ErrorCode"] = "INV_STOCK_LOCKED";
+                        throw locked;
+                    }
+                }
+
                 sourceBucket.Quantity -= chunk;
                 sourceBucket.LastUpdated = nowUtc;
 
@@ -501,10 +507,28 @@ public sealed class PutawayService(
                     dest.LastUpdated = nowUtc;
                 }
 
+                context.InventoryLocationMovements.Add(new InventoryLocationMovement
+                {
+                    WarehouseId = task.WarehouseId,
+                    ProductId = item.ProductId,
+                    InventoryStatus = item.InventoryStatus,
+                    LotId = sourceBucket.LotId,
+                    SerialId = sourceBucket.SerialId,
+                    FromLocationId = item.SourceLocationId,
+                    ToLocationId = destination.Id,
+                    BaseQuantity = chunk,
+                    EnteredQuantity = chunk == baseQty ? dto.Quantity : decimal.Round(dto.Quantity * chunk / baseQty, 4),
+                    EnteredUnitCode = enteredUnitCode,
+                    PutawayTaskId = task.Id,
+                    PutawayTaskItemId = item.Id,
+                    ReceiptId = task.ReceiptId,
+                    ReceiptLineId = item.ReceiptLineId,
+                    CreatedBy = currentUser.UserId
+                });
+
                 remainingToMove -= chunk;
             }
             item.MovedBaseQuantity+=baseQty; task.Status=task.Items.All(x=>x.RemainingBaseQuantity==0)?PutawayTaskStatus.Completed:PutawayTaskStatus.InProgress; task.StartedAt??=nowUtc; if(task.Status==PutawayTaskStatus.Completed)task.CompletedAt=nowUtc;
-            context.InventoryLocationMovements.Add(new InventoryLocationMovement{WarehouseId=task.WarehouseId,ProductId=item.ProductId,InventoryStatus=item.InventoryStatus,FromLocationId=item.SourceLocationId,ToLocationId=destination.Id,BaseQuantity=baseQty,EnteredQuantity=dto.Quantity,EnteredUnitCode=dto.UnitCode.Trim().ToUpperInvariant(),PutawayTaskId=task.Id,PutawayTaskItemId=item.Id,ReceiptId=task.ReceiptId,ReceiptLineId=item.ReceiptLineId,CreatedBy=currentUser.UserId});
             context.AuditLogs.Add(Audit(currentUser.UserId,"PutawayTask.Moved",task.Id,task.WarehouseId,$"ItemId: {item.Id}; BaseQuantity: {baseQty}; DestinationId: {destination.Id}"));
             await context.SaveChangesAsync(token); if(tx is not null)await tx.CommitAsync(token); return await GetAsync(id,token);
         }

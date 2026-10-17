@@ -54,15 +54,16 @@ public sealed class UserWarehouseAccessController(
     [HttpPost("/api/user-warehouse-access/verify-sod-isolation")]
     [PermissionAuthorize(AppPermissions.UserWarehouseRead)]
     public async Task<IActionResult> VerifySodIsolation(
-        [FromBody] VerifySodIsolationRequest? request = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifySodIsolationRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (warehouseAccess is not null && request?.WarehouseId is int warehouseId)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+        var warehouseId = request?.WarehouseId;
+        if (warehouseAccess is not null && warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var activeMemberships = db is not null
             ? await db.UserWarehouses.AsNoTracking().CountAsync(
-                uw => !request!.WarehouseId.HasValue || uw.WarehouseId == request.WarehouseId.Value,
+                uw => !warehouseId.HasValue || uw.WarehouseId == warehouseId.Value,
                 cancellationToken)
             : 0;
         var invalidMemberships = db is not null
@@ -74,7 +75,7 @@ public sealed class UserWarehouseAccessController(
         return Ok(new
         {
             auditId = $"SOD-ISO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
+            warehouseId,
             activeMemberships,
             crossSiteLeakageDetected = invalidMemberships > 0,
             sodPolicyStatus = invalidMemberships == 0 ? "STRICT_ISOLATION_VERIFIED" : "INACTIVE_MEMBERSHIP_DETECTED",

@@ -55,6 +55,8 @@ const errorMessage=(e:unknown)=>{
 export default function InventoryLocks(){
   const canManage=usePermission('inventory_lock.manage');
   const canRecallBlock=usePermission('inventory_status_change.create')||canManage;
+  const canReadWarehouses=usePermission('warehouse.read')||canManage||canRecallBlock;
+  const [showCreateForm,setShowCreateForm]=useState(true);
   const [locks,setLocks]=useState<LockRow[]>([]);
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]);
   const [statuses,setStatuses]=useState<Status[]>([]);
@@ -106,8 +108,8 @@ export default function InventoryLocks(){
     try{
       const [lockResponse,warehouseResponse,statusResponse]=await Promise.all([
         apiClient.get('/api/inventory/locks'),
-        apiClient.get('/api/Warehouses'),
-        apiClient.get('/api/inventory/statuses'),
+        (canReadWarehouses?apiClient.get('/api/Warehouses'):Promise.resolve({data:[]})).catch(()=>({data:[]})),
+        apiClient.get('/api/inventory/statuses').catch(()=>({data:[]})),
       ]);
       setLocks(lockResponse.data);
       setWarehouses(warehouseResponse.data);
@@ -184,7 +186,12 @@ export default function InventoryLocks(){
     {recallMsg&&<p role="status" className="ui-success-text">{recallMsg}</p>}
     <div className="ui-stack">
       {canManage&&<UiCard title="Tạo khóa tồn kho">
-        <form onSubmit={create} className="ui-form-grid" aria-busy={busy}>
+        <div className="ui-inline-actions" style={{marginBottom:showCreateForm?12:0}}>
+          <button type="button" onClick={()=>setShowCreateForm(v=>!v)}>
+            {showCreateForm?'Thu gọn biểu mẫu':'Mở biểu mẫu tạo mới'}
+          </button>
+        </div>
+        {showCreateForm&&<form onSubmit={create} className="ui-form-grid" aria-busy={busy}>
           <UiToolbarField label="Loại khóa">
             <select value={form.lockType} onChange={e=>setForm(x=>({...x,lockType:e.target.value}))}>
               {types.map(x=><option key={x} value={x}>{lockTypeLabel(x)}</option>)}
@@ -221,7 +228,7 @@ export default function InventoryLocks(){
             <input value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} required/>
           </UiToolbarField>
           <button type="submit" disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
-        </form>
+        </form>}
         <p className="ui-muted-text">Giữ do chất lượng, giữ để điều tra và giữ do thu hồi phải được mở thủ công; không tự hết hiệu lực.</p>
       </UiCard>}
 
