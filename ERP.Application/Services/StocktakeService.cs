@@ -156,7 +156,12 @@ namespace ERP.Application.Services
                 Security.ApprovalSafetyGuard.EnsureDifferentChecker(stocktake.CreatedBy, approvedByUserId);
 
                 if (stocktake.Status != ReceiptStatus.Draft)
-                    throw new BusinessRuleException("Chỉ có thể duyệt phiếu ở trạng thái nháp");
+                {
+                    var stateConflict = new BusinessRuleException("Chỉ có thể duyệt phiếu ở trạng thái nháp");
+                    stateConflict.Data["HttpStatusCode"] = 409;
+                    stateConflict.Data["ErrorCode"] = "STOCKTAKE_STATE_CONFLICT";
+                    throw stateConflict;
+                }
 
                 stocktake.Status = ReceiptStatus.Approved;
                 stocktake.ApprovedBy = approvedByUserId;

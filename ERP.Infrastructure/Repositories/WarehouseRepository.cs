@@ -43,6 +43,8 @@ namespace ERP.Infrastructure.Repositories
             if (await _context.Docks.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
             if (await _context.YardSlots.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
             if (await _context.DockAppointments.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
+            if (await _context.HandlingUnits.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
+            if (await _context.Backorders.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
             if (await _context.InventoryLocks.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
             if (await _context.InventoryLocationMovements.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
             if (await _context.WarehouseLocations.AnyAsync(x => x.WarehouseId == warehouseId && !x.IsSystemManaged && !SystemLocationCodes.Contains(x.Code))) return true;
@@ -50,9 +52,34 @@ namespace ERP.Infrastructure.Repositories
             return false;
         }
 
+        public override async Task<Warehouse> AddAsync(Warehouse entity, CancellationToken cancellationToken = default)
+        {
+            await using var transaction = _context.Database.IsRelational() && _context.Database.CurrentTransaction is null
+                ? await _context.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+
+            if (entity.UserAccesses.Count > 0 && _context.Database.IsRelational())
+            {
+                foreach (var access in entity.UserAccesses.ToList())
+                {
+                    var userExists = await _context.Users.AnyAsync(u => u.Id == access.UserId, cancellationToken);
+                    if (!userExists)
+                    {
+                        entity.UserAccesses.Remove(access);
+                    }
+                }
+            }
+
+            var created = await base.AddAsync(entity, cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
+
+            return created;
+        }
+
         public override async Task DeleteAsync(Warehouse entity, CancellationToken cancellationToken = default)
         {
-            await using var transaction = _context.Database.CurrentTransaction is null
+            await using var transaction = _context.Database.IsRelational() && _context.Database.CurrentTransaction is null
                 ? await _context.Database.BeginTransactionAsync(cancellationToken)
                 : null;
 

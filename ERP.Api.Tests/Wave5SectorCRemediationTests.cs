@@ -782,4 +782,70 @@ public sealed class Wave5SectorCRemediationTests
         damagedLoc.IsReceivable.Should().BeFalse();
         damagedLoc.IsSystemManaged.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task W8_03_Race4_IdempotentCommandFilter_FiveConcurrentRequests_NeverThrows500()
+    {
+        var dbName = "Wave8_IdemRace4_" + Guid.NewGuid().ToString("N");
+        DbContextOptions<ErpKhoDbContext> CreateSharedOptions() =>
+            new DbContextOptionsBuilder<ErpKhoDbContext>()
+                .UseInMemoryDatabase(dbName)
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+                .Options;
+
+        var idempotencyKey = "W8-API-RACE4-" + Guid.NewGuid().ToString("N");
+        var handlerInvocationCount = 0;
+        using var startGate = new ManualResetEventSlim(false);
+
+        var tasks = Enumerable.Range(0, 5).Select(async _ =>
+        {
+            await Task.Yield();
+            startGate.Wait();
+
+            await using var workerDb = new ErpKhoDbContext(CreateSharedOptions());
+            var metadata = new Mock<IRequestMetadata>();
+            metadata.SetupGet(x => x.CorrelationId).Returns("corr-w8-race4");
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+
+            var filter = new IdempotentCommandFilter(
+                "ImportReceipts.Create",
+                workerDb,
+                metadata.Object,
+                warehouseAuth.Object);
+
+            var httpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "17")], "TestAuth"))
+            };
+            httpContext.Request.Headers["Idempotency-Key"] = idempotencyKey;
+            var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
+            var executingCtx = new ActionExecutingContext(
+                actionContext,
+                new List<IFilterMetadata>(),
+                new Dictionary<string, object?> { ["dto"] = new { Code = "IR-W8-01", WarehouseId = 1 } },
+                controller: new object());
+
+            IActionResult? finalResult = null;
+            await filter.OnActionExecutionAsync(executingCtx, async () =>
+            {
+                Interlocked.Increment(ref handlerInvocationCount);
+                await Task.Delay(40);
+                var executed = new ActionExecutedContext(executingCtx, executingCtx.Filters, executingCtx.Controller)
+                {
+                    Result = new OkObjectResult(new { id = 801, code = "IR-W8-01", status = "Draft" })
+                };
+                finalResult = executed.Result;
+                return executed;
+            });
+
+            return executingCtx.Result ?? finalResult;
+        }).ToArray();
+
+        startGate.Set();
+        var results = await Task.WhenAll(tasks);
+
+        results.Should().HaveCount(5);
+        results.Should().NotContainNulls("every concurrent request must produce a clean HTTP result without throwing 500");
+        handlerInvocationCount.Should().BeGreaterThanOrEqualTo(1);
+    }
 }

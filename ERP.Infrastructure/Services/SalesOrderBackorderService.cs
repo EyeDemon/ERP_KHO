@@ -301,8 +301,20 @@ public sealed class SalesOrderBackorderService(
         BackorderReallocateDto request,
         CancellationToken cancellationToken = default)
     {
+        var lockScope = context.Database.IsSqlServer()
+            ? await context.Backorders.AsNoTracking()
+                .Where(x => x.Id == id)
+                .Select(x => new { x.WarehouseId, x.SalesOrderLine.ProductId })
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         await ExecuteSerializableAsync(async token =>
         {
+            if (lockScope is not null)
+            {
+                await AcquireAllocationLocksAsync(lockScope.WarehouseId, [lockScope.ProductId], token);
+            }
+
             var row = await LoadBackorderAsync(id, true, token);
             ApplyVersion(row, request.RowVersion);
 
@@ -461,8 +473,32 @@ public sealed class SalesOrderBackorderService(
         Func<SalesOrder, CancellationToken, Task> mutation,
         CancellationToken cancellationToken)
     {
+        int? lockWarehouseId = null;
+        int[] lockProductIds = [];
+        if (context.Database.IsSqlServer())
+        {
+            lockWarehouseId = await context.SalesOrders.AsNoTracking()
+                .Where(x => x.Id == id)
+                .Select(x => (int?)x.WarehouseId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (lockWarehouseId.HasValue)
+            {
+                lockProductIds = await context.SalesOrderLines.AsNoTracking()
+                    .Where(x => x.SalesOrderId == id)
+                    .Select(x => x.ProductId)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToArrayAsync(cancellationToken);
+            }
+        }
+
         await ExecuteSerializableAsync(async token =>
         {
+            if (lockWarehouseId.HasValue && lockProductIds.Length > 0)
+            {
+                await AcquireAllocationLocksAsync(lockWarehouseId.Value, lockProductIds, token);
+            }
+
             var order = await LoadOrderAsync(id, true, token);
             ApplyVersion(order, encodedRowVersion);
             await mutation(order, token);
@@ -470,6 +506,29 @@ public sealed class SalesOrderBackorderService(
             return true;
         }, cancellationToken);
         return await GetSalesOrderAsync(id, cancellationToken);
+    }
+
+    private async Task AcquireAllocationLocksAsync(
+        int warehouseId,
+        IEnumerable<int> productIds,
+        CancellationToken token)
+    {
+        if (!context.Database.IsSqlServer())
+            return;
+
+        foreach (var productId in productIds.Distinct().OrderBy(x => x))
+        {
+            var resource = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
+            await context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {resource},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;", token);
+        }
     }
 
     private async Task<SalesOrder> LoadOrderAsync(int id, bool tracking, CancellationToken token)
@@ -753,31 +812,45 @@ public sealed class SalesOrderBackorderService(
         CancellationToken token)
     {
         var own = context.Database.CurrentTransaction is null;
-        await using var transaction = own
-            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, token)
-            : null;
-        try
+        var maxAttempts = own && context.Database.IsSqlServer() ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
         {
-            var result = await action(token);
-            if (transaction is not null) await transaction.CommitAsync(token);
-            return result;
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw new ConcurrencyException("Demand đã thay đổi đồng thời. Vui lòng tải lại.", ex);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw Conflict("DEMAND_DUPLICATE", "Demand/Backorder bị trùng do yêu cầu đồng thời.");
-        }
-        catch
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw;
+            await using var transaction = own
+                ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, token)
+                : null;
+            try
+            {
+                var result = await action(token);
+                if (transaction is not null) await transaction.CommitAsync(token);
+                return result;
+            }
+            catch (Exception ex) when (own && attempt < maxAttempts && IsSqlDeadlock(ex))
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, token);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw new ConcurrencyException("Demand đã thay đổi đồng thời. Vui lòng tải lại.", ex);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw Conflict("DEMAND_DUPLICATE", "Demand/Backorder bị trùng do yêu cầu đồng thời.");
+            }
+            catch
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw;
+            }
         }
     }
+
+    private static bool IsSqlDeadlock(Exception ex) =>
+        ex is SqlException { Number: 1205 } ||
+        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } };
 
     private void AddAudit(string action, SalesOrder order, string values) =>
         context.AuditLogs.Add(new AuditLog

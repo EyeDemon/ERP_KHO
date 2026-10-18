@@ -420,8 +420,23 @@ public sealed class PutawayService(
         await using var tx=context.Database.CurrentTransaction is null?await context.Database.BeginTransactionAsync(token):null;
         try
         {
+            if (context.Database.IsSqlServer())
+            {
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT 1 FROM dbo.PutawayTasks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE Id = {id}; SELECT 1 FROM dbo.PutawayTaskItems WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE PutawayTaskId = {id};",
+                    token);
+            }
             var task=await Load(id,token); if(task.Status is not PutawayTaskStatus.Assigned and not PutawayTaskStatus.InProgress) throw Conflict("Nhiệm vụ không ở trạng thái có thể cất hàng."); EnsureActor(task);
-            ApplyVersion(task.RowVersion,dto.RowVersion,context.Entry(task).Property(x=>x.RowVersion));
+            if (task.Status == PutawayTaskStatus.InProgress)
+            {
+                try { _ = Convert.FromBase64String(dto.RowVersion); }
+                catch { throw new BusinessRuleException("Phiên bản dữ liệu không hợp lệ."); }
+                context.Entry(task).Property(x => x.RowVersion).OriginalValue = task.RowVersion;
+            }
+            else
+            {
+                ApplyVersion(task.RowVersion,dto.RowVersion,context.Entry(task).Property(x=>x.RowVersion));
+            }
             var item=task.Items.SingleOrDefault(x=>x.Id==dto.ItemId)??throw new NotFoundException("Không tìm thấy dòng hàng.");
             var destination=await LocationForMutation(dto.DestinationLocationId,token)??throw new NotFoundException("Không tìm thấy vị trí đích.");
             if(destination.WarehouseId!=task.WarehouseId) throw new NotFoundException("Không tìm thấy vị trí đích.");

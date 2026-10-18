@@ -12,21 +12,28 @@ namespace ERP.Application.Services
         private readonly IWarehouseRepository _warehouseRepository;
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
         private readonly IInventoryStockRepository? _stockRepository;
+        private readonly ICurrentUser? _currentUser;
 
-        internal WarehouseService(IWarehouseRepository warehouseRepository, IInventoryStockRepository? stockRepository = null)
+        internal WarehouseService(
+            IWarehouseRepository warehouseRepository,
+            IInventoryStockRepository? stockRepository = null,
+            ICurrentUser? currentUser = null)
         {
             _warehouseRepository = warehouseRepository;
             _stockRepository = stockRepository;
+            _currentUser = currentUser;
         }
 
         public WarehouseService(
             IWarehouseRepository warehouseRepository,
             IWarehouseAuthorizationService warehouseAuthorization,
-            IInventoryStockRepository? stockRepository = null)
+            IInventoryStockRepository? stockRepository = null,
+            ICurrentUser? currentUser = null)
         {
             _warehouseRepository = warehouseRepository;
             _warehouseAuthorization = warehouseAuthorization;
             _stockRepository = stockRepository;
+            _currentUser = currentUser;
         }
 
         public async Task<IEnumerable<WarehouseDto>> GetAllWarehousesAsync()
@@ -88,7 +95,22 @@ namespace ERP.Application.Services
             warehouse.Locations.Add(new WarehouseLocation { Code="LEGACY", Name="Vị trí tương thích nghiệp vụ kho", LocationType=WarehouseLocationType.Legacy, IsActive=true, IsPickable=true, IsSystemManaged=true });
             warehouse.Locations.Add(new WarehouseLocation { Code="DAMAGED", Name="Vị trí cách ly hàng hỏng", LocationType=WarehouseLocationType.Damaged, IsActive=true, IsPickable=false, IsReceivable=false, IsSystemManaged=true });
 
+            var creatorUserId = _currentUser is { IsAuthenticated: true, UserId: > 0 }
+                ? _currentUser.UserId
+                : _warehouseAuthorization?.CurrentUserId;
+
+            if (creatorUserId is > 0)
+            {
+                warehouse.UserAccesses.Add(new UserWarehouse
+                {
+                    UserId = creatorUserId.Value,
+                    CreatedBy = creatorUserId.Value,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
             await _warehouseRepository.AddAsync(warehouse);
+            _warehouseAuthorization?.InvalidateWarehouseAccessCache(creatorUserId);
 
             return new WarehouseDto
             {

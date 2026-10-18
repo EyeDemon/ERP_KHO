@@ -9,6 +9,21 @@ public sealed class WarehouseAuthorizationService(
     ErpKhoDbContext context,
     ICurrentUser currentUser) : IWarehouseAuthorizationService
 {
+    private readonly Dictionary<int, IReadOnlyList<int>> _accessibleWarehouseCache = new();
+
+    public int? CurrentUserId => currentUser.IsAuthenticated && currentUser.UserId > 0 ? currentUser.UserId : null;
+
+    public void InvalidateWarehouseAccessCache(int? userId = null)
+    {
+        if (userId.HasValue)
+        {
+            _accessibleWarehouseCache.Remove(userId.Value);
+            return;
+        }
+
+        _accessibleWarehouseCache.Clear();
+    }
+
     public async Task<IReadOnlyList<int>> GetAccessibleWarehouseIdsAsync(CancellationToken cancellationToken = default)
     {
         if (!currentUser.IsAuthenticated)
@@ -20,10 +35,13 @@ public sealed class WarehouseAuthorizationService(
                 .Select(x => x.Id)
                 .ToListAsync(cancellationToken);
 
-        return await context.UserWarehouses.AsNoTracking()
+        var warehouseIds = await context.UserWarehouses.AsNoTracking()
             .Where(x => x.UserId == currentUser.UserId && !context.Warehouses.Any(w => w.Id == x.WarehouseId && !w.IsActive))
             .Select(x => x.WarehouseId)
             .ToListAsync(cancellationToken);
+
+        _accessibleWarehouseCache[currentUser.UserId] = warehouseIds;
+        return warehouseIds;
     }
 
     public async Task<bool> CanAccessWarehouseAsync(int warehouseId, CancellationToken cancellationToken = default)
@@ -40,12 +58,17 @@ public sealed class WarehouseAuthorizationService(
             return await context.Warehouses.AsNoTracking()
                 .AnyAsync(x => x.Id == warehouseId && x.IsActive, cancellationToken);
 
-        return await context.UserWarehouses.AsNoTracking()
+        var allowed = await context.UserWarehouses.AsNoTracking()
             .AnyAsync(x =>
                 x.UserId == currentUser.UserId &&
                 x.WarehouseId == warehouseId &&
                 !context.Warehouses.Any(w => w.Id == x.WarehouseId && !w.IsActive),
                 cancellationToken);
+
+        if (!allowed)
+            _accessibleWarehouseCache.Remove(currentUser.UserId);
+
+        return allowed;
     }
 
     public async Task EnsureWarehouseAccessAsync(int warehouseId, CancellationToken cancellationToken = default)

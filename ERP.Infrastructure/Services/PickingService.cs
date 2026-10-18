@@ -372,6 +372,12 @@ public sealed class PickingService(
                         x.Location.IsActive &&
                         !x.Location.IsBlocked &&
                         x.Location.IsPickable &&
+                        !context.ShortPickExceptions.Any(sp =>
+                            sp.PickingTaskLine.ProductId == allocation.ProductId &&
+                            sp.PickingTaskLine.SourceLocationId == x.LocationId &&
+                            sp.PickingTaskLine.PickingTask.WarehouseId == allocation.WarehouseId &&
+                            sp.PickingTaskLine.PickingTask.Status != PickingTaskStatus.Completed &&
+                            sp.PickingTaskLine.PickingTask.Status != PickingTaskStatus.Cancelled) &&
                         (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today) &&
                         x.Quantity > x.ReservedQuantity)
             .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
@@ -784,37 +790,86 @@ public sealed class PickingService(
         CancellationToken cancellationToken)
     {
         var ownTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownTransaction
-            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : null;
-        try
+        int? lockWarehouseId = null;
+        int[] lockProductIds = [];
+        if (context.Database.IsSqlServer())
         {
-            var task = await LoadAsync(id, true, cancellationToken);
-            ApplyVersion(task, rowVersion);
-            await mutation(task, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-            return Map(task);
+            lockWarehouseId = await context.PickingTasks.AsNoTracking()
+                .Where(x => x.Id == id)
+                .Select(x => (int?)x.WarehouseId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (lockWarehouseId.HasValue)
+            {
+                lockProductIds = await context.PickingTaskLines.AsNoTracking()
+                    .Where(x => x.PickingTaskId == id)
+                    .Select(x => x.ProductId)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToArrayAsync(cancellationToken);
+            }
         }
-        catch (DbUpdateConcurrencyException ex)
+
+        var maxAttempts = ownTransaction && context.Database.IsSqlServer() ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
         {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw new ConcurrencyException("Dữ liệu Picking đã thay đổi. Vui lòng tải lại và thử lại.", ex);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 })
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw new DeadlockException("Giao dịch Picking bị deadlock.", ex);
-        }
-        catch (SqlException ex) when (ex.Number == 1205)
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw new DeadlockException("Giao dịch Picking bị deadlock.", ex);
-        }
-        catch
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw;
+            await using var transaction = ownTransaction
+                ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                : null;
+            try
+            {
+                if (lockWarehouseId.HasValue && context.Database.IsSqlServer())
+                {
+                    foreach (var productId in lockProductIds)
+                    {
+                        var resource = $"ERP:InventoryAllocation:{productId}:{lockWarehouseId.Value}";
+                        await context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {resource},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;", cancellationToken);
+                    }
+                }
+
+                var task = await LoadAsync(id, true, cancellationToken);
+                ApplyVersion(task, rowVersion);
+                await mutation(task, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+                var dto = Map(await LoadAsync(id, false, cancellationToken));
+                if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+                return dto;
+            }
+            catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
+                                       (ex is SqlException { Number: 1205 } ||
+                                        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw new ConcurrencyException("Dữ liệu Picking đã thay đổi. Vui lòng tải lại và thử lại.", ex);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 })
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw new DeadlockException("Giao dịch Picking bị deadlock.", ex);
+            }
+            catch (SqlException ex) when (ex.Number == 1205)
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw new DeadlockException("Giao dịch Picking bị deadlock.", ex);
+            }
+            catch
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw;
+            }
         }
     }
 

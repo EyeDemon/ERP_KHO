@@ -81,14 +81,14 @@ public sealed class IdempotentCommandFilter(
         {
             await context.SaveChangesAsync(actionContext.HttpContext.RequestAborted);
         }
-        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        catch (Exception ex) when (IsUniqueViolation(ex) || IsDeadlock(ex))
         {
             await transaction.RollbackAsync(CancellationToken.None);
             context.ChangeTracker.Clear();
-            var existing = await context.IdempotencyRecords.AsNoTracking().SingleAsync(
+            var existing = await context.IdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(
                 x => x.UserId == userId && x.CommandScope == commandScope && x.KeyHash == keyHash,
                 actionContext.HttpContext.RequestAborted);
-            if (existing.RequestFingerprint != fingerprint || existing.Status != IdempotencyStatus.Completed)
+            if (existing is null || existing.RequestFingerprint != fingerprint || existing.Status != IdempotencyStatus.Completed)
             {
                 actionContext.Result = new ConflictObjectResult(new { message = "Idempotency-Key đang được xử lý hoặc đã được dùng cho yêu cầu khác." });
                 return;
@@ -318,13 +318,18 @@ public sealed class IdempotentCommandFilter(
         || scope.StartsWith("DockAppointment.", StringComparison.Ordinal)
         || scope.StartsWith("DockYard.", StringComparison.Ordinal)
         || scope.StartsWith("Approval.", StringComparison.Ordinal));
-    private static bool IsUniqueViolation(DbUpdateException ex)
+    private static bool IsUniqueViolation(Exception ex)
     {
-        if (ex.InnerException is SqlException { Number: 2601 or 2627 }) return true;
-        var inner = ex.InnerException;
+        if (ex is not DbUpdateException dbEx) return false;
+        if (dbEx.InnerException is SqlException { Number: 2601 or 2627 }) return true;
+        var inner = dbEx.InnerException;
         return inner?.GetType().Name == "SqliteException"
             && inner.GetType().GetProperty("SqliteErrorCode")?.GetValue(inner) is 19;
     }
+
+    private static bool IsDeadlock(Exception ex) =>
+        ex is SqlException { Number: 1205 } ||
+        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } };
     internal static int ResultStatus(IActionResult? result) => result switch
     {
         ForbidResult => StatusCodes.Status403Forbidden,

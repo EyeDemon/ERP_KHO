@@ -153,9 +153,12 @@ public sealed class Wave7FullChaosLifecycleSqlTests
                 state.Wh1Id = wh1.Id;
                 state.Wh2Id = wh2.Id;
 
+                var wh1Reloaded = await whService.GetWarehouseByIdAsync(state.Wh1Id);
+                wh1Reloaded.Code.Should().Be($"WH1-{suffix}");
+                var wh2Reloaded = await whService.GetWarehouseByIdAsync(state.Wh2Id);
+                wh2Reloaded.Code.Should().Be($"WH2-{suffix}");
+
                 whDb.UserWarehouses.AddRange(
-                    new UserWarehouse { UserId = state.MakerId, WarehouseId = state.Wh1Id, CreatedBy = state.MakerId },
-                    new UserWarehouse { UserId = state.MakerId, WarehouseId = state.Wh2Id, CreatedBy = state.MakerId },
                     new UserWarehouse { UserId = state.CheckerId, WarehouseId = state.Wh1Id, CreatedBy = state.MakerId },
                     new UserWarehouse { UserId = state.CheckerId, WarehouseId = state.Wh2Id, CreatedBy = state.MakerId });
                 await whDb.SaveChangesAsync();

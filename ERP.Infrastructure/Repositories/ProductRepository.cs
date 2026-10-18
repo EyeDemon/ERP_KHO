@@ -81,13 +81,14 @@ namespace ERP.Infrastructure.Repositories
             if (await _context.InventorySerials.AnyAsync(x => x.ProductId == productId, cancellationToken)) return true;
             if (await _context.InventoryLocationMovements.AnyAsync(x => x.ProductId == productId, cancellationToken)) return true;
             if (await _context.InventoryLocks.AnyAsync(x => x.ProductId == productId, cancellationToken)) return true;
+            if (await _context.ImportReceiptInventoryIdentities.AnyAsync(x => x.ProductId == productId, cancellationToken)) return true;
 
             return false;
         }
 
         public override async Task DeleteAsync(Product entity, CancellationToken cancellationToken = default)
         {
-            await using var transaction = _context.Database.CurrentTransaction is null
+            await using var transaction = _context.Database.IsRelational() && _context.Database.CurrentTransaction is null
                 ? await _context.Database.BeginTransactionAsync(cancellationToken)
                 : null;
 
