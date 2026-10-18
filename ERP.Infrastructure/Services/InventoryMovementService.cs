@@ -26,183 +26,205 @@ public sealed class InventoryMovementService(
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new BusinessRuleException("Lý do di chuyển tồn kho là bắt buộc.");
 
+        var scope = await context.InventoryStocks.AsNoTracking()
+            .Where(x => x.Id == request.InventoryStockId)
+            .Select(x => new { x.WarehouseId, x.ProductId })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Không tìm thấy inventory bucket nguồn.");
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(scope.WarehouseId, cancellationToken);
+
+        var isSqlServer = context.Database.IsRelational() && context.Database.IsSqlServer();
         var own = context.Database.CurrentTransaction is null;
-        await using var tx = own
-            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : null;
-        try
+        var maxAttempts = own && isSqlServer ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
         {
-            var source = await context.InventoryStocks
-                .Include(x => x.Product).ThenInclude(x => x.Unit)
-                .Include(x => x.Location)
-                .SingleOrDefaultAsync(x => x.Id == request.InventoryStockId, cancellationToken)
-                ?? throw new NotFoundException("Không tìm thấy inventory bucket nguồn.");
-            await warehouseAuthorization.EnsureWarehouseAccessAsync(source.WarehouseId, cancellationToken);
-
-            if (!source.LocationId.HasValue)
-                throw Conflict("INV_BUCKET_CONFLICT", "Inventory bucket nguồn chưa có Location hợp lệ.");
-            if (source.LocationId.Value == request.DestinationLocationId)
-                throw Validation("TRANSFER_SOURCE_EQUALS_DESTINATION", "Vị trí nguồn và đích phải khác nhau.");
-
-            var destinationLocation = await context.WarehouseLocations
-                .SingleOrDefaultAsync(x => x.Id == request.DestinationLocationId, cancellationToken)
-                ?? throw new NotFoundException("Không tìm thấy vị trí đích.");
-            if (destinationLocation.WarehouseId != source.WarehouseId)
-                throw new NotFoundException("Không tìm thấy vị trí đích.");
-            if (!destinationLocation.IsActive || destinationLocation.IsBlocked || destinationLocation.IsSystemManaged)
-                throw Conflict("INV_BUCKET_CONFLICT", "Vị trí đích không cho phép internal movement.");
-            if (source.Status == InventoryStatus.Available &&
-                (!destinationLocation.IsPickable ||
-                 destinationLocation.LocationType is WarehouseLocationType.Damaged or WarehouseLocationType.Rejected))
-                throw Conflict("INV_BUCKET_CONFLICT", "Không thể di chuyển tồn kho AVAILABLE vào vị trí không cho phép lấy hàng hoặc vị trí cách ly/hàng hỏng.");
-            if (source.Status is InventoryStatus.Damaged or InventoryStatus.Rejected or InventoryStatus.Quarantine &&
-                (destinationLocation.IsPickable || destinationLocation.LocationType == WarehouseLocationType.Storage))
-                throw Conflict("INV_BUCKET_CONFLICT", $"Không thể di chuyển tồn kho trạng thái {source.Status} vào vị trí lưu trữ lấy hàng (Storage/Pickable).");
-
-            ValidateQuantityPrecision(source, request.Quantity);
-            if (source.SerialId.HasValue && request.Quantity != 1m)
-                throw Validation("SERIAL_QUANTITY_INVALID", "Inventory theo Serial chỉ được di chuyển đúng 1 base unit.");
-            if (source.Quantity - source.ReservedQuantity < request.Quantity)
-                throw Conflict("INV_INSUFFICIENT_AVAILABLE", "Không thể di chuyển phần tồn đang reserved/allocation.");
-
-            await locks.EnsureBucketUnlockedAsync(
-                source.WarehouseId,
-                source.LocationId,
-                source.ProductId,
-                source.Status,
-                source.LotId,
-                source.SerialId,
-                cancellationToken);
-            await locks.EnsureBucketUnlockedAsync(
-                source.WarehouseId,
-                destinationLocation.Id,
-                source.ProductId,
-                source.Status,
-                source.LotId,
-                source.SerialId,
-                cancellationToken);
-
-            await EnsureDestinationCapacityAsync(destinationLocation, source.Product, request.Quantity, cancellationToken);
-
-            var destination = await context.InventoryStocks.SingleOrDefaultAsync(
-                x => x.ProductId == source.ProductId &&
-                     x.WarehouseId == source.WarehouseId &&
-                     x.LocationId == destinationLocation.Id &&
-                     x.Status == source.Status &&
-                     x.LotId == source.LotId &&
-                     x.SerialId == source.SerialId,
-                cancellationToken);
-
-            source.Quantity -= request.Quantity;
-            source.LastUpdated = DateTime.UtcNow;
-            if (destination is null)
+            await using var tx = own
+                ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                : null;
+            try
             {
-                destination = new InventoryStock
+                await context.AcquireInventoryAllocationLocksAsync([(scope.WarehouseId, scope.ProductId)], cancellationToken);
+
+                var source = await context.InventoryStocks
+                    .Include(x => x.Product).ThenInclude(x => x.Unit)
+                    .Include(x => x.Location)
+                    .SingleOrDefaultAsync(x => x.Id == request.InventoryStockId, cancellationToken)
+                    ?? throw new NotFoundException("Không tìm thấy inventory bucket nguồn.");
+
+                if (!source.LocationId.HasValue)
+                    throw Conflict("INV_BUCKET_CONFLICT", "Inventory bucket nguồn chưa có Location hợp lệ.");
+                if (source.LocationId.Value == request.DestinationLocationId)
+                    throw Validation("TRANSFER_SOURCE_EQUALS_DESTINATION", "Vị trí nguồn và đích phải khác nhau.");
+
+                var destinationLocation = await context.WarehouseLocations
+                    .SingleOrDefaultAsync(x => x.Id == request.DestinationLocationId, cancellationToken)
+                    ?? throw new NotFoundException("Không tìm thấy vị trí đích.");
+                if (destinationLocation.WarehouseId != source.WarehouseId)
+                    throw new NotFoundException("Không tìm thấy vị trí đích.");
+                if (!destinationLocation.IsActive || destinationLocation.IsBlocked || destinationLocation.IsSystemManaged)
+                    throw Conflict("INV_BUCKET_CONFLICT", "Vị trí đích không cho phép internal movement.");
+                if (source.Status == InventoryStatus.Available &&
+                    (!destinationLocation.IsPickable ||
+                     destinationLocation.LocationType is WarehouseLocationType.Damaged or WarehouseLocationType.Rejected))
+                    throw Conflict("INV_BUCKET_CONFLICT", "Không thể di chuyển tồn kho AVAILABLE vào vị trí không cho phép lấy hàng hoặc vị trí cách ly/hàng hỏng.");
+                if (source.Status is InventoryStatus.Damaged or InventoryStatus.Rejected or InventoryStatus.Quarantine &&
+                    (destinationLocation.IsPickable || destinationLocation.LocationType == WarehouseLocationType.Storage))
+                    throw Conflict("INV_BUCKET_CONFLICT", $"Không thể di chuyển tồn kho trạng thái {source.Status} vào vị trí lưu trữ lấy hàng (Storage/Pickable).");
+
+                ValidateQuantityPrecision(source, request.Quantity);
+                if (source.SerialId.HasValue && request.Quantity != 1m)
+                    throw Validation("SERIAL_QUANTITY_INVALID", "Inventory theo Serial chỉ được di chuyển đúng 1 base unit.");
+                if (source.Quantity - source.ReservedQuantity < request.Quantity)
+                    throw Conflict("INV_INSUFFICIENT_AVAILABLE", "Không thể di chuyển phần tồn đang reserved/allocation.");
+
+                await locks.EnsureBucketUnlockedAsync(
+                    source.WarehouseId,
+                    source.LocationId,
+                    source.ProductId,
+                    source.Status,
+                    source.LotId,
+                    source.SerialId,
+                    cancellationToken);
+                await locks.EnsureBucketUnlockedAsync(
+                    source.WarehouseId,
+                    destinationLocation.Id,
+                    source.ProductId,
+                    source.Status,
+                    source.LotId,
+                    source.SerialId,
+                    cancellationToken);
+
+                await EnsureDestinationCapacityAsync(destinationLocation, source.Product, request.Quantity, cancellationToken);
+
+                var destination = await context.InventoryStocks.SingleOrDefaultAsync(
+                    x => x.ProductId == source.ProductId &&
+                         x.WarehouseId == source.WarehouseId &&
+                         x.LocationId == destinationLocation.Id &&
+                         x.Status == source.Status &&
+                         x.LotId == source.LotId &&
+                         x.SerialId == source.SerialId,
+                    cancellationToken);
+
+                source.Quantity -= request.Quantity;
+                source.LastUpdated = DateTime.UtcNow;
+                if (destination is null)
+                {
+                    destination = new InventoryStock
+                    {
+                        ProductId = source.ProductId,
+                        WarehouseId = source.WarehouseId,
+                        LocationId = destinationLocation.Id,
+                        LotId = source.LotId,
+                        SerialId = source.SerialId,
+                        Status = source.Status,
+                        Quantity = request.Quantity,
+                        ReservedQuantity = 0,
+                        LastUpdated = DateTime.UtcNow
+                    };
+                    context.InventoryStocks.Add(destination);
+                }
+                else
+                {
+                    destination.Quantity += request.Quantity;
+                    destination.LastUpdated = DateTime.UtcNow;
+                }
+
+                var movement = new InventoryLocationMovement
+                {
+                    WarehouseId = source.WarehouseId,
+                    ProductId = source.ProductId,
+                    InventoryStatus = source.Status,
+                    LotId = source.LotId,
+                    SerialId = source.SerialId,
+                    FromLocationId = source.LocationId.Value,
+                    ToLocationId = destinationLocation.Id,
+                    BaseQuantity = request.Quantity,
+                    EnteredQuantity = request.Quantity,
+                    EnteredUnitCode = source.Product.Unit?.Code ?? string.Empty,
+                    ReferenceType = "InventoryMove",
+                    CreatedBy = currentUser.UserId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                context.InventoryLocationMovements.Add(movement);
+                await context.SaveChangesAsync(cancellationToken);
+
+                movement.ReferenceId = movement.Id;
+                var ledger = new InventoryTransaction
                 {
                     ProductId = source.ProductId,
                     WarehouseId = source.WarehouseId,
-                    LocationId = destinationLocation.Id,
+                    LocationId = source.LocationId,
+                    FromLocationId = source.LocationId,
+                    ToLocationId = destinationLocation.Id,
                     LotId = source.LotId,
                     SerialId = source.SerialId,
-                    Status = source.Status,
+                    InventoryStatus = source.Status,
+                    TransactionType = TransactionType.Move,
                     Quantity = request.Quantity,
-                    ReservedQuantity = 0,
-                    LastUpdated = DateTime.UtcNow
+                    ReferenceId = movement.Id,
+                    ReferenceType = "InventoryMove",
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = currentUser.UserId,
+                    Note = request.Reason.Trim()
                 };
-                context.InventoryStocks.Add(destination);
+                context.InventoryTransactions.Add(ledger);
+                context.AuditLogs.Add(new AuditLog
+                {
+                    UserId = currentUser.UserId,
+                    Action = "Inventory.Move",
+                    EntityName = "InventoryLocationMovement",
+                    EntityId = movement.Id,
+                    WarehouseId = source.WarehouseId,
+                    Timestamp = DateTime.UtcNow,
+                    OldValues = $"StockId: {source.Id}; LocationId: {source.LocationId}; QuantityBefore: {source.Quantity + request.Quantity}",
+                    NewValues = $"DestinationStockId: {destination.Id}; ToLocationId: {destinationLocation.Id}; Quantity: {request.Quantity}; Status: {source.Status}; LotId: {source.LotId}; SerialId: {source.SerialId}",
+                    Reason = request.Reason.Trim(),
+                    Result = "Success",
+                    Severity = "Information"
+                });
+                await context.SaveChangesAsync(cancellationToken);
+                if (tx is not null) await tx.CommitAsync(cancellationToken);
+
+                return new InventoryMoveResultDto
+                {
+                    MovementId = movement.Id,
+                    TransactionId = ledger.Id,
+                    SourceStockId = source.Id,
+                    DestinationStockId = destination.Id,
+                    WarehouseId = source.WarehouseId,
+                    ProductId = source.ProductId,
+                    FromLocationId = source.LocationId.Value,
+                    ToLocationId = destinationLocation.Id,
+                    InventoryStatus = source.Status.ToString(),
+                    LotId = source.LotId,
+                    SerialId = source.SerialId,
+                    Quantity = request.Quantity
+                };
             }
-            else
+            catch (Exception ex) when (own && attempt < maxAttempts &&
+                                       (ex is DeadlockException ||
+                                        ex is SqlException { Number: 1205 } ||
+                                        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
             {
-                destination.Quantity += request.Quantity;
-                destination.LastUpdated = DateTime.UtcNow;
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
             }
-
-            var movement = new InventoryLocationMovement
+            catch (DbUpdateConcurrencyException ex)
             {
-                WarehouseId = source.WarehouseId,
-                ProductId = source.ProductId,
-                InventoryStatus = source.Status,
-                LotId = source.LotId,
-                SerialId = source.SerialId,
-                FromLocationId = source.LocationId.Value,
-                ToLocationId = destinationLocation.Id,
-                BaseQuantity = request.Quantity,
-                EnteredQuantity = request.Quantity,
-                EnteredUnitCode = source.Product.Unit?.Code ?? string.Empty,
-                ReferenceType = "InventoryMove",
-                CreatedBy = currentUser.UserId,
-                CreatedAt = DateTime.UtcNow
-            };
-            context.InventoryLocationMovements.Add(movement);
-            await context.SaveChangesAsync(cancellationToken);
-
-            movement.ReferenceId = movement.Id;
-            var ledger = new InventoryTransaction
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                throw new ConcurrencyException("Inventory bucket đã thay đổi trong lúc di chuyển.", ex);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
             {
-                ProductId = source.ProductId,
-                WarehouseId = source.WarehouseId,
-                LocationId = source.LocationId,
-                FromLocationId = source.LocationId,
-                ToLocationId = destinationLocation.Id,
-                LotId = source.LotId,
-                SerialId = source.SerialId,
-                InventoryStatus = source.Status,
-                TransactionType = TransactionType.Move,
-                Quantity = request.Quantity,
-                ReferenceId = movement.Id,
-                ReferenceType = "InventoryMove",
-                TransactionDate = DateTime.UtcNow,
-                CreatedBy = currentUser.UserId,
-                Note = request.Reason.Trim()
-            };
-            context.InventoryTransactions.Add(ledger);
-            context.AuditLogs.Add(new AuditLog
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                throw Conflict("INV_BUCKET_CONFLICT", "Inventory bucket đích vừa thay đổi đồng thời.");
+            }
+            catch
             {
-                UserId = currentUser.UserId,
-                Action = "Inventory.Move",
-                EntityName = "InventoryLocationMovement",
-                EntityId = movement.Id,
-                WarehouseId = source.WarehouseId,
-                Timestamp = DateTime.UtcNow,
-                OldValues = $"StockId: {source.Id}; LocationId: {source.LocationId}; QuantityBefore: {source.Quantity + request.Quantity}",
-                NewValues = $"DestinationStockId: {destination.Id}; ToLocationId: {destinationLocation.Id}; Quantity: {request.Quantity}; Status: {source.Status}; LotId: {source.LotId}; SerialId: {source.SerialId}",
-                Reason = request.Reason.Trim(),
-                Result = "Success",
-                Severity = "Information"
-            });
-            await context.SaveChangesAsync(cancellationToken);
-            if (tx is not null) await tx.CommitAsync(cancellationToken);
-
-            return new InventoryMoveResultDto
-            {
-                MovementId = movement.Id,
-                TransactionId = ledger.Id,
-                SourceStockId = source.Id,
-                DestinationStockId = destination.Id,
-                WarehouseId = source.WarehouseId,
-                ProductId = source.ProductId,
-                FromLocationId = source.LocationId.Value,
-                ToLocationId = destinationLocation.Id,
-                InventoryStatus = source.Status.ToString(),
-                LotId = source.LotId,
-                SerialId = source.SerialId,
-                Quantity = request.Quantity
-            };
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
-            throw new ConcurrencyException("Inventory bucket đã thay đổi trong lúc di chuyển.", ex);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
-        {
-            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
-            throw Conflict("INV_BUCKET_CONFLICT", "Inventory bucket đích vừa thay đổi đồng thời.");
-        }
-        catch
-        {
-            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
-            throw;
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                throw;
+            }
         }
     }
 

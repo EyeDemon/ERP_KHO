@@ -201,111 +201,140 @@ public sealed partial class StockTransferService(
     {
         EnsureWriteRole();
         var ownsTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
-        try
+        var maxAttempts = ownsTransaction && context.Database.IsSqlServer() ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
         {
-            var entity = await GetLockedScopedAsync(id, cancellationToken);
-            await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
-            if (entity.Status != StockTransferStatus.Approved)
-                throw Conflict("Phiếu không còn ở trạng thái có thể xuất kho.");
-            if (entity.Details.Any(x => x.Product.TrackingType != ProductTrackingType.None))
-                throw new BusinessRuleException("Phiếu điều chuyển kho chưa hỗ trợ sản phẩm quản lý theo Lô/Serial.");
-            var now = DateTime.UtcNow;
-            if (context.Database.IsSqlServer())
+            await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
+            try
             {
-                var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.Approved &&
-                    x.SourceWarehouseId == entity.SourceWarehouseId && x.DestinationWarehouseId == entity.DestinationWarehouseId)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StockTransferStatus.InTransit).SetProperty(x => x.DispatchedBy, currentUser.UserId).SetProperty(x => x.DispatchedAt, now), cancellationToken);
-                if (claimed != 1) throw Conflict("Phiếu không ở trạng thái có thể xuất kho hoặc đã được xử lý.");
+                var entity = await GetLockedScopedAsync(id, cancellationToken);
+                await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.SourceWarehouseId, cancellationToken);
+                if (entity.Status != StockTransferStatus.Approved)
+                    throw Conflict("Phiếu không còn ở trạng thái có thể xuất kho.");
+                if (entity.Details.Any(x => x.Product.TrackingType != ProductTrackingType.None))
+                    throw new BusinessRuleException("Phiếu điều chuyển kho chưa hỗ trợ sản phẩm quản lý theo Lô/Serial.");
+                var now = DateTime.UtcNow;
+                if (context.Database.IsSqlServer())
+                {
+                    var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.Approved &&
+                        x.SourceWarehouseId == entity.SourceWarehouseId && x.DestinationWarehouseId == entity.DestinationWarehouseId)
+                        .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StockTransferStatus.InTransit).SetProperty(x => x.DispatchedBy, currentUser.UserId).SetProperty(x => x.DispatchedAt, now), cancellationToken);
+                    if (claimed != 1) throw Conflict("Phiếu không ở trạng thái có thể xuất kho hoặc đã được xử lý.");
+                }
+                else
+                {
+                    entity.Status = StockTransferStatus.InTransit;
+                    entity.DispatchedBy = currentUser.UserId;
+                    entity.DispatchedAt = now;
+                }
+                var sourceLegacyLocationId = await context.WarehouseLocations
+                    .Where(x => x.WarehouseId == entity.SourceWarehouseId && x.Code == "LEGACY" && x.IsSystemManaged)
+                    .Select(x => (int?)x.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+                await stockRepository.AcquireAllocationLocksAsync(
+                    entity.SourceWarehouseId,
+                    entity.Details.Select(x => x.ProductId),
+                    cancellationToken);
+                foreach (var line in entity.Details.OrderBy(x => x.ProductId))
+                {
+                    if (!await stockRepository.TryDecreaseStockAsync(line.ProductId, entity.SourceWarehouseId, line.RequestedQuantity, cancellationToken))
+                        throw Conflict($"Không đủ tồn kho cho sản phẩm {line.ProductId}.");
+                    line.DispatchedQuantity = line.RequestedQuantity;
+                    context.InventoryTransactions.Add(Transaction(entity, line, entity.SourceWarehouseId, TransactionType.TransferOut, line.RequestedQuantity, now, sourceLegacyLocationId, InventoryStatus.Available));
+                }
+                await context.SaveChangesAsync(cancellationToken);
+                context.AuditLogs.Add(Audit(entity, "StockTransfer.Dispatched", StockTransferStatus.Approved, StockTransferStatus.InTransit, now));
+                await context.SaveChangesAsync(cancellationToken);
+                if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+                if (ownsTransaction) context.ChangeTracker.Clear();
+                return;
             }
-            else
+            catch (Exception ex) when (ownsTransaction && attempt < maxAttempts &&
+                                       (ex is DeadlockException ||
+                                        ex is Microsoft.Data.SqlClient.SqlException { Number: 1205 } ||
+                                        ex is DbUpdateException { InnerException: Microsoft.Data.SqlClient.SqlException { Number: 1205 } }))
             {
-                entity.Status = StockTransferStatus.InTransit;
-                entity.DispatchedBy = currentUser.UserId;
-                entity.DispatchedAt = now;
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
             }
-            var sourceLegacyLocationId = await context.WarehouseLocations
-                .Where(x => x.WarehouseId == entity.SourceWarehouseId && x.Code == "LEGACY" && x.IsSystemManaged)
-                .Select(x => (int?)x.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-            foreach (var line in entity.Details.OrderBy(x => x.ProductId))
-            {
-                if (!await stockRepository.TryDecreaseStockAsync(line.ProductId, entity.SourceWarehouseId, line.RequestedQuantity, cancellationToken))
-                    throw Conflict($"Không đủ tồn kho cho sản phẩm {line.ProductId}.");
-                line.DispatchedQuantity = line.RequestedQuantity;
-                context.InventoryTransactions.Add(Transaction(entity, line, entity.SourceWarehouseId, TransactionType.TransferOut, line.RequestedQuantity, now, sourceLegacyLocationId, InventoryStatus.Available));
-            }
-            await context.SaveChangesAsync(cancellationToken);
-            context.AuditLogs.Add(Audit(entity, "StockTransfer.Dispatched", StockTransferStatus.Approved, StockTransferStatus.InTransit, now));
-            await context.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-            if (ownsTransaction) context.ChangeTracker.Clear();
+            catch { if (transaction is not null) await transaction.RollbackAsync(cancellationToken); throw; }
         }
-        catch { if (transaction is not null) await transaction.RollbackAsync(cancellationToken); throw; }
     }
 
     public async Task ReceiveAsync(int id, ReceiveStockTransferDto request, CancellationToken cancellationToken = default)
     {
         EnsureWriteRole();
         var ownsTransaction = context.Database.CurrentTransaction is null;
-        // The document uses UPDLOCK/HOLDLOCK and the destination bucket gets
-        // an exclusive transaction-owned sp_getapplock before the stock MERGE.
-        // SERIALIZABLE across *all* reads here held compatible S/range locks
-        // on unrelated tables until commit, causing a lock conversion cycle
-        // while a second receipt waited for the app lock (SQL -3/1205).
-        // READ COMMITTED releases read locks after each statement. Document
-        // and canonical bucket write locks still persist to commit/rollback.
-        await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
-        try
+        var maxAttempts = ownsTransaction && context.Database.IsSqlServer() ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
         {
-            var entity = await GetLockedScopedAsync(id, cancellationToken);
-            await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
-            if (entity.Status != StockTransferStatus.InTransit) throw Conflict("Phiếu không ở trạng thái có thể nhận hoặc đã được xử lý.");
-            ValidateReceipt(entity, request);
-            var now = DateTime.UtcNow;
-            if (context.Database.IsSqlServer())
+            await using var transaction = ownsTransaction ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
+            try
             {
-                var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.InTransit &&
-                    x.SourceWarehouseId == entity.SourceWarehouseId && x.DestinationWarehouseId == entity.DestinationWarehouseId)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StockTransferStatus.Received).SetProperty(x => x.ReceivedBy, currentUser.UserId).SetProperty(x => x.ReceivedAt, now), cancellationToken);
-                if (claimed != 1) throw Conflict("Phiếu không ở trạng thái có thể nhận hoặc đã được xử lý.");
-            }
-            else
-            {
-                entity.Status = StockTransferStatus.Received;
-                entity.ReceivedBy = currentUser.UserId;
-                entity.ReceivedAt = now;
-            }
-            foreach (var input in request.Details.OrderBy(x => x.ProductId))
-            {
-                var line = entity.Details.Single(x => x.ProductId == input.ProductId);
-                line.ReceivedQuantity = input.ReceivedQuantity;
-                line.MissingQuantity = input.MissingQuantity;
-                line.DamagedQuantity = input.DamagedQuantity;
-                line.Note = input.Note;
-                if (input.ReceivedQuantity > 0)
+                var entity = await GetLockedScopedAsync(id, cancellationToken);
+                await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.DestinationWarehouseId, cancellationToken);
+                if (entity.Status != StockTransferStatus.InTransit) throw Conflict("Phiếu không ở trạng thái có thể nhận hoặc đã được xử lý.");
+                ValidateReceipt(entity, request);
+                var now = DateTime.UtcNow;
+                if (context.Database.IsSqlServer())
                 {
-                    var receivedLocationId = await IncreaseStockAsync(line.ProductId, entity.DestinationWarehouseId, input.ReceivedQuantity, now, cancellationToken, InventoryStatus.Available);
-                    context.InventoryTransactions.Add(Transaction(entity, line, entity.DestinationWarehouseId, TransactionType.TransferIn, input.ReceivedQuantity, now, receivedLocationId, InventoryStatus.Available));
+                    var claimed = await context.StockTransfers.Where(x => x.Id == id && x.Status == StockTransferStatus.InTransit &&
+                        x.SourceWarehouseId == entity.SourceWarehouseId && x.DestinationWarehouseId == entity.DestinationWarehouseId)
+                        .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StockTransferStatus.Received).SetProperty(x => x.ReceivedBy, currentUser.UserId).SetProperty(x => x.ReceivedAt, now), cancellationToken);
+                    if (claimed != 1) throw Conflict("Phiếu không ở trạng thái có thể nhận hoặc đã được xử lý.");
                 }
-                if (input.DamagedQuantity > 0)
+                else
                 {
-                    var damagedLocationId = await IncreaseStockAsync(line.ProductId, entity.DestinationWarehouseId, input.DamagedQuantity, now, cancellationToken, InventoryStatus.Damaged);
-                    var damagedTx = Transaction(entity, line, entity.DestinationWarehouseId, TransactionType.TransferIn, input.DamagedQuantity, now, damagedLocationId, InventoryStatus.Damaged);
-                    damagedTx.ReferenceType = "StockTransferDamage";
-                    damagedTx.Note = string.IsNullOrWhiteSpace(line.Note)
-                        ? "Nhận điều chuyển hàng hỏng"
-                        : $"[DAMAGED] {line.Note}";
-                    context.InventoryTransactions.Add(damagedTx);
+                    entity.Status = StockTransferStatus.Received;
+                    entity.ReceivedBy = currentUser.UserId;
+                    entity.ReceivedAt = now;
                 }
+                await context.AcquireInventoryAllocationLocksAsync(
+                    entity.DestinationWarehouseId,
+                    request.Details.Select(x => x.ProductId),
+                    cancellationToken);
+                foreach (var input in request.Details.OrderBy(x => x.ProductId))
+                {
+                    var line = entity.Details.Single(x => x.ProductId == input.ProductId);
+                    line.ReceivedQuantity = input.ReceivedQuantity;
+                    line.MissingQuantity = input.MissingQuantity;
+                    line.DamagedQuantity = input.DamagedQuantity;
+                    line.Note = input.Note;
+                    if (input.ReceivedQuantity > 0)
+                    {
+                        var receivedLocationId = await IncreaseStockAsync(line.ProductId, entity.DestinationWarehouseId, input.ReceivedQuantity, now, cancellationToken, InventoryStatus.Available);
+                        context.InventoryTransactions.Add(Transaction(entity, line, entity.DestinationWarehouseId, TransactionType.TransferIn, input.ReceivedQuantity, now, receivedLocationId, InventoryStatus.Available));
+                    }
+                    if (input.DamagedQuantity > 0)
+                    {
+                        var damagedLocationId = await IncreaseStockAsync(line.ProductId, entity.DestinationWarehouseId, input.DamagedQuantity, now, cancellationToken, InventoryStatus.Damaged);
+                        var damagedTx = Transaction(entity, line, entity.DestinationWarehouseId, TransactionType.TransferIn, input.DamagedQuantity, now, damagedLocationId, InventoryStatus.Damaged);
+                        damagedTx.ReferenceType = "StockTransferDamage";
+                        damagedTx.Note = string.IsNullOrWhiteSpace(line.Note)
+                            ? "Nhận điều chuyển hàng hỏng"
+                            : $"[DAMAGED] {line.Note}";
+                        context.InventoryTransactions.Add(damagedTx);
+                    }
+                }
+                await context.SaveChangesAsync(cancellationToken);
+                context.AuditLogs.Add(Audit(entity, "StockTransfer.Received", StockTransferStatus.InTransit, StockTransferStatus.Received, now));
+                await context.SaveChangesAsync(cancellationToken);
+                if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+                if (ownsTransaction) context.ChangeTracker.Clear();
+                return;
             }
-            await context.SaveChangesAsync(cancellationToken);
-            context.AuditLogs.Add(Audit(entity, "StockTransfer.Received", StockTransferStatus.InTransit, StockTransferStatus.Received, now));
-            await context.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-            if (ownsTransaction) context.ChangeTracker.Clear();
+            catch (Exception ex) when (ownsTransaction && attempt < maxAttempts &&
+                                       (ex is DeadlockException ||
+                                        ex is Microsoft.Data.SqlClient.SqlException { Number: 1205 } ||
+                                        ex is DbUpdateException { InnerException: Microsoft.Data.SqlClient.SqlException { Number: 1205 } }))
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
+            }
+            catch { if (transaction is not null) await transaction.RollbackAsync(cancellationToken); throw; }
         }
-        catch { if (transaction is not null) await transaction.RollbackAsync(cancellationToken); throw; }
     }
 
     public async Task CompleteAsync(int id, CancellationToken cancellationToken = default)
@@ -512,6 +541,7 @@ public sealed partial class StockTransferService(
         // can both take compatible range-read locks on a missing destination row
         // and then deadlock when MERGE converts them to write locks (SQL 1205).
         // The lock is held until the caller commits/rolls back ledger + audit.
+        await context.AcquireInventoryAllocationLocksAsync([(warehouseId, productId)], cancellationToken);
         var statusInt = (int)status;
         var bucketLock = $"ERP:TransferStock:{productId}:{warehouseId}:{locationId}:{statusInt}";
         await context.Database.ExecuteSqlInterpolatedAsync($@"

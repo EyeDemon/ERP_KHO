@@ -31,13 +31,20 @@ namespace ERP.Infrastructure.Repositories
                 .FirstOrDefaultAsync();
         }
 
-        public Task<InventoryStock?> GetByProductWarehouseAndStatusAsync(int productId, int warehouseId, InventoryStatus status) =>
-            _dbSet.Include(s => s.Location)
+        public async Task<InventoryStock?> GetByProductWarehouseAndStatusAsync(int productId, int warehouseId, InventoryStatus status)
+        {
+            await AcquireAllocationAndStockLocksAsync(productId, warehouseId);
+            var source = _context.Database.IsRelational() && _context.Database.IsSqlServer() && _context.Database.CurrentTransaction != null
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)status}")
+                : _dbSet.AsQueryable();
+            return await source
+                .Include(s => s.Location)
                 .Where(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && (status != InventoryStatus.Available || s.Location.IsPickable))))
                 .OrderBy(s => s.LotId.HasValue)
                 .ThenBy(s => s.SerialId.HasValue)
                 .ThenByDescending(s => s.Quantity - s.ReservedQuantity)
                 .FirstOrDefaultAsync();
+        }
 
         public async Task<InventoryStock?> GetByProductWarehouseStatusAndLocationAsync(int productId, int warehouseId, InventoryStatus status, int locationId)
         {
@@ -48,39 +55,11 @@ namespace ERP.Infrastructure.Repositories
             return await source.FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && s.LocationId == locationId && s.LotId == null && s.SerialId == null);
         }
 
-        private async Task AcquireAllocationAndStockLocksAsync(int productId, int warehouseId, CancellationToken token = default)
-        {
-            if (!_context.Database.IsRelational() || !_context.Database.IsSqlServer() || _context.Database.CurrentTransaction is null)
-            {
-                return;
-            }
+        public Task AcquireAllocationLocksAsync(int warehouseId, IEnumerable<int> productIds, CancellationToken cancellationToken = default) =>
+            _context.AcquireInventoryAllocationLocksAsync(warehouseId, productIds, cancellationToken);
 
-            try
-            {
-                var allocationLock = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
-                await _context.Database.ExecuteSqlInterpolatedAsync($@"
-DECLARE @lockResult int;
-EXEC @lockResult = sys.sp_getapplock
-    @Resource = {allocationLock},
-    @LockMode = 'Exclusive',
-    @LockOwner = 'Transaction',
-    @LockTimeout = 15000;
-IF @lockResult < 0
-BEGIN
-    DECLARE @lockMessage nvarchar(2048) =
-        CONCAT(N'Không thể khóa phân bổ tồn kho. Mã khóa SQL: ', @lockResult);
-    THROW 51033, @lockMessage, 1;
-END;
-SELECT 1
-FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
-WHERE ProductId = {productId}
-  AND WarehouseId = {warehouseId};", token);
-            }
-            catch (SqlException exception) when (exception.Number == 1205)
-            {
-                throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch khóa tồn kho bị deadlock.", exception);
-            }
-        }
+        private Task AcquireAllocationAndStockLocksAsync(int productId, int warehouseId, CancellationToken token = default) =>
+            _context.AcquireInventoryAllocationLocksAsync([(warehouseId, productId)], token);
 
         public async Task<int?> GetLegacyAdjustmentLocationIdAsync(int warehouseId, CancellationToken cancellationToken = default) =>
             await _context.WarehouseLocations.Where(x => x.WarehouseId == warehouseId && x.Code == "LEGACY" && x.IsSystemManaged)
@@ -175,6 +154,7 @@ WHERE ProductId = {productId}
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             try
             {
+                await AcquireAllocationAndStockLocksAsync(productId, warehouseId, cancellationToken);
                 var today = DateTime.UtcNow.Date;
                 var rows = await _dbSet.AsNoTracking()
                     .UnlockedAt(_context, DateTime.UtcNow)
@@ -267,6 +247,7 @@ WHERE ProductId = {productId}
             CancellationToken cancellationToken = default)
         {
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
+            await AcquireAllocationAndStockLocksAsync(productId, warehouseId, cancellationToken);
             var today = DateTime.UtcNow.Date;
             var candidates = await _dbSet.AsNoTracking()
                 .UnlockedAt(_context, DateTime.UtcNow)
@@ -300,6 +281,7 @@ WHERE ProductId = {productId}
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             try
             {
+                await AcquireAllocationAndStockLocksAsync(productId, warehouseId, cancellationToken);
                 var today = DateTime.UtcNow.Date;
                 var now = DateTime.UtcNow;
                 var affected = await _dbSet

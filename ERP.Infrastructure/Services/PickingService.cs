@@ -820,19 +820,7 @@ public sealed class PickingService(
             {
                 if (lockWarehouseId.HasValue && isSqlServer && context.Database.CurrentTransaction is not null)
                 {
-                    foreach (var productId in lockProductIds)
-                    {
-                        var resource = $"ERP:InventoryAllocation:{productId}:{lockWarehouseId.Value}";
-                        await context.Database.ExecuteSqlInterpolatedAsync($@"
-DECLARE @lockResult int;
-EXEC @lockResult = sys.sp_getapplock
-    @Resource = {resource},
-    @LockMode = 'Exclusive',
-    @LockOwner = 'Transaction',
-    @LockTimeout = 15000;
-IF @lockResult < 0
-    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;", cancellationToken);
-                    }
+                    await context.AcquireInventoryAllocationLocksAsync(lockWarehouseId.Value, lockProductIds, cancellationToken);
                 }
 
                 var task = await LoadAsync(id, true, cancellationToken);
@@ -844,7 +832,8 @@ IF @lockResult < 0
                 return dto;
             }
             catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
-                                       (ex is SqlException { Number: 1205 } ||
+                                       (ex is DeadlockException ||
+                                        ex is SqlException { Number: 1205 } ||
                                         ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
             {
                 if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);

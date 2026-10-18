@@ -127,31 +127,7 @@ public sealed class InventoryLockService(
             {
                 if (isSqlServer && context.Database.CurrentTransaction is not null)
                 {
-                    foreach (var productId in lockProductIds)
-                    {
-                        var resource = $"ERP:InventoryAllocation:{productId}:{request.WarehouseId}";
-                        await context.Database.ExecuteSqlInterpolatedAsync($@"
-DECLARE @lockResult int;
-EXEC @lockResult = sys.sp_getapplock
-    @Resource = {resource},
-    @LockMode = 'Exclusive',
-    @LockOwner = 'Transaction',
-    @LockTimeout = 15000;
-IF @lockResult < 0
-    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;", cancellationToken);
-                    }
-
-                    var statusInt = status.HasValue ? (int?)status.Value : null;
-                    await context.Database.ExecuteSqlInterpolatedAsync($@"
-SELECT Id
-FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
-WHERE WarehouseId = {request.WarehouseId}
-  AND ({request.LocationId} IS NULL OR LocationId = {request.LocationId})
-  AND ({request.ProductId} IS NULL OR ProductId = {request.ProductId})
-  AND ({statusInt} IS NULL OR Status = {statusInt})
-  AND ({request.LotId} IS NULL OR LotId = {request.LotId})
-  AND ({request.SerialId} IS NULL OR SerialId = {request.SerialId})
-ORDER BY Id;", cancellationToken);
+                    await context.AcquireInventoryAllocationLocksAsync(request.WarehouseId, lockProductIds, cancellationToken);
                 }
 
                 var entity = new InventoryLock
@@ -190,7 +166,8 @@ ORDER BY Id;", cancellationToken);
                 return await GetAsync(entity.Id, cancellationToken);
             }
             catch (Exception ex) when (own && attempt < maxAttempts &&
-                                       (ex is SqlException { Number: 1205 } ||
+                                       (ex is DeadlockException ||
+                                        ex is SqlException { Number: 1205 } ||
                                         ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
             {
                 if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
@@ -213,52 +190,66 @@ ORDER BY Id;", cancellationToken);
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new BusinessRuleException("Lý do release Inventory Lock là bắt buộc.");
 
+        var isSqlServer = context.Database.IsRelational() && context.Database.IsSqlServer();
         var own = context.Database.CurrentTransaction is null;
-        await using var tx = own
-            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : null;
-        try
+        var maxAttempts = own && isSqlServer ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
         {
-            var entity = await Query().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-                ?? throw new NotFoundException("Không tìm thấy Inventory Lock hoặc bạn không có quyền truy cập.");
-            await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.WarehouseId, cancellationToken);
-            ApplyVersion(entity, request.RowVersion);
-
-            if (entity.Status != InventoryLockStatus.Active)
-                throw Conflict("INV_STOCK_LOCKED", "Inventory Lock không còn ở trạng thái Active.");
-            if (entity.ExpiresAt.HasValue && entity.ExpiresAt.Value <= DateTime.UtcNow)
-                throw Conflict("INV_STOCK_LOCKED", "Inventory Lock đã hết hiệu lực theo thời gian; hãy tải lại danh sách.");
-
-            entity.Status = InventoryLockStatus.Released;
-            entity.ReleasedAt = DateTime.UtcNow;
-            entity.ReleasedBy = currentUser.UserId;
-            entity.ReleaseReason = request.Reason.Trim();
-            context.AuditLogs.Add(new AuditLog
+            await using var tx = own
+                ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                : null;
+            try
             {
-                UserId = currentUser.UserId,
-                Action = "InventoryLock.Released",
-                EntityName = "InventoryLock",
-                EntityId = entity.Id,
-                WarehouseId = entity.WarehouseId,
-                Timestamp = DateTime.UtcNow,
-                OldValues = ScopeText(entity),
-                Reason = entity.ReleaseReason,
-                Result = "Success",
-                Severity = "Information"
-            });
-            await context.SaveChangesAsync(cancellationToken);
-            if (tx is not null) await tx.CommitAsync(cancellationToken);
-            return await GetAsync(entity.Id, cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
-            throw new ConcurrencyException("Inventory Lock đã thay đổi. Vui lòng tải lại.", ex);
-        }
-        catch
-        {
-            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
-            throw;
+                var entity = await Query().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+                    ?? throw new NotFoundException("Không tìm thấy Inventory Lock hoặc bạn không có quyền truy cập.");
+                await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.WarehouseId, cancellationToken);
+                ApplyVersion(entity, request.RowVersion);
+
+                if (entity.Status != InventoryLockStatus.Active)
+                    throw Conflict("INV_STOCK_LOCKED", "Inventory Lock không còn ở trạng thái Active.");
+                if (entity.ExpiresAt.HasValue && entity.ExpiresAt.Value <= DateTime.UtcNow)
+                    throw Conflict("INV_STOCK_LOCKED", "Inventory Lock đã hết hiệu lực theo thời gian; hãy tải lại danh sách.");
+
+                entity.Status = InventoryLockStatus.Released;
+                entity.ReleasedAt = DateTime.UtcNow;
+                entity.ReleasedBy = currentUser.UserId;
+                entity.ReleaseReason = request.Reason.Trim();
+                context.AuditLogs.Add(new AuditLog
+                {
+                    UserId = currentUser.UserId,
+                    Action = "InventoryLock.Released",
+                    EntityName = "InventoryLock",
+                    EntityId = entity.Id,
+                    WarehouseId = entity.WarehouseId,
+                    Timestamp = DateTime.UtcNow,
+                    OldValues = ScopeText(entity),
+                    Reason = entity.ReleaseReason,
+                    Result = "Success",
+                    Severity = "Information"
+                });
+                await context.SaveChangesAsync(cancellationToken);
+                if (tx is not null) await tx.CommitAsync(cancellationToken);
+                return await GetAsync(entity.Id, cancellationToken);
+            }
+            catch (Exception ex) when (own && attempt < maxAttempts &&
+                                       (ex is DeadlockException ||
+                                        ex is SqlException { Number: 1205 } ||
+                                        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
+            {
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                throw new ConcurrencyException("Inventory Lock đã thay đổi. Vui lòng tải lại.", ex);
+            }
+            catch
+            {
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                throw;
+            }
         }
     }
 

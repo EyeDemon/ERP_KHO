@@ -1,15 +1,95 @@
 using ERP.Domain.Entities;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace ERP.Infrastructure.Persistence;
 
 public class ErpKhoDbContext : DbContext
 {
     private readonly ERP.Application.Interfaces.IRequestMetadata? _requestMetadata;
+    private IDbContextTransaction? _activeLockTransaction;
+    private Guid? _activeLockTransactionId;
+    private readonly HashSet<(int WarehouseId, int ProductId)> _lockedAllocationScopes = new();
 
     public ErpKhoDbContext(DbContextOptions<ErpKhoDbContext> options, ERP.Application.Interfaces.IRequestMetadata? requestMetadata = null) : base(options)
     {
         _requestMetadata = requestMetadata;
+    }
+
+    public Task AcquireInventoryAllocationLocksAsync(
+        int warehouseId,
+        IEnumerable<int> productIds,
+        CancellationToken cancellationToken = default) =>
+        AcquireInventoryAllocationLocksAsync(
+            productIds.Select(productId => (warehouseId, productId)),
+            cancellationToken);
+
+    public async Task AcquireInventoryAllocationLocksAsync(
+        IEnumerable<(int WarehouseId, int ProductId)> scopes,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Database.IsRelational() || !Database.IsSqlServer() || Database.CurrentTransaction is null)
+        {
+            return;
+        }
+
+        var currentTx = Database.CurrentTransaction;
+        var txId = currentTx.TransactionId;
+        if (!ReferenceEquals(_activeLockTransaction, currentTx) || _activeLockTransactionId != txId)
+        {
+            _activeLockTransaction = currentTx;
+            _activeLockTransactionId = txId;
+            _lockedAllocationScopes.Clear();
+        }
+
+        var pendingScopes = scopes
+            .Where(x => x.WarehouseId > 0 && x.ProductId > 0 && !_lockedAllocationScopes.Contains(x))
+            .Distinct()
+            .OrderBy(x => x.WarehouseId)
+            .ThenBy(x => x.ProductId)
+            .ToList();
+
+        if (pendingScopes.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var (warehouseId, productId) in pendingScopes)
+            {
+                var allocationLock = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
+                await Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {allocationLock},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+BEGIN
+    DECLARE @lockMessage nvarchar(2048) =
+        CONCAT(N'Không thể khóa phân bổ tồn kho. Mã khóa SQL: ', @lockResult);
+    THROW 51033, @lockMessage, 1;
+END;", cancellationToken);
+            }
+
+            foreach (var (warehouseId, productId) in pendingScopes)
+            {
+                await Database.ExecuteSqlInterpolatedAsync($@"
+SELECT Id
+FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE WarehouseId = {warehouseId}
+  AND ProductId = {productId}
+ORDER BY Id;", cancellationToken);
+                _lockedAllocationScopes.Add((warehouseId, productId));
+            }
+        }
+        catch (SqlException exception) when (exception.Number == 1205)
+        {
+            throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch khóa tồn kho bị deadlock.", exception);
+        }
     }
 
     public DbSet<Role> Roles => Set<Role>();

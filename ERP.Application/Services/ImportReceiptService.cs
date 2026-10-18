@@ -477,38 +477,51 @@ namespace ERP.Application.Services
         public async Task PostAsync(int id, int postedByUserId)
         {
             if (_currentUser is not null) postedByUserId = _currentUser.UserId;
-            await _unitOfWork.BeginTransactionAsync();
-            try
+            var maxAttempts = _unitOfWork.HasExternalTransaction ? 1 : 4;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var receipt = await _importReceiptRepository.GetByIdWithDetailsAsync(id)
-                    ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
-                if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
-                Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, postedByUserId);
-                if (receipt.Status != ReceiptStatus.ReadyToPost)
-                    throw Conflict("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
-                if (_inboundPlanning is not null) await _inboundPlanning.ValidatePostAsync(receipt);
-                if (_inventoryIdentity is not null) await _inventoryIdentity.ValidateReadyToPostAsync(receipt.Id);
-                int? receivingLocationId = _putaway is null ? null : await _putaway.GetReceivingLocationIdAsync(receipt.WarehouseId);
-                foreach (var detail in receipt.Details.OrderBy(d => d.ProductId).ThenBy(d => d.Id))
+                await _unitOfWork.BeginTransactionAsync();
+                try
                 {
-                    var legacyNoQc = !detail.RequiresQc && detail.BaseReceivedQuantity == 0 && detail.BaseAcceptedQuantity > 0;
-                    if (!legacyNoQc && detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity != detail.BaseReceivedQuantity)
-                        throw new BusinessRuleException($"Dòng {detail.Id} chưa có disposition hợp lệ");
-                    await PostBucketAsync(receipt, detail, InventoryStatus.Available, detail.BaseAcceptedQuantity, postedByUserId, receivingLocationId);
-                    await PostBucketAsync(receipt, detail, InventoryStatus.Damaged, detail.BaseDamagedQuantity, postedByUserId, receivingLocationId);
-                    await PostBucketAsync(receipt, detail, InventoryStatus.Rejected, detail.BaseRejectedQuantity, postedByUserId, receivingLocationId);
-                    detail.PostedQuantity = detail.AcceptedQuantity + detail.DamagedQuantity + detail.RejectedQuantity;
-                    detail.BasePostedQuantity = detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity;
+                    var receipt = await _importReceiptRepository.GetByIdWithDetailsAsync(id)
+                        ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
+                    if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                    Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, postedByUserId);
+                    if (receipt.Status != ReceiptStatus.ReadyToPost)
+                        throw Conflict("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
+                    if (_inboundPlanning is not null) await _inboundPlanning.ValidatePostAsync(receipt);
+                    if (_inventoryIdentity is not null) await _inventoryIdentity.ValidateReadyToPostAsync(receipt.Id);
+                    int? receivingLocationId = _putaway is null ? null : await _putaway.GetReceivingLocationIdAsync(receipt.WarehouseId);
+                    await _inventoryStockRepository.AcquireAllocationLocksAsync(
+                        receipt.WarehouseId,
+                        receipt.Details.Select(d => d.ProductId));
+                    foreach (var detail in receipt.Details.OrderBy(d => d.ProductId).ThenBy(d => d.Id))
+                    {
+                        var legacyNoQc = !detail.RequiresQc && detail.BaseReceivedQuantity == 0 && detail.BaseAcceptedQuantity > 0;
+                        if (!legacyNoQc && detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity != detail.BaseReceivedQuantity)
+                            throw new BusinessRuleException($"Dòng {detail.Id} chưa có disposition hợp lệ");
+                        await PostBucketAsync(receipt, detail, InventoryStatus.Available, detail.BaseAcceptedQuantity, postedByUserId, receivingLocationId);
+                        await PostBucketAsync(receipt, detail, InventoryStatus.Damaged, detail.BaseDamagedQuantity, postedByUserId, receivingLocationId);
+                        await PostBucketAsync(receipt, detail, InventoryStatus.Rejected, detail.BaseRejectedQuantity, postedByUserId, receivingLocationId);
+                        detail.PostedQuantity = detail.AcceptedQuantity + detail.DamagedQuantity + detail.RejectedQuantity;
+                        detail.BasePostedQuantity = detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity;
+                    }
+                    receipt.Status = ReceiptStatus.Posted;
+                    if (_inboundPlanning is not null) await _inboundPlanning.ApplyPostedStateAsync(receipt, postedByUserId);
+                    if (_putaway is not null) await _putaway.CreateForPostedReceiptAsync(receipt, receivingLocationId!.Value, postedByUserId);
+                    await _importReceiptRepository.UpdateAsync(receipt);
+                    await _auditLogRepository.AddAsync(new AuditLog { UserId = postedByUserId, Action = "ImportReceipt.Posted", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.ReadyToPost}", NewValues = $"Status: {ReceiptStatus.Posted}", Result = "Success", Severity = "Warning", Timestamp = DateTime.UtcNow });
+                    await _unitOfWork.CommitTransactionAsync();
+                    return;
                 }
-                receipt.Status = ReceiptStatus.Posted;
-                if (_inboundPlanning is not null) await _inboundPlanning.ApplyPostedStateAsync(receipt, postedByUserId);
-                if (_putaway is not null) await _putaway.CreateForPostedReceiptAsync(receipt, receivingLocationId!.Value, postedByUserId);
-                await _importReceiptRepository.UpdateAsync(receipt);
-                await _auditLogRepository.AddAsync(new AuditLog { UserId = postedByUserId, Action = "ImportReceipt.Posted", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.ReadyToPost}", NewValues = $"Status: {ReceiptStatus.Posted}", Result = "Success", Severity = "Warning", Timestamp = DateTime.UtcNow });
-                await _unitOfWork.CommitTransactionAsync();
+                catch (DeadlockException) when (attempt < maxAttempts)
+                {
+                    try { await _unitOfWork.RollbackTransactionAsync(); } catch { }
+                    await Task.Delay(15 * attempt);
+                }
+                catch (ConcurrencyException ex) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new ConcurrencyException("Phiếu nhập đã được xử lý bởi yêu cầu khác. Vui lòng tải lại.", ex); }
+                catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
             }
-            catch (ConcurrencyException ex) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new ConcurrencyException("Phiếu nhập đã được xử lý bởi yêu cầu khác. Vui lòng tải lại.", ex); }
-            catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
         }
 
         private async Task PostBucketAsync(ImportReceipt receipt, ImportReceiptDetail detail, InventoryStatus status, decimal quantity, int userId, int? locationId)

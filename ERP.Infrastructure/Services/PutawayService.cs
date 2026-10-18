@@ -417,10 +417,15 @@ public sealed class PutawayService(
     public async Task<PutawayTaskDto> MoveAsync(int id, MovePutawayItemDto dto, CancellationToken token = default)
     {
         if(dto.Quantity<=0) throw new BusinessRuleException("Số lượng cất phải lớn hơn 0.");
-        await using var tx=context.Database.CurrentTransaction is null?await context.Database.BeginTransactionAsync(token):null;
+        var ownTransaction = context.Database.CurrentTransaction is null;
+        var isSqlServer = context.Database.IsRelational() && context.Database.IsSqlServer();
+        var maxAttempts = ownTransaction && isSqlServer ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
+        {
+        await using var tx=ownTransaction?await context.Database.BeginTransactionAsync(token):null;
         try
         {
-            if (context.Database.IsSqlServer())
+            if (isSqlServer)
             {
                 await context.Database.ExecuteSqlInterpolatedAsync(
                     $"SELECT 1 FROM dbo.PutawayTasks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE Id = {id}; SELECT 1 FROM dbo.PutawayTaskItems WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE PutawayTaskId = {id};",
@@ -438,29 +443,13 @@ public sealed class PutawayService(
                 ApplyVersion(task.RowVersion,dto.RowVersion,context.Entry(task).Property(x=>x.RowVersion));
             }
             var item=task.Items.SingleOrDefault(x=>x.Id==dto.ItemId)??throw new NotFoundException("Không tìm thấy dòng hàng.");
+            await context.AcquireInventoryAllocationLocksAsync([(task.WarehouseId, item.ProductId)], token);
             var destination=await LocationForMutation(dto.DestinationLocationId,token)??throw new NotFoundException("Không tìm thấy vị trí đích.");
             if(destination.WarehouseId!=task.WarehouseId) throw new NotFoundException("Không tìm thấy vị trí đích.");
             if(!destination.IsActive||destination.IsBlocked||destination.LocationType!=RequiredType(item.InventoryStatus)||(item.InventoryStatus==InventoryStatus.Available&&!destination.IsPickable)) throw new BusinessRuleException("Vị trí đích không phù hợp với hàng hóa này.");
             var baseQty=ToBase(dto.Quantity,dto.UnitCode,item); if(baseQty>item.RemainingBaseQuantity) throw new BusinessRuleException("Số lượng cất vượt quá số lượng còn lại.");
             var product=await ProductForCapacity(item.ProductId,token)??throw new NotFoundException("Không tìm thấy sản phẩm.");
             await EnsurePutawayCapacityAsync(destination, product, baseQty, token);
-            if (context.Database.IsRelational() && context.Database.IsSqlServer() && context.Database.CurrentTransaction is not null)
-            {
-                var allocationLock = $"ERP:InventoryAllocation:{item.ProductId}:{task.WarehouseId}";
-                await context.Database.ExecuteSqlInterpolatedAsync($@"
-DECLARE @lockResult int;
-EXEC @lockResult = sys.sp_getapplock
-    @Resource = {allocationLock},
-    @LockMode = 'Exclusive',
-    @LockOwner = 'Transaction',
-    @LockTimeout = 15000;
-IF @lockResult < 0
-    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;", token);
-                _ = await context.InventoryStocks
-                    .FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE WarehouseId = {task.WarehouseId} AND ProductId = {item.ProductId} AND Status = {(int)item.InventoryStatus} AND (LocationId = {item.SourceLocationId} OR LocationId = {destination.Id})")
-                    .OrderBy(x => x.Id)
-                    .ToListAsync(token);
-            }
             var sourceBuckets = await context.InventoryStocks
                 .Include(x => x.Lot)
                 .Include(x => x.Serial)
@@ -621,7 +610,17 @@ IF @lockResult < 0
             context.AuditLogs.Add(Audit(currentUser.UserId,"PutawayTask.Moved",task.Id,task.WarehouseId,$"ItemId: {item.Id}; BaseQuantity: {baseQty}; DestinationId: {destination.Id}"));
             await context.SaveChangesAsync(token); if(tx is not null)await tx.CommitAsync(token); return await GetAsync(id,token);
         }
+        catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
+                                   (ex is DeadlockException ||
+                                    ex is Microsoft.Data.SqlClient.SqlException { Number: 1205 } ||
+                                    ex is DbUpdateException { InnerException: Microsoft.Data.SqlClient.SqlException { Number: 1205 } }))
+        {
+            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+            context.ChangeTracker.Clear();
+            await Task.Delay(15 * attempt, token);
+        }
         catch(DbUpdateConcurrencyException ex){if(tx is not null)await tx.RollbackAsync(token);throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.",ex);} catch{if(tx is not null)await tx.RollbackAsync(token);throw;}
+        }
     }
 
     private async Task<PutawayTaskDto> Mutate(int id,PutawayStateCommandDto dto,PutawayTaskStatus[] allowed,Action<PutawayTask> change,string action,CancellationToken token)

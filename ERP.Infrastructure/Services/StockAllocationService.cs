@@ -153,6 +153,7 @@ public sealed class StockAllocationService(
                 .SingleOrDefaultAsync(x => x.Id == id, token)
                 ?? throw new NotFoundException("Không tìm thấy Allocation hoặc bạn không có quyền truy cập.");
             await warehouseAuthorization.EnsureWarehouseAccessAsync(allocation.WarehouseId, token);
+            await context.AcquireInventoryAllocationLocksAsync([(allocation.WarehouseId, allocation.ProductId)], token);
 
             if (allocation.Status != StockAllocationStatus.Active)
                 throw new ConcurrencyException("Allocation không còn ở trạng thái có thể giải phóng.");
@@ -197,6 +198,7 @@ public sealed class StockAllocationService(
                 .SingleOrDefaultAsync(x => x.Id == id, token)
                 ?? throw new NotFoundException("Không tìm thấy Allocation hoặc bạn không có quyền truy cập.");
             await warehouseAuthorization.EnsureWarehouseAccessAsync(original.WarehouseId, token);
+            await context.AcquireInventoryAllocationLocksAsync([(original.WarehouseId, original.ProductId)], token);
 
             if (original.Status != StockAllocationStatus.Active)
                 throw new ConcurrencyException("Chỉ Allocation đang hoạt động mới có thể phân bổ lại.");
@@ -246,6 +248,7 @@ public sealed class StockAllocationService(
         return await ExecuteWithSerializableRetryAsync(async token =>
         {
             var reservation = await GetReservationAsync(request.ReservationId, true, token);
+            await context.AcquireInventoryAllocationLocksAsync([(reservation.WarehouseId, reservation.ProductId)], token);
             ValidateAllocatableReservation(reservation);
             var activeAllocated = await context.StockAllocations
                 .Where(x => x.ReservationId == reservation.Id && CapacityStatuses.Contains(x.Status))
@@ -466,7 +469,7 @@ public sealed class StockAllocationService(
         CancellationToken cancellationToken)
     {
         var ownTransaction = context.Database.CurrentTransaction is null;
-        var attempts = ownTransaction ? 2 : 1;
+        var attempts = ownTransaction ? 4 : 1;
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
             await using var transaction = ownTransaction
@@ -484,15 +487,23 @@ public sealed class StockAllocationService(
                 context.ChangeTracker.Clear();
                 _ = exception;
             }
+            catch (DeadlockException) when (attempt < attempts)
+            {
+                if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
+            }
             catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: 1205 } && attempt < attempts)
             {
                 if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
                 context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
             }
             catch (SqlException exception) when (exception.Number == 1205 && attempt < attempts)
             {
                 if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
                 context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
             }
             catch (DbUpdateConcurrencyException exception)
             {

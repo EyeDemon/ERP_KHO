@@ -9,6 +9,10 @@ public sealed partial class StockTransferService
         StockTransfer entity, Dictionary<int, InventoryTransaction> originalOut,
         string reasonCode, string reason, DateTime now, CancellationToken cancellationToken)
     {
+        await context.AcquireInventoryAllocationLocksAsync(
+            entity.SourceWarehouseId,
+            entity.Details.Select(x => x.ProductId),
+            cancellationToken);
         foreach (var line in entity.Details.OrderBy(x => x.ProductId))
         {
             await IncreaseStockAsync(line.ProductId, entity.SourceWarehouseId, line.DispatchedQuantity, now, cancellationToken);

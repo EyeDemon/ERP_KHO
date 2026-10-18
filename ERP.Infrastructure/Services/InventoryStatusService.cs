@@ -4,6 +4,7 @@ using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
+using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -248,7 +249,7 @@ public sealed class InventoryStatusService(
                 return result;
             }
             catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
-                                       (ex is SqlException { Number: 1205 } ||
+                                       (ex is DeadlockException or SqlException { Number: 1205 } ||
                                         ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
             {
                 if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
@@ -499,7 +500,7 @@ public sealed class InventoryStatusService(
                 return result;
             }
             catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
-                                       (ex is SqlException { Number: 1205 } ||
+                                       (ex is DeadlockException or SqlException { Number: 1205 } ||
                                         ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
             {
                 if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
@@ -677,7 +678,7 @@ public sealed class InventoryStatusService(
                 };
             }
             catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
-                                       (ex is SqlException { Number: 1205 } ||
+                                       (ex is DeadlockException or SqlException { Number: 1205 } ||
                                         ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
             {
                 if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
@@ -692,32 +693,11 @@ public sealed class InventoryStatusService(
         }
     }
 
-    private async Task AcquireProductWarehouseLockAndStockLocksAsync(
+    private Task AcquireProductWarehouseLockAndStockLocksAsync(
         int productId,
         int warehouseId,
-        CancellationToken cancellationToken)
-    {
-        if (!context.Database.IsRelational() || !context.Database.IsSqlServer() || context.Database.CurrentTransaction is null)
-        {
-            return;
-        }
-
-        var resource = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
-        await context.Database.ExecuteSqlInterpolatedAsync($@"
-DECLARE @lockResult int;
-EXEC @lockResult = sys.sp_getapplock
-    @Resource = {resource},
-    @LockMode = 'Exclusive',
-    @LockOwner = 'Transaction',
-    @LockTimeout = 15000;
-IF @lockResult < 0
-    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;
-SELECT Id
-FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
-WHERE ProductId = {productId}
-  AND WarehouseId = {warehouseId}
-ORDER BY Id;", cancellationToken);
-    }
+        CancellationToken cancellationToken) =>
+        context.AcquireInventoryAllocationLocksAsync([(warehouseId, productId)], cancellationToken);
 
     private static void ValidateTransition(InventoryStatus fromStatus, InventoryStatus toStatus)
     {

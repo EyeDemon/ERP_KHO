@@ -9,9 +9,11 @@ public sealed class WarehouseAuthorizationService(
     ErpKhoDbContext context,
     ICurrentUser currentUser) : IWarehouseAuthorizationService
 {
+    private const int MaxTransactionCacheEntries = 64;
     private readonly Dictionary<int, IReadOnlyList<int>> _accessibleWarehouseCache = new();
     private readonly Dictionary<(Guid TransactionId, int UserId), IReadOnlyList<int>> _txAccessibleWarehouses = new();
     private readonly HashSet<(Guid TransactionId, int UserId, int WarehouseId)> _txVerifiedAccess = new();
+    private Guid? _lastTransactionId;
 
     public int? CurrentUserId => currentUser.IsAuthenticated && currentUser.UserId > 0 ? currentUser.UserId : null;
 
@@ -20,7 +22,10 @@ public sealed class WarehouseAuthorizationService(
         if (userId.HasValue)
         {
             _accessibleWarehouseCache.Remove(userId.Value);
-            _txAccessibleWarehouses.Clear();
+            foreach (var key in _txAccessibleWarehouses.Keys.Where(k => k.UserId == userId.Value).ToList())
+            {
+                _txAccessibleWarehouses.Remove(key);
+            }
             _txVerifiedAccess.RemoveWhere(x => x.UserId == userId.Value);
             return;
         }
@@ -28,6 +33,22 @@ public sealed class WarehouseAuthorizationService(
         _accessibleWarehouseCache.Clear();
         _txAccessibleWarehouses.Clear();
         _txVerifiedAccess.Clear();
+        _lastTransactionId = null;
+    }
+
+    private Guid? GetActiveTransactionIdAndPrune()
+    {
+        var txId = context.Database.CurrentTransaction?.TransactionId;
+        if (_lastTransactionId != txId ||
+            _txAccessibleWarehouses.Count > MaxTransactionCacheEntries ||
+            _txVerifiedAccess.Count > MaxTransactionCacheEntries)
+        {
+            _txAccessibleWarehouses.Clear();
+            _txVerifiedAccess.Clear();
+            _lastTransactionId = txId;
+        }
+
+        return txId;
     }
 
     public async Task<IReadOnlyList<int>> GetAccessibleWarehouseIdsAsync(CancellationToken cancellationToken = default)
@@ -35,7 +56,7 @@ public sealed class WarehouseAuthorizationService(
         if (!currentUser.IsAuthenticated)
             throw new UnauthorizedAccessException("Người dùng chưa xác thực.");
 
-        var txId = context.Database.CurrentTransaction?.TransactionId;
+        var txId = GetActiveTransactionIdAndPrune();
         if (txId.HasValue && _txAccessibleWarehouses.TryGetValue((txId.Value, currentUser.UserId), out var cachedTxList))
             return cachedTxList;
 
@@ -73,7 +94,7 @@ public sealed class WarehouseAuthorizationService(
         if (warehouseId <= 0)
             return false;
 
-        var txId = context.Database.CurrentTransaction?.TransactionId;
+        var txId = GetActiveTransactionIdAndPrune();
         if (txId.HasValue && _txVerifiedAccess.Contains((txId.Value, currentUser.UserId, warehouseId)))
             return true;
 
@@ -103,6 +124,11 @@ public sealed class WarehouseAuthorizationService(
         else
         {
             _accessibleWarehouseCache.Remove(currentUser.UserId);
+            if (txId.HasValue)
+            {
+                _txAccessibleWarehouses.Remove((txId.Value, currentUser.UserId));
+                _txVerifiedAccess.Remove((txId.Value, currentUser.UserId, warehouseId));
+            }
         }
 
         return allowed;

@@ -37,5 +37,6 @@ namespace ERP.Domain.Interfaces
             decimal quantity,
             CancellationToken cancellationToken = default);
         Task<bool> TryReleaseReservationAsync(int productId, int warehouseId, decimal quantity, int? excludedReservationId, CancellationToken cancellationToken = default);
+        Task AcquireAllocationLocksAsync(int warehouseId, IEnumerable<int> productIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

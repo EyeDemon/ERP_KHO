@@ -508,33 +508,11 @@ public sealed class SalesOrderBackorderService(
         return await GetSalesOrderAsync(id, cancellationToken);
     }
 
-    private async Task AcquireAllocationLocksAsync(
+    private Task AcquireAllocationLocksAsync(
         int warehouseId,
         IEnumerable<int> productIds,
-        CancellationToken token)
-    {
-        if (!context.Database.IsRelational() || !context.Database.IsSqlServer() || context.Database.CurrentTransaction is null)
-            return;
-
-        foreach (var productId in productIds.Distinct().OrderBy(x => x))
-        {
-            var resource = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
-            await context.Database.ExecuteSqlInterpolatedAsync($@"
-DECLARE @lockResult int;
-EXEC @lockResult = sys.sp_getapplock
-    @Resource = {resource},
-    @LockMode = 'Exclusive',
-    @LockOwner = 'Transaction',
-    @LockTimeout = 15000;
-IF @lockResult < 0
-    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;
-SELECT Id
-FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
-WHERE ProductId = {productId}
-  AND WarehouseId = {warehouseId}
-ORDER BY Id;", token);
-        }
-    }
+        CancellationToken token) =>
+        context.AcquireInventoryAllocationLocksAsync(warehouseId, productIds, token);
 
     private async Task<SalesOrder> LoadOrderAsync(int id, bool tracking, CancellationToken token)
     {
@@ -854,6 +832,7 @@ ORDER BY Id;", token);
     }
 
     private static bool IsSqlDeadlock(Exception ex) =>
+        ex is DeadlockException ||
         ex is SqlException { Number: 1205 } ||
         ex is DbUpdateException { InnerException: SqlException { Number: 1205 } };
 

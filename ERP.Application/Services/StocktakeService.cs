@@ -170,6 +170,10 @@ namespace ERP.Application.Services
                     stocktake.ApprovedBy = approvedByUserId;
                     stocktake.ApprovedAt = DateTime.UtcNow;
 
+                    await _inventoryStockRepository.AcquireAllocationLocksAsync(
+                        stocktake.WarehouseId,
+                        stocktake.Details.Select(d => d.ProductId));
+
                     foreach (var detail in stocktake.Details.OrderBy(d => d.ProductId).ThenBy(d => d.LocationId ?? 0).ThenBy(d => d.Id))
                     {
                         if (detail.ActualQuantity == null)

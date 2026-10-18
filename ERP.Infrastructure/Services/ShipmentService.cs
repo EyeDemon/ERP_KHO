@@ -252,10 +252,16 @@ public sealed class ShipmentService(
 
             var reservations = await context.StockReservations
                 .Where(x => reservationIds.Contains(x.Id))
-                .OrderBy(x => x.Id)
+                .OrderBy(x => x.WarehouseId)
+                .ThenBy(x => x.ProductId)
+                .ThenBy(x => x.Id)
                 .ToListAsync(token);
             if (reservations.Count != reservationIds.Length)
                 throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Reservation của Shipment không còn đầy đủ.");
+
+            await context.AcquireInventoryAllocationLocksAsync(
+                reservations.Select(x => (x.WarehouseId, x.ProductId)),
+                token);
 
             var ledgerBuckets = new Dictionary<(int ProductId, int LocationId, InventoryStatus InventoryStatus, int? LotId, int? SerialId), decimal>();
             foreach (var reservation in reservations)
@@ -539,43 +545,56 @@ public sealed class ShipmentService(
         CancellationToken cancellationToken)
     {
         var ownTransaction = context.Database.CurrentTransaction is null;
-        await using var transaction = ownTransaction
-            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : null;
-        try
+        var maxAttempts = ownTransaction && context.Database.IsSqlServer() ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
         {
-            var shipment = await LoadAsync(id, true, cancellationToken);
-            ApplyVersion(shipment, encodedRowVersion);
-            await mutation(shipment, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-            return Map(shipment);
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw new ConcurrencyException("Dữ liệu Shipment đã thay đổi. Vui lòng tải lại và thử lại.", ex);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 } sql &&
-                                           sql.Message.Contains("IX_InventoryTransactions_ShipmentReference", StringComparison.OrdinalIgnoreCase))
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw new ConcurrencyException("Shipment đã được dispatch bởi yêu cầu đồng thời khác.", ex);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 })
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw new DeadlockException("Giao dịch Shipment bị deadlock.", ex);
-        }
-        catch (SqlException ex) when (ex.Number == 1205)
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw new DeadlockException("Giao dịch Shipment bị deadlock.", ex);
-        }
-        catch
-        {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            throw;
+            await using var transaction = ownTransaction
+                ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                : null;
+            try
+            {
+                var shipment = await LoadAsync(id, true, cancellationToken);
+                ApplyVersion(shipment, encodedRowVersion);
+                await mutation(shipment, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+                if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+                return Map(shipment);
+            }
+            catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
+                                       (ex is DeadlockException ||
+                                        ex is SqlException { Number: 1205 } ||
+                                        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw new ConcurrencyException("Dữ liệu Shipment đã thay đổi. Vui lòng tải lại và thử lại.", ex);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 } sql &&
+                                               sql.Message.Contains("IX_InventoryTransactions_ShipmentReference", StringComparison.OrdinalIgnoreCase))
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw new ConcurrencyException("Shipment đã được dispatch bởi yêu cầu đồng thời khác.", ex);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 })
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw new DeadlockException("Giao dịch Shipment bị deadlock.", ex);
+            }
+            catch (SqlException ex) when (ex.Number == 1205)
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw new DeadlockException("Giao dịch Shipment bị deadlock.", ex);
+            }
+            catch
+            {
+                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
+                throw;
+            }
         }
     }
 
