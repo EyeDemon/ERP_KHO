@@ -322,18 +322,18 @@ export default function PartnerDebts() {
             <table aria-label="Danh sách hóa đơn công nợ">
               <thead>
                 <tr>
-                  <th>Mã hóa đơn</th>
-                  <th>Loại</th>
-                  <th>Đối tác</th>
-                  <th>Chứng từ kho</th>
-                  <th>Trước thuế</th>
-                  <th>Thuế</th>
-                  <th>Tổng cộng</th>
-                  <th>Đã trả</th>
-                  <th>Còn nợ</th>
-                  <th>Hạn TT</th>
-                  <th>Trạng thái</th>
-                  <th>Thao tác</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Mã hóa đơn</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Loại</th>
+                  <th style={{ whiteSpace: 'nowrap', minWidth: 200 }}>Đối tác</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Chứng từ kho</th>
+                  <th className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>Trước thuế</th>
+                  <th className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>Thuế</th>
+                  <th className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>Tổng cộng</th>
+                  <th className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>Đã trả</th>
+                  <th className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>Còn nợ</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Hạn TT</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -346,33 +346,47 @@ export default function PartnerDebts() {
                 ) : (
                   invoices.map(inv => (
                     <tr key={inv.id}>
-                      <td><strong>{inv.code}</strong></td>
-                      <td>
+                      <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                        <strong>{inv.code}</strong>
+                      </td>
+                      <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}>
                         <UiBadge tone={inv.debtType === 'AP' ? 'warning' : 'success'}>
                           {inv.debtType === 'AP' ? 'AP (Phải trả)' : 'AR (Phải thu)'}
                         </UiBadge>
                       </td>
-                      <td>
-                        <div>{inv.partnerCode}</div>
-                        <small>{inv.partnerName}</small>
+                      <td className="ui-cell-partner" style={{ minWidth: 200, overflowWrap: 'break-word', wordBreak: 'normal' }}>
+                        <div style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{inv.partnerCode}</div>
+                        <small style={{ overflowWrap: 'break-word', wordBreak: 'normal' }}>{inv.partnerName}</small>
                       </td>
-                      <td>
-                        <div>{inv.sourceCode}</div>
-                        <small>{inv.sourceType}</small>
+                      <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                        <div style={{ whiteSpace: 'nowrap' }}>{inv.sourceCode}</div>
+                        <small style={{ whiteSpace: 'nowrap' }}>{inv.sourceType}</small>
                       </td>
-                      <td>{formatCurrency(inv.subTotalAmount, inv.currency)}</td>
-                      <td>{formatCurrency(inv.taxAmount, inv.currency)}</td>
-                      <td><strong>{formatCurrency(inv.totalAmount, inv.currency)}</strong></td>
-                      <td>{formatCurrency(inv.paidAmount, inv.currency)}</td>
-                      <td><strong>{formatCurrency(inv.remainingAmount, inv.currency)}</strong></td>
-                      <td>{inv.dueDateUtc ? new Date(inv.dueDateUtc).toLocaleDateString('vi-VN') : '—'}</td>
-                      <td>
+                      <td className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(inv.subTotalAmount, inv.currency)}
+                      </td>
+                      <td className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(inv.taxAmount, inv.currency)}
+                      </td>
+                      <td className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        <strong>{formatCurrency(inv.totalAmount, inv.currency)}</strong>
+                      </td>
+                      <td className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(inv.paidAmount, inv.currency)}
+                      </td>
+                      <td className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        <strong>{formatCurrency(inv.remainingAmount, inv.currency)}</strong>
+                      </td>
+                      <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                        {inv.dueDateUtc ? new Date(inv.dueDateUtc).toLocaleDateString('vi-VN') : '—'}
+                      </td>
+                      <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}>
                         <UiBadge tone={statusTone(inv.status)}>
                           {STATUS_LABELS[inv.status] ?? inv.status}
                         </UiBadge>
                       </td>
-                      <td>
-                        <div className="ui-inline-actions">
+                      <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}>
+                        <div className="ui-inline-actions" style={{ flexWrap: 'nowrap' }}>
                           <button type="button" onClick={() => setSelectedInvoice(inv)}>
                             Sổ phụ
                           </button>
@@ -397,15 +411,15 @@ export default function PartnerDebts() {
           <table aria-label="Sổ cái biến động công nợ đối tác">
             <thead>
               <tr>
-                <th>Thời gian</th>
-                <th>Loại</th>
-                <th>Đối tác</th>
-                <th>Hóa đơn</th>
-                <th>Nghiệp vụ</th>
-                <th>Biến động</th>
-                <th>Dư nợ sau GD</th>
-                <th>Tham chiếu</th>
-                <th>Ghi chú</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Thời gian</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Loại</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 200 }}>Đối tác</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Hóa đơn</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Nghiệp vụ</th>
+                <th className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>Biến động</th>
+                <th className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>Dư nợ sau GD</th>
+                <th style={{ whiteSpace: 'nowrap' }}>Tham chiếu</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 200 }}>Ghi chú</th>
               </tr>
             </thead>
             <tbody>
@@ -418,22 +432,36 @@ export default function PartnerDebts() {
               ) : (
                 ledger.map(entry => (
                   <tr key={entry.id}>
-                    <td>{new Date(entry.createdAtUtc).toLocaleString('vi-VN')}</td>
-                    <td><UiBadge>{entry.debtType}</UiBadge></td>
-                    <td>{entry.partnerCode} — {entry.partnerName}</td>
-                    <td><strong>{entry.invoiceCode}</strong></td>
-                    <td>{TX_LABELS[entry.transactionType] ?? entry.transactionType}</td>
-                    <td>
+                    <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                      {new Date(entry.createdAtUtc).toLocaleString('vi-VN')}
+                    </td>
+                    <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}>
+                      <UiBadge>{entry.debtType}</UiBadge>
+                    </td>
+                    <td className="ui-cell-partner" style={{ minWidth: 200, overflowWrap: 'break-word', wordBreak: 'normal' }}>
+                      {entry.partnerCode} — {entry.partnerName}
+                    </td>
+                    <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                      <strong>{entry.invoiceCode}</strong>
+                    </td>
+                    <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}>
+                      {TX_LABELS[entry.transactionType] ?? entry.transactionType}
+                    </td>
+                    <td className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       <strong style={{ color: entry.amountDelta < 0 ? '#15803d' : '#b45309' }}>
                         {entry.amountDelta > 0 ? `+${entry.amountDelta.toLocaleString('vi-VN')}` : entry.amountDelta.toLocaleString('vi-VN')}
                       </strong>
                     </td>
-                    <td><strong>{entry.balanceAfter.toLocaleString('vi-VN')}</strong></td>
-                    <td>
-                      <div>{entry.referenceCode}</div>
-                      {entry.paymentMethod && <small>{entry.paymentMethod}</small>}
+                    <td className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      <strong>{entry.balanceAfter.toLocaleString('vi-VN')}</strong>
                     </td>
-                    <td>{entry.note || '—'}</td>
+                    <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                      <div style={{ whiteSpace: 'nowrap' }}>{entry.referenceCode}</div>
+                      {entry.paymentMethod && <small style={{ whiteSpace: 'nowrap' }}>{entry.paymentMethod}</small>}
+                    </td>
+                    <td style={{ minWidth: 200, overflowWrap: 'break-word', wordBreak: 'normal' }}>
+                      {entry.note || '—'}
+                    </td>
                   </tr>
                 ))
               )}

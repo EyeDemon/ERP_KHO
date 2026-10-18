@@ -19,9 +19,10 @@ export interface ResolvedBarcodeResult {
   status?: string | null;
 }
 
-interface MobileBarcodeScannerBarProps {
+export interface MobileBarcodeScannerBarProps {
   label?: string;
   placeholder?: string;
+  sampleCode?: string;
   warehouseId?: number;
   disabled?: boolean;
   resolveViaApi?: boolean;
@@ -39,7 +40,8 @@ const ENTITY_LABELS: Record<string, string> = {
 
 export function MobileBarcodeScannerBar({
   label = 'Quét mã vạch Mobile / RF (Camera hoặc súng quét)',
-  placeholder = 'Quét hoặc nhập mã vạch Bin, SKU, Lot, Serial, HU rồi nhấn Enter...',
+  placeholder = 'Nhập hoặc quét mã Bin, SKU, Lot, Serial, LPN...',
+  sampleCode = 'BIN-A01',
   warehouseId,
   disabled = false,
   resolveViaApi = true,
@@ -48,7 +50,7 @@ export function MobileBarcodeScannerBar({
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState('');
+  const [cameraNotice, setCameraNotice] = useState('');
   const [lastResolved, setLastResolved] = useState<ResolvedBarcodeResult | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -76,7 +78,7 @@ export function MobileBarcodeScannerBar({
     const clean = sanitizeScannerCode(rawCode);
     if (!clean || busy || disabled) return;
     setBusy(true);
-    setCameraError('');
+    setCameraNotice('');
     try {
       let resolved: ResolvedBarcodeResult | null = null;
       if (resolveViaApi) {
@@ -102,9 +104,11 @@ export function MobileBarcodeScannerBar({
       stopCamera();
       return;
     }
-    setCameraError('');
+    setCameraNotice('');
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setCameraError('Trình duyệt hiện tại không hỗ trợ truy cập Camera trực tiếp. Vui lòng dùng súng quét hoặc nhập mã.');
+      setCameraNotice(
+        'Trình duyệt hiện tại chưa kết nối Camera trực tiếp. Bạn có thể nhập mã hoặc dùng súng quét USB/Bluetooth ngay tại ô bên trên.',
+      );
       return;
     }
     try {
@@ -118,7 +122,13 @@ export function MobileBarcodeScannerBar({
         await videoRef.current.play().catch(() => {});
       }
 
-      const BarcodeDetectorCtor = (window as unknown as { BarcodeDetector?: new (opts?: { formats?: string[] }) => { detect: (el: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
+      const BarcodeDetectorCtor = (
+        window as unknown as {
+          BarcodeDetector?: new (opts?: { formats?: string[] }) => {
+            detect: (el: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
+          };
+        }
+      ).BarcodeDetector;
       if (BarcodeDetectorCtor) {
         const detector = new BarcodeDetectorCtor({
           formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'code_39', 'upc_a', 'itf'],
@@ -138,21 +148,40 @@ export function MobileBarcodeScannerBar({
         }, 350);
       }
     } catch {
-      setCameraError('Không thể mở Camera thiết bị. Kiểm tra quyền Camera hoặc nhập mã trực tiếp.');
+      setCameraNotice(
+        'Thiết bị chưa cấp quyền hoặc không có Camera vật lý. Bạn có thể nhập mã trực tiếp, dùng súng quét USB/Bluetooth hoặc điền mã mẫu.',
+      );
       stopCamera();
     }
   };
 
   return (
-    <div className="ui-stack" style={{ marginBottom: 8 }}>
-      <div className="ui-inline-wrap" style={{ alignItems: 'flex-end' }}>
-        <label style={{ flex: '1 1 280px' }}>
-          {label}
+    <section
+      className="ui-card"
+      aria-label="Trạm quét mã vạch nhanh Mobile RF"
+      style={{
+        padding: '14px 16px',
+        marginBottom: 16,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        border: '1px solid #cbd5e1',
+        background: '#f8fafc',
+      }}
+    >
+      <div
+        className="ui-inline-wrap"
+        style={{ alignItems: 'flex-end', gap: 8, width: '100%' }}
+      >
+        <label style={{ flex: '1 1 240px', display: 'grid', gap: 4, minWidth: 0 }}>
+          <span>{label}</span>
           <input
+            type="search"
             aria-label={label}
             value={input}
             disabled={disabled || busy}
             placeholder={placeholder}
+            style={{ minHeight: 40, width: '100%', fontSize: 13, padding: '6px 10px' }}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {
@@ -162,35 +191,84 @@ export function MobileBarcodeScannerBar({
             }}
           />
         </label>
-        <button
-          type="button"
-          className="ui-primary-button"
-          disabled={disabled || busy || !sanitizeScannerCode(input)}
-          onClick={() => void handleTrigger(input)}
+        <div
+          className="ui-inline-actions"
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}
         >
-          {busy ? 'Đang xử lý...' : 'Xác nhận mã quét'}
-        </button>
-        <button
-          type="button"
-          disabled={disabled || busy}
-          onClick={() => void toggleCamera()}
-        >
-          {cameraActive ? 'Tắt Camera' : 'Bật Camera Quét'}
-        </button>
+          <button
+            type="button"
+            className="ui-primary-button"
+            style={{ minHeight: 40, whiteSpace: 'nowrap' }}
+            disabled={disabled || busy || !sanitizeScannerCode(input)}
+            onClick={() => void handleTrigger(input)}
+          >
+            {busy ? 'Đang xử lý...' : 'Xác nhận mã quét'}
+          </button>
+          <button
+            type="button"
+            style={{ minHeight: 40, whiteSpace: 'nowrap' }}
+            disabled={disabled || busy}
+            onClick={() => void toggleCamera()}
+          >
+            {cameraActive ? 'Tắt Camera' : 'Bật Camera Quét'}
+          </button>
+        </div>
         {lastResolved && (
           <UiBadge tone={lastResolved.entityType === 'Unknown' ? 'warning' : 'success'}>
             {`${ENTITY_LABELS[lastResolved.entityType] ?? lastResolved.entityType}: ${lastResolved.code ?? lastResolved.barcode}${lastResolved.name ? ` — ${lastResolved.name}` : ''}`}
           </UiBadge>
         )}
       </div>
-      {cameraError && <p role="alert" className="ui-muted-text">{cameraError}</p>}
+
+      {cameraNotice && (
+        <div
+          role="status"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            padding: '8px 12px',
+            borderRadius: 6,
+            border: '1px solid #cbd5e1',
+            background: '#ffffff',
+            color: '#334155',
+            fontSize: 13,
+          }}
+        >
+          <span>{cameraNotice}</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              type="button"
+              style={{ minHeight: 36, whiteSpace: 'nowrap' }}
+              disabled={disabled || busy}
+              onClick={() => {
+                setInput(sampleCode);
+                setCameraNotice('');
+                void handleTrigger(sampleCode);
+              }}
+            >
+              Điền mã mẫu
+            </button>
+            <button
+              type="button"
+              style={{ minHeight: 36, whiteSpace: 'nowrap' }}
+              onClick={() => setCameraNotice('')}
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
+
       {cameraActive && (
-        <div style={{ maxWidth: 360, border: '1px solid #cbd5e1', borderRadius: 8, padding: 8 }}>
+        <div style={{ maxWidth: 360, border: '1px solid #cbd5e1', borderRadius: 8, padding: 8, background: '#ffffff' }}>
           <video ref={videoRef} muted playsInline style={{ width: '100%', borderRadius: 6 }} />
           <small className="ui-muted-text">Hướng camera về phía mã vạch kệ (Bin) hoặc sản phẩm (SKU)...</small>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 export default MobileBarcodeScannerBar;

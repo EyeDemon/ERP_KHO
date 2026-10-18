@@ -181,13 +181,24 @@ export default function PickingTasks(){
     />
     {error&&<div role="alert">{error}</div>}
 
+    <MobileBarcodeScannerBar
+      warehouseId={selected?.warehouseId??tasks[0]?.warehouseId}
+      sampleCode={tasks[0]?.taskCode||'PICK-001'}
+      disabled={governanceBusy||!!busy}
+      onScan={code=>{
+        setMobileScanInput(code);
+        const matchTask=tasks.find(t=>t.taskCode.toUpperCase()===code.toUpperCase());
+        if(matchTask)void detail(matchTask.id);
+      }}
+    />
+
     <div className="ui-stack">
       <UiCard title="Trạm Điều hành Quét Mã Vạch Di Động & Đồng bộ Ngoại tuyến (Mobile Scan-First Execution — MO-01..MO-12)">
         <div className="ui-inline-wrap">
           <span>Tác vụ sẵn sàng quét RF/Mobile (MO-01..MO-09): <strong>{mobileReadyTasksCount}</strong></span>
           <span>Ngoại lệ chờ xử lý trên Mobile (MO-12): <strong>{shortPickExceptionTasksCount}</strong></span>
           <span>Tra cứu nhanh Barcode SKU (MO-11): <strong>Sẵn sàng</strong></span>
-          <span>Hàng đợi đồng bộ ngoại tuyến (MO-10): <strong>DEFERRED_LOW_RISK_QUEUE_WITH_IDEMPOTENCY_KEY</strong></span>
+          <span>Hàng đợi đồng bộ ngoại tuyến (MO-10): <UiBadge tone="success">Đồng bộ Idempotency an toàn</UiBadge></span>
         </div>
         <div className="ui-inline-wrap">
           <input
@@ -207,15 +218,6 @@ export default function PickingTasks(){
             </UiBadge>
           )}
         </div>
-        <MobileBarcodeScannerBar
-          warehouseId={selected?.warehouseId??tasks[0]?.warehouseId}
-          disabled={governanceBusy||!!busy}
-          onScan={code=>{
-            setMobileScanInput(code);
-            const matchTask=tasks.find(t=>t.taskCode.toUpperCase()===code.toUpperCase());
-            if(matchTask)void detail(matchTask.id);
-          }}
-        />
       </UiCard>
 
       <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking — OUT-04)">

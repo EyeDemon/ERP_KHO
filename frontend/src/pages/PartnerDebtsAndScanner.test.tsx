@@ -93,13 +93,16 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     });
   });
 
-  it('renders AP/AR summary, invoice table, and append-only ledger entries', async () => {
+  it('renders AP/AR summary, invoice table with nowrap/numeric cells, and append-only ledger entries', async () => {
     const view = render(<PartnerDebts />);
 
     expect(await view.findAllByText('AP-IR-001')).toHaveLength(2);
     expect(view.getAllByText('NK-2026-001')).toHaveLength(2);
     expect(view.getByText('Ghi nhận công nợ')).toBeTruthy();
     expect(view.getByText('Thanh toán')).toBeTruthy();
+
+    const headerCell = view.getByRole('columnheader', { name: 'Chứng từ kho' });
+    expect((headerCell as HTMLElement).style.whiteSpace).toBe('nowrap');
   });
 
   it('hides payment action button when user lacks partner.update permission', async () => {
@@ -177,9 +180,13 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     } as never);
 
     const onScan = vi.fn();
-    const view = render(<MobileBarcodeScannerBar warehouseId={5} onScan={onScan} />);
+    const view = render(<MobileBarcodeScannerBar warehouseId={5} sampleCode="BIN-STAGE-01" onScan={onScan} />);
 
-    const input = view.getByLabelText('Quét mã vạch Mobile / RF (Camera hoặc súng quét)');
+    const input = view.getByRole('searchbox', {
+      name: 'Quét mã vạch Mobile / RF (Camera hoặc súng quét)',
+    });
+    expect(view.getByPlaceholderText('Nhập hoặc quét mã Bin, SKU, Lot, Serial, LPN...')).toBeTruthy();
+
     fireEvent.change(input, { target: { value: '  BIN-STAGE-01\r\n ' } });
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
 
@@ -201,5 +208,10 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     });
 
     expect(await view.findByText(/Vị trí kệ \(Bin\): BIN-STAGE-01 — Vị trí Staging 01/)).toBeTruthy();
+
+    fireEvent.click(view.getByText('Bật Camera Quét'));
+    expect(await view.findByText('Điền mã mẫu')).toBeTruthy();
+    fireEvent.click(view.getByText('Đóng'));
+    expect(view.queryByText('Điền mã mẫu')).toBeNull();
   });
 });

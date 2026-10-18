@@ -20,10 +20,17 @@ namespace ERP.Api.Controllers
     public class ReportsController : ControllerBase
     {
         private readonly IReportService _reportService;
+        private readonly ErpKhoDbContext? _db;
+        private readonly IWarehouseAuthorizationService? _warehouseAuth;
 
-        public ReportsController(IReportService reportService)
+        public ReportsController(
+            IReportService reportService,
+            ErpKhoDbContext? db = null,
+            IWarehouseAuthorizationService? warehouseAuth = null)
         {
             _reportService = reportService;
+            _db = db;
+            _warehouseAuth = warehouseAuth;
         }
 
         [HttpGet("operational-dashboard")]
@@ -865,7 +872,9 @@ namespace ERP.Api.Controllers
             var issuedByProduct = await db.InventoryTransactions.AsNoTracking()
                 .Where(t => scopedIds.Contains(t.WarehouseId) &&
                             t.TransactionDate >= since &&
+                            t.TransactionType != TransactionType.Move &&
                             (t.TransactionType == TransactionType.Export ||
+                             t.TransactionType == TransactionType.Ship ||
                              t.TransactionType == TransactionType.TransferOut ||
                              t.TransactionType == TransactionType.AdjustmentDecrease))
                 .GroupBy(t => t.ProductId)
@@ -879,6 +888,7 @@ namespace ERP.Api.Controllers
             var periodInByProduct = await db.InventoryTransactions.AsNoTracking()
                 .Where(t => scopedIds.Contains(t.WarehouseId) &&
                             t.TransactionDate >= since &&
+                            t.TransactionType != TransactionType.Move &&
                             (t.TransactionType == TransactionType.Import ||
                              t.TransactionType == TransactionType.TransferIn ||
                              t.TransactionType == TransactionType.AdjustmentIncrease))
@@ -1137,13 +1147,192 @@ namespace ERP.Api.Controllers
         {
             try
             {
-                var report = await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
+                var report = _db is not null
+                    ? await ComputeInventoryInOutStockFromDbAsync(_db, _warehouseAuth, fromDate, toDate, warehouseId, productId, cancellationToken)
+                    : await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
                 return Ok(report);
             }
             catch (ERP.Application.Exceptions.BusinessRuleException ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        [NonAction]
+        public async Task<IActionResult> GetInventoryInOutStock(
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? warehouseId = null,
+            int? productId = null,
+            ErpKhoDbContext? db = null,
+            IWarehouseAuthorizationService? warehouseAuth = null,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var effectiveDb = db ?? _db;
+                var effectiveAuth = warehouseAuth ?? _warehouseAuth;
+                var report = effectiveDb is not null
+                    ? await ComputeInventoryInOutStockFromDbAsync(effectiveDb, effectiveAuth, fromDate, toDate, warehouseId, productId, cancellationToken)
+                    : await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
+                return Ok(report);
+            }
+            catch (ERP.Application.Exceptions.BusinessRuleException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        private static async Task<IReadOnlyList<ERP.Application.DTOs.InventoryInOutReportDto>> ComputeInventoryInOutStockFromDbAsync(
+            ErpKhoDbContext db,
+            IWarehouseAuthorizationService? warehouseAuth,
+            DateTime? fromDate,
+            DateTime? toDate,
+            int? warehouseId,
+            int? productId,
+            CancellationToken cancellationToken)
+        {
+            if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+            {
+                throw new ERP.Application.Exceptions.BusinessRuleException("Từ ngày không được lớn hơn đến ngày.");
+            }
+
+            IReadOnlyList<int>? allowedWarehouseIds = null;
+            if (warehouseAuth is not null)
+            {
+                if (warehouseId.HasValue)
+                {
+                    await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                    allowedWarehouseIds = new[] { warehouseId.Value };
+                }
+                else
+                {
+                    allowedWarehouseIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                }
+            }
+
+            // Explicitly exclude intra-warehouse bin-to-bin moves (TransactionType.Move),
+            // status changes, and zero-sum reversal markers from warehouse-level In/Out totals.
+            var query = db.InventoryTransactions.AsNoTracking()
+                .Where(t => t.InventoryStatus == InventoryStatus.Available &&
+                            t.TransactionType != TransactionType.Move &&
+                            (t.TransactionType == TransactionType.Import ||
+                             t.TransactionType == TransactionType.Export ||
+                             t.TransactionType == TransactionType.Ship ||
+                             t.TransactionType == TransactionType.AdjustmentIncrease ||
+                             t.TransactionType == TransactionType.AdjustmentDecrease ||
+                             t.TransactionType == TransactionType.TransferIn ||
+                             t.TransactionType == TransactionType.TransferOut));
+
+            if (warehouseId.HasValue)
+            {
+                query = query.Where(t => t.WarehouseId == warehouseId.Value);
+            }
+            else if (allowedWarehouseIds is not null)
+            {
+                query = query.Where(t => allowedWarehouseIds.Contains(t.WarehouseId));
+            }
+
+            if (productId.HasValue)
+            {
+                query = query.Where(t => t.ProductId == productId.Value);
+            }
+
+            if (toDate.HasValue)
+            {
+                query = query.Where(t => t.TransactionDate < toDate.Value);
+            }
+
+            var txRows = await query
+                .Select(t => new
+                {
+                    t.ProductId,
+                    t.WarehouseId,
+                    t.TransactionType,
+                    t.Quantity,
+                    t.TransactionDate
+                })
+                .ToListAsync(cancellationToken);
+
+            if (txRows.Count == 0)
+            {
+                return Array.Empty<ERP.Application.DTOs.InventoryInOutReportDto>();
+            }
+
+            var productIds = txRows.Select(x => x.ProductId).Distinct().ToList();
+            var warehouseIds = txRows.Select(x => x.WarehouseId).Distinct().ToList();
+
+            var products = await db.Products.AsNoTracking()
+                .Where(p => productIds.Contains(p.Id))
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Code,
+                    p.Name,
+                    UnitName = p.Unit != null ? p.Unit.Name : string.Empty
+                })
+                .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+            var warehouses = await db.Warehouses.AsNoTracking()
+                .Where(w => warehouseIds.Contains(w.Id))
+                .Select(w => new { w.Id, w.Name })
+                .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+            var report = txRows
+                .GroupBy(x => new { x.ProductId, x.WarehouseId })
+                .Select(g =>
+                {
+                    products.TryGetValue(g.Key.ProductId, out var prod);
+                    warehouses.TryGetValue(g.Key.WarehouseId, out var whName);
+
+                    var opening = fromDate.HasValue
+                        ? g.Where(x => x.TransactionDate < fromDate.Value)
+                            .Sum(x => x.TransactionType is TransactionType.Import or TransactionType.TransferIn or TransactionType.AdjustmentIncrease
+                                ? x.Quantity
+                                : x.TransactionType is TransactionType.Export or TransactionType.Ship or TransactionType.TransferOut or TransactionType.AdjustmentDecrease
+                                    ? -x.Quantity
+                                    : 0m)
+                        : 0m;
+
+                    var periodRows = fromDate.HasValue
+                        ? g.Where(x => x.TransactionDate >= fromDate.Value).ToList()
+                        : g.ToList();
+
+                    var importQty = periodRows.Where(x => x.TransactionType == TransactionType.Import).Sum(x => x.Quantity);
+                    var transferInQty = periodRows.Where(x => x.TransactionType == TransactionType.TransferIn).Sum(x => x.Quantity);
+                    var adjIncQty = periodRows.Where(x => x.TransactionType == TransactionType.AdjustmentIncrease).Sum(x => x.Quantity);
+                    var inQty = importQty + transferInQty + adjIncQty;
+
+                    var exportQty = periodRows.Where(x => x.TransactionType is TransactionType.Export or TransactionType.Ship).Sum(x => x.Quantity);
+                    var transferOutQty = periodRows.Where(x => x.TransactionType == TransactionType.TransferOut).Sum(x => x.Quantity);
+                    var adjDecQty = periodRows.Where(x => x.TransactionType == TransactionType.AdjustmentDecrease).Sum(x => x.Quantity);
+                    var outQty = exportQty + transferOutQty + adjDecQty;
+
+                    return new ERP.Application.DTOs.InventoryInOutReportDto
+                    {
+                        ProductId = g.Key.ProductId,
+                        ProductCode = prod?.Code ?? string.Empty,
+                        ProductName = prod?.Name ?? string.Empty,
+                        UnitName = prod?.UnitName ?? string.Empty,
+                        WarehouseId = g.Key.WarehouseId,
+                        WarehouseName = whName ?? string.Empty,
+                        OpeningQuantity = decimal.Round(opening, 4),
+                        ImportQuantity = decimal.Round(importQty, 4),
+                        TransferInQuantity = decimal.Round(transferInQty, 4),
+                        AdjustmentIncreaseQuantity = decimal.Round(adjIncQty, 4),
+                        InQuantity = decimal.Round(inQty, 4),
+                        ExportQuantity = decimal.Round(exportQty, 4),
+                        TransferOutQuantity = decimal.Round(transferOutQty, 4),
+                        AdjustmentDecreaseQuantity = decimal.Round(adjDecQty, 4),
+                        OutQuantity = decimal.Round(outQty, 4),
+                        ClosingQuantity = decimal.Round(opening + inQty - outQty, 4)
+                    };
+                })
+                .OrderBy(x => x.ProductCode, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.WarehouseName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return report;
         }
 
         [HttpGet("inventory-in-out-stock/export")]
@@ -1157,7 +1346,9 @@ namespace ERP.Api.Controllers
         {
             try
             {
-                var report = await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
+                var report = _db is not null
+                    ? await ComputeInventoryInOutStockFromDbAsync(_db, _warehouseAuth, fromDate, toDate, warehouseId, productId, cancellationToken)
+                    : await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
                 
                 using var workbook = new XLWorkbook();
                 var worksheet = workbook.Worksheets.Add("Báo cáo Xuất nhập tồn");

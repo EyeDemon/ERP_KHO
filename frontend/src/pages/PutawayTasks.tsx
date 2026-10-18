@@ -12,6 +12,35 @@ type Task={id:number;warehouseId?:number;receiptCode:string;warehouseName:string
 type Location={id:number;code:string;name:string;locationType:string;isPickable:boolean};
 const states:Record<string,string>={Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang thực hiện',Completed:'Đã hoàn thành',Cancelled:'Đã hủy',Exception:'Cần xử lý'};
 const inventory:Record<string,string>={Available:'Có thể sử dụng',Damaged:'Hư hỏng',Rejected:'Hàng bị từ chối'};
+const PUTAWAY_RANKING_CODES = [
+  '1_EXACT_SKU_AFFINITY',
+  '2_STORAGE_GROUP_COMPATIBILITY',
+  '3_REMAINING_CAPACITY_SCORE',
+  '4_PROXIMITY_PICK_FACE',
+  '5_FEFO_LOT_CONSOLIDATION',
+] as const;
+const PUTAWAY_HARD_GUARD_CODES = [
+  'ACTIVE_BIN_ONLY',
+  'UNBLOCKED_BIN_ONLY',
+  'NO_STOCKTAKE_FREEZE',
+  'CAPACITY_WEIGHT_VOLUME_PALLET_GUARD',
+] as const;
+const PUTAWAY_RULE_LABELS: Record<string, string> = {
+  '1_EXACT_SKU_AFFINITY': '1. Ưu tiên cùng SKU',
+  '2_STORAGE_GROUP_COMPATIBILITY': '2. Tương thích nhóm lưu trữ',
+  '3_REMAINING_CAPACITY_SCORE': '3. Đủ sức chứa còn lại',
+  '3_REMAINING_CAPACITY_FIT': '3. Đủ sức chứa còn lại',
+  '4_PROXIMITY_PICK_FACE': '4. Gần vị trí lấy hàng',
+  '4_PICK_FACE_PROXIMITY': '4. Gần vị trí lấy hàng',
+  '5_FEFO_LOT_CONSOLIDATION': '5. Gom lô FEFO',
+  ACTIVE_BIN_ONLY: 'Bin đang hoạt động',
+  UNBLOCKED_BIN_ONLY: 'Bin không bị khóa',
+  NO_STOCKTAKE_FREEZE: 'Không vướng khóa kiểm kê',
+  NO_INVENTORY_LOCK: 'Không vướng khóa kiểm kê',
+  CAPACITY_WEIGHT_VOLUME_PALLET_GUARD: 'Đảm bảo tải trọng / thể tích / số Pallet',
+};
+const formatPutawayRuleLabel = (code: string) =>
+  PUTAWAY_RULE_LABELS[code] ?? code.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 const message=(e:unknown)=>{const response=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;const status=response?.status;const code=response?.data?.code;if(code==='PUTAWAY_WRONG_BIN'||code==='PUTAWAY_WRONG_PRODUCT')return response?.data?.message??'Mã vạch vị trí hoặc sản phẩm không khớp.';return status===403?'Bạn không có quyền thực hiện thao tác này.':status===404?'Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.':status===409?'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.':'Không thể lưu dữ liệu. Vui lòng thử lại.'};
 
 export default function PutawayTasks(){
@@ -62,6 +91,17 @@ export default function PutawayTasks(){
 
    {error&&<div role="alert" className="putaway-error">{error}</div>}
 
+   <MobileBarcodeScannerBar
+     warehouseId={selected?.warehouseId??tasks[0]?.warehouseId}
+     sampleCode={tasks[0]?.receiptCode||'BIN-A01'}
+     disabled={!!busy}
+     onScan={code=>{
+       const upper=sanitizeScannerCode(code).toUpperCase();
+       const matchTask=tasks.find(t=>t.receiptCode.toUpperCase()===upper);
+       if(matchTask)void detail(matchTask.id);
+     }}
+   />
+
    <UiCard title="Tổng quan Tiến độ Cất hàng & Ngoại lệ Putaway (Putaway Execution & SLA Summary — IN-08)">
      <div className="ui-inline-wrap">
        <span>Tổng nhiệm vụ: <strong>{tasks.length}</strong></span>
@@ -74,23 +114,24 @@ export default function PutawayTasks(){
    </UiCard>
 
    <UiCard title="Bộ máy Quy tắc Đề xuất Vị trí Cất hàng (Putaway Rule Engine — IN-09)">
-     <div className="ui-inline-wrap">
-       <span>Tiêu chí xếp hạng (5 mức): <strong>1_EXACT_SKU_AFFINITY → 2_STORAGE_GROUP_COMPATIBILITY → 3_REMAINING_CAPACITY_FIT → 4_PICK_FACE_PROXIMITY → 5_FEFO_LOT_CONSOLIDATION</strong></span>
-       <span>Ràng buộc cứng (4 mức): <strong>ACTIVE_BIN_ONLY • UNBLOCKED_BIN_ONLY • NO_INVENTORY_LOCK • CAPACITY_WEIGHT_VOLUME_PALLET_GUARD</strong></span>
+     <div className="ui-stack" style={{ gap: 10 }}>
+       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+         <span style={{ fontWeight: 600 }}>Tiêu chí xếp hạng (5 mức):</span>
+         {PUTAWAY_RANKING_CODES.map(code => (
+           <UiBadge key={code} tone="success">{formatPutawayRuleLabel(code)}</UiBadge>
+         ))}
+       </div>
+       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+         <span style={{ fontWeight: 600 }}>Ràng buộc cứng (4 mức):</span>
+         {PUTAWAY_HARD_GUARD_CODES.map(code => (
+           <UiBadge key={code}>{formatPutawayRuleLabel(code)}</UiBadge>
+         ))}
+       </div>
+       <div className="ui-inline-wrap" style={{ marginTop: 4 }}>
+         <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin (IN-09)</button>
+         {slottingEvaluationResult&&<span><strong>{slottingEvaluationResult}</strong></span>}
+       </div>
      </div>
-     <div className="ui-inline-wrap">
-       <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin (IN-09)</button>
-       {slottingEvaluationResult&&<span><strong>{slottingEvaluationResult}</strong></span>}
-     </div>
-     <MobileBarcodeScannerBar
-       warehouseId={selected?.warehouseId??tasks[0]?.warehouseId}
-       disabled={!!busy}
-       onScan={code=>{
-         const upper=sanitizeScannerCode(code).toUpperCase();
-         const matchTask=tasks.find(t=>t.receiptCode.toUpperCase()===upper);
-         if(matchTask)void detail(matchTask.id);
-       }}
-     />
    </UiCard>
 
    <div className="putaway putaway-grid">

@@ -1257,6 +1257,77 @@ public sealed class MultiTenantIsolationSqlTests
                     .WithMessage("*403 Cross-Tenant Reference Denied*");
             }
 
+            // 2C. Master Data Delete Guards on SQL Server (BusinessPartner with PO/Debt, Unit with ProductUom, ProductCategory with Product) -> 400/409 BusinessRuleException (never 500 DbUpdateException)
+            await using (var dbDeleteGuards = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                var catId202 = await dbDeleteGuards.ProductCategories.Select(c => c.Id).FirstAsync();
+                var altUnit202 = new Unit
+                {
+                    Code = $"W12ALT-{suffix[..3]}",
+                    Name = "Alt Pack Unit 202",
+                    DecimalPlaces = 0,
+                    IsActive = true
+                };
+                var poOnlyPartner202 = new BusinessPartner
+                {
+                    Code = $"W12POONLY-{suffix}",
+                    Name = "PO Only Supplier 202",
+                    IsSupplier = true,
+                    IsActive = true
+                };
+                dbDeleteGuards.Units.Add(altUnit202);
+                dbDeleteGuards.BusinessPartners.Add(poOnlyPartner202);
+                await dbDeleteGuards.SaveChangesAsync();
+
+                dbDeleteGuards.ProductUoms.Add(new ProductUom
+                {
+                    ProductId = prod202Ids[0],
+                    UnitId = altUnit202.Id,
+                    ConversionFactor = 12m,
+                    Version = 1,
+                    EffectiveFromUtc = DateTime.UtcNow.AddDays(-1),
+                    IsActive = true
+                });
+                dbDeleteGuards.PurchaseOrders.Add(new PurchaseOrder
+                {
+                    Code = $"PO-W12-GUARD-{suffix}",
+                    SourceSystem = "ERP",
+                    ExternalPoId = $"EXT-PO-GUARD-{suffix}",
+                    SupplierId = poOnlyPartner202.Id,
+                    WarehouseId = wh202Id,
+                    OrderDate = DateTime.UtcNow.Date,
+                    Status = PurchaseOrderStatus.Open,
+                    CreatedBy = admin202Id,
+                    CreatedAtUtc = DateTime.UtcNow
+                });
+                await dbDeleteGuards.SaveChangesAsync();
+
+                var partnerService = new BusinessPartnerService(
+                    dbDeleteGuards,
+                    new WarehouseAuthorizationService(dbDeleteGuards, new StubTenantCurrentUser(admin202Id, "admin", "Admin", true, tenant202, $"TENANT-{tenant202}")),
+                    new StubTenantCurrentUser(admin202Id, "admin", "Admin", true, tenant202, $"TENANT-{tenant202}"));
+
+                var actDeleteDebtPartner = () => partnerService.DeleteAsync(supplier202Id);
+                (await actDeleteDebtPartner.Should().ThrowAsync<BusinessRuleException>())
+                    .Which.Data["HttpStatusCode"].Should().Be(409);
+
+                var actDeletePoPartner = () => partnerService.DeleteAsync(poOnlyPartner202.Id);
+                (await actDeletePoPartner.Should().ThrowAsync<BusinessRuleException>())
+                    .Which.Data["HttpStatusCode"].Should().Be(409);
+
+                var unitService = new UnitService(new UnitRepository(dbDeleteGuards));
+                var actDeleteUomUnit = () => unitService.DeleteUnitAsync(altUnit202.Id);
+                await actDeleteUomUnit.Should().ThrowAsync<BusinessRuleException>()
+                    .WithMessage("*đang được sử dụng*");
+
+                var catalogService = new ProductCatalogService(
+                    new ProductCatalogRepository(dbDeleteGuards),
+                    new ProductRepository(dbDeleteGuards));
+                var actDeleteCategory = () => catalogService.DeleteCategoryAsync(catId202);
+                (await actDeleteCategory.Should().ThrowAsync<BusinessRuleException>())
+                    .Which.Data["HttpStatusCode"].Should().Be(409);
+            }
+
             // 3. Per-Tenant Last Active Admin Guard: deactivating Tenant 202's sole admin fails even though Tenant 101 has an active admin
             await using (var dbGuard202 = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
             {
@@ -1346,6 +1417,7 @@ public sealed class MultiTenantIsolationSqlTests
                 DELETE FROM dbo.ImportReceipts WHERE TenantId = {tid};
                 DELETE FROM dbo.InventoryTransactions WHERE TenantId = {tid};
                 DELETE FROM dbo.InventoryStocks WHERE TenantId = {tid};
+                DELETE FROM dbo.ProductUoms WHERE TenantId = {tid};
                 DELETE FROM dbo.ProductBarcodes WHERE TenantId = {tid};
                 DELETE FROM dbo.Products WHERE TenantId = {tid};
                 DELETE FROM dbo.ProductCategories WHERE TenantId = {tid};

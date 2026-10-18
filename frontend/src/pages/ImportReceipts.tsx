@@ -472,6 +472,16 @@ const ImportReceipts = () => {
         {error && <p role="alert">{error}</p>}
         {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
 
+        <MobileBarcodeScannerBar
+          warehouseId={warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined)}
+          sampleCode={receipts[0]?.code || 'PNK-001'}
+          disabled={creating || workflowId !== null}
+          onScan={(code) => {
+            const match = receipts.find(r => r.code.toUpperCase() === code.toUpperCase());
+            if (match) void handleViewDetails(match.id);
+          }}
+        />
+
         <UiCard title="Tổng quan Pipeline Tiếp nhận, QC & Ghi sổ Phiếu nhập (Inbound Receiving Pipeline — IN-04..IN-07)">
           <div className="ui-inline-wrap">
             <UiBadge>{`Tổng số phiếu nhập: ${receipts.length}`}</UiBadge>
@@ -679,14 +689,6 @@ const ImportReceipts = () => {
         )}
 
         <UiCard title="Danh Sách Phiếu Nhập">
-          <MobileBarcodeScannerBar
-            warehouseId={warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined)}
-            disabled={creating || workflowId !== null}
-            onScan={(code) => {
-              const match = receipts.find(r => r.code.toUpperCase() === code.toUpperCase());
-              if (match) void handleViewDetails(match.id);
-            }}
-          />
           <UiTableScroll>
             <table aria-label="Danh sách phiếu nhập">
               <thead>

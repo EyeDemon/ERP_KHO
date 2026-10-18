@@ -42,8 +42,8 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
         var entity=await context.BusinessPartners.SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new NotFoundException($"Không tìm thấy đối tác id {id}");
         if(Code(dto.Code)!=entity.Code)throw new BusinessRuleException("Mã đối tác không được thay đổi.");
         Roles(dto.IsSupplier,dto.IsCustomer);
-        if(!dto.IsSupplier&&await context.ImportReceipts.AnyAsync(x=>x.SupplierId==id,ct))throw Conflict("Không thể tắt vai trò nhà cung cấp đang được phiếu nhập sử dụng.");
-        if(!dto.IsCustomer&&await context.ExportReceipts.AnyAsync(x=>x.CustomerId==id,ct))throw Conflict("Không thể tắt vai trò khách hàng đang được phiếu xuất sử dụng.");
+        if(!dto.IsSupplier&&(await context.ImportReceipts.AnyAsync(x=>x.SupplierId==id,ct)||await context.PurchaseOrders.AnyAsync(x=>x.SupplierId==id,ct)||await context.Asns.AnyAsync(x=>x.SupplierId==id,ct)||await context.PartnerDebtInvoices.AnyAsync(x=>x.PartnerId==id&&x.DebtType==PartnerDebtType.AP,ct)||await context.ReceivingTolerancePolicies.AnyAsync(x=>x.SupplierId==id,ct)||await context.QcPolicies.AnyAsync(x=>x.SupplierId==id,ct)))throw Conflict("Không thể tắt vai trò nhà cung cấp đang được phiếu nhập sử dụng.");
+        if(!dto.IsCustomer&&(await context.ExportReceipts.AnyAsync(x=>x.CustomerId==id,ct)||await context.SalesOrders.AnyAsync(x=>x.CustomerId==id,ct)||await context.PartnerDebtInvoices.AnyAsync(x=>x.PartnerId==id&&x.DebtType==PartnerDebtType.AR,ct)))throw Conflict("Không thể tắt vai trò khách hàng đang được phiếu xuất sử dụng.");
         var expected=RequiredRowVersion(dto.RowVersion);
         context.Entry(entity).Property(x=>x.RowVersion).OriginalValue=expected;
         entity.Name=Text(dto.Name,200,"Tên đối tác");entity.IsSupplier=dto.IsSupplier;entity.IsCustomer=dto.IsCustomer;entity.IsActive=dto.IsActive;entity.Phone=Optional(dto.Phone,50,"Điện thoại");entity.Email=Optional(dto.Email,254,"Email");entity.Address=Optional(dto.Address,500,"Địa chỉ");entity.CreditLimit=dto.CreditLimit;entity.PaymentTermDays=dto.PaymentTermDays;entity.UpdatedAt=DateTime.UtcNow;
@@ -53,9 +53,20 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
     public async Task DeleteAsync(int id,CancellationToken ct=default)
     {
         var entity=await context.BusinessPartners.SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new NotFoundException($"Không tìm thấy đối tác id {id}");
-        if(await context.ImportReceipts.AnyAsync(x=>x.SupplierId==id,ct)||await context.ExportReceipts.AnyAsync(x=>x.CustomerId==id,ct)||await context.PartnerDebtInvoices.AnyAsync(x=>x.PartnerId==id,ct))throw Conflict("Không thể xóa đối tác đang được chứng từ sử dụng.");
+        if(await HasTransactionsAsync(id,ct))throw Conflict("Không thể xóa đối tác đang được chứng từ sử dụng.");
         context.Remove(entity);await Save("Không thể xóa đối tác đang được chứng từ sử dụng.",ct);
     }
+
+    private async Task<bool> HasTransactionsAsync(int id,CancellationToken ct)=>
+        await context.ImportReceipts.AnyAsync(x=>x.SupplierId==id,ct)
+        ||await context.ExportReceipts.AnyAsync(x=>x.CustomerId==id,ct)
+        ||await context.PurchaseOrders.AnyAsync(x=>x.SupplierId==id,ct)
+        ||await context.Asns.AnyAsync(x=>x.SupplierId==id,ct)
+        ||await context.SalesOrders.AnyAsync(x=>x.CustomerId==id,ct)
+        ||await context.PartnerDebtInvoices.AnyAsync(x=>x.PartnerId==id,ct)
+        ||await context.PartnerDebtLedgers.AnyAsync(x=>x.PartnerId==id,ct)
+        ||await context.ReceivingTolerancePolicies.AnyAsync(x=>x.SupplierId==id,ct)
+        ||await context.QcPolicies.AnyAsync(x=>x.SupplierId==id,ct);
 
     public Task SetImportSupplierAsync(int receiptId,int? partnerId,CancellationToken ct=default)=>SetReceiptPartner(receiptId,partnerId,true,ct);
     public Task SetExportCustomerAsync(int receiptId,int? partnerId,CancellationToken ct=default)=>SetReceiptPartner(receiptId,partnerId,false,ct);

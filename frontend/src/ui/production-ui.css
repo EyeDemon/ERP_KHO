@@ -103,6 +103,9 @@
   letter-spacing: 0.025em;
   text-transform: uppercase;
   border-bottom: 1px solid var(--ui-border-strong);
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .production-ui th,
@@ -112,7 +115,35 @@
   vertical-align: top;
   border-right: 1px solid var(--ui-border);
   border-bottom: 1px solid var(--ui-border);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.production-ui th {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.production-ui .ui-cell-nowrap {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.production-ui .ui-cell-numeric {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.production-ui .ui-cell-partner {
+  min-width: 200px;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .production-ui tr > :last-child {
@@ -487,14 +518,27 @@
     font-size: 12px;
     max-width: 100%;
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 
   .production-ui span,
   .production-ui strong,
   .production-ui p,
   .production-ui div {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  .production-ui th,
+  .production-ui .ui-cell-nowrap,
+  .production-ui .ui-cell-nowrap *,
+  .production-ui .ui-cell-numeric,
+  .production-ui .ui-cell-numeric *,
+  .production-ui table .ui-badge {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   .production-ui :where(div, section):has(> table) {

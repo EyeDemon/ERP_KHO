@@ -286,6 +286,12 @@ namespace ERP.Infrastructure.Queries
                     unclassifiedCount += group.NegativeQuantityEvents;
                     continue;
                 }
+                if (group.TransactionType == TransactionType.Move)
+                {
+                    // Intra-warehouse bin-to-bin moves (e.g. Putaway RECEIVING -> Storage Bin)
+                    // have zero net effect on warehouse-level inventory balance.
+                    continue;
+                }
                 current.DirectLedgerNetQuantity +=
                     group.TransactionType.ApplySign(group.Quantity);
             }
@@ -355,6 +361,7 @@ namespace ERP.Infrastructure.Queries
             var legacyClassifiedQuantity = grouped
                 .Where(x => x.NegativeQuantityEvents == 0 &&
                     x.Type != TransactionType.TransferAdjustment &&
+                    x.Type != TransactionType.Move &&
                     Enum.IsDefined(x.Type))
                 .Sum(x => x.Type.ApplySign(x.Quantity));
             // A valid StatusChange is recorded on the destination bucket, not
@@ -644,10 +651,13 @@ namespace ERP.Infrastructure.Queries
                     .Where(t => t.ProductId == pair.ProductId && t.WarehouseId == pair.WarehouseId)
                     .ToList();
 
-                decimal Total(TransactionType type) => stockTransactions
-                    .Where(t => t.InventoryStatus == InventoryStatus.Available &&
-                                t.TransactionType == type)
-                    .Sum(t => t.TotalQuantity);
+                decimal Total(TransactionType type) => type == TransactionType.Move
+                    ? 0m
+                    : stockTransactions
+                        .Where(t => t.InventoryStatus == InventoryStatus.Available &&
+                                    t.TransactionType != TransactionType.Move &&
+                                    t.TransactionType == type)
+                        .Sum(t => t.TotalQuantity);
 
                 var importQuantity = Total(TransactionType.Import);
                 var exportQuantity = Total(TransactionType.Export) + Total(TransactionType.Ship);
@@ -700,6 +710,8 @@ namespace ERP.Infrastructure.Queries
                     lacksLedgerForOtherStatusOnly ? null :
                     stockTransactions.Sum(t =>
                     {
+                        if (t.TransactionType == TransactionType.Move)
+                            return 0m;
                         if (t.TransactionType == TransactionType.StatusChange)
                             return (t.ToInventoryStatus == InventoryStatus.Available
                                     ? t.TotalQuantity : 0m) -
@@ -726,6 +738,10 @@ namespace ERP.Infrastructure.Queries
                         .ToDictionary(state => state, _ => 0m);
                     foreach (var entry in stockTransactions)
                     {
+                        if (entry.TransactionType == TransactionType.Move)
+                        {
+                            continue;
+                        }
                         if (entry.TransactionType == TransactionType.StatusChange)
                         {
                             expectedByStatus[entry.FromInventoryStatus!.Value] -= entry.TotalQuantity;

@@ -159,6 +159,16 @@ export default function PackingSessions(){
     />
     {error&&<div role="alert">{error}</div>}
 
+    <MobileBarcodeScannerBar
+      warehouseId={selected?.warehouseId??sessions[0]?.warehouseId}
+      sampleCode={sessions[0]?.sessionCode||'HU-001'}
+      disabled={!!busy||governanceBusy}
+      onScan={code=>{
+        const matchSession=sessions.find(s=>s.sessionCode.toUpperCase()===code.toUpperCase());
+        if(matchSession)void detail(matchSession.id);
+      }}
+    />
+
     <div className="ui-stack">
       <UiCard title="Danh mục Loại Bao bì Chuẩn (MD-08) & Gợi ý Tối ưu Đóng thùng Cartonization (AX-11)">
         <div className="ui-inline-wrap">
@@ -166,7 +176,7 @@ export default function PackingSessions(){
           <span><strong>CARTON-L</strong> (CARTON): tối đa 30 kg / 0.12 m³</span>
           <span><strong>TOTE-STD</strong> (TOTE): tối đa 25 kg / 0.06 m³</span>
           <span><strong>PALLET-EUR</strong> (PALLET): tối đa 1000 kg / 1.80 m³</span>
-          <span>Chính sách Cartonization: <code>RECOMMEND_ONLY_REQUIRES_OPERATOR_CONFIRM</code></span>
+          <span>Chính sách Cartonization: <UiBadge tone="success">Đề xuất & Xác nhận bởi Nhân viên</UiBadge></span>
         </div>
         <div className="ui-inline-wrap">
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC (MD-08, AX-11)</button>
@@ -174,14 +184,6 @@ export default function PackingSessions(){
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS (AX-09, AX-10)</button>
           {kittingVasResult&&<UiBadge tone="success">{kittingVasResult}</UiBadge>}
         </div>
-        <MobileBarcodeScannerBar
-          warehouseId={selected?.warehouseId??sessions[0]?.warehouseId}
-          disabled={!!busy||governanceBusy}
-          onScan={code=>{
-            const matchSession=sessions.find(s=>s.sessionCode.toUpperCase()===code.toUpperCase());
-            if(matchSession)void detail(matchSession.id);
-          }}
-        />
       </UiCard>
 
       <UiCard title="Packing sessions">

@@ -438,6 +438,9 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
         int loc202Id;
         int sharedProd202Id;
         int customer202Id;
+        int poSupplier202Id;
+        int altUnit202Id;
+        int cat202Id;
         int inv202Id;
         var prod202Ids = new List<int>();
 
@@ -470,7 +473,12 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
                     AppPermissions.ProductRead,
                     AppPermissions.ProductCreate,
                     AppPermissions.PartnerRead,
-                    AppPermissions.PartnerUpdate
+                    AppPermissions.PartnerUpdate,
+                    AppPermissions.PartnerDeactivate,
+                    AppPermissions.UomRead,
+                    AppPermissions.UomManage,
+                    AppPermissions.CategoryRead,
+                    AppPermissions.CategoryManage
                 ]);
 
             var staffRole = await db.Roles.FirstOrDefaultAsync(r => r.RoleName == AppRoles.WarehouseStaff);
@@ -480,6 +488,15 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
                 db.Roles.Add(staffRole);
                 await db.SaveChangesAsync();
             }
+
+            // Grant read-only Viewer permissions on Partner Debts to staffRole (no PartnerUpdate)
+            await EnsurePermissionsForRoleAsync(
+                db,
+                staffRole,
+                [
+                    AppPermissions.PartnerRead,
+                    AppPermissions.ProductRead
+                ]);
 
             db.UseTenant(tenant101);
             var admin101 = new User
@@ -620,6 +637,7 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
             };
             var wh202 = new Warehouse { Code = "WH-202", Name = "Kho 202", IsActive = true };
             var unit202 = new Unit { Code = "PCS", Name = "Cái 202", IsActive = true };
+            var altUnit202 = new Unit { Code = "BOX12", Name = "Thùng 12 Cái 202", IsActive = true };
             var cat202 = new ProductCategory { Code = "CAT", Name = "Nhóm 202", IsActive = true };
             var cust202 = new BusinessPartner
             {
@@ -630,11 +648,18 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
                 ReceivableBalance = 880_000m,
                 IsActive = true
             };
+            var poSup202 = new BusinessPartner
+            {
+                Code = "SUP-PO-202",
+                Name = "Nhà cung cấp PO 202",
+                IsSupplier = true,
+                IsActive = true
+            };
             db.Users.AddRange(admin202, staff202);
             db.Warehouses.Add(wh202);
-            db.Units.Add(unit202);
+            db.Units.AddRange(unit202, altUnit202);
             db.ProductCategories.Add(cat202);
-            db.BusinessPartners.Add(cust202);
+            db.BusinessPartners.AddRange(cust202, poSup202);
             await db.SaveChangesAsync();
 
             for (var i = 1; i <= 20; i++)
@@ -656,6 +681,28 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
                 .Select(p => p.Id)
                 .ToListAsync();
             prod202Ids.Should().HaveCount(20);
+
+            db.ProductUoms.Add(new ProductUom
+            {
+                ProductId = prod202Ids[0],
+                UnitId = altUnit202.Id,
+                ConversionFactor = 12m,
+                Version = 1,
+                EffectiveFromUtc = DateTime.UtcNow.AddDays(-1),
+                IsActive = true
+            });
+            db.PurchaseOrders.Add(new PurchaseOrder
+            {
+                Code = "PO-202-GUARD-01",
+                SourceSystem = "ERP",
+                ExternalPoId = "EXT-PO-202-GUARD-01",
+                SupplierId = poSup202.Id,
+                WarehouseId = wh202.Id,
+                OrderDate = DateTime.UtcNow.Date,
+                Status = ERP.Domain.Enums.PurchaseOrderStatus.Open,
+                CreatedBy = admin202.Id,
+                CreatedAtUtc = DateTime.UtcNow
+            });
 
             var loc202 = new WarehouseLocation
             {
@@ -725,6 +772,9 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
             loc202Id = loc202.Id;
             sharedProd202Id = sharedProd202.Id;
             customer202Id = cust202.Id;
+            poSupplier202Id = poSup202.Id;
+            altUnit202Id = altUnit202.Id;
+            cat202Id = cat202.Id;
             inv202Id = inv202.Id;
         }
 
@@ -1003,6 +1053,79 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
             foreignLedgerResp.StatusCode.Should().Be(HttpStatusCode.OK);
             using var foreignLedgerDoc = JsonDocument.Parse(await foreignLedgerResp.Content.ReadAsStringAsync());
             foreignLedgerDoc.RootElement.GetArrayLength().Should().Be(0);
+        }
+
+        // 2g. Master Data Delete Guards (/api/business-partners/{id}, /api/Units/{id}, /api/product-categories/{id}) -> 400/409 (never 500)
+        using (var deleteDebtPartnerReq = new HttpRequestMessage(HttpMethod.Delete, $"/api/business-partners/{customer202Id}"))
+        {
+            deleteDebtPartnerReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            deleteDebtPartnerReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            using var deleteDebtPartnerResp = await client.SendAsync(deleteDebtPartnerReq);
+            deleteDebtPartnerResp.StatusCode.Should().BeOneOf(
+                [HttpStatusCode.BadRequest, HttpStatusCode.Conflict],
+                await deleteDebtPartnerResp.Content.ReadAsStringAsync());
+        }
+
+        using (var deletePoPartnerReq = new HttpRequestMessage(HttpMethod.Delete, $"/api/business-partners/{poSupplier202Id}"))
+        {
+            deletePoPartnerReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            deletePoPartnerReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            using var deletePoPartnerResp = await client.SendAsync(deletePoPartnerReq);
+            deletePoPartnerResp.StatusCode.Should().BeOneOf(
+                [HttpStatusCode.BadRequest, HttpStatusCode.Conflict],
+                await deletePoPartnerResp.Content.ReadAsStringAsync());
+        }
+
+        using (var deleteUomUnitReq = new HttpRequestMessage(HttpMethod.Delete, $"/api/Units/{altUnit202Id}"))
+        {
+            deleteUomUnitReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            deleteUomUnitReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            using var deleteUomUnitResp = await client.SendAsync(deleteUomUnitReq);
+            deleteUomUnitResp.StatusCode.Should().BeOneOf(
+                [HttpStatusCode.BadRequest, HttpStatusCode.Conflict],
+                await deleteUomUnitResp.Content.ReadAsStringAsync());
+        }
+
+        using (var deleteCategoryReq = new HttpRequestMessage(HttpMethod.Delete, $"/api/product-categories/{cat202Id}"))
+        {
+            deleteCategoryReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            deleteCategoryReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            using var deleteCategoryResp = await client.SendAsync(deleteCategoryReq);
+            deleteCategoryResp.StatusCode.Should().BeOneOf(
+                [HttpStatusCode.BadRequest, HttpStatusCode.Conflict],
+                await deleteCategoryResp.Content.ReadAsStringAsync());
+        }
+
+        // 2h. RBAC Guard: Viewer / Read-Only Staff without PartnerUpdate permission gets 403 Forbidden on POST /api/partner-debts/invoices/{id}/pay
+        using var staffLoginResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequestDto
+        {
+            Username = "staff_202",
+            Password = pass202,
+            TenantCode = "TENANT-202"
+        });
+        staffLoginResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var staffLoginPayload = await staffLoginResp.Content.ReadFromJsonAsync<LoginResponseDto>();
+        var staffToken202 = staffLoginPayload!.Token;
+
+        using (var staffReadDebtReq = new HttpRequestMessage(HttpMethod.Get, "/api/partner-debts/invoices"))
+        {
+            staffReadDebtReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", staffToken202);
+            using var staffReadDebtResp = await client.SendAsync(staffReadDebtReq);
+            staffReadDebtResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        using (var viewerPayDebtReq = new HttpRequestMessage(HttpMethod.Post, $"/api/partner-debts/invoices/{inv202Id}/pay"))
+        {
+            viewerPayDebtReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", staffToken202);
+            viewerPayDebtReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            viewerPayDebtReq.Content = JsonContent.Create(new PayPartnerDebtDto
+            {
+                Amount = 100_000m,
+                ReferenceCode = "VIEWER-FORBIDDEN-PAY",
+                Note = "Viewer should not be allowed to pay debt"
+            });
+            using var viewerPayDebtResp = await client.SendAsync(viewerPayDebtReq);
+            viewerPayDebtResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
     }
 
