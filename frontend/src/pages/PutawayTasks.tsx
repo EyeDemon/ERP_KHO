@@ -103,13 +103,39 @@ export default function PutawayTasks(){
    />
 
    <UiCard title="Tổng quan Tiến độ Cất hàng & Ngoại lệ Putaway (Putaway Execution & SLA Summary — IN-08)">
-     <div className="ui-inline-wrap">
-       <span>Tổng nhiệm vụ: <strong>{tasks.length}</strong></span>
-       <span>Chờ / Đã phân công: <strong>{openOrAssignedCount}</strong></span>
-       <span>Đang thực hiện cất hàng: <strong>{inProgressCount}</strong></span>
-       <span>Đã hoàn tất: <strong>{completedCount}</strong></span>
-       <span>Ngoại lệ cần xử lý: <strong>{exceptionCount}</strong></span>
-       <span>Lượng còn cần cất: <strong>{totalRemainingQuantity}</strong></span>
+     <div
+       style={{
+         display: 'grid',
+         gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+         gap: 10,
+       }}
+     >
+       {[
+         { label: 'Tổng nhiệm vụ', value: tasks.length },
+         { label: 'Chờ / Đã phân công', value: openOrAssignedCount },
+         { label: 'Đang thực hiện cất hàng', value: inProgressCount },
+         { label: 'Đã hoàn tất', value: completedCount },
+         { label: 'Ngoại lệ cần xử lý', value: exceptionCount },
+         { label: 'Lượng còn cần cất', value: totalRemainingQuantity },
+       ].map(metric => (
+         <div
+           key={metric.label}
+           style={{
+             border: '1px solid #e2e8f0',
+             background: '#f8fafc',
+             padding: '8px 10px',
+             borderRadius: 6,
+             display: 'flex',
+             flexDirection: 'column',
+             gap: 4,
+           }}
+         >
+           <span style={{ fontSize: 12, color: '#475569' }}>{metric.label}</span>
+           <strong style={{ fontSize: 18, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+             {metric.value}
+           </strong>
+         </div>
+       ))}
      </div>
    </UiCard>
 

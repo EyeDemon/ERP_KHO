@@ -251,15 +251,16 @@ public sealed class PartnerDebtService(
         if (string.IsNullOrWhiteSpace(referenceType) || !referenceId.HasValue || referenceId.Value <= 0)
             return null;
 
+        var normalizedReferenceType = NormalizeSourceOrReferenceType(referenceType);
         int? candidateInvoiceId = null;
-        if (referenceType is "ImportReceipt" or "ExportReceipt")
+        if (normalizedReferenceType is "ImportReceipt" or "ExportReceipt")
         {
             candidateInvoiceId = await context.PartnerDebtInvoices.AsNoTracking()
-                .Where(x => x.SourceType == referenceType && x.SourceId == referenceId.Value)
+                .Where(x => x.SourceType == normalizedReferenceType && x.SourceId == referenceId.Value)
                 .Select(x => (int?)x.Id)
                 .FirstOrDefaultAsync(ct);
         }
-        else if (referenceType == "Shipment")
+        else if (normalizedReferenceType == "Shipment")
         {
             var exportReceiptId = await context.ExportReceipts.AsNoTracking()
                 .Where(x => x.ShipmentId == referenceId.Value)
@@ -496,6 +497,7 @@ public sealed class PartnerDebtService(
         string? currency = "VND",
         CancellationToken ct = default)
     {
+        var normalizedSourceType = NormalizeSourceOrReferenceType(sourceType);
         var subTotal = decimal.Round(subTotalAmount, 2, MidpointRounding.AwayFromZero);
         var tax = decimal.Round(taxAmount, 2, MidpointRounding.AwayFromZero);
         var totalAmount = subTotal + tax;
@@ -506,7 +508,7 @@ public sealed class PartnerDebtService(
             .Include(x => x.Partner)
             .SingleOrDefaultAsync(x =>
                 x.DebtType == PartnerDebtType.AR &&
-                x.SourceType == sourceType &&
+                x.SourceType == normalizedSourceType &&
                 x.SourceId == sourceId, ct);
         if (existing is not null)
             return MapInvoice(existing);
@@ -517,13 +519,13 @@ public sealed class PartnerDebtService(
             return null;
 
         var now = DateTime.UtcNow;
-        var prefix = sourceType == "ExportReceipt" ? "AR-ER" : "AR-SHP";
+        var prefix = normalizedSourceType == "ExportReceipt" ? "AR-ER" : "AR-SHP";
         var invoice = new PartnerDebtInvoice
         {
             Code = $"{prefix}-{sourceId:D6}",
             PartnerId = customer.Id,
             DebtType = PartnerDebtType.AR,
-            SourceType = sourceType,
+            SourceType = normalizedSourceType,
             SourceId = sourceId,
             SourceCode = sourceCode,
             Currency = string.IsNullOrWhiteSpace(currency) ? "VND" : currency.Trim().ToUpperInvariant(),
@@ -554,7 +556,7 @@ public sealed class PartnerDebtService(
             TransactionType = PartnerDebtTransactionType.InvoiceCreated,
             AmountDelta = totalAmount,
             BalanceAfter = customer.ReceivableBalance,
-            ReferenceType = sourceType,
+            ReferenceType = normalizedSourceType,
             ReferenceId = sourceId,
             ReferenceCode = sourceCode,
             Note = $"Ghi nhận công nợ phải thu từ chứng từ xuất {sourceCode}",
@@ -568,6 +570,23 @@ public sealed class PartnerDebtService(
         return MapInvoice(invoice);
     }
 
+    private static string NormalizeSourceOrReferenceType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        return trimmed.ToUpperInvariant() switch
+        {
+            "IMPORTRECEIPT" or "IMPORT_RECEIPT" => "ImportReceipt",
+            "EXPORTRECEIPT" or "EXPORT_RECEIPT" => "ExportReceipt",
+            "SHIPMENT" => "Shipment",
+            "DEBTPAYMENT" or "DEBT_PAYMENT" => "DebtPayment",
+            "INVENTORYREVERSAL" or "INVENTORY_REVERSAL" => "InventoryReversal",
+            _ => trimmed
+        };
+    }
+
     private static PartnerDebtInvoiceDto MapInvoice(PartnerDebtInvoice x) => new()
     {
         Id = x.Id,
@@ -576,7 +595,7 @@ public sealed class PartnerDebtService(
         PartnerCode = x.Partner?.Code ?? string.Empty,
         PartnerName = x.Partner?.Name ?? string.Empty,
         DebtType = x.DebtType.ToString(),
-        SourceType = x.SourceType,
+        SourceType = NormalizeSourceOrReferenceType(x.SourceType),
         SourceId = x.SourceId,
         SourceCode = x.SourceCode,
         Currency = x.Currency,
@@ -604,10 +623,10 @@ public sealed class PartnerDebtService(
         TransactionType = x.TransactionType.ToString(),
         AmountDelta = x.AmountDelta,
         BalanceAfter = x.BalanceAfter,
-        ReferenceType = x.ReferenceType,
+        ReferenceType = NormalizeSourceOrReferenceType(x.ReferenceType),
         ReferenceId = x.ReferenceId,
         ReferenceCode = x.ReferenceCode,
-        PaymentMethod = x.PaymentMethod,
+        PaymentMethod = string.IsNullOrWhiteSpace(x.PaymentMethod) ? null : x.PaymentMethod.Trim().ToUpperInvariant(),
         Note = x.Note,
         CreatedBy = x.CreatedBy,
         CreatedAtUtc = x.CreatedAtUtc

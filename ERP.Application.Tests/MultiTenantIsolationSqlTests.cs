@@ -1257,7 +1257,7 @@ public sealed class MultiTenantIsolationSqlTests
                     .WithMessage("*403 Cross-Tenant Reference Denied*");
             }
 
-            // 2C. Master Data Delete Guards on SQL Server (BusinessPartner with PO/Debt, Unit with ProductUom, ProductCategory with Product) -> 400/409 BusinessRuleException (never 500 DbUpdateException)
+            // 2C. Master Data Delete & Deactivation Guards on SQL Server (BusinessPartner with PO/Debt, Unit with ProductUom, ProductCategory with Product, WarehouseLocation with PickingTaskLine/InventoryLock) -> 400/409 BusinessRuleException (never 500 DbUpdateException)
             await using (var dbDeleteGuards = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
             {
                 var catId202 = await dbDeleteGuards.ProductCategories.Select(c => c.Id).FirstAsync();
@@ -1275,10 +1275,78 @@ public sealed class MultiTenantIsolationSqlTests
                     IsSupplier = true,
                     IsActive = true
                 };
+                var loc202 = new WarehouseLocation
+                {
+                    WarehouseId = wh202Id,
+                    Code = $"BIN-G-{suffix}",
+                    Name = "Guard Bin 202",
+                    LocationType = WarehouseLocationType.Storage,
+                    IsPickable = true,
+                    IsActive = true,
+                    CreatedBy = admin202Id
+                };
                 dbDeleteGuards.Units.Add(altUnit202);
                 dbDeleteGuards.BusinessPartners.Add(poOnlyPartner202);
+                dbDeleteGuards.WarehouseLocations.Add(loc202);
                 await dbDeleteGuards.SaveChangesAsync();
 
+                var res202 = new StockReservation
+                {
+                    ReservationCode = $"RES-W12-{suffix}",
+                    ProductId = prod202Ids[0],
+                    WarehouseId = wh202Id,
+                    Quantity = 5m,
+                    AllocatedQuantity = 5m,
+                    Status = StockReservationStatus.Active,
+                    SourceType = "SalesOrder",
+                    SourceId = soOkId,
+                    SourceCode = $"SO-W12-OK-{suffix}",
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = admin202Id,
+                    ExpiresAt = DateTime.UtcNow.AddDays(1)
+                };
+                dbDeleteGuards.StockReservations.Add(res202);
+                await dbDeleteGuards.SaveChangesAsync();
+
+                var alloc202 = new StockAllocation
+                {
+                    AllocationCode = $"ALC-W12-{suffix}",
+                    ReservationId = res202.Id,
+                    WarehouseId = wh202Id,
+                    ProductId = prod202Ids[0],
+                    LocationId = loc202.Id,
+                    InventoryStatus = InventoryStatus.Available,
+                    Quantity = 5m,
+                    Status = StockAllocationStatus.Released,
+                    AllocatedAt = DateTime.UtcNow,
+                    AllocatedBy = admin202Id
+                };
+                var pickTask202 = new PickingTask
+                {
+                    TaskCode = $"PCK-W12-{suffix}",
+                    SourceType = "SalesOrder",
+                    SourceId = soOkId,
+                    SourceCode = $"SO-W12-OK-{suffix}",
+                    WarehouseId = wh202Id,
+                    Status = PickingTaskStatus.Open,
+                    CreatedBy = admin202Id,
+                    CreatedAt = DateTime.UtcNow
+                };
+                dbDeleteGuards.StockAllocations.Add(alloc202);
+                dbDeleteGuards.PickingTasks.Add(pickTask202);
+                await dbDeleteGuards.SaveChangesAsync();
+
+                dbDeleteGuards.PickingTaskLines.Add(new PickingTaskLine
+                {
+                    PickingTaskId = pickTask202.Id,
+                    AllocationId = alloc202.Id,
+                    ProductId = prod202Ids[0],
+                    SourceLocationId = loc202.Id,
+                    RequestedQuantity = 5m,
+                    PickedQuantity = 0m,
+                    Sequence = 1,
+                    Status = PickingTaskLineStatus.Open
+                });
                 dbDeleteGuards.ProductUoms.Add(new ProductUom
                 {
                     ProductId = prod202Ids[0],
@@ -1302,10 +1370,9 @@ public sealed class MultiTenantIsolationSqlTests
                 });
                 await dbDeleteGuards.SaveChangesAsync();
 
-                var partnerService = new BusinessPartnerService(
-                    dbDeleteGuards,
-                    new WarehouseAuthorizationService(dbDeleteGuards, new StubTenantCurrentUser(admin202Id, "admin", "Admin", true, tenant202, $"TENANT-{tenant202}")),
-                    new StubTenantCurrentUser(admin202Id, "admin", "Admin", true, tenant202, $"TENANT-{tenant202}"));
+                var currentUser202 = new StubTenantCurrentUser(admin202Id, "admin", "Admin", true, tenant202, $"TENANT-{tenant202}");
+                var whAuth202 = new WarehouseAuthorizationService(dbDeleteGuards, currentUser202);
+                var partnerService = new BusinessPartnerService(dbDeleteGuards, whAuth202, currentUser202);
 
                 var actDeleteDebtPartner = () => partnerService.DeleteAsync(supplier202Id);
                 (await actDeleteDebtPartner.Should().ThrowAsync<BusinessRuleException>())
@@ -1325,6 +1392,31 @@ public sealed class MultiTenantIsolationSqlTests
                     new ProductRepository(dbDeleteGuards));
                 var actDeleteCategory = () => catalogService.DeleteCategoryAsync(catId202);
                 (await actDeleteCategory.Should().ThrowAsync<BusinessRuleException>())
+                    .Which.Data["HttpStatusCode"].Should().Be(409);
+
+                var putawayService = new PutawayService(dbDeleteGuards, whAuth202, currentUser202);
+                var actDeactivateLocationWithPicking = () => putawayService.UpdateLocationAsync(loc202.Id, new UpdateWarehouseLocationDto
+                {
+                    Name = loc202.Name,
+                    IsActive = false,
+                    IsBlocked = false,
+                    IsPickable = true,
+                    IsReceivable = false,
+                    RowVersion = Convert.ToBase64String(loc202.RowVersion)
+                });
+                (await actDeactivateLocationWithPicking.Should().ThrowAsync<BusinessRuleException>())
+                    .Which.Data["HttpStatusCode"].Should().Be(409);
+
+                var actBlockLocationWithPicking = () => putawayService.UpdateLocationAsync(loc202.Id, new UpdateWarehouseLocationDto
+                {
+                    Name = loc202.Name,
+                    IsActive = true,
+                    IsBlocked = true,
+                    IsPickable = true,
+                    IsReceivable = false,
+                    RowVersion = Convert.ToBase64String(loc202.RowVersion)
+                });
+                (await actBlockLocationWithPicking.Should().ThrowAsync<BusinessRuleException>())
                     .Which.Data["HttpStatusCode"].Should().Be(409);
             }
 
@@ -1406,6 +1498,10 @@ public sealed class MultiTenantIsolationSqlTests
                 DELETE FROM dbo.SalesOrders WHERE TenantId = {tid};
                 DELETE FROM dbo.PurchaseOrderLines WHERE TenantId = {tid};
                 DELETE FROM dbo.PurchaseOrders WHERE TenantId = {tid};
+                DELETE FROM dbo.InventoryLocationMovements WHERE TenantId = {tid};
+                DELETE FROM dbo.PutawayTaskItems WHERE TenantId = {tid};
+                DELETE FROM dbo.PutawayTasks WHERE TenantId = {tid};
+                DELETE FROM dbo.InventoryLocks WHERE TenantId = {tid};
                 DELETE FROM dbo.StockTransferDetails WHERE TenantId = {tid};
                 DELETE FROM dbo.StockTransfers WHERE TenantId = {tid};
                 DELETE FROM dbo.StocktakeDetails WHERE TenantId = {tid};

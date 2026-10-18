@@ -141,9 +141,38 @@
 }
 
 .production-ui .ui-cell-partner {
-  min-width: 200px;
+  min-width: 150px;
+  max-width: 220px;
   overflow-wrap: break-word;
   word-break: normal;
+}
+
+.production-ui .ui-table-compact {
+  overflow: visible;
+}
+
+.production-ui .ui-table-compact th,
+.production-ui .ui-table-compact td {
+  padding: 6px 6px;
+  font-size: 12px;
+}
+
+.production-ui .ui-table-compact .ui-badge {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.production-ui .ui-sticky-action {
+  position: sticky;
+  right: 0;
+  background: var(--ui-surface);
+  z-index: 1;
+  box-shadow: -1px 0 0 var(--ui-border);
+}
+
+.production-ui thead .ui-sticky-action {
+  background: var(--ui-surface-muted);
+  z-index: 2;
 }
 
 .production-ui tr > :last-child {

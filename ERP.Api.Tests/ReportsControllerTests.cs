@@ -759,9 +759,46 @@ namespace ERP.Api.Tests
             var reportRows = reportRes.Should().BeOfType<OkObjectResult>().Subject
                 .Value.Should().BeAssignableTo<IReadOnlyList<InventoryInOutReportDto>>().Subject;
             reportRows.Should().ContainSingle();
+            reportRows[0].ImportQuantity.Should().Be(10m);
             reportRows[0].InQuantity.Should().Be(10m);
+            reportRows[0].ExportQuantity.Should().Be(0m);
             reportRows[0].OutQuantity.Should().Be(0m);
             reportRows[0].ClosingQuantity.Should().Be(10m);
+
+            // Step 3b: Verify ExportInventoryInOutReport (Excel export) writes InQuantity = 10, OutQuantity = 0, ClosingQuantity = 10
+            var exportRes = await controllerWithDb.ExportInventoryInOutReport(null, null, 1, 100);
+            var exportFile = exportRes.Should().BeOfType<FileContentResult>().Subject;
+            exportFile.ContentType.Should().Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            using (var exportStream = new System.IO.MemoryStream(exportFile.FileContents))
+            using (var exportWorkbook = new XLWorkbook(exportStream))
+            {
+                var sheet = exportWorkbook.Worksheet("Báo cáo Xuất nhập tồn");
+                sheet.Should().NotBeNull();
+                sheet.Cell(2, 1).GetString().Should().Be("SKU-PUTAWAY-10");
+                sheet.Cell(2, 5).GetValue<decimal>().Should().Be(0m);  // OpeningQuantity
+                sheet.Cell(2, 6).GetValue<decimal>().Should().Be(10m); // ImportQuantity
+                sheet.Cell(2, 9).GetValue<decimal>().Should().Be(10m); // InQuantity (Tổng tăng)
+                sheet.Cell(2, 10).GetValue<decimal>().Should().Be(0m); // ExportQuantity
+                sheet.Cell(2, 13).GetValue<decimal>().Should().Be(0m); // OutQuantity (Tổng giảm)
+                sheet.Cell(2, 14).GetValue<decimal>().Should().Be(10m); // ClosingQuantity (Tồn cuối kỳ)
+            }
+
+            // Step 3c: Verify GetAnalyticsSummary excludes TransactionType.Move from periodInByProduct and issuedByProduct
+            var analyticsRes = await controllerWithDb.GetAnalyticsSummary(db, warehouseAuth.Object, 1, 30);
+            var analyticsOk = analyticsRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var analyticsDoc = System.Text.Json.JsonSerializer.SerializeToDocument(analyticsOk.Value))
+            {
+                var turnoverItems = analyticsDoc.RootElement.GetProperty("turnoverItems");
+                turnoverItems.GetArrayLength().Should().Be(1);
+                var item = turnoverItems[0];
+                item.GetProperty("productId").GetInt32().Should().Be(100);
+                item.GetProperty("productCode").GetString().Should().Be("SKU-PUTAWAY-10");
+                item.GetProperty("currentOnHand").GetDecimal().Should().Be(10m);
+                item.GetProperty("periodInQuantity").GetDecimal().Should().Be(10m);
+                item.GetProperty("issuedLastPeriod").GetDecimal().Should().Be(0m);
+                item.GetProperty("turnoverRatio").GetDecimal().Should().Be(0m);
+                item.GetProperty("movementClass").GetString().Should().Be("NON_MOVING");
+            }
 
             // Step 4: Verify InventoryReconciliationQueryService also excludes TransactionType.Move
             var reconService = new ERP.Infrastructure.Queries.InventoryReconciliationQueryService(db, warehouseAuth.Object);
@@ -773,6 +810,207 @@ namespace ERP.Api.Tests
             reconPage.Items[0].ExpectedQuantity.Should().Be(10m);
             reconPage.Items[0].Difference.Should().Be(0m);
             reconPage.Items[0].Status.Should().Be("Match");
+        }
+
+        [Fact]
+        public async Task Wave15_ExportInventoryInOutReport_And_GetAnalyticsSummary_ExcludeIntraWarehouseMovesAcrossJsonExcelAndTurnover()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var unit = new ERP.Domain.Entities.Unit { Id = 1, Code = "PCS", Name = "Cái", IsActive = true };
+            var warehouse = new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH-01", Name = "Kho Chính", IsActive = true };
+            var receivingBin = new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 10,
+                WarehouseId = 1,
+                Warehouse = warehouse,
+                Code = "RECEIVING",
+                Name = "Vị trí nhận hàng",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Receiving,
+                IsActive = true,
+                IsBlocked = false,
+                IsReceivable = true,
+                IsPickable = false,
+                IsSystemManaged = true,
+                RowVersion = new byte[] { 1, 0, 0, 0, 0, 0, 0, 1 }
+            };
+            var storageBin = new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 20,
+                WarehouseId = 1,
+                Warehouse = warehouse,
+                Code = "A-01-01-01-01",
+                Name = "Kệ lưu trữ A01",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsBlocked = false,
+                IsReceivable = false,
+                IsPickable = true,
+                IsSystemManaged = false,
+                RowVersion = new byte[] { 1, 0, 0, 0, 0, 0, 0, 2 }
+            };
+            var product = new ERP.Domain.Entities.Product
+            {
+                Id = 100,
+                Code = "SKU-W15-10",
+                Name = "Sản phẩm kiểm thử Wave 15",
+                UnitId = 1,
+                Unit = unit,
+                IsActive = true
+            };
+
+            var receipt = new ERP.Domain.Entities.ImportReceipt
+            {
+                Id = 600,
+                Code = "PNK-W15-001",
+                WarehouseId = 1,
+                Warehouse = warehouse,
+                Status = ERP.Domain.Enums.ReceiptStatus.Posted,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+            };
+            receipt.Details.Add(new ERP.Domain.Entities.ImportReceiptDetail
+            {
+                Id = 601,
+                ImportReceiptId = 600,
+                ImportReceipt = receipt,
+                ProductId = 100,
+                Product = product,
+                Quantity = 10m,
+                AcceptedQuantity = 10m,
+                BaseAcceptedQuantity = 10m,
+                OperationUnitId = 1,
+                OperationUnitCodeSnapshot = "PCS",
+                BaseUnitId = 1,
+                BaseUnitCodeSnapshot = "PCS",
+                ConversionFactor = 1m,
+                ConversionVersion = 1,
+                BaseUnitDecimalPlaces = 0
+            });
+
+            db.Units.Add(unit);
+            db.Warehouses.Add(warehouse);
+            db.WarehouseLocations.AddRange(receivingBin, storageBin);
+            db.Products.Add(product);
+            db.ImportReceipts.Add(receipt);
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 1,
+                WarehouseId = 1,
+                Warehouse = warehouse,
+                LocationId = receivingBin.Id,
+                Location = receivingBin,
+                ProductId = 100,
+                Product = product,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 10m,
+                ReservedQuantity = 0m,
+                LastUpdated = DateTime.UtcNow.AddMinutes(-10)
+            });
+            db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+            {
+                ProductId = 100,
+                Product = product,
+                WarehouseId = 1,
+                Warehouse = warehouse,
+                LocationId = receivingBin.Id,
+                InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                Quantity = 10m,
+                ReferenceId = receipt.Id,
+                ReferenceType = "ImportReceipt",
+                TransactionDate = DateTime.UtcNow.AddMinutes(-10),
+                CreatedBy = 1
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new int[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            var currentUser = new Mock<ICurrentUser>();
+            currentUser.SetupGet(x => x.UserId).Returns(1);
+            currentUser.SetupGet(x => x.Role).Returns("Admin");
+            currentUser.SetupGet(x => x.IsGlobalAdmin).Returns(true);
+
+            var putawayService = new ERP.Infrastructure.Services.PutawayService(db, warehouseAuth.Object, currentUser.Object);
+            await putawayService.CreateForPostedReceiptAsync(receipt, receivingBin.Id, 1);
+
+            var taskEntity = await db.PutawayTasks.Include(t => t.Items).SingleAsync();
+            taskEntity.RowVersion = new byte[] { 1, 0, 0, 0, 0, 0, 0, 20 };
+            taskEntity.Status = ERP.Domain.Enums.PutawayTaskStatus.Assigned;
+            taskEntity.AssignedUserId = 1;
+            foreach (var item in taskEntity.Items)
+            {
+                item.RowVersion = new byte[] { 1, 0, 0, 0, 0, 0, 0, 21 };
+            }
+            await db.SaveChangesAsync();
+
+            await putawayService.MoveAsync(
+                taskEntity.Id,
+                new MovePutawayItemDto
+                {
+                    ItemId = taskEntity.Items.Single().Id,
+                    DestinationLocationId = storageBin.Id,
+                    DestinationLocationBarcode = storageBin.Code,
+                    ProductBarcode = product.Code,
+                    Quantity = 10m,
+                    UnitCode = "PCS",
+                    RowVersion = Convert.ToBase64String(taskEntity.RowVersion)
+                });
+
+            var controller = new ReportsController(_mockService.Object, db, warehouseAuth.Object);
+
+            // 1. JSON payload: GetInventoryInOutReport
+            var jsonResult = await controller.GetInventoryInOutReport(null, null, 1, 100);
+            var jsonRows = jsonResult.Should().BeOfType<OkObjectResult>().Subject
+                .Value.Should().BeAssignableTo<IReadOnlyList<InventoryInOutReportDto>>().Subject;
+            jsonRows.Should().ContainSingle();
+            jsonRows[0].InQuantity.Should().Be(10m);
+            jsonRows[0].OutQuantity.Should().Be(0m);
+            jsonRows[0].ClosingQuantity.Should().Be(10m);
+
+            // 2. Excel export: ExportInventoryInOutReport
+            var excelResult = await controller.ExportInventoryInOutReport(null, null, 1, 100);
+            var excelFile = excelResult.Should().BeOfType<FileContentResult>().Subject;
+            using (var stream = new System.IO.MemoryStream(excelFile.FileContents))
+            using (var workbook = new XLWorkbook(stream))
+            {
+                var worksheet = workbook.Worksheet("Báo cáo Xuất nhập tồn");
+                worksheet.Cell(2, 1).GetString().Should().Be("SKU-W15-10");
+                worksheet.Cell(2, 6).GetValue<decimal>().Should().Be(10m);  // Nhập kho
+                worksheet.Cell(2, 9).GetValue<decimal>().Should().Be(10m);  // Tổng tăng (InQuantity)
+                worksheet.Cell(2, 10).GetValue<decimal>().Should().Be(0m);  // Xuất kho
+                worksheet.Cell(2, 13).GetValue<decimal>().Should().Be(0m);  // Tổng giảm (OutQuantity)
+                worksheet.Cell(2, 14).GetValue<decimal>().Should().Be(10m); // Tồn cuối kỳ (ClosingQuantity)
+            }
+
+            // 3. Dashboard Analytics: GetAnalyticsSummary
+            var analyticsResult = await controller.GetAnalyticsSummary(db, warehouseAuth.Object, 1, 30);
+            var analyticsOk = analyticsResult.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(analyticsOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("inboundPostedCount").GetInt32().Should().Be(1);
+                root.GetProperty("putawayCompletedCount").GetInt32().Should().Be(1);
+
+                var turnover = root.GetProperty("turnoverItems");
+                turnover.GetArrayLength().Should().Be(1);
+                var row = turnover[0];
+                row.GetProperty("productId").GetInt32().Should().Be(100);
+                row.GetProperty("currentOnHand").GetDecimal().Should().Be(10m);
+                row.GetProperty("periodInQuantity").GetDecimal().Should().Be(10m);
+                row.GetProperty("issuedLastPeriod").GetDecimal().Should().Be(0m);
+                row.GetProperty("turnoverRatio").GetDecimal().Should().Be(0m);
+                row.GetProperty("daysOnHand").GetDecimal().Should().Be(999m);
+                row.GetProperty("movementClass").GetString().Should().Be("NON_MOVING");
+            }
         }
     }
 }

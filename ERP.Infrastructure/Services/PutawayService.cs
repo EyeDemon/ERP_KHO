@@ -199,6 +199,10 @@ public sealed class PutawayService(
 
         try { await context.SaveChangesAsync(token); }
         catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.", ex); }
+        catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 or 547 })
+        {
+            throw Conflict("Không thể cập nhật layout vị trí kho do xung đột ràng buộc dữ liệu.");
+        }
         if (transaction is not null) await transaction.CommitAsync(token);
         return Location(entity);
     }
@@ -218,7 +222,13 @@ public sealed class PutawayService(
         if (await context.WarehouseLocations.AnyAsync(x => x.WarehouseId == dto.WarehouseId && x.Code == code, token)) throw Conflict("Mã vị trí đã tồn tại trong kho.");
         ValidateFlags(type, dto.IsPickable, dto.IsReceivable);
         var entity = new WarehouseLocation { WarehouseId=dto.WarehouseId, Code=code, Name=name, StructurePath=structurePath, StorageClass=storageClass, MaxWeightKg=dto.MaxWeightKg, MaxVolumeM3=dto.MaxVolumeM3, MaxPalletEquivalent=dto.MaxPalletEquivalent, LocationType=type, IsPickable=dto.IsPickable, IsReceivable=dto.IsReceivable, CreatedBy=currentUser.UserId };
-        context.WarehouseLocations.Add(entity); await context.SaveChangesAsync(token); return Location(entity);
+        context.WarehouseLocations.Add(entity);
+        try { await context.SaveChangesAsync(token); }
+        catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 or 547 })
+        {
+            throw Conflict("Mã vị trí đã tồn tại trong kho hoặc dữ liệu tham chiếu không hợp lệ.");
+        }
+        return Location(entity);
     }
 
     public async Task<WarehouseLocationDto> UpdateLocationAsync(int id, UpdateWarehouseLocationDto dto, CancellationToken token = default)
@@ -236,7 +246,9 @@ public sealed class PutawayService(
         {
             var hasUsage = await context.InventoryStocks.AnyAsync(x => x.LocationId == id && x.Quantity != 0, token)
                 || await context.InventoryLocationMovements.AnyAsync(x => x.FromLocationId == id || x.ToLocationId == id, token)
-                || await context.PutawayTaskItems.AnyAsync(x => x.SourceLocationId == id && x.PutawayTask.Status != PutawayTaskStatus.Completed && x.PutawayTask.Status != PutawayTaskStatus.Cancelled, token);
+                || await context.InventoryTransactions.AnyAsync(x => x.LocationId == id || x.FromLocationId == id || x.ToLocationId == id, token)
+                || await context.PutawayTaskItems.AnyAsync(x => x.SourceLocationId == id && x.PutawayTask.Status != PutawayTaskStatus.Completed && x.PutawayTask.Status != PutawayTaskStatus.Cancelled, token)
+                || await context.PickingTaskLines.AnyAsync(x => x.SourceLocationId == id && x.PickingTask.Status != PickingTaskStatus.Completed && x.PickingTask.Status != PickingTaskStatus.Cancelled, token);
             if (hasUsage) throw Conflict("Không thể gắn cấu trúc cho vị trí đã có tồn kho, movement hoặc nhiệm vụ đang hoạt động.");
             entity.StructurePath = structurePath;
         }
@@ -253,13 +265,21 @@ public sealed class PutawayService(
         ValidateFlags(entity.LocationType, dto.IsPickable, dto.IsReceivable);
         if (!dto.IsActive && (await context.InventoryStocks.AnyAsync(x => x.LocationId == id && (x.Quantity != 0 || x.ReservedQuantity != 0), token) ||
             await context.StockAllocations.AnyAsync(x => x.LocationId == id && (x.Status == StockAllocationStatus.Active || x.Status == StockAllocationStatus.Picking || x.Status == StockAllocationStatus.Picked), token) ||
-            await context.PutawayTaskItems.AnyAsync(x => x.SourceLocationId == id && x.PutawayTask.Status != PutawayTaskStatus.Completed && x.PutawayTask.Status != PutawayTaskStatus.Cancelled, token)))
+            await context.PickingTaskLines.AnyAsync(x => x.SourceLocationId == id && x.PickingTask.Status != PickingTaskStatus.Completed && x.PickingTask.Status != PickingTaskStatus.Cancelled, token) ||
+            await context.PutawayTaskItems.AnyAsync(x => x.SourceLocationId == id && x.PutawayTask.Status != PutawayTaskStatus.Completed && x.PutawayTask.Status != PutawayTaskStatus.Cancelled, token) ||
+            await context.InventoryLocks.AnyAsync(x => x.LocationId == id && x.Status == InventoryLockStatus.Active, token)))
             throw Conflict("Không thể ngừng hoạt động vị trí đang có tồn kho, giữ hàng hoặc nhiệm vụ chưa hoàn tất.");
         if ((dto.IsBlocked || !dto.IsPickable) && (await context.InventoryStocks.AnyAsync(x => x.LocationId == id && x.ReservedQuantity > 0, token) ||
-            await context.StockAllocations.AnyAsync(x => x.LocationId == id && (x.Status == StockAllocationStatus.Active || x.Status == StockAllocationStatus.Picking || x.Status == StockAllocationStatus.Picked), token)))
+            await context.StockAllocations.AnyAsync(x => x.LocationId == id && (x.Status == StockAllocationStatus.Active || x.Status == StockAllocationStatus.Picking || x.Status == StockAllocationStatus.Picked), token) ||
+            await context.PickingTaskLines.AnyAsync(x => x.SourceLocationId == id && x.PickingTask.Status != PickingTaskStatus.Completed && x.PickingTask.Status != PickingTaskStatus.Cancelled, token)))
             throw Conflict("Không thể khóa hoặc tắt quyền lấy hàng của vị trí đang có cam kết giữ hàng hoặc phân bổ đang mở.");
         entity.Name=Required(dto.Name,"Tên vị trí"); entity.IsActive=dto.IsActive; entity.IsBlocked=dto.IsBlocked; entity.IsPickable=dto.IsPickable; entity.IsReceivable=dto.IsReceivable; entity.UpdatedAt=DateTime.UtcNow; entity.UpdatedBy=currentUser.UserId;
-        try { await context.SaveChangesAsync(token); } catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.", ex); }
+        try { await context.SaveChangesAsync(token); }
+        catch (DbUpdateConcurrencyException ex) { throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.", ex); }
+        catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 or 547 })
+        {
+            throw Conflict("Không thể cập nhật vị trí kho do đang có dữ liệu phát sinh liên quan.");
+        }
         if (transaction is not null) await transaction.CommitAsync(token);
         return Location(entity);
     }

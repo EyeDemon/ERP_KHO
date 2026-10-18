@@ -48,6 +48,29 @@ const mockApInvoice = {
   rowVersion: 'AAAAAAAAB9E=',
 };
 
+const mockArInvoice = {
+  id: 102,
+  code: 'AR-ER-001',
+  partnerId: 11,
+  partnerCode: 'CUS-01',
+  partnerName: 'Công ty Xây dựng Minh Long',
+  debtType: 'AR',
+  sourceType: 'ExportReceipt',
+  sourceId: 601,
+  sourceCode: 'PXK-2026-001',
+  currency: 'VND',
+  subTotalAmount: 800000,
+  taxAmount: 80000,
+  totalAmount: 880000,
+  paidAmount: 0,
+  remainingAmount: 880000,
+  status: 'Open',
+  issuedAtUtc: '2026-10-18T09:00:00Z',
+  dueDateUtc: '2026-11-18T09:00:00Z',
+  note: 'Công nợ phiếu xuất PXK-2026-001',
+  rowVersion: 'AAAAAAAAB9I=',
+};
+
 const mockLedger = [
   {
     id: 9001,
@@ -84,7 +107,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
         return Promise.resolve({ data: mockSummary } as never);
       }
       if (url === '/api/partner-debts/invoices') {
-        return Promise.resolve({ data: [mockApInvoice] } as never);
+        return Promise.resolve({ data: [mockApInvoice, mockArInvoice] } as never);
       }
       if (url === '/api/partner-debts/ledger') {
         return Promise.resolve({ data: mockLedger } as never);
@@ -93,13 +116,29 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     });
   });
 
-  it('renders AP/AR summary, invoice table with nowrap/numeric cells, and append-only ledger entries', async () => {
+  it('renders AP/AR summary, localized source document labels, compact columns (Còn nợ, Trạng thái, Thao tác), and append-only ledger entries', async () => {
     const view = render(<PartnerDebts />);
 
     expect(await view.findAllByText('AP-IR-001')).toHaveLength(2);
+    expect(view.getByText('AR-ER-001')).toBeTruthy();
     expect(view.getAllByText('NK-2026-001')).toHaveLength(2);
-    expect(view.getByText('Ghi nhận công nợ')).toBeTruthy();
-    expect(view.getByText('Thanh toán')).toBeTruthy();
+    expect(view.getByText('PXK-2026-001')).toBeTruthy();
+
+    expect(view.getAllByText('Phiếu nhập kho')).toHaveLength(2);
+    expect(view.getByText('Phiếu xuất kho')).toBeTruthy();
+    expect(view.queryByText('ImportReceipt')).toBeNull();
+    expect(view.queryByText('ExportReceipt')).toBeNull();
+
+    expect(view.getByText('Phát hành hóa đơn')).toBeTruthy();
+    expect(view.getByText(/Trước thuế: 1\.000\.000 • VAT: 100\.000/)).toBeTruthy();
+
+    expect(view.getByRole('columnheader', { name: 'Còn nợ' })).toBeTruthy();
+    expect(view.getByRole('columnheader', { name: 'Hạn TT' })).toBeTruthy();
+    expect(view.getByRole('columnheader', { name: 'Trạng thái' })).toBeTruthy();
+    expect(view.getByRole('columnheader', { name: 'Thao tác' })).toBeTruthy();
+
+    expect(view.getAllByText('Sổ phụ')).toHaveLength(2);
+    expect(view.getAllByText('Thanh toán')).toHaveLength(2);
 
     const headerCell = view.getByRole('columnheader', { name: 'Chứng từ kho' });
     expect((headerCell as HTMLElement).style.whiteSpace).toBe('nowrap');
@@ -133,7 +172,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     const view = render(<PartnerDebts />);
     await view.findAllByText('AP-IR-001');
 
-    fireEvent.click(view.getByText('Thanh toán'));
+    fireEvent.click(view.getAllByText('Thanh toán')[0]);
 
     const amountInput = view.getByLabelText('Số tiền thanh toán công nợ') as HTMLInputElement;
     expect(amountInput.value).toBe('1100000');
