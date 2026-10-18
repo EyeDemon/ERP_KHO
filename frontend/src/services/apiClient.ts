@@ -135,6 +135,26 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => {
     releaseAutoIdempotencyKey(response.config as RetryConfig | undefined);
+    if (
+      response.data &&
+      typeof response.data === 'object' &&
+      !Array.isArray(response.data) &&
+      (response.data as Record<string, unknown>).idempotentReplay === true &&
+      (response.data as Record<string, unknown>).truncated === true
+    ) {
+      const payload = response.data as Record<string, unknown>;
+      response.data = {
+        id: payload.id ?? 0,
+        code: payload.code ?? '',
+        status: payload.status ?? 'Completed',
+        rowVersion: payload.rowVersion ?? '',
+        lines: Array.isArray(payload.lines) ? payload.lines : [],
+        items: Array.isArray(payload.items) ? payload.items : [],
+        details: Array.isArray(payload.details) ? payload.details : [],
+        movements: Array.isArray(payload.movements) ? payload.movements : [],
+        ...payload,
+      };
+    }
     return response;
   },
   async (error: AxiosError) => {

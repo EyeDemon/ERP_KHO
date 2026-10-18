@@ -110,7 +110,7 @@ public sealed class ApprovalWorkflowService(
                 }),
                 CanReject = x.CreatorId != currentUser.UserId && (x.Type switch
                 {
-                    "ImportReceipt" => permissions.Contains("approval.reject"),
+                    "ImportReceipt" => permissions.Contains("approval.reject") && (!x.QcCompleted || permissions.Contains("quality_disposition.approve")),
                     "ExportReceipt" => permissions.Contains("approval.reject") && permissions.Contains("export_receipt.cancel"),
                     _ => legacy
                 }),
@@ -199,7 +199,7 @@ public sealed class ApprovalWorkflowService(
         if (documentType == "ImportReceipt")
         {
             summary.CanApprove &= permissions.Contains("receipt.complete") && (summary.PendingState != "QcCompleted" || permissions.Contains("quality_disposition.approve"));
-            summary.CanReject &= permissions.Contains("approval.reject");
+            summary.CanReject &= permissions.Contains("approval.reject") && (summary.PendingState != "QcCompleted" || permissions.Contains("quality_disposition.approve"));
             if (databaseRole == "Viewer") note = null;
         }
         else if (documentType == "ExportReceipt")

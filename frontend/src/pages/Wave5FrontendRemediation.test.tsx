@@ -424,8 +424,25 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
       await apiClient.post('/api/packing-sessions/1/items', { productId: 10, quantity: 1 });
       expect(capturedKeys).toHaveLength(3);
       expect(capturedKeys[2]).not.toBe(capturedKeys[0]);
+
+      // 3. W7-01: Truncated idempotent replay envelope is normalized with safe scalar & array defaults
+      apiClient.defaults.adapter = async (config) => ({
+        data: { idempotentReplay: true, truncated: true, statusCode: 200, id: 77, code: 'IMP-77' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      });
+      const replayRes = await apiClient.post('/api/import-receipts/77/post', {});
+      expect(replayRes.data.id).toBe(77);
+      expect(replayRes.data.code).toBe('IMP-77');
+      expect(replayRes.data.status).toBe('Completed');
+      expect(Array.isArray(replayRes.data.lines)).toBe(true);
+      expect(Array.isArray(replayRes.data.items)).toBe(true);
+      expect(Array.isArray(replayRes.data.details)).toBe(true);
     } finally {
       apiClient.defaults.adapter = originalAdapter;
     }
   });
 });
+

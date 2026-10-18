@@ -240,7 +240,7 @@ public sealed class Wave5SectorCRemediationTests
         });
         (await db.IdempotencyRecords.CountAsync(r => r.KeyHash == forbidHash)).Should().Be(0);
 
-        // 3. Oversized payload (> 65,536 chars) should succeed and store structured valid JSON envelope instead of truncated string
+        // 3. Oversized payload (> 65,536 chars) should succeed and store structured valid JSON envelope preserving core DTO fields
         var largeCtx = CreateContext("key-large", "?warehouseId=1");
         var largeHash = IdempotentCommandFilter.Hash("key-large");
         var largePayload = new string('X', 70_000);
@@ -248,7 +248,14 @@ public sealed class Wave5SectorCRemediationTests
         {
             var executed = new ActionExecutedContext(largeCtx, largeCtx.Filters, largeCtx.Controller)
             {
-                Result = new OkObjectResult(new { data = largePayload })
+                Result = new OkObjectResult(new
+                {
+                    id = 42,
+                    code = "DOC-42",
+                    status = "Posted",
+                    rowVersion = "AQIDBA==",
+                    lines = new[] { new { id = 1, blob = largePayload } }
+                })
             };
             return Task.FromResult(executed);
         });
@@ -259,6 +266,11 @@ public sealed class Wave5SectorCRemediationTests
         replayDoc.RootElement.GetProperty("idempotentReplay").GetBoolean().Should().BeTrue();
         replayDoc.RootElement.GetProperty("truncated").GetBoolean().Should().BeTrue();
         replayDoc.RootElement.GetProperty("statusCode").GetInt32().Should().Be(200);
+        replayDoc.RootElement.GetProperty("id").GetInt32().Should().Be(42);
+        replayDoc.RootElement.GetProperty("code").GetString().Should().Be("DOC-42");
+        replayDoc.RootElement.GetProperty("status").GetString().Should().Be("Posted");
+        replayDoc.RootElement.GetProperty("rowVersion").GetString().Should().Be("AQIDBA==");
+        replayDoc.RootElement.GetProperty("lines").GetArrayLength().Should().Be(0);
 
         // 4. Fingerprint and ComputeRequestHash include QueryString
         var fp1 = IdempotentCommandFilter.Fingerprint("Test.Command", new Dictionary<string, object?> { ["id"] = 1 }, "?warehouseId=1");
@@ -767,7 +779,7 @@ public sealed class Wave5SectorCRemediationTests
         damagedLoc.Should().NotBeNull();
         damagedLoc!.LocationType.Should().Be(WarehouseLocationType.Damaged);
         damagedLoc.IsPickable.Should().BeFalse();
-        damagedLoc.IsReceivable.Should().BeTrue();
+        damagedLoc.IsReceivable.Should().BeFalse();
         damagedLoc.IsSystemManaged.Should().BeTrue();
     }
 }

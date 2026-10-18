@@ -465,7 +465,7 @@ public sealed partial class StockTransferService(
                 LocationType = WarehouseLocationType.Damaged,
                 IsActive = true,
                 IsPickable = false,
-                IsReceivable = true,
+                IsReceivable = false,
                 IsSystemManaged = true
             };
             context.WarehouseLocations.Add(damagedLocation);

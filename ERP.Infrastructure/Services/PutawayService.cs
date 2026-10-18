@@ -175,7 +175,7 @@ public sealed class PutawayService(
         var entity = await LocationForMutation(id, token) ?? throw new NotFoundException("Không tìm thấy vị trí hoặc bạn không có quyền truy cập.");
         await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId, token);
         ApplyLocationVersion(entity, dto.RowVersion);
-        if (entity.IsSystemManaged) throw new BusinessRuleException("Không thể cấu hình layout cho vị trí hệ thống.");
+        if (entity.IsSystemManaged || entity.Code is "RECEIVING" or "LEGACY" or "DAMAGED") throw new BusinessRuleException("Không thể cấu hình layout cho vị trí hệ thống.");
 
         ValidateMapLayout(dto.MapX, dto.MapY, dto.MapWidth, dto.MapHeight);
         entity.MapX = dto.MapX;
@@ -210,6 +210,8 @@ public sealed class PutawayService(
         var structurePath = NormalizeStructurePath(dto.StructurePath);
         var storageClass = NormalizeStorageClass(dto.StorageClass);
         ValidateCapacityLimits(dto.MaxWeightKg, dto.MaxVolumeM3, dto.MaxPalletEquivalent);
+        if (code is "RECEIVING" or "LEGACY" or "DAMAGED")
+            throw new BusinessRuleException("Mã vị trí hệ thống (RECEIVING, LEGACY, DAMAGED) được quản lý tự động.");
         if (!Enum.TryParse<WarehouseLocationType>(dto.LocationType, true, out var type) || type is WarehouseLocationType.Receiving or WarehouseLocationType.Legacy)
             throw new BusinessRuleException("Loại vị trí không hợp lệ cho vị trí do người dùng tạo.");
         if (await context.WarehouseLocations.AnyAsync(x => x.WarehouseId == dto.WarehouseId && x.Code == code, token)) throw Conflict("Mã vị trí đã tồn tại trong kho.");
@@ -225,7 +227,7 @@ public sealed class PutawayService(
         await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId, token);
         ApplyLocationVersion(entity, dto.RowVersion);
         var structurePath = NormalizeStructurePath(dto.StructurePath);
-        if (entity.IsSystemManaged && (!dto.IsActive || dto.IsBlocked || dto.IsPickable != entity.IsPickable || dto.IsReceivable != entity.IsReceivable || structurePath is not null || dto.UpdateConstraints))
+        if ((entity.IsSystemManaged || entity.Code is "RECEIVING" or "LEGACY" or "DAMAGED") && (!dto.IsActive || dto.IsBlocked || dto.IsPickable != entity.IsPickable || dto.IsReceivable != entity.IsReceivable || structurePath is not null || dto.UpdateConstraints))
             throw new BusinessRuleException("Không thể thay đổi thuộc tính vận hành, cấu trúc hoặc capacity của vị trí hệ thống.");
         if (entity.StructurePath is not null && structurePath is not null && !string.Equals(entity.StructurePath, structurePath, StringComparison.Ordinal))
             throw Conflict("Đường dẫn cấu trúc đã gán không được thay đổi. Hãy tạo vị trí mới để bảo toàn truy vết lịch sử.");

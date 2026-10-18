@@ -7,6 +7,8 @@ namespace ERP.Infrastructure.Repositories
 {
     public class WarehouseRepository : Repository<Warehouse>, IWarehouseRepository
     {
+        private static readonly string[] SystemLocationCodes = ["RECEIVING", "LEGACY", "DAMAGED"];
+
         public WarehouseRepository(ErpKhoDbContext context) : base(context)
         {
         }
@@ -43,7 +45,7 @@ namespace ERP.Infrastructure.Repositories
             if (await _context.DockAppointments.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
             if (await _context.InventoryLocks.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
             if (await _context.InventoryLocationMovements.AnyAsync(x => x.WarehouseId == warehouseId)) return true;
-            if (await _context.WarehouseLocations.AnyAsync(x => x.WarehouseId == warehouseId && !x.IsSystemManaged)) return true;
+            if (await _context.WarehouseLocations.AnyAsync(x => x.WarehouseId == warehouseId && !x.IsSystemManaged && !SystemLocationCodes.Contains(x.Code))) return true;
 
             return false;
         }
@@ -90,7 +92,7 @@ namespace ERP.Infrastructure.Repositories
             if (tolerancePolicies.Count > 0) _context.ReceivingTolerancePolicies.RemoveRange(tolerancePolicies);
 
             var systemLocations = await _context.WarehouseLocations
-                .Where(x => x.WarehouseId == warehouseId && x.IsSystemManaged)
+                .Where(x => x.WarehouseId == warehouseId && (x.IsSystemManaged || SystemLocationCodes.Contains(x.Code)))
                 .ToListAsync(cancellationToken);
             if (systemLocations.Count > 0) _context.WarehouseLocations.RemoveRange(systemLocations);
 

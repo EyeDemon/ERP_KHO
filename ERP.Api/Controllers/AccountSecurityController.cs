@@ -46,7 +46,7 @@ public sealed class AccountSecurityController(
         if (db is not null && user is null && await db.Users.AnyAsync(cancellationToken))
             throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
 
-        await using var transaction = db is not null && db.Database.CurrentTransaction is null
+        await using var transaction = db is not null && db.Database.IsRelational() && db.Database.CurrentTransaction is null
             ? await db.Database.BeginTransactionAsync(cancellationToken)
             : null;
 
@@ -135,7 +135,7 @@ public sealed class AccountSecurityController(
         if (db is not null && user is null && await db.Users.AnyAsync(cancellationToken))
             throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
 
-        await using var transaction = db is not null && db.Database.CurrentTransaction is null
+        await using var transaction = db is not null && db.Database.IsRelational() && db.Database.CurrentTransaction is null
             ? await db.Database.BeginTransactionAsync(cancellationToken)
             : null;
 

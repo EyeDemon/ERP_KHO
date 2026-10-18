@@ -158,11 +158,56 @@ public sealed class IdempotentCommandFilter(
         record.ResponseStatusCode = statusCode;
         record.ResponseBody = SerializeResult(executed.Result);
         if (record.ResponseBody?.Length > MaxStoredResponseLength)
-            record.ResponseBody = JsonSerializer.Serialize(new { idempotentReplay = true, truncated = true, statusCode });
+            record.ResponseBody = BuildTruncatedReplayEnvelope(record.ResponseBody, statusCode);
         record.CompletedAtUtc = DateTime.UtcNow;
         await context.SaveChangesAsync(actionContext.HttpContext.RequestAborted);
         await transaction.CommitAsync(actionContext.HttpContext.RequestAborted);
         context.ChangeTracker.Clear();
+    }
+
+    private static string BuildTruncatedReplayEnvelope(string originalJson, int statusCode)
+    {
+        var envelope = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["idempotentReplay"] = true,
+            ["truncated"] = true,
+            ["statusCode"] = statusCode
+        };
+
+        try
+        {
+            using var doc = JsonDocument.Parse(originalJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (envelope.ContainsKey(prop.Name))
+                        continue;
+
+                    switch (prop.Value.ValueKind)
+                    {
+                        case JsonValueKind.Number:
+                        case JsonValueKind.True:
+                        case JsonValueKind.False:
+                        case JsonValueKind.Null:
+                            envelope[prop.Name] = prop.Value.Clone();
+                            break;
+                        case JsonValueKind.String when (prop.Value.GetString()?.Length ?? 0) <= 512:
+                            envelope[prop.Name] = prop.Value.GetString();
+                            break;
+                        case JsonValueKind.Array:
+                            envelope[prop.Name] = Array.Empty<object>();
+                            break;
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Fallback to minimal valid JSON envelope if payload was not a JSON object.
+        }
+
+        return JsonSerializer.Serialize(envelope);
     }
 
     private async Task ReauthorizeWarehouses(IdempotencyRecord record, CancellationToken token)

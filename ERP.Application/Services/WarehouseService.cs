@@ -86,11 +86,19 @@ namespace ERP.Application.Services
             };
             warehouse.Locations.Add(new WarehouseLocation { Code="RECEIVING", Name="Vị trí nhận hàng", LocationType=WarehouseLocationType.Receiving, IsActive=true, IsReceivable=true, IsSystemManaged=true });
             warehouse.Locations.Add(new WarehouseLocation { Code="LEGACY", Name="Vị trí tương thích nghiệp vụ kho", LocationType=WarehouseLocationType.Legacy, IsActive=true, IsPickable=true, IsSystemManaged=true });
-            warehouse.Locations.Add(new WarehouseLocation { Code="DAMAGED", Name="Vị trí cách ly hàng hỏng", LocationType=WarehouseLocationType.Damaged, IsActive=true, IsPickable=false, IsReceivable=true, IsSystemManaged=true });
+            warehouse.Locations.Add(new WarehouseLocation { Code="DAMAGED", Name="Vị trí cách ly hàng hỏng", LocationType=WarehouseLocationType.Damaged, IsActive=true, IsPickable=false, IsReceivable=false, IsSystemManaged=true });
 
             await _warehouseRepository.AddAsync(warehouse);
 
-            return await GetWarehouseByIdAsync(warehouse.Id);
+            return new WarehouseDto
+            {
+                Id = warehouse.Id,
+                Code = warehouse.Code,
+                Name = warehouse.Name,
+                Address = warehouse.Address,
+                IsActive = warehouse.IsActive,
+                CreatedAt = warehouse.CreatedAt
+            };
         }
 
         public async Task UpdateWarehouseAsync(int id, UpdateWarehouseDto dto, string username)
