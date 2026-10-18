@@ -47,7 +47,7 @@ public sealed class WarehouseCalendarService(
             : timeProvider.GetUtcNow();
         var localTime = TimeZoneInfo.ConvertTime(targetUtc, zone);
         var exceptions = await LoadCalendarExceptionsAsync(warehouseId, token);
-        var overrideState = EvaluateDateException(exceptions, localTime.Date);
+        var overrideState = EvaluateDateException(exceptions, localTime);
         if (overrideState == true)
             return true;
         if (overrideState == false)
@@ -195,12 +195,11 @@ public sealed class WarehouseCalendarService(
             .ThenByDescending(a => a.Id)
             .ToListAsync(token);
 
-    private static bool? EvaluateDateException(IReadOnlyList<AuditLog> exceptions, DateTime localDate)
+    private static bool? EvaluateDateException(IReadOnlyList<AuditLog> exceptions, DateTimeOffset localTime)
     {
-        var dateKey = localDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var matched = exceptions.FirstOrDefault(a =>
-            (a.OldValues != null && a.OldValues.Contains(dateKey, StringComparison.OrdinalIgnoreCase)) ||
-            (a.NewValues != null && a.NewValues.Contains(dateKey, StringComparison.OrdinalIgnoreCase)));
+            MatchesExceptionWindow(a.OldValues, localTime) ||
+            MatchesExceptionWindow(a.NewValues, localTime));
         if (matched is null) return null;
         if (string.Equals(matched.Action, "EMERGENCY_OPEN_OVERRIDE", StringComparison.OrdinalIgnoreCase))
             return true;
@@ -208,6 +207,123 @@ public sealed class WarehouseCalendarService(
             string.Equals(matched.Action, "MAINTENANCE_WINDOW", StringComparison.OrdinalIgnoreCase))
             return false;
         return null;
+    }
+
+    private static bool MatchesExceptionWindow(string? rawWindow, DateTimeOffset localTime)
+    {
+        if (string.IsNullOrWhiteSpace(rawWindow))
+            return false;
+
+        var trimmed = rawWindow.Trim();
+        var localDate = localTime.Date;
+        var dateKey = localDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        // 1. JSON payload support: {"startUtc":"...","endUtc":"..."} or {"startDate":"...","endDate":"..."}
+        if (trimmed.StartsWith('{') && trimmed.EndsWith('}'))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(trimmed);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("startUtc", out var sUtcEl) &&
+                    root.TryGetProperty("endUtc", out var eUtcEl) &&
+                    DateTimeOffset.TryParse(sUtcEl.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var sUtc) &&
+                    DateTimeOffset.TryParse(eUtcEl.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var eUtc))
+                {
+                    var targetUtc = localTime.ToUniversalTime();
+                    return sUtc <= targetUtc && targetUtc <= eUtc;
+                }
+                if (root.TryGetProperty("startDate", out var sDateEl) &&
+                    root.TryGetProperty("endDate", out var eDateEl) &&
+                    DateTime.TryParseExact(sDateEl.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var sDate) &&
+                    DateTime.TryParseExact(eDateEl.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var eDate))
+                {
+                    return sDate.Date <= localDate && localDate <= eDate.Date;
+                }
+            }
+            catch
+            {
+                // Fallback safely on malformed JSON
+            }
+        }
+
+        // 2. Same-day time window: "yyyy-MM-dd HH:mm..HH:mm" or "yyyy-MM-dd HH:mm-HH:mm" or "yyyy-MM-dd HH:mm - HH:mm"
+        if (trimmed.Length >= 21 &&
+            DateTime.TryParseExact(trimmed[..10], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var windowDate) &&
+            (trimmed[10] == ' ' || trimmed[10] == 'T'))
+        {
+            var remainder = trimmed[11..].Trim();
+            var timeParts = remainder.Split(["..", " - ", "-", " to "], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (timeParts.Length == 2 &&
+                TimeSpan.TryParseExact(timeParts[0], @"hh\:mm", CultureInfo.InvariantCulture, out var startTod) &&
+                TimeSpan.TryParseExact(timeParts[1], @"hh\:mm", CultureInfo.InvariantCulture, out var endTod))
+            {
+                if (windowDate.Date != localDate)
+                    return false;
+                return IsWithinWindow(localTime.TimeOfDay, startTod, endTod);
+            }
+        }
+
+        // 3. Explicit range separator: "start..end", "start - end", "start -> end", "start to end"
+        string[]? rangeParts = null;
+        foreach (var sep in new[] { "..", " -> ", " - ", " to " })
+        {
+            if (trimmed.Contains(sep, StringComparison.OrdinalIgnoreCase))
+            {
+                var split = trimmed.Split(sep, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (split.Length == 2)
+                {
+                    rangeParts = split;
+                    break;
+                }
+            }
+        }
+
+        if (rangeParts is { Length: 2 })
+        {
+            var left = rangeParts[0];
+            var right = rangeParts[1];
+
+            // 3a. Multi-day date-only range: "yyyy-MM-dd..yyyy-MM-dd"
+            if (DateTime.TryParseExact(left, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var startDateOnly) &&
+                DateTime.TryParseExact(right, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var endDateOnly))
+            {
+                return startDateOnly.Date <= localDate && localDate <= endDateOnly.Date;
+            }
+
+            // 3b. DateTime / DateTimeOffset range: "2026-10-18T08:00..2026-10-18T12:00"
+            if (TryParseLocalOrOffsetDateTime(left, localTime.Offset, out var startDt) &&
+                TryParseLocalOrOffsetDateTime(right, localTime.Offset, out var endDt))
+            {
+                return startDt <= localTime && localTime <= endDt;
+            }
+        }
+
+        // 4. Exact single date "yyyy-MM-dd"
+        if (DateTime.TryParseExact(trimmed, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var singleDate))
+        {
+            return singleDate.Date == localDate;
+        }
+
+        // 5. Safe fallback for legacy free-text strings
+        return trimmed.Contains(dateKey, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseLocalOrOffsetDateTime(string input, TimeSpan defaultOffset, out DateTimeOffset result)
+    {
+        var formats = new[]
+        {
+            "yyyy-MM-ddTHH:mm",
+            "yyyy-MM-dd HH:mm",
+            "yyyy-MM-ddTHH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss"
+        };
+        if (DateTime.TryParseExact(input, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var localDt))
+        {
+            result = new DateTimeOffset(DateTime.SpecifyKind(localDt, DateTimeKind.Unspecified), defaultOffset);
+            return true;
+        }
+        return DateTimeOffset.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out result);
     }
 
     private WarehouseCalendarDto Map(Warehouse warehouse, WarehouseCalendar? calendar, IReadOnlyList<AuditLog>? exceptions = null)
@@ -218,7 +334,7 @@ public sealed class WarehouseCalendarService(
         var days = calendar?.Days.OrderBy(x => x.DayOfWeek).ToList() ?? [];
         var shifts = calendar?.Shifts.OrderBy(x => x.StartTimeLocal).ThenBy(x => x.Code).ToList() ?? [];
         var openNow = IsCalendarOpen(days, localNow.DayOfWeek, localNow.TimeOfDay);
-        var overrideState = exceptions is not null ? EvaluateDateException(exceptions, localNow.Date) : null;
+        var overrideState = exceptions is not null ? EvaluateDateException(exceptions, localNow) : null;
         if (overrideState.HasValue)
             openNow = overrideState.Value;
         var currentShift = openNow

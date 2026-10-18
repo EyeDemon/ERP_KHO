@@ -33,6 +33,10 @@ public sealed class PackingSessionIntegration(ErpKhoDbContext context) : IPackin
         if (picked <= 0)
             throw new ConcurrencyException("Picking task không có số lượng đã lấy để đóng gói.");
 
+        await using var transaction = context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         var now = DateTime.UtcNow;
         var session = new PackingSession
         {
@@ -59,5 +63,7 @@ public sealed class PackingSessionIntegration(ErpKhoDbContext context) : IPackin
             Severity = "Information"
         });
         await context.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
     }
 }

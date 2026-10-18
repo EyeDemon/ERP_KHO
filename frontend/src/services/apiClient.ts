@@ -7,10 +7,22 @@ const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://localhost:7198';
 let accessToken: string | null = null;
 let isRedirecting = false;
 
-type RetryConfig = InternalAxiosRequestConfig & { _authRetry?: boolean; _idempotencyKey?: string };
+type RetryConfig = InternalAxiosRequestConfig & {
+  _authRetry?: boolean;
+  _idempotencyKey?: string;
+  _autoFingerprint?: string;
+};
 
 const AUTO_IDEMPOTENCY_TTL_MS = 5_000;
 const autoIdempotencyCache = new Map<string, { key: string; expiresAt: number }>();
+
+const releaseAutoIdempotencyKey = (config?: RetryConfig): void => {
+  if (!config?._autoFingerprint) return;
+  const current = autoIdempotencyCache.get(config._autoFingerprint);
+  if (!current || current.key === config._idempotencyKey) {
+    autoIdempotencyCache.delete(config._autoFingerprint);
+  }
+};
 
 const buildRequestFingerprint = (method: string, config: Record<string, unknown>): string | null => {
   const url = typeof config.url === 'string' ? config.url.trim() : '';
@@ -113,6 +125,7 @@ apiClient.interceptors.request.use((config) => {
         }
       }
       retryConfig._idempotencyKey = generatedKey;
+      retryConfig._autoFingerprint = fingerprint ?? undefined;
       config.headers['Idempotency-Key'] = generatedKey;
     }
   }
@@ -120,7 +133,10 @@ apiClient.interceptors.request.use((config) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    releaseAutoIdempotencyKey(response.config as RetryConfig | undefined);
+    return response;
+  },
   async (error: AxiosError) => {
     const config = error.config as RetryConfig | undefined;
     const requestUrl = config?.url;
@@ -142,12 +158,19 @@ apiClient.interceptors.response.use(
         config.headers.Authorization = `Bearer ${token}`;
         return apiClient.request(config);
       } catch {
+        releaseAutoIdempotencyKey(config);
         clearAuthentication();
         const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
         if (shouldRedirectToLogin(pathname, requestUrl, isRedirecting)) {
           isRedirecting = true;
           window.location.href = '/login';
         }
+      }
+    }
+    if (error.response) {
+      releaseAutoIdempotencyKey(config);
+      if (config && config._autoFingerprint) {
+        delete config._idempotencyKey;
       }
     }
     return Promise.reject(error);

@@ -58,7 +58,7 @@ public sealed class ApprovalWorkflowService(
         var transfers = context.StockTransfers.AsNoTracking().Where(x => x.Status == StockTransferStatus.Draft && allowed.Contains(x.SourceWarehouseId) && allowed.Contains(x.DestinationWarehouseId))
             .Select(x => new QueueRow { Type = "StockTransfer", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.SourceWarehouseId, WarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, TotalQuantity = x.Details.Sum(d => d.RequestedQuantity), QcCompleted = false });
         var stocktakes = context.Stocktakes.AsNoTracking().Where(x => x.Status == ReceiptStatus.Draft && allowed.Contains(x.WarehouseId))
-            .Select(x => new QueueRow { Type = "Stocktake", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.ActualQuantity ?? d.SystemQuantity), QcCompleted = false });
+            .Select(x => new QueueRow { Type = "Stocktake", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Note != null && x.Note.Contains("[BLIND]") ? x.Details.Sum(d => d.ActualQuantity ?? 0m) : x.Details.Sum(d => d.ActualQuantity ?? d.SystemQuantity), QcCompleted = false });
         var query = imports.Where(_ => inboundRead).Concat(exports.Where(_ => outboundRead)).Concat(transfers.Where(_ => legacy)).Concat(stocktakes.Where(_ => legacy));
         if (!string.IsNullOrWhiteSpace(request.DocumentType)) query = query.Where(x => x.Type == request.DocumentType.Trim());
         if (request.WarehouseId.HasValue) query = query.Where(x => x.WarehouseId == request.WarehouseId || x.DestinationWarehouseId == request.WarehouseId);
@@ -110,7 +110,7 @@ public sealed class ApprovalWorkflowService(
                 }),
                 CanReject = x.CreatorId != currentUser.UserId && (x.Type switch
                 {
-                    "ImportReceipt" => !x.QcCompleted && permissions.Contains("approval.reject"),
+                    "ImportReceipt" => permissions.Contains("approval.reject"),
                     "ExportReceipt" => permissions.Contains("approval.reject") && permissions.Contains("export_receipt.cancel"),
                     _ => legacy
                 }),
@@ -185,7 +185,8 @@ public sealed class ApprovalWorkflowService(
             var x = await context.Stocktakes.AsNoTracking().Include(x => x.Warehouse).Include(x => x.CreatedByUser).Include(x => x.Details).ThenInclude(x => x.Product).ThenInclude(x => x.Unit)
                 .SingleOrDefaultAsync(x => x.Id == id && allowed.Contains(x.WarehouseId), cancellationToken) ?? throw new NotFoundException("Không tìm thấy chứng từ.");
             summary = DetailSummary(documentType, x.Id, x.Code, x.Status.ToString(), x.CreatedBy, x.CreatedByUser.FullName ?? x.CreatedByUser.Username, x.CreatedAt, x.WarehouseId, x.Warehouse.Name, null, null);
-            note = x.Note; lines = x.Details.Select(d => DetailLine(d.Product, d.ActualQuantity ?? d.SystemQuantity)).ToList();
+            var isBlindDraft = x.Status == ReceiptStatus.Draft && x.Note != null && x.Note.Contains("[BLIND]", StringComparison.OrdinalIgnoreCase);
+            note = x.Note; lines = x.Details.Select(d => DetailLine(d.Product, isBlindDraft ? (d.ActualQuantity ?? 0m) : (d.ActualQuantity ?? d.SystemQuantity))).ToList();
         }
         else if (documentType == "StockTransfer")
         {
@@ -384,7 +385,7 @@ public sealed class ApprovalWorkflowService(
     {
         var pending = type == "ImportReceipt" ? state is "Received" or "QcCompleted" : state == "Draft"; var checker = creatorId != currentUser.UserId;
         var aging = ApprovalAgingCalculator.Calculate(createdAt, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime, pending, agingOptions ?? new ApprovalAgingOptions());
-        return new ApprovalQueueItem { DocumentType = type, DocumentId = id, DocumentCode = code, PendingState = state, CreatorId = creatorId, CreatorName = creatorName, RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName, DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName, CanApprove = pending && checker, CanReject = pending && checker && !(type == "ImportReceipt" && state == "QcCompleted"), DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
+        return new ApprovalQueueItem { DocumentType = type, DocumentId = id, DocumentCode = code, PendingState = state, CreatorId = creatorId, CreatorName = creatorName, RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName, DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName, CanApprove = pending && checker, CanReject = pending && checker, DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
     }
     private static ApprovalDetailLine DetailLine(Product product, decimal quantity) => new() { ProductCode = product.Code, ProductName = product.Name, UnitName = product.Unit.Name, Quantity = quantity };
     private async Task<HashSet<string>> PermissionsAsync(CancellationToken token)

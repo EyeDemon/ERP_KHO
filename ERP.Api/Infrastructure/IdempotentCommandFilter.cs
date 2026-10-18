@@ -123,6 +123,11 @@ public sealed class IdempotentCommandFilter(
                 ? RejectionAudit(userId, actionContext.ActionArguments, executed.Exception.Message, TrackedWarehouses(actionContext.ActionArguments))
                 : null;
             await transaction.RollbackAsync(CancellationToken.None);
+            if (!context.Database.IsRelational())
+            {
+                context.IdempotencyRecords.Remove(record);
+                await context.SaveChangesAsync(CancellationToken.None);
+            }
             context.ChangeTracker.Clear();
             if (rejectedAudit is not null)
             {
@@ -136,6 +141,11 @@ public sealed class IdempotentCommandFilter(
         if (statusCode >= 400)
         {
             await transaction.RollbackAsync(CancellationToken.None);
+            if (!context.Database.IsRelational())
+            {
+                context.IdempotencyRecords.Remove(record);
+                await context.SaveChangesAsync(CancellationToken.None);
+            }
             context.ChangeTracker.Clear();
             return;
         }
@@ -148,7 +158,7 @@ public sealed class IdempotentCommandFilter(
         record.ResponseStatusCode = statusCode;
         record.ResponseBody = SerializeResult(executed.Result);
         if (record.ResponseBody?.Length > MaxStoredResponseLength)
-            record.ResponseBody = "{\"truncated\":true}";
+            record.ResponseBody = JsonSerializer.Serialize(new { idempotentReplay = true, truncated = true, statusCode });
         record.CompletedAtUtc = DateTime.UtcNow;
         await context.SaveChangesAsync(actionContext.HttpContext.RequestAborted);
         await transaction.CommitAsync(actionContext.HttpContext.RequestAborted);

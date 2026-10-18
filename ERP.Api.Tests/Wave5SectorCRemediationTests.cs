@@ -214,7 +214,7 @@ public sealed class Wave5SectorCRemediationTests
                 controller: new object());
         }
 
-        // 1. 400 BadRequest should NOT persist a Completed IdempotencyRecord
+        // 1. 400 BadRequest should NOT persist any IdempotencyRecord (even Processing)
         var badReqCtx = CreateContext("key-400");
         var badReqHash = IdempotentCommandFilter.Hash("key-400");
         await filter.OnActionExecutionAsync(badReqCtx, () =>
@@ -225,9 +225,9 @@ public sealed class Wave5SectorCRemediationTests
             };
             return Task.FromResult(executed);
         });
-        (await db.IdempotencyRecords.CountAsync(r => r.KeyHash == badReqHash && r.Status == IdempotencyStatus.Completed)).Should().Be(0);
+        (await db.IdempotencyRecords.CountAsync(r => r.KeyHash == badReqHash)).Should().Be(0);
 
-        // 2. ForbidResult (403) should NOT persist a Completed IdempotencyRecord
+        // 2. ForbidResult (403) should NOT persist any IdempotencyRecord (even Processing)
         var forbidCtx = CreateContext("key-403");
         var forbidHash = IdempotentCommandFilter.Hash("key-403");
         await filter.OnActionExecutionAsync(forbidCtx, () =>
@@ -238,9 +238,9 @@ public sealed class Wave5SectorCRemediationTests
             };
             return Task.FromResult(executed);
         });
-        (await db.IdempotencyRecords.CountAsync(r => r.KeyHash == forbidHash && r.Status == IdempotencyStatus.Completed)).Should().Be(0);
+        (await db.IdempotencyRecords.CountAsync(r => r.KeyHash == forbidHash)).Should().Be(0);
 
-        // 3. Oversized payload (> 65,536 chars) should succeed and store {"truncated":true} instead of throwing
+        // 3. Oversized payload (> 65,536 chars) should succeed and store structured valid JSON envelope instead of truncated string
         var largeCtx = CreateContext("key-large", "?warehouseId=1");
         var largeHash = IdempotentCommandFilter.Hash("key-large");
         var largePayload = new string('X', 70_000);
@@ -255,7 +255,10 @@ public sealed class Wave5SectorCRemediationTests
 
         var savedRecord = await db.IdempotencyRecords.SingleAsync(r => r.KeyHash == largeHash);
         savedRecord.Status.Should().Be(IdempotencyStatus.Completed);
-        savedRecord.ResponseBody.Should().Be("{\"truncated\":true}");
+        using var replayDoc = JsonDocument.Parse(savedRecord.ResponseBody!);
+        replayDoc.RootElement.GetProperty("idempotentReplay").GetBoolean().Should().BeTrue();
+        replayDoc.RootElement.GetProperty("truncated").GetBoolean().Should().BeTrue();
+        replayDoc.RootElement.GetProperty("statusCode").GetInt32().Should().Be(200);
 
         // 4. Fingerprint and ComputeRequestHash include QueryString
         var fp1 = IdempotentCommandFilter.Fingerprint("Test.Command", new Dictionary<string, object?> { ["id"] = 1 }, "?warehouseId=1");
@@ -615,5 +618,156 @@ public sealed class Wave5SectorCRemediationTests
 
         using var healthLive = await client.GetAsync("/health/live");
         healthLive.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task W6_03_WarehouseCalendarService_EvaluatesMultiDayDateRanges_IntraDayMaintenanceWindows_AndAuditLogCompositeIndexes()
+    {
+        await using var db = CreateDbContext();
+
+        var auditEntityType = db.Model.FindEntityType(typeof(AuditLog))!;
+        var indexNames = auditEntityType.GetIndexes().Select(i => i.GetDatabaseName()).ToList();
+        indexNames.Should().Contain("IX_AuditLogs_EntityName_Action_EntityId_Timestamp");
+        indexNames.Should().Contain("IX_AuditLogs_EntityName_WarehouseId_Timestamp");
+
+        db.Warehouses.Add(new Warehouse { Id = 1, Code = "WH-CAL", Name = "Calendar WH", IsActive = true });
+        var calendar = new WarehouseCalendar
+        {
+            WarehouseId = 1,
+            TimeZoneId = "UTC",
+            Days = Enumerable.Range(0, 7).Select(d => new WarehouseCalendarDay
+            {
+                WarehouseId = 1,
+                DayOfWeek = d,
+                IsOpen = true,
+                OpensAtLocal = new TimeSpan(6, 0, 0),
+                ClosesAtLocal = new TimeSpan(22, 0, 0)
+            }).ToList()
+        };
+        db.WarehouseCalendars.Add(calendar);
+
+        // 1. Multi-day holiday range: 2026-10-18..2026-10-20 (must block 2026-10-19!)
+        // 2. Intra-day maintenance window: 2026-10-21 08:00..12:00 (must block 10:00, but allow 15:00!)
+        db.AuditLogs.AddRange(
+            new AuditLog
+            {
+                EntityName = "WarehouseCalendarException",
+                EntityId = 1,
+                WarehouseId = 1,
+                Action = "HOLIDAY_CLOSURE",
+                OldValues = "2026-10-18..2026-10-20",
+                NewValues = "2026-10-18..2026-10-20",
+                Result = "Success",
+                Timestamp = DateTime.UtcNow.AddMinutes(-5)
+            },
+            new AuditLog
+            {
+                EntityName = "WarehouseCalendarException",
+                EntityId = 1,
+                WarehouseId = 1,
+                Action = "MAINTENANCE_WINDOW",
+                OldValues = "2026-10-21 08:00..12:00",
+                NewValues = "2026-10-21 08:00..12:00",
+                Result = "Success",
+                Timestamp = DateTime.UtcNow.AddMinutes(-1)
+            });
+        await db.SaveChangesAsync();
+
+        var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+        var currentUser = new Mock<ICurrentUser>();
+        currentUser.SetupGet(x => x.UserId).Returns(1);
+
+        var calService = new WarehouseCalendarService(db, warehouseAuth.Object, currentUser.Object, TimeProvider.System);
+
+        // Middle day of multi-day holiday range (2026-10-19 10:00 UTC) must be blocked
+        Func<Task> midHoliday = () => calService.ValidateOperatingWindowAsync(1, new DateTime(2026, 10, 19, 10, 0, 0, DateTimeKind.Utc));
+        await midHoliday.Should().ThrowAsync<BusinessRuleException>();
+
+        // Inside maintenance window (2026-10-21 10:00 UTC) must be blocked
+        Func<Task> inMaint = () => calService.ValidateOperatingWindowAsync(1, new DateTime(2026, 10, 21, 10, 0, 0, DateTimeKind.Utc));
+        await inMaint.Should().ThrowAsync<BusinessRuleException>();
+
+        // Outside maintenance window on same day (2026-10-21 15:00 UTC) must be open
+        (await calService.ValidateOperatingWindowAsync(1, new DateTime(2026, 10, 21, 15, 0, 0, DateTimeKind.Utc))).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task W6_04_ApprovalWorkflowService_MasksBlindStocktakeSystemQuantity_AndWarehouseServiceSeedsNonPickableDamagedLocation()
+    {
+        await using var db = CreateDbContext();
+        var role = new Role { Id = 1, RoleName = AppRoles.Manager };
+        var creator = new User { Id = 10, Username = "creator", FullName = "Creator", PasswordHash = "h", RoleId = 1, Role = role, IsActive = true };
+        var checker = new User { Id = 20, Username = "checker", FullName = "Checker", PasswordHash = "h", RoleId = 1, Role = role, IsActive = true };
+        var unit = new Unit { Id = 1, Code = "EA", Name = "Each", DecimalPlaces = 0 };
+        var product = new Product { Id = 1, Code = "SKU-BLIND", Name = "Blind Product", UnitId = 1, Unit = unit, IsActive = true };
+        var warehouse = new Warehouse { Id = 1, Code = "WH1", Name = "Main WH", IsActive = true };
+
+        db.Roles.Add(role);
+        db.Users.AddRange(creator, checker);
+        db.Units.Add(unit);
+        db.Products.Add(product);
+        db.Warehouses.Add(warehouse);
+        db.Stocktakes.Add(new Stocktake
+        {
+            Id = 100,
+            Code = "ST-BLIND-100",
+            WarehouseId = 1,
+            Warehouse = warehouse,
+            CreatedBy = 10,
+            CreatedByUser = creator,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-30),
+            Status = ReceiptStatus.Draft,
+            Note = "[BLIND] Cycle count",
+            Details =
+            [
+                new StocktakeDetail
+                {
+                    Id = 1001,
+                    StocktakeId = 100,
+                    ProductId = 1,
+                    Product = product,
+                    SystemQuantity = 75m,
+                    ActualQuantity = null
+                }
+            ]
+        });
+        await db.SaveChangesAsync();
+
+        var currentUser = new Mock<ICurrentUser>();
+        currentUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+        currentUser.SetupGet(x => x.UserId).Returns(20);
+        currentUser.SetupGet(x => x.Role).Returns(AppRoles.Manager);
+
+        var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+        warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { 1 });
+
+        var metadata = new Mock<IRequestMetadata>();
+        var approvalService = new ApprovalWorkflowService(db, currentUser.Object, warehouseAuth.Object, metadata.Object);
+
+        var queue = await approvalService.GetQueueAsync(new ApprovalQueueQuery { DocumentType = "Stocktake", PageIndex = 1, PageSize = 20 });
+        queue.Items.Should().ContainSingle();
+        queue.Items[0].TotalQuantity.Should().Be(0m);
+
+        var detail = await approvalService.GetDetailAsync("Stocktake", 100);
+        detail.Lines.Should().ContainSingle();
+        detail.Lines[0].Quantity.Should().Be(0m);
+
+        // Also verify WarehouseService.CreateWarehouseAsync seeds non-pickable DAMAGED system location
+        var whRepo = new ERP.Infrastructure.Repositories.WarehouseRepository(db);
+        var whService = new ERP.Application.Services.WarehouseService(whRepo, warehouseAuth.Object);
+        var createdWh = await whService.CreateWarehouseAsync(new CreateWarehouseDto
+        {
+            Code = "WH-NEW",
+            Name = "New Warehouse",
+            Address = "123 Street"
+        }, "admin");
+
+        var damagedLoc = await db.WarehouseLocations.SingleOrDefaultAsync(x => x.WarehouseId == createdWh.Id && x.Code == "DAMAGED");
+        damagedLoc.Should().NotBeNull();
+        damagedLoc!.LocationType.Should().Be(WarehouseLocationType.Damaged);
+        damagedLoc.IsPickable.Should().BeFalse();
+        damagedLoc.IsReceivable.Should().BeTrue();
+        damagedLoc.IsSystemManaged.Should().BeTrue();
     }
 }

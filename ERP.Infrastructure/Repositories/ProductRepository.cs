@@ -87,6 +87,10 @@ namespace ERP.Infrastructure.Repositories
 
         public override async Task DeleteAsync(Product entity, CancellationToken cancellationToken = default)
         {
+            await using var transaction = _context.Database.CurrentTransaction is null
+                ? await _context.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+
             var productId = entity.Id;
 
             var emptyStocks = await _context.InventoryStocks
@@ -106,6 +110,8 @@ namespace ERP.Infrastructure.Repositories
 
             entity.QcPolicies.Clear();
             await base.DeleteAsync(entity, cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
         }
     }
 }

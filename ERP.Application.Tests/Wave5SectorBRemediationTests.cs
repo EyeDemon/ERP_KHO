@@ -340,18 +340,7 @@ public class Wave5SectorBRemediationTests
             IsActive = true,
             IsSystemManaged = true
         };
-        var dstDamaged = new WarehouseLocation
-        {
-            Id = 3,
-            WarehouseId = whDst.Id,
-            Code = "DAMAGED",
-            Name = "Damaged",
-            LocationType = WarehouseLocationType.Damaged,
-            IsPickable = false,
-            IsReceivable = true,
-            IsActive = true
-        };
-        db.WarehouseLocations.AddRange(srcLegacy, dstLegacy, dstDamaged);
+        db.WarehouseLocations.AddRange(srcLegacy, dstLegacy);
 
         var prod = new Product
         {
@@ -408,11 +397,16 @@ public class Wave5SectorBRemediationTests
         var dstAvailable = await db.InventoryStocks.SingleAsync(s =>
             s.WarehouseId == whDst.Id && s.ProductId == prod.Id && s.Status == InventoryStatus.Available);
         dstAvailable.Quantity.Should().Be(8m);
+        dstAvailable.LocationId.Should().Be(dstLegacy.Id);
 
         var dstDamagedStock = await db.InventoryStocks.SingleAsync(s =>
             s.WarehouseId == whDst.Id && s.ProductId == prod.Id && s.Status == InventoryStatus.Damaged);
         dstDamagedStock.Quantity.Should().Be(2m);
-        dstDamagedStock.LocationId.Should().Be(dstDamaged.Id);
+        dstDamagedStock.LocationId.Should().NotBe(dstLegacy.Id);
+        var autoDamagedLocation = await db.WarehouseLocations.SingleAsync(l => l.Id == dstDamagedStock.LocationId);
+        autoDamagedLocation.Code.Should().Be("DAMAGED");
+        autoDamagedLocation.LocationType.Should().Be(WarehouseLocationType.Damaged);
+        autoDamagedLocation.IsPickable.Should().BeFalse();
 
         var reverse1 = await makerService.CreateReverseDraftAsync(draft.Id, new CreateReverseStockTransferDto
         {

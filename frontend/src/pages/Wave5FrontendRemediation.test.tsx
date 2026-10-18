@@ -367,4 +367,65 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
     });
     permView.unmount();
   });
+
+  it('W6-02: apiClient reuses auto Idempotency-Key only while in-flight, and generates a fresh key once 200 OK or 4xx/5xx response is received', async () => {
+    const capturedKeys: string[] = [];
+    const resolvers: Array<(val: unknown) => void> = [];
+
+    const originalAdapter = apiClient.defaults.adapter;
+    try {
+      // 1. Two concurrent in-flight POST requests with identical payload share the same auto-generated key
+      apiClient.defaults.adapter = (config) => {
+        capturedKeys.push(String(config.headers?.['Idempotency-Key'] ?? ''));
+        return new Promise((resolve) => {
+          resolvers.push((val) =>
+            resolve({
+              ...(val as Record<string, unknown>),
+              data: { ok: true },
+              status: 200,
+              statusText: 'OK',
+              headers: {},
+              config,
+            }),
+          );
+        });
+      };
+
+      const p1 = apiClient.post('/api/packing-sessions/1/items', { productId: 10, quantity: 1 });
+      const p2 = apiClient.post('/api/packing-sessions/1/items', { productId: 10, quantity: 1 });
+      await waitFor(() => {
+        expect(capturedKeys).toHaveLength(2);
+      });
+      expect(capturedKeys[0]).toMatch(/^auto-post-/);
+      expect(capturedKeys[1]).toBe(capturedKeys[0]);
+
+      for (const r of resolvers) {
+        r({
+          data: { ok: true },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        });
+      }
+      await Promise.all([p1, p2]);
+
+      // 2. Sequential scan #2 right after 200 OK with the exact same payload gets a BRAND NEW key
+      apiClient.defaults.adapter = async (config) => {
+        capturedKeys.push(String(config.headers?.['Idempotency-Key'] ?? ''));
+        return {
+          data: { ok: true },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+        };
+      };
+
+      await apiClient.post('/api/packing-sessions/1/items', { productId: 10, quantity: 1 });
+      expect(capturedKeys).toHaveLength(3);
+      expect(capturedKeys[2]).not.toBe(capturedKeys[0]);
+    } finally {
+      apiClient.defaults.adapter = originalAdapter;
+    }
+  });
 });

@@ -46,6 +46,10 @@ public sealed class ShipmentIntegration(ErpKhoDbContext context) : IShipmentInte
         if (roots.Count == 0)
             throw new ConcurrencyException("Không tìm thấy Handling Unit gốc để gắn Shipment.");
 
+        await using var transaction = context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         var now = DateTime.UtcNow;
         var shipment = new Shipment
         {
@@ -85,5 +89,7 @@ public sealed class ShipmentIntegration(ErpKhoDbContext context) : IShipmentInte
             Severity = "Information"
         });
         await context.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
     }
 }

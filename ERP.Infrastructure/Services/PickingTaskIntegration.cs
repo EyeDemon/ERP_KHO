@@ -120,6 +120,10 @@ public sealed class PickingTaskIntegration(ErpKhoDbContext context) : IPickingTa
 
         if (allocations.Count == 0) return;
 
+        await using var transaction = context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         if (existingTask is not null)
         {
             if (existingTask.Status is not PickingTaskStatus.Open and not PickingTaskStatus.Assigned)
@@ -158,6 +162,8 @@ public sealed class PickingTaskIntegration(ErpKhoDbContext context) : IPickingTa
                 Severity = "Information"
             });
             await context.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
             return;
         }
 
@@ -206,5 +212,7 @@ public sealed class PickingTaskIntegration(ErpKhoDbContext context) : IPickingTa
             Severity = "Information"
         });
         await context.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
     }
 }

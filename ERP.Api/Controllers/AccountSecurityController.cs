@@ -46,6 +46,10 @@ public sealed class AccountSecurityController(
         if (db is not null && user is null && await db.Users.AnyAsync(cancellationToken))
             throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
 
+        await using var transaction = db is not null && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         var revisionBefore = user?.SecurityRevision;
         if (sessionService is not null && !string.IsNullOrWhiteSpace(request?.RowVersion))
             await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
@@ -83,6 +87,8 @@ public sealed class AccountSecurityController(
                 Timestamp = now
             });
             await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
         }
 
         return Ok(new
@@ -129,6 +135,10 @@ public sealed class AccountSecurityController(
         if (db is not null && user is null && await db.Users.AnyAsync(cancellationToken))
             throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
 
+        await using var transaction = db is not null && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         var revisionBefore = user?.SecurityRevision;
         if (sessionService is not null && !string.IsNullOrWhiteSpace(request.RowVersion))
             await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
@@ -170,6 +180,8 @@ public sealed class AccountSecurityController(
                 Timestamp = now
             });
             await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
         }
 
         return Ok(new

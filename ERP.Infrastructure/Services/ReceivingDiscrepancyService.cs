@@ -137,11 +137,15 @@ public sealed class ReceivingDiscrepancyService(
         EnsureQuantity(baseFinal, line.BaseUnitDecimalPlaces, "Final Received Base UOM");
 
         var policy = await SelectPolicy(receipt, line, token);
-        var allowed = Math.Max(policy?.AbsoluteQuantityTolerance ?? 0, line.BaseExpectedQuantity * (policy?.PercentageTolerance ?? 0));
+        var allowed = decimal.Round(
+            Math.Max(policy?.AbsoluteQuantityTolerance ?? 0, line.BaseExpectedQuantity * (policy?.PercentageTolerance ?? 0)),
+            Math.Clamp(line.BaseUnitDecimalPlaces, 0, 4),
+            MidpointRounding.AwayFromZero);
         var difference = observation.BaseObservedQuantity - line.BaseExpectedQuantity;
         var outside = Math.Abs(difference) > allowed;
         var directionDisallowed = difference > 0 ? policy?.OverageAllowed == false : difference < 0 && policy?.ShortageAllowed == false;
-        var valueOutside = policy?.ValueTolerance is decimal valueTolerance && (Math.Abs(difference) / factor) * line.UnitPrice > valueTolerance;
+        var valueOutside = policy?.ValueTolerance is decimal valueTolerance &&
+                           decimal.Round((Math.Abs(difference) / factor) * line.UnitPrice, 4, MidpointRounding.AwayFromZero) > valueTolerance;
         var requiresApproval = reason.RequiresApproval || directionDisallowed || valueOutside || (outside && (policy?.RequiresApprovalOutsideTolerance ?? true));
         var previous = discrepancy.Resolutions.OrderByDescending(x => x.Version).FirstOrDefault();
         var now = DateTime.UtcNow;
@@ -257,7 +261,8 @@ public sealed class ReceivingDiscrepancyService(
     private static decimal NormalizeToOperationUom(ImportReceiptDetail line, decimal baseQuantity)
     {
         var factor = line.ConversionFactor <= 0 ? 1m : line.ConversionFactor;
-        return baseQuantity / factor;
+        var decimals = Math.Clamp(line.OperationUnitDecimalPlaces, 0, 4);
+        return decimal.Round(baseQuantity / factor, decimals, MidpointRounding.AwayFromZero);
     }
     private static void ApplyFinal(ImportReceiptDetail line, decimal final, decimal baseFinal, decimal door, decimal baseDoor, ReceivingResolutionVersion? resolution)
     {

@@ -444,9 +444,9 @@ public sealed partial class StockTransferService(
     {
         var locationId = status == InventoryStatus.Damaged
             ? await context.WarehouseLocations
-                .Where(x => x.WarehouseId == warehouseId && x.IsActive && !x.IsBlocked &&
-                            (x.LocationType == WarehouseLocationType.Damaged || x.Code == "DAMAGED" || x.Code == "RECEIVING" || x.Code == "LEGACY"))
-                .OrderBy(x => x.LocationType == WarehouseLocationType.Damaged || x.Code == "DAMAGED" ? 0 : x.Code == "RECEIVING" ? 1 : 2)
+                .Where(x => x.WarehouseId == warehouseId && x.IsActive && !x.IsBlocked && !x.IsPickable &&
+                            (x.LocationType == WarehouseLocationType.Damaged || x.Code == "DAMAGED" || x.LocationType == WarehouseLocationType.Receiving || x.Code == "RECEIVING"))
+                .OrderBy(x => x.LocationType == WarehouseLocationType.Damaged || x.Code == "DAMAGED" ? 0 : 1)
                 .ThenBy(x => x.Id)
                 .Select(x => x.Id)
                 .FirstOrDefaultAsync(cancellationToken)
@@ -454,6 +454,24 @@ public sealed partial class StockTransferService(
                 .Where(x => x.WarehouseId == warehouseId && x.Code == "LEGACY" && x.IsSystemManaged && x.IsActive && !x.IsBlocked && x.IsPickable)
                 .Select(x => x.Id)
                 .SingleOrDefaultAsync(cancellationToken);
+
+        if (locationId == 0 && status == InventoryStatus.Damaged)
+        {
+            var damagedLocation = new WarehouseLocation
+            {
+                WarehouseId = warehouseId,
+                Code = "DAMAGED",
+                Name = "Vị trí cách ly hàng hỏng",
+                LocationType = WarehouseLocationType.Damaged,
+                IsActive = true,
+                IsPickable = false,
+                IsReceivable = true,
+                IsSystemManaged = true
+            };
+            context.WarehouseLocations.Add(damagedLocation);
+            await context.SaveChangesAsync(cancellationToken);
+            locationId = damagedLocation.Id;
+        }
         if (locationId == 0) throw new BusinessRuleException("Kho đích chưa có vị trí tương thích để nhận điều chuyển.");
         if (context.Database.IsRelational() && context.Database.CurrentTransaction is null)
             throw new InvalidOperationException("Nhận hoặc hoàn trả điều chuyển phải nằm trong giao dịch SQL.");

@@ -99,7 +99,10 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
                 EnsurePrecision(sourceDto.ExpectedQuantity, source.OperationUnitDecimalPlaces, "Số lượng dự kiến theo PO");
                 var baseExpected = sourceDto.ExpectedQuantity * source.ConversionFactorSnapshot;
                 EnsurePrecision(baseExpected, source.BaseUnitDecimalPlaces, "Số lượng Base UOM theo PO");
-                var max = source.BaseOrderedQuantity * (1m + source.AllowedOverReceiptPct / 100m);
+                var max = decimal.Round(
+                    source.BaseOrderedQuantity * (1m + source.AllowedOverReceiptPct / 100m),
+                    Math.Clamp(source.BaseUnitDecimalPlaces, 0, 4),
+                    MidpointRounding.AwayFromZero);
                 if (baseExpected > max)
                     throw Conflict("Số lượng dự kiến của phiếu nhập vượt giới hạn nhận của dòng PO.");
 
@@ -171,7 +174,10 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
             var baseOrdered = line.BaseOrderedQuantity > 0
                 ? line.BaseOrderedQuantity
                 : line.OrderedQuantity * (line.ConversionFactorSnapshot > 0 ? line.ConversionFactorSnapshot : 1m);
-            var maximum = baseOrdered * (1m + line.AllowedOverReceiptPct / 100m);
+            var maximum = decimal.Round(
+                baseOrdered * (1m + line.AllowedOverReceiptPct / 100m),
+                Math.Clamp(line.BaseUnitDecimalPlaces, 0, 4),
+                MidpointRounding.AwayFromZero);
             if (previous + currentAccepted + currentDamaged > maximum)
                 throw Conflict($"Tổng số lượng POST vượt dung sai nhận của dòng PO {line.ExternalLineId}.");
         }
@@ -214,7 +220,10 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
                 .Where(x => x.PurchaseOrderLineId == line.Id)
                 .Sum(x => Math.Max(0m, (x.BasePostedQuantity > 0 ? x.BasePostedQuantity : x.BaseAcceptedQuantity + x.BaseDamagedQuantity) - x.BaseRejectedQuantity));
             var total = previous + current;
-            var minimumRequired = line.BaseOrderedQuantity * (1m - line.AllowedUnderReceiptPct / 100m);
+            var minimumRequired = decimal.Round(
+                line.BaseOrderedQuantity * (1m - line.AllowedUnderReceiptPct / 100m),
+                Math.Clamp(line.BaseUnitDecimalPlaces, 0, 4),
+                MidpointRounding.AwayFromZero);
             if (total > 0) anyReceived = true;
             if (total <= 0 || total < minimumRequired) allReceived = false;
         }

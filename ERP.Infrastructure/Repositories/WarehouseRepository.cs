@@ -50,6 +50,10 @@ namespace ERP.Infrastructure.Repositories
 
         public override async Task DeleteAsync(Warehouse entity, CancellationToken cancellationToken = default)
         {
+            await using var transaction = _context.Database.CurrentTransaction is null
+                ? await _context.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+
             var warehouseId = entity.Id;
 
             var emptyStocks = await _context.InventoryStocks
@@ -91,6 +95,8 @@ namespace ERP.Infrastructure.Repositories
             if (systemLocations.Count > 0) _context.WarehouseLocations.RemoveRange(systemLocations);
 
             await base.DeleteAsync(entity, cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
         }
     }
 }
