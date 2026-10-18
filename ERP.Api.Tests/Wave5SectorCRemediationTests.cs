@@ -848,4 +848,74 @@ public sealed class Wave5SectorCRemediationTests
         results.Should().NotContainNulls("every concurrent request must produce a clean HTTP result without throwing 500");
         handlerInvocationCount.Should().BeGreaterThanOrEqualTo(1);
     }
+
+    [Fact]
+    public async Task Phase2_HttpTenantContext_IgnoresSpoofedHeaderAndQuery_And_IdempotentCommandFilter_IsolatesTenants()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Headers["X-Tenant-Id"] = "999";
+        httpContext.Request.QueryString = new QueryString("?tenantId=888");
+        httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, "42"),
+            new Claim("tenant_id", "7"),
+            new Claim("tenant_code", "TENANT-0007")
+        ], "JwtBearer"));
+
+        var accessor = new HttpContextAccessor { HttpContext = httpContext };
+        var tenantCtx = new HttpTenantContext(accessor);
+        tenantCtx.TenantId.Should().Be(7);
+        tenantCtx.TenantCode.Should().Be("TENANT-0007");
+        tenantCtx.IsSystemBypass.Should().BeFalse();
+
+        var dbName = "Phase2Idemp_" + Guid.NewGuid().ToString("N");
+        DbContextOptions<ErpKhoDbContext> CreateOptions() =>
+            new DbContextOptionsBuilder<ErpKhoDbContext>()
+                .UseInMemoryDatabase(dbName)
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+                .Options;
+
+        const string sharedKey = "SAME-KEY-001";
+        foreach (var (tid, expectedWarehouseCode) in new[] { (10, "WH-TENANT-10"), (20, "WH-TENANT-20") })
+        {
+            await using var db = new ErpKhoDbContext(CreateOptions(), tenantContext: new TenantContext(tid, $"T-{tid}"));
+            var metadata = new Mock<IRequestMetadata>();
+            metadata.SetupGet(x => x.CorrelationId).Returns($"corr-{tid}");
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+
+            var filter = new IdempotentCommandFilter("Warehouse.Create", db, metadata.Object, warehouseAuth.Object);
+            var reqHttp = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                [
+                    new Claim(ClaimTypes.NameIdentifier, "42"),
+                    new Claim("tenant_id", tid.ToString())
+                ], "JwtBearer"))
+            };
+            reqHttp.Request.Headers["Idempotency-Key"] = sharedKey;
+            var actionCtx = new ActionContext(reqHttp, new RouteData(), new ActionDescriptor());
+            var execCtx = new ActionExecutingContext(
+                actionCtx,
+                new List<IFilterMetadata>(),
+                new Dictionary<string, object?> { ["dto"] = new { Code = "WH-01" } },
+                controller: new object());
+
+            await filter.OnActionExecutionAsync(execCtx, () =>
+            {
+                var executed = new ActionExecutedContext(execCtx, execCtx.Filters, execCtx.Controller)
+                {
+                    Result = new OkObjectResult(new { tenantId = tid, warehouseCode = expectedWarehouseCode })
+                };
+                return Task.FromResult(executed);
+            });
+        }
+
+        await using var verifyDb10 = new ErpKhoDbContext(CreateOptions(), tenantContext: new TenantContext(10, "T-10"));
+        await using var verifyDb20 = new ErpKhoDbContext(CreateOptions(), tenantContext: new TenantContext(20, "T-20"));
+
+        var rec10 = await verifyDb10.IdempotencyRecords.SingleAsync();
+        var rec20 = await verifyDb20.IdempotencyRecords.SingleAsync();
+        rec10.ResponseBody.Should().Contain("WH-TENANT-10").And.NotContain("WH-TENANT-20");
+        rec20.ResponseBody.Should().Contain("WH-TENANT-20").And.NotContain("WH-TENANT-10");
+    }
 }

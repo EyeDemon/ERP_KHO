@@ -41,8 +41,9 @@ namespace ERP.Infrastructure.Repositories
         private async Task<ImportReceipt?> LoadWithDetailsAsync(int id, bool forUpdate)
         {
             // Status alone does not protect two partial QC updates that remain QcPending.
+            var tenantId = _context.CurrentTenantId;
             var source = forUpdate && _context.Database.IsSqlServer()
-                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.ImportReceipts WITH (UPDLOCK,HOLDLOCK) WHERE Id = {id}")
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.ImportReceipts WITH (UPDLOCK,HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {id}")
                 : _dbSet.AsQueryable();
             var query = source
                 .Include(i => i.Warehouse)

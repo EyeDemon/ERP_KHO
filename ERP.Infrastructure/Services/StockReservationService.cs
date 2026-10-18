@@ -171,7 +171,8 @@ public class StockReservationService(
 
     private static bool IsExportReservationSourceConflict(DbUpdateException exception) =>
         exception.InnerException is SqlException { Number: 2601 or 2627 } sql &&
-        sql.Message.Contains("IX_StockReservations_SourceType_SourceId_ProductId", StringComparison.OrdinalIgnoreCase);
+        (sql.Message.Contains("IX_StockReservations_SourceType_SourceId_ProductId", StringComparison.OrdinalIgnoreCase) ||
+         sql.Message.Contains("UX_StockReservations_TenantId_SourceType_SourceId_ProductId", StringComparison.OrdinalIgnoreCase));
 
     public async Task<StockReservation> GetExportReservationAsync(int exportReceiptId, int warehouseId, int productId, CancellationToken cancellationToken = default)
     {

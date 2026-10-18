@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class Warehouse
+public class Warehouse : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Address { get; set; }

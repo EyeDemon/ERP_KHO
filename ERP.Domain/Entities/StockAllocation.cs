@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public class StockAllocation
+public class StockAllocation : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string AllocationCode { get; set; } = string.Empty;
     public int ReservationId { get; set; }
     public int WarehouseId { get; set; }

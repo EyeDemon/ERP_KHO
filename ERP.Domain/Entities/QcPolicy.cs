@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class QcPolicy
+public class QcPolicy : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ProductId { get; set; }
     public int? SupplierId { get; set; }
     public int Version { get; set; } = 1;

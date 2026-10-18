@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public class ImportReceiptDetail
+public class ImportReceiptDetail : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ImportReceiptId { get; set; }
     public int ProductId { get; set; }
     public int? PurchaseOrderLineId { get; set; }

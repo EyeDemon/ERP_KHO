@@ -36,7 +36,8 @@ namespace ERP.Application.Tests
                 if (sqliteEx.SqliteExtendedErrorCode == 2067 || sqliteEx.SqliteErrorCode == 19)
                 {
                     var msg = sqliteEx.Message ?? string.Empty;
-                    return msg.Contains("UNIQUE constraint failed: ExportReceipts.Code", StringComparison.OrdinalIgnoreCase);
+                    return msg.Contains("UNIQUE constraint failed: ExportReceipts.Code", StringComparison.OrdinalIgnoreCase)
+                        || msg.Contains("UNIQUE constraint failed: ExportReceipts.TenantId, ExportReceipts.Code", StringComparison.OrdinalIgnoreCase);
                 }
             }
 

@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class Dock
+public sealed class Dock : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int WarehouseId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
@@ -19,9 +21,10 @@ public sealed class Dock
     public Warehouse Warehouse { get; set; } = null!;
 }
 
-public sealed class YardSlot
+public sealed class YardSlot : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int WarehouseId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
@@ -31,9 +34,10 @@ public sealed class YardSlot
     public Warehouse Warehouse { get; set; } = null!;
 }
 
-public sealed class DockAppointment
+public sealed class DockAppointment : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int WarehouseId { get; set; }
     public string Code { get; set; } = string.Empty;
     public DockAppointmentDirection Direction { get; set; }
@@ -73,9 +77,10 @@ public sealed class DockAppointment
     public ICollection<DockAppointmentEvent> Events { get; set; } = new List<DockAppointmentEvent>();
 }
 
-public sealed class DockAppointmentEvent
+public sealed class DockAppointmentEvent : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int DockAppointmentId { get; set; }
     public string EventType { get; set; } = string.Empty;
     public DateTime EventAtUtc { get; set; }

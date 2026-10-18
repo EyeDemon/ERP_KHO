@@ -69,9 +69,10 @@ public sealed class IdempotentCommandFilter(
         await using var transaction = RequiresSerializableIsolation(commandScope)
             ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, actionContext.HttpContext.RequestAborted)
             : await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
+        var tenantId = context.CurrentTenantId;
         var record = new IdempotencyRecord
         {
-            UserId = userId, CommandScope = commandScope, KeyHash = keyHash,
+            TenantId = tenantId, UserId = userId, CommandScope = commandScope, KeyHash = keyHash,
             RequestFingerprint = fingerprint, Status = IdempotencyStatus.Processing,
             CorrelationId = metadata.CorrelationId, CreatedAtUtc = DateTime.UtcNow,
             ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
@@ -86,7 +87,7 @@ public sealed class IdempotentCommandFilter(
             await transaction.RollbackAsync(CancellationToken.None);
             context.ChangeTracker.Clear();
             var existing = await context.IdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(
-                x => x.UserId == userId && x.CommandScope == commandScope && x.KeyHash == keyHash,
+                x => x.TenantId == tenantId && x.UserId == userId && x.CommandScope == commandScope && x.KeyHash == keyHash,
                 actionContext.HttpContext.RequestAborted);
             if (existing is null || existing.RequestFingerprint != fingerprint || existing.Status != IdempotencyStatus.Completed)
             {

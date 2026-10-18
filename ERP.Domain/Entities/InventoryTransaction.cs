@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public class InventoryTransaction
+public class InventoryTransaction : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ProductId { get; set; }
     public int WarehouseId { get; set; }
     public int? LocationId { get; set; }

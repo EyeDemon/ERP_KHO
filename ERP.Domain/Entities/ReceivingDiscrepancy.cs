@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class ReceivingDiscrepancy
+public sealed class ReceivingDiscrepancy : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ImportReceiptId { get; set; }
     public int ImportReceiptDetailId { get; set; }
     public ReceivingDiscrepancyStatus Status { get; set; } = ReceivingDiscrepancyStatus.Pending;
@@ -17,9 +19,10 @@ public sealed class ReceivingDiscrepancy
     public ICollection<ReceivingResolutionVersion> Resolutions { get; set; } = [];
 }
 
-public sealed class ReceivingObservationVersion
+public sealed class ReceivingObservationVersion : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ReceivingDiscrepancyId { get; set; }
     public int Version { get; set; }
     public int? PreviousObservationVersionId { get; set; }
@@ -36,9 +39,10 @@ public sealed class ReceivingObservationVersion
     public ICollection<ReceivingObservationItem> Items { get; set; } = [];
 }
 
-public sealed class ReceivingObservationItem
+public sealed class ReceivingObservationItem : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ReceivingObservationVersionId { get; set; }
     public decimal Quantity { get; set; }
     public string? ScanReference { get; set; }
@@ -50,9 +54,10 @@ public sealed class ReceivingObservationItem
     public ReceivingObservationVersion ReceivingObservationVersion { get; set; } = null!;
 }
 
-public sealed class ReceivingResolutionVersion
+public sealed class ReceivingResolutionVersion : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ReceivingDiscrepancyId { get; set; }
     public int Version { get; set; }
     public int? PreviousResolutionVersionId { get; set; }

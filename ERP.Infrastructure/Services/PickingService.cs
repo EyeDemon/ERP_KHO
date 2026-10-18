@@ -355,8 +355,9 @@ public sealed class PickingService(
         var reservation = await context.StockReservations.SingleAsync(x => x.Id == allocation.ReservationId, token);
         if (context.Database.IsSqlServer())
         {
+            var tenantId = context.CurrentTenantId;
             _ = await context.InventoryStocks
-                .FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE WarehouseId = {allocation.WarehouseId} AND ProductId = {allocation.ProductId} AND Status = {(int)allocation.InventoryStatus}")
+                .FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (INDEX(IX_InventoryStocks_CanonicalBucket), UPDLOCK, ROWLOCK, REPEATABLEREAD) WHERE TenantId = {tenantId} AND ProductId = {allocation.ProductId} AND WarehouseId = {allocation.WarehouseId} AND Status = {(int)allocation.InventoryStatus}")
                 .OrderBy(x => x.Id)
                 .ToListAsync(token);
         }

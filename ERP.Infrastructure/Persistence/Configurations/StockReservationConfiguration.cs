@@ -24,9 +24,9 @@ public class StockReservationConfiguration : IEntityTypeConfiguration<StockReser
         builder.Property(x => x.AllocatedQuantity).HasPrecision(18, 4);
         builder.Property(x => x.AllocationVersion).IsConcurrencyToken();
         builder.Property(x => x.Status).IsConcurrencyToken();
-        builder.HasIndex(x => x.ReservationCode).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.ReservationCode }).IsUnique().HasDatabaseName("UX_StockReservations_TenantId_ReservationCode");
         builder.HasIndex(x => new { x.ProductId, x.WarehouseId, x.Status, x.ExpiresAt });
-        builder.HasIndex(x => new { x.SourceType, x.SourceId, x.ProductId }).IsUnique().HasFilter("[SourceId] IS NOT NULL");
+        builder.HasIndex(x => new { x.TenantId, x.SourceType, x.SourceId, x.ProductId }).IsUnique().HasDatabaseName("UX_StockReservations_TenantId_SourceType_SourceId_ProductId").HasFilter("[SourceId] IS NOT NULL");
         builder.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);

@@ -632,9 +632,10 @@ WHEN NOT MATCHED THEN
         if (context.Database.IsRelational() && context.Database.CurrentTransaction is null)
             throw new InvalidOperationException("Stock transfer posting requires a database transaction.");
         var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        var tenantId = context.CurrentTenantId;
         var locked = context.Database.IsSqlServer()
             ? context.StockTransfers.FromSqlInterpolated(
-                $"SELECT * FROM dbo.StockTransfers WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}")
+                $"SELECT * FROM dbo.StockTransfers WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {id}")
             : context.StockTransfers.AsQueryable();
         return await locked.Include(x => x.SourceWarehouse).Include(x => x.DestinationWarehouse)
             .Include(x => x.Details).ThenInclude(x => x.Product)

@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public class StockReservation
+public class StockReservation : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string ReservationCode { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public int WarehouseId { get; set; }

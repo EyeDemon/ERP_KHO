@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class StocktakeDetail
+public class StocktakeDetail : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int StocktakeId { get; set; }
     public int ProductId { get; set; }
     public int? LocationId { get; set; }

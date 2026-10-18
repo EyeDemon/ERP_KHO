@@ -17,7 +17,7 @@ public sealed class PickingTaskConfiguration : IEntityTypeConfiguration<PickingT
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => new { x.WarehouseId, x.TaskCode }).IsUnique();
         b.HasIndex(x => new { x.WarehouseId, x.Status, x.Priority });
-        b.HasIndex(x => new { x.SourceType, x.SourceId })
+        b.HasIndex(x => new { x.TenantId, x.SourceType, x.SourceId })
             .IsUnique()
             .HasFilter("[SourceId] IS NOT NULL");
         b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);

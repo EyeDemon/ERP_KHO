@@ -14,6 +14,7 @@ namespace ERP.Infrastructure.Persistence
     public class ExportReceiptConflictClassifier : IExportReceiptConflictClassifier
     {
         public const string TargetIndexName = "IX_ExportReceipts_Code";
+        public const string CompositeTargetIndexName = "UX_ExportReceipts_TenantId_Code";
 
         public virtual bool IsCodeUniqueConflict(DbUpdateException ex, string code)
         {
@@ -27,7 +28,8 @@ namespace ERP.Infrastructure.Persistence
 
             if (ex.InnerException is SqlException sqlEx)
             {
-                return IsDuplicateKeyWithExactIndex(sqlEx.Number, sqlEx.Message, TargetIndexName);
+                return IsDuplicateKeyWithExactIndex(sqlEx.Number, sqlEx.Message, TargetIndexName)
+                    || IsDuplicateKeyWithExactIndex(sqlEx.Number, sqlEx.Message, CompositeTargetIndexName);
             }
 
             return false;

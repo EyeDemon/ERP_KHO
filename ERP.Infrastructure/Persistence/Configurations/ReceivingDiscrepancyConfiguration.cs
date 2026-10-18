@@ -57,7 +57,7 @@ public sealed class ReceivingReasonCodeConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<ReceivingReasonCode> b)
     {
-        b.ToTable("ReceivingReasonCodes"); b.HasKey(x => x.Id); b.HasIndex(x => new { x.Code, x.Version }).IsUnique(); b.HasIndex(x => new { x.Code, x.IsActive, x.EffectiveFromUtc });
+        b.ToTable("ReceivingReasonCodes"); b.HasKey(x => x.Id); b.HasIndex(x => new { x.TenantId, x.Code, x.Version }).IsUnique().HasDatabaseName("UX_ReceivingReasonCodes_TenantId_Code_Version"); b.HasIndex(x => new { x.TenantId, x.Code, x.IsActive, x.EffectiveFromUtc });
         b.Property(x => x.Code).HasMaxLength(50); b.Property(x => x.Name).HasMaxLength(200); b.Property(x => x.Category).HasMaxLength(50);
         var effective = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         b.HasData(
@@ -81,7 +81,7 @@ public sealed class ReceivingTolerancePolicyConfiguration : IEntityTypeConfigura
             t.HasCheckConstraint("CK_ReceivingTolerancePolicies_Tolerance", "[AbsoluteQuantityTolerance] >= 0 AND [PercentageTolerance] >= 0 AND ([ValueTolerance] IS NULL OR [ValueTolerance] >= 0)");
             t.HasCheckConstraint("CK_ReceivingTolerancePolicies_Scope", "([ProductId] IS NOT NULL AND [SupplierId] IS NOT NULL) OR ([ProductId] IS NOT NULL AND [SupplierId] IS NULL AND [WarehouseId] IS NULL) OR ([ProductId] IS NULL AND [SupplierId] IS NULL)");
         });
-        b.HasKey(x => x.Id); b.HasIndex(x => new { x.ProductId, x.SupplierId, x.WarehouseId, x.Version }).IsUnique(); b.HasIndex(x => new { x.IsActive, x.EffectiveFromUtc });
+        b.HasKey(x => x.Id); b.HasIndex(x => new { x.TenantId, x.ProductId, x.SupplierId, x.WarehouseId, x.Version }).IsUnique(); b.HasIndex(x => new { x.TenantId, x.IsActive, x.EffectiveFromUtc });
         b.Property(x => x.AbsoluteQuantityTolerance).HasPrecision(18,4); b.Property(x => x.PercentageTolerance).HasPrecision(9,6); b.Property(x => x.ValueTolerance).HasPrecision(18,2); b.Property(x => x.ApproverTarget).HasMaxLength(100);
         b.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<BusinessPartner>().WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);

@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class UserSession
+public class UserSession : ITenantEntity
 {
     public Guid Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int UserId { get; set; }
     public string RefreshTokenHash { get; set; } = string.Empty;
     public Guid RefreshTokenFamilyId { get; set; }

@@ -14,6 +14,12 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
         ? id
         : throw new UnauthorizedAccessException("Không xác định được danh tính người dùng.");
 
+    public int TenantId => IsAuthenticated
+        && int.TryParse(User.FindFirstValue(TenantClaimTypes.TenantId), out var tenantId)
+        && tenantId > 0
+        ? tenantId
+        : 1;
+
     public bool IsGlobalAdmin => string.Equals(Role, AppRoles.Admin, StringComparison.Ordinal);
     public string Role => httpContextAccessor.HttpContext?.Items[EffectiveRoleKey] as string
         ?? User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;

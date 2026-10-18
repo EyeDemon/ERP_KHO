@@ -11,7 +11,7 @@ public sealed class ProductBarcodeConfiguration : IEntityTypeConfiguration<Produ
         builder.ToTable("ProductBarcodes");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Value).IsRequired().HasMaxLength(64);
-        builder.HasIndex(x => x.Value).IsUnique().HasDatabaseName("UX_ProductBarcodes_Value");
+        builder.HasIndex(x => new { x.TenantId, x.Value }).IsUnique().HasDatabaseName("UX_ProductBarcodes_TenantId_Value");
         builder.HasOne(x => x.Product).WithMany(x => x.Barcodes).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Cascade);
     }
 }

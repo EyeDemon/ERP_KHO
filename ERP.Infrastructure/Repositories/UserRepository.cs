@@ -14,9 +14,25 @@ namespace ERP.Infrastructure.Repositories
 
         public async Task<User?> GetByUsernameWithRoleAsync(string username, CancellationToken cancellationToken = default)
         {
-            return await _dbSet
+            var user = await _dbSet
                 .Include(u => u.Role)
                 .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
+            if (user is not null)
+                return user;
+
+            var matches = await _dbSet
+                .IgnoreQueryFilters()
+                .Include(u => u.Role)
+                .Where(u => u.Username == username)
+                .Take(2)
+                .ToListAsync(cancellationToken);
+            if (matches.Count == 1)
+            {
+                _context.UseTenant(matches[0].TenantId);
+                return matches[0];
+            }
+
+            return null;
         }
 
         public Task<bool> HasPermissionAsync(int userId, string permission, CancellationToken cancellationToken = default)

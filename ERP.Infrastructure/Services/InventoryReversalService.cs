@@ -153,9 +153,10 @@ public sealed class InventoryReversalService(
                 // Without it, two SERIALIZABLE readers may both hold shared locks and
                 // deadlock when they attempt to insert competing reversal markers.
                 // The unique ReversalOfTransactionId index remains the final invariant.
+                var tenantId = context.CurrentTenantId;
                 var originalQuery = context.Database.IsSqlServer()
                     ? context.InventoryTransactions.FromSqlInterpolated(
-                        $"SELECT * FROM dbo.InventoryTransactions WITH (UPDLOCK, HOLDLOCK) WHERE Id = {request.OriginalTransactionId}")
+                        $"SELECT * FROM dbo.InventoryTransactions WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {request.OriginalTransactionId}")
                     : context.InventoryTransactions.AsQueryable();
 
                 var original = await originalQuery.AsNoTracking()

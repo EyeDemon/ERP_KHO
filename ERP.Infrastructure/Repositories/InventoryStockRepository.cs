@@ -17,8 +17,9 @@ namespace ERP.Infrastructure.Repositories
         public async Task<InventoryStock?> GetByProductAndWarehouseAsync(int productId, int warehouseId)
         {
             await AcquireAllocationAndStockLocksAsync(productId, warehouseId);
+            var tenantId = _context.CurrentTenantId;
             var source = _context.Database.IsRelational() && _context.Database.IsSqlServer() && _context.Database.CurrentTransaction != null
-                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)InventoryStatus.Available}")
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (INDEX(IX_InventoryStocks_CanonicalBucket), UPDLOCK, ROWLOCK, REPEATABLEREAD) WHERE TenantId = {tenantId} AND ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)InventoryStatus.Available}")
                 : _dbSet.AsQueryable();
             return await source
                 .Include(s => s.Location)
@@ -34,8 +35,9 @@ namespace ERP.Infrastructure.Repositories
         public async Task<InventoryStock?> GetByProductWarehouseAndStatusAsync(int productId, int warehouseId, InventoryStatus status)
         {
             await AcquireAllocationAndStockLocksAsync(productId, warehouseId);
+            var tenantId = _context.CurrentTenantId;
             var source = _context.Database.IsRelational() && _context.Database.IsSqlServer() && _context.Database.CurrentTransaction != null
-                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)status}")
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (INDEX(IX_InventoryStocks_CanonicalBucket), UPDLOCK, ROWLOCK, REPEATABLEREAD) WHERE TenantId = {tenantId} AND ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)status}")
                 : _dbSet.AsQueryable();
             return await source
                 .Include(s => s.Location)
@@ -49,8 +51,9 @@ namespace ERP.Infrastructure.Repositories
         public async Task<InventoryStock?> GetByProductWarehouseStatusAndLocationAsync(int productId, int warehouseId, InventoryStatus status, int locationId)
         {
             await AcquireAllocationAndStockLocksAsync(productId, warehouseId);
+            var tenantId = _context.CurrentTenantId;
             var source = _context.Database.IsRelational() && _context.Database.IsSqlServer() && _context.Database.CurrentTransaction != null
-                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)status} AND LocationId = {locationId} AND LotId IS NULL AND SerialId IS NULL")
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (INDEX(IX_InventoryStocks_CanonicalBucket), UPDLOCK, ROWLOCK, REPEATABLEREAD) WHERE TenantId = {tenantId} AND ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)status} AND LocationId = {locationId} AND LotId IS NULL AND SerialId IS NULL")
                 : _dbSet.AsQueryable();
             return await source.FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && s.LocationId == locationId && s.LotId == null && s.SerialId == null);
         }

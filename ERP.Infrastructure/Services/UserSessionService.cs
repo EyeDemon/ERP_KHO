@@ -18,6 +18,8 @@ public sealed class UserSessionService(
 
     public async Task<SessionTokenResultDto> CreateAsync(User user, SessionContextDto requestContext, CancellationToken cancellationToken = default)
     {
+        if (user.TenantId > 0)
+            context.UseTenant(user.TenantId);
         await using var transaction = context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
@@ -42,9 +44,16 @@ public sealed class UserSessionService(
         var hash = tokenService.HashRefreshToken(refreshToken);
         await using var transaction = context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
+        var current = await context.UserSessions.IgnoreQueryFilters().AsNoTracking().Include(x => x.User).ThenInclude(x => x.Role)
+            .SingleOrDefaultAsync(x => x.RefreshTokenHash == hash, cancellationToken);
+
+        if (current is null || !tokenService.FixedTimeHashEquals(current.RefreshTokenHash, hash))
+            throw new UnauthorizedAccessException(GenericFailure);
+
+        context.UseTenant(current.TenantId > 0 ? current.TenantId : (current.User?.TenantId > 0 ? current.User.TenantId : 1));
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
         var now = DateTime.UtcNow;
-        var current = await context.UserSessions.AsNoTracking().Include(x => x.User).ThenInclude(x => x.Role)
+        current = await context.UserSessions.AsNoTracking().Include(x => x.User).ThenInclude(x => x.Role)
             .SingleOrDefaultAsync(x => x.RefreshTokenHash == hash, cancellationToken);
 
         if (current is null || !tokenService.FixedTimeHashEquals(current.RefreshTokenHash, hash))
@@ -104,8 +113,10 @@ public sealed class UserSessionService(
         if (string.IsNullOrWhiteSpace(refreshToken)) return;
         var hash = tokenService.HashRefreshToken(refreshToken);
         var now = DateTime.UtcNow;
-        var session = await context.UserSessions.SingleOrDefaultAsync(x => x.RefreshTokenHash == hash, cancellationToken);
+        var session = await context.UserSessions.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.RefreshTokenHash == hash, cancellationToken);
         if (session is null || (actorUserId.HasValue && session.UserId != actorUserId.Value)) return;
+        if (session.TenantId > 0)
+            context.UseTenant(session.TenantId);
         await RevokeWhereAsync(x => x.Id == session.Id, actorUserId?.ToString() ?? "cookie", "Logout", now, cancellationToken);
     }
 

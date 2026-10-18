@@ -1,3 +1,4 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
@@ -15,9 +16,10 @@ public sealed class InventoryStatusDefinition
     public bool IsSystem { get; set; } = true;
 }
 
-public sealed class InventoryLot
+public sealed class InventoryLot : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ProductId { get; set; }
     public string LotNumber { get; set; } = string.Empty;
     public DateTime? ManufactureDate { get; set; }
@@ -28,9 +30,10 @@ public sealed class InventoryLot
     public ICollection<InventorySerial> Serials { get; set; } = [];
 }
 
-public sealed class InventorySerial
+public sealed class InventorySerial : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ProductId { get; set; }
     public int? LotId { get; set; }
     public string SerialNumber { get; set; } = string.Empty;
@@ -39,9 +42,10 @@ public sealed class InventorySerial
     public InventoryLot? Lot { get; set; }
 }
 
-public sealed class ImportReceiptInventoryIdentity
+public sealed class ImportReceiptInventoryIdentity : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ImportReceiptDetailId { get; set; }
     public int ProductId { get; set; }
     public InventoryStatus TargetStatus { get; set; }

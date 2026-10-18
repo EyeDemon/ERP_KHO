@@ -15,8 +15,9 @@ namespace ERP.Infrastructure.Repositories
         {
             if (_context.Database.IsSqlServer() && _context.Database.CurrentTransaction is not null)
             {
+                var tenantId = _context.CurrentTenantId;
                 await _context.Database.ExecuteSqlInterpolatedAsync(
-                    $"SELECT 1 FROM dbo.Stocktakes WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE Id = {id}");
+                    $"SELECT 1 FROM dbo.Stocktakes WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {id}");
             }
 
             return await _dbSet

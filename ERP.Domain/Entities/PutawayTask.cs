@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public class PutawayTask
+public class PutawayTask : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ReceiptId { get; set; }
     public int WarehouseId { get; set; }
     public PutawayTaskStatus Status { get; set; } = PutawayTaskStatus.Open;
@@ -21,9 +23,10 @@ public class PutawayTask
     public ICollection<PutawayTaskItem> Items { get; set; } = [];
 }
 
-public class PutawayTaskItem
+public class PutawayTaskItem : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int PutawayTaskId { get; set; }
     public int ReceiptLineId { get; set; }
     public int ProductId { get; set; }
@@ -46,9 +49,10 @@ public class PutawayTaskItem
     public decimal RemainingBaseQuantity => RequiredBaseQuantity - MovedBaseQuantity;
 }
 
-public class InventoryLocationMovement
+public class InventoryLocationMovement : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int WarehouseId { get; set; }
     public int ProductId { get; set; }
     public InventoryStatus InventoryStatus { get; set; }

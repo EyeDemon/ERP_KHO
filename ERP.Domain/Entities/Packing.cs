@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class PackingSession
+public sealed class PackingSession : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string SessionCode { get; set; } = string.Empty;
     public int PickingTaskId { get; set; }
     public int WarehouseId { get; set; }
@@ -22,9 +24,10 @@ public sealed class PackingSession
     public ICollection<HandlingUnit> HandlingUnits { get; set; } = [];
 }
 
-public sealed class HandlingUnit
+public sealed class HandlingUnit : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string HuCode { get; set; } = string.Empty;
     public string Barcode { get; set; } = string.Empty;
     public string? Sscc { get; set; }
@@ -50,9 +53,10 @@ public sealed class HandlingUnit
     public User CreatedByUser { get; set; } = null!;
 }
 
-public sealed class HandlingUnitContent
+public sealed class HandlingUnitContent : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int HandlingUnitId { get; set; }
     public int PickingTaskLineId { get; set; }
     public int ProductId { get; set; }

@@ -17,9 +17,10 @@ public static class PermissionAdministrationGuard
         // ponytail: serialize security/session and administration writes globally; shard only with a proven boundary/last-admin strategy.
         try
         {
-            await db.Database.ExecuteSqlRawAsync("""
+            var lockResource = $"ERP.PermissionAdministration:{db.CurrentTenantId}";
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
             DECLARE @result int;
-            EXEC @result = sys.sp_getapplock @Resource=N'ERP.PermissionAdministration',
+            EXEC @result = sys.sp_getapplock @Resource={lockResource},
                 @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=10000;
             IF @result < 0 THROW 51009, 'Administration concurrency conflict.', 1;
             """, token);

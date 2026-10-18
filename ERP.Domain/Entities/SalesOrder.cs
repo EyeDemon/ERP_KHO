@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class SalesOrder
+public sealed class SalesOrder : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string OrderCode { get; set; } = string.Empty;
     public string ExternalOrderId { get; set; } = string.Empty;
     public int CustomerId { get; set; }
@@ -26,9 +28,10 @@ public sealed class SalesOrder
     public ICollection<SalesOrderLine> Lines { get; set; } = [];
 }
 
-public sealed class SalesOrderLine
+public sealed class SalesOrderLine : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int SalesOrderId { get; set; }
     public string ExternalLineId { get; set; } = string.Empty;
     public int ProductId { get; set; }
@@ -41,9 +44,10 @@ public sealed class SalesOrderLine
     public Backorder? Backorder { get; set; }
 }
 
-public sealed class Backorder
+public sealed class Backorder : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string BackorderCode { get; set; } = string.Empty;
     public int SalesOrderLineId { get; set; }
     public int WarehouseId { get; set; }

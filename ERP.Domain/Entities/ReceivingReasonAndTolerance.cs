@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public sealed class ReceivingReasonCode
+public sealed class ReceivingReasonCode : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Category { get; set; } = "Receiving";
@@ -15,9 +18,10 @@ public sealed class ReceivingReasonCode
     public bool IsActive { get; set; }
 }
 
-public sealed class ReceivingTolerancePolicy
+public sealed class ReceivingTolerancePolicy : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int? ProductId { get; set; }
     public int? SupplierId { get; set; }
     public int? WarehouseId { get; set; }

@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public sealed class WarehouseCalendar
+public sealed class WarehouseCalendar : ITenantEntity
 {
     public int WarehouseId { get; set; }
+    public int TenantId { get; set; } = 1;
     public string TimeZoneId { get; set; } = "UTC";
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
@@ -14,9 +17,10 @@ public sealed class WarehouseCalendar
     public ICollection<WarehouseShift> Shifts { get; set; } = new List<WarehouseShift>();
 }
 
-public sealed class WarehouseCalendarDay
+public sealed class WarehouseCalendarDay : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int WarehouseId { get; set; }
     public int DayOfWeek { get; set; }
     public bool IsOpen { get; set; }
@@ -28,9 +32,10 @@ public sealed class WarehouseCalendarDay
     public WarehouseCalendar Calendar { get; set; } = null!;
 }
 
-public sealed class WarehouseShift
+public sealed class WarehouseShift : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int WarehouseId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;

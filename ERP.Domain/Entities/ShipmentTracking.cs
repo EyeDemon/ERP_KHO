@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class ShipmentTrackingEvent
+public sealed class ShipmentTrackingEvent : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ShipmentId { get; set; }
     public string EventType { get; set; } = string.Empty;
     public ShipmentStatus FromStatus { get; set; }
@@ -21,9 +23,10 @@ public sealed class ShipmentTrackingEvent
     public User? RecordedByUser { get; set; }
 }
 
-public sealed class ShipmentProofOfDelivery
+public sealed class ShipmentProofOfDelivery : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ShipmentId { get; set; }
     public DateTime DeliveredAt { get; set; }
     public string ReceiverName { get; set; } = string.Empty;

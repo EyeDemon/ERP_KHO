@@ -15,7 +15,7 @@ public sealed class IdempotencyRecordConfiguration : IEntityTypeConfiguration<Id
         builder.Property(x => x.RequestFingerprint).HasMaxLength(64).IsFixedLength().IsRequired();
         builder.Property(x => x.CorrelationId).HasMaxLength(64).IsRequired();
         builder.Property(x => x.ResponseBody).HasColumnType("nvarchar(max)");
-        builder.HasIndex(x => new { x.UserId, x.CommandScope, x.KeyHash }).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.UserId, x.CommandScope, x.KeyHash }).IsUnique().HasDatabaseName("UX_IdempotencyRecords_TenantId_UserId_CommandScope_KeyHash");
         builder.HasIndex(x => x.ExpiresAtUtc);
         builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
     }

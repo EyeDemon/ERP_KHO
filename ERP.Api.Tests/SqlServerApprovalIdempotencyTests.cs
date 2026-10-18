@@ -74,7 +74,7 @@ public sealed class SqlServerApprovalIdempotencyTests
                     SELECT p.Id,w.Id,l.Id,s.Status,s.Quantity,0,SYSUTCDATETIME() FROM Products p CROSS JOIN Warehouses w JOIN WarehouseLocations l ON l.WarehouseId=w.Id
                     CROSS JOIN (VALUES(0,12),(1,3)) s(Status,Quantity) WHERE p.Code='QA-MIGRATION' AND w.Code='QA-MIGRATION';
                     """);
-                var before = await db.InventoryStocks.AsNoTracking().OrderBy(s => s.Id)
+                var before = await db.InventoryStocks.IgnoreQueryFilters().AsNoTracking().OrderBy(s => s.Id)
                     .Select(s => new { s.ProductId, s.WarehouseId, s.LocationId, s.Status, s.Quantity, s.ReservedQuantity }).ToListAsync();
                 await migrator.MigrateAsync();
                 Assert.Equal(canonicalPermissionCount, await db.Permissions.CountAsync());
@@ -98,8 +98,8 @@ public sealed class SqlServerApprovalIdempotencyTests
                 Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sys.tables WHERE name IN ('Permissions','RolePermissions')").SingleAsync());
                 Assert.DoesNotContain("20260930032852_AddPermissionCodeAuthorization", await db.Database.GetAppliedMigrationsAsync());
             }
-            Assert.Equal(scenario == "valid" ? 2 : 0, await db.InventoryStocks.CountAsync());
-            Assert.Equal(0, await db.InventoryTransactions.CountAsync());
+            Assert.Equal(scenario == "valid" ? 2 : 0, await db.InventoryStocks.IgnoreQueryFilters().CountAsync());
+            Assert.Equal(0, await db.InventoryTransactions.IgnoreQueryFilters().CountAsync());
             Console.WriteLine($"Permission migration scenario {scenario}: PASS; owned target cleanup follows.");
         }
     }

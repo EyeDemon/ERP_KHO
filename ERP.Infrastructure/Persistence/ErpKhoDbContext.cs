@@ -8,13 +8,33 @@ namespace ERP.Infrastructure.Persistence;
 public class ErpKhoDbContext : DbContext
 {
     private readonly ERP.Application.Interfaces.IRequestMetadata? _requestMetadata;
+    private readonly ERP.Application.Interfaces.ITenantContext? _tenantContext;
+    private int? _ambientTenantOverride;
     private IDbContextTransaction? _activeLockTransaction;
     private Guid? _activeLockTransactionId;
-    private readonly HashSet<(int WarehouseId, int ProductId)> _lockedAllocationScopes = new();
+    private readonly HashSet<(int TenantId, int WarehouseId, int ProductId)> _lockedAllocationScopes = new();
 
-    public ErpKhoDbContext(DbContextOptions<ErpKhoDbContext> options, ERP.Application.Interfaces.IRequestMetadata? requestMetadata = null) : base(options)
+    public ErpKhoDbContext(
+        DbContextOptions<ErpKhoDbContext> options,
+        ERP.Application.Interfaces.IRequestMetadata? requestMetadata = null,
+        ERP.Application.Interfaces.ITenantContext? tenantContext = null) : base(options)
     {
         _requestMetadata = requestMetadata;
+        _tenantContext = tenantContext;
+    }
+
+    public int CurrentTenantId => _ambientTenantOverride ?? (_tenantContext?.TenantId > 0 ? _tenantContext.TenantId : 1);
+
+    public bool IsSystemTenantBypass => _tenantContext?.IsSystemBypass == true;
+
+    public void UseTenant(int tenantId)
+    {
+        if (tenantId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tenantId), "TenantId must be positive.");
+        }
+
+        _ambientTenantOverride = tenantId;
     }
 
     public Task AcquireInventoryAllocationLocksAsync(
@@ -43,8 +63,9 @@ public class ErpKhoDbContext : DbContext
             _lockedAllocationScopes.Clear();
         }
 
+        var tenantId = CurrentTenantId;
         var pendingScopes = scopes
-            .Where(x => x.WarehouseId > 0 && x.ProductId > 0 && !_lockedAllocationScopes.Contains(x))
+            .Where(x => x.WarehouseId > 0 && x.ProductId > 0 && !_lockedAllocationScopes.Contains((tenantId, x.WarehouseId, x.ProductId)))
             .Distinct()
             .OrderBy(x => x.WarehouseId)
             .ThenBy(x => x.ProductId)
@@ -59,7 +80,7 @@ public class ErpKhoDbContext : DbContext
         {
             foreach (var (warehouseId, productId) in pendingScopes)
             {
-                var allocationLock = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
+                var allocationLock = $"ERP:InventoryAllocation:{tenantId}:{warehouseId}:{productId}";
                 await Database.ExecuteSqlInterpolatedAsync($@"
 DECLARE @lockResult int;
 EXEC @lockResult = sys.sp_getapplock
@@ -79,11 +100,12 @@ END;", cancellationToken);
             {
                 await Database.ExecuteSqlInterpolatedAsync($@"
 SELECT Id
-FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
-WHERE WarehouseId = {warehouseId}
+FROM dbo.InventoryStocks WITH (INDEX(IX_InventoryStocks_CanonicalBucket), UPDLOCK, ROWLOCK, REPEATABLEREAD)
+WHERE TenantId = {tenantId}
   AND ProductId = {productId}
+  AND WarehouseId = {warehouseId}
 ORDER BY Id;", cancellationToken);
-                _lockedAllocationScopes.Add((warehouseId, productId));
+                _lockedAllocationScopes.Add((tenantId, warehouseId, productId));
             }
         }
         catch (SqlException exception) when (exception.Number == 1205)
@@ -164,6 +186,7 @@ ORDER BY Id;", cancellationToken);
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        EnforceMultiTenantIsolation();
         EnforceAppendOnlyInventoryLedger();
         EnforceAppendOnlyAuditLogs();
         EnrichAuditLogs();
@@ -175,10 +198,49 @@ ORDER BY Id;", cancellationToken);
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        EnforceMultiTenantIsolation();
         EnforceAppendOnlyInventoryLedger();
         EnforceAppendOnlyAuditLogs();
         EnrichAuditLogs();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void EnforceMultiTenantIsolation()
+    {
+        var activeTenantId = CurrentTenantId;
+        var isBypass = IsSystemTenantBypass;
+
+        foreach (var entry in ChangeTracker.Entries<ERP.Domain.Common.ITenantEntity>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                if (isBypass && entry.Entity.TenantId > 0)
+                {
+                    continue;
+                }
+
+                entry.Entity.TenantId = activeTenantId;
+            }
+            else if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
+                if (isBypass)
+                {
+                    continue;
+                }
+
+                var tenantProp = entry.Property(nameof(ERP.Domain.Common.ITenantEntity.TenantId));
+                var originalTenantId = tenantProp.OriginalValue is int orig && orig > 0 ? orig : entry.Entity.TenantId;
+                var currentTenantId = entry.Entity.TenantId;
+
+                if (originalTenantId != activeTenantId
+                    || currentTenantId != activeTenantId
+                    || (entry.State == EntityState.Modified && tenantProp.IsModified && originalTenantId != currentTenantId))
+                {
+                    throw new ERP.Application.Exceptions.ForbiddenException(
+                        $"Vi phạm cô lập dữ liệu Multi-Tenant: Không được phép thao tác hoặc sửa đổi thực thể '{entry.Metadata.ClrType.Name}' thuộc Tenant {originalTenantId} từ ngữ cảnh Tenant {activeTenantId}.");
+                }
+            }
+        }
     }
 
     private void EnforceAppendOnlyAuditLogs()
@@ -234,10 +296,36 @@ ORDER BY Id;", cancellationToken);
         }
     }
 
+    private void ConfigureTenantEntity<TEntity>(ModelBuilder modelBuilder)
+        where TEntity : class, ERP.Domain.Common.ITenantEntity
+    {
+        modelBuilder.Entity<TEntity>(builder =>
+        {
+            builder.Property(e => e.TenantId).HasDefaultValue(1);
+            builder.HasQueryFilter(e => IsSystemTenantBypass || e.TenantId == CurrentTenantId);
+        });
+    }
+
+    private void ConfigureMultiTenantEntities(ModelBuilder modelBuilder)
+    {
+        var method = typeof(ErpKhoDbContext).GetMethod(
+            nameof(ConfigureTenantEntity),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (typeof(ERP.Domain.Common.ITenantEntity).IsAssignableFrom(entityType.ClrType))
+            {
+                method.MakeGenericMethod(entityType.ClrType).Invoke(this, [modelBuilder]);
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ErpKhoDbContext).Assembly);
+        ConfigureMultiTenantEntities(modelBuilder);
         if (Database.IsSqlServer())
         {
             modelBuilder.Entity<Permission>().Property(x => x.Code).UseCollation("Latin1_General_100_BIN2");

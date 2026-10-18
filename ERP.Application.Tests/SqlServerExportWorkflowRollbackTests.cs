@@ -68,7 +68,7 @@ public sealed class SqlServerExportWorkflowRollbackTests
         var error = await act.Should().ThrowAsync<SqlException>();
         error.Which.Number.Should().Be(51011);
         (await HasDispatchColumnsAsync(context)).Should().BeTrue();
-        (await context.ExportReceipts.CountAsync(x => x.Id == receipt.Id)).Should().Be(beforeCount);
+        (await context.ExportReceipts.IgnoreQueryFilters().CountAsync(x => x.Id == receipt.Id)).Should().Be(beforeCount);
         (await context.Database.GetAppliedMigrationsAsync()).Should().Contain("20260825104054_AddExportReceiptDispatchWorkflow");
     }
 

@@ -33,11 +33,14 @@ namespace ERP.Infrastructure.Services
 
             var jti = Guid.NewGuid().ToString("N");
             var expiresAtUtc = DateTime.UtcNow.AddMinutes(double.Parse(jwtSettings["ExpiryMinutes"] ?? "15"));
+            var tenantId = user.TenantId > 0 ? user.TenantId : 1;
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.Username),
                 new Claim(ClaimTypes.Role, user.Role?.RoleName ?? string.Empty),
+                new Claim(TenantClaimTypes.TenantId, tenantId.ToString()),
+                new Claim(TenantClaimTypes.TenantCode, tenantId == 1 ? "DEFAULT" : $"TENANT-{tenantId}"),
                 new Claim(JwtRegisteredClaimNames.Jti, jti)
             };
 

@@ -10,18 +10,23 @@ public sealed class WarehouseAuthorizationService(
     ICurrentUser currentUser) : IWarehouseAuthorizationService
 {
     private const int MaxTransactionCacheEntries = 64;
-    private readonly Dictionary<int, IReadOnlyList<int>> _accessibleWarehouseCache = new();
-    private readonly Dictionary<(Guid TransactionId, int UserId), IReadOnlyList<int>> _txAccessibleWarehouses = new();
-    private readonly HashSet<(Guid TransactionId, int UserId, int WarehouseId)> _txVerifiedAccess = new();
+    private readonly Dictionary<(int TenantId, int UserId), IReadOnlyList<int>> _accessibleWarehouseCache = new();
+    private readonly Dictionary<(Guid TransactionId, int TenantId, int UserId), IReadOnlyList<int>> _txAccessibleWarehouses = new();
+    private readonly HashSet<(Guid TransactionId, int TenantId, int UserId, int WarehouseId)> _txVerifiedAccess = new();
     private Guid? _lastTransactionId;
 
     public int? CurrentUserId => currentUser.IsAuthenticated && currentUser.UserId > 0 ? currentUser.UserId : null;
+
+    private int EffectiveTenantId => currentUser.TenantId > 0 ? currentUser.TenantId : context.CurrentTenantId;
 
     public void InvalidateWarehouseAccessCache(int? userId = null)
     {
         if (userId.HasValue)
         {
-            _accessibleWarehouseCache.Remove(userId.Value);
+            foreach (var key in _accessibleWarehouseCache.Keys.Where(k => k.UserId == userId.Value).ToList())
+            {
+                _accessibleWarehouseCache.Remove(key);
+            }
             foreach (var key in _txAccessibleWarehouses.Keys.Where(k => k.UserId == userId.Value).ToList())
             {
                 _txAccessibleWarehouses.Remove(key);
@@ -56,8 +61,9 @@ public sealed class WarehouseAuthorizationService(
         if (!currentUser.IsAuthenticated)
             throw new UnauthorizedAccessException("Người dùng chưa xác thực.");
 
+        var tenantId = EffectiveTenantId;
         var txId = GetActiveTransactionIdAndPrune();
-        if (txId.HasValue && _txAccessibleWarehouses.TryGetValue((txId.Value, currentUser.UserId), out var cachedTxList))
+        if (txId.HasValue && _txAccessibleWarehouses.TryGetValue((txId.Value, tenantId, currentUser.UserId), out var cachedTxList))
             return cachedTxList;
 
         IReadOnlyList<int> warehouseIds;
@@ -76,12 +82,12 @@ public sealed class WarehouseAuthorizationService(
                 .ToListAsync(cancellationToken);
         }
 
-        _accessibleWarehouseCache[currentUser.UserId] = warehouseIds;
+        _accessibleWarehouseCache[(tenantId, currentUser.UserId)] = warehouseIds;
         if (txId.HasValue)
         {
-            _txAccessibleWarehouses[(txId.Value, currentUser.UserId)] = warehouseIds;
+            _txAccessibleWarehouses[(txId.Value, tenantId, currentUser.UserId)] = warehouseIds;
             foreach (var wid in warehouseIds)
-                _txVerifiedAccess.Add((txId.Value, currentUser.UserId, wid));
+                _txVerifiedAccess.Add((txId.Value, tenantId, currentUser.UserId, wid));
         }
         return warehouseIds;
     }
@@ -94,8 +100,9 @@ public sealed class WarehouseAuthorizationService(
         if (warehouseId <= 0)
             return false;
 
+        var tenantId = EffectiveTenantId;
         var txId = GetActiveTransactionIdAndPrune();
-        if (txId.HasValue && _txVerifiedAccess.Contains((txId.Value, currentUser.UserId, warehouseId)))
+        if (txId.HasValue && _txVerifiedAccess.Contains((txId.Value, tenantId, currentUser.UserId, warehouseId)))
             return true;
 
         // Global admin bypasses membership, never resource existence or active state.
@@ -119,15 +126,15 @@ public sealed class WarehouseAuthorizationService(
         if (allowed)
         {
             if (txId.HasValue)
-                _txVerifiedAccess.Add((txId.Value, currentUser.UserId, warehouseId));
+                _txVerifiedAccess.Add((txId.Value, tenantId, currentUser.UserId, warehouseId));
         }
         else
         {
-            _accessibleWarehouseCache.Remove(currentUser.UserId);
+            _accessibleWarehouseCache.Remove((tenantId, currentUser.UserId));
             if (txId.HasValue)
             {
-                _txAccessibleWarehouses.Remove((txId.Value, currentUser.UserId));
-                _txVerifiedAccess.Remove((txId.Value, currentUser.UserId, warehouseId));
+                _txAccessibleWarehouses.Remove((txId.Value, tenantId, currentUser.UserId));
+                _txVerifiedAccess.Remove((txId.Value, tenantId, currentUser.UserId, warehouseId));
             }
         }
 

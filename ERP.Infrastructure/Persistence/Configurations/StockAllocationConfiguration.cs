@@ -20,7 +20,7 @@ public sealed class StockAllocationConfiguration : IEntityTypeConfiguration<Stoc
         builder.Property(x => x.SelectionReason).HasMaxLength(500).IsRequired();
         builder.Property(x => x.ReleaseReason).HasMaxLength(500);
         builder.Property(x => x.Version).IsConcurrencyToken();
-        builder.HasIndex(x => x.AllocationCode).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.AllocationCode }).IsUnique().HasDatabaseName("UX_StockAllocations_TenantId_AllocationCode");
         builder.HasIndex(x => x.ReservationId);
         builder.HasIndex(x => new { x.WarehouseId, x.LocationId, x.ProductId, x.LotId, x.SerialId, x.Status });
         builder.HasIndex(x => new { x.ReservationId, x.LocationId, x.InventoryStatus, x.LotId, x.SerialId, x.Status });

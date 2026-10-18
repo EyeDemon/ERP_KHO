@@ -15,8 +15,8 @@ public sealed class SalesOrderConfiguration : IEntityTypeConfiguration<SalesOrde
         b.Property(x => x.ShippingMethod).HasMaxLength(100);
         b.Property(x => x.CancellationReason).HasMaxLength(500);
         b.Property(x => x.RowVersion).IsRowVersion();
-        b.HasIndex(x => x.OrderCode).IsUnique();
-        b.HasIndex(x => x.ExternalOrderId).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.OrderCode }).IsUnique().HasDatabaseName("UX_SalesOrders_TenantId_OrderCode");
+        b.HasIndex(x => new { x.TenantId, x.ExternalOrderId }).IsUnique().HasDatabaseName("UX_SalesOrders_TenantId_ExternalOrderId");
         b.HasIndex(x => new { x.WarehouseId, x.Status, x.RequestedShipDate });
         b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
@@ -61,7 +61,7 @@ public sealed class BackorderConfiguration : IEntityTypeConfiguration<Backorder>
         b.Property(x => x.RecoveredQuantity).HasPrecision(18, 4);
         b.Property(x => x.CancelledQuantity).HasPrecision(18, 4);
         b.Property(x => x.RowVersion).IsRowVersion();
-        b.HasIndex(x => x.BackorderCode).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.BackorderCode }).IsUnique().HasDatabaseName("UX_Backorders_TenantId_BackorderCode");
         b.HasIndex(x => x.SalesOrderLineId).IsUnique();
         b.HasIndex(x => new { x.WarehouseId, x.Status, x.CreatedAt });
         b.HasOne(x => x.SalesOrderLine).WithOne(x => x.Backorder).HasForeignKey<Backorder>(x => x.SalesOrderLineId).OnDelete(DeleteBehavior.Restrict);

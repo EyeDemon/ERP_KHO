@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class ExportReceiptDetail
+public class ExportReceiptDetail : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ExportReceiptId { get; set; }
     public int ProductId { get; set; }
     public decimal Quantity { get; set; }

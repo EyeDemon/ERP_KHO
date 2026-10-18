@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class ProductUom
+public class ProductUom : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ProductId { get; set; }
     public int UnitId { get; set; }
     public decimal ConversionFactor { get; set; }

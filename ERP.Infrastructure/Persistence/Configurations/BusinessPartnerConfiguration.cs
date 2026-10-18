@@ -11,7 +11,7 @@ public sealed class BusinessPartnerConfiguration : IEntityTypeConfiguration<Busi
         builder.ToTable("BusinessPartners", t => t.HasCheckConstraint("CK_BusinessPartners_Role", "[IsSupplier] = 1 OR [IsCustomer] = 1"));
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
-        builder.HasIndex(x => x.Code).IsUnique().HasDatabaseName("UX_BusinessPartners_Code");
+        builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasDatabaseName("UX_BusinessPartners_TenantId_Code");
         builder.Property(x => x.Name).IsRequired().HasMaxLength(200);
         builder.Property(x => x.Phone).HasMaxLength(50);
         builder.Property(x => x.Email).HasMaxLength(254);

@@ -120,9 +120,10 @@ namespace ERP.Infrastructure.Queries
             if (warehouseName is null)
                 throw new NotFoundException("Không tìm thấy kho cần đối chiếu.");
 
+            var tenantId = _context.CurrentTenantId;
             var baseStocks = _context.Database.IsSqlServer()
                 ? _context.InventoryStocks
-                    .FromSqlRaw("SELECT * FROM [InventoryStocks] WITH (INDEX(IX_InventoryStocks_CanonicalBucket))")
+                    .FromSqlInterpolated($"SELECT * FROM [InventoryStocks] WITH (INDEX(IX_InventoryStocks_CanonicalBucket)) WHERE [TenantId] = {tenantId}")
                     .AsNoTracking()
                 : _context.InventoryStocks.AsNoTracking();
             var allStatusStocks = baseStocks

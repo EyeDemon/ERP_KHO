@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class Shipment
+public sealed class Shipment : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string ShipmentCode { get; set; } = string.Empty;
     public int PackingSessionId { get; set; }
     public int WarehouseId { get; set; }
@@ -43,9 +45,10 @@ public sealed class Shipment
     public ShipmentProofOfDelivery? ProofOfDelivery { get; set; }
 }
 
-public sealed class ShipmentHandlingUnit
+public sealed class ShipmentHandlingUnit : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ShipmentId { get; set; }
     public int HandlingUnitId { get; set; }
     public int Sequence { get; set; }

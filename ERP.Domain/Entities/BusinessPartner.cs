@@ -1,10 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using ERP.Domain.Common;
 
 namespace ERP.Domain.Entities;
 
-public sealed class BusinessPartner
+public sealed class BusinessPartner : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public bool IsSupplier { get; set; }

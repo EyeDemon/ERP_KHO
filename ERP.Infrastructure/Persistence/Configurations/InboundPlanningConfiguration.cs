@@ -16,7 +16,7 @@ public sealed class PurchaseOrderConfiguration : IEntityTypeConfiguration<Purcha
         b.Property(x => x.Currency).HasMaxLength(10);
         b.Property(x => x.ExternalVersion).HasMaxLength(100);
         b.Property(x => x.RowVersion).IsConcurrencyToken();
-        b.HasIndex(x => new { x.SourceSystem, x.ExternalPoId }).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.SourceSystem, x.ExternalPoId }).IsUnique().HasDatabaseName("UX_PurchaseOrders_TenantId_SourceSystem_ExternalPoId");
         b.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
         b.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);

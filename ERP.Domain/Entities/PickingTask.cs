@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class PickingTask
+public sealed class PickingTask : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string TaskCode { get; set; } = string.Empty;
     public string SourceType { get; set; } = string.Empty;
     public int? SourceId { get; set; }
@@ -26,9 +28,10 @@ public sealed class PickingTask
     public ICollection<PickingTaskLine> Lines { get; set; } = [];
 }
 
-public sealed class PickingTaskLine
+public sealed class PickingTaskLine : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int PickingTaskId { get; set; }
     public int AllocationId { get; set; }
     public int ProductId { get; set; }
@@ -47,9 +50,10 @@ public sealed class PickingTaskLine
     public decimal RemainingQuantity => RequestedQuantity - PickedQuantity;
 }
 
-public sealed class ShortPickException
+public sealed class ShortPickException : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int PickingTaskLineId { get; set; }
     public decimal ExpectedQuantity { get; set; }
     public decimal PickedQuantity { get; set; }

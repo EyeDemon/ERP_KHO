@@ -32,9 +32,10 @@ public sealed partial class StockTransferService
             var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
             // Lock the original before checking the reverse link. The unique filtered
             // index is a second defense against concurrent requests with different keys.
+            var tenantId = context.CurrentTenantId;
             var lockedQuery = context.Database.IsSqlServer()
                 ? context.StockTransfers.FromSqlInterpolated(
-                    $"SELECT * FROM dbo.StockTransfers WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}")
+                    $"SELECT * FROM dbo.StockTransfers WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {id}")
                 : context.StockTransfers.AsQueryable();
             var locked = await lockedQuery.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.Id == id && allowed.Contains(x.SourceWarehouseId) &&

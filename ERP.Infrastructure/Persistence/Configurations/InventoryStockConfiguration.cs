@@ -20,6 +20,7 @@ public class InventoryStockConfiguration : IEntityTypeConfiguration<InventorySto
         builder.Property<int>("CanonicalSerialId")
                .HasComputedColumnSql("COALESCE([SerialId], 0)", stored: true);
         builder.HasIndex(
+                "TenantId",
                 "ProductId",
                 "WarehouseId",
                 "Status",

@@ -41,7 +41,7 @@ public sealed class HandlingUnitConfiguration : IEntityTypeConfiguration<Handlin
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => new { x.WarehouseId, x.HuCode }).IsUnique();
         b.HasIndex(x => new { x.WarehouseId, x.Barcode }).IsUnique();
-        b.HasIndex(x => x.Sscc).IsUnique().HasFilter("[Sscc] IS NOT NULL");
+        b.HasIndex(x => new { x.TenantId, x.Sscc }).IsUnique().HasDatabaseName("UX_HandlingUnits_TenantId_Sscc").HasFilter("[Sscc] IS NOT NULL");
         b.HasIndex(x => new { x.PackingSessionId, x.Status });
         b.HasOne(x => x.PackingSession).WithMany(x => x.HandlingUnits).HasForeignKey(x => x.PackingSessionId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);

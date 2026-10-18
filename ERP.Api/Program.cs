@@ -172,6 +172,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IPasswordHasherService, ER
 builder.Services.AddScoped<ERP.Application.Interfaces.ITokenService, ERP.Infrastructure.Services.TokenService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IAuthService, ERP.Application.Services.AuthService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.ICurrentUser, ERP.Api.Authorization.HttpCurrentUser>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ITenantContext, ERP.Api.Authorization.HttpTenantContext>();
 builder.Services.AddScoped<ERP.Api.Infrastructure.RequestMetadata>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IRequestMetadata>(sp => sp.GetRequiredService<ERP.Api.Infrastructure.RequestMetadata>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseAuthorizationService, ERP.Infrastructure.Services.WarehouseAuthorizationService>();
@@ -250,6 +251,13 @@ builder.Services.AddAuthentication(options =>
             {
                 context.Fail("Access token session is invalid.");
                 return;
+            }
+
+            if (int.TryParse(context.Principal?.FindFirstValue(ERP.Application.Interfaces.TenantClaimTypes.TenantId), out var tenantId) && tenantId > 0)
+            {
+                context.HttpContext.RequestServices
+                    .GetRequiredService<ErpKhoDbContext>()
+                    .UseTenant(tenantId);
             }
 
             var validator = context.HttpContext.RequestServices

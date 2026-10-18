@@ -11,7 +11,7 @@ public class ExportReceiptConfiguration : IEntityTypeConfiguration<ExportReceipt
         builder.ToTable("ExportReceipts");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
-        builder.HasIndex(x => x.Code).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasDatabaseName("UX_ExportReceipts_TenantId_Code");
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.Property(x => x.DispatchMode);
         builder.Property(x => x.Note).HasMaxLength(500);

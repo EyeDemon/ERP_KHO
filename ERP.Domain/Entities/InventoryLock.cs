@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class InventoryLock
+public sealed class InventoryLock : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public InventoryLockType LockType { get; set; }
     public InventoryLockStatus Status { get; set; } = InventoryLockStatus.Active;
     public int WarehouseId { get; set; }

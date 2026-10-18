@@ -1,10 +1,12 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public sealed class PurchaseOrder
+public sealed class PurchaseOrder : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string ExternalPoId { get; set; } = string.Empty;
     public string SourceSystem { get; set; } = "MANUAL";
     public string Code { get; set; } = string.Empty;
@@ -27,9 +29,10 @@ public sealed class PurchaseOrder
     public ICollection<Asn> Asns { get; set; } = [];
 }
 
-public sealed class PurchaseOrderLine
+public sealed class PurchaseOrderLine : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int PurchaseOrderId { get; set; }
     public string ExternalLineId { get; set; } = string.Empty;
     public int LineNo { get; set; }
@@ -51,9 +54,10 @@ public sealed class PurchaseOrderLine
     public ICollection<AsnLine> AsnLines { get; set; } = [];
 }
 
-public sealed class Asn
+public sealed class Asn : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string Code { get; set; } = string.Empty;
     public int? PurchaseOrderId { get; set; }
     public int SupplierId { get; set; }
@@ -75,9 +79,10 @@ public sealed class Asn
     public ICollection<AsnLine> Lines { get; set; } = [];
 }
 
-public sealed class AsnLine
+public sealed class AsnLine : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int AsnId { get; set; }
     public int? PurchaseOrderLineId { get; set; }
     public int LineNo { get; set; }
