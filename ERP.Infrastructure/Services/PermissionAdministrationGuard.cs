@@ -12,6 +12,8 @@ public static class PermissionAdministrationGuard
 
     public static async Task LockAsync(ErpKhoDbContext db, CancellationToken token)
     {
+        if (!db.Database.IsRelational())
+            return;
         if (db.Database.CurrentTransaction is null)
             throw new InvalidOperationException("Permission administration requires a transaction.");
         // ponytail: serialize security/session and administration writes globally; shard only with a proven boundary/last-admin strategy.

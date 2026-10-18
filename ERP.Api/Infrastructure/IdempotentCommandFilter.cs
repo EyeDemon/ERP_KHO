@@ -66,9 +66,11 @@ public sealed class IdempotentCommandFilter(
             actionContext.HttpContext.Request.QueryString.HasValue ? actionContext.HttpContext.Request.QueryString.Value : null);
         metadata.IdempotencyKeyHash = keyHash;
         metadata.RequestFingerprint = fingerprint;
-        await using var transaction = RequiresSerializableIsolation(commandScope)
-            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, actionContext.HttpContext.RequestAborted)
-            : await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
+        await using var transaction = !context.Database.IsRelational()
+            ? null
+            : RequiresSerializableIsolation(commandScope)
+                ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, actionContext.HttpContext.RequestAborted)
+                : await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
         var tenantId = context.CurrentTenantId;
         var record = new IdempotencyRecord
         {
@@ -84,7 +86,7 @@ public sealed class IdempotentCommandFilter(
         }
         catch (Exception ex) when (IsUniqueViolation(ex) || IsDeadlock(ex))
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
             context.ChangeTracker.Clear();
             var existing = await context.IdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(
                 x => x.TenantId == tenantId && x.UserId == userId && x.CommandScope == commandScope && x.KeyHash == keyHash,
@@ -123,11 +125,16 @@ public sealed class IdempotentCommandFilter(
             var rejectedAudit = executed.Exception is ForbiddenException
                 ? RejectionAudit(userId, actionContext.ActionArguments, executed.Exception.Message, TrackedWarehouses(actionContext.ActionArguments))
                 : null;
-            await transaction.RollbackAsync(CancellationToken.None);
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
             if (!context.Database.IsRelational())
             {
-                context.IdempotencyRecords.Remove(record);
-                await context.SaveChangesAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                var orphan = await context.IdempotencyRecords.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == record.Id, CancellationToken.None);
+                if (orphan is not null)
+                {
+                    context.IdempotencyRecords.Remove(orphan);
+                    await context.SaveChangesAsync(CancellationToken.None);
+                }
             }
             context.ChangeTracker.Clear();
             if (rejectedAudit is not null)
@@ -141,11 +148,16 @@ public sealed class IdempotentCommandFilter(
         var statusCode = ResultStatus(executed.Result);
         if (statusCode >= 400)
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
             if (!context.Database.IsRelational())
             {
-                context.IdempotencyRecords.Remove(record);
-                await context.SaveChangesAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                var orphan = await context.IdempotencyRecords.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == record.Id, CancellationToken.None);
+                if (orphan is not null)
+                {
+                    context.IdempotencyRecords.Remove(orphan);
+                    await context.SaveChangesAsync(CancellationToken.None);
+                }
             }
             context.ChangeTracker.Clear();
             return;
@@ -162,7 +174,7 @@ public sealed class IdempotentCommandFilter(
             record.ResponseBody = BuildTruncatedReplayEnvelope(record.ResponseBody, statusCode);
         record.CompletedAtUtc = DateTime.UtcNow;
         await context.SaveChangesAsync(actionContext.HttpContext.RequestAborted);
-        await transaction.CommitAsync(actionContext.HttpContext.RequestAborted);
+        if (transaction is not null) await transaction.CommitAsync(actionContext.HttpContext.RequestAborted);
         context.ChangeTracker.Clear();
     }
 

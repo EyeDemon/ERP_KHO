@@ -210,7 +210,9 @@ ORDER BY Id;", cancellationToken);
         var activeTenantId = CurrentTenantId;
         var isBypass = IsSystemTenantBypass;
 
-        foreach (var entry in ChangeTracker.Entries<ERP.Domain.Common.ITenantEntity>())
+        var tenantEntries = ChangeTracker.Entries<ERP.Domain.Common.ITenantEntity>().ToList();
+
+        foreach (var entry in tenantEntries)
         {
             if (entry.State == EntityState.Added)
             {
@@ -221,13 +223,19 @@ ORDER BY Id;", cancellationToken);
 
                 entry.Entity.TenantId = activeTenantId;
             }
-            else if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
-            {
-                if (isBypass)
-                {
-                    continue;
-                }
+        }
 
+        if (isBypass)
+        {
+            return;
+        }
+
+        var principalTenantCache = new Dictionary<(Type PrincipalType, object Key), int?>();
+
+        foreach (var entry in tenantEntries)
+        {
+            if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
                 var tenantProp = entry.Property(nameof(ERP.Domain.Common.ITenantEntity.TenantId));
                 var originalTenantId = tenantProp.OriginalValue is int orig && orig > 0 ? orig : entry.Entity.TenantId;
                 var currentTenantId = entry.Entity.TenantId;
@@ -240,7 +248,125 @@ ORDER BY Id;", cancellationToken);
                         $"Vi phạm cô lập dữ liệu Multi-Tenant: Không được phép thao tác hoặc sửa đổi thực thể '{entry.Metadata.ClrType.Name}' thuộc Tenant {originalTenantId} từ ngữ cảnh Tenant {activeTenantId}.");
                 }
             }
+
+            if (entry.State == EntityState.Added || entry.State == EntityState.Modified)
+            {
+                foreach (var navigation in entry.Navigations)
+                {
+                    if (navigation.CurrentValue is ERP.Domain.Common.ITenantEntity referencedEntity)
+                    {
+                        EnsureNavigationTenantMatch(entry.Metadata.ClrType.Name, navigation.Metadata.Name, referencedEntity, activeTenantId);
+                    }
+                    else if (navigation.CurrentValue is System.Collections.IEnumerable collection && navigation.CurrentValue is not string)
+                    {
+                        foreach (var item in collection)
+                        {
+                            if (item is ERP.Domain.Common.ITenantEntity childEntity)
+                            {
+                                EnsureNavigationTenantMatch(entry.Metadata.ClrType.Name, navigation.Metadata.Name, childEntity, activeTenantId);
+                            }
+                        }
+                    }
+                }
+
+                ValidateForeignKeyTenantOwnership(entry, activeTenantId, principalTenantCache);
+            }
         }
+    }
+
+    private static void EnsureNavigationTenantMatch(
+        string entityTypeName,
+        string navigationName,
+        ERP.Domain.Common.ITenantEntity referencedEntity,
+        int activeTenantId)
+    {
+        if (referencedEntity.TenantId > 0 && referencedEntity.TenantId != activeTenantId)
+        {
+            throw new ERP.Application.Exceptions.ForbiddenException(
+                $"Vi phạm cô lập khóa ngoại Multi-Tenant (403 Cross-Tenant Reference Denied): Thực thể '{entityTypeName}' (Tenant {activeTenantId}) không được phép liên kết '{navigationName}' thuộc Tenant {referencedEntity.TenantId}.");
+        }
+    }
+
+    private void ValidateForeignKeyTenantOwnership(
+        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<ERP.Domain.Common.ITenantEntity> entry,
+        int activeTenantId,
+        Dictionary<(Type PrincipalType, object Key), int?> principalTenantCache)
+    {
+        foreach (var fk in entry.Metadata.GetForeignKeys())
+        {
+            var principalClrType = fk.PrincipalEntityType.ClrType;
+            if (!typeof(ERP.Domain.Common.ITenantEntity).IsAssignableFrom(principalClrType)
+                || fk.Properties.Count != 1
+                || fk.PrincipalKey.Properties.Count != 1)
+            {
+                continue;
+            }
+
+            var fkPropEntry = entry.Property(fk.Properties[0].Name);
+            if (entry.State == EntityState.Modified && !fkPropEntry.IsModified)
+            {
+                continue;
+            }
+
+            var fkValue = fkPropEntry.CurrentValue;
+            if (fkValue is null
+                || (fkValue is int intKey && intKey <= 0)
+                || (fkValue is Guid guidKey && guidKey == Guid.Empty))
+            {
+                continue;
+            }
+
+            var principalKeyName = fk.PrincipalKey.Properties[0].Name;
+            var trackedPrincipal = ChangeTracker.Entries()
+                .FirstOrDefault(e =>
+                    principalClrType.IsAssignableFrom(e.Metadata.ClrType)
+                    && Equals(e.Property(principalKeyName).CurrentValue, fkValue));
+
+            if (trackedPrincipal?.Entity is ERP.Domain.Common.ITenantEntity trackedTenantPrincipal)
+            {
+                if (trackedTenantPrincipal.TenantId > 0 && trackedTenantPrincipal.TenantId != activeTenantId)
+                {
+                    throw new ERP.Application.Exceptions.ForbiddenException(
+                        $"Vi phạm cô lập khóa ngoại Multi-Tenant (403 Cross-Tenant Reference Denied): Thực thể '{entry.Metadata.ClrType.Name}' (Tenant {activeTenantId}) không được phép tham chiếu '{principalClrType.Name}' (ID={fkValue}, Tenant {trackedTenantPrincipal.TenantId}).");
+                }
+
+                continue;
+            }
+
+            var cacheKey = (principalClrType, fkValue);
+            if (!principalTenantCache.TryGetValue(cacheKey, out var principalTenantId))
+            {
+                principalTenantId = LookupPrincipalTenantId(principalClrType, principalKeyName, fkValue);
+                principalTenantCache[cacheKey] = principalTenantId;
+            }
+
+            if (principalTenantId.HasValue && principalTenantId.Value > 0 && principalTenantId.Value != activeTenantId)
+            {
+                throw new ERP.Application.Exceptions.ForbiddenException(
+                    $"Vi phạm cô lập khóa ngoại Multi-Tenant (403 Cross-Tenant Reference Denied): Thực thể '{entry.Metadata.ClrType.Name}' (Tenant {activeTenantId}) không được phép tham chiếu '{principalClrType.Name}' (ID={fkValue}, Tenant {principalTenantId.Value}).");
+            }
+        }
+    }
+
+    private int? LookupPrincipalTenantId(Type principalClrType, string principalKeyName, object keyValue)
+    {
+        var method = typeof(ErpKhoDbContext).GetMethod(
+            nameof(LookupPrincipalTenantIdCore),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .MakeGenericMethod(principalClrType, keyValue.GetType());
+
+        return (int?)method.Invoke(this, [principalKeyName, keyValue]);
+    }
+
+    private int? LookupPrincipalTenantIdCore<TPrincipal, TKey>(string principalKeyName, TKey keyValue)
+        where TPrincipal : class, ERP.Domain.Common.ITenantEntity
+    {
+        return Set<TPrincipal>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(e => EF.Property<TKey>(e, principalKeyName)!.Equals(keyValue))
+            .Select(e => (int?)e.TenantId)
+            .FirstOrDefault();
     }
 
     private void EnforceAppendOnlyAuditLogs()
@@ -302,7 +428,7 @@ ORDER BY Id;", cancellationToken);
         modelBuilder.Entity<TEntity>(builder =>
         {
             builder.Property(e => e.TenantId).HasDefaultValue(1);
-            builder.HasQueryFilter(e => IsSystemTenantBypass || e.TenantId == CurrentTenantId);
+            builder.HasQueryFilter(e => this.IsSystemTenantBypass || e.TenantId == this.CurrentTenantId);
         });
     }
 

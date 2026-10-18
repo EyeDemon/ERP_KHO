@@ -752,6 +752,198 @@ public sealed class MultiTenantIsolationSqlTests
         }
     }
 
+    [SqlServerFact]
+    public async Task Wave11_NonDefaultTenantAuthRefreshAndCrossTenantForeignKeyGuard_AreEnforcedOnSqlServer()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        var tenant101 = Random.Shared.Next(100_000, 120_000);
+        var tenant202 = tenant101 + 101;
+        var sharedAdminUsername = $"admin_{suffix.ToLowerInvariant()}";
+        const string pass101 = "Tenant101#Wave11!";
+        const string pass202 = "Tenant202#Wave11!";
+
+        var hasher = new PasswordHasherService();
+        int unit101Id = 0;
+        int cat101Id = 0;
+        int wh101Id = 0;
+        int unit202Id = 0;
+        int cat202Id = 0;
+
+        try
+        {
+            await using (var db101 = CreateTenantContext(tenant101, $"TENANT-{tenant101}"))
+            {
+                var role = await db101.Roles.FirstOrDefaultAsync(r => r.RoleName == "Admin")
+                           ?? new Role { RoleName = "Admin" };
+                if (role.Id == 0)
+                {
+                    db101.Roles.Add(role);
+                    await db101.SaveChangesAsync();
+                }
+
+                var u101 = new User
+                {
+                    Username = sharedAdminUsername,
+                    PasswordHash = hasher.HashPassword(pass101),
+                    FullName = "Admin 101",
+                    RoleId = role.Id,
+                    IsActive = true
+                };
+                var unit101 = new Unit { Code = $"U101-{suffix[..3]}", Name = "Unit 101", DecimalPlaces = 0, IsActive = true };
+                var cat101 = new ProductCategory { Code = $"C101-{suffix}", Name = "Cat 101", IsActive = true };
+                var wh101 = new Warehouse { Code = $"WH101-{suffix}", Name = "WH 101", IsActive = true };
+                db101.Users.Add(u101);
+                db101.Units.Add(unit101);
+                db101.ProductCategories.Add(cat101);
+                db101.Warehouses.Add(wh101);
+                await db101.SaveChangesAsync();
+
+                unit101Id = unit101.Id;
+                cat101Id = cat101.Id;
+                wh101Id = wh101.Id;
+            }
+
+            await using (var db202 = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                var role = await db202.Roles.SingleAsync(r => r.RoleName == "Admin");
+                var u202 = new User
+                {
+                    Username = sharedAdminUsername,
+                    PasswordHash = hasher.HashPassword(pass202),
+                    FullName = "Admin 202",
+                    RoleId = role.Id,
+                    IsActive = true
+                };
+                var unit202 = new Unit { Code = $"U202-{suffix[..3]}", Name = "Unit 202", DecimalPlaces = 0, IsActive = true };
+                var cat202 = new ProductCategory { Code = $"C202-{suffix}", Name = "Cat 202", IsActive = true };
+                db202.Users.Add(u202);
+                db202.Units.Add(unit202);
+                db202.ProductCategories.Add(cat202);
+                await db202.SaveChangesAsync();
+
+                unit202Id = unit202.Id;
+                cat202Id = cat202.Id;
+            }
+
+            // 1. Login and Refresh when DbContext is in anonymous DefaultTenantId = 1 context
+            var jwtSection = new Moq.Mock<Microsoft.Extensions.Configuration.IConfigurationSection>();
+            jwtSection.Setup(x => x["Secret"]).Returns("wave11_sql_integration_test_secret_key_at_least_32_bytes_long");
+            jwtSection.Setup(x => x["Issuer"]).Returns("ErpKhoApi");
+            jwtSection.Setup(x => x["Audience"]).Returns("ErpKhoClient");
+            jwtSection.Setup(x => x["ExpiryMinutes"]).Returns("30");
+            var config = new Moq.Mock<Microsoft.Extensions.Configuration.IConfiguration>();
+            config.Setup(x => x.GetSection("JwtSettings")).Returns(jwtSection.Object);
+            var tokenService = new TokenService(config.Object);
+
+            string refreshToken202;
+            await using (var anonymousLoginDb = CreateTenantContext(TenantContext.DefaultTenantId, TenantContext.DefaultTenantCode))
+            {
+                var userRepo = new UserRepository(anonymousLoginDb);
+                var sessionService = new UserSessionService(
+                    anonymousLoginDb,
+                    tokenService,
+                    new StubTenantCurrentUser(0, "anonymous", "", false, TenantContext.DefaultTenantId),
+                    new SessionSecurityOptions());
+                var authService = new AuthService(userRepo, hasher, tokenService, new AuthSecurityOptions(), null, null, sessionService);
+
+                var loginResult = await authService.LoginAsync(new LoginRequestDto
+                {
+                    Username = sharedAdminUsername,
+                    Password = pass202,
+                    TenantId = tenant202
+                });
+
+                loginResult.TenantId.Should().Be(tenant202);
+                loginResult.TenantCode.Should().Be($"TENANT-{tenant202}");
+                loginResult.RefreshToken.Should().NotBeNullOrWhiteSpace();
+                refreshToken202 = loginResult.RefreshToken;
+            }
+
+            await using (var anonymousRefreshDb = CreateTenantContext(TenantContext.DefaultTenantId, TenantContext.DefaultTenantCode))
+            {
+                var sessionService = new UserSessionService(
+                    anonymousRefreshDb,
+                    tokenService,
+                    new StubTenantCurrentUser(0, "anonymous", "", false, TenantContext.DefaultTenantId),
+                    new SessionSecurityOptions());
+
+                var rotated = await sessionService.RefreshAsync(refreshToken202, new SessionContextDto());
+                rotated.AccessToken.Should().NotBeNullOrWhiteSpace();
+                var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(rotated.AccessToken);
+                jwt.Claims.First(c => c.Type == TenantClaimTypes.TenantId).Value.Should().Be(tenant202.ToString());
+                jwt.Claims.First(c => c.Type == TenantClaimTypes.TenantCode).Value.Should().Be($"TENANT-{tenant202}");
+
+                await sessionService.LogoutAsync(rotated.RefreshToken, null);
+            }
+
+            // 2. Cross-Tenant Foreign Key Reference Injection on Added & Modified entities in Tenant 202 -> ForbiddenException (403)
+            await using (var db202 = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                db202.Products.Add(new Product
+                {
+                    Code = $"SKU-FK-UNIT-{suffix}",
+                    Name = "Cross Tenant Unit FK",
+                    UnitId = unit101Id, // Belongs to Tenant 101!
+                    CategoryId = cat202Id,
+                    IsActive = true
+                });
+
+                var actUnit = () => db202.SaveChangesAsync();
+                await actUnit.Should().ThrowAsync<ForbiddenException>()
+                    .WithMessage("*403 Cross-Tenant Reference Denied*");
+                db202.ChangeTracker.Clear();
+
+                db202.Products.Add(new Product
+                {
+                    Code = $"SKU-FK-CAT-{suffix}",
+                    Name = "Cross Tenant Category FK",
+                    UnitId = unit202Id,
+                    CategoryId = cat101Id, // Belongs to Tenant 101!
+                    IsActive = true
+                });
+
+                var actCat = () => db202.SaveChangesAsync();
+                await actCat.Should().ThrowAsync<ForbiddenException>()
+                    .WithMessage("*403 Cross-Tenant Reference Denied*");
+                db202.ChangeTracker.Clear();
+
+                db202.WarehouseLocations.Add(new WarehouseLocation
+                {
+                    WarehouseId = wh101Id, // Belongs to Tenant 101!
+                    Code = $"LOC-FK-{suffix}",
+                    Name = "Cross Tenant Location",
+                    IsActive = true
+                });
+
+                var actLoc = () => db202.SaveChangesAsync();
+                await actLoc.Should().ThrowAsync<ForbiddenException>()
+                    .WithMessage("*403 Cross-Tenant Reference Denied*");
+                db202.ChangeTracker.Clear();
+
+                // Valid Tenant 202 product creation succeeds, then modifying its UnitId to Tenant 101's UnitId is blocked
+                var validProd = new Product
+                {
+                    Code = $"SKU-OK-{suffix}",
+                    Name = "Valid Product 202",
+                    UnitId = unit202Id,
+                    CategoryId = cat202Id,
+                    IsActive = true
+                };
+                db202.Products.Add(validProd);
+                await db202.SaveChangesAsync();
+
+                validProd.UnitId = unit101Id;
+                var actModifyFk = () => db202.SaveChangesAsync();
+                await actModifyFk.Should().ThrowAsync<ForbiddenException>()
+                    .WithMessage("*403 Cross-Tenant Reference Denied*");
+            }
+        }
+        finally
+        {
+            await CleanupTenantsAsync(tenant101, tenant202);
+        }
+    }
+
     private static async Task CleanupTenantsAsync(params int[] tenantIds)
     {
         await using var sysDb = CreateTenantContext(1, "SYSTEM", isSystemBypass: true);

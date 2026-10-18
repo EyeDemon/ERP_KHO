@@ -18,21 +18,33 @@ public sealed class UserSessionService(
 
     public async Task<SessionTokenResultDto> CreateAsync(User user, SessionContextDto requestContext, CancellationToken cancellationToken = default)
     {
-        if (user.TenantId > 0)
-            context.UseTenant(user.TenantId);
-        await using var transaction = context.Database.CurrentTransaction is null
+        var resolvedTenantId = user.TenantId > 0 ? user.TenantId : 1;
+        context.UseTenant(resolvedTenantId);
+        await using var transaction = context.Database.IsRelational() && context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
         var authenticatedHash = user.PasswordHash;
-        user = await AccountSecurityState.ReadAsync(context, user.Id, cancellationToken);
+        user = await context.Users.IgnoreQueryFilters().AsNoTracking().Include(u => u.Role)
+            .SingleOrDefaultAsync(u => u.Id == user.Id, cancellationToken)
+            ?? throw new UnauthorizedAccessException(GenericFailure);
+        if (user.TenantId > 0)
+        {
+            resolvedTenantId = user.TenantId;
+            context.UseTenant(resolvedTenantId);
+        }
+        else
+        {
+            user.TenantId = resolvedTenantId;
+        }
+
         var now = DateTime.UtcNow;
         if (!user.IsActive || user.LockoutEnd > now || user.PasswordHash != authenticatedHash)
             throw new UnauthorizedAccessException(GenericFailure);
         var accessToken = tokenService.GenerateAccessToken(user);
         var refreshToken = tokenService.GenerateRefreshToken();
-        var session = NewSession(user.Id, Guid.NewGuid(), accessToken.Jti, refreshToken, requestContext, now);
+        var session = NewSession(user.Id, resolvedTenantId, Guid.NewGuid(), accessToken.Jti, refreshToken, requestContext, now);
         context.UserSessions.Add(session);
-        await AccountSecurityState.AdvanceAsync(context, user.Id, cancellationToken);
+        await IncrementUserSecurityRevisionAsync(user.Id, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return ToResult(accessToken, refreshToken, session.ExpiresAt);
@@ -42,7 +54,7 @@ public sealed class UserSessionService(
     {
         if (string.IsNullOrWhiteSpace(refreshToken)) throw new UnauthorizedAccessException(GenericFailure);
         var hash = tokenService.HashRefreshToken(refreshToken);
-        await using var transaction = context.Database.CurrentTransaction is null
+        await using var transaction = context.Database.IsRelational() && context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken) : null;
         var current = await context.UserSessions.IgnoreQueryFilters().AsNoTracking().Include(x => x.User).ThenInclude(x => x.Role)
             .SingleOrDefaultAsync(x => x.RefreshTokenHash == hash, cancellationToken);
@@ -50,59 +62,107 @@ public sealed class UserSessionService(
         if (current is null || !tokenService.FixedTimeHashEquals(current.RefreshTokenHash, hash))
             throw new UnauthorizedAccessException(GenericFailure);
 
-        context.UseTenant(current.TenantId > 0 ? current.TenantId : (current.User?.TenantId > 0 ? current.User.TenantId : 1));
+        var resolvedTenantId = current.TenantId > 0 ? current.TenantId : (current.User?.TenantId > 0 ? current.User.TenantId : 1);
+        context.UseTenant(resolvedTenantId);
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
         var now = DateTime.UtcNow;
-        current = await context.UserSessions.AsNoTracking().Include(x => x.User).ThenInclude(x => x.Role)
+        current = await context.UserSessions.IgnoreQueryFilters().AsNoTracking().Include(x => x.User).ThenInclude(x => x.Role)
             .SingleOrDefaultAsync(x => x.RefreshTokenHash == hash, cancellationToken);
 
         if (current is null || !tokenService.FixedTimeHashEquals(current.RefreshTokenHash, hash))
             throw new UnauthorizedAccessException(GenericFailure);
 
+        resolvedTenantId = current.TenantId > 0 ? current.TenantId : (current.User?.TenantId > 0 ? current.User.TenantId : resolvedTenantId);
+        context.UseTenant(resolvedTenantId);
+
         if (current.RevokedAt.HasValue)
         {
-            var revoked = await context.UserSessions.Where(x => x.RefreshTokenFamilyId == current.RefreshTokenFamilyId && x.RevokedAt == null)
+            var revoked = await RevokeRefreshFamilyAsync(current.RefreshTokenFamilyId, "system", "Refresh token reuse detected", now, cancellationToken);
+            if (revoked > 0)
+            {
+                await IncrementUserSecurityRevisionAsync(current.UserId, cancellationToken);
+            }
+            var reuseAudit = SecurityAudit(current.UserId, "Authentication.RefreshTokenReuseDetected", current.Id, now);
+            reuseAudit.TenantId = resolvedTenantId;
+            context.AuditLogs.Add(reuseAudit);
+            await context.SaveChangesAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            throw new UnauthorizedAccessException(GenericFailure);
+        }
+
+        if (current.ExpiresAt <= now || !current.User!.IsActive || current.User.LockoutEnd > now)
+            throw new UnauthorizedAccessException(GenericFailure);
+
+        int updated;
+        if (context.Database.IsRelational())
+        {
+            updated = await context.UserSessions.IgnoreQueryFilters()
+                .Where(x => x.Id == current.Id && x.RevokedAt == null)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(x => x.RevokedAt, now)
-                    .SetProperty(x => x.RevokedBy, "system")
-                    .SetProperty(x => x.RevokeReason, "Refresh token reuse detected"), cancellationToken);
-            if (revoked > 0) await AccountSecurityState.AdvanceAsync(context, current.UserId, cancellationToken);
-            context.AuditLogs.Add(SecurityAudit(current.UserId, "Authentication.RefreshTokenReuseDetected", current.Id, now));
-            await context.SaveChangesAsync(cancellationToken);
-            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-            throw new UnauthorizedAccessException(GenericFailure);
+                    .SetProperty(x => x.LastUsedAt, now)
+                    .SetProperty(x => x.RevokedBy, "rotation")
+                    .SetProperty(x => x.RevokeReason, "Rotated"), cancellationToken);
+        }
+        else
+        {
+            var trackedSession = await context.UserSessions.IgnoreQueryFilters()
+                .SingleOrDefaultAsync(x => x.Id == current.Id && x.RevokedAt == null, cancellationToken);
+            if (trackedSession is not null)
+            {
+                trackedSession.RevokedAt = now;
+                trackedSession.LastUsedAt = now;
+                trackedSession.RevokedBy = "rotation";
+                trackedSession.RevokeReason = "Rotated";
+                await context.SaveChangesAsync(cancellationToken);
+                updated = 1;
+            }
+            else
+            {
+                updated = 0;
+            }
         }
 
-        if (current.ExpiresAt <= now || !current.User.IsActive || current.User.LockoutEnd > now)
-            throw new UnauthorizedAccessException(GenericFailure);
-
-        var updated = await context.UserSessions.Where(x => x.Id == current.Id && x.RevokedAt == null)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(x => x.RevokedAt, now)
-                .SetProperty(x => x.LastUsedAt, now)
-                .SetProperty(x => x.RevokedBy, "rotation")
-                .SetProperty(x => x.RevokeReason, "Rotated"), cancellationToken);
         if (updated != 1)
         {
-            var revoked = await context.UserSessions.Where(x => x.RefreshTokenFamilyId == current.RefreshTokenFamilyId && x.RevokedAt == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now).SetProperty(x => x.RevokedBy, "system").SetProperty(x => x.RevokeReason, "Concurrent refresh conflict"), cancellationToken);
-            if (revoked > 0) await AccountSecurityState.AdvanceAsync(context, current.UserId, cancellationToken);
-            context.AuditLogs.Add(SecurityAudit(current.UserId, "Authentication.RefreshTokenReuseDetected", current.Id, now));
+            var revoked = await RevokeRefreshFamilyAsync(current.RefreshTokenFamilyId, "system", "Concurrent refresh conflict", now, cancellationToken);
+            if (revoked > 0)
+            {
+                await IncrementUserSecurityRevisionAsync(current.UserId, cancellationToken);
+            }
+            var conflictAudit = SecurityAudit(current.UserId, "Authentication.RefreshTokenReuseDetected", current.Id, now);
+            conflictAudit.TenantId = resolvedTenantId;
+            context.AuditLogs.Add(conflictAudit);
             await context.SaveChangesAsync(cancellationToken);
             if (transaction is not null) await transaction.CommitAsync(cancellationToken);
             throw new UnauthorizedAccessException(GenericFailure);
         }
 
+        current.User.TenantId = resolvedTenantId;
         var accessToken = tokenService.GenerateAccessToken(current.User);
         var nextRefreshToken = tokenService.GenerateRefreshToken();
-        var replacement = NewSession(current.UserId, current.RefreshTokenFamilyId, accessToken.Jti, nextRefreshToken, requestContext, now);
+        var replacement = NewSession(current.UserId, resolvedTenantId, current.RefreshTokenFamilyId, accessToken.Jti, nextRefreshToken, requestContext, now);
         context.UserSessions.Add(replacement);
-        await AccountSecurityState.AdvanceAsync(context, current.UserId, cancellationToken);
+        await IncrementUserSecurityRevisionAsync(current.UserId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
-        await context.UserSessions.Where(x => x.Id == current.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReplacedBySessionId, replacement.Id), cancellationToken);
+        if (context.Database.IsRelational())
+        {
+            await context.UserSessions.IgnoreQueryFilters().Where(x => x.Id == current.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReplacedBySessionId, replacement.Id), cancellationToken);
+        }
+        else
+        {
+            var oldTracked = await context.UserSessions.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == current.Id, cancellationToken);
+            if (oldTracked is not null)
+            {
+                oldTracked.ReplacedBySessionId = replacement.Id;
+                await context.SaveChangesAsync(cancellationToken);
+            }
+        }
 
-        context.AuditLogs.Add(SecurityAudit(current.UserId, "Authentication.RefreshRotated", replacement.Id, now));
+        var rotatedAudit = SecurityAudit(current.UserId, "Authentication.RefreshRotated", replacement.Id, now);
+        rotatedAudit.TenantId = resolvedTenantId;
+        context.AuditLogs.Add(rotatedAudit);
         await context.SaveChangesAsync(cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return ToResult(accessToken, nextRefreshToken, replacement.ExpiresAt);
@@ -115,8 +175,8 @@ public sealed class UserSessionService(
         var now = DateTime.UtcNow;
         var session = await context.UserSessions.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.RefreshTokenHash == hash, cancellationToken);
         if (session is null || (actorUserId.HasValue && session.UserId != actorUserId.Value)) return;
-        if (session.TenantId > 0)
-            context.UseTenant(session.TenantId);
+        var resolvedTenantId = session.TenantId > 0 ? session.TenantId : 1;
+        context.UseTenant(resolvedTenantId);
         await RevokeWhereAsync(x => x.Id == session.Id, actorUserId?.ToString() ?? "cookie", "Logout", now, cancellationToken);
     }
 
@@ -148,7 +208,7 @@ public sealed class UserSessionService(
     public async Task RevokeUserSessionsAsAdminAsync(int userId, string? rowVersion, CancellationToken cancellationToken = default)
     {
         await AccountSecurityState.AuthorizeAsync(context, currentUser, cancellationToken);
-        await using var transaction = context.Database.CurrentTransaction is null
+        await using var transaction = context.Database.IsRelational() && context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
             : null;
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
@@ -173,7 +233,7 @@ public sealed class UserSessionService(
 
     public async Task<int> CleanupAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default)
     {
-        await using var transaction = context.Database.CurrentTransaction is null
+        await using var transaction = context.Database.IsRelational() && context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
         var expired = context.UserSessions.Where(x => x.ExpiresAt < cutoffUtc || (x.RevokedAt != null && x.RevokedAt < cutoffUtc));
@@ -184,9 +244,9 @@ public sealed class UserSessionService(
         return count;
     }
 
-    private UserSession NewSession(int userId, Guid familyId, string jti, string refreshToken, SessionContextDto requestContext, DateTime now) => new()
+    private UserSession NewSession(int userId, int tenantId, Guid familyId, string jti, string refreshToken, SessionContextDto requestContext, DateTime now) => new()
     {
-        Id = Guid.NewGuid(), UserId = userId, RefreshTokenFamilyId = familyId,
+        Id = Guid.NewGuid(), UserId = userId, TenantId = tenantId > 0 ? tenantId : 1, RefreshTokenFamilyId = familyId,
         RefreshTokenHash = tokenService.HashRefreshToken(refreshToken), AccessTokenJti = jti,
         CreatedAt = now, ExpiresAt = now.AddDays(options.RefreshTokenDays),
         IpAddress = requestContext.IpAddress, UserAgent = Truncate(requestContext.UserAgent, 512)
@@ -194,16 +254,81 @@ public sealed class UserSessionService(
 
     private async Task<int> RevokeWhereAsync(System.Linq.Expressions.Expression<Func<UserSession, bool>> predicate, string actor, string reason, DateTime now, CancellationToken cancellationToken)
     {
-        await using var transaction = context.Database.CurrentTransaction is null
+        await using var transaction = context.Database.IsRelational() && context.Database.CurrentTransaction is null
             ? await context.Database.BeginTransactionAsync(cancellationToken) : null;
         await PermissionAdministrationGuard.LockAsync(context, cancellationToken);
-        var sessions = context.UserSessions.Where(predicate).Where(x => x.RevokedAt == null);
+        var activeTenantId = context.CurrentTenantId;
+        var sessions = context.UserSessions.IgnoreQueryFilters()
+            .Where(x => x.TenantId == activeTenantId)
+            .Where(predicate)
+            .Where(x => x.RevokedAt == null);
         var users = await sessions.Select(x => x.UserId).Distinct().ToListAsync(cancellationToken);
-        var count = await sessions.ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now)
-            .SetProperty(x => x.RevokedBy, actor).SetProperty(x => x.RevokeReason, reason), cancellationToken);
-        foreach (var userId in users) await AccountSecurityState.AdvanceAsync(context, userId, cancellationToken);
+        int count;
+        if (context.Database.IsRelational())
+        {
+            count = await sessions.ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now)
+                .SetProperty(x => x.RevokedBy, actor).SetProperty(x => x.RevokeReason, reason), cancellationToken);
+        }
+        else
+        {
+            var matched = await sessions.ToListAsync(cancellationToken);
+            foreach (var s in matched)
+            {
+                s.RevokedAt = now;
+                s.RevokedBy = actor;
+                s.RevokeReason = reason;
+            }
+            count = matched.Count;
+            if (count > 0) await context.SaveChangesAsync(cancellationToken);
+        }
+        foreach (var userId in users)
+        {
+            await IncrementUserSecurityRevisionAsync(userId, cancellationToken);
+        }
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return count;
+    }
+
+    private async Task<int> RevokeRefreshFamilyAsync(Guid familyId, string actor, string reason, DateTime now, CancellationToken cancellationToken)
+    {
+        if (context.Database.IsRelational())
+        {
+            return await context.UserSessions.IgnoreQueryFilters()
+                .Where(x => x.RefreshTokenFamilyId == familyId && x.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.RevokedAt, now)
+                    .SetProperty(x => x.RevokedBy, actor)
+                    .SetProperty(x => x.RevokeReason, reason), cancellationToken);
+        }
+
+        var familySessions = await context.UserSessions.IgnoreQueryFilters()
+            .Where(x => x.RefreshTokenFamilyId == familyId && x.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+        foreach (var s in familySessions)
+        {
+            s.RevokedAt = now;
+            s.RevokedBy = actor;
+            s.RevokeReason = reason;
+        }
+        if (familySessions.Count > 0) await context.SaveChangesAsync(cancellationToken);
+        return familySessions.Count;
+    }
+
+    private async Task IncrementUserSecurityRevisionAsync(int userId, CancellationToken cancellationToken)
+    {
+        if (context.Database.IsRelational())
+        {
+            await context.Users.IgnoreQueryFilters().Where(u => u.Id == userId)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.SecurityRevision, u => u.SecurityRevision + 1), cancellationToken);
+            return;
+        }
+
+        var trackedUser = await context.Users.IgnoreQueryFilters().SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (trackedUser is not null)
+        {
+            trackedUser.SecurityRevision += 1;
+            await context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static AuditLog SecurityAudit(int userId, string action, Guid sessionId, DateTime now) => new()

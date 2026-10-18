@@ -119,9 +119,10 @@ public sealed partial class StockTransferService(
             var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
             // Lock the header before checking Draft. A concurrent approval must
             // never be able to commit while we replace the posted document lines.
+            var activeTenantId = context.CurrentTenantId;
             var lockedQuery = context.Database.IsSqlServer()
                 ? context.StockTransfers.FromSqlInterpolated(
-                    $"SELECT * FROM dbo.StockTransfers WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}")
+                    $"SELECT * FROM dbo.StockTransfers WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id} AND TenantId = {activeTenantId}")
                 : context.StockTransfers.AsQueryable();
             var entity = await lockedQuery
                 .Include(x => x.Details)

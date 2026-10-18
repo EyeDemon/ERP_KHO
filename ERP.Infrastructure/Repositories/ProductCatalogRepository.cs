@@ -11,21 +11,27 @@ public sealed class ProductCatalogRepository(ErpKhoDbContext context) : IProduct
 {
     public async Task<Product> AddProductAsync(Product product, CancellationToken ct = default)
     {
-        await using var transaction = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
+        await using var transaction = context.Database.IsRelational() && context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct)
+            : null;
         try
         {
+            if (product.UnitId <= 0 ||
+                !await context.Units.AnyAsync(x => x.Id == product.UnitId && x.IsActive, ct))
+                throw new BusinessRuleException("Đơn vị tính cơ sở không tồn tại hoặc đang ngừng hoạt động.");
+
             if (product.CategoryId.HasValue &&
                 !await context.ProductCategories.AnyAsync(x => x.Id == product.CategoryId.Value && x.IsActive, ct))
                 throw new BusinessRuleException("Danh mục không tồn tại hoặc đang ngừng hoạt động.");
 
             context.Products.Add(product);
             await SaveAsync("Mã sản phẩm đã tồn tại hoặc danh mục không còn khả dụng.", ct);
-            await transaction.CommitAsync(ct);
+            if (transaction is not null) await transaction.CommitAsync(ct);
             return product;
         }
         catch
         {
-            await transaction.RollbackAsync(ct);
+            if (transaction is not null) await transaction.RollbackAsync(ct);
             throw;
         }
     }
@@ -62,7 +68,9 @@ public sealed class ProductCatalogRepository(ErpKhoDbContext context) : IProduct
 
     public async Task SetProductCategoryAsync(int productId, int? categoryId, CancellationToken ct = default)
     {
-        await using var transaction = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
+        await using var transaction = context.Database.IsRelational() && context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct)
+            : null;
         try
         {
             if (categoryId.HasValue && !await context.ProductCategories.AnyAsync(x => x.Id == categoryId.Value && x.IsActive, ct))
@@ -72,11 +80,11 @@ public sealed class ProductCatalogRepository(ErpKhoDbContext context) : IProduct
             product.CategoryId = categoryId;
             product.UpdatedAt = DateTime.UtcNow;
             await SaveAsync("Danh mục không còn khả dụng hoặc dữ liệu đã thay đổi.", ct);
-            await transaction.CommitAsync(ct);
+            if (transaction is not null) await transaction.CommitAsync(ct);
         }
         catch
         {
-            await transaction.RollbackAsync(ct);
+            if (transaction is not null) await transaction.RollbackAsync(ct);
             throw;
         }
     }
