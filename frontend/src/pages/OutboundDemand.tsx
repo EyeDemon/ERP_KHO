@@ -9,10 +9,12 @@ type OrderLine = {
   id:number; externalLineId:string; productId:number; productCode:string; productName:string; uomCode:string;
   orderedQuantity:number; reservedQuantity:number; allocatedQuantity:number; pickedQuantity:number;
   shippedQuantity:number; backorderQuantity:number; cancelledQuantity:number; openQuantity:number;
+  unitPrice?:number; taxPercent?:number; lineSubTotal?:number; lineTaxAmount?:number; lineTotalAmount?:number;
 };
 type SalesOrder = {
   id:number; orderCode:string; externalOrderId:string; customerId:number; customerCode:string; customerName:string;
   warehouseId:number; warehouseName:string; requestedShipDate?:string; priority:number; shippingMethod?:string;
+  currency?:string; subTotalAmount?:number; taxAmount?:number; totalAmount?:number;
   status:string; orderedQuantity:number; reservedQuantity:number; allocatedQuantity:number; pickedQuantity:number;
   shippedQuantity:number; backorderQuantity:number; cancelledQuantity:number; openQuantity:number;
   createdAt:string; releasedAt?:string; rowVersion?:string; lines?:OrderLine[];
@@ -26,7 +28,7 @@ type Backorder = {
 type Partner = { id:number; code:string; name:string; isCustomer:boolean; isActive:boolean };
 type Warehouse = { id:number; code:string; name:string; isActive:boolean };
 type Product = { id:number; code:string; name:string; isActive:boolean };
-type CreateLine = { externalLineId:string; productId:string; quantity:string };
+type CreateLine = { externalLineId:string; productId:string; quantity:string; unitPrice?:string; taxPercent?:string };
 
 const orderLabels:Record<string,string>={
   Draft:'Nháp',Hold:'Tạm giữ',Released:'Đã release',PartiallyFulfilled:'Fulfill một phần',
@@ -43,6 +45,7 @@ const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
 const messageOf=(failure:unknown)=>{
   const response=(failure as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
   const code=response?.data?.code;
+  if(code==='SALES_ORDER_CREDIT_LIMIT_EXCEEDED')return response?.data?.message??'Khách hàng vượt hạn mức tín dụng cho phép.';
   if(code==='BACKORDER_INSUFFICIENT_AVAILABLE')return 'Chưa có tồn khả dụng để recover Backorder.';
   if(code==='BACKORDER_EXECUTION_STARTED')return 'Picking đã bắt đầu. Foundation hiện chưa recover Backorder bằng multi-shipment sau execution.';
   if(code==='SALES_ORDER_ALREADY_RELEASED')return 'Sales Order đã được release hoặc không còn ở trạng thái cho phép release.';
@@ -52,7 +55,7 @@ const messageOf=(failure:unknown)=>{
   return response?.data?.message??'Không thể xử lý Demand/Backorder.';
 };
 
-const emptyLine=(index:number):CreateLine=>({externalLineId:String(index),productId:'',quantity:''});
+const emptyLine=(index:number):CreateLine=>({externalLineId:String(index),productId:'',quantity:'',unitPrice:'0',taxPercent:'0'});
 
 export default function OutboundDemand(){
   const canReadOrders=usePermission('sales_order.read');
@@ -155,7 +158,13 @@ export default function OutboundDemand(){
     }
     const lines=createLines
       .filter(line=>line.productId&&roundQty4(Number(line.quantity))>0)
-      .map(line=>({externalLineId:sanitizeScannerCode(line.externalLineId),productId:Number(line.productId),orderedQuantity:roundQty4(Number(line.quantity))}));
+      .map(line=>({
+        externalLineId:sanitizeScannerCode(line.externalLineId),
+        productId:Number(line.productId),
+        orderedQuantity:roundQty4(Number(line.quantity)),
+        ...(Number(line.unitPrice||0)>0?{unitPrice:Number(line.unitPrice)}:{}) ,
+        ...(Number(line.taxPercent||0)>0?{taxPercent:Number(line.taxPercent)}:{}) ,
+      }));
     if(!cleanExternalOrderId||!customerId||!warehouseId||lines.length===0){
       setError('External Order ID, khách hàng, kho và ít nhất một dòng hàng là bắt buộc.');
       return;
@@ -346,6 +355,14 @@ export default function OutboundDemand(){
                 <input aria-label={`Sales Order quantity ${index+1}`} type="number" min="0" step="any" value={line.quantity}
                   onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))}/>
               </label>
+              <label>Đơn giá
+                <input aria-label={`Sales Order unit price ${index+1}`} type="number" min="0" step="any" value={line.unitPrice??'0'}
+                  onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,unitPrice:e.target.value}:item))}/>
+              </label>
+              <label>Thuế %
+                <input aria-label={`Sales Order tax percent ${index+1}`} type="number" min="0" max="100" step="any" value={line.taxPercent??'0'}
+                  onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,taxPercent:e.target.value}:item))}/>
+              </label>
               {createLines.length>1&&<button type="button" onClick={()=>setCreateLines(lines=>lines.filter((_,i)=>i!==index))}>Xóa dòng</button>}
             </div>
           </fieldset>)}
@@ -378,6 +395,7 @@ export default function OutboundDemand(){
           <UiBadge tone={tone(selected.status)}>{orderLabels[selected.status]??selected.status}</UiBadge>
           <span>{selected.externalOrderId} • {selected.customerName} • {selected.warehouseName}</span>
           <span>Ordered {selected.orderedQuantity} = Shipped {selected.shippedQuantity} + Open {selected.openQuantity} + Cancelled {selected.cancelledQuantity}</span>
+          {Number(selected.totalAmount||0)>0&&<span>Tổng giá trị: <strong>{Number(selected.totalAmount).toLocaleString('vi-VN')} {selected.currency||'VND'}</strong></span>}
         </div>
         <p className="ui-muted-text">Foundation hiện release theo tồn Available, tạo Reservation + Allocation cho phần giữ được và Backorder cho phần thiếu. Amendment/update/close, SLA priority automation và multi-shipment recovery sau khi Picking bắt đầu chưa hoàn tất.</p>
         <div className="ui-inline-wrap">
@@ -399,12 +417,13 @@ export default function OutboundDemand(){
         </div>
         <UiTableScroll>
           <table aria-label="Dòng Sales Order">
-            <thead><tr><th>SKU</th><th>Ordered</th><th>Reserved</th><th>Allocated</th><th>Picked</th><th>Shipped</th><th>Backorder</th><th>Cancelled</th><th>Open</th></tr></thead>
+            <thead><tr><th>SKU</th><th>Ordered</th><th>Reserved</th><th>Allocated</th><th>Picked</th><th>Shipped</th><th>Backorder</th><th>Cancelled</th><th>Open</th><th>Đơn giá / Thuế</th></tr></thead>
             <tbody>{(selected.lines??[]).map(line=><tr key={line.id}>
               <td>{line.productCode} — {line.productName}<div className="ui-muted-text">{line.uomCode}</div></td>
               <td>{line.orderedQuantity}</td><td>{line.reservedQuantity}</td><td>{line.allocatedQuantity}</td>
               <td>{line.pickedQuantity}</td><td>{line.shippedQuantity}</td><td>{line.backorderQuantity}</td>
               <td>{line.cancelledQuantity}</td><td><strong>{line.openQuantity}</strong></td>
+              <td>{Number(line.unitPrice||0).toLocaleString('vi-VN')} ({Number(line.taxPercent||0)}%)</td>
             </tr>)}</tbody>
           </table>
         </UiTableScroll>

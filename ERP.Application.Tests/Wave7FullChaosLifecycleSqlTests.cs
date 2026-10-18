@@ -1465,6 +1465,9 @@ public sealed class Wave7FullChaosLifecycleSqlTests
             await db.ImportReceiptDetails.Where(x => whIds.Contains(x.ImportReceipt.WarehouseId)).ExecuteDeleteAsync();
             await db.ImportReceipts.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
 
+            await db.ExportReceiptDetails.Where(x => whIds.Contains(x.ExportReceipt.WarehouseId)).ExecuteDeleteAsync();
+            await db.ExportReceipts.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+
             await db.DockAppointmentEvents.Where(x => whIds.Contains(x.Appointment.WarehouseId)).ExecuteDeleteAsync();
             await db.DockAppointments.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
             await db.Docks.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
@@ -1513,6 +1516,8 @@ public sealed class Wave7FullChaosLifecycleSqlTests
         var partnerIds = new[] { state.SupplierId, state.CustomerId }.Where(x => x > 0).ToArray();
         if (partnerIds.Length > 0)
         {
+            await db.PartnerDebtLedgers.Where(x => partnerIds.Contains(x.PartnerId)).ExecuteDeleteAsync();
+            await db.PartnerDebtInvoices.Where(x => partnerIds.Contains(x.PartnerId)).ExecuteDeleteAsync();
             await db.BusinessPartners.Where(x => partnerIds.Contains(x.Id)).ExecuteDeleteAsync();
         }
 

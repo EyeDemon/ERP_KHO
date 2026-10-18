@@ -44,7 +44,7 @@ public sealed class InventoryLotConfiguration : IEntityTypeConfiguration<Invento
             "[ExpiryDate] IS NULL OR [ManufactureDate] IS NULL OR [ExpiryDate] >= [ManufactureDate]"));
         b.HasKey(x => x.Id);
         b.Property(x => x.LotNumber).HasMaxLength(100).IsRequired();
-        b.HasIndex(x => new { x.ProductId, x.LotNumber }).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.ProductId, x.LotNumber }).IsUnique();
         b.HasIndex(x => x.ExpiryDate);
         b.HasOne(x => x.Product).WithMany(x => x.InventoryLots).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -57,7 +57,7 @@ public sealed class InventorySerialConfiguration : IEntityTypeConfiguration<Inve
         b.ToTable("InventorySerials");
         b.HasKey(x => x.Id);
         b.Property(x => x.SerialNumber).HasMaxLength(120).IsRequired();
-        b.HasIndex(x => new { x.ProductId, x.SerialNumber }).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.ProductId, x.SerialNumber }).IsUnique();
         b.HasOne(x => x.Product).WithMany(x => x.InventorySerials).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Lot).WithMany(x => x.Serials).HasForeignKey(x => x.LotId).OnDelete(DeleteBehavior.Restrict);
     }

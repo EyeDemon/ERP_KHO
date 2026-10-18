@@ -26,6 +26,32 @@ public sealed class PermissionsController(
         .Select(x => new { x.Id, x.RoleName, RowVersion = Convert.ToBase64String(x.RowVersion),
             Permissions = x.Permissions.OrderBy(p => p.Permission.Code).Select(p => p.Permission.Code).ToArray() }).ToListAsync(ct));
 
+    [HttpGet("users"), PermissionAuthorize(AppPermissions.UserRead)]
+    public async Task<IActionResult> Users(CancellationToken ct)
+    {
+        var activeTenantId = db.CurrentTenantId;
+        var users = await db.Users
+            .AsNoTracking()
+            .Where(x => x.TenantId == activeTenantId)
+            .OrderBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                x.Username,
+                x.FullName,
+                x.Email,
+                x.TenantId,
+                x.RoleId,
+                RoleName = x.Role != null ? x.Role.RoleName : string.Empty,
+                x.IsActive,
+                x.LockoutEnd,
+                x.SecurityRevision
+            })
+            .ToListAsync(ct);
+
+        return Ok(users);
+    }
+
     [HttpGet("audit-logs"), PermissionAuthorize(AppPermissions.PermissionRead)]
     public async Task<IActionResult> AuditLogs(CancellationToken ct)
     {

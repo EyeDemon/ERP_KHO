@@ -20,6 +20,7 @@ public class InventoryStock : ITenantEntity
     public decimal ReservedQuantity { get; set; }
     
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
 
     // Navigation
     public Product Product { get; set; } = null!;

@@ -15,9 +15,14 @@ public sealed class BusinessPartner : ITenantEntity
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public string? Address { get; set; }
+    public decimal CreditLimit { get; set; }
+    public int PaymentTermDays { get; set; } = 30;
+    public decimal PayableBalance { get; set; }
+    public decimal ReceivableBalance { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
-    [Timestamp] public byte[] RowVersion { get; set; } = [];
+    [Timestamp] public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
     public ICollection<ImportReceipt> ImportReceipts { get; set; } = [];
     public ICollection<ExportReceipt> ExportReceipts { get; set; } = [];
+    public ICollection<PartnerDebtInvoice> DebtInvoices { get; set; } = [];
 }

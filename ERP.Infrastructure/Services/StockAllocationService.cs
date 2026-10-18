@@ -487,19 +487,7 @@ public sealed class StockAllocationService(
                 context.ChangeTracker.Clear();
                 _ = exception;
             }
-            catch (DeadlockException) when (attempt < attempts)
-            {
-                if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
-                context.ChangeTracker.Clear();
-                await Task.Delay(15 * attempt, cancellationToken);
-            }
-            catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: 1205 } && attempt < attempts)
-            {
-                if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
-                context.ChangeTracker.Clear();
-                await Task.Delay(15 * attempt, cancellationToken);
-            }
-            catch (SqlException exception) when (exception.Number == 1205 && attempt < attempts)
+            catch (Exception exception) when (attempt < attempts && IsDeadlock(exception))
             {
                 if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
                 context.ChangeTracker.Clear();
@@ -510,12 +498,7 @@ public sealed class StockAllocationService(
                 if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
                 throw new ConcurrencyException("Dữ liệu Allocation đã thay đổi. Vui lòng tải lại và thử lại.", exception);
             }
-            catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: 1205 })
-            {
-                if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
-                throw new DeadlockException("Giao dịch Allocation bị deadlock.", exception);
-            }
-            catch (SqlException exception) when (exception.Number == 1205)
+            catch (Exception exception) when (IsDeadlock(exception))
             {
                 if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
                 throw new DeadlockException("Giao dịch Allocation bị deadlock.", exception);
@@ -528,6 +511,16 @@ public sealed class StockAllocationService(
         }
 
         throw new ConcurrencyException("Không thể hoàn tất Allocation do dữ liệu thay đổi đồng thời.");
+    }
+
+    private static bool IsDeadlock(Exception? ex)
+    {
+        for (var cur = ex; cur is not null; cur = cur.InnerException)
+        {
+            if (cur is DeadlockException or SqlException { Number: 1205 })
+                return true;
+        }
+        return false;
     }
 
     private IQueryable<StockAllocation> AllocationQuery() =>

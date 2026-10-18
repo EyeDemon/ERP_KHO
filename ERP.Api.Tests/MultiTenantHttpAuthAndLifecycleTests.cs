@@ -387,6 +387,625 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
         }
     }
 
+    [Fact]
+    public async Task Wave12_BatchedForeignKeyValidationAndCrossTenantAdminIsolation_AreEnforcedEndToEnd()
+    {
+        var dbName = $"multi_tenant_w12_{Guid.NewGuid():N}";
+        const int tenant101 = 101;
+        const int tenant202 = 202;
+        const string pass101 = "Tenant101#Wave12!";
+        const string pass202 = "Tenant202#Wave12!";
+
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Testing");
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["JwtSettings:Secret"] = JwtSecret,
+                ["JwtSettings:Issuer"] = JwtIssuer,
+                ["JwtSettings:Audience"] = JwtAudience,
+                ["JwtSettings:ExpiryMinutes"] = "30"
+            }));
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<ErpKhoDbContext>();
+                services.RemoveAll(typeof(DbContextOptions<ErpKhoDbContext>));
+                services.RemoveAll(typeof(IDbContextOptionsConfiguration<ErpKhoDbContext>));
+                services.AddDbContext<ErpKhoDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName)
+                        .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning)));
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                {
+                    options.TokenValidationParameters.ValidIssuer = JwtIssuer;
+                    options.TokenValidationParameters.ValidAudience = JwtAudience;
+                    options.TokenValidationParameters.IssuerSigningKey =
+                        new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtSecret));
+                });
+            });
+        });
+
+        int admin101Id;
+        int staff101Id;
+        int wh101Id;
+        int loc101Id;
+        int prod101Id;
+        int sharedProd101Id;
+        int partner101Id;
+        int inv101Id;
+        int admin202Id;
+        int staff202Id;
+        int wh202Id;
+        int loc202Id;
+        int sharedProd202Id;
+        int customer202Id;
+        int inv202Id;
+        var prod202Ids = new List<int>();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ErpKhoDbContext>();
+            var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasherService>();
+
+            var adminRole = await db.Roles.FirstOrDefaultAsync(r => r.RoleName == AppRoles.Admin);
+            if (adminRole is null)
+            {
+                adminRole = new Role { RoleName = AppRoles.Admin };
+                db.Roles.Add(adminRole);
+                await db.SaveChangesAsync();
+            }
+
+            await EnsurePermissionsForRoleAsync(
+                db,
+                adminRole,
+                [
+                    AppPermissions.PermissionRead,
+                    AppPermissions.PermissionAssign,
+                    AppPermissions.RoleRead,
+                    AppPermissions.RoleManage,
+                    AppPermissions.UserRead,
+                    AppPermissions.UserManage,
+                    AppPermissions.UserWarehouseRead,
+                    AppPermissions.UserWarehouseManage,
+                    AppPermissions.WarehouseRead,
+                    AppPermissions.ProductRead,
+                    AppPermissions.ProductCreate,
+                    AppPermissions.PartnerRead,
+                    AppPermissions.PartnerUpdate
+                ]);
+
+            var staffRole = await db.Roles.FirstOrDefaultAsync(r => r.RoleName == AppRoles.WarehouseStaff);
+            if (staffRole is null)
+            {
+                staffRole = new Role { RoleName = AppRoles.WarehouseStaff };
+                db.Roles.Add(staffRole);
+                await db.SaveChangesAsync();
+            }
+
+            db.UseTenant(tenant101);
+            var admin101 = new User
+            {
+                Username = "admin",
+                PasswordHash = hasher.HashPassword(pass101),
+                FullName = "Admin Tenant 101",
+                Email = "admin@tenant-101.local",
+                RoleId = adminRole.Id,
+                IsActive = true
+            };
+            var staff101 = new User
+            {
+                Username = "staff_101",
+                PasswordHash = hasher.HashPassword(pass101),
+                FullName = "Staff Tenant 101",
+                Email = "staff@tenant-101.local",
+                RoleId = staffRole.Id,
+                IsActive = true
+            };
+            var wh101 = new Warehouse { Code = "WH-101", Name = "Kho 101", IsActive = true };
+            var unit101 = new Unit { Code = "PCS", Name = "Cái 101", IsActive = true };
+            var cat101 = new ProductCategory { Code = "CAT", Name = "Nhóm 101", IsActive = true };
+            var partner101 = new BusinessPartner
+            {
+                Code = "PARTNER-SHARED",
+                Name = "Đối tác Tenant 101",
+                IsSupplier = true,
+                IsCustomer = true,
+                PayableBalance = 5_000_000m,
+                ReceivableBalance = 0m,
+                IsActive = true
+            };
+            db.Users.AddRange(admin101, staff101);
+            db.Warehouses.Add(wh101);
+            db.Units.Add(unit101);
+            db.ProductCategories.Add(cat101);
+            db.BusinessPartners.Add(partner101);
+            await db.SaveChangesAsync();
+
+            var loc101 = new WarehouseLocation
+            {
+                WarehouseId = wh101.Id,
+                Code = "BIN-SHARED-A01",
+                Name = "Kệ A01 Tenant 101",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true,
+                IsReceivable = true
+            };
+            var prod101 = new Product
+            {
+                Code = "SKU-101-FOREIGN",
+                Name = "Sản phẩm Tenant 101",
+                UnitId = unit101.Id,
+                CategoryId = cat101.Id,
+                IsActive = true
+            };
+            var sharedProd101 = new Product
+            {
+                Code = "SKU-SHARED-BC",
+                Name = "Sản phẩm trùng mã Tenant 101",
+                UnitId = unit101.Id,
+                CategoryId = cat101.Id,
+                IsActive = true
+            };
+            db.WarehouseLocations.Add(loc101);
+            db.Products.AddRange(prod101, sharedProd101);
+            await db.SaveChangesAsync();
+
+            db.ProductBarcodes.Add(new ProductBarcode
+            {
+                ProductId = sharedProd101.Id,
+                Value = "8938505970019"
+            });
+            var inv101 = new PartnerDebtInvoice
+            {
+                Code = "AP-101-0001",
+                PartnerId = partner101.Id,
+                DebtType = ERP.Domain.Enums.PartnerDebtType.AP,
+                SourceType = "ImportReceipt",
+                SourceId = 10101,
+                SourceCode = "IR-101-0001",
+                SubTotalAmount = 5_000_000m,
+                TaxAmount = 0m,
+                TotalAmount = 5_000_000m,
+                PaidAmount = 0m,
+                RemainingAmount = 5_000_000m,
+                Status = ERP.Domain.Enums.PartnerDebtInvoiceStatus.Open,
+                IssuedAtUtc = DateTime.UtcNow,
+                CreatedBy = admin101.Id
+            };
+            var ledger101 = new PartnerDebtLedger
+            {
+                PartnerId = partner101.Id,
+                Invoice = inv101,
+                DebtType = ERP.Domain.Enums.PartnerDebtType.AP,
+                TransactionType = ERP.Domain.Enums.PartnerDebtTransactionType.InvoiceCreated,
+                ReferenceType = "ImportReceipt",
+                ReferenceId = 10101,
+                ReferenceCode = "IR-101-0001",
+                AmountDelta = 5_000_000m,
+                BalanceAfter = 5_000_000m,
+                CreatedAtUtc = DateTime.UtcNow,
+                CreatedBy = admin101.Id
+            };
+            db.PartnerDebtInvoices.Add(inv101);
+            db.PartnerDebtLedgers.Add(ledger101);
+            await db.SaveChangesAsync();
+
+            admin101Id = admin101.Id;
+            staff101Id = staff101.Id;
+            wh101Id = wh101.Id;
+            loc101Id = loc101.Id;
+            prod101Id = prod101.Id;
+            sharedProd101Id = sharedProd101.Id;
+            partner101Id = partner101.Id;
+            inv101Id = inv101.Id;
+
+            db.UseTenant(tenant202);
+            var admin202 = new User
+            {
+                Username = "admin",
+                PasswordHash = hasher.HashPassword(pass202),
+                FullName = "Admin Tenant 202",
+                Email = "admin@tenant-202.local",
+                RoleId = adminRole.Id,
+                IsActive = true
+            };
+            var staff202 = new User
+            {
+                Username = "staff_202",
+                PasswordHash = hasher.HashPassword(pass202),
+                FullName = "Staff Tenant 202",
+                Email = "staff@tenant-202.local",
+                RoleId = staffRole.Id,
+                IsActive = true
+            };
+            var wh202 = new Warehouse { Code = "WH-202", Name = "Kho 202", IsActive = true };
+            var unit202 = new Unit { Code = "PCS", Name = "Cái 202", IsActive = true };
+            var cat202 = new ProductCategory { Code = "CAT", Name = "Nhóm 202", IsActive = true };
+            var cust202 = new BusinessPartner
+            {
+                Code = "CUST-202",
+                Name = "Khách hàng 202",
+                IsCustomer = true,
+                PayableBalance = 0m,
+                ReceivableBalance = 880_000m,
+                IsActive = true
+            };
+            db.Users.AddRange(admin202, staff202);
+            db.Warehouses.Add(wh202);
+            db.Units.Add(unit202);
+            db.ProductCategories.Add(cat202);
+            db.BusinessPartners.Add(cust202);
+            await db.SaveChangesAsync();
+
+            for (var i = 1; i <= 20; i++)
+            {
+                var p202 = new Product
+                {
+                    Code = $"SKU-202-{i:D2}",
+                    Name = $"Sản phẩm 202 #{i}",
+                    UnitId = unit202.Id,
+                    CategoryId = cat202.Id,
+                    IsActive = true
+                };
+                db.Products.Add(p202);
+            }
+            await db.SaveChangesAsync();
+
+            prod202Ids = await db.Products
+                .OrderBy(p => p.Code)
+                .Select(p => p.Id)
+                .ToListAsync();
+            prod202Ids.Should().HaveCount(20);
+
+            var loc202 = new WarehouseLocation
+            {
+                WarehouseId = wh202.Id,
+                Code = "BIN-SHARED-A01",
+                Name = "Kệ A01 Tenant 202",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true,
+                IsReceivable = true
+            };
+            var sharedProd202 = new Product
+            {
+                Code = "SKU-SHARED-BC",
+                Name = "Sản phẩm trùng mã Tenant 202",
+                UnitId = unit202.Id,
+                CategoryId = cat202.Id,
+                IsActive = true
+            };
+            db.WarehouseLocations.Add(loc202);
+            db.Products.Add(sharedProd202);
+            await db.SaveChangesAsync();
+
+            db.ProductBarcodes.Add(new ProductBarcode
+            {
+                ProductId = sharedProd202.Id,
+                Value = "8938505970019"
+            });
+            var inv202 = new PartnerDebtInvoice
+            {
+                Code = "AR-202-0001",
+                PartnerId = cust202.Id,
+                DebtType = ERP.Domain.Enums.PartnerDebtType.AR,
+                SourceType = "Shipment",
+                SourceId = 20201,
+                SourceCode = "SHP-202-0001",
+                SubTotalAmount = 800_000m,
+                TaxAmount = 80_000m,
+                TotalAmount = 880_000m,
+                PaidAmount = 0m,
+                RemainingAmount = 880_000m,
+                Status = ERP.Domain.Enums.PartnerDebtInvoiceStatus.Open,
+                IssuedAtUtc = DateTime.UtcNow,
+                CreatedBy = admin202.Id
+            };
+            var ledger202 = new PartnerDebtLedger
+            {
+                PartnerId = cust202.Id,
+                Invoice = inv202,
+                DebtType = ERP.Domain.Enums.PartnerDebtType.AR,
+                TransactionType = ERP.Domain.Enums.PartnerDebtTransactionType.InvoiceCreated,
+                ReferenceType = "Shipment",
+                ReferenceId = 20201,
+                ReferenceCode = "SHP-202-0001",
+                AmountDelta = 880_000m,
+                BalanceAfter = 880_000m,
+                CreatedAtUtc = DateTime.UtcNow,
+                CreatedBy = admin202.Id
+            };
+            db.PartnerDebtInvoices.Add(inv202);
+            db.PartnerDebtLedgers.Add(ledger202);
+            await db.SaveChangesAsync();
+
+            admin202Id = admin202.Id;
+            staff202Id = staff202.Id;
+            wh202Id = wh202.Id;
+            loc202Id = loc202.Id;
+            sharedProd202Id = sharedProd202.Id;
+            customer202Id = cust202.Id;
+            inv202Id = inv202.Id;
+        }
+
+        // 1. Test 20-line batched SaveChangesAsync FK ownership validation in a fresh Tenant 202 DbContext (empty ChangeTracker)
+        var dbOptions = factory.Services.GetRequiredService<DbContextOptions<ErpKhoDbContext>>();
+        var tenant202Ctx = new TenantContext
+        {
+            TenantId = tenant202,
+            TenantCode = "TENANT-202",
+            IsSystemBypass = false
+        };
+
+        int so202OkId;
+        int so202BadId;
+        await using (var headerDb = new ErpKhoDbContext(dbOptions, tenantContext: tenant202Ctx))
+        {
+            var soOk = new SalesOrder
+            {
+                OrderCode = "SO-202-BATCH-20",
+                ExternalOrderId = "EXT-202-BATCH-20",
+                CustomerId = customer202Id,
+                WarehouseId = wh202Id,
+                Status = ERP.Domain.Enums.SalesOrderStatus.Released,
+                CreatedBy = admin202Id,
+                CreatedAt = DateTime.UtcNow
+            };
+            var soBad = new SalesOrder
+            {
+                OrderCode = "SO-202-BATCH-BAD",
+                ExternalOrderId = "EXT-202-BATCH-BAD",
+                CustomerId = customer202Id,
+                WarehouseId = wh202Id,
+                Status = ERP.Domain.Enums.SalesOrderStatus.Released,
+                CreatedBy = admin202Id,
+                CreatedAt = DateTime.UtcNow
+            };
+            headerDb.SalesOrders.AddRange(soOk, soBad);
+            await headerDb.SaveChangesAsync();
+            so202OkId = soOk.Id;
+            so202BadId = soBad.Id;
+        }
+
+        await using (var batchOkDb = new ErpKhoDbContext(dbOptions, tenantContext: tenant202Ctx))
+        {
+            var lines = new List<SalesOrderLine>();
+            for (var i = 0; i < 20; i++)
+            {
+                lines.Add(new SalesOrderLine
+                {
+                    SalesOrderId = so202OkId,
+                    ExternalLineId = $"L-{i + 1:D2}",
+                    ProductId = prod202Ids[i],
+                    OrderedQuantity = 10m + i,
+                    UomCode = "PCS"
+                });
+            }
+
+            batchOkDb.SalesOrderLines.AddRange(lines);
+            await batchOkDb.SaveChangesAsync();
+            lines.Should().HaveCount(20);
+            lines.Should().OnlyContain(l => l.TenantId == tenant202);
+        }
+
+        await using (var batchBadDb = new ErpKhoDbContext(dbOptions, tenantContext: tenant202Ctx))
+        {
+            for (var i = 0; i < 19; i++)
+            {
+                batchBadDb.SalesOrderLines.Add(new SalesOrderLine
+                {
+                    SalesOrderId = so202BadId,
+                    ExternalLineId = $"BL-{i + 1:D2}",
+                    ProductId = prod202Ids[i],
+                    OrderedQuantity = 5m,
+                    UomCode = "PCS"
+                });
+            }
+
+            batchBadDb.SalesOrderLines.Add(new SalesOrderLine
+            {
+                SalesOrderId = so202BadId,
+                ExternalLineId = "BL-20",
+                ProductId = prod101Id, // Foreign ProductId belonging to Tenant 101
+                OrderedQuantity = 5m,
+                UomCode = "PCS"
+            });
+
+            var actCrossBatch = () => batchBadDb.SaveChangesAsync();
+            await actCrossBatch.Should().ThrowAsync<ERP.Application.Exceptions.ForbiddenException>()
+                .WithMessage("*403 Cross-Tenant Reference Denied*");
+        }
+
+        // 2. Log in as Admin of Tenant 202 via HTTP and verify complete cross-tenant admin isolation
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false
+        });
+
+        using var loginResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequestDto
+        {
+            Username = "admin",
+            Password = pass202,
+            TenantCode = "TENANT-202"
+        });
+        loginResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var loginPayload = await loginResp.Content.ReadFromJsonAsync<LoginResponseDto>();
+        var token202 = loginPayload!.Token;
+
+        // 2a. GET /api/permissions/users returns only Tenant 202 users (never Tenant 101 users)
+        using (var usersReq = new HttpRequestMessage(HttpMethod.Get, "/api/permissions/users"))
+        {
+            usersReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var usersResp = await client.SendAsync(usersReq);
+            usersResp.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var usersDoc = JsonDocument.Parse(await usersResp.Content.ReadAsStringAsync());
+            var returnedIds = usersDoc.RootElement.EnumerateArray()
+                .Select(x => x.GetProperty("id").GetInt32())
+                .ToList();
+
+            returnedIds.Should().Contain([admin202Id, staff202Id]);
+            returnedIds.Should().NotContain([admin101Id, staff101Id]);
+        }
+
+        // 2b. Admin of Tenant 202 cannot lock, reset password, or delete a User of Tenant 101 -> 404 NotFound
+        using (var lockForeignReq = new HttpRequestMessage(HttpMethod.Post, $"/api/account-security/{staff101Id}/lock"))
+        {
+            lockForeignReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            lockForeignReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            lockForeignReq.Content = JsonContent.Create(new { });
+            using var lockForeignResp = await client.SendAsync(lockForeignReq);
+            lockForeignResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        using (var resetForeignReq = new HttpRequestMessage(HttpMethod.Post, $"/api/account-security/{staff101Id}/reset-password"))
+        {
+            resetForeignReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            resetForeignReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            resetForeignReq.Content = JsonContent.Create(new { TemporaryPassword = "NewTempPass!123", Reason = "Cross-tenant test" });
+            using var resetForeignResp = await client.SendAsync(resetForeignReq);
+            resetForeignResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        using (var deleteForeignReq = new HttpRequestMessage(HttpMethod.Delete, $"/api/account-security/{staff101Id}"))
+        {
+            deleteForeignReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var deleteForeignResp = await client.SendAsync(deleteForeignReq);
+            deleteForeignResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        // 2c. Admin of Tenant 202 cannot grant warehouse access across tenants (foreign user or foreign warehouse) -> 404 NotFound
+        using (var grantForeignWhReq = new HttpRequestMessage(HttpMethod.Post, $"/api/user-warehouse-access/{staff202Id}"))
+        {
+            grantForeignWhReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            grantForeignWhReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            grantForeignWhReq.Content = JsonContent.Create(new GrantWarehouseAccessDto(wh101Id, "AAAAAAA="));
+            using var grantForeignWhResp = await client.SendAsync(grantForeignWhReq);
+            grantForeignWhResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        using (var grantForeignUserReq = new HttpRequestMessage(HttpMethod.Post, $"/api/user-warehouse-access/{staff101Id}"))
+        {
+            grantForeignUserReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            grantForeignUserReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            grantForeignUserReq.Content = JsonContent.Create(new GrantWarehouseAccessDto(wh202Id, "AAAAAAA="));
+            using var grantForeignUserResp = await client.SendAsync(grantForeignUserReq);
+            grantForeignUserResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        // 2d. Sole active Admin of Tenant 202 is protected by Last Active Admin Guard independently of Tenant 101 -> 409 Conflict
+        using (var deleteSoleAdminReq = new HttpRequestMessage(HttpMethod.Delete, $"/api/account-security/{admin202Id}"))
+        {
+            deleteSoleAdminReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var deleteSoleAdminResp = await client.SendAsync(deleteSoleAdminReq);
+            deleteSoleAdminResp.StatusCode.Should().Be(HttpStatusCode.Conflict);
+            using var errDoc = JsonDocument.Parse(await deleteSoleAdminResp.Content.ReadAsStringAsync());
+            errDoc.RootElement.GetProperty("message").GetString().Should().Contain("quản trị viên hợp lệ cuối cùng");
+        }
+
+        // 2e. Multi-Tenant Barcode Lookup Isolation (/api/barcode-lookup/resolve) when Tenant 101 & Tenant 202 have identical codes
+        using (var resolveLocReq = new HttpRequestMessage(HttpMethod.Get, "/api/barcode-lookup/resolve?code=BIN-SHARED-A01"))
+        {
+            resolveLocReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var resolveLocResp = await client.SendAsync(resolveLocReq);
+            resolveLocResp.StatusCode.Should().Be(HttpStatusCode.OK, await resolveLocResp.Content.ReadAsStringAsync());
+            using var locDoc = JsonDocument.Parse(await resolveLocResp.Content.ReadAsStringAsync());
+            locDoc.RootElement.GetProperty("entityType").GetString().Should().Be("Location");
+            locDoc.RootElement.GetProperty("entityId").GetInt32().Should().Be(loc202Id).And.NotBe(loc101Id);
+            locDoc.RootElement.GetProperty("warehouseId").GetInt32().Should().Be(wh202Id);
+        }
+
+        using (var resolveForeignWhReq = new HttpRequestMessage(HttpMethod.Get, $"/api/barcode-lookup/resolve?code=BIN-SHARED-A01&warehouseId={wh101Id}"))
+        {
+            resolveForeignWhReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var resolveForeignWhResp = await client.SendAsync(resolveForeignWhReq);
+            resolveForeignWhResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        using (var resolveProdCodeReq = new HttpRequestMessage(HttpMethod.Get, "/api/barcode-lookup/resolve?code=SKU-SHARED-BC"))
+        {
+            resolveProdCodeReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var resolveProdCodeResp = await client.SendAsync(resolveProdCodeReq);
+            resolveProdCodeResp.StatusCode.Should().Be(HttpStatusCode.OK, await resolveProdCodeResp.Content.ReadAsStringAsync());
+            using var prodDoc = JsonDocument.Parse(await resolveProdCodeResp.Content.ReadAsStringAsync());
+            prodDoc.RootElement.GetProperty("entityType").GetString().Should().Be("Product");
+            prodDoc.RootElement.GetProperty("entityId").GetInt32().Should().Be(sharedProd202Id).And.NotBe(sharedProd101Id);
+        }
+
+        using (var resolveEanReq = new HttpRequestMessage(HttpMethod.Get, "/api/barcode-lookup/resolve?code=8938505970019"))
+        {
+            resolveEanReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var resolveEanResp = await client.SendAsync(resolveEanReq);
+            resolveEanResp.StatusCode.Should().Be(HttpStatusCode.OK, await resolveEanResp.Content.ReadAsStringAsync());
+            using var eanDoc = JsonDocument.Parse(await resolveEanResp.Content.ReadAsStringAsync());
+            eanDoc.RootElement.GetProperty("entityType").GetString().Should().Be("Product");
+            eanDoc.RootElement.GetProperty("entityId").GetInt32().Should().Be(sharedProd202Id).And.NotBe(sharedProd101Id);
+        }
+
+        // 2f. Multi-Tenant Partner Debt Isolation (/api/partner-debts/*) between Tenant 101 and Tenant 202
+        using (var debtSummaryReq = new HttpRequestMessage(HttpMethod.Get, "/api/partner-debts/summary"))
+        {
+            debtSummaryReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var debtSummaryResp = await client.SendAsync(debtSummaryReq);
+            debtSummaryResp.StatusCode.Should().Be(HttpStatusCode.OK, await debtSummaryResp.Content.ReadAsStringAsync());
+            using var sumDoc = JsonDocument.Parse(await debtSummaryResp.Content.ReadAsStringAsync());
+            sumDoc.RootElement.GetProperty("totalPayableBalance").GetDecimal().Should().Be(0m);
+            sumDoc.RootElement.GetProperty("totalReceivableBalance").GetDecimal().Should().Be(880_000m);
+            sumDoc.RootElement.GetProperty("openApInvoiceCount").GetInt32().Should().Be(0);
+            sumDoc.RootElement.GetProperty("openArInvoiceCount").GetInt32().Should().Be(1);
+        }
+
+        using (var listInvoicesReq = new HttpRequestMessage(HttpMethod.Get, "/api/partner-debts/invoices"))
+        {
+            listInvoicesReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var listInvoicesResp = await client.SendAsync(listInvoicesReq);
+            listInvoicesResp.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var invListDoc = JsonDocument.Parse(await listInvoicesResp.Content.ReadAsStringAsync());
+            var invIds = invListDoc.RootElement.EnumerateArray().Select(x => x.GetProperty("id").GetInt32()).ToList();
+            invIds.Should().ContainSingle().Which.Should().Be(inv202Id);
+            invIds.Should().NotContain(inv101Id);
+        }
+
+        using (var foreignPartnerInvoicesReq = new HttpRequestMessage(HttpMethod.Get, $"/api/partner-debts/invoices?partnerId={partner101Id}"))
+        {
+            foreignPartnerInvoicesReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var foreignPartnerInvoicesResp = await client.SendAsync(foreignPartnerInvoicesReq);
+            foreignPartnerInvoicesResp.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var emptyDoc = JsonDocument.Parse(await foreignPartnerInvoicesResp.Content.ReadAsStringAsync());
+            emptyDoc.RootElement.GetArrayLength().Should().Be(0);
+        }
+
+        using (var getForeignInvoiceReq = new HttpRequestMessage(HttpMethod.Get, $"/api/partner-debts/invoices/{inv101Id}"))
+        {
+            getForeignInvoiceReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var getForeignInvoiceResp = await client.SendAsync(getForeignInvoiceReq);
+            getForeignInvoiceResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        using (var payForeignInvoiceReq = new HttpRequestMessage(HttpMethod.Post, $"/api/partner-debts/invoices/{inv101Id}/pay"))
+        {
+            payForeignInvoiceReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            payForeignInvoiceReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+            payForeignInvoiceReq.Content = JsonContent.Create(new PayPartnerDebtDto
+            {
+                Amount = 100_000m,
+                ReferenceCode = "CROSS-PAY-101",
+                Note = "Attempt cross-tenant payment"
+            });
+            using var payForeignInvoiceResp = await client.SendAsync(payForeignInvoiceReq);
+            payForeignInvoiceResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        using (var foreignLedgerReq = new HttpRequestMessage(HttpMethod.Get, $"/api/partner-debts/ledger?partnerId={partner101Id}&invoiceId={inv101Id}"))
+        {
+            foreignLedgerReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var foreignLedgerResp = await client.SendAsync(foreignLedgerReq);
+            foreignLedgerResp.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var foreignLedgerDoc = JsonDocument.Parse(await foreignLedgerResp.Content.ReadAsStringAsync());
+            foreignLedgerDoc.RootElement.GetArrayLength().Should().Be(0);
+        }
+    }
+
     private static async Task EnsurePermissionsForRoleAsync(
         ErpKhoDbContext db,
         Role role,

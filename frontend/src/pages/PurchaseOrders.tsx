@@ -20,11 +20,12 @@ import './InboundPlanning.css';
 type PurchaseOrderList = {
   id:number; externalPoId:string; code:string; supplierCode:string; supplierName:string;
   warehouseId:number; warehouseName:string; status:string; orderDate:string; expectedDate?:string;
-  baseOrderedQuantity:number;
+  baseOrderedQuantity:number; subTotalAmount?:number; taxAmount?:number; totalAmount?:number;
 };
 type PurchaseOrderLine = {
   id:number; externalLineId:string; lineNo:number; productId:number; productCode:string; productName:string;
   orderedQuantity:number; operationUnitCode:string; baseOrderedQuantity:number; baseUnitCode:string;
+  unitPrice?:number; taxPercent?:number; lineSubTotal?:number; lineTaxAmount?:number; lineTotalAmount?:number;
   allowedOverReceiptPct:number; allowedUnderReceiptPct:number;
 };
 type PurchaseOrderDetail = PurchaseOrderList & {
@@ -34,7 +35,7 @@ type Warehouse={id:number;name:string};
 type Partner={id:number;code:string;name:string;isActive:boolean};
 type ProductUom={unitId:number;unitCode:string;unitName:string;decimalPlaces:number;conversionFactor:number;version:number};
 type Product={id:number;code:string;name:string;unitId:number;unitCode:string;unitName:string;uoms:ProductUom[]};
-type LineForm={externalLineId:string;productId:number|'';operationUnitId:number|'';orderedQuantity:number|'';allowedOverReceiptPct:number|'';allowedUnderReceiptPct:number|''};
+type LineForm={externalLineId:string;productId:number|'';operationUnitId:number|'';orderedQuantity:number|'';unitPrice:number|'';taxPercent:number|'';allowedOverReceiptPct:number|'';allowedUnderReceiptPct:number|''};
 
 const labels:Record<string,string>={
   Draft:'Nháp',Open:'Đang mở',PartiallyReceived:'Đã nhận một phần',Received:'Đã nhận đủ',Closed:'Đã đóng',Cancelled:'Đã hủy',
@@ -42,7 +43,7 @@ const labels:Record<string,string>={
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Received'||status==='Closed'?'success':status==='PartiallyReceived'?'warning':status==='Cancelled'?'danger':'neutral';
 const isoDay=(value?:string)=>value?new Date(value).toLocaleDateString('vi-VN'):'—';
-const emptyLine=():LineForm=>({externalLineId:'',productId:'',operationUnitId:'',orderedQuantity:'',allowedOverReceiptPct:0,allowedUnderReceiptPct:0});
+const emptyLine=():LineForm=>({externalLineId:'',productId:'',operationUnitId:'',orderedQuantity:'',unitPrice:0,taxPercent:0,allowedOverReceiptPct:0,allowedUnderReceiptPct:0});
 
 export default function PurchaseOrders(){
   const canRead=usePermission('purchase_order.read');
@@ -245,7 +246,9 @@ export default function PurchaseOrders(){
         currency:currency||null,
         lines:lines.map(line=>({
           externalLineId:sanitizeScannerCode(line.externalLineId),productId:Number(line.productId),operationUnitId:Number(line.operationUnitId),
-          orderedQuantity:roundQty4(Number(line.orderedQuantity)),allowedOverReceiptPct:Number(line.allowedOverReceiptPct||0),
+          orderedQuantity:roundQty4(Number(line.orderedQuantity)),
+          unitPrice:Number(line.unitPrice||0),taxPercent:Number(line.taxPercent||0),
+          allowedOverReceiptPct:Number(line.allowedOverReceiptPct||0),
           allowedUnderReceiptPct:Number(line.allowedUnderReceiptPct||0),
         })),
       };
@@ -331,13 +334,14 @@ export default function PurchaseOrders(){
         {filtered.length===0?<UiEmptyState title="Chưa có đơn mua phù hợp" detail="Thay đổi bộ lọc hoặc tạo PO mới nếu bạn có quyền."/>:
           <UiTableScroll>
             <table className="inbound-planning-table" aria-label="Danh sách đơn mua">
-              <thead><tr><th>Mã PO</th><th>Nhà cung cấp</th><th>Kho</th><th>Ngày dự kiến</th><th className="inbound-planning-numeric">SL cơ sở</th><th>Trạng thái</th></tr></thead>
+              <thead><tr><th>Mã PO</th><th>Nhà cung cấp</th><th>Kho</th><th>Ngày dự kiến</th><th className="inbound-planning-numeric">SL cơ sở</th><th className="inbound-planning-numeric">Tổng tiền</th><th>Trạng thái</th></tr></thead>
               <tbody>{filtered.map(item=><tr key={item.id}>
                 <td><button type="button" onClick={()=>void viewDetail(item.id)}><strong>{item.code}</strong><br/><small>{item.externalPoId}</small></button></td>
                 <td>{item.supplierCode}<br/><small>{item.supplierName}</small></td>
                 <td>{item.warehouseName}</td>
                 <td>{isoDay(item.expectedDate)}</td>
                 <td className="inbound-planning-numeric">{item.baseOrderedQuantity.toLocaleString('vi-VN')}</td>
+                <td className="inbound-planning-numeric">{Number(item.totalAmount||0).toLocaleString('vi-VN')}</td>
                 <td><UiBadge tone={tone(item.status)}>{labels[item.status]??item.status}</UiBadge></td>
               </tr>)}</tbody>
             </table>
@@ -355,6 +359,7 @@ export default function PurchaseOrders(){
             <div><strong>Ngày dự kiến</strong><br/>{isoDay(selected.expectedDate)}</div>
             <div><strong>Tiền tệ tham chiếu</strong><br/>{selected.currency||'—'}</div>
             <div><strong>Tổng SL cơ sở</strong><br/>{selected.baseOrderedQuantity.toLocaleString('vi-VN')}</div>
+            <div><strong>Tổng tiền PO (Đã gồm thuế)</strong><br/>{Number(selected.totalAmount||0).toLocaleString('vi-VN')} {selected.currency||'VND'}</div>
           </div>
           <div className="inbound-planning-actions">
             {canRelease&&selected.status==='Draft'&&<button className="ui-primary-button" disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/purchase-orders/'+selected.id+'/open','po-open:'+selected.id,'Đơn mua đã được mở cho quy trình nhận hàng.')}>{busy?'Đang lưu...':'Mở đơn mua'}</button>}
@@ -363,12 +368,14 @@ export default function PurchaseOrders(){
           </div>
           <UiTableScroll>
             <table aria-label={'Dòng đơn mua '+selected.code}>
-              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th className="inbound-planning-numeric">Đặt mua</th><th className="inbound-planning-numeric">SL cơ sở</th><th>Dung sai</th></tr></thead>
+              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th className="inbound-planning-numeric">Đặt mua</th><th className="inbound-planning-numeric">SL cơ sở</th><th className="inbound-planning-numeric">Đơn giá / Thuế</th><th className="inbound-planning-numeric">Thành tiền</th><th>Dung sai</th></tr></thead>
               <tbody>{selected.lines.map(line=><tr key={line.id}>
                 <td>{line.externalLineId}</td>
                 <td>{line.productCode}<br/><small>{line.productName}</small></td>
                 <td className="inbound-planning-numeric">{line.orderedQuantity.toLocaleString('vi-VN')} {line.operationUnitCode}</td>
                 <td className="inbound-planning-numeric">{line.baseOrderedQuantity.toLocaleString('vi-VN')} {line.baseUnitCode}</td>
+                <td className="inbound-planning-numeric">{Number(line.unitPrice||0).toLocaleString('vi-VN')} ({Number(line.taxPercent||0)}%)</td>
+                <td className="inbound-planning-numeric">{Number(line.lineTotalAmount||0).toLocaleString('vi-VN')}</td>
                 <td>+{line.allowedOverReceiptPct}% / -{line.allowedUnderReceiptPct}%</td>
               </tr>)}</tbody>
             </table>
@@ -402,6 +409,8 @@ export default function PurchaseOrders(){
                   <label>Sản phẩm<select required value={line.productId} onChange={e=>changeLine(index,{productId:e.target.value?Number(e.target.value):''})}><option value="">Chọn sản phẩm</option>{products.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>
                   <label>Đơn vị<select required value={line.operationUnitId} onChange={e=>changeLine(index,{operationUnitId:e.target.value?Number(e.target.value):''})}><option value="">Chọn đơn vị</option>{productUnitOptions(products,line.productId).map(x=><option key={x.unitId} value={x.unitId}>{x.unitCode}</option>)}</select></label>
                   <label>Số lượng<input required min="0" step="any" type="number" value={line.orderedQuantity} onChange={e=>changeLine(index,{orderedQuantity:e.target.value===''?'':Number(e.target.value)})}/></label>
+                  <label>Đơn giá<input min="0" step="any" type="number" value={line.unitPrice} onChange={e=>changeLine(index,{unitPrice:e.target.value===''?'':Number(e.target.value)})}/></label>
+                  <label>Thuế %<input min="0" max="100" step="any" type="number" value={line.taxPercent} onChange={e=>changeLine(index,{taxPercent:e.target.value===''?'':Number(e.target.value)})}/></label>
                   <label>Nhận vượt %<input min="0" max="100" step="any" type="number" value={line.allowedOverReceiptPct} onChange={e=>changeLine(index,{allowedOverReceiptPct:e.target.value===''?'':Number(e.target.value)})}/></label>
                   <label>Nhận thiếu %<input min="0" max="100" step="any" type="number" value={line.allowedUnderReceiptPct} onChange={e=>changeLine(index,{allowedUnderReceiptPct:e.target.value===''?'':Number(e.target.value)})}/></label>
                   <button type="button" disabled={lines.length===1} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}>Xóa</button>

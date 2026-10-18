@@ -17,6 +17,7 @@ public sealed record ResetPasswordAdminRequest(
 
 [ApiController]
 [Route("api/users/{userId:int}/security")]
+[Route("api/account-security/{userId:int}")]
 [Authorize]
 [PermissionAuthorize(AppPermissions.UserManage)]
 public sealed class AccountSecurityController(
@@ -36,67 +37,82 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccountSecurityCommandDto? request = null,
         CancellationToken cancellationToken = default)
     {
+        var user = db is not null
+            ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken)
+            : null;
+        if (db is not null && user is null && await db.Users.IgnoreQueryFilters().AnyAsync(cancellationToken))
+            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
+
         var actorUserId = ResolveActorUserId();
         if (actorUserId.HasValue && actorUserId.Value == userId)
             throw new ERP.Application.Exceptions.BusinessRuleException("Không thể tự khóa hoặc đặt lại mật khẩu tài khoản của chính mình.");
-
-        var user = db is not null
-            ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            : null;
-        if (db is not null && user is null && await db.Users.AnyAsync(cancellationToken))
-            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
 
         await using var transaction = db is not null && db.Database.IsRelational() && db.Database.CurrentTransaction is null
             ? await db.Database.BeginTransactionAsync(cancellationToken)
             : null;
 
-        var revisionBefore = user?.SecurityRevision;
-        if (sessionService is not null && !string.IsNullOrWhiteSpace(request?.RowVersion))
-            await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
-
-        var now = DateTime.UtcNow;
-        if (user is not null && !string.IsNullOrWhiteSpace(request?.RowVersion) && user.SecurityRevision == revisionBefore)
-            EnsureMatchingSecurityToken(user, request.RowVersion, now);
-
-        var lockoutEnd = now.AddMinutes(30);
-        if (db is not null)
+        try
         {
-            if (user is not null)
+            if (db is not null && db.Database.IsRelational() && db.Database.CurrentTransaction is not null)
+                await ERP.Infrastructure.Services.PermissionAdministrationGuard.LockAsync(db, cancellationToken);
+
+            if (db is not null && user is not null)
+                await EnsureRemainingActiveTenantAdminAsync(user, cancellationToken);
+
+            var revisionBefore = user?.SecurityRevision;
+            if (sessionService is not null && !string.IsNullOrWhiteSpace(request?.RowVersion))
+                await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
+
+            var now = DateTime.UtcNow;
+            if (user is not null && !string.IsNullOrWhiteSpace(request?.RowVersion) && user.SecurityRevision == revisionBefore)
+                EnsureMatchingSecurityToken(user, request.RowVersion, now);
+
+            var lockoutEnd = now.AddMinutes(30);
+            if (db is not null)
             {
-                user.LockoutEnd = lockoutEnd;
-                if (user.SecurityRevision == revisionBefore)
-                    user.SecurityRevision++;
+                if (user is not null)
+                {
+                    user.LockoutEnd = lockoutEnd;
+                    if (user.SecurityRevision == revisionBefore)
+                        user.SecurityRevision++;
+                }
+
+                var activeSessions = await db.UserSessions
+                    .Where(s => s.UserId == userId && s.RevokedAt == null)
+                    .ToListAsync(cancellationToken);
+                foreach (var session in activeSessions)
+                {
+                    session.RevokedAt = now;
+                    session.RevokeReason = "AdminLock";
+                }
+
+                db.AuditLogs.Add(new AuditLog
+                {
+                    UserId = actorUserId,
+                    Action = "Authentication.AccountLocked",
+                    EntityName = "User",
+                    EntityId = userId,
+                    Result = "Success",
+                    Timestamp = now
+                });
+                await db.SaveChangesAsync(cancellationToken);
+                if (transaction is not null)
+                    await transaction.CommitAsync(cancellationToken);
             }
 
-            var activeSessions = await db.UserSessions
-                .Where(s => s.UserId == userId && s.RevokedAt == null)
-                .ToListAsync(cancellationToken);
-            foreach (var session in activeSessions)
+            return Ok(new
             {
-                session.RevokedAt = now;
-                session.RevokeReason = "AdminLock";
-            }
-
-            db.AuditLogs.Add(new AuditLog
-            {
-                UserId = actorUserId,
-                Action = "Authentication.AccountLocked",
-                EntityName = "User",
-                EntityId = userId,
-                Result = "Success",
-                Timestamp = now
+                userId,
+                isLockedOut = true,
+                lockoutEnd
             });
-            await db.SaveChangesAsync(cancellationToken);
-            if (transaction is not null)
-                await transaction.CommitAsync(cancellationToken);
         }
-
-        return Ok(new
+        catch
         {
-            userId,
-            isLockedOut = true,
-            lockoutEnd
-        });
+            if (transaction is not null)
+                await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     [HttpPost("unlock")]
@@ -122,18 +138,18 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ResetPasswordAdminRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        var user = db is not null
+            ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken)
+            : null;
+        if (db is not null && user is null && await db.Users.IgnoreQueryFilters().AnyAsync(cancellationToken))
+            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
+
         var actorUserId = ResolveActorUserId();
         if (actorUserId.HasValue && actorUserId.Value == userId)
             throw new ERP.Application.Exceptions.BusinessRuleException("Không thể tự khóa hoặc đặt lại mật khẩu tài khoản của chính mình.");
 
         if (string.IsNullOrWhiteSpace(request?.TemporaryPassword) || request.TemporaryPassword.Trim().Length < 8)
             throw new ERP.Application.Exceptions.BusinessRuleException("Mật khẩu tạm thời phải có tối thiểu 8 ký tự.");
-
-        var user = db is not null
-            ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            : null;
-        if (db is not null && user is null && await db.Users.AnyAsync(cancellationToken))
-            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
 
         await using var transaction = db is not null && db.Database.IsRelational() && db.Database.CurrentTransaction is null
             ? await db.Database.BeginTransactionAsync(cancellationToken)
@@ -190,6 +206,107 @@ public sealed class AccountSecurityController(
             status = "PASSWORD_RESET_COMPLETED",
             resetAtUtc = now
         });
+    }
+
+    [HttpDelete]
+    public async Task<IActionResult> Delete(
+        int userId,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccountSecurityCommandDto? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (db is null)
+            return NoContent();
+
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
+        if (user is null)
+            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
+
+        await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        try
+        {
+            if (db.Database.IsRelational() && db.Database.CurrentTransaction is not null)
+                await ERP.Infrastructure.Services.PermissionAdministrationGuard.LockAsync(db, cancellationToken);
+
+            await EnsureRemainingActiveTenantAdminAsync(user, cancellationToken);
+
+            var actorUserId = ResolveActorUserId();
+            if (actorUserId.HasValue && actorUserId.Value == userId)
+                throw new ERP.Application.Exceptions.BusinessRuleException("Không thể tự khóa hoặc vô hiệu hóa tài khoản của chính mình.");
+
+            var now = DateTime.UtcNow;
+            if (!string.IsNullOrWhiteSpace(request?.RowVersion))
+                EnsureMatchingSecurityToken(user, request.RowVersion, now);
+
+            user.IsActive = false;
+            user.SecurityRevision++;
+
+            var activeSessions = await db.UserSessions
+                .Where(s => s.UserId == userId && s.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var session in activeSessions)
+            {
+                session.RevokedAt = now;
+                session.RevokeReason = "AdminDeactivate";
+            }
+
+            db.AuditLogs.Add(new AuditLog
+            {
+                UserId = actorUserId,
+                Action = "Authentication.AccountDeactivated",
+                EntityName = "User",
+                EntityId = userId,
+                Result = "Success",
+                Timestamp = now
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
+
+            return NoContent();
+        }
+        catch
+        {
+            if (transaction is not null)
+                await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task EnsureRemainingActiveTenantAdminAsync(User targetUser, CancellationToken cancellationToken)
+    {
+        if (db is null)
+            return;
+
+        var roleName = targetUser.Role?.RoleName
+            ?? await db.Roles.AsNoTracking()
+                .Where(r => r.Id == targetUser.RoleId)
+                .Select(r => r.RoleName)
+                .FirstOrDefaultAsync(cancellationToken)
+            ?? string.Empty;
+
+        if (!string.Equals(roleName.Trim(), AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var now = DateTime.UtcNow;
+        var activeTenantId = db.CurrentTenantId;
+        var hasAnotherActiveTenantAdmin = await db.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AnyAsync(u =>
+                u.TenantId == activeTenantId &&
+                u.Id != targetUser.Id &&
+                u.IsActive &&
+                (u.LockoutEnd == null || u.LockoutEnd <= now) &&
+                u.Role.RoleName.Trim().ToLower() == "admin",
+                cancellationToken);
+
+        if (!hasAnotherActiveTenantAdmin)
+            throw new ERP.Domain.Exceptions.ConcurrencyException("Không thể loại bỏ quản trị viên hợp lệ cuối cùng.");
     }
 
     private int? ResolveActorUserId() =>

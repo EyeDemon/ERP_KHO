@@ -17,6 +17,7 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
         {
             var asn = await context.Asns.AsNoTracking()
                 .Include(x => x.PurchaseOrder)
+                    .ThenInclude(p => p!.Lines)
                 .Include(x => x.Lines)
                 .SingleOrDefaultAsync(x => x.Id == dto.AsnId.Value
                     && x.WarehouseId == receipt.WarehouseId
@@ -63,6 +64,17 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
                 target.ConversionFactor = source.ConversionFactorSnapshot;
                 target.ConversionVersion = source.ConversionVersionSnapshot;
                 target.BaseExpectedQuantity = source.BaseExpectedQuantity;
+                if (source.PurchaseOrderLineId.HasValue && asn.PurchaseOrder?.Lines is not null)
+                {
+                    var linkedPoLine = asn.PurchaseOrder.Lines.SingleOrDefault(l => l.Id == source.PurchaseOrderLineId.Value);
+                    if (linkedPoLine is not null)
+                    {
+                        if (target.UnitPrice <= 0 && linkedPoLine.UnitPrice > 0)
+                            target.UnitPrice = linkedPoLine.UnitPrice;
+                        if (target.TaxPercent <= 0 && linkedPoLine.TaxPercent > 0)
+                            target.TaxPercent = linkedPoLine.TaxPercent;
+                    }
+                }
             }
             return;
         }
@@ -117,6 +129,10 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
                 target.ConversionFactor = source.ConversionFactorSnapshot;
                 target.ConversionVersion = source.ConversionVersionSnapshot;
                 target.BaseExpectedQuantity = baseExpected;
+                if (target.UnitPrice <= 0 && source.UnitPrice > 0)
+                    target.UnitPrice = source.UnitPrice;
+                if (target.TaxPercent <= 0 && source.TaxPercent > 0)
+                    target.TaxPercent = source.TaxPercent;
             }
             return;
         }

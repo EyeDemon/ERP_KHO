@@ -6,6 +6,7 @@ import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 import ReceiptInventoryIdentityEditor from '../components/ReceiptInventoryIdentityEditor';
 import { permissionError } from '../services/permissionPresentation';
 import { roundQty4 } from './productCatalog';
+import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import './ImportReceipts.css';
 
@@ -18,7 +19,7 @@ interface ImportReceiptDetail {
   expectedQuantity: number; receivedQuantity: number; acceptedQuantity: number; damagedQuantity: number; rejectedQuantity: number;
   postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; baseDamagedQuantity?: number; baseRejectedQuantity?: number; basePostedQuantity: number;
   trackingType?: 'None' | 'Lot' | 'Serial'; expiryControl?: boolean; shelfLifeDays?: number | null;
-  unitPrice?: number;
+  unitPrice?: number; taxPercent?: number; lineSubTotal?: number; lineTaxAmount?: number; lineTotalAmount?: number;
   note: string;
   requiresQc: boolean; qcState: string; qcPolicyId?: number; qcPolicyVersion?: number; qcPolicySource?: string;
   qcDispositionReasonCode?: string; qcDispositionNote?: string;
@@ -41,6 +42,10 @@ interface ImportReceipt {
   supplierId?: number;
   supplierCode?: string;
   supplierName?: string;
+  subTotalAmount?: number;
+  taxAmount?: number;
+  totalAmount?: number;
+  rowVersion?: string;
   requiresQc: boolean;
   details: ImportReceiptDetail[];
 }
@@ -674,6 +679,14 @@ const ImportReceipts = () => {
         )}
 
         <UiCard title="Danh Sách Phiếu Nhập">
+          <MobileBarcodeScannerBar
+            warehouseId={warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined)}
+            disabled={creating || workflowId !== null}
+            onScan={(code) => {
+              const match = receipts.find(r => r.code.toUpperCase() === code.toUpperCase());
+              if (match) void handleViewDetails(match.id);
+            }}
+          />
           <UiTableScroll>
             <table aria-label="Danh sách phiếu nhập">
               <thead>

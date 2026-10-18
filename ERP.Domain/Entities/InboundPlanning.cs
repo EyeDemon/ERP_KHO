@@ -21,7 +21,7 @@ public sealed class PurchaseOrder : ITenantEntity
     public int CreatedBy { get; set; }
     public DateTime? UpdatedAtUtc { get; set; }
     public int? UpdatedBy { get; set; }
-    public byte[] RowVersion { get; set; } = [];
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
     public BusinessPartner Supplier { get; set; } = null!;
     public Warehouse Warehouse { get; set; } = null!;
     public User CreatedByUser { get; set; } = null!;
@@ -38,6 +38,8 @@ public sealed class PurchaseOrderLine : ITenantEntity
     public int LineNo { get; set; }
     public int ProductId { get; set; }
     public decimal OrderedQuantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal TaxPercent { get; set; }
     public int OperationUnitId { get; set; }
     public string OperationUnitCodeSnapshot { get; set; } = string.Empty;
     public int OperationUnitDecimalPlaces { get; set; }
@@ -71,7 +73,7 @@ public sealed class Asn : ITenantEntity
     public int CreatedBy { get; set; }
     public DateTime? UpdatedAtUtc { get; set; }
     public int? UpdatedBy { get; set; }
-    public byte[] RowVersion { get; set; } = [];
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
     public PurchaseOrder? PurchaseOrder { get; set; }
     public BusinessPartner Supplier { get; set; } = null!;
     public Warehouse Warehouse { get; set; } = null!;

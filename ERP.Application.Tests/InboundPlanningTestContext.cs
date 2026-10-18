@@ -20,6 +20,9 @@ internal sealed class InboundPlanningTestContext(DbContextOptions<ErpKhoDbContex
             if(property.GetColumnType()?.Contains("max",StringComparison.OrdinalIgnoreCase)==true) property.SetColumnType(null);
 
         modelBuilder.Entity<BusinessPartner>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
+        modelBuilder.Entity<BusinessPartner>().Property(x=>x.CreditLimit).HasConversion<double>();
+        modelBuilder.Entity<BusinessPartner>().Property(x=>x.PayableBalance).HasConversion<double>();
+        modelBuilder.Entity<BusinessPartner>().Property(x=>x.ReceivableBalance).HasConversion<double>();
         modelBuilder.Entity<PurchaseOrder>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
         modelBuilder.Entity<Asn>().Property(x=>x.RowVersion).IsConcurrencyToken().ValueGeneratedNever();
         modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.OrderedQuantity).HasConversion<double>();
@@ -27,6 +30,8 @@ internal sealed class InboundPlanningTestContext(DbContextOptions<ErpKhoDbContex
         modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.ConversionFactorSnapshot).HasConversion<double>();
         modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.AllowedOverReceiptPct).HasConversion<double>();
         modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.AllowedUnderReceiptPct).HasConversion<double>();
+        modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.UnitPrice).HasConversion<double>();
+        modelBuilder.Entity<PurchaseOrderLine>().Property(x=>x.TaxPercent).HasConversion<double>();
         modelBuilder.Entity<AsnLine>().Property(x=>x.ExpectedQuantity).HasConversion<double>();
         modelBuilder.Entity<AsnLine>().Property(x=>x.BaseExpectedQuantity).HasConversion<double>();
         modelBuilder.Entity<AsnLine>().Property(x=>x.ConversionFactorSnapshot).HasConversion<double>();

@@ -20,6 +20,7 @@ public class InventoryTransactionConfiguration : IEntityTypeConfiguration<Invent
         builder.HasIndex(x => x.ProductId);
         builder.HasIndex(x => x.WarehouseId);
         builder.HasIndex(x => x.TransactionDate);
+        builder.HasIndex(x => new { x.TenantId, x.WarehouseId, x.ProductId, x.TransactionDate });
         builder.HasIndex(x => new { x.ProductId, x.WarehouseId, x.TransactionDate });
         builder.HasIndex(x => x.ReversalOfTransactionId)
                .IsUnique()

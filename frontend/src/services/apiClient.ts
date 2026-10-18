@@ -77,9 +77,17 @@ const refreshAccessToken = createSingleFlight<string>(() =>
 
 const clearAuthentication = (): void => {
   setAccessToken(null);
+  autoIdempotencyCache.clear();
   localStorage.removeItem('username');
   localStorage.removeItem('role');
   localStorage.removeItem('userId');
+  localStorage.removeItem('tenantId');
+  localStorage.removeItem('tenantCode');
+  try {
+    sessionStorage.clear();
+  } catch {
+    // Ignore storage access errors in restricted environments
+  }
   setCurrentPermissions([]);
 };
 

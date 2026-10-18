@@ -33,6 +33,7 @@ import Shipments from '../pages/Shipments';
 import OutboundDemand from '../pages/OutboundDemand';
 import Approvals from '../pages/Approvals';
 import BusinessPartners from '../pages/BusinessPartners';
+import PartnerDebts from '../pages/PartnerDebts';
 import PutawayTasks from '../pages/PutawayTasks';
 import Permissions from '../pages/Permissions';
 import SystemBlueprint from '../pages/SystemBlueprint';
@@ -105,6 +106,7 @@ const AppRoutes = () => {
         <Route path="dock-yard" element={<PermissionRoute permission="dock_appointment.read"><DockYard /></PermissionRoute>} />
         <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
         <Route path="business-partners" element={<PermissionRoute permission="partner.read"><BusinessPartners /></PermissionRoute>} />
+        <Route path="partner-debts" element={<PermissionRoute permission="partner.read"><PartnerDebts /></PermissionRoute>} />
         <Route path="export-receipts" element={<PermissionRoute permission="export_receipt.read"><ExportReceipts /></PermissionRoute>} />
         <Route path="purchase-orders" element={<PermissionRoute permission="purchase_order.read"><PurchaseOrders /></PermissionRoute>} />
         <Route path="asns" element={<PermissionRoute permission="asn.read"><Asns /></PermissionRoute>} />

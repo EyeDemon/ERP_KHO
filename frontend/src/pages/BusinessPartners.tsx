@@ -6,10 +6,12 @@ import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableS
 
 export interface BusinessPartner {
   id: number; code: string; name: string; isSupplier: boolean; isCustomer: boolean;
-  isActive: boolean; phone?: string; email?: string; address?: string; rowVersion: string;
+  isActive: boolean; phone?: string; email?: string; address?: string;
+  creditLimit?: number; paymentTermDays?: number; payableBalance?: number; receivableBalance?: number;
+  rowVersion: string;
 }
 
-const empty = { code: '', name: '', isSupplier: true, isCustomer: false, isActive: true, phone: '', email: '', address: '', rowVersion: '' };
+const empty = { code: '', name: '', isSupplier: true, isCustomer: false, isActive: true, phone: '', email: '', address: '', creditLimit: 0, paymentTermDays: 30, rowVersion: '' };
 
 const BusinessPartners = () => {
   const canManage = usePermission('partner.update');
@@ -154,10 +156,10 @@ const BusinessPartners = () => {
 
       <UiCard title="Danh sách đối tác">
         {loading ? <p role="status">Đang tải đối tác...</p> : <UiTableScroll><table aria-label="Danh sách đối tác kinh doanh">
-          <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
+          <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Công nợ &amp; Tín dụng</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
           <tbody>
             {items.length === 0
-              ? <tr><td colSpan={canManage ? 6 : 5} className="ui-empty-cell">Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
+              ? <tr><td colSpan={canManage ? 7 : 6} className="ui-empty-cell">Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
               : items.map(item => <tr key={item.id}>
                   <td><strong>{item.code}</strong></td>
                   <td><div>{item.name}</div>{item.address && <small>{item.address}</small>}</td>
@@ -167,6 +169,11 @@ const BusinessPartners = () => {
                       {item.isCustomer && <UiBadge>Khách hàng</UiBadge>}
                       {!item.isSupplier && !item.isCustomer && <span>—</span>}
                     </div>
+                  </td>
+                  <td>
+                    {item.isSupplier && <div><small>AP (Phải trả): <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')}</strong></small></div>}
+                    {item.isCustomer && <div><small>AR (Phải thu): <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')}</strong> / Hạn mức: {Number(item.creditLimit ?? 0) > 0 ? Number(item.creditLimit).toLocaleString('vi-VN') : 'Không giới hạn'}</small></div>}
+                    <div><small>Kỳ hạn TT: {item.paymentTermDays ?? 30} ngày</small></div>
                   </td>
                   <td><div>{item.phone || '—'}</div>{item.email && <small>{item.email}</small>}</td>
                   <td><UiBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
@@ -193,6 +200,8 @@ const BusinessPartners = () => {
         </div>
         <label>Điện thoại<input aria-label="Điện thoại đối tác" value={form.phone || ''} maxLength={50} onChange={event => field('phone', event.target.value)} /></label>
         <label>Email<input aria-label="Email đối tác" value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
+        <label>Hạn mức tín dụng (VND)<input aria-label="Hạn mức tín dụng đối tác" type="number" min="0" step="1000" value={form.creditLimit ?? 0} onChange={event => field('creditLimit', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
+        <label>Kỳ hạn thanh toán (ngày)<input aria-label="Kỳ hạn thanh toán đối tác" type="number" min="0" max="3650" value={form.paymentTermDays ?? 30} onChange={event => field('paymentTermDays', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
         <label>Địa chỉ<textarea aria-label="Địa chỉ đối tác" value={form.address || ''} maxLength={500} rows={3} onChange={event => field('address', event.target.value)} /></label>
         <div className="ui-inline-actions">
           <button type="submit" disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu'}</button>

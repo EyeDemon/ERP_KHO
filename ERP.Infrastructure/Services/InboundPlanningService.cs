@@ -18,14 +18,29 @@ public sealed class InboundPlanningService(
     public async Task<IReadOnlyList<PurchaseOrderListDto>> ListPurchaseOrdersAsync(PurchaseOrderStatus? status = null, CancellationToken token = default)
     {
         var allowed = await warehouses.GetAccessibleWarehouseIdsAsync(token);
-        var query = context.PurchaseOrders.AsNoTracking().Where(x => allowed.Contains(x.WarehouseId));
+        var query = context.PurchaseOrders.AsNoTracking()
+            .Include(x => x.Supplier)
+            .Include(x => x.Warehouse)
+            .Include(x => x.Lines)
+            .Where(x => allowed.Contains(x.WarehouseId));
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
-        return await query.OrderByDescending(x => x.CreatedAtUtc).Select(x => new PurchaseOrderListDto
+        var entities = await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(token);
+        return entities.Select(x =>
         {
-            Id=x.Id, ExternalPoId=x.ExternalPoId, Code=x.Code, SupplierCode=x.Supplier.Code, SupplierName=x.Supplier.Name,
-            WarehouseId=x.WarehouseId, WarehouseName=x.Warehouse.Name, Status=x.Status.ToString(), OrderDate=x.OrderDate,
-            ExpectedDate=x.ExpectedDate, BaseOrderedQuantity=x.Lines.Sum(l=>l.BaseOrderedQuantity)
-        }).ToListAsync(token);
+            var subTotal = x.Lines.Sum(l => decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero));
+            var taxAmount = x.Lines.Sum(l =>
+            {
+                var lineSub = decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
+                return decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+            });
+            return new PurchaseOrderListDto
+            {
+                Id = x.Id, ExternalPoId = x.ExternalPoId, Code = x.Code, SupplierCode = x.Supplier.Code, SupplierName = x.Supplier.Name,
+                WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, Status = x.Status.ToString(), OrderDate = x.OrderDate,
+                ExpectedDate = x.ExpectedDate, Currency = x.Currency ?? "VND", BaseOrderedQuantity = x.Lines.Sum(l => l.BaseOrderedQuantity),
+                SubTotalAmount = subTotal, TaxAmount = taxAmount, TotalAmount = subTotal + taxAmount
+            };
+        }).ToList();
     }
 
     public async Task<PurchaseOrderDto> GetPurchaseOrderAsync(int id, CancellationToken token = default)
@@ -279,14 +294,18 @@ public sealed class InboundPlanningService(
             var external=Required(dto.ExternalLineId,$"Mã dòng ngoài hệ thống #{lineNo}",100);
             if(!externalIds.Add(external)) throw new BusinessRuleException("Mã dòng ngoài hệ thống bị trùng trong đơn mua.");
             ValidateTolerance(dto.AllowedOverReceiptPct,dto.AllowedUnderReceiptPct);
+            if(dto.UnitPrice<0) throw new BusinessRuleException("Đơn giá không được âm.");
+            if(dto.TaxPercent is <0 or >100) throw new BusinessRuleException("Thuế suất phải trong khoảng 0–100%.");
             var conversion=ResolveConversion(productsById,dto.ProductId,dto.OperationUnitId,dto.OrderedQuantity);
+            var resolvedUnitPrice = dto.UnitPrice;
             entity.Lines.Add(new PurchaseOrderLine
             {
                 ExternalLineId=external,LineNo=lineNo,ProductId=dto.ProductId,OrderedQuantity=dto.OrderedQuantity,
                 OperationUnitId=conversion.OperationUnitId,OperationUnitCodeSnapshot=conversion.OperationUnitCode,
                 OperationUnitDecimalPlaces=conversion.OperationDecimals,BaseUnitId=conversion.BaseUnitId,BaseUnitCodeSnapshot=conversion.BaseUnitCode,
                 BaseUnitDecimalPlaces=conversion.BaseDecimals,ConversionFactorSnapshot=conversion.Factor,ConversionVersionSnapshot=conversion.Version,
-                BaseOrderedQuantity=conversion.BaseQuantity,AllowedOverReceiptPct=dto.AllowedOverReceiptPct,AllowedUnderReceiptPct=dto.AllowedUnderReceiptPct
+                BaseOrderedQuantity=conversion.BaseQuantity,UnitPrice=resolvedUnitPrice,TaxPercent=dto.TaxPercent,
+                AllowedOverReceiptPct=dto.AllowedOverReceiptPct,AllowedUnderReceiptPct=dto.AllowedUnderReceiptPct
             });
         }
     }
@@ -369,19 +388,33 @@ public sealed class InboundPlanningService(
     private IQueryable<PurchaseOrder> PurchaseOrderQuery()=>context.PurchaseOrders.Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product);
     private IQueryable<Asn> AsnQuery()=>context.Asns.Include(x=>x.PurchaseOrder).Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product);
 
-    private PurchaseOrderDto Map(PurchaseOrder x)=>new()
+    private PurchaseOrderDto Map(PurchaseOrder x)
     {
-        Id=x.Id,ExternalPoId=x.ExternalPoId,SourceSystem=x.SourceSystem,Code=x.Code,SupplierCode=x.Supplier.Code,SupplierName=x.Supplier.Name,
-        WarehouseId=x.WarehouseId,WarehouseName=x.Warehouse.Name,Status=x.Status.ToString(),OrderDate=x.OrderDate,ExpectedDate=x.ExpectedDate,
-        Currency=x.Currency,ExternalVersion=x.ExternalVersion,BaseOrderedQuantity=x.Lines.Sum(l=>l.BaseOrderedQuantity),
-        RowVersion=CanSeeMutationToken()?Convert.ToBase64String(x.RowVersion):null,
-        Lines=x.Lines.OrderBy(l=>l.LineNo).Select(l=>new PurchaseOrderLineDto
+        var lines = x.Lines.OrderBy(l => l.LineNo).Select(l =>
         {
-            Id=l.Id,ExternalLineId=l.ExternalLineId,LineNo=l.LineNo,ProductId=l.ProductId,ProductCode=l.Product.Code,ProductName=l.Product.Name,
-            OrderedQuantity=l.OrderedQuantity,OperationUnitCode=l.OperationUnitCodeSnapshot,BaseOrderedQuantity=l.BaseOrderedQuantity,
-            BaseUnitCode=l.BaseUnitCodeSnapshot,AllowedOverReceiptPct=l.AllowedOverReceiptPct,AllowedUnderReceiptPct=l.AllowedUnderReceiptPct
-        }).ToList()
-    };
+            var lineSub = decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
+            var lineTax = decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+            return new PurchaseOrderLineDto
+            {
+                Id = l.Id, ExternalLineId = l.ExternalLineId, LineNo = l.LineNo, ProductId = l.ProductId, ProductCode = l.Product.Code, ProductName = l.Product.Name,
+                OrderedQuantity = l.OrderedQuantity, OperationUnitCode = l.OperationUnitCodeSnapshot, BaseOrderedQuantity = l.BaseOrderedQuantity,
+                BaseUnitCode = l.BaseUnitCodeSnapshot, UnitPrice = l.UnitPrice, TaxPercent = l.TaxPercent,
+                LineSubTotal = lineSub, LineTaxAmount = lineTax, LineTotal = lineSub + lineTax,
+                AllowedOverReceiptPct = l.AllowedOverReceiptPct, AllowedUnderReceiptPct = l.AllowedUnderReceiptPct
+            };
+        }).ToList();
+        var subTotal = lines.Sum(l => l.LineSubTotal);
+        var taxAmount = lines.Sum(l => l.LineTaxAmount);
+        return new()
+        {
+            Id = x.Id, ExternalPoId = x.ExternalPoId, SourceSystem = x.SourceSystem, Code = x.Code, SupplierCode = x.Supplier.Code, SupplierName = x.Supplier.Name,
+            WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, Status = x.Status.ToString(), OrderDate = x.OrderDate, ExpectedDate = x.ExpectedDate,
+            Currency = x.Currency ?? "VND", ExternalVersion = x.ExternalVersion, BaseOrderedQuantity = x.Lines.Sum(l => l.BaseOrderedQuantity),
+            SubTotalAmount = subTotal, TaxAmount = taxAmount, TotalAmount = subTotal + taxAmount,
+            RowVersion = CanSeeMutationToken() ? Convert.ToBase64String(x.RowVersion) : null,
+            Lines = lines
+        };
+    }
 
     private AsnDto Map(Asn x)=>new()
     {

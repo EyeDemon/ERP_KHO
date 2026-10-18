@@ -418,6 +418,7 @@ public sealed class Wave8ParallelConcurrencySqlTests
             {
                 await cleanDb.AuditLogs.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
                 await cleanDb.InventoryLocationMovements.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+                await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
                 await cleanDb.PutawayTaskItems.Where(x => x.PutawayTaskId == taskId).ExecuteDeleteAsync();
                 await cleanDb.PutawayTasks.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
                 await cleanDb.ImportReceiptInventoryIdentities.Where(x => x.ProductId == productId).ExecuteDeleteAsync();

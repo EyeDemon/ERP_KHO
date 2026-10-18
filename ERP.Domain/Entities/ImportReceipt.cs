@@ -23,6 +23,7 @@ public class ImportReceipt : ITenantEntity
     public int? AsnId { get; set; }
     public string? SupplierCodeSnapshot { get; set; }
     public string? SupplierNameSnapshot { get; set; }
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
 
     // Navigation
     public Warehouse Warehouse { get; set; } = null!;

@@ -14,13 +14,14 @@ public sealed class SalesOrder : ITenantEntity
     public DateTime? RequestedShipDate { get; set; }
     public int Priority { get; set; }
     public string? ShippingMethod { get; set; }
+    public string? Currency { get; set; } = "VND";
     public SalesOrderStatus Status { get; set; } = SalesOrderStatus.Draft;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int CreatedBy { get; set; }
     public DateTime? ReleasedAt { get; set; }
     public DateTime? CancelledAt { get; set; }
     public string? CancellationReason { get; set; }
-    public byte[] RowVersion { get; set; } = [];
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
 
     public BusinessPartner Customer { get; set; } = null!;
     public Warehouse Warehouse { get; set; } = null!;
@@ -37,6 +38,8 @@ public sealed class SalesOrderLine : ITenantEntity
     public int ProductId { get; set; }
     public decimal OrderedQuantity { get; set; }
     public decimal CancelledQuantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal TaxPercent { get; set; }
     public string UomCode { get; set; } = string.Empty;
 
     public SalesOrder SalesOrder { get; set; } = null!;
@@ -58,7 +61,7 @@ public sealed class Backorder : ITenantEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
-    public byte[] RowVersion { get; set; } = [];
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
 
     public SalesOrderLine SalesOrderLine { get; set; } = null!;
     public Warehouse Warehouse { get; set; } = null!;

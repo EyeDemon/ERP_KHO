@@ -543,8 +543,9 @@ public sealed partial class StockTransferService(
         // and then deadlock when MERGE converts them to write locks (SQL 1205).
         // The lock is held until the caller commits/rolls back ledger + audit.
         await context.AcquireInventoryAllocationLocksAsync([(warehouseId, productId)], cancellationToken);
+        var tenantId = context.CurrentTenantId;
         var statusInt = (int)status;
-        var bucketLock = $"ERP:TransferStock:{productId}:{warehouseId}:{locationId}:{statusInt}";
+        var bucketLock = $"ERP:TransferStock:{tenantId}:{productId}:{warehouseId}:{locationId}:{statusInt}";
         await context.Database.ExecuteSqlInterpolatedAsync($@"
 DECLARE @lockResult int;
 EXEC @lockResult = sys.sp_getapplock
@@ -564,14 +565,14 @@ END;", cancellationToken);
 
         await context.Database.ExecuteSqlInterpolatedAsync($@"
 MERGE INTO InventoryStocks WITH (HOLDLOCK) AS target
-USING (SELECT {productId} AS ProductId, {warehouseId} AS WarehouseId, {locationId} AS LocationId, {quantity} AS Quantity, {now} AS LastUpdated, {statusInt} AS Status) AS source
-ON target.ProductId = source.ProductId AND target.WarehouseId = source.WarehouseId AND target.Status = source.Status AND target.LocationId = source.LocationId
+USING (SELECT {tenantId} AS TenantId, {productId} AS ProductId, {warehouseId} AS WarehouseId, {locationId} AS LocationId, {quantity} AS Quantity, {now} AS LastUpdated, {statusInt} AS Status) AS source
+ON target.TenantId = source.TenantId AND target.ProductId = source.ProductId AND target.WarehouseId = source.WarehouseId AND target.Status = source.Status AND target.LocationId = source.LocationId
    AND target.LotId IS NULL AND target.SerialId IS NULL
 WHEN MATCHED THEN
     UPDATE SET Quantity = target.Quantity + source.Quantity, LastUpdated = source.LastUpdated
 WHEN NOT MATCHED THEN
-    INSERT (ProductId, WarehouseId, LocationId, Status, Quantity, ReservedQuantity, LastUpdated)
-    VALUES (source.ProductId, source.WarehouseId, source.LocationId, source.Status, source.Quantity, 0, source.LastUpdated);", cancellationToken);
+    INSERT (TenantId, ProductId, WarehouseId, LocationId, Status, Quantity, ReservedQuantity, LastUpdated)
+    VALUES (source.TenantId, source.ProductId, source.WarehouseId, source.LocationId, source.Status, source.Quantity, 0, source.LastUpdated);", cancellationToken);
         return locationId;
     }
 

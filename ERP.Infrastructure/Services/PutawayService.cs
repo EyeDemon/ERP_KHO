@@ -17,6 +17,7 @@ public sealed class PutawayService(
     IInventoryLockEvaluator? inventoryLocks = null)
     : IPutawayService, IReceiptPutawayIntegration
 {
+    private readonly IInventoryLockEvaluator? _inventoryLocks = inventoryLocks;
     public async Task<IReadOnlyList<WarehouseDto>> ListLocationWarehousesAsync(CancellationToken token = default)
     {
         var ids = await warehouses.GetAccessibleWarehouseIdsAsync(token);
@@ -445,11 +446,41 @@ public sealed class PutawayService(
             }
             var item=task.Items.SingleOrDefault(x=>x.Id==dto.ItemId)??throw new NotFoundException("Không tìm thấy dòng hàng.");
             await context.AcquireInventoryAllocationLocksAsync([(task.WarehouseId, item.ProductId)], token);
-            var destination=await LocationForMutation(dto.DestinationLocationId,token)??throw new NotFoundException("Không tìm thấy vị trí đích.");
+            WarehouseLocation? destination;
+            if (dto.DestinationLocationId > 0)
+            {
+                destination = await LocationForMutation(dto.DestinationLocationId, token) ?? throw new NotFoundException("Không tìm thấy vị trí đích.");
+                if (!string.IsNullOrWhiteSpace(dto.DestinationLocationBarcode) &&
+                    !string.Equals(destination.Code, dto.DestinationLocationBarcode.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw ConflictWithCode("PUTAWAY_WRONG_BIN", $"Mã vị trí quét ({dto.DestinationLocationBarcode.Trim()}) không khớp với vị trí đích ({destination.Code}).");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.DestinationLocationBarcode))
+            {
+                var scannedBinCode = dto.DestinationLocationBarcode.Trim().ToUpperInvariant();
+                destination = await LocationByCodeForMutation(task.WarehouseId, scannedBinCode, token)
+                              ?? throw ConflictWithCode("PUTAWAY_WRONG_BIN", $"Không tìm thấy vị trí kệ lưu trữ với mã quét '{scannedBinCode}'.");
+            }
+            else
+            {
+                throw new NotFoundException("Không tìm thấy vị trí đích.");
+            }
             if(destination.WarehouseId!=task.WarehouseId) throw new NotFoundException("Không tìm thấy vị trí đích.");
             if(!destination.IsActive||destination.IsBlocked||destination.LocationType!=RequiredType(item.InventoryStatus)||(item.InventoryStatus==InventoryStatus.Available&&!destination.IsPickable)) throw new BusinessRuleException("Vị trí đích không phù hợp với hàng hóa này.");
             var baseQty=ToBase(dto.Quantity,dto.UnitCode,item); if(baseQty>item.RemainingBaseQuantity) throw new BusinessRuleException("Số lượng cất vượt quá số lượng còn lại.");
             var product=await ProductForCapacity(item.ProductId,token)??throw new NotFoundException("Không tìm thấy sản phẩm.");
+            if (!string.IsNullOrWhiteSpace(dto.ProductBarcode))
+            {
+                var scannedProductCode = dto.ProductBarcode.Trim();
+                var matchesSku = string.Equals(product.Code, scannedProductCode, StringComparison.OrdinalIgnoreCase);
+                var matchesBarcode = matchesSku || await context.ProductBarcodes.AsNoTracking()
+                    .AnyAsync(b => b.ProductId == item.ProductId && b.Value == scannedProductCode, token);
+                if (!matchesBarcode)
+                {
+                    throw ConflictWithCode("PUTAWAY_WRONG_PRODUCT", $"Mã vạch sản phẩm quét ({scannedProductCode}) không khớp với SKU ({product.Code}).");
+                }
+            }
             await EnsurePutawayCapacityAsync(destination, product, baseQty, token);
             var sourceBuckets = await context.InventoryStocks
                 .Include(x => x.Lot)
@@ -605,23 +636,51 @@ public sealed class PutawayService(
                     CreatedBy = currentUser.UserId
                 });
 
+                context.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = item.ProductId,
+                    WarehouseId = task.WarehouseId,
+                    LocationId = destination.Id,
+                    FromLocationId = item.SourceLocationId,
+                    ToLocationId = destination.Id,
+                    InventoryStatus = item.InventoryStatus,
+                    LotId = sourceBucket.LotId,
+                    SerialId = sourceBucket.SerialId,
+                    TransactionType = TransactionType.Move,
+                    Quantity = chunk,
+                    ReferenceId = task.Id,
+                    ReferenceType = "PutawayTask",
+                    TransactionDate = nowUtc,
+                    CreatedBy = currentUser.UserId,
+                    Note = $"Putaway từ {item.SourceLocation?.Code ?? "RECEIVING"} sang {destination.Code}"
+                });
+
                 remainingToMove -= chunk;
             }
             item.MovedBaseQuantity+=baseQty; task.Status=task.Items.All(x=>x.RemainingBaseQuantity==0)?PutawayTaskStatus.Completed:PutawayTaskStatus.InProgress; task.StartedAt??=nowUtc; if(task.Status==PutawayTaskStatus.Completed)task.CompletedAt=nowUtc;
             context.AuditLogs.Add(Audit(currentUser.UserId,"PutawayTask.Moved",task.Id,task.WarehouseId,$"ItemId: {item.Id}; BaseQuantity: {baseQty}; DestinationId: {destination.Id}"));
             await context.SaveChangesAsync(token); if(tx is not null)await tx.CommitAsync(token); return await GetAsync(id,token);
         }
-        catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
-                                   (ex is DeadlockException ||
-                                    ex is Microsoft.Data.SqlClient.SqlException { Number: 1205 } ||
-                                    ex is DbUpdateException { InnerException: Microsoft.Data.SqlClient.SqlException { Number: 1205 } }))
+        catch (Exception ex) when (ownTransaction && attempt < maxAttempts && IsDeadlock(ex))
         {
             if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
             context.ChangeTracker.Clear();
             await Task.Delay(15 * attempt, token);
         }
-        catch(DbUpdateConcurrencyException ex){if(tx is not null)await tx.RollbackAsync(token);throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.",ex);} catch{if(tx is not null)await tx.RollbackAsync(token);throw;}
+        catch(DbUpdateConcurrencyException ex){if(tx is not null)await tx.RollbackAsync(token);throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.",ex);}
+        catch(Exception ex) when (IsDeadlock(ex)){if(tx is not null)await tx.RollbackAsync(token);throw new DeadlockException("Giao dịch Putaway bị deadlock.",ex);}
+        catch{if(tx is not null)await tx.RollbackAsync(token);throw;}
         }
+    }
+
+    private static bool IsDeadlock(Exception? ex)
+    {
+        for (var cur = ex; cur is not null; cur = cur.InnerException)
+        {
+            if (cur is DeadlockException or Microsoft.Data.SqlClient.SqlException { Number: 1205 })
+                return true;
+        }
+        return false;
     }
 
     private async Task<PutawayTaskDto> Mutate(int id,PutawayStateCommandDto dto,PutawayTaskStatus[] allowed,Action<PutawayTask> change,string action,CancellationToken token)
@@ -632,20 +691,25 @@ public sealed class PutawayService(
     // Hold destination eligibility through commit, including a concurrent master deactivation.
     private Task<WarehouseLocation?> LocationForMutation(int id, CancellationToken token) =>
         (context.Database.IsSqlServer()
-            ? context.WarehouseLocations.FromSqlInterpolated($"SELECT * FROM dbo.WarehouseLocations WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}")
+            ? context.WarehouseLocations.FromSqlInterpolated($"SELECT * FROM dbo.WarehouseLocations WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = {context.CurrentTenantId} AND Id = {id}")
             : context.WarehouseLocations.Where(x => x.Id == id)).SingleOrDefaultAsync(token);
+    private Task<WarehouseLocation?> LocationByCodeForMutation(int warehouseId, string code, CancellationToken token) =>
+        (context.Database.IsSqlServer()
+            ? context.WarehouseLocations.FromSqlInterpolated($"SELECT * FROM dbo.WarehouseLocations WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = {context.CurrentTenantId} AND WarehouseId = {warehouseId} AND Code = {code}")
+            : context.WarehouseLocations.Where(x => x.WarehouseId == warehouseId && x.Code == code)).SingleOrDefaultAsync(token);
     private Task<Product?> ProductForCapacity(int id, CancellationToken token) =>
         (context.Database.IsSqlServer()
-            ? context.Products.FromSqlInterpolated($"SELECT * FROM dbo.Products WITH (UPDLOCK, HOLDLOCK) WHERE Id = {id}").AsNoTracking()
+            ? context.Products.FromSqlInterpolated($"SELECT * FROM dbo.Products WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = {context.CurrentTenantId} AND Id = {id}").AsNoTracking()
             : context.Products.AsNoTracking().Where(x => x.Id == id)).SingleOrDefaultAsync(token);
-    private IQueryable<PutawayTask> Query()=>context.PutawayTasks.Include(x=>x.Receipt).Include(x=>x.Warehouse).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).Include(x=>x.Items).ThenInclude(x=>x.SourceLocation);
+    private IQueryable<PutawayTask> Query()=>context.PutawayTasks.Include(x=>x.Receipt).Include(x=>x.Warehouse).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).ThenInclude(x=>x.Barcodes).Include(x=>x.Items).ThenInclude(x=>x.SourceLocation);
     private void EnsureActor(PutawayTask task){if(task.AssignedUserId!=currentUser.UserId&&!currentUser.IsGlobalAdmin&&currentUser.Role is not "Admin" and not "Manager")throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");}
     private static decimal ToBase(decimal qty,string unit,PutawayTaskItem item){var code=unit.Trim().ToUpperInvariant();var result=code==item.BaseUnitCodeSnapshot.ToUpperInvariant()?qty:code==item.OperationUnitCodeSnapshot.ToUpperInvariant()?qty*item.ConversionFactorSnapshot:throw new BusinessRuleException("Đơn vị tính không được hỗ trợ.");if(decimal.Round(result,item.BaseUnitDecimalPlaces)!=result)throw new BusinessRuleException("Số lượng vượt quá độ chính xác cho phép; hệ thống không tự làm tròn.");return result;}
     private static WarehouseLocationType RequiredType(InventoryStatus s)=>s switch{InventoryStatus.Available=>WarehouseLocationType.Storage,InventoryStatus.Damaged=>WarehouseLocationType.Damaged,InventoryStatus.Rejected=>WarehouseLocationType.Rejected,_=>throw new BusinessRuleException("Trạng thái tồn kho không thuộc luồng cất hàng tự động.")};
     private static void ApplyVersion(byte[] actual,string encoded,Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry<PutawayTask,byte[]> p){byte[] expected;try{expected=Convert.FromBase64String(encoded);}catch{throw new BusinessRuleException("Phiên bản dữ liệu không hợp lệ.");}if(!actual.SequenceEqual(expected))throw Conflict("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");p.OriginalValue=expected;}
-    private async Task<PutawayTaskDto> MapAsync(PutawayTask t,CancellationToken token){var moves=await context.InventoryLocationMovements.AsNoTracking().Where(x=>x.PutawayTaskId==t.Id&&x.PutawayTaskItemId.HasValue).Join(context.WarehouseLocations,x=>x.FromLocationId,x=>x.Id,(m,f)=>new{m,f}).Join(context.WarehouseLocations,x=>x.m.ToLocationId,x=>x.Id,(x,d)=>new PutawayMovementDto{Id=x.m.Id,ItemId=x.m.PutawayTaskItemId.GetValueOrDefault(),FromLocationCode=x.f.Code,ToLocationCode=d.Code,BaseQuantity=x.m.BaseQuantity,CreatedAt=x.m.CreatedAt}).ToListAsync(token);var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";return new PutawayTaskDto{Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=t.Receipt.Code,WarehouseId=t.WarehouseId,WarehouseName=t.Warehouse.Name,Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,Items=t.Items.Select(x=>new PutawayTaskItemDto{Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=x.ReceiptLine.Product.Code,ProductName=x.ReceiptLine.Product.Name,InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=x.SourceLocation.Code,OperationUnitCode=x.OperationUnitCodeSnapshot,BaseUnitCode=x.BaseUnitCodeSnapshot,RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate?Convert.ToBase64String(x.RowVersion):null}).ToList(),Movements=moves};}
+    private async Task<PutawayTaskDto> MapAsync(PutawayTask t,CancellationToken token){var moves=await context.InventoryLocationMovements.AsNoTracking().Where(x=>x.PutawayTaskId==t.Id&&x.PutawayTaskItemId.HasValue).Join(context.WarehouseLocations,x=>x.FromLocationId,x=>x.Id,(m,f)=>new{m,f}).Join(context.WarehouseLocations,x=>x.m.ToLocationId,x=>x.Id,(x,d)=>new PutawayMovementDto{Id=x.m.Id,ItemId=x.m.PutawayTaskItemId.GetValueOrDefault(),FromLocationCode=x.f.Code,ToLocationCode=d.Code,BaseQuantity=x.m.BaseQuantity,CreatedAt=x.m.CreatedAt}).ToListAsync(token);var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";return new PutawayTaskDto{Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=t.Receipt.Code,WarehouseId=t.WarehouseId,WarehouseName=t.Warehouse.Name,Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,Items=t.Items.Select(x=>new PutawayTaskItemDto{Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=x.ReceiptLine.Product.Code,ProductName=x.ReceiptLine.Product.Name,ProductBarcodes=x.ReceiptLine.Product.Barcodes.Select(b=>b.Value).ToList(),InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=x.SourceLocation.Code,OperationUnitCode=x.OperationUnitCodeSnapshot,BaseUnitCode=x.BaseUnitCodeSnapshot,RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate?Convert.ToBase64String(x.RowVersion):null}).ToList(),Movements=moves};}
     private static AuditLog Audit(int user,string action,int entity,int warehouse,string values)=>new(){UserId=user,Action=action,EntityName="PutawayTask",EntityId=entity,WarehouseId=warehouse,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
     private static BusinessRuleException Conflict(string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;return e;}
+    private static BusinessRuleException ConflictWithCode(string code,string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;e.Data["ErrorCode"]=code;return e;}
     private WarehouseLocationDto Location(WarehouseLocation x)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,Code=x.Code,Name=x.Name,StructurePath=x.StructurePath,StorageClass=x.StorageClass,MaxWeightKg=x.MaxWeightKg,MaxVolumeM3=x.MaxVolumeM3,MaxPalletEquivalent=x.MaxPalletEquivalent,MapX=x.MapX,MapY=x.MapY,MapWidth=x.MapWidth,MapHeight=x.MapHeight,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff"?Convert.ToBase64String(x.RowVersion):null};
     private static decimal? CapacityUtilizationPercent(WarehouseLocationCapacityDto? capacity)
     {

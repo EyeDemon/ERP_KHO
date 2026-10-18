@@ -3,6 +3,7 @@ import apiClient from '../services/apiClient';
 import { currentUserId, usePermission } from '../services/authorization';
 import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type PickingLine = {
@@ -206,6 +207,15 @@ export default function PickingTasks(){
             </UiBadge>
           )}
         </div>
+        <MobileBarcodeScannerBar
+          warehouseId={selected?.warehouseId??tasks[0]?.warehouseId}
+          disabled={governanceBusy||!!busy}
+          onScan={code=>{
+            setMobileScanInput(code);
+            const matchTask=tasks.find(t=>t.taskCode.toUpperCase()===code.toUpperCase());
+            if(matchTask)void detail(matchTask.id);
+          }}
+        />
       </UiCard>
 
       <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking — OUT-04)">

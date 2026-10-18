@@ -55,6 +55,7 @@ const productionIcons: Record<string, LucideIcon> = {
   '/dock-yard': Truck,
   '/units': Ruler,
   '/business-partners': Handshake,
+  '/partner-debts': Scale,
   '/purchase-orders': ShoppingCart,
   '/asns': PackageCheck,
   '/import-receipts': Clipboard,
@@ -235,6 +236,11 @@ const MainLayout = () => {
               </>
             ) : (
               <>
+                {localStorage.getItem('tenantCode') && (
+                  <span className="runtime-badge" data-testid="topbar-tenant-badge">
+                    {localStorage.getItem('tenantCode')}
+                  </span>
+                )}
                 <span className="topbar-context-text">{localStorage.getItem('username') || 'Người dùng'}</span>
                 <button
                   type="button"

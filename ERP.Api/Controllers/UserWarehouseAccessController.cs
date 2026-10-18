@@ -11,6 +11,8 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/users/{userId:int}/warehouse-access")]
+[Route("api/user-warehouse-access/{userId:int}")]
+[Route("api/users/{userId:int}/warehouses")]
 [Authorize]
 public sealed class UserWarehouseAccessController(
     IUserWarehouseAccessService service,
@@ -18,12 +20,16 @@ public sealed class UserWarehouseAccessController(
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.UserWarehouseRead)]
-    public async Task<IActionResult> Get(int userId, CancellationToken cancellationToken) =>
-        Ok(await service.GetForUserAsync(userId, cancellationToken));
+    public async Task<IActionResult> Get(int userId, CancellationToken cancellationToken)
+    {
+        await EnsureTenantUserOwnershipAsync(userId, null, cancellationToken);
+        return Ok(await service.GetForUserAsync(userId, cancellationToken));
+    }
 
     [HttpGet("governance-summary"), PermissionAuthorize(AppPermissions.UserWarehouseRead)]
     public async Task<IActionResult> GetGovernanceSummary(int userId, CancellationToken cancellationToken)
     {
+        await EnsureTenantUserOwnershipAsync(userId, null, cancellationToken);
         var access = await service.GetForUserAsync(userId, cancellationToken);
         return Ok(new
         {
@@ -39,6 +45,7 @@ public sealed class UserWarehouseAccessController(
     public async Task<IActionResult> Grant(int userId, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GrantWarehouseAccessDto? request, CancellationToken cancellationToken)
     {
         if (request is null) throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+        await EnsureTenantUserOwnershipAsync(userId, request.WarehouseId, cancellationToken);
         await service.GrantAsync(userId, request.WarehouseId, request.RowVersion, cancellationToken);
         return NoContent();
     }
@@ -46,8 +53,36 @@ public sealed class UserWarehouseAccessController(
     [HttpDelete("{warehouseId:int}"), IdempotentCommand("UserWarehouse.Revoke"), PermissionAuthorize(AppPermissions.UserWarehouseManage)]
     public async Task<IActionResult> Revoke(int userId, int warehouseId, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RevokeWarehouseAccessDto? request, CancellationToken cancellationToken)
     {
+        await EnsureTenantUserOwnershipAsync(userId, warehouseId, cancellationToken);
         await service.RevokeAsync(userId, warehouseId, request?.RowVersion, cancellationToken);
         return NoContent();
+    }
+
+    private async Task EnsureTenantUserOwnershipAsync(int userId, int? warehouseId, CancellationToken cancellationToken)
+    {
+        if (db is null)
+            return;
+
+        if (!await db.Users.IgnoreQueryFilters().AnyAsync(cancellationToken))
+            return;
+
+        var activeTenantId = db.CurrentTenantId;
+        var userOwnedByTenant = await db.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == userId && u.TenantId == activeTenantId, cancellationToken);
+        if (!userOwnedByTenant)
+            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
+
+        if (warehouseId.HasValue)
+        {
+            var warehouseOwnedByTenant = await db.Warehouses
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .AnyAsync(w => w.Id == warehouseId.Value && w.TenantId == activeTenantId, cancellationToken);
+            if (!warehouseOwnedByTenant)
+                throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
+        }
     }
 
     [HttpPost("verify-sod-isolation")]

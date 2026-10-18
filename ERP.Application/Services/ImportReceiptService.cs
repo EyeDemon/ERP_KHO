@@ -23,6 +23,7 @@ namespace ERP.Application.Services
         private readonly IReceiptInboundPlanningIntegration? _inboundPlanning;
         private readonly IReceiptInventoryIdentityService? _inventoryIdentity;
         private readonly IUserRepository? _permissionUsers;
+        private readonly IPartnerDebtService? _partnerDebt;
 
         internal ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository)
         {
@@ -82,6 +83,24 @@ namespace ERP.Application.Services
             : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers, putaway, inboundPlanning)
             => _inventoryIdentity = inventoryIdentity;
 
+        public ImportReceiptService(
+            IImportReceiptRepository importReceiptRepository,
+            IInventoryStockRepository inventoryStockRepository,
+            IInventoryTransactionRepository inventoryTransactionRepository,
+            IWarehouseRepository warehouseRepository,
+            IProductRepository productRepository,
+            IUnitOfWork unitOfWork,
+            IAuditLogRepository auditLogRepository,
+            IWarehouseAuthorizationService warehouseAuthorization,
+            ICurrentUser currentUser,
+            IUserRepository permissionUsers,
+            IReceiptPutawayIntegration putaway,
+            IReceiptInboundPlanningIntegration inboundPlanning,
+            IReceiptInventoryIdentityService inventoryIdentity,
+            IPartnerDebtService partnerDebt)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers, putaway, inboundPlanning, inventoryIdentity)
+            => _partnerDebt = partnerDebt;
+
         public async Task<ImportReceiptDto> CreateAsync(CreateImportReceiptDto dto, int userId)
         {
             if (_currentUser is not null) userId = _currentUser.UserId;
@@ -138,7 +157,7 @@ namespace ERP.Application.Services
                     ? new { Unit = product.Unit, Factor = 1m, Version = 1 }
                     : product.Uoms.Where(x => x.IsActive && x.EffectiveFromUtc <= DateTime.UtcNow && x.UnitId == operationUnitId)
                         .OrderByDescending(x => x.Version)
-                        .Select(x => new { x.Unit, Factor = x.ConversionFactor, x.Version })
+                        .Select(x => new { x.Unit, Factor = x.ConversionFactor, Version = x.Version })
                         .FirstOrDefault();
                 if (conversion is null || conversion.Factor <= 0)
                     throw new BusinessRuleException($"UOM thao tác không hợp lệ cho sản phẩm ID {detailDto.ProductId}");
@@ -148,6 +167,8 @@ namespace ERP.Application.Services
 
                 if (detailDto.UnitPrice < 0)
                     throw new BusinessRuleException($"Đơn giá của sản phẩm ID {detailDto.ProductId} không được âm");
+                if (detailDto.TaxPercent is < 0 or > 100)
+                    throw new BusinessRuleException($"Thuế suất của sản phẩm ID {detailDto.ProductId} phải từ 0 đến 100%");
 
                 var now = DateTime.UtcNow;
                 var policy = product.QcPolicies
@@ -171,6 +192,7 @@ namespace ERP.Application.Services
                     ConversionVersion = conversion.Version,
                     BaseExpectedQuantity = baseExpected,
                     UnitPrice = detailDto.UnitPrice,
+                    TaxPercent = detailDto.TaxPercent,
                     Note = detailDto.Note,
                     RequiresQc = policy?.RequiresQc == true,
                     QcPolicyId = policy?.Id,
@@ -217,29 +239,17 @@ namespace ERP.Application.Services
         private ImportReceiptDto MapToDto(ImportReceipt receipt)
         {
             var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role == "Manager";
-            return new ImportReceiptDto
+            var details = receipt.Details.Select(d =>
             {
-                Id = receipt.Id,
-                Code = receipt.Code,
-                WarehouseId = receipt.WarehouseId,
-                WarehouseName = receipt.Warehouse?.Name,
-                Status = receipt.Status.ToString(),
-                Note = receipt.Note,
-                CreatedBy = receipt.CreatedBy,
-                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
-                ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
-                CreatedAt = receipt.CreatedAt,
-                ApprovedAt = receipt.ApprovedAt,
-                SupplierId = receipt.SupplierId,
-                PurchaseOrderId = receipt.PurchaseOrderId,
-                PurchaseOrderCode = receipt.PurchaseOrder?.Code,
-                AsnId = receipt.AsnId,
-                AsnCode = receipt.Asn?.Code,
-                SupplierCode = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Code : receipt.SupplierCodeSnapshot,
-                SupplierName = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Name : receipt.SupplierNameSnapshot,
-                RequiresQc = receipt.Details.Any(x => x.RequiresQc),
-                Details = receipt.Details.Select(d => new ImportReceiptDetailDto
+                var factor = d.ConversionFactor > 0 ? d.ConversionFactor : 1m;
+                var billableQty = d.AcceptedQuantity > 0
+                    ? d.AcceptedQuantity
+                    : (d.BaseAcceptedQuantity > 0
+                        ? d.BaseAcceptedQuantity / factor
+                        : (d.ReceivedQuantity > 0 ? d.ReceivedQuantity : (d.ExpectedQuantity > 0 ? d.ExpectedQuantity : d.Quantity)));
+                var lineSub = canReadCost ? decimal.Round(billableQty * d.UnitPrice, 2, MidpointRounding.AwayFromZero) : 0m;
+                var lineTax = canReadCost ? decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
+                return new ImportReceiptDetailDto
                 {
                     Id = d.Id,
                     ProductId = d.ProductId,
@@ -276,6 +286,10 @@ namespace ERP.Application.Services
                     FinalReceivedQuantity = d.FinalReceivedQuantity > 0 ? d.FinalReceivedQuantity : d.ReceivedQuantity,
                     BaseFinalReceivedQuantity = d.BaseFinalReceivedQuantity > 0 ? d.BaseFinalReceivedQuantity : d.BaseReceivedQuantity,
                     UnitPrice = canReadCost ? d.UnitPrice : null,
+                    TaxPercent = d.TaxPercent,
+                    LineSubTotal = lineSub,
+                    LineTaxAmount = lineTax,
+                    LineTotal = lineSub + lineTax,
                     Note = d.Note,
                     RequiresQc = d.RequiresQc,
                     QcState = d.QcState.ToString(),
@@ -285,7 +299,39 @@ namespace ERP.Application.Services
                     QcPolicyEffectiveAtUtc = d.QcPolicyEffectiveAtUtc,
                     QcDispositionReasonCode = d.QcDispositionReasonCode,
                     QcDispositionNote = d.QcDispositionNote
-                }).ToList()
+                };
+            }).ToList();
+
+            var subTotal = details.Sum(x => x.LineSubTotal);
+            var taxAmount = details.Sum(x => x.LineTaxAmount);
+
+            return new ImportReceiptDto
+            {
+                Id = receipt.Id,
+                Code = receipt.Code,
+                WarehouseId = receipt.WarehouseId,
+                WarehouseName = receipt.Warehouse?.Name,
+                Status = receipt.Status.ToString(),
+                Note = receipt.Note,
+                CreatedBy = receipt.CreatedBy,
+                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
+                ApprovedBy = receipt.ApprovedBy,
+                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
+                CreatedAt = receipt.CreatedAt,
+                ApprovedAt = receipt.ApprovedAt,
+                SupplierId = receipt.SupplierId,
+                PurchaseOrderId = receipt.PurchaseOrderId,
+                PurchaseOrderCode = receipt.PurchaseOrder?.Code,
+                AsnId = receipt.AsnId,
+                AsnCode = receipt.Asn?.Code,
+                SupplierCode = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Code : receipt.SupplierCodeSnapshot,
+                SupplierName = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Name : receipt.SupplierNameSnapshot,
+                RequiresQc = receipt.Details.Any(x => x.RequiresQc),
+                SubTotalAmount = subTotal,
+                TaxAmount = taxAmount,
+                TotalAmount = subTotal + taxAmount,
+                RowVersion = receipt.RowVersion is { Length: > 0 } ? Convert.ToBase64String(receipt.RowVersion) : null,
+                Details = details
             };
         }
 
@@ -510,6 +556,7 @@ namespace ERP.Application.Services
                     if (_inboundPlanning is not null) await _inboundPlanning.ApplyPostedStateAsync(receipt, postedByUserId);
                     if (_putaway is not null) await _putaway.CreateForPostedReceiptAsync(receipt, receivingLocationId!.Value, postedByUserId);
                     await _importReceiptRepository.UpdateAsync(receipt);
+                    if (_partnerDebt is not null) await _partnerDebt.RecordImportReceiptApDebtAsync(receipt, postedByUserId);
                     await _auditLogRepository.AddAsync(new AuditLog { UserId = postedByUserId, Action = "ImportReceipt.Posted", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.ReadyToPost}", NewValues = $"Status: {ReceiptStatus.Posted}", Result = "Success", Severity = "Warning", Timestamp = DateTime.UtcNow });
                     await _unitOfWork.CommitTransactionAsync();
                     return;

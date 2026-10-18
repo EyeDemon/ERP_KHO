@@ -122,6 +122,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IProductService, ERP.Appli
 builder.Services.AddScoped<ERP.Domain.Interfaces.IProductCatalogRepository, ERP.Infrastructure.Repositories.ProductCatalogRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IProductCatalogService, ERP.Application.Services.ProductCatalogService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IBusinessPartnerService, ERP.Infrastructure.Services.BusinessPartnerService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPartnerDebtService, ERP.Infrastructure.Services.PartnerDebtService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IWarehouseRepository, ERP.Infrastructure.Repositories.WarehouseRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseService, ERP.Application.Services.WarehouseService>();

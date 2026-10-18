@@ -201,10 +201,7 @@ public sealed class InventoryMovementService(
                     Quantity = request.Quantity
                 };
             }
-            catch (Exception ex) when (own && attempt < maxAttempts &&
-                                       (ex is DeadlockException ||
-                                        ex is SqlException { Number: 1205 } ||
-                                        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
+            catch (Exception ex) when (own && attempt < maxAttempts && IsDeadlock(ex))
             {
                 if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
                 context.ChangeTracker.Clear();
@@ -226,6 +223,16 @@ public sealed class InventoryMovementService(
                 throw;
             }
         }
+    }
+
+    private static bool IsDeadlock(Exception? ex)
+    {
+        for (var cur = ex; cur is not null; cur = cur.InnerException)
+        {
+            if (cur is DeadlockException or SqlException { Number: 1205 })
+                return true;
+        }
+        return false;
     }
 
     private async Task EnsureDestinationCapacityAsync(

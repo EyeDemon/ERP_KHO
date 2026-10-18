@@ -17,7 +17,7 @@ public sealed class PurchaseOrderConfiguration : IEntityTypeConfiguration<Purcha
         b.Property(x => x.ExternalVersion).HasMaxLength(100);
         b.Property(x => x.RowVersion).IsConcurrencyToken();
         b.HasIndex(x => new { x.TenantId, x.SourceSystem, x.ExternalPoId }).IsUnique().HasDatabaseName("UX_PurchaseOrders_TenantId_SourceSystem_ExternalPoId");
-        b.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.WarehouseId, x.Code }).IsUnique();
         b.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
@@ -42,6 +42,8 @@ public sealed class PurchaseOrderLineConfiguration : IEntityTypeConfiguration<Pu
         b.Property(x => x.ConversionFactorSnapshot).HasPrecision(18,8);
         b.Property(x => x.AllowedOverReceiptPct).HasPrecision(9,4);
         b.Property(x => x.AllowedUnderReceiptPct).HasPrecision(9,4);
+        b.Property(x => x.UnitPrice).HasPrecision(18, 2);
+        b.Property(x => x.TaxPercent).HasPrecision(9, 4);
         b.HasIndex(x => new { x.PurchaseOrderId, x.ExternalLineId }).IsUnique();
         b.HasIndex(x => new { x.PurchaseOrderId, x.LineNo }).IsUnique();
         b.HasOne(x => x.PurchaseOrder).WithMany(x => x.Lines).HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
@@ -62,7 +64,7 @@ public sealed class AsnConfiguration : IEntityTypeConfiguration<Asn>
         b.Property(x => x.VehiclePlate).HasMaxLength(30);
         b.Property(x => x.Note).HasMaxLength(500);
         b.Property(x => x.RowVersion).IsConcurrencyToken();
-        b.HasIndex(x => new { x.WarehouseId, x.Code }).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.WarehouseId, x.Code }).IsUnique();
         b.HasOne(x => x.PurchaseOrder).WithMany(x => x.Asns).HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);

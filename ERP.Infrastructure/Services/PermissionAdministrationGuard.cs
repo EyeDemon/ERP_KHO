@@ -36,10 +36,16 @@ public static class PermissionAdministrationGuard
     public static async Task EnsureAdministratorAsync(ErpKhoDbContext db, CancellationToken token)
     {
         var now = DateTime.UtcNow;
-        var valid = await db.Users.AsNoTracking().AnyAsync(u => u.IsActive &&
-            (u.LockoutEnd == null || u.LockoutEnd <= now) &&
-            u.Role.RoleName.Trim().ToLower() == "admin" &&
-            RequiredPermissions.All(code => u.Role.Permissions.Any(p => p.Permission.Code == code)), token);
+        var activeTenantId = db.CurrentTenantId;
+        var valid = await db.Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AnyAsync(u =>
+                u.TenantId == activeTenantId &&
+                u.IsActive &&
+                (u.LockoutEnd == null || u.LockoutEnd <= now) &&
+                u.Role.RoleName.Trim().ToLower() == "admin" &&
+                RequiredPermissions.All(code => u.Role.Permissions.Any(p => p.Permission.Code == code)), token);
         if (!valid)
             throw new ConcurrencyException("Không thể loại bỏ quản trị viên hợp lệ cuối cùng.");
     }

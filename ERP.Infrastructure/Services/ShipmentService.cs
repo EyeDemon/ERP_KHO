@@ -15,7 +15,8 @@ public sealed class ShipmentService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouseAuthorization,
     ICurrentUser currentUser,
-    IStockReservationService stockReservationService) : IShipmentService, IShipmentDispatchReadiness
+    IStockReservationService stockReservationService,
+    IPartnerDebtService? partnerDebt = null) : IShipmentService, IShipmentDispatchReadiness
 {
     public async Task<IReadOnlyList<ShipmentListDto>> ListAsync(
         int? warehouseId = null,
@@ -38,11 +39,50 @@ public sealed class ShipmentService(
             .ThenByDescending(x => x.Id)
             .Take(250)
             .ToListAsync(cancellationToken);
-        return rows.Select(MapList).ToList();
+        var shipmentIds = rows.Select(x => x.Id).ToArray();
+        var linkedExportReceipts = shipmentIds.Length == 0
+            ? new Dictionary<int, (int Id, string Code)>()
+            : await context.ExportReceipts.AsNoTracking()
+                .Where(x => x.ShipmentId.HasValue && shipmentIds.Contains(x.ShipmentId.Value))
+                .Select(x => new { ShipmentId = x.ShipmentId!.Value, x.Id, x.Code })
+                .ToDictionaryAsync(x => x.ShipmentId, x => (x.Id, x.Code), cancellationToken);
+        return rows.Select(r =>
+        {
+            var dto = MapList(r);
+            if (linkedExportReceipts.TryGetValue(r.Id, out var er))
+            {
+                dto.ExportReceiptId = er.Id;
+                dto.ExportReceiptCode = er.Code;
+            }
+            else if (r.SourceType == "ExportReceipt" && r.SourceId.HasValue)
+            {
+                dto.ExportReceiptId = r.SourceId;
+                dto.ExportReceiptCode = r.SourceCode;
+            }
+            return dto;
+        }).ToList();
     }
 
-    public async Task<ShipmentDto> GetAsync(int id, CancellationToken cancellationToken = default) =>
-        Map(await LoadAsync(id, false, cancellationToken));
+    public async Task<ShipmentDto> GetAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var shipment = await LoadAsync(id, false, cancellationToken);
+        var dto = Map(shipment);
+        var linkedEr = await context.ExportReceipts.AsNoTracking()
+            .Where(x => x.ShipmentId == shipment.Id)
+            .Select(x => new { x.Id, x.Code })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (linkedEr is not null)
+        {
+            dto.ExportReceiptId = linkedEr.Id;
+            dto.ExportReceiptCode = linkedEr.Code;
+        }
+        else if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
+        {
+            dto.ExportReceiptId = shipment.SourceId;
+            dto.ExportReceiptCode = shipment.SourceCode;
+        }
+        return dto;
+    }
 
     public Task<ShipmentDto> StageAsync(
         int id,
@@ -362,9 +402,9 @@ public sealed class ShipmentService(
 
             if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
             {
-                var receipt = await context.ExportReceipts.SingleOrDefaultAsync(
-                    x => x.Id == shipment.SourceId.Value,
-                    token);
+                var receipt = await context.ExportReceipts
+                    .Include(x => x.Details)
+                    .SingleOrDefaultAsync(x => x.Id == shipment.SourceId.Value, token);
                 if (receipt is null)
                     throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Không tìm thấy phiếu xuất nguồn của Shipment.");
                 if (receipt.Status != ReceiptStatus.Approved)
@@ -373,6 +413,126 @@ public sealed class ShipmentService(
                 receipt.Status = ReceiptStatus.Dispatched;
                 receipt.DispatchedAt = dispatchedAt;
                 receipt.DispatchedBy = currentUser.UserId;
+                receipt.ShipmentId = shipment.Id;
+
+                AddAudit(
+                    "Shipment.Dispatched",
+                    shipment,
+                    $"Reservations: {reservations.Count}; LedgerRows: {ledgerBuckets.Count}; Quantity: {ledgerBuckets.Values.Sum()}");
+                await context.SaveChangesAsync(token);
+
+                if (partnerDebt is not null && receipt.CustomerId.HasValue)
+                {
+                    var subTotal = receipt.Details.Sum(d => decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero));
+                    var taxAmount = receipt.Details.Sum(d =>
+                    {
+                        var lineSub = decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero);
+                        return decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                    });
+                    await partnerDebt.RecordOutboundArDebtAsync(
+                        receipt.CustomerId.Value,
+                        "ExportReceipt",
+                        receipt.Id,
+                        receipt.Code,
+                        subTotal,
+                        taxAmount,
+                        currentUser.UserId,
+                        "VND",
+                        token);
+                }
+                return;
+            }
+
+            if (shipment.SourceType == "SalesOrder" && shipment.SourceId.HasValue)
+            {
+                var salesOrder = await context.SalesOrders.AsNoTracking()
+                    .Include(x => x.Customer)
+                    .Include(x => x.Lines)
+                        .ThenInclude(l => l.Product)
+                            .ThenInclude(p => p.Unit)
+                    .SingleOrDefaultAsync(x => x.Id == shipment.SourceId.Value, token);
+
+                AddAudit(
+                    "Shipment.Dispatched",
+                    shipment,
+                    $"Reservations: {reservations.Count}; LedgerRows: {ledgerBuckets.Count}; Quantity: {ledgerBuckets.Values.Sum()}");
+
+                if (salesOrder is not null)
+                {
+                    var existingReceipt = await context.ExportReceipts
+                        .Include(x => x.Details)
+                        .SingleOrDefaultAsync(x => x.ShipmentId == shipment.Id, token);
+
+                    if (existingReceipt is null)
+                    {
+                        existingReceipt = new ExportReceipt
+                        {
+                            Code = $"ER-SHP-{shipment.Id:D6}",
+                            WarehouseId = shipment.WarehouseId,
+                            Status = ReceiptStatus.Dispatched,
+                            DispatchMode = ExportDispatchMode.RequireSeparateDispatch,
+                            CustomerId = salesOrder.CustomerId,
+                            CustomerCodeSnapshot = salesOrder.Customer?.Code,
+                            CustomerNameSnapshot = salesOrder.Customer?.Name,
+                            SalesOrderId = salesOrder.Id,
+                            ShipmentId = shipment.Id,
+                            CreatedBy = currentUser.UserId,
+                            CreatedAt = dispatchedAt,
+                            ApprovedBy = currentUser.UserId,
+                            ApprovedAt = dispatchedAt,
+                            DispatchedBy = currentUser.UserId,
+                            DispatchedAt = dispatchedAt,
+                            Note = $"Phiếu xuất tự động từ Shipment {shipment.ShipmentCode} (SO {salesOrder.OrderCode})",
+                            Details = new List<ExportReceiptDetail>()
+                        };
+
+                        foreach (var group in dispatchableLines.GroupBy(x => x.ProductId).OrderBy(g => g.Key))
+                        {
+                            var soLine = salesOrder.Lines.FirstOrDefault(l => l.ProductId == group.Key);
+                            var shippedBaseQty = group.Sum(x => x.PickedQuantity);
+                            var unitPricePerBase = soLine?.UnitPrice ?? 0m;
+                            var taxPercent = soLine?.TaxPercent ?? 0m;
+
+                            existingReceipt.Details.Add(new ExportReceiptDetail
+                            {
+                                ProductId = group.Key,
+                                Quantity = shippedBaseQty,
+                                UnitPrice = unitPricePerBase,
+                                TaxPercent = taxPercent,
+                                BaseUomIdSnapshot = soLine?.Product?.UnitId,
+                                BaseUomCodeSnapshot = soLine?.Product?.Unit?.Code,
+                                BaseUomNameSnapshot = soLine?.Product?.Unit?.Name,
+                                BaseUomDecimalPlacesSnapshot = soLine?.Product?.Unit?.DecimalPlaces,
+                                Note = $"Xuất theo Shipment {shipment.ShipmentCode}"
+                            });
+                        }
+
+                        context.ExportReceipts.Add(existingReceipt);
+                    }
+
+                    await context.SaveChangesAsync(token);
+
+                    if (partnerDebt is not null && salesOrder.CustomerId > 0)
+                    {
+                        var subTotal = existingReceipt.Details.Sum(d => decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero));
+                        var taxAmount = existingReceipt.Details.Sum(d =>
+                        {
+                            var lineSub = decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero);
+                            return decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                        });
+                        await partnerDebt.RecordOutboundArDebtAsync(
+                            salesOrder.CustomerId,
+                            "ExportReceipt",
+                            existingReceipt.Id,
+                            existingReceipt.Code,
+                            subTotal,
+                            taxAmount,
+                            currentUser.UserId,
+                            salesOrder.Currency,
+                            token);
+                    }
+                }
+                return;
             }
 
             AddAudit(
@@ -558,7 +718,22 @@ public sealed class ShipmentService(
                 await mutation(shipment, cancellationToken);
                 await context.SaveChangesAsync(cancellationToken);
                 if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-                return Map(shipment);
+                var dto = Map(shipment);
+                var linkedEr = await context.ExportReceipts.AsNoTracking()
+                    .Where(x => x.ShipmentId == shipment.Id)
+                    .Select(x => new { x.Id, x.Code })
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (linkedEr is not null)
+                {
+                    dto.ExportReceiptId = linkedEr.Id;
+                    dto.ExportReceiptCode = linkedEr.Code;
+                }
+                else if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
+                {
+                    dto.ExportReceiptId = shipment.SourceId;
+                    dto.ExportReceiptCode = shipment.SourceCode;
+                }
+                return dto;
             }
             catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
                                        (ex is DeadlockException ||

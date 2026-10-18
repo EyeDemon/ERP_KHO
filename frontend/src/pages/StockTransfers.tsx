@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Plus, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
-import { currentUserId, hasPermission, usePermission } from '../services/authorization';
+import { currentRole, currentUserId, hasPermission, usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import {
   UiBadge,
@@ -89,7 +89,7 @@ const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger
 };
 
 export default function StockTransfers() {
-  const role = localStorage.getItem('role') || 'Viewer';
+  const role = currentRole();
   const hasCreatePermission = usePermission('stock_transfer.create');
   const hasApprovePermission = usePermission('stock_transfer.approve');
   const canWrite = hasCreatePermission || ['Admin', 'Manager', 'WarehouseStaff'].includes(role);

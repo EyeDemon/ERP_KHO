@@ -114,6 +114,30 @@ ORDER BY Id;", cancellationToken);
         }
     }
 
+    public async Task AcquireBusinessPartnerLockAsync(
+        int partnerId,
+        CancellationToken cancellationToken = default)
+    {
+        if (partnerId <= 0 || !Database.IsRelational() || !Database.IsSqlServer() || Database.CurrentTransaction is null)
+        {
+            return;
+        }
+
+        var tenantId = CurrentTenantId;
+        try
+        {
+            await Database.ExecuteSqlInterpolatedAsync($@"
+SELECT Id
+FROM dbo.BusinessPartners WITH (UPDLOCK, ROWLOCK)
+WHERE TenantId = {tenantId}
+  AND Id = {partnerId};", cancellationToken);
+        }
+        catch (SqlException exception) when (exception.Number == 1205)
+        {
+            throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch khóa công nợ đối tác bị deadlock.", exception);
+        }
+    }
+
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
@@ -125,6 +149,8 @@ ORDER BY Id;", cancellationToken);
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
     public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
     public DbSet<BusinessPartner> BusinessPartners => Set<BusinessPartner>();
+    public DbSet<PartnerDebtInvoice> PartnerDebtInvoices => Set<PartnerDebtInvoice>();
+    public DbSet<PartnerDebtLedger> PartnerDebtLedgers => Set<PartnerDebtLedger>();
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<WarehouseCalendar> WarehouseCalendars => Set<WarehouseCalendar>();
     public DbSet<WarehouseCalendarDay> WarehouseCalendarDays => Set<WarehouseCalendarDay>();
@@ -188,27 +214,97 @@ ORDER BY Id;", cancellationToken);
     {
         EnforceMultiTenantIsolation();
         EnforceAppendOnlyInventoryLedger();
+        EnforceAppendOnlyLocationMovements();
+        EnforceAppendOnlyPartnerDebtLedger();
         EnforceAppendOnlyAuditLogs();
         EnrichAuditLogs();
+        EnsureNonSqlServerRowVersions();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
         SaveChangesAsync(acceptAllChangesOnSuccess: true, cancellationToken);
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        EnforceMultiTenantIsolation();
+        await EnforceMultiTenantIsolationAsync(cancellationToken);
         EnforceAppendOnlyInventoryLedger();
+        EnforceAppendOnlyLocationMovements();
+        EnforceAppendOnlyPartnerDebtLedger();
         EnforceAppendOnlyAuditLogs();
         EnrichAuditLogs();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        EnsureNonSqlServerRowVersions();
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
+
+    private readonly record struct PendingForeignKeyTenantCheck(
+        string DependentTypeName,
+        Type PrincipalClrType,
+        string PrincipalKeyName,
+        object FkValue);
 
     private void EnforceMultiTenantIsolation()
     {
-        var activeTenantId = CurrentTenantId;
+        if (!PrepareAndCollectMultiTenantChecks(out var activeTenantId, out var pendingFkChecks))
+        {
+            return;
+        }
+
+        if (pendingFkChecks.Count == 0)
+        {
+            return;
+        }
+
+        var principalTenantCache = new Dictionary<(Type PrincipalType, object Key), int?>();
+        foreach (var group in pendingFkChecks.GroupBy(x => (x.PrincipalClrType, x.PrincipalKeyName, KeyClrType: x.FkValue.GetType())))
+        {
+            var distinctKeys = group.Select(x => x.FkValue).Distinct().ToList();
+            BatchLookupPrincipalTenantIdsSync(
+                group.Key.PrincipalClrType,
+                group.Key.KeyClrType,
+                group.Key.PrincipalKeyName,
+                distinctKeys,
+                principalTenantCache);
+        }
+
+        VerifyCollectedForeignKeyTenantOwnership(pendingFkChecks, activeTenantId, principalTenantCache);
+    }
+
+    private async Task EnforceMultiTenantIsolationAsync(CancellationToken cancellationToken)
+    {
+        if (!PrepareAndCollectMultiTenantChecks(out var activeTenantId, out var pendingFkChecks))
+        {
+            return;
+        }
+
+        if (pendingFkChecks.Count == 0)
+        {
+            return;
+        }
+
+        var principalTenantCache = new Dictionary<(Type PrincipalType, object Key), int?>();
+        foreach (var group in pendingFkChecks.GroupBy(x => (x.PrincipalClrType, x.PrincipalKeyName, KeyClrType: x.FkValue.GetType())))
+        {
+            var distinctKeys = group.Select(x => x.FkValue).Distinct().ToList();
+            await BatchLookupPrincipalTenantIdsAsync(
+                group.Key.PrincipalClrType,
+                group.Key.KeyClrType,
+                group.Key.PrincipalKeyName,
+                distinctKeys,
+                principalTenantCache,
+                cancellationToken);
+        }
+
+        VerifyCollectedForeignKeyTenantOwnership(pendingFkChecks, activeTenantId, principalTenantCache);
+    }
+
+    private bool PrepareAndCollectMultiTenantChecks(
+        out int activeTenantId,
+        out List<PendingForeignKeyTenantCheck> pendingFkChecks)
+    {
+        activeTenantId = CurrentTenantId;
         var isBypass = IsSystemTenantBypass;
+        pendingFkChecks = [];
 
         var tenantEntries = ChangeTracker.Entries<ERP.Domain.Common.ITenantEntity>().ToList();
 
@@ -227,10 +323,8 @@ ORDER BY Id;", cancellationToken);
 
         if (isBypass)
         {
-            return;
+            return false;
         }
-
-        var principalTenantCache = new Dictionary<(Type PrincipalType, object Key), int?>();
 
         foreach (var entry in tenantEntries)
         {
@@ -269,9 +363,11 @@ ORDER BY Id;", cancellationToken);
                     }
                 }
 
-                ValidateForeignKeyTenantOwnership(entry, activeTenantId, principalTenantCache);
+                CollectEntryForeignKeyChecks(entry, activeTenantId, pendingFkChecks);
             }
         }
+
+        return true;
     }
 
     private static void EnsureNavigationTenantMatch(
@@ -287,18 +383,26 @@ ORDER BY Id;", cancellationToken);
         }
     }
 
-    private void ValidateForeignKeyTenantOwnership(
+    private void CollectEntryForeignKeyChecks(
         Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<ERP.Domain.Common.ITenantEntity> entry,
         int activeTenantId,
-        Dictionary<(Type PrincipalType, object Key), int?> principalTenantCache)
+        List<PendingForeignKeyTenantCheck> pendingFkChecks)
     {
         foreach (var fk in entry.Metadata.GetForeignKeys())
         {
             var principalClrType = fk.PrincipalEntityType.ClrType;
+            // Skip global catalog tables that do not implement ITenantEntity (Role, Permission, RolePermission, InventoryStatusDefinition)
             if (!typeof(ERP.Domain.Common.ITenantEntity).IsAssignableFrom(principalClrType)
                 || fk.Properties.Count != 1
                 || fk.PrincipalKey.Properties.Count != 1)
             {
+                continue;
+            }
+
+            if (fk.DependentToPrincipal?.Name is string depNavName
+                && entry.Navigation(depNavName).CurrentValue is ERP.Domain.Common.ITenantEntity navPrincipal)
+            {
+                EnsureNavigationTenantMatch(entry.Metadata.ClrType.Name, depNavName, navPrincipal, activeTenantId);
                 continue;
             }
 
@@ -309,8 +413,10 @@ ORDER BY Id;", cancellationToken);
             }
 
             var fkValue = fkPropEntry.CurrentValue;
-            if (fkValue is null
+            if (fkPropEntry.IsTemporary
+                || fkValue is null
                 || (fkValue is int intKey && intKey <= 0)
+                || (fkValue is long longKey && longKey <= 0)
                 || (fkValue is Guid guidKey && guidKey == Guid.Empty))
             {
                 continue;
@@ -333,40 +439,138 @@ ORDER BY Id;", cancellationToken);
                 continue;
             }
 
-            var cacheKey = (principalClrType, fkValue);
-            if (!principalTenantCache.TryGetValue(cacheKey, out var principalTenantId))
-            {
-                principalTenantId = LookupPrincipalTenantId(principalClrType, principalKeyName, fkValue);
-                principalTenantCache[cacheKey] = principalTenantId;
-            }
+            pendingFkChecks.Add(new PendingForeignKeyTenantCheck(
+                entry.Metadata.ClrType.Name,
+                principalClrType,
+                principalKeyName,
+                fkValue));
+        }
+    }
 
-            if (principalTenantId.HasValue && principalTenantId.Value > 0 && principalTenantId.Value != activeTenantId)
+    private static void VerifyCollectedForeignKeyTenantOwnership(
+        List<PendingForeignKeyTenantCheck> pendingFkChecks,
+        int activeTenantId,
+        Dictionary<(Type PrincipalType, object Key), int?> principalTenantCache)
+    {
+        foreach (var check in pendingFkChecks)
+        {
+            if (principalTenantCache.TryGetValue((check.PrincipalClrType, check.FkValue), out var principalTenantId)
+                && principalTenantId.HasValue
+                && principalTenantId.Value > 0
+                && principalTenantId.Value != activeTenantId)
             {
                 throw new ERP.Application.Exceptions.ForbiddenException(
-                    $"Vi phạm cô lập khóa ngoại Multi-Tenant (403 Cross-Tenant Reference Denied): Thực thể '{entry.Metadata.ClrType.Name}' (Tenant {activeTenantId}) không được phép tham chiếu '{principalClrType.Name}' (ID={fkValue}, Tenant {principalTenantId.Value}).");
+                    $"Vi phạm cô lập khóa ngoại Multi-Tenant (403 Cross-Tenant Reference Denied): Thực thể '{check.DependentTypeName}' (Tenant {activeTenantId}) không được phép tham chiếu '{check.PrincipalClrType.Name}' (ID={check.FkValue}, Tenant {principalTenantId.Value}).");
             }
         }
     }
 
-    private int? LookupPrincipalTenantId(Type principalClrType, string principalKeyName, object keyValue)
+    private Task BatchLookupPrincipalTenantIdsAsync(
+        Type principalClrType,
+        Type keyClrType,
+        string principalKeyName,
+        IReadOnlyCollection<object> rawKeys,
+        Dictionary<(Type PrincipalType, object Key), int?> cache,
+        CancellationToken cancellationToken)
     {
         var method = typeof(ErpKhoDbContext).GetMethod(
-            nameof(LookupPrincipalTenantIdCore),
+            nameof(BatchLookupPrincipalTenantIdsCoreAsync),
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .MakeGenericMethod(principalClrType, keyValue.GetType());
+            .MakeGenericMethod(principalClrType, keyClrType);
 
-        return (int?)method.Invoke(this, [principalKeyName, keyValue]);
+        return (Task)method.Invoke(this, [principalKeyName, rawKeys, cache, cancellationToken])!;
     }
 
-    private int? LookupPrincipalTenantIdCore<TPrincipal, TKey>(string principalKeyName, TKey keyValue)
+    private async Task BatchLookupPrincipalTenantIdsCoreAsync<TPrincipal, TKey>(
+        string principalKeyName,
+        IReadOnlyCollection<object> rawKeys,
+        Dictionary<(Type PrincipalType, object Key), int?> cache,
+        CancellationToken cancellationToken)
         where TPrincipal : class, ERP.Domain.Common.ITenantEntity
+        where TKey : notnull
     {
-        return Set<TPrincipal>()
+        var typedKeys = rawKeys.Cast<TKey>().Distinct().ToList();
+        if (typedKeys.Count == 0)
+        {
+            return;
+        }
+
+        var rows = await Set<TPrincipal>()
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(e => EF.Property<TKey>(e, principalKeyName)!.Equals(keyValue))
-            .Select(e => (int?)e.TenantId)
-            .FirstOrDefault();
+            .Where(e => typedKeys.Contains(EF.Property<TKey>(e, principalKeyName)))
+            .Select(e => new
+            {
+                Key = EF.Property<TKey>(e, principalKeyName),
+                e.TenantId
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var key in typedKeys)
+        {
+            cache[(typeof(TPrincipal), key)] = null;
+        }
+
+        foreach (var row in rows)
+        {
+            if (row.Key is not null)
+            {
+                cache[(typeof(TPrincipal), row.Key)] = row.TenantId;
+            }
+        }
+    }
+
+    private void BatchLookupPrincipalTenantIdsSync(
+        Type principalClrType,
+        Type keyClrType,
+        string principalKeyName,
+        IReadOnlyCollection<object> rawKeys,
+        Dictionary<(Type PrincipalType, object Key), int?> cache)
+    {
+        var method = typeof(ErpKhoDbContext).GetMethod(
+            nameof(BatchLookupPrincipalTenantIdsCoreSync),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .MakeGenericMethod(principalClrType, keyClrType);
+
+        method.Invoke(this, [principalKeyName, rawKeys, cache]);
+    }
+
+    private void BatchLookupPrincipalTenantIdsCoreSync<TPrincipal, TKey>(
+        string principalKeyName,
+        IReadOnlyCollection<object> rawKeys,
+        Dictionary<(Type PrincipalType, object Key), int?> cache)
+        where TPrincipal : class, ERP.Domain.Common.ITenantEntity
+        where TKey : notnull
+    {
+        var typedKeys = rawKeys.Cast<TKey>().Distinct().ToList();
+        if (typedKeys.Count == 0)
+        {
+            return;
+        }
+
+        var rows = Set<TPrincipal>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(e => typedKeys.Contains(EF.Property<TKey>(e, principalKeyName)))
+            .Select(e => new
+            {
+                Key = EF.Property<TKey>(e, principalKeyName),
+                e.TenantId
+            })
+            .ToList();
+
+        foreach (var key in typedKeys)
+        {
+            cache[(typeof(TPrincipal), key)] = null;
+        }
+
+        foreach (var row in rows)
+        {
+            if (row.Key is not null)
+            {
+                cache[(typeof(TPrincipal), row.Key)] = row.TenantId;
+            }
+        }
     }
 
     private void EnforceAppendOnlyAuditLogs()
@@ -410,6 +614,45 @@ ORDER BY Id;", cancellationToken);
         return entry.Properties.All(p => !p.IsModified || p.Metadata.Name == nameof(InventoryTransaction.CorrectiveTransactionId));
     }
 
+    private void EnforceAppendOnlyLocationMovements()
+    {
+        foreach (var entry in ChangeTracker.Entries<InventoryLocationMovement>())
+        {
+            if (entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException(
+                    "InventoryLocationMovements is append-only; modifying or deleting location movement history is forbidden.");
+            }
+
+            if (entry.State == EntityState.Modified && !IsAllowedMovementSelfReferenceLinkUpdate(entry))
+            {
+                throw new InvalidOperationException(
+                    "InventoryLocationMovements is append-only; modifying or deleting location movement history is forbidden.");
+            }
+        }
+    }
+
+    private static bool IsAllowedMovementSelfReferenceLinkUpdate(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<InventoryLocationMovement> entry)
+    {
+        var refProp = entry.Property(x => x.ReferenceId);
+        if (!refProp.IsModified || refProp.OriginalValue != null || refProp.CurrentValue != entry.Entity.Id)
+            return false;
+
+        return entry.Properties.All(p => !p.IsModified || p.Metadata.Name == nameof(InventoryLocationMovement.ReferenceId));
+    }
+
+    private void EnforceAppendOnlyPartnerDebtLedger()
+    {
+        foreach (var entry in ChangeTracker.Entries<PartnerDebtLedger>())
+        {
+            if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException(
+                    "PartnerDebtLedgers is append-only; modifying or deleting debt ledger entries is forbidden.");
+            }
+        }
+    }
+
     private void EnrichAuditLogs()
     {
         if (_requestMetadata is null) return;
@@ -419,6 +662,48 @@ ORDER BY Id;", cancellationToken);
             entry.Entity.IdempotencyKeyHash ??= _requestMetadata.IdempotencyKeyHash;
             entry.Entity.RequestFingerprint ??= _requestMetadata.RequestFingerprint;
             entry.Entity.Result ??= "Success";
+        }
+    }
+
+    private void EnsureNonSqlServerRowVersions()
+    {
+        if (Database.IsSqlServer())
+        {
+            return;
+        }
+
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State != EntityState.Added && entry.State != EntityState.Modified)
+            {
+                continue;
+            }
+
+            var rowVersionMeta = entry.Metadata.FindProperty("RowVersion");
+            if (rowVersionMeta is null || rowVersionMeta.ClrType != typeof(byte[]))
+            {
+                continue;
+            }
+
+            var prop = entry.Property("RowVersion");
+            var current = prop.CurrentValue as byte[];
+            var nextToken = Guid.NewGuid().ToByteArray()[..8];
+
+            if (entry.State == EntityState.Added)
+            {
+                if (current is null || current.Length == 0)
+                {
+                    prop.CurrentValue = nextToken;
+                }
+            }
+            else if (entry.State == EntityState.Modified && rowVersionMeta.ValueGenerated == Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never)
+            {
+                var original = prop.OriginalValue as byte[];
+                if (current is null || current.Length == 0 || (original is not null && current.AsSpan().SequenceEqual(original)))
+                {
+                    prop.CurrentValue = nextToken;
+                }
+            }
         }
     }
 
@@ -464,6 +749,10 @@ ORDER BY Id;", cancellationToken);
             modelBuilder.Entity<DockAppointment>().Property(x => x.RowVersion).IsRowVersion();
             modelBuilder.Entity<PurchaseOrder>().Property(x => x.RowVersion).IsRowVersion();
             modelBuilder.Entity<Asn>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<InventoryStock>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<ImportReceipt>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<ExportReceipt>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<PartnerDebtInvoice>().Property(x => x.RowVersion).IsRowVersion();
             // SQL deployments backfill LocationId before enforcing the final required relationship.
             // The nullable CLR shape also lets pre-migration compatibility tests represent legacy rows.
             modelBuilder.Entity<InventoryStock>().Property(x => x.LocationId).IsRequired();

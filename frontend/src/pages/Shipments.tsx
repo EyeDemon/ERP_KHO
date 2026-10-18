@@ -19,7 +19,7 @@ type ShipmentProofOfDelivery = {
 };
 type Shipment = {
   id:number; shipmentCode:string; packingSessionId:number; packingSessionCode:string; warehouseId:number; warehouseName:string;
-  sourceType:string; sourceId?:number; sourceCode?:string; status:string; stagingLocationId?:number; stagingLocationCode?:string;
+  sourceType:string; sourceId?:number; sourceCode?:string; exportReceiptId?:number; exportReceiptCode?:string; status:string; stagingLocationId?:number; stagingLocationCode?:string;
   handlingUnitCount:number; loadedHandlingUnitCount:number; dockAppointmentId?:number; dockAppointmentCode?:string; dockId?:number; dockCode?:string; carrierName?:string; vehiclePlate?:string; trailerPlate?:string;
   sealNumber?:string; createdAt:string; stagedAt?:string; loadingStartedAt?:string; loadedAt?:string;
   dispatchedAt?:string; dispatchedBy?:number; dispatchedByName?:string; inTransitAt?:string; deliveryFailedAt?:string;
@@ -244,6 +244,7 @@ export default function Shipments(){
           <span className="ui-muted-text">{selected.packingSessionCode} • {selected.sourceCode??selected.sourceType} • {selected.warehouseName}</span>
           <span>HU loaded <strong>{selected.loadedHandlingUnitCount}</strong> / {selected.handlingUnitCount}</span>
           {selected.stagingLocationCode&&<span>Staging: <strong>{selected.stagingLocationCode}</strong></span>}
+          {selected.exportReceiptCode&&<UiBadge tone="success">{`Phiếu xuất kho: ${selected.exportReceiptCode}`}</UiBadge>}
         </div>
         <p className="ui-muted-text">
           Foundation hiện quản lý Shipment từ READY đến DISPATCHED và post-dispatch internal workflow IN_TRANSIT / DELIVERY_FAILED /

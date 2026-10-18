@@ -13,6 +13,7 @@ public sealed class SalesOrderConfiguration : IEntityTypeConfiguration<SalesOrde
         b.Property(x => x.OrderCode).HasMaxLength(50).IsRequired();
         b.Property(x => x.ExternalOrderId).HasMaxLength(100).IsRequired();
         b.Property(x => x.ShippingMethod).HasMaxLength(100);
+        b.Property(x => x.Currency).HasMaxLength(10).HasDefaultValue("VND").IsRequired();
         b.Property(x => x.CancellationReason).HasMaxLength(500);
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => new { x.TenantId, x.OrderCode }).IsUnique().HasDatabaseName("UX_SalesOrders_TenantId_OrderCode");
@@ -38,6 +39,8 @@ public sealed class SalesOrderLineConfiguration : IEntityTypeConfiguration<Sales
         b.Property(x => x.UomCode).HasMaxLength(20).IsRequired();
         b.Property(x => x.OrderedQuantity).HasPrecision(18, 4);
         b.Property(x => x.CancelledQuantity).HasPrecision(18, 4);
+        b.Property(x => x.UnitPrice).HasPrecision(18, 2);
+        b.Property(x => x.TaxPercent).HasPrecision(9, 4);
         b.HasIndex(x => new { x.SalesOrderId, x.ExternalLineId }).IsUnique();
         b.HasIndex(x => new { x.SalesOrderId, x.ProductId }).IsUnique();
         b.HasOne(x => x.SalesOrder).WithMany(x => x.Lines).HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.Restrict);

@@ -3,6 +3,7 @@ import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type SourceLine = {
@@ -173,6 +174,14 @@ export default function PackingSessions(){
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS (AX-09, AX-10)</button>
           {kittingVasResult&&<UiBadge tone="success">{kittingVasResult}</UiBadge>}
         </div>
+        <MobileBarcodeScannerBar
+          warehouseId={selected?.warehouseId??sessions[0]?.warehouseId}
+          disabled={!!busy||governanceBusy}
+          onScan={code=>{
+            const matchSession=sessions.find(s=>s.sessionCode.toUpperCase()===code.toUpperCase());
+            if(matchSession)void detail(matchSession.id);
+          }}
+        />
       </UiCard>
 
       <UiCard title="Packing sessions">

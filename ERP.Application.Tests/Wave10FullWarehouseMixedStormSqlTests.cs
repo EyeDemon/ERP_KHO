@@ -1010,7 +1010,8 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
                             .Where(t => t.ProductId == productId)
                             .Sum(t => GetLocationLedgerDelta(t, locationId))
                         + wh1PutawayMovements
-                            .Where(m => m.ProductId == productId)
+                            .Where(m => m.ProductId == productId &&
+                                        !wh1Transactions.Any(t => t.ReferenceType == "PutawayTask" && t.ReferenceId == m.PutawayTaskId))
                             .Sum(m => (m.ToLocationId == locationId ? m.BaseQuantity : 0m) -
                                       (m.FromLocationId == locationId ? m.BaseQuantity : 0m)));
 
@@ -1047,6 +1048,8 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
             await cleanDb.Stocktakes.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
             await cleanDb.ImportReceiptDetails.Where(x => warehouseIds.Contains(x.ImportReceipt.WarehouseId)).ExecuteDeleteAsync();
             await cleanDb.ImportReceipts.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+            await cleanDb.ExportReceiptDetails.Where(x => warehouseIds.Contains(x.ExportReceipt.WarehouseId)).ExecuteDeleteAsync();
+            await cleanDb.ExportReceipts.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
             await cleanDb.InventoryStocks.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
             await cleanDb.WarehouseLocations.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
             await cleanDb.UserWarehouses.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
@@ -1054,7 +1057,11 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
             if (skuAId > 0 || skuBId > 0)
                 await cleanDb.Products.Where(x => x.Id == skuAId || x.Id == skuBId).ExecuteDeleteAsync();
             if (customerId > 0 || supplierId > 0)
+            {
+                await cleanDb.PartnerDebtLedgers.Where(x => x.PartnerId == customerId || x.PartnerId == supplierId).ExecuteDeleteAsync();
+                await cleanDb.PartnerDebtInvoices.Where(x => x.PartnerId == customerId || x.PartnerId == supplierId).ExecuteDeleteAsync();
                 await cleanDb.BusinessPartners.Where(x => x.Id == customerId || x.Id == supplierId).ExecuteDeleteAsync();
+            }
             await cleanDb.Units.Where(x => x.Code == unitCode).ExecuteDeleteAsync();
             if (makerId > 0 || checkerId > 0)
                 await cleanDb.Users.Where(x => x.Id == makerId || x.Id == checkerId).ExecuteDeleteAsync();

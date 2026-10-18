@@ -13,6 +13,7 @@ public class ImportReceiptConfiguration : IEntityTypeConfiguration<ImportReceipt
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasDatabaseName("UX_ImportReceipts_TenantId_Code");
         builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.RowVersion).IsConcurrencyToken();
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.SupplierCodeSnapshot).HasMaxLength(50);
         builder.Property(x => x.SupplierNameSnapshot).HasMaxLength(200);

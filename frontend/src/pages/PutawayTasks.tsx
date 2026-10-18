@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { roundQty4 } from './productCatalog';
+import { roundQty4, sanitizeScannerCode } from './productCatalog';
+import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
 import './PutawayTasks.css';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
@@ -11,11 +12,13 @@ type Task={id:number;warehouseId?:number;receiptCode:string;warehouseName:string
 type Location={id:number;code:string;name:string;locationType:string;isPickable:boolean};
 const states:Record<string,string>={Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang thực hiện',Completed:'Đã hoàn thành',Cancelled:'Đã hủy',Exception:'Cần xử lý'};
 const inventory:Record<string,string>={Available:'Có thể sử dụng',Damaged:'Hư hỏng',Rejected:'Hàng bị từ chối'};
-const message=(e:unknown)=>{const status=(e as {response?:{status?:number}})?.response?.status;return status===403?'Bạn không có quyền thực hiện thao tác này.':status===404?'Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.':status===409?'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.':'Không thể lưu dữ liệu. Vui lòng thử lại.'};
+const message=(e:unknown)=>{const response=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;const status=response?.status;const code=response?.data?.code;if(code==='PUTAWAY_WRONG_BIN'||code==='PUTAWAY_WRONG_PRODUCT')return response?.data?.message??'Mã vạch vị trí hoặc sản phẩm không khớp.';return status===403?'Bạn không có quyền thực hiện thao tác này.':status===404?'Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.':status===409?'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.':'Không thể lưu dữ liệu. Vui lòng thử lại.'};
 
 export default function PutawayTasks(){
  const [tasks,setTasks]=useState<Task[]>([]),[selected,setSelected]=useState<Task|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState('');
- const [locations,setLocations]=useState<Record<number,Location[]>>({}),[destination,setDestination]=useState<Record<number,number>>({}),[quantity,setQuantity]=useState<Record<number,number|string>>({}); const lock=useRef(new Set<string>());
+ const [locations,setLocations]=useState<Record<number,Location[]>>({}),[destination,setDestination]=useState<Record<number,number>>({}),[quantity,setQuantity]=useState<Record<number,number|string>>({});
+ const [scannedBin,setScannedBin]=useState<Record<number,string>>({}),[scannedProduct,setScannedProduct]=useState<Record<number,string>>({});
+ const lock=useRef(new Set<string>());
  const canAssign=usePermission('putaway.assign'),canExecute=usePermission('putaway.execute'),canCancel=usePermission('putaway.cancel');
  const [exceptionReason,setExceptionReason]=useState('');
  const [slottingEvaluationResult,setSlottingEvaluationResult]=useState('');
@@ -79,6 +82,15 @@ export default function PutawayTasks(){
        <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin (IN-09)</button>
        {slottingEvaluationResult&&<span><strong>{slottingEvaluationResult}</strong></span>}
      </div>
+     <MobileBarcodeScannerBar
+       warehouseId={selected?.warehouseId??tasks[0]?.warehouseId}
+       disabled={!!busy}
+       onScan={code=>{
+         const upper=sanitizeScannerCode(code).toUpperCase();
+         const matchTask=tasks.find(t=>t.receiptCode.toUpperCase()===upper);
+         if(matchTask)void detail(matchTask.id);
+       }}
+     />
    </UiCard>
 
    <div className="putaway putaway-grid">
@@ -100,6 +112,29 @@ export default function PutawayTasks(){
          <span className="ui-muted-text">Tiến độ {selected.movedBaseQuantity}/{selected.requiredBaseQuantity}</span>
        </div>
        {selected.exceptionReason&&<p><strong>Lý do cần xử lý:</strong> {selected.exceptionReason}</p>}
+
+       {canExecute&&['Assigned','InProgress'].includes(selected.status)&&<MobileBarcodeScannerBar
+         label="Quét nhanh kệ đích (Bin) hoặc mã sản phẩm (SKU)"
+         warehouseId={selected.warehouseId}
+         disabled={!!busy}
+         resolveViaApi={false}
+         onScan={code=>{
+           const upper=sanitizeScannerCode(code).toUpperCase();
+           for(const item of selected.items.filter(x=>x.remainingBaseQuantity>0)){
+             const matchLoc=(locations[item.id]??[]).find(l=>l.code.toUpperCase()===upper);
+             if(matchLoc){
+               setDestination(v=>({...v,[item.id]:matchLoc.id}));
+               setScannedBin(v=>({...v,[item.id]:matchLoc.code}));
+               return;
+             }
+             if(item.productCode.toUpperCase()===upper){
+               setScannedProduct(v=>({...v,[item.id]:item.productCode}));
+               if(!quantity[item.id])setQuantity(v=>({...v,[item.id]:item.remainingBaseQuantity}));
+               return;
+             }
+           }
+         }}
+       />}
 
        <div className="putaway-actions">
          {canAssign&&selected.status==='Open'&&<button disabled={!!busy} onClick={()=>void mutate(`assign-${selected.id}`,`/api/putaway-tasks/${selected.id}/assign`,{assignedUserId:currentUserId(),rowVersion:selected.rowVersion})}>{busy?'Đang lưu...':'Nhận nhiệm vụ'}</button>}
@@ -124,7 +159,7 @@ export default function PutawayTasks(){
            {canExecute&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
              <label>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
              <label>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0.0001" step="0.0001" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:e.target.value===''?'':roundQty4(Number(e.target.value))}))}/></label>
-             <button disabled={!!busy||!destination[item.id]||!(Number(quantity[item.id])>0)} onClick={()=>void mutate(`move-${selected.id}-${item.id}`,`/api/putaway-tasks/${selected.id}/move`,{itemId:item.id,destinationLocationId:destination[item.id],quantity:roundQty4(Number(quantity[item.id])),unitCode:item.operationUnitCode,rowVersion:selected.rowVersion})}>{busy===`move-${selected.id}-${item.id}`?'Đang hoàn thành...':'Xác nhận số lượng'}</button>
+             <button disabled={!!busy||!destination[item.id]||!(Number(quantity[item.id])>0)} onClick={()=>void mutate(`move-${selected.id}-${item.id}`,`/api/putaway-tasks/${selected.id}/move`,{itemId:item.id,destinationLocationId:destination[item.id],quantity:roundQty4(Number(quantity[item.id])),unitCode:item.operationUnitCode,rowVersion:selected.rowVersion,...(scannedBin[item.id]?{destinationLocationBarcode:scannedBin[item.id]}:{}),...(scannedProduct[item.id]?{productBarcode:scannedProduct[item.id]}:{})})}>{busy===`move-${selected.id}-${item.id}`?'Đang hoàn thành...':'Xác nhận số lượng'}</button>
            </div>}
          </fieldset>)}
        </div>

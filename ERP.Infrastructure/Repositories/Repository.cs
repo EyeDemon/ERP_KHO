@@ -19,7 +19,7 @@ namespace ERP.Infrastructure.Repositories
 
         public virtual async Task<T?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
         {
-            var entity = await _dbSet.FindAsync(new object?[] { id }, cancellationToken).AsTask();
+            var entity = await _dbSet.FirstOrDefaultAsync(e => EF.Property<int>(e, "Id") == id, cancellationToken);
             if (entity is ERP.Domain.Common.ITenantEntity tenantEntity &&
                 !_context.IsSystemTenantBypass &&
                 tenantEntity.TenantId != _context.CurrentTenantId)

@@ -171,13 +171,16 @@ const Inventory = () => {
   const paginatedStocks = stocks.slice((currentStockPage - 1) * stockPageSize, currentStockPage * stockPageSize);
 
   useEffect(() => {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('permissions') !== null && !hasPermission('warehouse.read')) {
+    if (!hasPermission('warehouse.read')) {
       setWarehouses([]);
       return;
     }
     apiClient.get('/api/warehouses')
       .then(response => setWarehouses(response.data.filter((warehouse: WarehouseOption) => warehouse.isActive)))
-      .catch(() => setWarehouses([]));
+      .catch(() => {
+        setWarehouses([]);
+        setStockError('Không thể tải danh sách kho được phân quyền.');
+      });
   }, []);
 
   useEffect(() => {
@@ -1101,7 +1104,7 @@ const Inventory = () => {
                               demandAnomalyDetector: String(d.demandAnomalyDetector ?? ''),
                               inventoryRiskScoreStatus: String(d.inventoryRiskScoreStatus ?? ''),
                               humanInTheLoopBoundary: String(d.humanInTheLoopBoundary ?? ''),
-                              status: String(d.status ?? 'VERIFIED'),
+                              status: String(d.status ?? ''),
                             });
                           })
                           .catch(() => {

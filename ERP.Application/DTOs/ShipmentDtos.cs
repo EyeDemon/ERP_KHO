@@ -11,6 +11,8 @@ public class ShipmentListDto
     public string SourceType { get; set; } = string.Empty;
     public int? SourceId { get; set; }
     public string? SourceCode { get; set; }
+    public int? ExportReceiptId { get; set; }
+    public string? ExportReceiptCode { get; set; }
     public string Status { get; set; } = string.Empty;
     public int? StagingLocationId { get; set; }
     public string? StagingLocationCode { get; set; }

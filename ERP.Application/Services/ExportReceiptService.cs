@@ -21,6 +21,7 @@ namespace ERP.Application.Services
         private readonly IPickingDispatchReadiness? _pickingDispatchReadiness;
         private readonly IPackingDispatchReadiness? _packingDispatchReadiness;
         private readonly IShipmentDispatchReadiness? _shipmentDispatchReadiness;
+        private readonly IPartnerDebtService? _partnerDebt;
         private readonly ExportReceiptOptions _options;
 
         internal ExportReceiptService(IExportReceiptRepository exportReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, ExportReceiptOptions? options = null)
@@ -34,6 +35,7 @@ namespace ERP.Application.Services
             _pickingDispatchReadiness = null;
             _packingDispatchReadiness = null;
             _shipmentDispatchReadiness = null;
+            _partnerDebt = null;
             _options = options ?? new ExportReceiptOptions();
         }
 
@@ -49,7 +51,8 @@ namespace ERP.Application.Services
             ExportReceiptOptions? options = null,
             IPickingDispatchReadiness? pickingDispatchReadiness = null,
             IPackingDispatchReadiness? packingDispatchReadiness = null,
-            IShipmentDispatchReadiness? shipmentDispatchReadiness = null)
+            IShipmentDispatchReadiness? shipmentDispatchReadiness = null,
+            IPartnerDebtService? partnerDebt = null)
         {
             _exportReceiptRepository = exportReceiptRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -62,6 +65,7 @@ namespace ERP.Application.Services
             _pickingDispatchReadiness = pickingDispatchReadiness;
             _packingDispatchReadiness = packingDispatchReadiness;
             _shipmentDispatchReadiness = shipmentDispatchReadiness;
+            _partnerDebt = partnerDebt;
             _options = options ?? new ExportReceiptOptions();
         }
 
@@ -109,6 +113,8 @@ namespace ERP.Application.Services
 
                 if (detailDto.UnitPrice < 0)
                     throw new BusinessRuleException($"Đơn giá của sản phẩm ID {detailDto.ProductId} không được âm");
+                if (detailDto.TaxPercent is < 0 or > 100)
+                    throw new BusinessRuleException($"Thuế suất của sản phẩm ID {detailDto.ProductId} phải từ 0 đến 100%");
 
                 var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detailDto.ProductId, dto.WarehouseId);
                 if (stock == null)
@@ -130,6 +136,7 @@ namespace ERP.Application.Services
                     ProductId = detailDto.ProductId,
                     Quantity = detailDto.Quantity,
                     UnitPrice = detailDto.UnitPrice,
+                    TaxPercent = detailDto.TaxPercent,
                     Note = detailDto.Note,
                     BaseUomIdSnapshot = stock.Product.Unit.Id,
                     BaseUomCodeSnapshot = stock.Product.Unit.Code,
@@ -227,6 +234,18 @@ namespace ERP.Application.Services
                     else receipt.Status = ReceiptStatus.Approved;
 
                     await _exportReceiptRepository.UpdateAsync(receipt);
+                    if (mode == ExportDispatchMode.DispatchOnApproval && _partnerDebt is not null && receipt.CustomerId.HasValue)
+                    {
+                        var (subTotal, taxAmount) = CalculateReceiptTotals(receipt);
+                        await _partnerDebt.RecordOutboundArDebtAsync(
+                            receipt.CustomerId.Value,
+                            "ExportReceipt",
+                            receipt.Id,
+                            receipt.Code,
+                            subTotal,
+                            taxAmount,
+                            approvedByUserId);
+                    }
                     await _auditLogRepository.AddAsync(new ERP.Domain.Entities.AuditLog
                     {
                         UserId = approvedByUserId,
@@ -296,6 +315,18 @@ namespace ERP.Application.Services
                     receipt.DispatchedBy = userId;
                     receipt.DispatchedAt = DateTime.UtcNow;
                     await _exportReceiptRepository.UpdateAsync(receipt);
+                    if (_partnerDebt is not null && receipt.CustomerId.HasValue)
+                    {
+                        var (subTotal, taxAmount) = CalculateReceiptTotals(receipt);
+                        await _partnerDebt.RecordOutboundArDebtAsync(
+                            receipt.CustomerId.Value,
+                            "ExportReceipt",
+                            receipt.Id,
+                            receipt.Code,
+                            subTotal,
+                            taxAmount,
+                            userId);
+                    }
                     await _auditLogRepository.AddAsync(new ERP.Domain.Entities.AuditLog
                     {
                         UserId = userId,
@@ -429,9 +460,51 @@ namespace ERP.Application.Services
             }
         }
 
+        private static (decimal SubTotal, decimal TaxAmount) CalculateReceiptTotals(ERP.Domain.Entities.ExportReceipt receipt)
+        {
+            decimal subTotal = 0m;
+            decimal taxAmount = 0m;
+            foreach (var d in receipt.Details)
+            {
+                var lineSub = decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero);
+                var lineTax = decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                subTotal += lineSub;
+                taxAmount += lineTax;
+            }
+            return (subTotal, taxAmount);
+        }
+
         private ExportReceiptDto MapToDto(ERP.Domain.Entities.ExportReceipt receipt)
         {
             var viewer = string.Equals(_currentUser?.Role, "Viewer", StringComparison.Ordinal);
+            var details = (receipt.Details ?? []).Select(d =>
+            {
+                var lineSub = viewer ? 0m : decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero);
+                var lineTax = viewer ? 0m : decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                return new ExportReceiptDetailDto
+                {
+                    Id = d.Id,
+                    ProductId = d.ProductId,
+                    ProductCode = d.Product?.Code,
+                    ProductName = d.Product?.Name,
+                    UnitName = d.BaseUomNameSnapshot ?? d.Product?.Unit?.Name,
+                    Quantity = d.Quantity,
+                    UnitPrice = viewer ? null : d.UnitPrice,
+                    TaxPercent = d.TaxPercent,
+                    LineSubTotal = lineSub,
+                    LineTaxAmount = lineTax,
+                    LineTotal = lineSub + lineTax,
+                    Note = viewer ? null : d.Note,
+                    BaseUomIdSnapshot = d.BaseUomIdSnapshot,
+                    BaseUomCodeSnapshot = d.BaseUomCodeSnapshot,
+                    BaseUomNameSnapshot = d.BaseUomNameSnapshot,
+                    BaseUomDecimalPlacesSnapshot = d.BaseUomDecimalPlacesSnapshot
+                };
+            }).ToList();
+
+            var subTotal = details.Sum(x => x.LineSubTotal);
+            var taxAmount = details.Sum(x => x.LineTaxAmount);
+
             return new ExportReceiptDto
             {
                 Id = receipt.Id,
@@ -453,25 +526,17 @@ namespace ERP.Application.Services
                 CustomerId = receipt.CustomerId,
                 CustomerCode = receipt.Status == ReceiptStatus.Draft ? receipt.Customer?.Code : receipt.CustomerCodeSnapshot,
                 CustomerName = receipt.Status == ReceiptStatus.Draft ? receipt.Customer?.Name : receipt.CustomerNameSnapshot,
+                SalesOrderId = receipt.SalesOrderId,
+                ShipmentId = receipt.ShipmentId,
+                SubTotalAmount = subTotal,
+                TaxAmount = taxAmount,
+                TotalAmount = subTotal + taxAmount,
+                RowVersion = receipt.RowVersion is { Length: > 0 } ? Convert.ToBase64String(receipt.RowVersion) : null,
                 AllowPerReceiptDispatchMode = _options.AllowPerReceiptDispatchMode,
                 AllowWarehouseStaffDirectDispatch = _options.AllowWarehouseStaffDirectDispatch,
                 WriteEnabled = _options.WriteEnabled,
                 ReservationStatus = receipt.Status == ReceiptStatus.Approved ? "Active" : receipt.Status == ReceiptStatus.Dispatched ? "Consumed" : receipt.Status == ReceiptStatus.Cancelled ? "Released" : "PendingApproval",
-                Details = receipt.Details.Select(d => new ExportReceiptDetailDto
-                {
-                    Id = d.Id,
-                    ProductId = d.ProductId,
-                    ProductCode = d.Product?.Code,
-                    ProductName = d.Product?.Name,
-                    UnitName = d.BaseUomNameSnapshot ?? d.Product?.Unit?.Name,
-                    Quantity = d.Quantity,
-                    UnitPrice = viewer ? null : d.UnitPrice,
-                    Note = viewer ? null : d.Note,
-                    BaseUomIdSnapshot = d.BaseUomIdSnapshot,
-                    BaseUomCodeSnapshot = d.BaseUomCodeSnapshot,
-                    BaseUomNameSnapshot = d.BaseUomNameSnapshot,
-                    BaseUomDecimalPlacesSnapshot = d.BaseUomDecimalPlacesSnapshot
-                }).ToList()
+                Details = details
             };
         }
 

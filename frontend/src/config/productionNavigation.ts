@@ -17,6 +17,7 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/warehouse-calendar', label: 'Lịch & ca kho', section: 'Dữ liệu nền', description: 'Múi giờ, lịch tuần, giờ chốt và năng lực theo ca vận hành.', permission: 'warehouse.read' },
   { path: '/units', label: 'Đơn vị tính', section: 'Dữ liệu nền', description: 'Danh mục đơn vị tính dùng trong chứng từ và tồn kho.', permission: 'uom.read' },
   { path: '/business-partners', label: 'Đối tác', section: 'Dữ liệu nền', description: 'Nhà cung cấp, khách hàng và thông tin liên hệ.', permission: 'partner.read' },
+  { path: '/partner-debts', label: 'Công nợ AP / AR', section: 'Dữ liệu nền', description: 'Hóa đơn công nợ phải trả (AP), phải thu (AR), thanh toán và sổ cái công nợ bất biến.', permission: 'partner.read' },
   { path: '/purchase-orders', label: 'Đơn mua (PO)', section: 'Nhập kho', description: 'Đơn hàng dự kiến từ ERP/Mua hàng, dung sai và trạng thái nhận hàng.', permission: 'purchase_order.read' },
   { path: '/asns', label: 'ASN dự kiến', section: 'Nhập kho', description: 'Lô hàng dự kiến, vận chuyển, thời điểm đến và bàn giao sang tiếp nhận.', permission: 'asn.read' },
   { path: '/import-receipts', label: 'Phiếu nhập kho', section: 'Nhập kho', description: 'Nhận hàng, kiểm tra chất lượng, chênh lệch và ghi sổ nhập kho.', permission: 'receipt.read' },

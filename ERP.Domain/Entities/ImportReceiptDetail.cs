@@ -41,6 +41,7 @@ public class ImportReceiptDetail : ITenantEntity
     public int? FinalResolutionVersionId { get; set; }
     public ReceivingResolutionVersion? FinalResolutionVersion { get; set; }
     public decimal UnitPrice { get; set; }
+    public decimal TaxPercent { get; set; }
     public string? Note { get; set; }
     public bool RequiresQc { get; set; }
     public int? QcPolicyId { get; set; }

@@ -18,7 +18,8 @@ public sealed class SalesOrderBackorderService(
     IStockReservationService reservationService,
     IStockAllocationService allocationService,
     IWarehouseAuthorizationService warehouseAuthorization,
-    ICurrentUser currentUser) : ISalesOrderBackorderService
+    ICurrentUser currentUser,
+    IPickingTaskIntegration? pickingTaskIntegration = null) : ISalesOrderBackorderService
 {
     private static readonly StockAllocationStatus[] CountedAllocationStatuses =
     [
@@ -50,10 +51,12 @@ public sealed class SalesOrderBackorderService(
             .Take(parsedStatus.HasValue ? 250 : 100)
             .ToListAsync(cancellationToken);
 
+        var batchProgress = await BuildBatchLineProgressAsync(orders, cancellationToken);
         var result = new List<SalesOrderListDto>(orders.Count);
         foreach (var order in orders)
         {
-            var dto = await BuildOrderDtoAsync(order, false, cancellationToken);
+            var progress = batchProgress.GetValueOrDefault(order.Id) ?? new Dictionary<int, LineProgress>();
+            var dto = MapOrderDto(order, progress, false);
             if (!parsedStatus.HasValue ||
                 string.Equals(dto.Status, parsedStatus.Value.ToString(), StringComparison.OrdinalIgnoreCase))
                 result.Add(dto);
@@ -103,6 +106,7 @@ public sealed class SalesOrderBackorderService(
             RequestedShipDate = request.RequestedShipDate,
             Priority = request.Priority,
             ShippingMethod = string.IsNullOrWhiteSpace(request.ShippingMethod) ? null : request.ShippingMethod.Trim(),
+            Currency = string.IsNullOrWhiteSpace(request.Currency) ? "VND" : request.Currency.Trim().ToUpperInvariant(),
             Status = SalesOrderStatus.Draft,
             CreatedAt = now,
             CreatedBy = currentUser.UserId
@@ -116,6 +120,8 @@ public sealed class SalesOrderBackorderService(
                 ExternalLineId = line.ExternalLineId.Trim(),
                 ProductId = line.ProductId,
                 OrderedQuantity = line.OrderedQuantity,
+                UnitPrice = line.UnitPrice,
+                TaxPercent = line.TaxPercent,
                 UomCode = product.Unit.Code
             });
         }
@@ -148,6 +154,24 @@ public sealed class SalesOrderBackorderService(
         {
             if (order.Status is not SalesOrderStatus.Draft and not SalesOrderStatus.Hold)
                 throw Conflict("SALES_ORDER_ALREADY_RELEASED", "Sales Order không còn ở trạng thái có thể release.");
+
+            if (order.Customer.CreditLimit > 0m)
+            {
+                var orderTotalAmount = order.Lines.Sum(l =>
+                {
+                    var effectiveQty = Math.Max(0m, l.OrderedQuantity - l.CancelledQuantity);
+                    var subTotal = decimal.Round(effectiveQty * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
+                    var tax = decimal.Round(subTotal * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                    return subTotal + tax;
+                });
+
+                if (order.Customer.ReceivableBalance + orderTotalAmount > order.Customer.CreditLimit)
+                {
+                    throw Conflict(
+                        "SALES_ORDER_CREDIT_LIMIT_EXCEEDED",
+                        $"Vượt hạn mức công nợ khách hàng ({order.Customer.Code}): Công nợ hiện tại ({order.Customer.ReceivableBalance:N2}) + Giá trị đơn ({orderTotalAmount:N2}) vượt hạn mức ({order.Customer.CreditLimit:N2}).");
+                }
+            }
 
             var reservations = new List<(StockReservation Reservation, decimal Quantity)>();
             foreach (var line in order.Lines.OrderBy(x => x.ProductId))
@@ -200,6 +224,11 @@ public sealed class SalesOrderBackorderService(
                     ReservationId = item.Reservation.Id,
                     Quantity = item.Quantity
                 }, token);
+
+                if (pickingTaskIntegration is not null)
+                {
+                    await pickingTaskIntegration.EnsureForReservationAsync(item.Reservation.Id, currentUser.UserId, token);
+                }
             }
         }, cancellationToken);
 
@@ -269,17 +298,13 @@ public sealed class SalesOrderBackorderService(
             .Take(parsedStatus.HasValue ? 500 : 250)
             .ToListAsync(cancellationToken);
 
-        var cache = new Dictionary<int, Dictionary<int, LineProgress>>();
+        var distinctOrders = rows.Select(x => x.SalesOrderLine.SalesOrder).DistinctBy(x => x.Id).ToList();
+        var cache = await BuildBatchLineProgressAsync(distinctOrders, cancellationToken);
         var result = new List<BackorderDto>(rows.Count);
         foreach (var row in rows)
         {
             var order = row.SalesOrderLine.SalesOrder;
-            if (!cache.TryGetValue(order.Id, out var progress))
-            {
-                progress = await BuildLineProgressAsync(order, cancellationToken);
-                cache[order.Id] = progress;
-            }
-
+            var progress = cache.GetValueOrDefault(order.Id) ?? new Dictionary<int, LineProgress>();
             var dto = MapBackorder(row, progress);
             if (!parsedStatus.HasValue ||
                 string.Equals(dto.Status, parsedStatus.Value.ToString(), StringComparison.OrdinalIgnoreCase))
@@ -556,9 +581,20 @@ public sealed class SalesOrderBackorderService(
         CancellationToken token)
     {
         var progress = await BuildLineProgressAsync(order, token);
+        return MapOrderDto(order, progress, includeLines);
+    }
+
+    private static SalesOrderListDto MapOrderDto(
+        SalesOrder order,
+        IReadOnlyDictionary<int, LineProgress> progress,
+        bool includeLines)
+    {
         var lines = order.Lines.OrderBy(x => x.Id).Select(line =>
         {
-            var p = progress[line.ProductId];
+            var p = progress.GetValueOrDefault(line.ProductId) ?? new LineProgress(0m, 0m, 0m, 0m, 0m);
+            var effectiveOrdered = Math.Max(0m, line.OrderedQuantity - line.CancelledQuantity);
+            var lineSubTotal = decimal.Round(effectiveOrdered * line.UnitPrice, 2, MidpointRounding.AwayFromZero);
+            var lineTax = decimal.Round(lineSubTotal * (line.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
             return new SalesOrderLineDto
             {
                 Id = line.Id,
@@ -568,6 +604,11 @@ public sealed class SalesOrderBackorderService(
                 ProductName = line.Product.Name,
                 UomCode = line.UomCode,
                 OrderedQuantity = line.OrderedQuantity,
+                UnitPrice = line.UnitPrice,
+                TaxPercent = line.TaxPercent,
+                LineSubTotal = lineSubTotal,
+                LineTaxAmount = lineTax,
+                LineTotal = lineSubTotal + lineTax,
                 ReservedQuantity = p.Reserved,
                 AllocatedQuantity = p.Allocated,
                 PickedQuantity = p.Picked,
@@ -582,6 +623,8 @@ public sealed class SalesOrderBackorderService(
         var shipped = lines.Sum(x => x.ShippedQuantity);
         var cancelled = lines.Sum(x => x.CancelledQuantity);
         var open = lines.Sum(x => x.OpenQuantity);
+        var subTotal = lines.Sum(x => x.LineSubTotal);
+        var taxAmount = lines.Sum(x => x.LineTaxAmount);
         var status = EffectiveOrderStatus(order, shipped, open, cancelled);
 
         SalesOrderListDto dto = includeLines ? new SalesOrderDto() : new SalesOrderListDto();
@@ -596,6 +639,7 @@ public sealed class SalesOrderBackorderService(
         dto.RequestedShipDate = order.RequestedShipDate;
         dto.Priority = order.Priority;
         dto.ShippingMethod = order.ShippingMethod;
+        dto.Currency = string.IsNullOrWhiteSpace(order.Currency) ? "VND" : order.Currency;
         dto.Status = status.ToString();
         dto.OrderedQuantity = ordered;
         dto.ReservedQuantity = lines.Sum(x => x.ReservedQuantity);
@@ -605,6 +649,9 @@ public sealed class SalesOrderBackorderService(
         dto.BackorderQuantity = lines.Sum(x => x.BackorderQuantity);
         dto.CancelledQuantity = cancelled;
         dto.OpenQuantity = open;
+        dto.SubTotalAmount = subTotal;
+        dto.TaxAmount = taxAmount;
+        dto.TotalAmount = subTotal + taxAmount;
         dto.CreatedAt = order.CreatedAt;
         dto.ReleasedAt = order.ReleasedAt;
 
@@ -616,81 +663,124 @@ public sealed class SalesOrderBackorderService(
         return dto;
     }
 
-    private async Task<Dictionary<int, LineProgress>> BuildLineProgressAsync(
-        SalesOrder order,
+    private async Task<Dictionary<int, Dictionary<int, LineProgress>>> BuildBatchLineProgressAsync(
+        IReadOnlyCollection<SalesOrder> orders,
         CancellationToken token)
     {
+        if (orders.Count == 0)
+            return new Dictionary<int, Dictionary<int, LineProgress>>();
+
+        var orderIds = orders.Select(x => x.Id).Distinct().ToArray();
+
         var demandLines = await context.SalesOrderLines.AsNoTracking()
             .Include(x => x.Backorder)
-            .Where(x => x.SalesOrderId == order.Id)
+            .Where(x => orderIds.Contains(x.SalesOrderId))
             .ToListAsync(token);
 
         var reservations = await context.StockReservations.AsNoTracking()
-            .Where(x => x.SourceType == "SalesOrder" && x.SourceId == order.Id)
+            .Where(x => x.SourceType == "SalesOrder" && x.SourceId.HasValue && orderIds.Contains(x.SourceId.Value))
             .ToListAsync(token);
         var reservationIds = reservations.Select(x => x.Id).ToArray();
+        var reservationOrderMap = reservations.ToDictionary(x => x.Id, x => x.SourceId!.Value);
 
-        var allocated = reservationIds.Length == 0
-            ? new Dictionary<int, decimal>()
+        var allocatedRows = reservationIds.Length == 0
+            ? []
             : await context.StockAllocations.AsNoTracking()
                 .Where(x => reservationIds.Contains(x.ReservationId) && CountedAllocationStatuses.Contains(x.Status))
-                .GroupBy(x => x.ProductId)
-                .Select(g => new { ProductId = g.Key, Quantity = g.Sum(x => x.Quantity) })
-                .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, token);
+                .GroupBy(x => new { x.ReservationId, x.ProductId })
+                .Select(g => new { g.Key.ReservationId, g.Key.ProductId, Quantity = g.Sum(x => x.Quantity) })
+                .ToListAsync(token);
 
-        var picked = await context.PickingTaskLines.AsNoTracking()
+        var allocatedByOrderProduct = allocatedRows
+            .GroupBy(x => (OrderId: reservationOrderMap[x.ReservationId], x.ProductId))
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
+
+        var pickedRows = await context.PickingTaskLines.AsNoTracking()
             .Where(x => x.PickingTask.SourceType == "SalesOrder" &&
-                        x.PickingTask.SourceId == order.Id &&
+                        x.PickingTask.SourceId.HasValue &&
+                        orderIds.Contains(x.PickingTask.SourceId.Value) &&
                         x.PickingTask.Status != PickingTaskStatus.Cancelled)
-            .GroupBy(x => x.ProductId)
-            .Select(g => new { ProductId = g.Key, Quantity = g.Sum(x => x.PickedQuantity) })
-            .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, token);
+            .GroupBy(x => new { OrderId = x.PickingTask.SourceId!.Value, x.ProductId })
+            .Select(g => new { g.Key.OrderId, g.Key.ProductId, Quantity = g.Sum(x => x.PickedQuantity) })
+            .ToListAsync(token);
+        var pickedByOrderProduct = pickedRows.ToDictionary(x => (x.OrderId, x.ProductId), x => x.Quantity);
 
-        var packingSessionIds = await context.Shipments.AsNoTracking()
+        var shipmentSessions = await context.Shipments.AsNoTracking()
             .Where(x => x.SourceType == "SalesOrder" &&
-                        x.SourceId == order.Id &&
+                        x.SourceId.HasValue &&
+                        orderIds.Contains(x.SourceId.Value) &&
                         (x.Status == ShipmentStatus.Dispatched ||
                          x.Status == ShipmentStatus.InTransit ||
                          x.Status == ShipmentStatus.Delivered ||
                          x.Status == ShipmentStatus.Completed ||
                          x.Status == ShipmentStatus.DeliveryFailed ||
                          x.Status == ShipmentStatus.ReturnToWarehouse))
-            .Select(x => x.PackingSessionId)
-            .ToArrayAsync(token);
+            .Select(x => new { OrderId = x.SourceId!.Value, x.PackingSessionId })
+            .ToListAsync(token);
 
-        var shipped = packingSessionIds.Length == 0
-            ? new Dictionary<int, decimal>()
+        var packingSessionIds = shipmentSessions.Select(x => x.PackingSessionId).Distinct().ToArray();
+        var shippedRows = packingSessionIds.Length == 0
+            ? []
             : await context.HandlingUnitContents.AsNoTracking()
                 .Where(x => packingSessionIds.Contains(x.HandlingUnit.PackingSessionId))
-                .GroupBy(x => x.ProductId)
-                .Select(g => new { ProductId = g.Key, Quantity = g.Sum(x => x.Quantity) })
-                .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, token);
+                .GroupBy(x => new { x.HandlingUnit.PackingSessionId, x.ProductId })
+                .Select(g => new { g.Key.PackingSessionId, g.Key.ProductId, Quantity = g.Sum(x => x.Quantity) })
+                .ToListAsync(token);
 
-        var result = new Dictionary<int, LineProgress>();
+        var shippedBySession = shippedRows
+            .GroupBy(x => x.PackingSessionId)
+            .ToDictionary(g => g.Key, g => g.ToDictionary(x => x.ProductId, x => x.Quantity));
+
+        var shippedByOrderProduct = new Dictionary<(int OrderId, int ProductId), decimal>();
+        foreach (var s in shipmentSessions)
+        {
+            if (!shippedBySession.TryGetValue(s.PackingSessionId, out var prodMap)) continue;
+            foreach (var (prodId, qty) in prodMap)
+            {
+                var key = (s.OrderId, prodId);
+                shippedByOrderProduct[key] = shippedByOrderProduct.GetValueOrDefault(key) + qty;
+            }
+        }
+
+        var reservationByOrderProduct = reservations
+            .GroupBy(x => (x.SourceId!.Value, x.ProductId))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var result = orderIds.ToDictionary(id => id, _ => new Dictionary<int, LineProgress>());
         foreach (var line in demandLines)
         {
-            var reservation = reservations.SingleOrDefault(x => x.ProductId == line.ProductId);
+            var key = (line.SalesOrderId, line.ProductId);
+            var reservation = reservationByOrderProduct.GetValueOrDefault(key);
             var backorder = line.Backorder;
             var remainingBackorder = backorder is null
                 ? 0m
                 : Math.Max(0m, backorder.Quantity - backorder.RecoveredQuantity - backorder.CancelledQuantity);
-            result[line.ProductId] = new LineProgress(
+            result[line.SalesOrderId][line.ProductId] = new LineProgress(
                 reservation is null
                     ? 0m
                     : Math.Max(0m, reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity),
-                allocated.GetValueOrDefault(line.ProductId),
-                picked.GetValueOrDefault(line.ProductId),
-                shipped.GetValueOrDefault(line.ProductId),
+                allocatedByOrderProduct.GetValueOrDefault(key),
+                pickedByOrderProduct.GetValueOrDefault(key),
+                shippedByOrderProduct.GetValueOrDefault(key),
                 remainingBackorder);
         }
+
         return result;
+    }
+
+    private async Task<Dictionary<int, LineProgress>> BuildLineProgressAsync(
+        SalesOrder order,
+        CancellationToken token)
+    {
+        var batch = await BuildBatchLineProgressAsync([order], token);
+        return batch.GetValueOrDefault(order.Id) ?? new Dictionary<int, LineProgress>();
     }
 
     private BackorderDto MapBackorder(Backorder row, IReadOnlyDictionary<int, LineProgress> progress)
     {
         var line = row.SalesOrderLine;
         var order = line.SalesOrder;
-        var p = progress[line.ProductId];
+        var p = progress.GetValueOrDefault(line.ProductId) ?? new LineProgress(0m, 0m, 0m, 0m, 0m);
         var remaining = Math.Max(0m, row.Quantity - row.RecoveredQuantity - row.CancelledQuantity);
         var effective = row.Status;
         if (row.Status != BackorderStatus.Cancelled)
@@ -754,7 +844,7 @@ public sealed class SalesOrderBackorderService(
             throw new BusinessRuleException("Priority không được âm.");
         if (request.Lines.Count == 0)
             throw new BusinessRuleException("Sales Order phải có ít nhất một dòng.");
-        if (request.Lines.Any(x => string.IsNullOrWhiteSpace(x.ExternalLineId) || x.ExternalLineId.Trim().Length > 100 || x.ProductId <= 0 || x.OrderedQuantity <= 0))
+        if (request.Lines.Any(x => string.IsNullOrWhiteSpace(x.ExternalLineId) || x.ExternalLineId.Trim().Length > 100 || x.ProductId <= 0 || x.OrderedQuantity <= 0 || x.UnitPrice < 0m || x.TaxPercent < 0m || x.TaxPercent > 100m))
             throw new BusinessRuleException("Dòng Sales Order không hợp lệ.");
         if (request.Lines.GroupBy(x => x.ExternalLineId.Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
             throw new BusinessRuleException("ExternalLineId không được trùng trong cùng Sales Order.");

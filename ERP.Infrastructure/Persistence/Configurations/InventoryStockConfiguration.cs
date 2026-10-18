@@ -12,6 +12,7 @@ public class InventoryStockConfiguration : IEntityTypeConfiguration<InventorySto
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Quantity).HasPrecision(18, 4);
         builder.Property(x => x.ReservedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.RowVersion).IsConcurrencyToken();
         builder.ToTable(t => t.HasCheckConstraint("CK_InventoryStocks_Reservation", "[ReservedQuantity] >= 0 AND [Quantity] >= [ReservedQuantity]"));
         builder.Property<int>("CanonicalLocationId")
                .HasComputedColumnSql("COALESCE([LocationId], 0)", stored: true);

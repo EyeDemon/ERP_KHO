@@ -13,6 +13,10 @@ interface ExportReceiptDetail {
   productName: string;
   quantity: number;
   unitPrice?: number;
+  taxPercent?: number;
+  lineSubTotal?: number;
+  lineTaxAmount?: number;
+  lineTotalAmount?: number;
   note?: string;
 }
 
@@ -39,6 +43,12 @@ interface ExportReceipt {
   customerId?: number;
   customerCode?: string;
   customerName?: string;
+  salesOrderId?: number;
+  shipmentId?: number;
+  subTotalAmount?: number;
+  taxAmount?: number;
+  totalAmount?: number;
+  rowVersion?: string;
 }
 
 interface Warehouse {

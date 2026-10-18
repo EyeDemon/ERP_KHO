@@ -13,11 +13,16 @@ public class ExportReceiptConfiguration : IEntityTypeConfiguration<ExportReceipt
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasDatabaseName("UX_ExportReceipts_TenantId_Code");
         builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.RowVersion).IsConcurrencyToken();
         builder.Property(x => x.DispatchMode);
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.CustomerCodeSnapshot).HasMaxLength(50);
         builder.Property(x => x.CustomerNameSnapshot).HasMaxLength(200);
         builder.HasOne(x => x.Customer).WithMany(x => x.ExportReceipts).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+        builder.Ignore(x => x.SalesOrder);
+        builder.Ignore(x => x.Shipment);
+        builder.HasIndex(x => x.SalesOrderId);
+        builder.HasIndex(x => x.ShipmentId);
 
         builder.HasOne(x => x.Warehouse)
                .WithMany(w => w.ExportReceipts)

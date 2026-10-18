@@ -22,8 +22,11 @@ public class ExportReceipt : ITenantEntity
     public DateTime? ApprovedAt { get; set; }
     public DateTime? DispatchedAt { get; set; }
     public int? CustomerId { get; set; }
+    public int? SalesOrderId { get; set; }
+    public int? ShipmentId { get; set; }
     public string? CustomerCodeSnapshot { get; set; }
     public string? CustomerNameSnapshot { get; set; }
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
 
     // Navigation
     public Warehouse Warehouse { get; set; } = null!;
@@ -31,5 +34,7 @@ public class ExportReceipt : ITenantEntity
     public User? ApprovedByUser { get; set; }
     public User? DispatchedByUser { get; set; }
     public BusinessPartner? Customer { get; set; }
+    public SalesOrder? SalesOrder { get; set; }
+    public Shipment? Shipment { get; set; }
     public ICollection<ExportReceiptDetail> Details { get; set; } = new List<ExportReceiptDetail>();
 }

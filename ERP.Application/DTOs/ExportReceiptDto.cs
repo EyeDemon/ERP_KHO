@@ -24,6 +24,12 @@ namespace ERP.Application.DTOs
         public int? CustomerId { get; set; }
         public string? CustomerCode { get; set; }
         public string? CustomerName { get; set; }
+        public int? SalesOrderId { get; set; }
+        public int? ShipmentId { get; set; }
+        public decimal SubTotalAmount { get; set; }
+        public decimal TaxAmount { get; set; }
+        public decimal TotalAmount { get; set; }
+        public string? RowVersion { get; set; }
         public bool AllowPerReceiptDispatchMode { get; set; }
         public bool AllowWarehouseStaffDirectDispatch { get; set; }
         public bool WriteEnabled { get; set; }
@@ -41,6 +47,10 @@ namespace ERP.Application.DTOs
         public decimal Quantity { get; set; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public decimal? UnitPrice { get; set; }
+        public decimal TaxPercent { get; set; }
+        public decimal LineSubTotal { get; set; }
+        public decimal LineTaxAmount { get; set; }
+        public decimal LineTotal { get; set; }
         public string? Note { get; set; }
         public int? BaseUomIdSnapshot { get; set; }
         public string? BaseUomCodeSnapshot { get; set; }
@@ -62,6 +72,7 @@ namespace ERP.Application.DTOs
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
+        public decimal TaxPercent { get; set; }
         public string? Note { get; set; }
     }
 }

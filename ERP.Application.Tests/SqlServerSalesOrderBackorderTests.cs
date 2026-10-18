@@ -708,6 +708,14 @@ public sealed class SqlServerSalesOrderBackorderTests
     {
         await using var db = CreateContext();
         await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
+        await db.PartnerDebtLedgers.Where(x => x.PartnerId == fixture.CustomerId).ExecuteDeleteAsync();
+        await db.PartnerDebtInvoices.Where(x => x.PartnerId == fixture.CustomerId).ExecuteDeleteAsync();
+        await db.ExportReceiptDetails
+            .Where(x => x.ExportReceipt.WarehouseId == fixture.WarehouseId || x.ProductId == fixture.ProductId)
+            .ExecuteDeleteAsync();
+        await db.ExportReceipts
+            .Where(x => x.WarehouseId == fixture.WarehouseId || x.CustomerId == fixture.CustomerId)
+            .ExecuteDeleteAsync();
         await db.InventoryTransactions
             .Where(x => x.WarehouseId == fixture.WarehouseId && x.ProductId == fixture.ProductId)
             .ExecuteDeleteAsync();

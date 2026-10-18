@@ -10,6 +10,7 @@ public class ExportReceiptDetail : ITenantEntity
     public int ProductId { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
+    public decimal TaxPercent { get; set; }
     public string? Note { get; set; }
     public int? BaseUomIdSnapshot { get; set; }
     public string? BaseUomCodeSnapshot { get; set; }

@@ -16,6 +16,10 @@ public sealed class BusinessPartnerConfiguration : IEntityTypeConfiguration<Busi
         builder.Property(x => x.Phone).HasMaxLength(50);
         builder.Property(x => x.Email).HasMaxLength(254);
         builder.Property(x => x.Address).HasMaxLength(500);
+        builder.Property(x => x.CreditLimit).HasPrecision(18, 2);
+        builder.Property(x => x.PaymentTermDays).HasDefaultValue(30);
+        builder.Property(x => x.PayableBalance).HasPrecision(18, 2);
+        builder.Property(x => x.ReceivableBalance).HasPrecision(18, 2);
         builder.Property(x => x.RowVersion).IsRowVersion();
     }
 }

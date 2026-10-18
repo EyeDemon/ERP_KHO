@@ -180,7 +180,16 @@ public sealed class InventoryReversalService(
                               x.ReferenceId == original.Id), cancellationToken))
                     throw Conflict("INV_ALREADY_REVERSED", "Giao dịch tồn kho đã được đảo trước đó.");
 
-                if (original.TransactionType is not (TransactionType.Move or TransactionType.StatusChange))
+                var debtService = new PartnerDebtService(context, currentUser);
+                var linkedDebtInvoice = await debtService.LockAndValidateSourceDebtForReversalAsync(
+                    original.ReferenceType,
+                    original.ReferenceId,
+                    cancellationToken);
+
+                var isDebtBackedDocumentTx = linkedDebtInvoice is not null &&
+                    original.TransactionType is TransactionType.Import or TransactionType.Export or TransactionType.Ship;
+
+                if (original.TransactionType is not (TransactionType.Move or TransactionType.StatusChange) && !isDebtBackedDocumentTx)
                     throw Conflict(
                         "INV_REVERSAL_UNSUPPORTED",
                         "Phạm vi hiện tại chỉ hỗ trợ đảo giao dịch di chuyển vị trí nội bộ và đổi trạng thái tồn kho; giao dịch gắn với chứng từ phải được đảo tại quy trình nghiệp vụ chuyên biệt.");
@@ -208,7 +217,7 @@ public sealed class InventoryReversalService(
                     fromLocationId = original.ToLocationId;
                     toLocationId = original.FromLocationId;
                 }
-                else
+                else if (original.TransactionType == TransactionType.StatusChange)
                 {
                     if (!original.FromInventoryStatus.HasValue || !original.ToInventoryStatus.HasValue)
                         throw Conflict("INV_REVERSAL_INVALID_SOURCE", "Giao dịch StatusChange thiếu trạng thái trước/sau để thực hiện đảo giao dịch.");
@@ -271,7 +280,7 @@ public sealed class InventoryReversalService(
 
                     correctiveTransactionId = correction.TransactionId;
                 }
-                else
+                else if (original.TransactionType == TransactionType.StatusChange)
                 {
                     var source = await context.InventoryStocks.SingleOrDefaultAsync(
                         x => x.ProductId == original.ProductId &&
@@ -296,6 +305,122 @@ public sealed class InventoryReversalService(
                     }, cancellationToken);
 
                     correctiveTransactionId = correction.TransactionId;
+                }
+                else if (original.TransactionType == TransactionType.Import)
+                {
+                    var source = await context.InventoryStocks.SingleOrDefaultAsync(
+                        x => x.ProductId == original.ProductId &&
+                             x.WarehouseId == original.WarehouseId &&
+                             x.LocationId == original.LocationId &&
+                             x.Status == original.InventoryStatus &&
+                             x.LotId == original.LotId &&
+                             x.SerialId == original.SerialId,
+                        cancellationToken);
+
+                    if (source is null || source.Quantity - source.ReservedQuantity < original.Quantity)
+                    {
+                        source = await context.InventoryStocks
+                            .Where(x => x.ProductId == original.ProductId &&
+                                        x.WarehouseId == original.WarehouseId &&
+                                        x.Status == original.InventoryStatus &&
+                                        x.LotId == original.LotId &&
+                                        x.SerialId == original.SerialId &&
+                                        x.Quantity - x.ReservedQuantity >= original.Quantity)
+                            .OrderByDescending(x => x.Quantity - x.ReservedQuantity)
+                            .FirstOrDefaultAsync(cancellationToken);
+                    }
+
+                    if (source is null || source.Quantity - source.ReservedQuantity < original.Quantity)
+                        throw Conflict("INV_REVERSAL_INSUFFICIENT_STOCK",
+                            "Tồn khả dụng không đủ để đảo giao dịch nhập kho. Hãy kiểm tra các nghiệp vụ xuất/giữ chỗ đã phát sinh.");
+
+                    source.Quantity -= original.Quantity;
+                    source.LastUpdated = DateTime.UtcNow;
+
+                    var corrective = new InventoryTransaction
+                    {
+                        ProductId = original.ProductId,
+                        WarehouseId = original.WarehouseId,
+                        LocationId = source.LocationId,
+                        LotId = original.LotId,
+                        SerialId = original.SerialId,
+                        InventoryStatus = original.InventoryStatus,
+                        TransactionType = TransactionType.Export,
+                        Quantity = original.Quantity,
+                        ReferenceId = marker.Id,
+                        ReferenceType = "InventoryReversal",
+                        TransactionDate = DateTime.UtcNow,
+                        CreatedBy = currentUser.UserId,
+                        Note = $"Đảo giao dịch nhập {original.Id}: {reason}",
+                        ReasonCode = reasonCode
+                    };
+                    context.InventoryTransactions.Add(corrective);
+                    await context.SaveChangesAsync(cancellationToken);
+                    correctiveTransactionId = corrective.Id;
+                }
+                else
+                {
+                    var targetStock = await context.InventoryStocks.SingleOrDefaultAsync(
+                        x => x.ProductId == original.ProductId &&
+                             x.WarehouseId == original.WarehouseId &&
+                             x.LocationId == original.LocationId &&
+                             x.Status == original.InventoryStatus &&
+                             x.LotId == original.LotId &&
+                             x.SerialId == original.SerialId,
+                        cancellationToken);
+
+                    if (targetStock is null)
+                    {
+                        targetStock = new InventoryStock
+                        {
+                            ProductId = original.ProductId,
+                            WarehouseId = original.WarehouseId,
+                            LocationId = original.LocationId,
+                            Status = original.InventoryStatus,
+                            LotId = original.LotId,
+                            SerialId = original.SerialId,
+                            Quantity = original.Quantity,
+                            ReservedQuantity = 0m,
+                            LastUpdated = DateTime.UtcNow
+                        };
+                        context.InventoryStocks.Add(targetStock);
+                    }
+                    else
+                    {
+                        targetStock.Quantity += original.Quantity;
+                        targetStock.LastUpdated = DateTime.UtcNow;
+                    }
+
+                    var corrective = new InventoryTransaction
+                    {
+                        ProductId = original.ProductId,
+                        WarehouseId = original.WarehouseId,
+                        LocationId = original.LocationId,
+                        LotId = original.LotId,
+                        SerialId = original.SerialId,
+                        InventoryStatus = original.InventoryStatus,
+                        TransactionType = TransactionType.Import,
+                        Quantity = original.Quantity,
+                        ReferenceId = marker.Id,
+                        ReferenceType = "InventoryReversal",
+                        TransactionDate = DateTime.UtcNow,
+                        CreatedBy = currentUser.UserId,
+                        Note = $"Đảo giao dịch xuất {original.Id}: {reason}",
+                        ReasonCode = reasonCode
+                    };
+                    context.InventoryTransactions.Add(corrective);
+                    await context.SaveChangesAsync(cancellationToken);
+                    correctiveTransactionId = corrective.Id;
+                }
+
+                if (linkedDebtInvoice is not null)
+                {
+                    await debtService.CancelLockedInvoiceForInventoryReversalAsync(
+                        linkedDebtInvoice,
+                        original.Id,
+                        marker.Id,
+                        reason,
+                        cancellationToken);
                 }
 
                 marker.CorrectiveTransactionId = correctiveTransactionId;

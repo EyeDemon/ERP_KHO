@@ -78,6 +78,7 @@ namespace ERP.Infrastructure.Repositories
                 .Include(e => e.CreatedByUser)
                 .Include(e => e.ApprovedByUser)
                 .Include(e => e.DispatchedByUser)
+                .Include(e => e.Details)
                 .OrderByDescending(e => e.CreatedAt)
                 .ToListAsync();
         }

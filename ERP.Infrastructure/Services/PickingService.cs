@@ -832,10 +832,7 @@ public sealed class PickingService(
                 if (transaction is not null) await transaction.CommitAsync(cancellationToken);
                 return dto;
             }
-            catch (Exception ex) when (ownTransaction && attempt < maxAttempts &&
-                                       (ex is DeadlockException ||
-                                        ex is SqlException { Number: 1205 } ||
-                                        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
+            catch (Exception ex) when (ownTransaction && attempt < maxAttempts && IsDeadlock(ex))
             {
                 if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
                 context.ChangeTracker.Clear();
@@ -846,12 +843,7 @@ public sealed class PickingService(
                 if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
                 throw new ConcurrencyException("Dữ liệu Picking đã thay đổi. Vui lòng tải lại và thử lại.", ex);
             }
-            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 })
-            {
-                if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-                throw new DeadlockException("Giao dịch Picking bị deadlock.", ex);
-            }
-            catch (SqlException ex) when (ex.Number == 1205)
+            catch (Exception ex) when (IsDeadlock(ex))
             {
                 if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
                 throw new DeadlockException("Giao dịch Picking bị deadlock.", ex);
@@ -862,6 +854,16 @@ public sealed class PickingService(
                 throw;
             }
         }
+    }
+
+    private static bool IsDeadlock(Exception? ex)
+    {
+        for (var cur = ex; cur is not null; cur = cur.InnerException)
+        {
+            if (cur is DeadlockException or SqlException { Number: 1205 })
+                return true;
+        }
+        return false;
     }
 
     private async Task<PickingTask> LoadAsync(int id, bool tracking, CancellationToken token)

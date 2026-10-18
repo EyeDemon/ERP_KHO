@@ -12,13 +12,16 @@ public class PurchaseOrderListDto
     public string Status { get; set; } = string.Empty;
     public DateTime OrderDate { get; set; }
     public DateTime? ExpectedDate { get; set; }
+    public string? Currency { get; set; }
     public decimal BaseOrderedQuantity { get; set; }
+    public decimal SubTotalAmount { get; set; }
+    public decimal TaxAmount { get; set; }
+    public decimal TotalAmount { get; set; }
 }
 
 public sealed class PurchaseOrderDto : PurchaseOrderListDto
 {
     public string SourceSystem { get; set; } = string.Empty;
-    public string? Currency { get; set; }
     public string? ExternalVersion { get; set; }
     public string? RowVersion { get; set; }
     public IReadOnlyList<PurchaseOrderLineDto> Lines { get; set; } = [];
@@ -36,6 +39,11 @@ public sealed class PurchaseOrderLineDto
     public string OperationUnitCode { get; set; } = string.Empty;
     public decimal BaseOrderedQuantity { get; set; }
     public string BaseUnitCode { get; set; } = string.Empty;
+    public decimal UnitPrice { get; set; }
+    public decimal TaxPercent { get; set; }
+    public decimal LineSubTotal { get; set; }
+    public decimal LineTaxAmount { get; set; }
+    public decimal LineTotal { get; set; }
     public decimal AllowedOverReceiptPct { get; set; }
     public decimal AllowedUnderReceiptPct { get; set; }
 }
@@ -65,6 +73,8 @@ public sealed class CreatePurchaseOrderLineDto
     public int ProductId { get; set; }
     public int OperationUnitId { get; set; }
     public decimal OrderedQuantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal TaxPercent { get; set; }
     public decimal AllowedOverReceiptPct { get; set; }
     public decimal AllowedUnderReceiptPct { get; set; }
 }

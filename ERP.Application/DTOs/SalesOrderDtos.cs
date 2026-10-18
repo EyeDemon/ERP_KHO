@@ -8,6 +8,7 @@ public sealed class CreateSalesOrderDto
     public DateTime? RequestedShipDate { get; set; }
     public int Priority { get; set; }
     public string? ShippingMethod { get; set; }
+    public string Currency { get; set; } = "VND";
     public IReadOnlyList<CreateSalesOrderLineDto> Lines { get; set; } = [];
 }
 
@@ -16,6 +17,8 @@ public sealed class CreateSalesOrderLineDto
     public string ExternalLineId { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public decimal OrderedQuantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal TaxPercent { get; set; }
 }
 
 public sealed class SalesOrderStateCommandDto
@@ -37,6 +40,7 @@ public class SalesOrderListDto
     public DateTime? RequestedShipDate { get; set; }
     public int Priority { get; set; }
     public string? ShippingMethod { get; set; }
+    public string Currency { get; set; } = "VND";
     public string Status { get; set; } = string.Empty;
     public decimal OrderedQuantity { get; set; }
     public decimal ReservedQuantity { get; set; }
@@ -46,6 +50,9 @@ public class SalesOrderListDto
     public decimal BackorderQuantity { get; set; }
     public decimal CancelledQuantity { get; set; }
     public decimal OpenQuantity { get; set; }
+    public decimal SubTotalAmount { get; set; }
+    public decimal TaxAmount { get; set; }
+    public decimal TotalAmount { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ReleasedAt { get; set; }
 }
@@ -65,6 +72,11 @@ public sealed class SalesOrderLineDto
     public string ProductName { get; set; } = string.Empty;
     public string UomCode { get; set; } = string.Empty;
     public decimal OrderedQuantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal TaxPercent { get; set; }
+    public decimal LineSubTotal { get; set; }
+    public decimal LineTaxAmount { get; set; }
+    public decimal LineTotal { get; set; }
     public decimal ReservedQuantity { get; set; }
     public decimal AllocatedQuantity { get; set; }
     public decimal PickedQuantity { get; set; }

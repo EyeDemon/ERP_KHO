@@ -33,6 +33,7 @@ public class ImportReceiptDetailConfiguration : IEntityTypeConfiguration<ImportR
         builder.Property(x => x.OperationUnitCodeSnapshot).HasMaxLength(20);
         builder.Property(x => x.BaseUnitCodeSnapshot).HasMaxLength(20);
         builder.Property(x => x.UnitPrice).HasPrecision(18, 2);
+        builder.Property(x => x.TaxPercent).HasPrecision(9, 4);
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.QcPolicySourceSnapshot).HasMaxLength(50);
         builder.Property(x => x.QcRuleSnapshot).HasMaxLength(500);

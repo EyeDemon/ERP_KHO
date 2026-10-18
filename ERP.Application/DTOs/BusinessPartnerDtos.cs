@@ -11,6 +11,10 @@ public sealed class BusinessPartnerDto
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public string? Address { get; set; }
+    public decimal CreditLimit { get; set; }
+    public int PaymentTermDays { get; set; }
+    public decimal PayableBalance { get; set; }
+    public decimal ReceivableBalance { get; set; }
     public string RowVersion { get; set; } = string.Empty;
 }
 
@@ -24,6 +28,8 @@ public sealed class SaveBusinessPartnerDto
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public string? Address { get; set; }
+    public decimal CreditLimit { get; set; }
+    public int PaymentTermDays { get; set; }
     public string? RowVersion { get; set; }
 }
 

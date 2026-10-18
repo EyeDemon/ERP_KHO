@@ -944,12 +944,384 @@ public sealed class MultiTenantIsolationSqlTests
         }
     }
 
+    [SqlServerFact]
+    public async Task Wave12_BatchedForeignKeyTenantValidationAndPerTenantLastAdminGuard_AreEnforcedOnSqlServer()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        var tenant101 = Random.Shared.Next(125_000, 140_000);
+        var tenant202 = tenant101 + 101;
+
+        int prod101Id = 0;
+        int unit202Id = 0;
+        int wh202Id = 0;
+        int supplier202Id = 0;
+        int admin202Id = 0;
+        var prod202Ids = new List<int>();
+
+        try
+        {
+            await using (var db101 = CreateTenantContext(tenant101, $"TENANT-{tenant101}"))
+            {
+                var adminRole = await EnsureAdminRoleWithRequiredPermissionsAsync(db101);
+                var u101 = new User
+                {
+                    Username = $"w12_admin_{suffix.ToLowerInvariant()}",
+                    PasswordHash = "Hash101",
+                    FullName = "Admin 101",
+                    RoleId = adminRole.Id,
+                    IsActive = true
+                };
+                var unit101 = new Unit { Code = $"W12U1-{suffix[..3]}", Name = "Unit 101", DecimalPlaces = 0, IsActive = true };
+                var cat101 = new ProductCategory { Code = $"W12C1-{suffix}", Name = "Cat 101", IsActive = true };
+                db101.Users.Add(u101);
+                db101.Units.Add(unit101);
+                db101.ProductCategories.Add(cat101);
+                await db101.SaveChangesAsync();
+
+                var p101 = new Product
+                {
+                    Code = $"W12-P101-{suffix}",
+                    Name = "Product 101",
+                    UnitId = unit101.Id,
+                    CategoryId = cat101.Id,
+                    IsActive = true
+                };
+                db101.Products.Add(p101);
+                await db101.SaveChangesAsync();
+                prod101Id = p101.Id;
+            }
+
+            await using (var db202 = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                var adminRole = await EnsureAdminRoleWithRequiredPermissionsAsync(db202);
+                var u202 = new User
+                {
+                    Username = $"w12_admin_{suffix.ToLowerInvariant()}",
+                    PasswordHash = "Hash202",
+                    FullName = "Admin 202",
+                    RoleId = adminRole.Id,
+                    IsActive = true
+                };
+                var unit202 = new Unit { Code = $"W12U2-{suffix[..3]}", Name = "Unit 202", DecimalPlaces = 0, IsActive = true };
+                var cat202 = new ProductCategory { Code = $"W12C2-{suffix}", Name = "Cat 202", IsActive = true };
+                var wh202 = new Warehouse { Code = $"W12WH2-{suffix}", Name = "WH 202", IsActive = true };
+                var sup202 = new BusinessPartner
+                {
+                    Code = $"W12SUP-{suffix}",
+                    Name = "Supplier 202",
+                    IsSupplier = true,
+                    IsCustomer = true,
+                    IsActive = true
+                };
+
+                db202.Users.Add(u202);
+                db202.Units.Add(unit202);
+                db202.ProductCategories.Add(cat202);
+                db202.Warehouses.Add(wh202);
+                db202.BusinessPartners.Add(sup202);
+                await db202.SaveChangesAsync();
+
+                admin202Id = u202.Id;
+                unit202Id = unit202.Id;
+                wh202Id = wh202.Id;
+                supplier202Id = sup202.Id;
+
+                for (var i = 1; i <= 20; i++)
+                {
+                    db202.Products.Add(new Product
+                    {
+                        Code = $"W12-P202-{i:D2}-{suffix}",
+                        Name = $"Product 202 #{i}",
+                        UnitId = unit202Id,
+                        CategoryId = cat202.Id,
+                        IsActive = true
+                    });
+                }
+                await db202.SaveChangesAsync();
+
+                prod202Ids = await db202.Products
+                    .OrderBy(p => p.Code)
+                    .Select(p => p.Id)
+                    .ToListAsync();
+                prod202Ids.Should().HaveCount(20);
+            }
+
+            // 1. Batch 20-line SalesOrder SaveChangesAsync in a fresh DbContext (empty ChangeTracker)
+            int soOkId;
+            await using (var dbBatchOk = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                var so = new SalesOrder
+                {
+                    OrderCode = $"SO-W12-OK-{suffix}",
+                    ExternalOrderId = $"EXT-W12-OK-{suffix}",
+                    CustomerId = supplier202Id,
+                    WarehouseId = wh202Id,
+                    Status = SalesOrderStatus.Released,
+                    CreatedBy = admin202Id,
+                    CreatedAt = DateTime.UtcNow
+                };
+                dbBatchOk.SalesOrders.Add(so);
+                await dbBatchOk.SaveChangesAsync();
+                soOkId = so.Id;
+            }
+
+            await using (var dbBatchLinesOk = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                var lines = new List<SalesOrderLine>();
+                for (var i = 0; i < 20; i++)
+                {
+                    lines.Add(new SalesOrderLine
+                    {
+                        SalesOrderId = soOkId,
+                        ExternalLineId = $"L-{i + 1:D2}",
+                        ProductId = prod202Ids[i],
+                        OrderedQuantity = 10m + i,
+                        UomCode = $"W12U2-{suffix[..3]}"
+                    });
+                }
+
+                dbBatchLinesOk.SalesOrderLines.AddRange(lines);
+                await dbBatchLinesOk.SaveChangesAsync();
+
+                lines.Should().HaveCount(20);
+                lines.Should().OnlyContain(l => l.TenantId == tenant202);
+            }
+
+            // 2. Batch 20-line SalesOrderLines SaveChangesAsync where line #20 injects Tenant 101's ProductId -> 403 ForbiddenException
+            int soBadId;
+            await using (var dbBatchBadHeader = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                var badSo = new SalesOrder
+                {
+                    OrderCode = $"SO-W12-BAD-{suffix}",
+                    ExternalOrderId = $"EXT-W12-BAD-{suffix}",
+                    CustomerId = supplier202Id,
+                    WarehouseId = wh202Id,
+                    Status = SalesOrderStatus.Released,
+                    CreatedBy = admin202Id,
+                    CreatedAt = DateTime.UtcNow
+                };
+                dbBatchBadHeader.SalesOrders.Add(badSo);
+                await dbBatchBadHeader.SaveChangesAsync();
+                soBadId = badSo.Id;
+            }
+
+            await using (var dbBatchBad = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                for (var i = 0; i < 19; i++)
+                {
+                    dbBatchBad.SalesOrderLines.Add(new SalesOrderLine
+                    {
+                        SalesOrderId = soBadId,
+                        ExternalLineId = $"BL-{i + 1:D2}",
+                        ProductId = prod202Ids[i],
+                        OrderedQuantity = 5m,
+                        UomCode = $"W12U2-{suffix[..3]}"
+                    });
+                }
+
+                // Line 20 injects foreign ProductId from Tenant 101
+                dbBatchBad.SalesOrderLines.Add(new SalesOrderLine
+                {
+                    SalesOrderId = soBadId,
+                    ExternalLineId = "BL-20",
+                    ProductId = prod101Id,
+                    OrderedQuantity = 5m,
+                    UomCode = $"W12U2-{suffix[..3]}"
+                });
+
+                var actBadBatch = () => dbBatchBad.SaveChangesAsync();
+                await actBadBatch.Should().ThrowAsync<ForbiddenException>()
+                    .WithMessage("*403 Cross-Tenant Reference Denied*");
+            }
+
+            // 2B. Simultaneous Parent + Child SaveChangesAsync (temporary Identity keys Id <= 0) for PurchaseOrder+Lines and PartnerDebtInvoice+Ledger
+            await using (var dbSimulOk = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                var poSimul = new PurchaseOrder
+                {
+                    Code = $"PO-W12-SIMUL-{suffix}",
+                    SourceSystem = "ERP",
+                    ExternalPoId = $"EXT-PO-SIMUL-{suffix}",
+                    SupplierId = supplier202Id,
+                    WarehouseId = wh202Id,
+                    OrderDate = DateTime.UtcNow.Date,
+                    Status = PurchaseOrderStatus.Open,
+                    CreatedBy = admin202Id,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                var poLineSimul = new PurchaseOrderLine
+                {
+                    PurchaseOrder = poSimul,
+                    ExternalLineId = "PO-L-01",
+                    LineNo = 1,
+                    ProductId = prod202Ids[0],
+                    OrderedQuantity = 15m,
+                    OperationUnitId = unit202Id,
+                    OperationUnitCodeSnapshot = $"W12U2-{suffix[..3]}",
+                    BaseUnitId = unit202Id,
+                    BaseUnitCodeSnapshot = $"W12U2-{suffix[..3]}",
+                    ConversionFactorSnapshot = 1m,
+                    ConversionVersionSnapshot = 1,
+                    BaseOrderedQuantity = 15m,
+                    UnitPrice = 100m,
+                    TaxPercent = 10m
+                };
+
+                var debtInvSimul = new PartnerDebtInvoice
+                {
+                    Code = $"AP-W12-SIMUL-{suffix}",
+                    PartnerId = supplier202Id,
+                    DebtType = PartnerDebtType.AP,
+                    SourceType = "ImportReceipt",
+                    SourceId = 999999,
+                    SourceCode = $"IR-SIMUL-{suffix}",
+                    SubTotalAmount = 1500m,
+                    TaxAmount = 150m,
+                    TotalAmount = 1650m,
+                    PaidAmount = 0m,
+                    RemainingAmount = 1650m,
+                    Status = PartnerDebtInvoiceStatus.Open,
+                    IssuedAtUtc = DateTime.UtcNow,
+                    CreatedBy = admin202Id
+                };
+                var debtLedgerSimul = new PartnerDebtLedger
+                {
+                    PartnerId = supplier202Id,
+                    Invoice = debtInvSimul,
+                    DebtType = PartnerDebtType.AP,
+                    TransactionType = PartnerDebtTransactionType.InvoiceCreated,
+                    ReferenceType = "ImportReceipt",
+                    ReferenceId = 999999,
+                    ReferenceCode = $"IR-SIMUL-{suffix}",
+                    AmountDelta = 1650m,
+                    BalanceAfter = 1650m,
+                    CreatedAtUtc = DateTime.UtcNow,
+                    CreatedBy = admin202Id
+                };
+
+                dbSimulOk.PurchaseOrders.Add(poSimul);
+                dbSimulOk.PurchaseOrderLines.Add(poLineSimul);
+                dbSimulOk.PartnerDebtInvoices.Add(debtInvSimul);
+                dbSimulOk.PartnerDebtLedgers.Add(debtLedgerSimul);
+
+                await dbSimulOk.SaveChangesAsync();
+
+                poSimul.Id.Should().BeGreaterThan(0);
+                poLineSimul.Id.Should().BeGreaterThan(0);
+                poLineSimul.PurchaseOrderId.Should().Be(poSimul.Id);
+                poLineSimul.TenantId.Should().Be(tenant202);
+
+                debtInvSimul.Id.Should().BeGreaterThan(0);
+                debtLedgerSimul.Id.Should().BeGreaterThan(0);
+                debtLedgerSimul.InvoiceId.Should().Be(debtInvSimul.Id);
+                debtLedgerSimul.TenantId.Should().Be(tenant202);
+            }
+
+            // Simultaneous Parent + Child where child references cross-tenant ProductId or cross-tenant Parent navigation -> 403 ForbiddenException
+            await using (var dbSimulBad = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                var poBad = new PurchaseOrder
+                {
+                    Code = $"PO-W12-SIMUL-BAD-{suffix}",
+                    SourceSystem = "ERP",
+                    ExternalPoId = $"EXT-PO-SIMUL-BAD-{suffix}",
+                    SupplierId = supplier202Id,
+                    WarehouseId = wh202Id,
+                    OrderDate = DateTime.UtcNow.Date,
+                    Status = PurchaseOrderStatus.Open,
+                    CreatedBy = admin202Id,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                var poLineBad = new PurchaseOrderLine
+                {
+                    PurchaseOrder = poBad,
+                    ExternalLineId = "PO-BL-01",
+                    LineNo = 1,
+                    ProductId = prod101Id, // Belongs to Tenant 101!
+                    OrderedQuantity = 5m,
+                    OperationUnitId = unit202Id,
+                    OperationUnitCodeSnapshot = $"W12U2-{suffix[..3]}",
+                    BaseUnitId = unit202Id,
+                    BaseUnitCodeSnapshot = $"W12U2-{suffix[..3]}",
+                    ConversionFactorSnapshot = 1m,
+                    ConversionVersionSnapshot = 1,
+                    BaseOrderedQuantity = 5m
+                };
+
+                dbSimulBad.PurchaseOrders.Add(poBad);
+                dbSimulBad.PurchaseOrderLines.Add(poLineBad);
+
+                var actSimulBad = () => dbSimulBad.SaveChangesAsync();
+                await actSimulBad.Should().ThrowAsync<ForbiddenException>()
+                    .WithMessage("*403 Cross-Tenant Reference Denied*");
+            }
+
+            // 3. Per-Tenant Last Active Admin Guard: deactivating Tenant 202's sole admin fails even though Tenant 101 has an active admin
+            await using (var dbGuard202 = CreateTenantContext(tenant202, $"TENANT-{tenant202}"))
+            {
+                await using var tx = await dbGuard202.Database.BeginTransactionAsync();
+                await PermissionAdministrationGuard.LockAsync(dbGuard202, CancellationToken.None);
+
+                // While admin202 is active, EnsureAdministratorAsync succeeds for Tenant 202
+                await PermissionAdministrationGuard.EnsureAdministratorAsync(dbGuard202, CancellationToken.None);
+
+                var soleAdmin202 = await dbGuard202.Users.SingleAsync(u => u.Id == admin202Id);
+                soleAdmin202.IsActive = false;
+                await dbGuard202.SaveChangesAsync();
+
+                var actLastAdmin = () => PermissionAdministrationGuard.EnsureAdministratorAsync(dbGuard202, CancellationToken.None);
+                await actLastAdmin.Should().ThrowAsync<ERP.Domain.Exceptions.ConcurrencyException>()
+                    .WithMessage("*quản trị viên hợp lệ cuối cùng*");
+
+                await tx.RollbackAsync();
+            }
+        }
+        finally
+        {
+            await CleanupTenantsAsync(tenant101, tenant202);
+        }
+    }
+
+    private static async Task<Role> EnsureAdminRoleWithRequiredPermissionsAsync(ErpKhoDbContext db)
+    {
+        var role = await db.Roles.FirstOrDefaultAsync(r => r.RoleName == "Admin");
+        if (role is null)
+        {
+            role = new Role { RoleName = "Admin" };
+            db.Roles.Add(role);
+            await db.SaveChangesAsync();
+        }
+
+        foreach (var code in PermissionAdministrationGuard.RequiredPermissions)
+        {
+            var perm = await db.Permissions.FirstOrDefaultAsync(p => p.Code == code);
+            if (perm is null)
+            {
+                perm = new Permission(code, code);
+                db.Permissions.Add(perm);
+                await db.SaveChangesAsync();
+            }
+
+            var hasGrant = await db.RolePermissions.AnyAsync(rp => rp.RoleId == role.Id && rp.PermissionId == perm.Id);
+            if (!hasGrant)
+            {
+                db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = perm.Id });
+                await db.SaveChangesAsync();
+            }
+        }
+
+        return role;
+    }
+
     private static async Task CleanupTenantsAsync(params int[] tenantIds)
     {
         await using var sysDb = CreateTenantContext(1, "SYSTEM", isSystemBypass: true);
         foreach (var tid in tenantIds)
         {
             await sysDb.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM dbo.PartnerDebtLedgers WHERE TenantId = {tid};
+                DELETE FROM dbo.PartnerDebtInvoices WHERE TenantId = {tid};
                 DELETE FROM dbo.HandlingUnitContents WHERE TenantId = {tid};
                 DELETE FROM dbo.HandlingUnits WHERE TenantId = {tid};
                 DELETE FROM dbo.PackingSessions WHERE TenantId = {tid};
