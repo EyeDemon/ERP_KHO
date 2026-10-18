@@ -91,9 +91,9 @@ const TX_LABELS: Record<string, string> = {
 };
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  BANK_TRANSFER: 'Chuyển khoản NH',
-  CASH: 'Tiền mặt',
-  OFFSET: 'Bù trừ công nợ',
+  BANK_TRANSFER: 'Chuyển khoản ngân hàng',
+  CASH: 'Tiền mặt tại quỹ',
+  OFFSET: 'Bù trừ công nợ hai chiều',
 };
 
 const formatSourceType = (sourceType?: string | null) =>
@@ -273,8 +273,8 @@ export default function PartnerDebts() {
       </UiToolbar>
 
       {selectedInvoice && canManage && ['Open', 'PartiallyPaid'].includes(selectedInvoice.status) && (
-        <UiCard title={`Tất toán / Thanh toán Hóa đơn ${selectedInvoice.code} (${selectedInvoice.debtType})`}>
-          <form onSubmit={submitPayment} className="ui-form-grid">
+        <UiCard title={`Tất toán / Thanh toán Hóa đơn ${selectedInvoice.code} (${selectedInvoice.debtType === 'AP' ? 'Phải trả NCC' : 'Phải thu KH'})`}>
+          <form onSubmit={submitPayment} className="ui-form-grid" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
             <div>
               <strong>Đối tác:</strong> {selectedInvoice.partnerCode} — {selectedInvoice.partnerName}
               <br />
@@ -305,9 +305,9 @@ export default function PartnerDebts() {
                 value={paymentMethod}
                 onChange={e => setPaymentMethod(e.target.value)}
               >
-                <option value="BANK_TRANSFER">Chuyển khoản ngân hàng (BANK_TRANSFER)</option>
-                <option value="CASH">Tiền mặt (CASH)</option>
-                <option value="OFFSET">Bù trừ công nợ (OFFSET)</option>
+                <option value="BANK_TRANSFER">Chuyển khoản ngân hàng</option>
+                <option value="CASH">Tiền mặt tại quỹ</option>
+                <option value="OFFSET">Bù trừ công nợ hai chiều</option>
               </select>
             </label>
             <label>
@@ -422,7 +422,7 @@ export default function PartnerDebts() {
                         style={{ whiteSpace: 'nowrap', padding: '6px 5px', fontSize: 12, position: 'sticky', right: 0, background: '#ffffff', zIndex: 1 }}
                       >
                         <div className="ui-inline-actions" style={{ flexWrap: 'nowrap', gap: 4 }}>
-                          <button type="button" style={{ padding: '4px 7px', minHeight: 28, fontSize: 11.5 }} onClick={() => setSelectedInvoice(inv)}>
+                          <button type="button" style={{ padding: '4px 7px', minHeight: 28, fontSize: 11.5 }} onClick={() => openPaymentModal(inv)}>
                             Sổ phụ
                           </button>
                           {canManage && ['Open', 'PartiallyPaid'].includes(inv.status) && (
@@ -441,7 +441,13 @@ export default function PartnerDebts() {
         )}
       </UiCard>
 
-      <UiCard title="Sổ cái Công nợ Bất biến (Append-Only PartnerDebtLedger)">
+      <UiCard
+        title={
+          selectedInvoice
+            ? `Sổ phụ & Lịch sử Thanh toán — Hóa đơn ${selectedInvoice.code}`
+            : 'Sổ phụ & Lịch sử Thanh toán (Sổ cái Công nợ Bất biến)'
+        }
+      >
         <UiTableScroll>
           <table className="ui-table-compact" aria-label="Sổ cái biến động công nợ đối tác">
             <thead>

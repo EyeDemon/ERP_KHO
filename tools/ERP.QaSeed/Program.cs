@@ -683,19 +683,167 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         }
     }
 
+    // 6. Idempotent PartnerDebtInvoices ("AP-IR-QA0001" and "AR-ER-QA0001") & PartnerDebtLedgers
+    var nowUtc = DateTime.UtcNow;
+    var apInvoice = await context.PartnerDebtInvoices.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(x => x.Code == "AP-IR-QA0001");
+    if (apInvoice is null)
+    {
+        apInvoice = new PartnerDebtInvoice
+        {
+            Code = "AP-IR-QA0001",
+            PartnerId = supplier.Id,
+            DebtType = PartnerDebtType.AP,
+            SourceType = "ImportReceipt",
+            SourceId = putawayReceipt.Id,
+            SourceCode = "IR-QA-001",
+            Currency = "VND",
+            SubTotalAmount = 25_000_000m,
+            TaxAmount = 2_500_000m,
+            TotalAmount = 27_500_000m,
+            PaidAmount = 0m,
+            RemainingAmount = 27_500_000m,
+            Status = PartnerDebtInvoiceStatus.Open,
+            IssuedAtUtc = nowUtc.AddDays(-5),
+            DueDateUtc = nowUtc.Date.AddDays(25),
+            Note = "Công nợ phải trả từ phiếu nhập kho IR-QA-001",
+            CreatedBy = qaAdmin.Id,
+            CreatedAtUtc = nowUtc.AddDays(-5)
+        };
+        context.PartnerDebtInvoices.Add(apInvoice);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        apInvoice.SourceType = "ImportReceipt";
+        apInvoice.SourceCode = "IR-QA-001";
+        apInvoice.SubTotalAmount = 25_000_000m;
+        apInvoice.TaxAmount = 2_500_000m;
+        apInvoice.TotalAmount = 27_500_000m;
+        if (apInvoice.Status == PartnerDebtInvoiceStatus.Paid)
+        {
+            apInvoice.PaidAmount = 0m;
+            apInvoice.RemainingAmount = 27_500_000m;
+            apInvoice.Status = PartnerDebtInvoiceStatus.Open;
+        }
+    }
+
+    if (!await context.PartnerDebtLedgers.IgnoreQueryFilters().AnyAsync(l => l.InvoiceId == apInvoice.Id))
+    {
+        context.PartnerDebtLedgers.Add(new PartnerDebtLedger
+        {
+            PartnerId = supplier.Id,
+            InvoiceId = apInvoice.Id,
+            DebtType = PartnerDebtType.AP,
+            TransactionType = PartnerDebtTransactionType.InvoiceCreated,
+            AmountDelta = 27_500_000m,
+            BalanceAfter = 27_500_000m,
+            ReferenceType = "ImportReceipt",
+            ReferenceId = putawayReceipt.Id,
+            ReferenceCode = "IR-QA-001",
+            Note = "Ghi nhận công nợ phải trả từ phiếu nhập kho IR-QA-001",
+            CreatedBy = qaAdmin.Id,
+            CreatedAtUtc = nowUtc.AddDays(-5)
+        });
+    }
+
+    var arInvoice = await context.PartnerDebtInvoices.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(x => x.Code == "AR-ER-QA0001");
+    if (arInvoice is null)
+    {
+        arInvoice = new PartnerDebtInvoice
+        {
+            Code = "AR-ER-QA0001",
+            PartnerId = customer.Id,
+            DebtType = PartnerDebtType.AR,
+            SourceType = "ExportReceipt",
+            SourceId = salesOrder.Id,
+            SourceCode = "ER-QA-001",
+            Currency = "VND",
+            SubTotalAmount = 18_000_000m,
+            TaxAmount = 1_800_000m,
+            TotalAmount = 19_800_000m,
+            PaidAmount = 5_000_000m,
+            RemainingAmount = 14_800_000m,
+            Status = PartnerDebtInvoiceStatus.PartiallyPaid,
+            IssuedAtUtc = nowUtc.AddDays(-4),
+            DueDateUtc = nowUtc.Date.AddDays(26),
+            Note = "Công nợ phải thu từ phiếu xuất kho ER-QA-001",
+            CreatedBy = qaAdmin.Id,
+            CreatedAtUtc = nowUtc.AddDays(-4)
+        };
+        context.PartnerDebtInvoices.Add(arInvoice);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        arInvoice.SourceType = "ExportReceipt";
+        arInvoice.SourceCode = "ER-QA-001";
+        arInvoice.SubTotalAmount = 18_000_000m;
+        arInvoice.TaxAmount = 1_800_000m;
+        arInvoice.TotalAmount = 19_800_000m;
+        if (arInvoice.Status == PartnerDebtInvoiceStatus.Paid)
+        {
+            arInvoice.PaidAmount = 5_000_000m;
+            arInvoice.RemainingAmount = 14_800_000m;
+            arInvoice.Status = PartnerDebtInvoiceStatus.PartiallyPaid;
+        }
+    }
+
+    if (!await context.PartnerDebtLedgers.IgnoreQueryFilters().AnyAsync(l => l.InvoiceId == arInvoice.Id))
+    {
+        context.PartnerDebtLedgers.AddRange(
+            new PartnerDebtLedger
+            {
+                PartnerId = customer.Id,
+                InvoiceId = arInvoice.Id,
+                DebtType = PartnerDebtType.AR,
+                TransactionType = PartnerDebtTransactionType.InvoiceCreated,
+                AmountDelta = 19_800_000m,
+                BalanceAfter = 19_800_000m,
+                ReferenceType = "ExportReceipt",
+                ReferenceId = salesOrder.Id,
+                ReferenceCode = "ER-QA-001",
+                Note = "Ghi nhận công nợ phải thu từ phiếu xuất kho ER-QA-001",
+                CreatedBy = qaAdmin.Id,
+                CreatedAtUtc = nowUtc.AddDays(-4)
+            },
+            new PartnerDebtLedger
+            {
+                PartnerId = customer.Id,
+                InvoiceId = arInvoice.Id,
+                DebtType = PartnerDebtType.AR,
+                TransactionType = PartnerDebtTransactionType.Payment,
+                AmountDelta = -5_000_000m,
+                BalanceAfter = 14_800_000m,
+                ReferenceType = "DebtPayment",
+                ReferenceId = arInvoice.Id,
+                ReferenceCode = "UNC-VCB-QA001",
+                PaymentMethod = "BANK_TRANSFER",
+                Note = "Thu tiền đợt 1 qua chuyển khoản ngân hàng",
+                CreatedBy = qaAdmin.Id,
+                CreatedAtUtc = nowUtc.AddDays(-2)
+            });
+    }
+
+    if (supplier.PayableBalance < apInvoice.RemainingAmount)
+        supplier.PayableBalance = apInvoice.RemainingAmount;
+    if (customer.ReceivableBalance < arInvoice.RemainingAmount)
+        customer.ReceivableBalance = arInvoice.RemainingAmount;
+
     context.AuditLogs.Add(new AuditLog
     {
         UserId = qaAdmin.Id,
         Action = "QA.IamAndOperationalSeedApplied",
         EntityName = "LocalQaOperationalSeed",
-        NewValues = $"Warehouse={primaryWarehouse.Code};PutawayTask=PUT-QA-001({putawayTask.Status});PickingTask={pickingTask.TaskCode}({pickingTask.Status});CleanedPartners={cleanedPartnersCount}",
+        NewValues = $"Warehouse={primaryWarehouse.Code};PutawayTask=PUT-QA-001({putawayTask.Status});PickingTask={pickingTask.TaskCode}({pickingTask.Status});AP={apInvoice.Code};AR={arInvoice.Code};CleanedPartners={cleanedPartnersCount}",
         Timestamp = DateTime.UtcNow,
         IpAddress = "local-cli"
     });
     await context.SaveChangesAsync();
     await transaction.CommitAsync();
 
-    Console.WriteLine($"[{dataSource}] Local ERP_KHO QA seed completed: PutawayTask=PUT-QA-001 ({putawayTask.Status}), PickingTask={pickingTask.TaskCode} ({pickingTask.Status}), CleanedPartners={cleanedPartnersCount}.");
+    Console.WriteLine($"[{dataSource}] Local ERP_KHO QA seed completed: PutawayTask=PUT-QA-001 ({putawayTask.Status}), PickingTask={pickingTask.TaskCode} ({pickingTask.Status}), AP={apInvoice.Code}, AR={arInvoice.Code}, CleanedPartners={cleanedPartnersCount}.");
 }
 
 static async Task RevokeQaSessionsAsync(ErpKhoDbContext context)
