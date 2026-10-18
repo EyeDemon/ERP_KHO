@@ -16,8 +16,9 @@ namespace ERP.Infrastructure.Repositories
 
         public async Task<InventoryStock?> GetByProductAndWarehouseAsync(int productId, int warehouseId)
         {
-            var source = _context.Database.CurrentTransaction != null && _context.Database.IsSqlServer()
-                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)InventoryStatus.Available}")
+            await AcquireAllocationAndStockLocksAsync(productId, warehouseId);
+            var source = _context.Database.IsRelational() && _context.Database.IsSqlServer() && _context.Database.CurrentTransaction != null
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)InventoryStatus.Available}")
                 : _dbSet.AsQueryable();
             return await source
                 .Include(s => s.Location)
@@ -38,12 +39,47 @@ namespace ERP.Infrastructure.Repositories
                 .ThenByDescending(s => s.Quantity - s.ReservedQuantity)
                 .FirstOrDefaultAsync();
 
-        public Task<InventoryStock?> GetByProductWarehouseStatusAndLocationAsync(int productId, int warehouseId, InventoryStatus status, int locationId)
+        public async Task<InventoryStock?> GetByProductWarehouseStatusAndLocationAsync(int productId, int warehouseId, InventoryStatus status, int locationId)
         {
-            var source = _context.Database.CurrentTransaction != null && _context.Database.IsSqlServer()
-                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)status} AND LocationId = {locationId} AND LotId IS NULL AND SerialId IS NULL")
+            await AcquireAllocationAndStockLocksAsync(productId, warehouseId);
+            var source = _context.Database.IsRelational() && _context.Database.IsSqlServer() && _context.Database.CurrentTransaction != null
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE ProductId = {productId} AND WarehouseId = {warehouseId} AND Status = {(int)status} AND LocationId = {locationId} AND LotId IS NULL AND SerialId IS NULL")
                 : _dbSet.AsQueryable();
-            return source.FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && s.LocationId == locationId && s.LotId == null && s.SerialId == null);
+            return await source.FirstOrDefaultAsync(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == status && s.LocationId == locationId && s.LotId == null && s.SerialId == null);
+        }
+
+        private async Task AcquireAllocationAndStockLocksAsync(int productId, int warehouseId, CancellationToken token = default)
+        {
+            if (!_context.Database.IsRelational() || !_context.Database.IsSqlServer() || _context.Database.CurrentTransaction is null)
+            {
+                return;
+            }
+
+            try
+            {
+                var allocationLock = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {allocationLock},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+BEGIN
+    DECLARE @lockMessage nvarchar(2048) =
+        CONCAT(N'Không thể khóa phân bổ tồn kho. Mã khóa SQL: ', @lockResult);
+    THROW 51033, @lockMessage, 1;
+END;
+SELECT 1
+FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE ProductId = {productId}
+  AND WarehouseId = {warehouseId};", token);
+            }
+            catch (SqlException exception) when (exception.Number == 1205)
+            {
+                throw new ERP.Domain.Exceptions.DeadlockException("Giao dịch khóa tồn kho bị deadlock.", exception);
+            }
         }
 
         public async Task<int?> GetLegacyAdjustmentLocationIdAsync(int warehouseId, CancellationToken cancellationToken = default) =>
@@ -335,23 +371,7 @@ namespace ERP.Infrastructure.Repositories
             // Serialize allocations of the same product/warehouse before
             // reading stock candidates. Document locks alone cannot protect
             // two independent transfers spending one source stock bucket.
-            if (_context.Database.IsSqlServer() && _context.Database.CurrentTransaction is not null)
-            {
-                var allocationLock = $"ERP:InventoryAllocation:{productId}:{warehouseId}";
-                await _context.Database.ExecuteSqlInterpolatedAsync($@"
-DECLARE @lockResult int;
-EXEC @lockResult = sys.sp_getapplock
-    @Resource = {allocationLock},
-    @LockMode = 'Exclusive',
-    @LockOwner = 'Transaction',
-    @LockTimeout = 15000;
-IF @lockResult < 0
-BEGIN
-    DECLARE @lockMessage nvarchar(2048) =
-        CONCAT(N'Không thể khóa phân bổ tồn kho. Mã khóa SQL: ', @lockResult);
-    THROW 51033, @lockMessage, 1;
-END;", token);
-            }
+            await AcquireAllocationAndStockLocksAsync(productId, warehouseId, token);
 
             var today = DateTime.UtcNow.Date;
             var eligible = _dbSet.AsNoTracking()

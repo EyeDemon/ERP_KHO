@@ -809,7 +809,8 @@ public sealed class PickingService(
             }
         }
 
-        var maxAttempts = ownTransaction && context.Database.IsSqlServer() ? 4 : 1;
+        var isSqlServer = context.Database.IsRelational() && context.Database.IsSqlServer();
+        var maxAttempts = ownTransaction && isSqlServer ? 4 : 1;
         for (var attempt = 1; ; attempt++)
         {
             await using var transaction = ownTransaction
@@ -817,7 +818,7 @@ public sealed class PickingService(
                 : null;
             try
             {
-                if (lockWarehouseId.HasValue && context.Database.IsSqlServer())
+                if (lockWarehouseId.HasValue && isSqlServer && context.Database.CurrentTransaction is not null)
                 {
                     foreach (var productId in lockProductIds)
                     {

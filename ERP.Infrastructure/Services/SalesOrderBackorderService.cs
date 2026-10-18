@@ -513,7 +513,7 @@ public sealed class SalesOrderBackorderService(
         IEnumerable<int> productIds,
         CancellationToken token)
     {
-        if (!context.Database.IsSqlServer())
+        if (!context.Database.IsRelational() || !context.Database.IsSqlServer() || context.Database.CurrentTransaction is null)
             return;
 
         foreach (var productId in productIds.Distinct().OrderBy(x => x))
@@ -527,7 +527,12 @@ EXEC @lockResult = sys.sp_getapplock
     @LockOwner = 'Transaction',
     @LockTimeout = 15000;
 IF @lockResult < 0
-    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;", token);
+    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;
+SELECT Id
+FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE ProductId = {productId}
+  AND WarehouseId = {warehouseId}
+ORDER BY Id;", token);
         }
     }
 

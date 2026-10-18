@@ -7,6 +7,7 @@ using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Queries;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Services;
@@ -77,51 +78,130 @@ public sealed class InventoryLockService(
                 throw new BusinessRuleException("QUALITY_HOLD, INVESTIGATION_HOLD và RECALL_HOLD phải được release thủ công.");
         }
 
-        var own = context.Database.CurrentTransaction is null;
-        await using var tx = own
-            ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : null;
-        try
+        var isSqlServer = context.Database.IsRelational() && context.Database.IsSqlServer();
+        int[] lockProductIds = [];
+        if (isSqlServer)
         {
-            var entity = new InventoryLock
+            if (request.ProductId.HasValue)
             {
-                LockType = lockType,
-                Status = InventoryLockStatus.Active,
-                WarehouseId = request.WarehouseId,
-                LocationId = request.LocationId,
-                ProductId = request.ProductId,
-                InventoryStatus = status,
-                LotId = request.LotId,
-                SerialId = request.SerialId,
-                Reason = request.Reason.Trim(),
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = currentUser.UserId,
-                ExpiresAt = request.ExpiresAt
-            };
-            context.InventoryLocks.Add(entity);
-            await context.SaveChangesAsync(cancellationToken);
-            var audit = new AuditLog
+                lockProductIds = [request.ProductId.Value];
+            }
+            else if (request.LotId.HasValue)
             {
-                UserId = currentUser.UserId,
-                Action = "InventoryLock.Created",
-                EntityName = "InventoryLock",
-                EntityId = entity.Id,
-                WarehouseId = request.WarehouseId,
-                Timestamp = DateTime.UtcNow,
-                NewValues = ScopeText(entity),
-                Reason = entity.Reason,
-                Result = "Success",
-                Severity = "Warning"
-            };
-            context.AuditLogs.Add(audit);
-            await context.SaveChangesAsync(cancellationToken);
-            if (tx is not null) await tx.CommitAsync(cancellationToken);
-            return await GetAsync(entity.Id, cancellationToken);
+                lockProductIds = await context.InventoryLots.AsNoTracking()
+                    .Where(x => x.Id == request.LotId.Value)
+                    .Select(x => x.ProductId)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToArrayAsync(cancellationToken);
+            }
+            else if (request.SerialId.HasValue)
+            {
+                lockProductIds = await context.InventorySerials.AsNoTracking()
+                    .Where(x => x.Id == request.SerialId.Value)
+                    .Select(x => x.ProductId)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToArrayAsync(cancellationToken);
+            }
+            else
+            {
+                lockProductIds = await context.InventoryStocks.AsNoTracking()
+                    .Where(x => x.WarehouseId == request.WarehouseId &&
+                                (!request.LocationId.HasValue || x.LocationId == request.LocationId.Value))
+                    .Select(x => x.ProductId)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToArrayAsync(cancellationToken);
+            }
         }
-        catch
+
+        var own = context.Database.CurrentTransaction is null;
+        var maxAttempts = own && isSqlServer ? 4 : 1;
+        for (var attempt = 1; ; attempt++)
         {
-            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
-            throw;
+            await using var tx = own
+                ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                : null;
+            try
+            {
+                if (isSqlServer && context.Database.CurrentTransaction is not null)
+                {
+                    foreach (var productId in lockProductIds)
+                    {
+                        var resource = $"ERP:InventoryAllocation:{productId}:{request.WarehouseId}";
+                        await context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {resource},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;", cancellationToken);
+                    }
+
+                    var statusInt = status.HasValue ? (int?)status.Value : null;
+                    await context.Database.ExecuteSqlInterpolatedAsync($@"
+SELECT Id
+FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE WarehouseId = {request.WarehouseId}
+  AND ({request.LocationId} IS NULL OR LocationId = {request.LocationId})
+  AND ({request.ProductId} IS NULL OR ProductId = {request.ProductId})
+  AND ({statusInt} IS NULL OR Status = {statusInt})
+  AND ({request.LotId} IS NULL OR LotId = {request.LotId})
+  AND ({request.SerialId} IS NULL OR SerialId = {request.SerialId})
+ORDER BY Id;", cancellationToken);
+                }
+
+                var entity = new InventoryLock
+                {
+                    LockType = lockType,
+                    Status = InventoryLockStatus.Active,
+                    WarehouseId = request.WarehouseId,
+                    LocationId = request.LocationId,
+                    ProductId = request.ProductId,
+                    InventoryStatus = status,
+                    LotId = request.LotId,
+                    SerialId = request.SerialId,
+                    Reason = request.Reason.Trim(),
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = currentUser.UserId,
+                    ExpiresAt = request.ExpiresAt
+                };
+                context.InventoryLocks.Add(entity);
+                await context.SaveChangesAsync(cancellationToken);
+                var audit = new AuditLog
+                {
+                    UserId = currentUser.UserId,
+                    Action = "InventoryLock.Created",
+                    EntityName = "InventoryLock",
+                    EntityId = entity.Id,
+                    WarehouseId = request.WarehouseId,
+                    Timestamp = DateTime.UtcNow,
+                    NewValues = ScopeText(entity),
+                    Reason = entity.Reason,
+                    Result = "Success",
+                    Severity = "Warning"
+                };
+                context.AuditLogs.Add(audit);
+                await context.SaveChangesAsync(cancellationToken);
+                if (tx is not null) await tx.CommitAsync(cancellationToken);
+                return await GetAsync(entity.Id, cancellationToken);
+            }
+            catch (Exception ex) when (own && attempt < maxAttempts &&
+                                       (ex is SqlException { Number: 1205 } ||
+                                        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } }))
+            {
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                await Task.Delay(15 * attempt, cancellationToken);
+            }
+            catch
+            {
+                if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+                throw;
+            }
         }
     }
 

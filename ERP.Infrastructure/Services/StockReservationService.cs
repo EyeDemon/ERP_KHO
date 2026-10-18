@@ -316,16 +316,31 @@ public class StockReservationService(
 
     public async Task ReleaseAsync(int id, ReleaseStockReservationDto request, CancellationToken cancellationToken = default)
     {
-        var reservation = await ScopedQuery().FirstOrDefaultAsync(x => x.Id == id, cancellationToken) ?? throw new NotFoundException("Không tìm thấy reservation.");
-        if (!string.Equals(reservation.SourceType, "Manual", StringComparison.OrdinalIgnoreCase))
-            throw new ConcurrencyException("Chỉ được giải phóng thủ công reservation Manual; reservation thuộc chứng từ xuất phải được xử lý theo vòng đời chứng từ.");
-        await unitOfWork.BeginTransactionAsync();
-        try
+        const int maxAttempts = 4;
+        for (var attempt = 1; ; attempt++)
         {
-            await ReleaseCoreAsync(reservation, request.Quantity, currentUser.UserId, request.Reason, StockReservationStatus.Released, cancellationToken);
-            await unitOfWork.CommitTransactionAsync();
+            await unitOfWork.BeginTransactionAsync();
+            try
+            {
+                var reservation = await ScopedQuery().FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
+                    ?? throw new NotFoundException("Không tìm thấy reservation.");
+                if (!string.Equals(reservation.SourceType, "Manual", StringComparison.OrdinalIgnoreCase))
+                    throw new ConcurrencyException("Chỉ được giải phóng thủ công reservation Manual; reservation thuộc chứng từ xuất phải được xử lý theo vòng đời chứng từ.");
+                await ReleaseCoreAsync(reservation, request.Quantity, currentUser.UserId, request.Reason, StockReservationStatus.Released, cancellationToken);
+                await unitOfWork.CommitTransactionAsync();
+                return;
+            }
+            catch (DeadlockException) when (attempt < maxAttempts)
+            {
+                await unitOfWork.RollbackTransactionAsync();
+                await Task.Delay(15 * attempt, cancellationToken);
+            }
+            catch
+            {
+                await unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
         }
-        catch { await unitOfWork.RollbackTransactionAsync(); throw; }
     }
 
     private async Task ReleaseCoreAsync(

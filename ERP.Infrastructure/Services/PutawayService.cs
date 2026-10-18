@@ -444,8 +444,18 @@ public sealed class PutawayService(
             var baseQty=ToBase(dto.Quantity,dto.UnitCode,item); if(baseQty>item.RemainingBaseQuantity) throw new BusinessRuleException("Số lượng cất vượt quá số lượng còn lại.");
             var product=await ProductForCapacity(item.ProductId,token)??throw new NotFoundException("Không tìm thấy sản phẩm.");
             await EnsurePutawayCapacityAsync(destination, product, baseQty, token);
-            if (context.Database.IsSqlServer())
+            if (context.Database.IsRelational() && context.Database.IsSqlServer() && context.Database.CurrentTransaction is not null)
             {
+                var allocationLock = $"ERP:InventoryAllocation:{item.ProductId}:{task.WarehouseId}";
+                await context.Database.ExecuteSqlInterpolatedAsync($@"
+DECLARE @lockResult int;
+EXEC @lockResult = sys.sp_getapplock
+    @Resource = {allocationLock},
+    @LockMode = 'Exclusive',
+    @LockOwner = 'Transaction',
+    @LockTimeout = 15000;
+IF @lockResult < 0
+    THROW 51033, N'Không thể khóa phân bổ tồn kho do yêu cầu đồng thời.', 1;", token);
                 _ = await context.InventoryStocks
                     .FromSqlInterpolated($"SELECT * FROM dbo.InventoryStocks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE WarehouseId = {task.WarehouseId} AND ProductId = {item.ProductId} AND Status = {(int)item.InventoryStatus} AND (LocationId = {item.SourceLocationId} OR LocationId = {destination.Id})")
                     .OrderBy(x => x.Id)
@@ -527,29 +537,26 @@ public sealed class PutawayService(
                 if (availableInBucket <= 0) continue;
                 var chunk = Math.Min(remainingToMove, availableInBucket);
 
-                if (inventoryLocks is not null)
+                var sourceLocked = await context.InventoryLocks.EffectiveAt(nowUtc).AnyAsync(l =>
+                    l.WarehouseId == task.WarehouseId &&
+                    (!l.LocationId.HasValue || l.LocationId == item.SourceLocationId) &&
+                    (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
+                    (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus) &&
+                    (!l.LotId.HasValue || l.LotId == sourceBucket.LotId) &&
+                    (!l.SerialId.HasValue || l.SerialId == sourceBucket.SerialId), token);
+                var destinationLocked = await context.InventoryLocks.EffectiveAt(nowUtc).AnyAsync(l =>
+                    l.WarehouseId == task.WarehouseId &&
+                    (!l.LocationId.HasValue || l.LocationId == destination.Id) &&
+                    (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
+                    (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus) &&
+                    (!l.LotId.HasValue || l.LotId == sourceBucket.LotId) &&
+                    (!l.SerialId.HasValue || l.SerialId == sourceBucket.SerialId), token);
+                if (sourceLocked || destinationLocked)
                 {
-                    var sourceLocked = await context.InventoryLocks.EffectiveAt(nowUtc).AnyAsync(l =>
-                        l.WarehouseId == task.WarehouseId &&
-                        (!l.LocationId.HasValue || l.LocationId == item.SourceLocationId) &&
-                        (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
-                        (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus) &&
-                        (!l.LotId.HasValue || l.LotId == sourceBucket.LotId) &&
-                        (!l.SerialId.HasValue || l.SerialId == sourceBucket.SerialId), token);
-                    var destinationLocked = await context.InventoryLocks.EffectiveAt(nowUtc).AnyAsync(l =>
-                        l.WarehouseId == task.WarehouseId &&
-                        (!l.LocationId.HasValue || l.LocationId == destination.Id) &&
-                        (!l.ProductId.HasValue || l.ProductId == item.ProductId) &&
-                        (!l.InventoryStatus.HasValue || l.InventoryStatus == item.InventoryStatus) &&
-                        (!l.LotId.HasValue || l.LotId == sourceBucket.LotId) &&
-                        (!l.SerialId.HasValue || l.SerialId == sourceBucket.SerialId), token);
-                    if (sourceLocked || destinationLocked)
-                    {
-                        var locked = new BusinessRuleException("Inventory bucket đang bị khóa bởi Inventory Lock.");
-                        locked.Data["HttpStatusCode"] = 409;
-                        locked.Data["ErrorCode"] = "INV_STOCK_LOCKED";
-                        throw locked;
-                    }
+                    var locked = new BusinessRuleException("Inventory bucket đang bị khóa bởi Inventory Lock.");
+                    locked.Data["HttpStatusCode"] = 409;
+                    locked.Data["ErrorCode"] = "INV_STOCK_LOCKED";
+                    throw locked;
                 }
 
                 sourceBucket.Quantity -= chunk;

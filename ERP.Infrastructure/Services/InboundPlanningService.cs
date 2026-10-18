@@ -204,25 +204,31 @@ public sealed class InboundPlanningService(
     {
         var entity=await PurchaseOrderQuery().SingleOrDefaultAsync(x=>x.Id==id,token)??throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
         await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId,token);
-        var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
-        if(!accessibleWarehouseIds.Contains(entity.WarehouseId))
-            throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        if(warehouses is not WarehouseAuthorizationService)
+        {
+            var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+            if(accessibleWarehouseIds is not null&&!accessibleWarehouseIds.Contains(entity.WarehouseId))
+                throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        }
         await ApplyStateMutationAsync(entity.Status,allowedStates,target,entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion),
             ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;},"Trạng thái đơn mua không cho phép thao tác này.",action,"PurchaseOrder",entity.Id,entity.WarehouseId,token);
-        return await GetPurchaseOrderAsync(id,token);
+        return Map(entity);
     }
 
     private async Task<AsnDto> MutateAsnAsync(int id,InboundStateCommandDto dto,AsnStatus[] allowedStates,AsnStatus target,string action,CancellationToken token,Func<Asn,CancellationToken,Task>? beforeMutate=null)
     {
         var entity=await AsnQuery().SingleOrDefaultAsync(x=>x.Id==id,token)??throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
         await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId,token);
-        var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
-        if(!accessibleWarehouseIds.Contains(entity.WarehouseId))
-            throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        if(warehouses is not WarehouseAuthorizationService)
+        {
+            var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+            if(accessibleWarehouseIds is not null&&!accessibleWarehouseIds.Contains(entity.WarehouseId))
+                throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        }
         if(beforeMutate is not null) await beforeMutate(entity,token);
         await ApplyStateMutationAsync(entity.Status,allowedStates,target,entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion),
             ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;},"Trạng thái ASN không cho phép thao tác này.",action,"Asn",entity.Id,entity.WarehouseId,token);
-        return await GetAsnAsync(id,token);
+        return Map(entity);
     }
 
     private async Task ApplyStateMutationAsync<TStatus>(
