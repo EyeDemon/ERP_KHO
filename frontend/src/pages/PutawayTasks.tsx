@@ -165,39 +165,38 @@ export default function PutawayTasks(){
        {tasks.length===0?<p>Chưa có nhiệm vụ cất hàng phù hợp.</p>:<UiTableScroll><table className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
          <thead>
            <tr>
-             <th style={{ width: '24%', padding: '4px 2px', fontSize: 10, whiteSpace: 'nowrap' }}>Phiếu nhập</th>
-             <th style={{ width: '19%', padding: '4px 2px', fontSize: 10, whiteSpace: 'nowrap' }}>Kho</th>
-             <th style={{ width: '23%', padding: '4px 2px', fontSize: 10, whiteSpace: 'nowrap' }}>Lộ trình</th>
-             <th style={{ width: '20%', padding: '4px 2px', fontSize: 10, whiteSpace: 'nowrap' }}>Trạng thái</th>
-             <th style={{ width: '14%', padding: '4px 2px', fontSize: 10, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+             <th style={{ width: '28%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phiếu nhập</th>
+             <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+             <th style={{ width: '29%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+             <th style={{ width: '16%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
            </tr>
          </thead>
          <tbody>{tasks.map(task=>{
            const sourceCode=task.items?.[0]?.sourceLocationCode||'RECEIVING';
            return <tr key={task.id}>
-             <td style={{ padding: '4px 2px', fontSize: 10.5, verticalAlign: 'middle' }}>
+             <td style={{ padding: '6px 5px', fontSize: 11, verticalAlign: 'middle' }}>
                <button
                  type="button"
-                 style={{ whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'anywhere', padding: '2px 4px', minHeight: 24, fontSize: 10.5, lineHeight: 1.15, maxWidth: '100%' }}
+                 style={{ whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'anywhere', padding: '3px 6px', minHeight: 26, fontSize: 11, lineHeight: 1.2, maxWidth: '100%' }}
                  onClick={()=>void detail(task.id)}
                >
                  {task.receiptCode}
                </button>
+               <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>
+                 {task.warehouseName}
+               </div>
              </td>
-             <td style={{ padding: '4px 2px', fontSize: 10.5, lineHeight: 1.2, verticalAlign: 'middle' }}>
-               {task.warehouseName}
-             </td>
-             <td style={{ padding: '4px 2px', fontSize: 10, lineHeight: 1.2, wordBreak: 'keep-all', overflowWrap: 'normal', verticalAlign: 'middle' }}>
+             <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, wordBreak: 'keep-all', overflowWrap: 'normal', verticalAlign: 'middle' }}>
                {`${sourceCode} -> BIN-A01-01`}
              </td>
-             <td style={{ padding: '4px 2px', fontSize: 10, verticalAlign: 'middle' }}>
+             <td style={{ padding: '6px 5px', fontSize: 10.5, verticalAlign: 'middle' }}>
                <UiBadge tone={task.status==='Completed'?'success':task.status==='Exception'?'danger':task.status==='InProgress'?'warning':'neutral'}>
-                 <span style={{ whiteSpace: 'normal', lineHeight: 1.15, fontSize: 10, display: 'inline-block', maxWidth: 56, textAlign: 'center' }}>
+                 <span style={{ whiteSpace: 'normal', lineHeight: 1.2, fontSize: 10.5, display: 'inline-block', maxWidth: 'none', textAlign: 'center' }}>
                    {states[task.status]??'Không xác định'}
                  </span>
                </UiBadge>
              </td>
-             <td style={{ padding: '4px 2px', fontSize: 11, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+             <td style={{ padding: '6px 5px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
                <strong>{task.movedBaseQuantity}</strong> / {task.requiredBaseQuantity}
              </td>
            </tr>;

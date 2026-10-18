@@ -275,59 +275,67 @@ export default function PartnerDebts() {
       {selectedInvoice && canManage && ['Open', 'PartiallyPaid'].includes(selectedInvoice.status) && (
         <UiCard title={`Tất toán / Thanh toán Hóa đơn ${selectedInvoice.code} (${selectedInvoice.debtType === 'AP' ? 'Phải trả NCC' : 'Phải thu KH'})`}>
           <form onSubmit={submitPayment} className="ui-form-grid" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
-            <div>
-              <strong>Đối tác:</strong> {selectedInvoice.partnerCode} — {selectedInvoice.partnerName}
-              <br />
-              <small>Chứng từ gốc: {formatSourceType(selectedInvoice.sourceType)} #{selectedInvoice.sourceCode}</small>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px 16px' }}>
+              <div>
+                <strong>Đối tác:</strong> {selectedInvoice.partnerCode} — {selectedInvoice.partnerName}
+                <br />
+                <small>Chứng từ gốc: {formatSourceType(selectedInvoice.sourceType)} #{selectedInvoice.sourceCode}</small>
+              </div>
+              <div>
+                <strong>Tổng hóa đơn:</strong> {formatCurrency(selectedInvoice.totalAmount, selectedInvoice.currency)}
+                <br />
+                <small>Còn lại cần thanh toán: <strong>{formatCurrency(selectedInvoice.remainingAmount, selectedInvoice.currency)}</strong></small>
+              </div>
             </div>
-            <div>
-              <strong>Tổng hóa đơn:</strong> {formatCurrency(selectedInvoice.totalAmount, selectedInvoice.currency)}
-              <br />
-              <small>Còn lại cần thanh toán: <strong>{formatCurrency(selectedInvoice.remainingAmount, selectedInvoice.currency)}</strong></small>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px 16px', marginTop: 14, marginBottom: 16 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                <span>Số tiền thanh toán *</span>
+                <input
+                  aria-label="Số tiền thanh toán công nợ"
+                  type="number"
+                  min="0.01"
+                  max={selectedInvoice.remainingAmount}
+                  step="0.01"
+                  required
+                  value={payAmount}
+                  onChange={e => setPayAmount(e.target.value)}
+                  style={{ width: '100%', minHeight: 38, padding: '8px 12px', boxSizing: 'border-box' }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                <span>Phương thức thanh toán</span>
+                <select
+                  aria-label="Phương thức thanh toán"
+                  value={paymentMethod}
+                  onChange={e => setPaymentMethod(e.target.value)}
+                  style={{ width: '100%', minHeight: 38, padding: '8px 12px', boxSizing: 'border-box' }}
+                >
+                  <option value="BANK_TRANSFER">Chuyển khoản ngân hàng</option>
+                  <option value="CASH">Tiền mặt tại quỹ</option>
+                  <option value="OFFSET">Bù trừ công nợ hai chiều</option>
+                </select>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                <span>Mã tham chiếu / Ủy nhiệm chi</span>
+                <input
+                  aria-label="Mã tham chiếu thanh toán"
+                  value={referenceCode}
+                  onChange={e => setReferenceCode(e.target.value)}
+                  maxLength={80}
+                  style={{ width: '100%', minHeight: 38, padding: '8px 12px', boxSizing: 'border-box' }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                <span>Ghi chú</span>
+                <input
+                  aria-label="Ghi chú thanh toán"
+                  value={payNote}
+                  onChange={e => setPayNote(e.target.value)}
+                  maxLength={300}
+                  style={{ width: '100%', minHeight: 38, padding: '8px 12px', boxSizing: 'border-box' }}
+                />
+              </label>
             </div>
-            <label>
-              Số tiền thanh toán *
-              <input
-                aria-label="Số tiền thanh toán công nợ"
-                type="number"
-                min="0.01"
-                max={selectedInvoice.remainingAmount}
-                step="0.01"
-                required
-                value={payAmount}
-                onChange={e => setPayAmount(e.target.value)}
-              />
-            </label>
-            <label>
-              Phương thức thanh toán
-              <select
-                aria-label="Phương thức thanh toán"
-                value={paymentMethod}
-                onChange={e => setPaymentMethod(e.target.value)}
-              >
-                <option value="BANK_TRANSFER">Chuyển khoản ngân hàng</option>
-                <option value="CASH">Tiền mặt tại quỹ</option>
-                <option value="OFFSET">Bù trừ công nợ hai chiều</option>
-              </select>
-            </label>
-            <label>
-              Mã tham chiếu / Ủy nhiệm chi
-              <input
-                aria-label="Mã tham chiếu thanh toán"
-                value={referenceCode}
-                onChange={e => setReferenceCode(e.target.value)}
-                maxLength={80}
-              />
-            </label>
-            <label>
-              Ghi chú
-              <input
-                aria-label="Ghi chú thanh toán"
-                value={payNote}
-                onChange={e => setPayNote(e.target.value)}
-                maxLength={300}
-              />
-            </label>
             <div className="ui-inline-actions">
               <button type="submit" className="ui-primary-button" disabled={submitting}>
                 {submitting ? 'Đang ghi sổ...' : 'Xác nhận Thanh toán'}
