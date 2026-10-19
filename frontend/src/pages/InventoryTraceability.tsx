@@ -99,10 +99,12 @@ const shipmentStatusLabel=(value:string)=>({
 }[value]??value);
 
 const referenceTypeLabel=(value:string)=>({
-  GoodsReceipt:'Phiếu nhập kho', Receipt:'Phiếu nhập kho', StockTransfer:'Phiếu điều chuyển',
+  GoodsReceipt:'Phiếu nhập kho', Receipt:'Phiếu nhập kho', ImportReceipt:'Phiếu nhập kho',
+  ExportReceipt:'Phiếu xuất kho', StockTransfer:'Phiếu điều chuyển',
   Shipment:'Chuyến giao hàng', InventoryReversal:'Phiếu đảo giao dịch',
   InventoryAdjustment:'Phiếu điều chỉnh', InventoryMove:'Phiếu di chuyển',
-  Return:'Phiếu trả hàng', PickTask:'Phiếu lấy hàng',
+  InternalMove:'Di chuyển nội bộ', PurchaseOrder:'Đơn mua hàng', Asn:'Thông báo giao hàng',
+  Stocktake:'Phiếu kiểm kê', Return:'Phiếu trả hàng', PickTask:'Phiếu lấy hàng',
 }[value]??value);
 
 const inventoryStatusLabel=(value:string)=>({
@@ -314,6 +316,13 @@ export default function InventoryTraceability(){
     }finally{if(sequence===requestSequence.current)setLoading(false)}
   };
   const search=(e:FormEvent)=>{e.preventDefault();void requestTrace(0,0,true)};
+  const clearFilters=()=>{
+    setForm({warehouseId:'',productId:'',lotNumber:'',serialNumber:'',referenceType:'',referenceId:''});
+    setEventLimit(200);
+    setValidationError('');
+    setRequestError('');
+    invalidateResults();
+  };
 
   const referencePairErrorActive=Boolean(validationError&&referencePairInvalid);
   const resultStatus=loading
@@ -327,7 +336,7 @@ export default function InventoryTraceability(){
       description="Xem toàn bộ nhóm tồn của một kho được phép, hoặc truy theo sản phẩm, lô, sê-ri và chứng từ. Dòng thời gian sổ cái giữ nguyên lịch sử bất biến."/>
     {requestError&&<p role="alert">{requestError}</p>}
     <UiCard title="Điều kiện truy vết">
-      <form onSubmit={search} noValidate className="ui-form-grid" style={{gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:12,alignItems:'end',maxWidth:'100%'}} aria-busy={loading}>
+      <form onSubmit={search} noValidate className="ui-form-grid" style={{gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:10,alignItems:'end',maxWidth:'100%'}} aria-busy={loading}>
         <UiToolbarField label="Kho truy vết">
           <select aria-label="Kho truy vết" value={form.warehouseId}
             disabled={warehousesLoading||Boolean(warehousesError)||warehouses.length===0}
@@ -337,18 +346,6 @@ export default function InventoryTraceability(){
             {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}
           </select>
         </UiToolbarField>
-        <p id="traceability-warehouse-help" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
-          Chọn một kho để xem toàn bộ tồn hiện tại và sự kiện gần nhất; 500 nhóm tồn mỗi trang. Để truy vết nhiều kho, cần nhập thêm sản phẩm, lô, sê-ri hoặc chứng từ.
-        </p>
-        {warehousesLoading&&<p role="status" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>Đang tải kho được cấp quyền...</p>}
-        {warehousesError&&<div className="ui-stack" style={{gridColumn:'1 / -1'}}>
-          <p role="alert">{warehousesError}</p>
-          <button type="button" onClick={()=>void loadWarehouses()}>Tải lại danh sách kho</button>
-        </div>}
-        {!warehousesLoading&&!warehousesError&&warehouses.length===0&&
-          <p role="status" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
-            Chưa có kho được cấp quyền truy vết. Liên hệ quản trị để kiểm tra quyền truy cập.
-          </p>}
         <UiToolbarField label="ID sản phẩm">
           <input ref={productIdRef} type="number" min="1" value={form.productId} onChange={e=>updateField('productId',e.target.value)} inputMode="numeric"/>
         </UiToolbarField>
@@ -380,10 +377,6 @@ export default function InventoryTraceability(){
             inputMode="numeric"
           />
         </UiToolbarField>
-        <p id="traceability-reference-help" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
-          Loại tham chiếu và ID tham chiếu là một cặp; nhập cả hai khi truy theo chứng từ. Kết hợp chứng từ với bộ lọc khác chỉ lấy nhóm tồn liên quan đến chứng từ đó, kể cả khi giới hạn sự kiện thấp.
-        </p>
-        {validationError&&<p id="traceability-validation-error" role="alert" style={{gridColumn:'1 / -1',margin:0}}>{validationError}</p>}
         <UiToolbarField label="Giới hạn sự kiện">
           <select aria-label="Giới hạn sự kiện truy vết" value={eventLimit} disabled={loading}
             onChange={e=>{
@@ -396,7 +389,26 @@ export default function InventoryTraceability(){
             <option value={500}>500 sự kiện</option>
           </select>
         </UiToolbarField>
-        <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={loading}>{loading?'Đang truy vết...':'Truy vết'}</button>
+        <div className="ui-inline-actions" style={{alignSelf:'end',height:38,alignItems:'center'}}>
+          <button type="submit" className="ui-primary-button" style={{height:38,minHeight:38,whiteSpace:'nowrap'}} disabled={loading}>{loading?'Đang truy vết...':'Truy vết'}</button>
+          <button type="button" style={{height:38,minHeight:38,whiteSpace:'nowrap'}} disabled={loading} onClick={clearFilters}>Xóa bộ lọc</button>
+        </div>
+        <p id="traceability-warehouse-help" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
+          Chọn một kho để xem toàn bộ tồn hiện tại và sự kiện gần nhất; 500 nhóm tồn mỗi trang. Để truy vết nhiều kho, cần nhập thêm sản phẩm, lô, sê-ri hoặc chứng từ.
+        </p>
+        {warehousesLoading&&<p role="status" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>Đang tải kho được cấp quyền...</p>}
+        {warehousesError&&<div className="ui-stack" style={{gridColumn:'1 / -1'}}>
+          <p role="alert">{warehousesError}</p>
+          <button type="button" onClick={()=>void loadWarehouses()}>Tải lại danh sách kho</button>
+        </div>}
+        {!warehousesLoading&&!warehousesError&&warehouses.length===0&&
+          <p role="status" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
+            Chưa có kho được cấp quyền truy vết. Liên hệ quản trị để kiểm tra quyền truy cập.
+          </p>}
+        <p id="traceability-reference-help" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
+          Loại tham chiếu và ID tham chiếu là một cặp; nhập cả hai khi truy theo chứng từ. Kết hợp chứng từ với bộ lọc khác chỉ lấy nhóm tồn liên quan đến chứng từ đó, kể cả khi giới hạn sự kiện thấp.
+        </p>
+        {validationError&&<p id="traceability-validation-error" role="alert" style={{gridColumn:'1 / -1',margin:0}}>{validationError}</p>}
         {resultStatus&&<p role="status" aria-live="polite" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>{resultStatus}</p>}
       </form>
     </UiCard>

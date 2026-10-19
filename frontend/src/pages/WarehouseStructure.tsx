@@ -250,12 +250,12 @@ const WarehouseStructure = () => {
               <UiMetric value={inactiveCount} label="Ngừng hoạt động" />
             </UiMetricGrid>
 
-            <UiCard title="Tổng quan Cấu trúc Phân cấp Kho & Định danh Vị trí (Warehouse Hierarchy Summary — WH-02 / WH-03)">
+            <UiCard title="Tổng quan Cấu trúc Phân cấp Kho & Định danh Vị trí (WH-02 / WH-03)">
               <div className="ui-inline-wrap">
-                <UiBadge tone="success">{`Vị trí cho phép lấy hàng (Pickable): ${allLocations.filter(l => l.isActive && !l.isBlocked && l.isPickable).length}`}</UiBadge>
-                <UiBadge tone="success">{`Vị trí cho phép nhận hàng (Receivable): ${allLocations.filter(l => l.isActive && !l.isBlocked && l.isReceivable).length}`}</UiBadge>
-                <UiBadge tone="warning">{`Vị trí hệ thống (System-managed): ${structure.systemLocations.length}`}</UiBadge>
-                <UiBadge tone="neutral">{`Vị trí chưa gắn cấu trúc (Unmapped): ${structure.unmappedLocations.length}`}</UiBadge>
+                <UiBadge tone="success">{`Vị trí cho phép lấy hàng: ${allLocations.filter(l => l.isActive && !l.isBlocked && l.isPickable).length}`}</UiBadge>
+                <UiBadge tone="success">{`Vị trí cho phép nhận hàng: ${allLocations.filter(l => l.isActive && !l.isBlocked && l.isReceivable).length}`}</UiBadge>
+                <UiBadge tone="warning">{`Vị trí hệ thống: ${structure.systemLocations.length}`}</UiBadge>
+                <UiBadge tone="neutral">{`Vị trí chưa gắn cấu trúc: ${structure.unmappedLocations.length}`}</UiBadge>
               </div>
               <div className="ui-inline-actions" style={{ marginTop: 8 }}>
                 <button type="button" onClick={() => void verifyVirtualLocations()}>
@@ -271,7 +271,7 @@ const WarehouseStructure = () => {
 
             <UiCard title="Cây cấu trúc vật lý">
               <UiTableScroll>
-                <table aria-label="Cấu trúc vị trí kho">
+                <table aria-label="Cấu trúc vị trí kho" className="ui-table-compact">
                   <thead>
                     <tr>
                       <th>Cấp</th>
@@ -312,8 +312,8 @@ const WarehouseStructure = () => {
                 <UiEmptyState title="Không có vị trí phù hợp bộ lọc." />
               ) : (
                 <UiTableScroll>
-                  <table aria-label="Vị trí vật lý theo bộ lọc">
-                    <thead><tr><th>Mã</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Pick</th></tr></thead>
+                  <table aria-label="Vị trí vật lý theo bộ lọc" className="ui-table-compact">
+                    <thead><tr><th>Mã</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Lấy hàng</th></tr></thead>
                     <tbody>
                       {filteredLocations.map(({ row, location }) => {
                         const status = locationStatus(location);
@@ -334,21 +334,21 @@ const WarehouseStructure = () => {
             </UiCard>
 
             {selectedLocation && (
-              <UiCard title={'Chi tiết mock • ' + selectedLocation.code}>
+              <UiCard title={'Chi tiết mô phỏng • ' + selectedLocation.code}>
                 <div className="warehouse-structure-form-grid">
                   <div><strong>Loại</strong><br />{locationLabels[selectedLocation.locationType] || selectedLocation.locationType}</div>
                   <div><strong>Trạng thái</strong><br />{locationStatus(selectedLocation).label}</div>
-                  <div><strong>Pick</strong><br />{availabilityLabel(selectedLocation)}</div>
-                  <div><strong>System managed</strong><br />{selectedLocation.isSystemManaged ? 'Có' : 'Không'}</div>
+                  <div><strong>Lấy hàng</strong><br />{availabilityLabel(selectedLocation)}</div>
+                  <div><strong>Hệ thống quản lý</strong><br />{selectedLocation.isSystemManaged ? 'Có' : 'Không'}</div>
                 </div>
               </UiCard>
             )}
 
             {structure.unmappedLocations.length > 0 && (
               <UiCard title="Vị trí chưa gắn cấu trúc">
-                <p className="ui-muted-text">Dữ liệu legacy/non-system được giữ nguyên, không tự bịa Zone/Rack lịch sử.</p>
+                <p className="ui-muted-text">Dữ liệu cũ không thuộc hệ thống được giữ nguyên, không tự suy đoán Khu vực / Kệ lịch sử.</p>
                 <UiTableScroll>
-                  <table aria-label="Vị trí chưa gắn cấu trúc">
+                  <table aria-label="Vị trí chưa gắn cấu trúc" className="ui-table-compact">
                     <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th></tr></thead>
                     <tbody>
                       {structure.unmappedLocations.map((location) => {
@@ -370,11 +370,11 @@ const WarehouseStructure = () => {
 
             <UiCard title="Vị trí hệ thống">
               <p className="ui-muted-text">
-                RECEIVING và LEGACY là ví dụ system-managed để minh họa compatibility; đây không phải bằng chứng production seed/API.
+                RECEIVING và LEGACY là ví dụ vị trí hệ thống quản lý để minh họa khả năng tương thích; đây không phải dữ liệu vận hành thực tế.
               </p>
               <UiTableScroll>
-                <table aria-label="Vị trí hệ thống">
-                  <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Receivable</th><th>Pick</th></tr></thead>
+                <table aria-label="Vị trí hệ thống" className="ui-table-compact">
+                  <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Nhận hàng</th><th>Lấy hàng</th></tr></thead>
                   <tbody>
                     {structure.systemLocations.map((location) => (
                       <tr key={location.id}>

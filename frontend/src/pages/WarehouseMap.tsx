@@ -79,10 +79,16 @@ const stateLabel: Record<string, string> = {
   Available: 'Khả dụng',
   NearCapacity: 'Gần đầy',
   OverCapacity: 'Vượt sức chứa',
-  ProfileIncomplete: 'Thiếu profile',
-  CompatibilityConflict: 'Xung đột class',
+  ProfileIncomplete: 'Thiếu thông số',
+  CompatibilityConflict: 'Xung đột phân lớp',
   Blocked: 'Bị khóa',
   Inactive: 'Ngừng hoạt động',
+};
+
+const activityLabel: Record<string, string> = {
+  High: 'Cao',
+  Medium: 'Trung bình',
+  Low: 'Thấp',
 };
 
 const errorMessage = (failure: unknown, fallback: string) => {
@@ -223,7 +229,7 @@ const WarehouseMap = () => {
     setSuccess('');
     try {
       if (!clear && [layout.x, layout.y, layout.width, layout.height].some(value => !value.trim())) {
-        setError('Cần nhập đủ X, Y, Width và Height.');
+        setError('Cần nhập đủ X, Y, Rộng và Cao.');
         return;
       }
       const payload = clear
@@ -236,7 +242,7 @@ const WarehouseMap = () => {
             rowVersion: layout.rowVersion,
           };
       if (!clear && [payload.mapX, payload.mapY, payload.mapWidth, payload.mapHeight].some(value => Number.isNaN(value))) {
-        setError('X, Y, Width và Height phải là số hợp lệ.');
+        setError('X, Y, Rộng và Cao phải là số hợp lệ.');
         return;
       }
       await apiClient.put('/api/putaway-tasks/locations/' + layout.locationId + '/layout', payload);
@@ -255,8 +261,8 @@ const WarehouseMap = () => {
     <UiPage>
       <UiPageHeader
         eyebrow="Kho & Vị trí"
-        title="Bản đồ kho & Heatmap"
-        description="Bản đồ vật lý dựa trên layout được cấu hình thật. Heatmap sử dụng capacity, movement 60 phút gần nhất và active putaway; location chưa có tọa độ không được tự suy đoán."
+        title="Bản đồ Kho & Bản đồ Nhiệt"
+        description="Bản đồ vật lý dựa trên bố cục không gian được cấu hình thật. Bản đồ nhiệt sử dụng sức chứa, dịch chuyển 60 phút gần nhất và tác vụ cất hàng đang mở; vị trí chưa có tọa độ không được tự suy đoán."
       />
 
       {success && <p role="status" className="ui-success-text">{success}</p>}
@@ -265,35 +271,35 @@ const WarehouseMap = () => {
       <UiMetricGrid>
         <UiMetric value={mappedItems.length} label="Đã bố trí" />
         <UiMetric value={unmappedItems.length} label="Chưa bố trí" />
-        <UiMetric value={avgUtilization + '%'} label="Utilization trung bình" />
+        <UiMetric value={avgUtilization + '%'} label="Mức sử dụng trung bình" />
         <UiMetric value={busyCount} label="Khu vực có hoạt động" />
         <UiMetric value={criticalCount} label="Điểm cần chú ý" />
       </UiMetricGrid>
 
-      <UiCard title="Tổng quan Mật độ Sơ đồ Không gian Kho (Spatial Layout & Bin Occupancy — WH-03)">
+      <UiCard title="Tổng quan Mật độ Sơ đồ Không gian Kho (WH-03)">
         <div className="warehouse-map-layout-form">
           <div>
             <strong>Độ phủ tọa độ sơ đồ không gian</strong><br />
             {items.length > 0 ? Math.round((mappedItems.length / items.length) * 100) : 0}% ({mappedItems.length}/{items.length} vị trí)
           </div>
           <div>
-            <strong>Mật độ lấp đầy & Bin tải cao (≥75%)</strong><br />
+            <strong>Mật độ lấp đầy & Ô lưu trữ tải cao (≥75%)</strong><br />
             TB {avgUtilization}% • {items.filter(item => (item.utilizationPercent ?? 0) >= 75).length} vị trí tải cao
           </div>
           <div>
-            <strong>Cường độ vận hành & Putaway chờ xử lý</strong><br />
-            {items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)} dịch chuyển 60p • {items.reduce((sum, item) => sum + (item.activePutawayCount || 0), 0)} putaway
+            <strong>Cường độ vận hành & Cất hàng chờ xử lý</strong><br />
+            {items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)} dịch chuyển 60p • {items.reduce((sum, item) => sum + (item.activePutawayCount || 0), 0)} tác vụ cất hàng
           </div>
         </div>
       </UiCard>
 
       <UiCard title="Năng suất Tác vụ Kho, Bản đồ Nhiệt & Điểm chuẩn Xuất BI (RP-07, RP-10)">
         <div className="ui-inline-wrap">
-          <UiBadge tone="success">{`Putaway hoàn tất: ${biSnapshot?.completedPutawaysCount ?? 0}`}</UiBadge>
-          <UiBadge tone="success">{`Pick hoàn tất: ${biSnapshot?.completedPicksCount ?? 0}`}</UiBadge>
-          <UiBadge tone="success">{`Pack hoàn tất: ${biSnapshot?.completedPacksCount ?? 0}`}</UiBadge>
-          <UiBadge>{`Tổng dịch chuyển nội bộ (Move): ${biSnapshot?.totalMovesCount ?? items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)}`}</UiBadge>
-          <UiBadge tone="warning">{`CDC Ledger Watermark: #${biSnapshot?.ledgerWatermarkId ?? 0} • Audit Watermark: #${biSnapshot?.auditWatermarkId ?? 0}`}</UiBadge>
+          <UiBadge tone="success">{`Cất hàng hoàn tất: ${biSnapshot?.completedPutawaysCount ?? 0}`}</UiBadge>
+          <UiBadge tone="success">{`Lấy hàng hoàn tất: ${biSnapshot?.completedPicksCount ?? 0}`}</UiBadge>
+          <UiBadge tone="success">{`Đóng gói hoàn tất: ${biSnapshot?.completedPacksCount ?? 0}`}</UiBadge>
+          <UiBadge>{`Tổng dịch chuyển nội bộ: ${biSnapshot?.totalMovesCount ?? items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)}`}</UiBadge>
+          <UiBadge tone="warning">{`Mốc đồng bộ sổ cái: #${biSnapshot?.ledgerWatermarkId ?? 0} • Mốc kiểm toán: #${biSnapshot?.auditWatermarkId ?? 0}`}</UiBadge>
           <UiBadge tone={biSnapshot?.readyForBiExport !== false ? 'success' : 'neutral'}>
             {biSnapshot?.readyForBiExport !== false ? `Sẵn sàng đồng bộ BI (${biSnapshot?.stockSnapshotRowCount ?? items.length} dòng)` : 'Đang đồng bộ BI'}
           </UiBadge>
@@ -316,21 +322,21 @@ const WarehouseMap = () => {
             {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>)}
           </select>
         </UiToolbarField>
-        <UiToolbarField label="Heatmap">
+        <UiToolbarField label="Chế độ nhiệt">
           <select aria-label="Chế độ heatmap" value={mode} onChange={event => setMode(event.target.value as 'utilization' | 'activity')}>
-            <option value="utilization">Utilization / Capacity</option>
-            <option value="activity">Operational Activity</option>
+            <option value="utilization">Mức sử dụng / Sức chứa</option>
+            <option value="activity">Cường độ vận hành</option>
           </select>
         </UiToolbarField>
         <UiToolbarField label="Tìm vị trí">
-          <input aria-label="Tìm vị trí trên bản đồ" value={search} onChange={event => setSearch(event.target.value)} placeholder="Mã, tên, path, class" />
+          <input aria-label="Tìm vị trí trên bản đồ" value={search} onChange={event => setSearch(event.target.value)} placeholder="Mã, tên, đường dẫn, phân lớp" />
         </UiToolbarField>
         <button type="button" onClick={() => void loadMap(warehouseId)} disabled={!warehouseId || loading}>Làm mới</button>
       </UiToolbar>
 
       <p className={ageMinutes != null && ageMinutes > 5 ? 'warehouse-map-freshness stale' : 'warehouse-map-freshness'}>
-        Snapshot: {generatedAt ? generatedAt.toLocaleString('vi-VN') : '—'} • Tuổi dữ liệu: {ageMinutes == null ? '—' : ageMinutes + ' phút'}
-        {ageMinutes != null && ageMinutes > 5 ? ' • Dữ liệu cũ, cần refresh trước khi điều phối.' : ''}
+        Ảnh chụp dữ liệu: {generatedAt ? generatedAt.toLocaleString('vi-VN') : '—'} • Tuổi dữ liệu: {ageMinutes == null ? '—' : ageMinutes + ' phút'}
+        {ageMinutes != null && ageMinutes > 5 ? ' • Dữ liệu cũ, cần làm mới trước khi điều phối.' : ''}
       </p>
 
       {loading ? (
@@ -339,9 +345,9 @@ const WarehouseMap = () => {
         <UiEmptyState title="Không có kho nào trong phạm vi được phép." />
       ) : (
         <>
-          <UiCard title={'Warehouse Map' + (currentWarehouse ? ' • ' + currentWarehouse.code : '')}>
+          <UiCard title={'Bản đồ Kho' + (currentWarehouse ? ' • ' + currentWarehouse.code : '')}>
             {filteredMapped.length === 0 ? (
-              <UiEmptyState title="Chưa có location phù hợp đã được bố trí trên bản đồ." detail="Location không có tọa độ thật sẽ nằm trong danh sách Chưa bố trí." />
+              <UiEmptyState title="Chưa có vị trí phù hợp đã được bố trí trên bản đồ." detail="Vị trí không có tọa độ thật sẽ nằm trong danh sách Chưa bố trí." />
             ) : (
               <div className="warehouse-map-canvas" aria-label="Bản đồ kho thật">
                 <div className="warehouse-map-grid" aria-hidden="true" />
@@ -362,8 +368,8 @@ const WarehouseMap = () => {
                     title={item.structurePath || item.name}
                   >
                     <strong>{item.code}</strong>
-                    <span>{mode === 'utilization' ? (item.utilizationPercent != null ? item.utilizationPercent + '%' : 'N/A') : item.activityLevel}</span>
-                    <small>{item.recentMovementCount} mvmt • {item.activePutawayCount} task</small>
+                    <span>{mode === 'utilization' ? (item.utilizationPercent != null ? item.utilizationPercent + '%' : 'Chưa có') : (activityLabel[item.activityLevel] || item.activityLevel)}</span>
+                    <small>{item.recentMovementCount} dịch chuyển • {item.activePutawayCount} tác vụ</small>
                   </button>
                 ))}
               </div>
@@ -376,19 +382,19 @@ const WarehouseMap = () => {
             </div>
           </UiCard>
 
-          <UiCard title="Operational Heatmap Detail">
+          <UiCard title="Chi tiết Bản đồ Nhiệt Vận hành">
             <UiTableScroll>
-              <table aria-label="Chi tiết heatmap kho thật">
-                <thead><tr><th>Vị trí</th><th>Storage Class</th><th>Utilization</th><th>Capacity</th><th>Movement 60m</th><th>Active putaway</th><th>Activity</th>{canManage && <th>Layout</th>}</tr></thead>
+              <table aria-label="Chi tiết heatmap kho thật" className="ui-table-compact">
+                <thead><tr><th>Vị trí</th><th>Phân lớp lưu trữ</th><th>Mức sử dụng</th><th>Sức chứa</th><th>Dịch chuyển 60p</th><th>Cất hàng mở</th><th>Hoạt động</th>{canManage && <th>Bố trí</th>}</tr></thead>
                 <tbody>{items.map(item => (
                   <tr key={item.locationId}>
                     <td><strong>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
                     <td>{item.storageClass || '—'}</td>
-                    <td>{item.utilizationPercent != null ? item.utilizationPercent + '%' : 'N/A'}</td>
+                    <td>{item.utilizationPercent != null ? item.utilizationPercent + '%' : 'Chưa có'}</td>
                     <td><UiBadge tone={capacityTone(item)}>{stateLabel[item.capacityState] || item.capacityState}</UiBadge></td>
                     <td>{item.recentMovementCount}</td>
                     <td>{item.activePutawayCount}</td>
-                    <td>{item.activityLevel}</td>
+                    <td>{activityLabel[item.activityLevel] || item.activityLevel}</td>
                     {canManage && <td><button type="button" onClick={() => openLayout(item)} disabled={!item.rowVersion}>{mapped(item) ? 'Sửa bố trí' : 'Bố trí'}</button></td>}
                   </tr>
                 ))}</tbody>
@@ -397,11 +403,11 @@ const WarehouseMap = () => {
           </UiCard>
 
           {unmappedItems.length > 0 && (
-            <UiCard title="Location chưa bố trí">
-              <p className="ui-muted-text">Hệ thống không tự suy đoán tọa độ từ StructurePath. Manager phải bố trí bằng tọa độ phần trăm.</p>
+            <UiCard title="Vị trí chưa bố trí">
+              <p className="ui-muted-text">Hệ thống không tự suy đoán tọa độ từ đường dẫn cấu trúc. Quản lý kho phải bố trí bằng tọa độ phần trăm.</p>
               <UiTableScroll>
-                <table aria-label="Location chưa bố trí bản đồ">
-                  <thead><tr><th>Mã</th><th>Tên</th><th>StructurePath</th><th>Storage Class</th>{canManage && <th>Thao tác</th>}</tr></thead>
+                <table aria-label="Location chưa bố trí bản đồ" className="ui-table-compact">
+                  <thead><tr><th>Mã</th><th>Tên</th><th>Đường dẫn cấu trúc</th><th>Phân lớp lưu trữ</th>{canManage && <th>Thao tác</th>}</tr></thead>
                   <tbody>{unmappedItems.map(item => (
                     <tr key={item.locationId}>
                       <td><strong>{item.code}</strong></td><td>{item.name}</td><td>{item.structurePath?.split('/').join(' / ') || '—'}</td><td>{item.storageClass || '—'}</td>
@@ -415,12 +421,12 @@ const WarehouseMap = () => {
 
           {layout && canManage && (
             <UiCard title={'Bố trí bản đồ • ' + layout.code}>
-              <p className="ui-muted-text">Tọa độ dùng phần trăm canvas 0–100. X + Width và Y + Height không được vượt 100.</p>
+              <p className="ui-muted-text">Tọa độ dùng phần trăm khung bản đồ 0–100. X + Rộng và Y + Cao không được vượt 100.</p>
               <div className="warehouse-map-layout-form">
                 <label className="ui-stack"><span>X (%)</span><input aria-label="Map X" type="number" min="0" max="100" step="0.01" value={layout.x} onChange={event => setLayout(current => current && ({ ...current, x: event.target.value }))} /></label>
                 <label className="ui-stack"><span>Y (%)</span><input aria-label="Map Y" type="number" min="0" max="100" step="0.01" value={layout.y} onChange={event => setLayout(current => current && ({ ...current, y: event.target.value }))} /></label>
-                <label className="ui-stack"><span>Width (%)</span><input aria-label="Map Width" type="number" min="0.01" max="100" step="0.01" value={layout.width} onChange={event => setLayout(current => current && ({ ...current, width: event.target.value }))} /></label>
-                <label className="ui-stack"><span>Height (%)</span><input aria-label="Map Height" type="number" min="0.01" max="100" step="0.01" value={layout.height} onChange={event => setLayout(current => current && ({ ...current, height: event.target.value }))} /></label>
+                <label className="ui-stack"><span>Rộng (%)</span><input aria-label="Map Width" type="number" min="0.01" max="100" step="0.01" value={layout.width} onChange={event => setLayout(current => current && ({ ...current, width: event.target.value }))} /></label>
+                <label className="ui-stack"><span>Cao (%)</span><input aria-label="Map Height" type="number" min="0.01" max="100" step="0.01" value={layout.height} onChange={event => setLayout(current => current && ({ ...current, height: event.target.value }))} /></label>
               </div>
               <div className="ui-inline-actions">
                 <button type="button" onClick={() => void saveLayout(false)} disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu bố trí'}</button>

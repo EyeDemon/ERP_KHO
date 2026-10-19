@@ -19,12 +19,12 @@ public sealed class PermissionsController(
 {
     [HttpGet, PermissionAuthorize(AppPermissions.PermissionRead)]
     public async Task<IActionResult> Catalog(CancellationToken ct) => Ok(await db.Permissions.AsNoTracking()
-        .OrderBy(x => x.Code).Select(x => new { x.Code, x.Description }).ToListAsync(ct));
+        .OrderBy(x => x.Code).Select(x => new { Code = x.Code.Trim(), Description = x.Description != null ? x.Description.Trim() : null }).ToListAsync(ct));
 
     [HttpGet("roles"), PermissionAuthorize(AppPermissions.RoleRead)]
     public async Task<IActionResult> Roles(CancellationToken ct) => Ok(await db.Roles.AsNoTracking().OrderBy(x => x.RoleName)
-        .Select(x => new { x.Id, x.RoleName, RowVersion = Convert.ToBase64String(x.RowVersion),
-            Permissions = x.Permissions.OrderBy(p => p.Permission.Code).Select(p => p.Permission.Code).ToArray() }).ToListAsync(ct));
+        .Select(x => new { x.Id, RoleName = x.RoleName.Trim(), RowVersion = Convert.ToBase64String(x.RowVersion),
+            Permissions = x.Permissions.OrderBy(p => p.Permission.Code).Select(p => p.Permission.Code.Trim()).ToArray() }).ToListAsync(ct));
 
     [HttpGet("users"), PermissionAuthorize(AppPermissions.UserRead)]
     public async Task<IActionResult> Users(CancellationToken ct)
@@ -37,12 +37,12 @@ public sealed class PermissionsController(
             .Select(x => new
             {
                 x.Id,
-                x.Username,
-                x.FullName,
-                x.Email,
+                Username = x.Username.Trim(),
+                FullName = x.FullName != null ? x.FullName.Trim() : null,
+                Email = x.Email != null ? x.Email.Trim() : null,
                 x.TenantId,
                 x.RoleId,
-                RoleName = x.Role != null ? x.Role.RoleName : string.Empty,
+                RoleName = x.Role != null ? x.Role.RoleName.Trim() : string.Empty,
                 x.IsActive,
                 x.LockoutEnd,
                 x.SecurityRevision
@@ -65,7 +65,7 @@ public sealed class PermissionsController(
         return Ok(await query
             .OrderByDescending(x => x.Timestamp)
             .Take(20)
-            .Select(x => new { x.Id, x.UserId, x.Action, x.EntityName, x.EntityId, x.WarehouseId, x.NewValues, x.Result, x.Timestamp })
+            .Select(x => new { x.Id, x.UserId, Action = x.Action.Trim(), EntityName = x.EntityName.Trim(), x.EntityId, x.WarehouseId, x.NewValues, Result = x.Result != null ? x.Result.Trim() : null, x.Timestamp })
             .ToListAsync(ct));
     }
 

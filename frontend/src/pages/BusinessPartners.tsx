@@ -89,7 +89,7 @@ const BusinessPartners = () => {
     {message && <p role="status" className="ui-success-text">{message}</p>}
 
     {!showForm && <>
-      <UiCard title="Tổng quan Hồ sơ Nhà cung cấp & Khách hàng (Partner Governance — MD-04..MD-06)">
+      <UiCard title="Tổng quan Hồ sơ Nhà cung cấp & Khách hàng (MD-04..MD-06)">
         <UiMetricGrid>
           <UiMetric value={items.length} label="Tổng đối tác trên trang" />
           <UiMetric value={activeSuppliersCount} label="NCC đang hoạt động (MD-04)" />
@@ -99,23 +99,23 @@ const BusinessPartners = () => {
           <UiMetric value={missingContactInfoCount} label="Thiếu thông tin liên hệ" />
         </UiMetricGrid>
       </UiCard>
-      <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết SLA Đối tác (Carrier & SLA Contracts — MD-06, MD-09)">
+      <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết Thời gian Phục vụ Đối tác (MD-06, MD-09)">
         <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           <div className="ui-subcard">
-            <strong>Hồ sơ SLA Nhà cung cấp (SUPPLIER_INBOUND_SLA)</strong><br />
-            {activeSuppliersCount} hồ sơ • Cam kết Lead-time tiếp nhận chuẩn: 24h
+            <strong>Hồ sơ cam kết Nhà cung cấp</strong><br />
+            {activeSuppliersCount} hồ sơ • Cam kết thời gian tiếp nhận chuẩn: 24h
           </div>
           <div className="ui-subcard">
-            <strong>Hồ sơ SLA Khách hàng (CUSTOMER_FULFILLMENT_SLA)</strong><br />
-            {activeCustomersCount} hồ sơ • Cam kết Lead-time xuất giao chuẩn: 12h
+            <strong>Hồ sơ cam kết Khách hàng</strong><br />
+            {activeCustomersCount} hồ sơ • Cam kết thời gian xuất giao chuẩn: 12h
           </div>
           <div className="ui-subcard">
-            <strong>Đối tác Vai trò kép / Vận chuyển 3PL (ENTERPRISE_3PL_CARRIER)</strong><br />
+            <strong>Đối tác Vai trò kép / Vận chuyển 3PL</strong><br />
             {dualRolePartnersCount} đối tác vận chuyển & hậu cần hai chiều
           </div>
           <div className="ui-subcard">
-            <strong>Mục tiêu tỷ lệ giao nhận đúng hạn (On-Time SLA)</strong><br />
-            98.5% (24h Inbound / 12h Outbound)
+            <strong>Mục tiêu tỷ lệ giao nhận đúng hạn</strong><br />
+            98.5% (24h Nhập kho / 12h Xuất kho)
           </div>
         </div>
         <div className="ui-inline-actions" style={{ marginTop: 8 }}>
@@ -123,7 +123,7 @@ const BusinessPartners = () => {
             Xác minh &amp; Đồng bộ Hồ sơ SLA Đối tác
           </button>
           {slaVerified && (
-            <UiBadge tone="success">Đã đồng bộ cam kết SLA (98.5% On-Time)</UiBadge>
+            <UiBadge tone="success">Đã đồng bộ cam kết dịch vụ (98.5% đúng hạn)</UiBadge>
           )}
           <button type="button" disabled={loading || governanceBusy} onClick={() => void calculate3PlBilling()}>
             Đối soát Hợp đồng 3PL, Tồn Ký gửi Đa Chủ sở hữu &amp; Tính phí Kho (AX-05, AX-21, AX-22)
@@ -171,8 +171,8 @@ const BusinessPartners = () => {
                     </div>
                   </td>
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {item.isSupplier && <div><small>AP (Phải trả): <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')}</strong></small></div>}
-                    {item.isCustomer && <div><small>AR (Phải thu): <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')}</strong> / Hạn mức: {Number(item.creditLimit ?? 0) > 0 ? Number(item.creditLimit).toLocaleString('vi-VN') : 'Không giới hạn'}</small></div>}
+                    {item.isSupplier && <div><small>Công nợ phải trả: <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')}</strong></small></div>}
+                    {item.isCustomer && <div><small>Công nợ phải thu: <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')}</strong> / Hạn mức: {Number(item.creditLimit ?? 0) > 0 ? Number(item.creditLimit).toLocaleString('vi-VN') : 'Không giới hạn'}</small></div>}
                     <div><small>Kỳ hạn TT: {item.paymentTermDays ?? 30} ngày</small></div>
                   </td>
                   <td><div>{item.phone || '—'}</div>{item.email && <small>{item.email}</small>}</td>

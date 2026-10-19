@@ -260,7 +260,7 @@ const WarehouseCalendar = () => {
   return (
     <UiPage>
       <UiPageHeader eyebrow="Kho & Vị trí" title="Lịch vận hành & Ca kho"
-        description="Cấu hình timezone, lịch tuần, cutoff, capacity theo ca và ngoại lệ lịch nghỉ lễ / bảo trì / ghi đè khẩn cấp (WH-07)." />
+        description="Cấu hình múi giờ, lịch tuần, giờ cắt đơn, năng lực theo ca và ngoại lệ lịch nghỉ lễ / bảo trì / ghi đè khẩn cấp (WH-07)." />
       {success && <p role="status" className="ui-success-text">{success}</p>}
       {error && <p role="alert">{error} <button type="button" onClick={() => void loadCalendar(warehouseId)}>Tải lại</button></p>}
 
@@ -277,18 +277,18 @@ const WarehouseCalendar = () => {
             {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>)}
           </select>
         </UiToolbarField>
-        <div className="ui-muted-text ui-auto-actions">Local time: {calendar?.localNow ? new Date(calendar.localNow).toLocaleString('vi-VN', { timeZone: calendar.timeZoneId }) : '—'} • {calendar?.timeZoneId || '—'}</div>
+        <div className="ui-muted-text ui-auto-actions">Giờ địa phương: {calendar?.localNow ? new Date(calendar.localNow).toLocaleString('vi-VN', { timeZone: calendar.timeZoneId }) : '—'} • {calendar?.timeZoneId || '—'}</div>
       </UiToolbar>
 
       {loading ? <p role="status">Đang tải lịch vận hành...</p> : warehouses.length === 0 ? <UiEmptyState title="Không có kho nào trong phạm vi được phép." /> : calendar ? (
         <>
           <UiCard title="Lịch vận hành tuần">
-            {!calendar.isConfigured && <p role="status"><UiBadge tone="warning">Chưa cấu hình</UiBadge> Kho chưa có lịch vận hành. Manager có thể thiết lập baseline đầu tiên.</p>}
+            {!calendar.isConfigured && <p role="status"><UiBadge tone="warning">Chưa cấu hình</UiBadge> Kho chưa có lịch vận hành. Quản lý kho có thể thiết lập lịch chuẩn đầu tiên.</p>}
             <form onSubmit={saveCalendar}>
-              <label className="ui-stack"><span>Warehouse timezone</span><input aria-label="Warehouse timezone" value={timeZoneId} onChange={event => setTimeZoneId(event.target.value)} disabled={!canManage || saving} placeholder="Asia/Ho_Chi_Minh" /></label>
+              <label className="ui-stack"><span>Múi giờ kho</span><input aria-label="Warehouse timezone" value={timeZoneId} onChange={event => setTimeZoneId(event.target.value)} disabled={!canManage || saving} placeholder="Asia/Ho_Chi_Minh" /></label>
               <UiTableScroll>
-                <table aria-label="Lịch vận hành tuần">
-                  <thead><tr><th>Ngày</th><th>Mở cửa</th><th>Mở</th><th>Đóng</th><th>Inbound cutoff</th><th>Outbound cutoff</th></tr></thead>
+                <table aria-label="Lịch vận hành tuần" className="ui-table-compact">
+                  <thead><tr><th>Ngày</th><th>Mở cửa</th><th>Mở</th><th>Đóng</th><th>Hạn cắt đơn nhập</th><th>Hạn cắt đơn xuất</th></tr></thead>
                   <tbody>{calendar.days.map((day, index) => {
                     const form = days[index];
                     return <tr key={day.dayOfWeek}>
@@ -306,11 +306,11 @@ const WarehouseCalendar = () => {
             </form>
           </UiCard>
 
-          <UiCard title="Ca làm việc & Capacity">
+          <UiCard title="Ca làm việc & Năng lực xử lý">
             <div className="ui-inline-actions">{canManage && <button type="button" className="ui-primary-button" onClick={() => openShift()} disabled={!calendar.isConfigured}>Thêm ca</button>}</div>
             <UiTableScroll>
-              <table aria-label="Ca làm việc và capacity">
-                <thead><tr><th>Ca</th><th>Khung giờ</th><th>Headcount</th><th>Inbound pallet/h</th><th>Outbound order/h</th><th>Dock</th><th>Labor h</th><th>Staging</th><th>Packing</th><th>Equipment</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
+              <table aria-label="Ca làm việc và capacity" className="ui-table-compact">
+                <thead><tr><th>Ca</th><th>Khung giờ</th><th>Nhân sự</th><th>Pallet nhập/giờ</th><th>Đơn xuất/giờ</th><th>Cửa nhận/xuất</th><th>Giờ công</th><th>Sức chứa tập kết</th><th>Trạm đóng gói</th><th>Thiết bị</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
                 <tbody>
                   {calendar.shifts.map(shift => <tr key={shift.id}>
                     <td><strong>{shift.code}</strong><br /><small>{shift.name}</small></td>
@@ -334,14 +334,14 @@ const WarehouseCalendar = () => {
               <label className="ui-stack"><span>Bắt đầu *</span><input aria-label="Giờ bắt đầu ca" type="time" value={shiftForm.startTimeLocal} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, startTimeLocal: event.target.value }))} required /></label>
               <label className="ui-stack"><span>Kết thúc *</span><input aria-label="Giờ kết thúc ca" type="time" value={shiftForm.endTimeLocal} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, endTimeLocal: event.target.value }))} required /></label>
               <label className="ui-stack"><span>Nghỉ (phút)</span><input aria-label="Phút nghỉ ca" type="number" min="0" value={shiftForm.breakMinutes} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, breakMinutes: event.target.value }))} /></label>
-              <label className="ui-stack"><span>Planned headcount</span><input aria-label="Planned headcount" type="number" min="0" value={shiftForm.plannedHeadcount} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, plannedHeadcount: event.target.value }))} /></label>
-              <label className="ui-stack"><span>Inbound pallets/hour</span><input aria-label="Inbound pallets per hour" type="number" min="0" step="0.01" value={shiftForm.inboundPalletsPerHour} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, inboundPalletsPerHour: event.target.value }))} /></label>
-              <label className="ui-stack"><span>Outbound orders/hour</span><input aria-label="Outbound orders per hour" type="number" min="0" step="0.01" value={shiftForm.outboundOrdersPerHour} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, outboundOrdersPerHour: event.target.value }))} /></label>
-              <label className="ui-stack"><span>Dock slots</span><input aria-label="Dock slots" type="number" min="0" value={shiftForm.dockSlots} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, dockSlots: event.target.value }))} /></label>
-              <label className="ui-stack"><span>Labor hours</span><input aria-label="Labor hours" type="number" min="0" step="0.01" value={shiftForm.laborHours} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, laborHours: event.target.value }))} /></label>
-              <label className="ui-stack"><span>Staging capacity</span><input aria-label="Staging capacity" type="number" min="0" step="0.01" value={shiftForm.stagingCapacity} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, stagingCapacity: event.target.value }))} /></label>
-              <label className="ui-stack"><span>Packing stations</span><input aria-label="Packing stations" type="number" min="0" value={shiftForm.packingStations} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, packingStations: event.target.value }))} /></label>
-              <label className="ui-stack"><span>Equipment available</span><input aria-label="Equipment available" type="number" min="0" value={shiftForm.equipmentAvailable} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, equipmentAvailable: event.target.value }))} /></label>
+              <label className="ui-stack"><span>Định biên nhân sự</span><input aria-label="Planned headcount" type="number" min="0" value={shiftForm.plannedHeadcount} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, plannedHeadcount: event.target.value }))} /></label>
+              <label className="ui-stack"><span>Pallet nhập / giờ</span><input aria-label="Inbound pallets per hour" type="number" min="0" step="0.01" value={shiftForm.inboundPalletsPerHour} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, inboundPalletsPerHour: event.target.value }))} /></label>
+              <label className="ui-stack"><span>Đơn xuất / giờ</span><input aria-label="Outbound orders per hour" type="number" min="0" step="0.01" value={shiftForm.outboundOrdersPerHour} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, outboundOrdersPerHour: event.target.value }))} /></label>
+              <label className="ui-stack"><span>Số cửa nhận/xuất</span><input aria-label="Dock slots" type="number" min="0" value={shiftForm.dockSlots} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, dockSlots: event.target.value }))} /></label>
+              <label className="ui-stack"><span>Tổng giờ công</span><input aria-label="Labor hours" type="number" min="0" step="0.01" value={shiftForm.laborHours} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, laborHours: event.target.value }))} /></label>
+              <label className="ui-stack"><span>Sức chứa khu tập kết</span><input aria-label="Staging capacity" type="number" min="0" step="0.01" value={shiftForm.stagingCapacity} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, stagingCapacity: event.target.value }))} /></label>
+              <label className="ui-stack"><span>Số trạm đóng gói</span><input aria-label="Packing stations" type="number" min="0" value={shiftForm.packingStations} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, packingStations: event.target.value }))} /></label>
+              <label className="ui-stack"><span>Thiết bị khả dụng</span><input aria-label="Equipment available" type="number" min="0" value={shiftForm.equipmentAvailable} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, equipmentAvailable: event.target.value }))} /></label>
               {shiftForm.id && <label className="ui-checkbox-label"><input type="checkbox" checked={shiftForm.isActive} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, isActive: event.target.checked }))} /> Ca đang hoạt động</label>}
               <div className="ui-inline-actions"><button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu ca'}</button><button type="button" disabled={saving} onClick={() => setShiftForm(null)}>Hủy</button></div>
             </form>
@@ -358,7 +358,7 @@ const WarehouseCalendar = () => {
                 </UiBadge>
               )}
               <button type="button" disabled={saving || governanceBusy} onClick={() => void optimizeLaborInterleaving()}>
-                Tối ưu Đan xen Nhiệm vụ (Task Interleaving), Định biên Nhân lực & An toàn Công thái học (AX-02, AX-14)
+                Tối ưu Đan xen Nhiệm vụ, Định biên Nhân lực & An toàn Công thái học (AX-02, AX-14)
               </button>
               {laborOptimization && (
                 <UiBadge tone="success">
@@ -411,7 +411,7 @@ const WarehouseCalendar = () => {
               </form>
             )}
             <UiTableScroll>
-              <table aria-label="Danh sách ngoại lệ lịch vận hành WH-07">
+              <table aria-label="Danh sách ngoại lệ lịch vận hành WH-07" className="ui-table-compact">
                 <thead>
                   <tr>
                     <th>Loại ngoại lệ</th>

@@ -160,20 +160,20 @@ const Products = () => {
     <UiPageHeader
       eyebrow="Dữ liệu nền"
       title="Sản phẩm"
-      description="Quản lý SKU, danh mục, đơn vị tính, barcode, chính sách hạn dùng FEFO (MD-08) và quy cách đóng gói chuẩn (MD-09)."
+      description="Quản lý sản phẩm, danh mục, đơn vị tính, mã vạch, chính sách hạn dùng (MD-08) và quy cách đóng gói chuẩn (MD-09)."
     />
 
     {notice && <p role="status" className="ui-success-text">{notice}</p>}
     {error && <p role="alert">{error}</p>}
     {mutating && <p role="status">Đang xử lý...</p>}
 
-    <UiCard title="Chỉ số Chuẩn hóa Chính sách Hạn dùng (MD-08) & Quy cách Đóng gói SKU (MD-09)">
+    <UiCard title="Chỉ số Chuẩn hóa Chính sách Hạn dùng (MD-08) & Quy cách Đóng gói Sản phẩm (MD-09)">
       <div className="ui-inline-wrap">
-        <UiBadge tone="success">{`SKU hoạt động: ${governanceSummary.activeCount}/${products.length}`}</UiBadge>
+        <UiBadge tone="success">{`Sản phẩm hoạt động: ${governanceSummary.activeCount}/${products.length}`}</UiBadge>
         <UiBadge>{`Danh mục hoạt động (MD-01): ${categories.filter(c => c.isActive).length}/${categories.length}`}</UiBadge>
-        <UiBadge>{`Theo dõi Lot: ${governanceSummary.lotCount} • Serial: ${governanceSummary.serialCount}`}</UiBadge>
-        <UiBadge tone="warning">{`Kiểm soát HSD / FEFO (MD-08): ${governanceSummary.expiryCount} SKU`}</UiBadge>
-        <UiBadge tone="success">{`Đã chuẩn hóa Trọng lượng/Thể tích/Pallet (MD-09): ${governanceSummary.dimensionCount} SKU`}</UiBadge>
+        <UiBadge>{`Theo dõi Lô: ${governanceSummary.lotCount} • Sê-ri: ${governanceSummary.serialCount}`}</UiBadge>
+        <UiBadge tone="warning">{`Kiểm soát hạn dùng / FEFO (MD-08): ${governanceSummary.expiryCount} sản phẩm`}</UiBadge>
+        <UiBadge tone="success">{`Đã chuẩn hóa Trọng lượng/Thể tích/Pallet (MD-09): ${governanceSummary.dimensionCount} sản phẩm`}</UiBadge>
         <button type="button" disabled={mutating} onClick={() => void triggerAutoAuditGovernance()}>
           Chạy Kiểm định Hồ sơ Kỹ thuật & Chuẩn hóa FEFO/Đóng gói (MD-02, MD-08, MD-09)
         </button>
@@ -193,7 +193,7 @@ const Products = () => {
       </div>
       {governanceSummary.incomplete.length > 0 && (
         <p className="ui-muted-text">
-          {`SKU cần bổ sung thông số đóng gói hoặc vòng đời HSD: ${governanceSummary.incomplete.map(item => `${item.code} (${item.name})`).join(', ')}`}
+          {`Sản phẩm cần bổ sung thông số đóng gói hoặc vòng đời hạn dùng: ${governanceSummary.incomplete.map(item => `${item.code} (${item.name})`).join(', ')}`}
         </p>
       )}
     </UiCard>
@@ -258,26 +258,26 @@ const Products = () => {
         <input aria-label="Mã sản phẩm" value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã sản phẩm" disabled={!!editing} required />
         <input aria-label="Tên sản phẩm" value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên sản phẩm" required />
         <textarea aria-label="Mô tả sản phẩm" value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="Mô tả" rows={3} />
-        <input aria-label="Storage Class sản phẩm" value={form.storageClass} onChange={e => setForm(x => ({ ...x, storageClass: e.target.value.toUpperCase() }))} placeholder="Storage Class, ví dụ AMBIENT" maxLength={32} />
-        <input aria-label="Trọng lượng đơn vị kg" type="number" min="0.000001" step="0.000001" value={form.unitWeightKg} onChange={e => setForm(x => ({ ...x, unitWeightKg: e.target.value }))} placeholder="kg / base unit" />
-        <input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="m³ / base unit" />
-        <input aria-label="Pallet-equivalent đơn vị" type="number" min="0.00000001" step="0.00000001" value={form.unitPalletEquivalent} onChange={e => setForm(x => ({ ...x, unitPalletEquivalent: e.target.value }))} placeholder="Pallet-equivalent / base unit" />
+        <input aria-label="Storage Class sản phẩm" value={form.storageClass} onChange={e => setForm(x => ({ ...x, storageClass: e.target.value.toUpperCase() }))} placeholder="Phân lớp lưu trữ, ví dụ AMBIENT" maxLength={32} />
+        <input aria-label="Trọng lượng đơn vị kg" type="number" min="0.000001" step="0.000001" value={form.unitWeightKg} onChange={e => setForm(x => ({ ...x, unitWeightKg: e.target.value }))} placeholder="kg / đơn vị cơ sở" />
+        <input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="m³ / đơn vị cơ sở" />
+        <input aria-label="Pallet-equivalent đơn vị" type="number" min="0.00000001" step="0.00000001" value={form.unitPalletEquivalent} onChange={e => setForm(x => ({ ...x, unitPalletEquivalent: e.target.value }))} placeholder="Quy đổi pallet / đơn vị cơ sở" />
         <label>
-          Tracking Type
+          Phương thức theo dõi
           <select aria-label="Tracking Type sản phẩm" value={form.trackingType} onChange={e => {
             const trackingType = e.target.value as 'None' | 'Lot' | 'Serial';
             setForm(x => ({ ...x, trackingType, expiryControl: trackingType === 'None' ? false : x.expiryControl, shelfLifeDays: trackingType === 'None' ? '' : x.shelfLifeDays }));
           }}>
-            <option value="None">Không theo Lot/Serial</option>
-            <option value="Lot">Theo Lot</option>
-            <option value="Serial">Theo Serial</option>
+            <option value="None">Không theo Lô/Sê-ri</option>
+            <option value="Lot">Theo Lô</option>
+            <option value="Serial">Theo Sê-ri</option>
           </select>
         </label>
         <label className="ui-checkbox-label">
           <input aria-label="Kiểm soát hạn dùng" type="checkbox" checked={form.expiryControl} disabled={form.trackingType === 'None'} onChange={e => setForm(x => ({ ...x, expiryControl: e.target.checked, shelfLifeDays: e.target.checked ? x.shelfLifeDays : '' }))} />
           Kiểm soát hạn dùng
         </label>
-        <input aria-label="Shelf Life Days" type="number" min="1" step="1" disabled={!form.expiryControl} value={form.shelfLifeDays} onChange={e => setForm(x => ({ ...x, shelfLifeDays: e.target.value }))} placeholder="Shelf life (ngày), tùy chọn" />
+        <input aria-label="Shelf Life Days" type="number" min="1" step="1" disabled={!form.expiryControl} value={form.shelfLifeDays} onChange={e => setForm(x => ({ ...x, shelfLifeDays: e.target.value }))} placeholder="Vòng đời hạn dùng (ngày), tùy chọn" />
         <select aria-label="Đơn vị tính" value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required>
           <option value={0}>Chọn đơn vị</option>
           {units.filter(item => item.isActive).map(item => <option key={item.id} value={item.id}>{item.code} – {item.name}</option>)}
@@ -306,7 +306,7 @@ const Products = () => {
 
     <UiCard title="Danh sách sản phẩm">
       {loading ? <p role="status">Đang tải sản phẩm...</p> : <UiTableScroll><table className="ui-table-compact">
-        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Storage profile</th><th>Tracking</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Thông số lưu trữ</th><th>Theo dõi</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
         <tbody>
           {visibleProducts.length === 0
             ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 9 : 8} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
@@ -315,8 +315,8 @@ const Products = () => {
                 <td>{product.name}</td>
                 <td>{product.categoryName || '—'}</td>
                 <td>{product.unitName || product.unitId}</td>
-                <td><strong>{product.storageClass || '—'}</strong><br /><small>{product.unitWeightKg != null ? product.unitWeightKg + ' kg' : '—'} • {product.unitVolumeM3 != null ? product.unitVolumeM3 + ' m³' : '—'} • {product.unitPalletEquivalent != null ? product.unitPalletEquivalent + ' pallet-eq' : '—'}</small></td>
-                <td><strong>{product.trackingType || 'None'}</strong><br /><small>{product.expiryControl ? `Expiry${product.shelfLifeDays ? ` • ${product.shelfLifeDays} ngày` : ''}` : 'Không kiểm soát hạn dùng'}</small></td>
+                <td><strong>{product.storageClass || '—'}</strong><br /><small>{product.unitWeightKg != null ? product.unitWeightKg + ' kg' : '—'} • {product.unitVolumeM3 != null ? product.unitVolumeM3 + ' m³' : '—'} • {product.unitPalletEquivalent != null ? product.unitPalletEquivalent + ' quy đổi pallet' : '—'}</small></td>
+                <td><strong>{product.trackingType === 'Lot' ? 'Theo lô' : product.trackingType === 'Serial' ? 'Theo sê-ri' : 'Không theo dõi'}</strong><br /><small>{product.expiryControl ? `Có hạn dùng${product.shelfLifeDays ? ` • ${product.shelfLifeDays} ngày` : ''}` : 'Không kiểm soát hạn dùng'}</small></td>
                 <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>
                 <td><UiBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Hoạt động' : 'Khóa'}</UiBadge></td>
                 {(canManage || canManageBarcodes || canDeactivate) && <td style={{ whiteSpace: 'nowrap' }}>

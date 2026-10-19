@@ -68,11 +68,11 @@ namespace ERP.Api.Controllers
                 .Select(a => new
                 {
                     a.Id,
-                    a.Action,
-                    a.EntityName,
+                    Action = a.Action.Trim(),
+                    EntityName = a.EntityName.Trim(),
                     a.EntityId,
                     a.WarehouseId,
-                    a.Result,
+                    Result = a.Result != null ? a.Result.Trim() : null,
                     a.Timestamp
                 })
                 .ToListAsync(cancellationToken);
@@ -106,8 +106,8 @@ namespace ERP.Api.Controllers
                 .Select(w => new
                 {
                     warehouseId = w.Id,
-                    warehouseCode = w.Code,
-                    warehouseName = w.Name,
+                    warehouseCode = w.Code.Trim(),
+                    warehouseName = w.Name.Trim(),
                     isActive = w.IsActive
                 })
                 .ToListAsync(cancellationToken);
@@ -301,9 +301,9 @@ namespace ERP.Api.Controllers
                 .Select(t => new
                 {
                     taskType = "PUTAWAY",
-                    code = t.Receipt.Code,
+                    code = t.Receipt.Code.Trim(),
                     warehouseId = t.WarehouseId,
-                    warehouseName = t.Warehouse.Name,
+                    warehouseName = t.Warehouse.Name.Trim(),
                     status = t.Status.ToString(),
                     priority = t.Status == PutawayTaskStatus.InProgress ? "HIGH" : "NORMAL",
                     createdAt = t.CreatedAt,
@@ -319,9 +319,9 @@ namespace ERP.Api.Controllers
                 .Select(t => new
                 {
                     taskType = "PICKING",
-                    code = t.TaskCode,
+                    code = t.TaskCode.Trim(),
                     warehouseId = t.WarehouseId,
-                    warehouseName = t.Warehouse.Name,
+                    warehouseName = t.Warehouse.Name.Trim(),
                     status = t.Status.ToString(),
                     priority = t.Priority >= 2 ? "HIGH" : "NORMAL",
                     createdAt = t.CreatedAt,
@@ -337,9 +337,9 @@ namespace ERP.Api.Controllers
                 .Select(s => new
                 {
                     taskType = "PACKING",
-                    code = s.SessionCode,
+                    code = s.SessionCode.Trim(),
                     warehouseId = s.WarehouseId,
-                    warehouseName = s.Warehouse.Name,
+                    warehouseName = s.Warehouse.Name.Trim(),
                     status = s.Status.ToString(),
                     priority = "NORMAL",
                     createdAt = s.CreatedAt,
@@ -354,9 +354,9 @@ namespace ERP.Api.Controllers
                 .Select(r => new
                 {
                     taskType = "INBOUND_RECEIPT",
-                    code = r.Code,
+                    code = r.Code.Trim(),
                     warehouseId = r.WarehouseId,
-                    warehouseName = r.Warehouse.Name,
+                    warehouseName = r.Warehouse.Name.Trim(),
                     status = r.Status.ToString(),
                     priority = "NORMAL",
                     createdAt = r.CreatedAt,
@@ -371,9 +371,9 @@ namespace ERP.Api.Controllers
                 .Select(s => new
                 {
                     taskType = "STOCKTAKE",
-                    code = s.Code,
+                    code = s.Code.Trim(),
                     warehouseId = s.WarehouseId,
-                    warehouseName = s.Warehouse.Name,
+                    warehouseName = s.Warehouse.Name.Trim(),
                     status = s.Status.ToString(),
                     priority = "NORMAL",
                     createdAt = s.CreatedAt,
@@ -393,9 +393,9 @@ namespace ERP.Api.Controllers
                 .Select(a => new
                 {
                     taskType = "DOCK_YARD",
-                    code = a.Code,
+                    code = a.Code.Trim(),
                     warehouseId = a.WarehouseId,
-                    warehouseName = a.Warehouse.Name,
+                    warehouseName = a.Warehouse.Name.Trim(),
                     status = a.Status.ToString(),
                     priority = a.Status == DockAppointmentStatus.Arrived || a.Status == DockAppointmentStatus.InService ? "HIGH" : "NORMAL",
                     createdAt = a.CreatedAtUtc,
@@ -442,10 +442,10 @@ namespace ERP.Api.Controllers
                 .Select(t => new
                 {
                     category = "PUTAWAY_EXCEPTION",
-                    code = t.Receipt.Code,
-                    warehouseName = t.Warehouse.Name,
+                    code = t.Receipt.Code.Trim(),
+                    warehouseName = t.Warehouse.Name.Trim(),
                     severity = "HIGH",
-                    summary = t.ExceptionReason ?? "Ngoại lệ cất hàng",
+                    summary = t.ExceptionReason != null ? t.ExceptionReason.Trim() : "Ngoại lệ cất hàng",
                     route = "/putaway-tasks"
                 })
                 .Take(20)
@@ -457,10 +457,10 @@ namespace ERP.Api.Controllers
                 .Select(e => new
                 {
                     category = "SHORT_PICK",
-                    code = e.PickingTaskLine.PickingTask.TaskCode,
-                    warehouseName = e.PickingTaskLine.PickingTask.Warehouse.Name,
+                    code = e.PickingTaskLine.PickingTask.TaskCode.Trim(),
+                    warehouseName = e.PickingTaskLine.PickingTask.Warehouse.Name.Trim(),
                     severity = "HIGH",
-                    summary = "Thiếu hàng lấy (" + e.ShortageQuantity + "): " + e.Reason,
+                    summary = "Thiếu hàng lấy (" + e.ShortageQuantity + "): " + e.Reason.Trim(),
                     route = "/picking-tasks"
                 })
                 .Take(20)
@@ -472,8 +472,8 @@ namespace ERP.Api.Controllers
                 .Select(d => new
                 {
                     category = "RECEIVING_DISCREPANCY",
-                    code = d.ImportReceipt.Code,
-                    warehouseName = d.ImportReceipt.Warehouse.Name,
+                    code = d.ImportReceipt.Code.Trim(),
+                    warehouseName = d.ImportReceipt.Warehouse.Name.Trim(),
                     severity = "MEDIUM",
                     summary = "Chênh lệch nhận hàng (" + d.Status + ")",
                     route = "/import-receipts"
@@ -487,8 +487,8 @@ namespace ERP.Api.Controllers
                 .Select(s => new
                 {
                     category = "SHIPMENT_EXCEPTION",
-                    code = s.ShipmentCode,
-                    warehouseName = s.Warehouse.Name,
+                    code = s.ShipmentCode.Trim(),
+                    warehouseName = s.Warehouse.Name.Trim(),
                     severity = "HIGH",
                     summary = "Sự cố giao hàng (" + s.Status + ")",
                     route = "/shipments"
@@ -507,12 +507,12 @@ namespace ERP.Api.Controllers
                 .Select(s => new
                 {
                     category = "INVENTORY_HOLD",
-                    code = s.Lot != null ? s.Product.Code + " (" + s.Lot.LotNumber + ")" : s.Product.Code,
-                    warehouseName = s.Warehouse.Name,
+                    code = s.Lot != null ? s.Product.Code.Trim() + " (" + s.Lot.LotNumber.Trim() + ")" : s.Product.Code.Trim(),
+                    warehouseName = s.Warehouse.Name.Trim(),
                     severity = s.Status == InventoryStatus.RecallBlocked || s.Status == InventoryStatus.Damaged || s.Status == InventoryStatus.Expired
                         ? "HIGH"
                         : "MEDIUM",
-                    summary = "Tồn biệt trữ/cảnh báo " + s.Status + " (" + s.Quantity + ") tại " + (s.Location != null ? s.Location.Code : "DEFAULT"),
+                    summary = "Tồn biệt trữ/cảnh báo " + s.Status + " (" + s.Quantity + ") tại " + (s.Location != null ? s.Location.Code.Trim() : "DEFAULT"),
                     route = "/inventory"
                 })
                 .Take(30)
@@ -625,9 +625,9 @@ namespace ERP.Api.Controllers
                 .Select(b => new
                 {
                     entityType = "BARCODE",
-                    code = b.Value,
-                    title = b.Product.Code + " — " + b.Product.Name,
-                    subtitle = "Barcode • " + b.Value,
+                    code = b.Value.Trim(),
+                    title = b.Product.Code.Trim() + " — " + b.Product.Name.Trim(),
+                    subtitle = "Barcode • " + b.Value.Trim(),
                     route = "/products"
                 })
                 .ToListAsync(cancellationToken);
@@ -639,9 +639,9 @@ namespace ERP.Api.Controllers
                 .Select(p => new
                 {
                     entityType = "PRODUCT",
-                    code = p.Code,
-                    title = p.Name,
-                    subtitle = "Sản phẩm • " + p.Code,
+                    code = p.Code.Trim(),
+                    title = p.Name.Trim(),
+                    subtitle = "Sản phẩm • " + p.Code.Trim(),
                     route = "/products"
                 })
                 .ToListAsync(cancellationToken);
@@ -653,9 +653,9 @@ namespace ERP.Api.Controllers
                 .Select(l => new
                 {
                     entityType = "LOCATION",
-                    code = l.Code,
-                    title = l.Name,
-                    subtitle = "Vị trí • " + l.Warehouse.Name,
+                    code = l.Code.Trim(),
+                    title = l.Name.Trim(),
+                    subtitle = "Vị trí • " + l.Warehouse.Name.Trim(),
                     route = "/warehouse-structure"
                 })
                 .ToListAsync(cancellationToken);
@@ -668,8 +668,8 @@ namespace ERP.Api.Controllers
                 .Select(l => new
                 {
                     entityType = "LOT",
-                    code = l.LotNumber,
-                    title = l.Product.Code + " — " + l.Product.Name,
+                    code = l.LotNumber.Trim(),
+                    title = l.Product.Code.Trim() + " — " + l.Product.Name.Trim(),
                     subtitle = "Lô hàng",
                     route = "/inventory"
                 })
@@ -683,8 +683,8 @@ namespace ERP.Api.Controllers
                 .Select(s => new
                 {
                     entityType = "SERIAL",
-                    code = s.SerialNumber,
-                    title = s.Product.Code + " — " + s.Product.Name,
+                    code = s.SerialNumber.Trim(),
+                    title = s.Product.Code.Trim() + " — " + s.Product.Name.Trim(),
                     subtitle = "Sê-ri tồn kho",
                     route = "/inventory"
                 })
@@ -697,9 +697,9 @@ namespace ERP.Api.Controllers
                 .Select(r => new
                 {
                     entityType = "IMPORT_RECEIPT",
-                    code = r.Code,
-                    title = "Phiếu nhập " + r.Code,
-                    subtitle = r.Warehouse.Name + " • " + r.Status,
+                    code = r.Code.Trim(),
+                    title = "Phiếu nhập " + r.Code.Trim(),
+                    subtitle = r.Warehouse.Name.Trim() + " • " + r.Status,
                     route = "/import-receipts"
                 })
                 .ToListAsync(cancellationToken);
@@ -711,9 +711,9 @@ namespace ERP.Api.Controllers
                 .Select(r => new
                 {
                     entityType = "EXPORT_RECEIPT",
-                    code = r.Code,
-                    title = "Phiếu xuất " + r.Code,
-                    subtitle = r.Warehouse.Name + " • " + r.Status,
+                    code = r.Code.Trim(),
+                    title = "Phiếu xuất " + r.Code.Trim(),
+                    subtitle = r.Warehouse.Name.Trim() + " • " + r.Status,
                     route = "/export-receipts"
                 })
                 .ToListAsync(cancellationToken);
@@ -725,9 +725,9 @@ namespace ERP.Api.Controllers
                 .Select(p => new
                 {
                     entityType = "PURCHASE_ORDER",
-                    code = p.Code,
-                    title = "Đơn mua " + p.Code,
-                    subtitle = p.Warehouse.Name + " • " + p.Status,
+                    code = p.Code.Trim(),
+                    title = "Đơn mua " + p.Code.Trim(),
+                    subtitle = p.Warehouse.Name.Trim() + " • " + p.Status,
                     route = "/purchase-orders"
                 })
                 .ToListAsync(cancellationToken);
@@ -739,9 +739,9 @@ namespace ERP.Api.Controllers
                 .Select(a => new
                 {
                     entityType = "ASN",
-                    code = a.Code,
-                    title = "ASN " + a.Code,
-                    subtitle = a.Warehouse.Name + " • " + a.Status,
+                    code = a.Code.Trim(),
+                    title = "ASN " + a.Code.Trim(),
+                    subtitle = a.Warehouse.Name.Trim() + " • " + a.Status,
                     route = "/asns"
                 })
                 .ToListAsync(cancellationToken);
@@ -753,9 +753,9 @@ namespace ERP.Api.Controllers
                 .Select(t => new
                 {
                     entityType = "STOCK_TRANSFER",
-                    code = t.Code,
-                    title = "Điều chuyển " + t.Code,
-                    subtitle = t.SourceWarehouse.Name + " → " + t.DestinationWarehouse.Name,
+                    code = t.Code.Trim(),
+                    title = "Điều chuyển " + t.Code.Trim(),
+                    subtitle = t.SourceWarehouse.Name.Trim() + " → " + t.DestinationWarehouse.Name.Trim(),
                     route = "/stock-transfers"
                 })
                 .ToListAsync(cancellationToken);
@@ -767,9 +767,9 @@ namespace ERP.Api.Controllers
                 .Select(s => new
                 {
                     entityType = "SHIPMENT",
-                    code = s.ShipmentCode,
-                    title = "Lô giao " + s.ShipmentCode,
-                    subtitle = s.Warehouse.Name + " • " + s.Status,
+                    code = s.ShipmentCode.Trim(),
+                    title = "Lô giao " + s.ShipmentCode.Trim(),
+                    subtitle = s.Warehouse.Name.Trim() + " • " + s.Status,
                     route = "/shipments"
                 })
                 .ToListAsync(cancellationToken);
@@ -781,9 +781,9 @@ namespace ERP.Api.Controllers
                 .Select(s => new
                 {
                     entityType = "STOCKTAKE",
-                    code = s.Code,
-                    title = "Kiểm kê " + s.Code,
-                    subtitle = s.Warehouse.Name + " • " + s.Status,
+                    code = s.Code.Trim(),
+                    title = "Kiểm kê " + s.Code.Trim(),
+                    subtitle = s.Warehouse.Name.Trim() + " • " + s.Status,
                     route = "/stocktakes"
                 })
                 .ToListAsync(cancellationToken);
@@ -919,9 +919,9 @@ namespace ERP.Api.Controllers
                     return new
                     {
                         productId = p.ProductId,
-                        productCode = p.ProductCode,
-                        productName = p.ProductName,
-                        unitName = string.IsNullOrWhiteSpace(p.UnitName) ? "ĐVT" : p.UnitName,
+                        productCode = (p.ProductCode ?? string.Empty).Trim(),
+                        productName = (p.ProductName ?? string.Empty).Trim(),
+                        unitName = NormalizeUom(p.UnitName, "ĐVT"),
                         currentOnHand = p.CurrentOnHand,
                         periodInQuantity = periodIn,
                         issuedLastPeriod = issued,
@@ -1051,16 +1051,16 @@ namespace ERP.Api.Controllers
                     {
                         r.InventoryStockId,
                         r.WarehouseId,
-                        r.WarehouseName,
+                        WarehouseName = (r.WarehouseName ?? string.Empty).Trim(),
                         r.LocationId,
-                        r.LocationCode,
+                        LocationCode = (r.LocationCode ?? "DEFAULT").Trim(),
                         r.ProductId,
-                        r.ProductCode,
-                        r.ProductName,
-                        r.UnitName,
+                        ProductCode = (r.ProductCode ?? string.Empty).Trim(),
+                        ProductName = (r.ProductName ?? string.Empty).Trim(),
+                        UnitName = NormalizeUom(r.UnitName),
                         r.Status,
                         r.LotId,
-                        r.LotNumber,
+                        LotNumber = r.LotNumber != null ? r.LotNumber.Trim() : null,
                         r.ManufactureDate,
                         r.ExpiryDate,
                         r.Quantity,
@@ -1311,11 +1311,11 @@ namespace ERP.Api.Controllers
                     return new ERP.Application.DTOs.InventoryInOutReportDto
                     {
                         ProductId = g.Key.ProductId,
-                        ProductCode = prod?.Code ?? string.Empty,
-                        ProductName = prod?.Name ?? string.Empty,
-                        UnitName = prod?.UnitName ?? string.Empty,
+                        ProductCode = (prod?.Code ?? string.Empty).Trim(),
+                        ProductName = (prod?.Name ?? string.Empty).Trim(),
+                        UnitName = NormalizeUom(prod?.UnitName, string.Empty),
                         WarehouseId = g.Key.WarehouseId,
-                        WarehouseName = whName ?? string.Empty,
+                        WarehouseName = (whName ?? string.Empty).Trim(),
                         OpeningQuantity = decimal.Round(opening, 4),
                         ImportQuantity = decimal.Round(importQty, 4),
                         TransferInQuantity = decimal.Round(transferInQty, 4),
@@ -1333,6 +1333,14 @@ namespace ERP.Api.Controllers
                 .ToList();
 
             return report;
+        }
+
+        private static string NormalizeUom(string? uom, string fallback = "THÙNG")
+        {
+            var t = uom?.Trim() ?? string.Empty;
+            return string.IsNullOrEmpty(t) || string.Equals(t, "QA_UNIT", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                ? fallback
+                : t;
         }
 
         [HttpGet("inventory-in-out-stock/export")]

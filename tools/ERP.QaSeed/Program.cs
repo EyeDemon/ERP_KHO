@@ -348,8 +348,12 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         {
             WarehouseId = primaryWarehouse.Id,
             Code = "BIN-A01-01",
-            Name = "Kệ lưu trữ A01-01",
+            Name = "Kệ lưu trữ tiêu chuẩn A01-01",
             StructurePath = "ZONE-A/AISLE-01/RACK-01/SHELF-01/BIN-01",
+            StorageClass = "AMBIENT",
+            MaxWeightKg = 1500m,
+            MaxVolumeM3 = 15m,
+            MaxPalletEquivalent = 10m,
             LocationType = WarehouseLocationType.Storage,
             IsActive = true,
             IsBlocked = false,
@@ -366,8 +370,80 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         context.WarehouseLocations.Add(storageBin);
         await context.SaveChangesAsync();
     }
+    else
+    {
+        storageBin.Name = "Kệ lưu trữ tiêu chuẩn A01-01";
+        storageBin.StructurePath ??= "ZONE-A/AISLE-01/RACK-01/SHELF-01/BIN-01";
+        storageBin.StorageClass = "AMBIENT";
+        storageBin.MaxWeightKg = 1500m;
+        storageBin.MaxVolumeM3 = 15m;
+        storageBin.MaxPalletEquivalent = 10m;
+        storageBin.IsActive = true;
+        storageBin.IsBlocked = false;
+        storageBin.IsPickable = true;
+    }
 
-    // 3. Resolve Unit and Product for QA operational tasks
+    var storageBin2 = await context.WarehouseLocations.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == "BIN-A01-02");
+    if (storageBin2 is null)
+    {
+        storageBin2 = new WarehouseLocation
+        {
+            WarehouseId = primaryWarehouse.Id,
+            Code = "BIN-A01-02",
+            Name = "Kệ lưu trữ cảm biến A01-02",
+            StructurePath = "ZONE-A/AISLE-01/RACK-01/SHELF-02/BIN-02",
+            StorageClass = "AMBIENT",
+            MaxWeightKg = 1200m,
+            MaxVolumeM3 = 12m,
+            MaxPalletEquivalent = 8m,
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsBlocked = false,
+            IsPickable = true,
+            IsReceivable = false,
+            IsSystemManaged = false,
+            MapX = 35m,
+            MapY = 10m,
+            MapWidth = 20m,
+            MapHeight = 15m,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = qaAdmin.Id
+        };
+        context.WarehouseLocations.Add(storageBin2);
+    }
+    else
+    {
+        storageBin2.Name = "Kệ lưu trữ cảm biến A01-02";
+        storageBin2.StructurePath ??= "ZONE-A/AISLE-01/RACK-01/SHELF-02/BIN-02";
+        storageBin2.StorageClass = "AMBIENT";
+        storageBin2.MaxWeightKg = 1200m;
+        storageBin2.MaxVolumeM3 = 12m;
+        storageBin2.MaxPalletEquivalent = 8m;
+        storageBin2.IsActive = true;
+        storageBin2.IsBlocked = false;
+        storageBin2.IsPickable = true;
+    }
+
+    var primaryNonSystemLocations = await context.WarehouseLocations.IgnoreQueryFilters()
+        .Where(l => l.WarehouseId == primaryWarehouse.Id && !l.IsSystemManaged)
+        .ToListAsync();
+    var locIdx = 3;
+    foreach (var loc in primaryNonSystemLocations)
+    {
+        loc.StorageClass ??= "AMBIENT";
+        loc.MaxWeightKg ??= 1000m;
+        loc.MaxVolumeM3 ??= 10m;
+        loc.MaxPalletEquivalent ??= 6m;
+        if (string.IsNullOrWhiteSpace(loc.StructurePath))
+        {
+            loc.StructurePath = $"ZONE-B/AISLE-01/RACK-01/SHELF-01/BIN-{locIdx:D2}";
+            locIdx++;
+        }
+    }
+    await context.SaveChangesAsync();
+
+    // 3. Resolve Unit, Category, Barcode and Product for QA operational tasks
     var allUnits = await context.Units.IgnoreQueryFilters().OrderBy(u => u.Id).ToListAsync();
     foreach (var u in allUnits)
     {
@@ -393,6 +469,44 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         await context.SaveChangesAsync();
     }
 
+    var catQa01 = await context.ProductCategories.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(c => c.Code == "CAT-QA-01");
+    if (catQa01 is null)
+    {
+        catQa01 = new ProductCategory
+        {
+            Code = "CAT-QA-01",
+            Name = "Thiết bị & Linh kiện Công nghiệp QA",
+            IsActive = true
+        };
+        context.ProductCategories.Add(catQa01);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        catQa01.Name = "Thiết bị & Linh kiện Công nghiệp QA";
+        catQa01.IsActive = true;
+    }
+
+    var catQa02 = await context.ProductCategories.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(c => c.Code == "CAT-QA-02");
+    if (catQa02 is null)
+    {
+        catQa02 = new ProductCategory
+        {
+            Code = "CAT-QA-02",
+            Name = "Cảm biến & Tự động hóa QA",
+            IsActive = true
+        };
+        context.ProductCategories.Add(catQa02);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        catQa02.Name = "Cảm biến & Tự động hóa QA";
+        catQa02.IsActive = true;
+    }
+
     var product = await context.Products.IgnoreQueryFilters().OrderBy(p => p.Id).FirstOrDefaultAsync(p => p.IsActive);
     if (product is null)
     {
@@ -401,15 +515,27 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Code = "QA-E2E-001",
             Name = "Thùng linh kiện điện tử QA-01",
             UnitId = unit.Id,
+            CategoryId = catQa01.Id,
             Description = "Linh kiện điện tử dùng cho kiểm thử ERP",
+            StorageClass = "AMBIENT",
+            UnitWeightKg = 2.5m,
+            UnitVolumeM3 = 0.025m,
+            UnitPalletEquivalent = 0.05m,
+            TrackingType = ProductTrackingType.None,
+            ExpiryControl = false,
             IsActive = true
         };
         context.Products.Add(product);
         await context.SaveChangesAsync();
     }
-    else if (product.UnitId != unit.Id)
+    else
     {
         product.UnitId = unit.Id;
+        product.CategoryId ??= catQa01.Id;
+        product.StorageClass = "AMBIENT";
+        product.UnitWeightKg ??= 2.5m;
+        product.UnitVolumeM3 ??= 0.025m;
+        product.UnitPalletEquivalent ??= 0.05m;
         await context.SaveChangesAsync();
     }
 
@@ -422,18 +548,63 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Code = "QA-LOT-002",
             Name = "Hộp cảm biến nhiệt độ QA-02",
             UnitId = unit.Id,
+            CategoryId = catQa02.Id,
             Description = "Cảm biến nhiệt độ quản lý theo lô dùng cho kiểm thử ERP",
-            IsActive = true,
-            ShelfLifeDays = 365
+            StorageClass = "AMBIENT",
+            UnitWeightKg = 1.2m,
+            UnitVolumeM3 = 0.012m,
+            UnitPalletEquivalent = 0.025m,
+            TrackingType = ProductTrackingType.Lot,
+            ExpiryControl = true,
+            ShelfLifeDays = 365,
+            IsActive = true
         };
         context.Products.Add(lotProduct);
         await context.SaveChangesAsync();
     }
-    else if (lotProduct.UnitId != unit.Id)
+    else
     {
         lotProduct.UnitId = unit.Id;
+        lotProduct.CategoryId ??= catQa02.Id;
+        lotProduct.StorageClass = "AMBIENT";
+        lotProduct.UnitWeightKg ??= 1.2m;
+        lotProduct.UnitVolumeM3 ??= 0.012m;
+        lotProduct.UnitPalletEquivalent ??= 0.025m;
+        lotProduct.TrackingType = ProductTrackingType.Lot;
+        lotProduct.ExpiryControl = true;
+        lotProduct.ShelfLifeDays ??= 365;
         await context.SaveChangesAsync();
     }
+
+    var allExistingProducts = await context.Products.IgnoreQueryFilters()
+        .Include(p => p.Barcodes)
+        .OrderBy(p => p.Id)
+        .ToListAsync();
+    foreach (var p in allExistingProducts)
+    {
+        p.CategoryId ??= catQa01.Id;
+        p.StorageClass ??= "AMBIENT";
+        p.UnitWeightKg ??= 2.0m;
+        p.UnitVolumeM3 ??= 0.02m;
+        p.UnitPalletEquivalent ??= 0.04m;
+        if (p.ExpiryControl && p.ShelfLifeDays is null)
+        {
+            p.ShelfLifeDays = 365;
+        }
+        if (!p.Barcodes.Any())
+        {
+            var bcVal = $"8938505{p.Id:D6}";
+            if (!await context.ProductBarcodes.IgnoreQueryFilters().AnyAsync(b => b.Value == bcVal))
+            {
+                context.ProductBarcodes.Add(new ProductBarcode
+                {
+                    ProductId = p.Id,
+                    Value = bcVal
+                });
+            }
+        }
+    }
+    await context.SaveChangesAsync();
 
     // 4. Idempotent PutawayTask ("PUT-QA-001") backed by ImportReceipt ("IR-QA-002") in Open status
     var putawayReceipt = await context.ImportReceipts.IgnoreQueryFilters()
@@ -1940,14 +2111,20 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         await context.SaveChangesAsync();
     }
 
-    var lotStorageStock = await context.InventoryStocks.IgnoreQueryFilters()
-        .FirstOrDefaultAsync(s =>
+    var lotStorageStocks = await context.InventoryStocks.IgnoreQueryFilters()
+        .Where(s =>
             s.WarehouseId == primaryWarehouse.Id &&
             s.ProductId == lotProduct.Id &&
             s.LocationId == storageBin.Id &&
             s.Status == InventoryStatus.Available &&
-            s.LotId == null &&
-            s.SerialId == null);
+            s.SerialId == null)
+        .OrderByDescending(s => s.LotId == lotQa002.Id)
+        .ToListAsync();
+    var lotStorageStock = lotStorageStocks.FirstOrDefault();
+    foreach (var extraLotStock in lotStorageStocks.Skip(1))
+    {
+        context.InventoryStocks.Remove(extraLotStock);
+    }
     if (lotStorageStock is null)
     {
         lotStorageStock = new InventoryStock
@@ -1956,16 +2133,453 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             ProductId = lotProduct.Id,
             LocationId = storageBin.Id,
             Status = InventoryStatus.Available,
+            LotId = lotQa002.Id,
             Quantity = 60m,
             ReservedQuantity = 0m,
             LastUpdated = DateTime.UtcNow
         };
         context.InventoryStocks.Add(lotStorageStock);
     }
-    else if (lotStorageStock.Quantity < 60m)
+    else
     {
+        lotStorageStock.LotId = lotQa002.Id;
         lotStorageStock.Quantity = 60m;
+        lotStorageStock.ReservedQuantity = 0m;
         lotStorageStock.LastUpdated = DateTime.UtcNow;
+    }
+    await context.SaveChangesAsync();
+
+    // Ensure IR-QA-001 has a posted line & Import ledger transaction for LOT-QA-002 (65 units)
+    if (!irQa001.Details.Any(d => d.ProductId == lotProduct.Id))
+    {
+        irQa001.Details.Add(new ImportReceiptDetail
+        {
+            ProductId = lotProduct.Id,
+            Quantity = 65m,
+            UnitPrice = 420000m,
+            Note = "Nhập kho lô cảm biến nhiệt độ LOT-QA-002 theo đơn mua PO-QA-001",
+            OperationUnitId = unit.Id,
+            OperationUnitCodeSnapshot = unit.Code,
+            OperationUnitDecimalPlaces = unit.DecimalPlaces,
+            BaseUnitId = unit.Id,
+            BaseUnitCodeSnapshot = unit.Code,
+            BaseUnitDecimalPlaces = unit.DecimalPlaces,
+            ConversionFactor = 1m,
+            ConversionVersion = 1,
+            ExpectedQuantity = 65m,
+            ReceivedQuantity = 65m,
+            ObservedQuantity = 65m,
+            FinalReceivedQuantity = 65m,
+            AcceptedQuantity = 65m,
+            PostedQuantity = 65m,
+            BaseExpectedQuantity = 65m,
+            BaseReceivedQuantity = 65m,
+            BaseObservedQuantity = 65m,
+            BaseFinalReceivedQuantity = 65m,
+            BaseAcceptedQuantity = 65m
+        });
+        await context.SaveChangesAsync();
+    }
+
+    if (!await context.InventoryTransactions.IgnoreQueryFilters().AsNoTracking().AnyAsync(t =>
+            t.WarehouseId == primaryWarehouse.Id &&
+            t.ProductId == lotProduct.Id &&
+            t.TransactionType == TransactionType.Import &&
+            t.ReferenceType == "ImportReceipt" &&
+            t.ReferenceId == irQa001.Id))
+    {
+        context.InventoryTransactions.Add(new InventoryTransaction
+        {
+            WarehouseId = primaryWarehouse.Id,
+            ProductId = lotProduct.Id,
+            LocationId = receivingLocation.Id,
+            LotId = lotQa002.Id,
+            InventoryStatus = InventoryStatus.Available,
+            TransactionType = TransactionType.Import,
+            Quantity = 65m,
+            ReferenceType = "ImportReceipt",
+            ReferenceId = irQa001.Id,
+            TransactionDate = DateTime.UtcNow.AddDays(-2),
+            CreatedBy = qaAdmin.Id,
+            Note = "Ghi sổ phiếu nhập kho IR-QA-001 cho lô cảm biến LOT-QA-002 tại khu tiếp nhận RECEIVING"
+        });
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE InventoryTransactions SET LocationId = {receivingLocation.Id}, LotId = {lotQa002.Id}, InventoryStatus = {(int)InventoryStatus.Available}, Quantity = 65, Note = N'Ghi sổ phiếu nhập kho IR-QA-001 cho lô cảm biến LOT-QA-002 tại khu tiếp nhận RECEIVING' WHERE WarehouseId = {primaryWarehouse.Id} AND ProductId = {lotProduct.Id} AND TransactionType = {(int)TransactionType.Import} AND ReferenceType = 'ImportReceipt' AND ReferenceId = {irQa001.Id}");
+    }
+
+    // Ensure ER-QA-001 -> RSV-QA-LOT-002 -> ALC-QA-LOT-002 -> PICK-QA-003 -> PACK-QA-002 -> HU-QA-002 -> SHP-QA-002 outbound genealogy for LOT-QA-002 (5 units)
+    var erQa001Lot = await context.ExportReceipts.IgnoreQueryFilters()
+        .Include(e => e.Details)
+        .OrderBy(e => e.Id)
+        .FirstOrDefaultAsync(e => e.Code == "ER-QA-001" || e.WarehouseId == primaryWarehouse.Id);
+    if (erQa001Lot is not null)
+    {
+        erQa001Lot.Status = ReceiptStatus.Dispatched;
+        erQa001Lot.DispatchedAt ??= DateTime.UtcNow.AddDays(-1);
+        erQa001Lot.DispatchedBy ??= qaAdmin.Id;
+        if (!erQa001Lot.Details.Any(d => d.ProductId == lotProduct.Id))
+        {
+            erQa001Lot.Details.Add(new ExportReceiptDetail
+            {
+                ProductId = lotProduct.Id,
+                Quantity = 5m,
+                UnitPrice = 1800000m,
+                TaxPercent = 10m,
+                Note = "Xuất giao lô cảm biến nhiệt độ LOT-QA-002",
+                BaseUomIdSnapshot = unit.Id,
+                BaseUomCodeSnapshot = unit.Code,
+                BaseUomNameSnapshot = unit.Name,
+                BaseUomDecimalPlacesSnapshot = unit.DecimalPlaces
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var rsvLot002 = await context.StockReservations.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(r => r.ReservationCode == "RSV-QA-LOT-002" ||
+                                      (r.SourceType == "ExportReceipt" && r.SourceId == erQa001Lot.Id && r.ProductId == lotProduct.Id));
+        if (rsvLot002 is null)
+        {
+            rsvLot002 = new StockReservation
+            {
+                ReservationCode = "RSV-QA-LOT-002",
+                ProductId = lotProduct.Id,
+                WarehouseId = primaryWarehouse.Id,
+                Quantity = 5m,
+                AllocatedQuantity = 0m,
+                ConsumedQuantity = 5m,
+                ReleasedQuantity = 0m,
+                Status = StockReservationStatus.Consumed,
+                SourceType = "ExportReceipt",
+                SourceId = erQa001Lot.Id,
+                SourceCode = erQa001Lot.Code,
+                CreatedAt = DateTime.UtcNow.AddHours(-18),
+                CreatedBy = qaAdmin.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+                AllocationVersion = 1
+            };
+            context.StockReservations.Add(rsvLot002);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            rsvLot002.ReservationCode = "RSV-QA-LOT-002";
+            rsvLot002.ProductId = lotProduct.Id;
+            rsvLot002.WarehouseId = primaryWarehouse.Id;
+            rsvLot002.SourceType = "ExportReceipt";
+            rsvLot002.SourceId = erQa001Lot.Id;
+            rsvLot002.SourceCode = erQa001Lot.Code;
+            rsvLot002.Quantity = 5m;
+            rsvLot002.AllocatedQuantity = 0m;
+            rsvLot002.ConsumedQuantity = 5m;
+            rsvLot002.ReleasedQuantity = 0m;
+            rsvLot002.Status = StockReservationStatus.Consumed;
+            await context.SaveChangesAsync();
+        }
+
+        var alcLot002 = await context.StockAllocations.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(a => a.AllocationCode == "ALC-QA-LOT-002" || a.ReservationId == rsvLot002.Id);
+        if (alcLot002 is null)
+        {
+            alcLot002 = new StockAllocation
+            {
+                AllocationCode = "ALC-QA-LOT-002",
+                ReservationId = rsvLot002.Id,
+                WarehouseId = primaryWarehouse.Id,
+                ProductId = lotProduct.Id,
+                LocationId = storageBin.Id,
+                LotId = lotQa002.Id,
+                InventoryStatus = InventoryStatus.Available,
+                Quantity = 5m,
+                Status = StockAllocationStatus.Consumed,
+                Strategy = AllocationStrategy.LocationOrder,
+                SelectionReason = "Phân bổ theo FEFO lô LOT-QA-002 tại kệ BIN-A01-01",
+                AllocatedAt = DateTime.UtcNow.AddHours(-17),
+                AllocatedBy = qaAdmin.Id,
+                Version = 1
+            };
+            context.StockAllocations.Add(alcLot002);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            alcLot002.AllocationCode = "ALC-QA-LOT-002";
+            alcLot002.WarehouseId = primaryWarehouse.Id;
+            alcLot002.ProductId = lotProduct.Id;
+            alcLot002.LocationId = storageBin.Id;
+            alcLot002.LotId = lotQa002.Id;
+            alcLot002.InventoryStatus = InventoryStatus.Available;
+            alcLot002.Quantity = 5m;
+            alcLot002.Status = StockAllocationStatus.Consumed;
+            alcLot002.SelectionReason = "Phân bổ theo FEFO lô LOT-QA-002 tại kệ BIN-A01-01";
+            await context.SaveChangesAsync();
+        }
+
+        var pickQa003 = await context.PickingTasks.IgnoreQueryFilters()
+            .Include(t => t.Lines)
+            .FirstOrDefaultAsync(t => t.TaskCode == "PICK-QA-003");
+        if (pickQa003 is null)
+        {
+            pickQa003 = new PickingTask
+            {
+                TaskCode = "PICK-QA-003",
+                SourceType = "ExportReceipt",
+                SourceId = erQa001Lot.Id,
+                SourceCode = erQa001Lot.Code,
+                WarehouseId = primaryWarehouse.Id,
+                PickingType = "SingleOrder",
+                Status = PickingTaskStatus.Completed,
+                Priority = 1,
+                AssignedUserId = qaAdmin.Id,
+                CreatedAt = DateTime.UtcNow.AddHours(-16),
+                StartedAt = DateTime.UtcNow.AddHours(-15),
+                CompletedAt = DateTime.UtcNow.AddHours(-14),
+                CreatedBy = qaAdmin.Id,
+                Lines =
+                [
+                    new PickingTaskLine
+                    {
+                        Sequence = 1,
+                        AllocationId = alcLot002.Id,
+                        ProductId = lotProduct.Id,
+                        SourceLocationId = storageBin.Id,
+                        RequestedQuantity = 5m,
+                        PickedQuantity = 5m,
+                        Status = PickingTaskLineStatus.Picked
+                    }
+                ]
+            };
+            context.PickingTasks.Add(pickQa003);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            pickQa003.SourceType = "ExportReceipt";
+            pickQa003.SourceId = erQa001Lot.Id;
+            pickQa003.SourceCode = erQa001Lot.Code;
+            pickQa003.WarehouseId = primaryWarehouse.Id;
+            pickQa003.Status = PickingTaskStatus.Completed;
+            pickQa003.CompletedAt ??= DateTime.UtcNow.AddHours(-14);
+            foreach (var l in pickQa003.Lines)
+            {
+                l.AllocationId = alcLot002.Id;
+                l.ProductId = lotProduct.Id;
+                l.SourceLocationId = storageBin.Id;
+                l.RequestedQuantity = 5m;
+                l.PickedQuantity = 5m;
+                l.Status = PickingTaskLineStatus.Picked;
+            }
+            await context.SaveChangesAsync();
+        }
+
+        var pickQa003Line = pickQa003.Lines.First();
+        var packQa002 = await context.PackingSessions.IgnoreQueryFilters()
+            .Include(s => s.HandlingUnits)
+            .ThenInclude(h => h.Contents)
+            .FirstOrDefaultAsync(s => s.SessionCode == "PACK-QA-002" || s.PickingTaskId == pickQa003.Id);
+        if (packQa002 is null)
+        {
+            packQa002 = new PackingSession
+            {
+                SessionCode = "PACK-QA-002",
+                PickingTaskId = pickQa003.Id,
+                WarehouseId = primaryWarehouse.Id,
+                Status = PackingSessionStatus.Packed,
+                CreatedAt = DateTime.UtcNow.AddHours(-14),
+                StartedAt = DateTime.UtcNow.AddHours(-14),
+                PackedAt = DateTime.UtcNow.AddHours(-13),
+                CreatedBy = qaAdmin.Id,
+                HandlingUnits =
+                [
+                    new HandlingUnit
+                    {
+                        HuCode = "HU-QA-002",
+                        Barcode = "BC-HU-QA-002",
+                        Sscc = "003893000000000025",
+                        WarehouseId = primaryWarehouse.Id,
+                        Type = HandlingUnitType.Carton,
+                        Status = HandlingUnitStatus.Shipped,
+                        GrossWeightKg = 6.2m,
+                        NetWeightKg = 6.0m,
+                        VolumeM3 = 0.06m,
+                        CreatedAt = DateTime.UtcNow.AddHours(-13),
+                        CreatedBy = qaAdmin.Id,
+                        Contents =
+                        [
+                            new HandlingUnitContent
+                            {
+                                PickingTaskLineId = pickQa003Line.Id,
+                                ProductId = lotProduct.Id,
+                                Quantity = 5m,
+                                PackedAt = DateTime.UtcNow.AddHours(-13),
+                                PackedBy = qaAdmin.Id
+                            }
+                        ]
+                    }
+                ]
+            };
+            context.PackingSessions.Add(packQa002);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            packQa002.SessionCode = "PACK-QA-002";
+            packQa002.PickingTaskId = pickQa003.Id;
+            packQa002.WarehouseId = primaryWarehouse.Id;
+            packQa002.Status = PackingSessionStatus.Packed;
+            packQa002.PackedAt ??= DateTime.UtcNow.AddHours(-13);
+            var hu2 = packQa002.HandlingUnits.FirstOrDefault(h => h.HuCode == "HU-QA-002")
+                      ?? packQa002.HandlingUnits.FirstOrDefault();
+            if (hu2 is null)
+            {
+                hu2 = new HandlingUnit
+                {
+                    HuCode = "HU-QA-002",
+                    Barcode = "BC-HU-QA-002",
+                    Sscc = "003893000000000025",
+                    WarehouseId = primaryWarehouse.Id,
+                    PackingSessionId = packQa002.Id,
+                    Type = HandlingUnitType.Carton,
+                    Status = HandlingUnitStatus.Shipped,
+                    GrossWeightKg = 6.2m,
+                    NetWeightKg = 6.0m,
+                    VolumeM3 = 0.06m,
+                    CreatedAt = DateTime.UtcNow.AddHours(-13),
+                    CreatedBy = qaAdmin.Id,
+                    Contents =
+                    [
+                        new HandlingUnitContent
+                        {
+                            PickingTaskLineId = pickQa003Line.Id,
+                            ProductId = lotProduct.Id,
+                            Quantity = 5m,
+                            PackedAt = DateTime.UtcNow.AddHours(-13),
+                            PackedBy = qaAdmin.Id
+                        }
+                    ]
+                };
+                packQa002.HandlingUnits.Add(hu2);
+            }
+            else
+            {
+                hu2.HuCode = "HU-QA-002";
+                hu2.Barcode = "BC-HU-QA-002";
+                hu2.WarehouseId = primaryWarehouse.Id;
+                hu2.ParentHandlingUnitId = null;
+                hu2.Status = HandlingUnitStatus.Shipped;
+                if (!hu2.Contents.Any(c => c.PickingTaskLineId == pickQa003Line.Id))
+                {
+                    hu2.Contents.Add(new HandlingUnitContent
+                    {
+                        PickingTaskLineId = pickQa003Line.Id,
+                        ProductId = lotProduct.Id,
+                        Quantity = 5m,
+                        PackedAt = DateTime.UtcNow.AddHours(-13),
+                        PackedBy = qaAdmin.Id
+                    });
+                }
+            }
+            await context.SaveChangesAsync();
+        }
+
+        var huQa002 = packQa002.HandlingUnits.First();
+        var shpQa002 = await context.Shipments.IgnoreQueryFilters()
+            .Include(s => s.HandlingUnits)
+            .FirstOrDefaultAsync(s => s.ShipmentCode == "SHP-QA-002" || s.PackingSessionId == packQa002.Id);
+        if (shpQa002 is null)
+        {
+            shpQa002 = new Shipment
+            {
+                ShipmentCode = "SHP-QA-002",
+                PackingSessionId = packQa002.Id,
+                WarehouseId = primaryWarehouse.Id,
+                SourceType = "ExportReceipt",
+                SourceId = erQa001Lot.Id,
+                SourceCode = erQa001Lot.Code,
+                Status = ShipmentStatus.Delivered,
+                StagingLocationId = stagingLocation.Id,
+                VehiclePlate = "51D-668.88",
+                TrailerPlate = "51R-208.99",
+                SealNumber = "SEAL-QA-002",
+                CreatedAt = DateTime.UtcNow.AddHours(-12),
+                CreatedBy = qaAdmin.Id,
+                DispatchedAt = DateTime.UtcNow.AddHours(-12),
+                DispatchedBy = qaAdmin.Id,
+                CompletedAt = DateTime.UtcNow.AddHours(-6),
+                HandlingUnits =
+                [
+                    new ShipmentHandlingUnit
+                    {
+                        HandlingUnitId = huQa002.Id,
+                        Sequence = 1,
+                        AssignedAt = DateTime.UtcNow.AddHours(-12),
+                        StagedAt = DateTime.UtcNow.AddHours(-12),
+                        LoadedAt = DateTime.UtcNow.AddHours(-12),
+                        LoadedBy = qaAdmin.Id
+                    }
+                ]
+            };
+            context.Shipments.Add(shpQa002);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            shpQa002.ShipmentCode = "SHP-QA-002";
+            shpQa002.PackingSessionId = packQa002.Id;
+            shpQa002.WarehouseId = primaryWarehouse.Id;
+            shpQa002.SourceType = "ExportReceipt";
+            shpQa002.SourceId = erQa001Lot.Id;
+            shpQa002.SourceCode = erQa001Lot.Code;
+            shpQa002.Status = ShipmentStatus.Delivered;
+            shpQa002.DispatchedAt ??= DateTime.UtcNow.AddHours(-12);
+            shpQa002.DispatchedBy ??= qaAdmin.Id;
+            if (!shpQa002.HandlingUnits.Any(x => x.HandlingUnitId == huQa002.Id))
+            {
+                shpQa002.HandlingUnits.Add(new ShipmentHandlingUnit
+                {
+                    HandlingUnitId = huQa002.Id,
+                    Sequence = 1,
+                    AssignedAt = DateTime.UtcNow.AddHours(-12),
+                    StagedAt = DateTime.UtcNow.AddHours(-12),
+                    LoadedAt = DateTime.UtcNow.AddHours(-12),
+                    LoadedBy = qaAdmin.Id
+                });
+            }
+            await context.SaveChangesAsync();
+        }
+
+        if (!await context.InventoryTransactions.IgnoreQueryFilters().AsNoTracking().AnyAsync(t =>
+                t.WarehouseId == primaryWarehouse.Id &&
+                t.ProductId == lotProduct.Id &&
+                t.TransactionType == TransactionType.Ship &&
+                t.ReferenceType == "Shipment" &&
+                t.ReferenceId == shpQa002.Id))
+        {
+            context.InventoryTransactions.Add(new InventoryTransaction
+            {
+                WarehouseId = primaryWarehouse.Id,
+                ProductId = lotProduct.Id,
+                LocationId = storageBin.Id,
+                LotId = lotQa002.Id,
+                InventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.Ship,
+                Quantity = 5m,
+                ReferenceType = "Shipment",
+                ReferenceId = shpQa002.Id,
+                TransactionDate = DateTime.UtcNow.AddHours(-12),
+                CreatedBy = qaAdmin.Id,
+                Note = "Xuất giao 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) trên chuyến giao SHP-QA-002 theo phiếu xuất ER-QA-001"
+            });
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE InventoryTransactions SET LocationId = {storageBin.Id}, LotId = {lotQa002.Id}, InventoryStatus = {(int)InventoryStatus.Available}, Quantity = 5, Note = N'Xuất giao 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) trên chuyến giao SHP-QA-002 theo phiếu xuất ER-QA-001' WHERE WarehouseId = {primaryWarehouse.Id} AND ProductId = {lotProduct.Id} AND TransactionType = {(int)TransactionType.Ship} AND ReferenceType = 'Shipment' AND ReferenceId = {shpQa002.Id}");
+        }
     }
 
     var activeQcLock = await context.InventoryLocks.IgnoreQueryFilters()
@@ -2107,10 +2721,15 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Quantity = 5m,
             ReferenceType = "InternalMove",
             ReferenceId = 9002,
-            TransactionDate = DateTime.UtcNow.AddHours(-2),
+            TransactionDate = DateTime.UtcNow.AddHours(-19),
             CreatedBy = qaAdmin.Id,
             Note = "Điều chuyển nội bộ 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) từ RECEIVING vào kệ BIN-A01-01"
         });
+    }
+    else
+    {
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE InventoryTransactions SET LotId = {lotQa002.Id}, LocationId = {storageBin.Id}, FromLocationId = {receivingLocation.Id}, ToLocationId = {storageBin.Id} WHERE WarehouseId = {primaryWarehouse.Id} AND TransactionType = {(int)TransactionType.Move} AND ReferenceType = 'InternalMove' AND ReferenceId = 9002");
     }
 
     var allAllocations = await context.StockAllocations.IgnoreQueryFilters()
@@ -2120,7 +2739,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     foreach (var alloc in allAllocations)
     {
         if (!string.Equals(alloc.AllocationCode, "ALC-QA-PICK-001", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(alloc.AllocationCode, "ALC-QA-PACK-001", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(alloc.AllocationCode, "ALC-QA-PACK-001", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(alloc.AllocationCode, "ALC-QA-LOT-002", StringComparison.OrdinalIgnoreCase))
         {
             alloc.AllocationCode = $"ALC-QA-{alcCounter:D3}";
             alcCounter++;
@@ -2149,7 +2769,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     foreach (var rsv in allReservations)
     {
         if (!string.Equals(rsv.ReservationCode, "RSV-QA-PICK-001", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(rsv.ReservationCode, "RSV-QA-PACK-001", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(rsv.ReservationCode, "RSV-QA-PACK-001", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(rsv.ReservationCode, "RSV-QA-LOT-002", StringComparison.OrdinalIgnoreCase))
         {
             rsv.ReservationCode = $"RSV-QA-{rsvCounter:D3}";
             if (rsv.SourceCode != null && rsv.SourceCode.Contains("QA-EXP", StringComparison.OrdinalIgnoreCase))

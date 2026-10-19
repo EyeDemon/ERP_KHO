@@ -235,7 +235,7 @@ const Warehouses = () => {
         <UiMetric value={filtered.length} label="Kết quả hiện tại" />
       </UiMetricGrid>
 
-      <UiCard title="Tổng quan Mạng lưới Kho & Trạng thái Vận hành (Warehouse Network Governance — WH-01)">
+      <UiCard title="Tổng quan Mạng lưới Kho & Trạng thái Vận hành (WH-01)">
         <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           <div className="ui-subcard">
             <strong>Tỷ lệ kho đang vận hành</strong><br />
@@ -252,7 +252,7 @@ const Warehouses = () => {
         </div>
         <div className="ui-inline-wrap">
           <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void evaluateNetworkMhe()}>
-            Đánh giá Quy hoạch Mạng lưới Kho (Hub/Spoke), Dự báo Sức chứa & Thiết bị MHE (AX-03, AX-04, AX-08)
+            Đánh giá Quy hoạch Mạng lưới Kho (Trung tâm / Vệ tinh), Dự báo Sức chứa & Thiết bị MHE (AX-03, AX-04, AX-08)
           </button>
           {networkMheEval && (
             <UiBadge tone="success">

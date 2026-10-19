@@ -212,11 +212,11 @@ const Units = () => {
         setCatchWeightColdChainResult(`${data.verificationId} • ${data.status}`);
       } else {
         setCatchWeightColdChainResult('');
-        setError('Phản hồi kiểm định Catch-Weight và chuỗi lạnh không hợp lệ từ máy chủ.');
+        setError('Phản hồi kiểm định trọng lượng biến thiên và chuỗi lạnh không hợp lệ từ máy chủ.');
       }
     } catch (failure) {
       setCatchWeightColdChainResult('');
-      setError(messageOf(failure, 'Không thể kiểm định tồn kho hai UOM (Catch-Weight) và chuỗi lạnh.'));
+      setError(messageOf(failure, 'Không thể kiểm định tồn kho hai đơn vị tính (trọng lượng biến thiên) và chuỗi lạnh.'));
     } finally {
       setGovernanceBusy(false);
     }
@@ -240,7 +240,7 @@ const Units = () => {
         <UiMetric value={filtered.length} label="Kết quả hiện tại" />
       </UiMetricGrid>
 
-      <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi (UOM Governance — MD-02)">
+      <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi (MD-02)">
         <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           <div className="ui-subcard">
             <strong>Tỷ lệ đơn vị tính kích hoạt</strong><br />
@@ -265,7 +265,7 @@ const Units = () => {
             </UiBadge>
           )}
           <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyCatchWeightColdChain()}>
-            Kiểm định Tồn kho Hai UOM (Catch-Weight), Chuỗi lạnh &amp; Hàng nguy hiểm Hazmat (AX-07, AX-18..20)
+            Kiểm định Tồn kho Hai ĐVT (Trọng lượng biến thiên), Chuỗi lạnh &amp; Hàng nguy hiểm (AX-07, AX-18..20)
           </button>
           {catchWeightColdChainResult && (
             <UiBadge tone="success">{catchWeightColdChainResult}</UiBadge>

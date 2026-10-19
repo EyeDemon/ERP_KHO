@@ -361,7 +361,7 @@ export default function Permissions() {
     <UiPageHeader
       eyebrow="Kiểm soát"
       title="Quản trị quyền truy cập"
-      description="Theo dõi permission catalog, grant theo role, bảo mật phiên người dùng, phạm vi kho và nhật ký kiểm toán."
+      description="Theo dõi danh mục quyền, cấp quyền theo vai trò, bảo mật phiên người dùng, phạm vi kho và nhật ký kiểm toán."
       actions={<button type="button" disabled={pending || loading} onClick={() => void load()}>Tải lại</button>}
     />
 
@@ -369,37 +369,37 @@ export default function Permissions() {
     {success && <p role="status" className="ui-success-text">{success}</p>}
 
     <UiMetricGrid>
-      <UiMetric value={catalog.length} label="Permission trong catalog" />
-      <UiMetric value={roles.length} label="Role đang hiển thị" />
-      <UiMetric value={roles.reduce((sum, role) => sum + role.permissions.length, 0)} label="Grant hiện tại" />
+      <UiMetric value={catalog.length} label="Quyền trong danh mục" />
+      <UiMetric value={roles.length} label="Vai trò đang hiển thị" />
+      <UiMetric value={roles.reduce((sum, role) => sum + role.permissions.length, 0)} label="Lượt cấp quyền hiện tại" />
     </UiMetricGrid>
 
     {(catalog.length > 0 || roles.length > 0) && (
       <>
-        <UiCard title="Tổng quan Tài khoản, Vai trò & Phân quyền Kho (User & Role Governance — AD-01)">
+        <UiCard title="Tổng quan Tài khoản, Vai trò & Phân quyền Kho (AD-01)">
           <div className="ui-inline-wrap">
             <UiBadge tone="success">{`Danh mục quyền hệ thống: ${catalog.length}`}</UiBadge>
             <UiBadge>{`Vai trò nghiệp vụ: ${roles.length}`}</UiBadge>
-            <UiBadge tone="warning">{`Tổng lượt cấp quyền (Grants): ${roles.reduce((sum, role) => sum + role.permissions.length, 0)}`}</UiBadge>
+            <UiBadge tone="warning">{`Tổng lượt cấp quyền: ${roles.reduce((sum, role) => sum + role.permissions.length, 0)}`}</UiBadge>
             <UiBadge>{`Phạm vi kho đang tra cứu (AD-03): ${userWarehouses ? userWarehouses.warehouses.length : 0}`}</UiBadge>
           </div>
         </UiCard>
 
         <UiCard title="Cấu hình Quản trị Doanh nghiệp Mở rộng: Cờ chức năng, Chuỗi số Chứng từ, SSO, Giữ pháp lý & Bảo vệ Dữ liệu (AD-05, AD-07..AD-14)">
           <div className="ui-inline-wrap">
-            <UiBadge tone="success">Cờ chức năng (AD-05): WMS_STRICT_SOD_APPROVAL • WMS_FEFO_AUTO_ALLOCATION • WMS_APPEND_ONLY_LEDGER_GUARD</UiBadge>
-            <UiBadge tone="success">Cảnh báo vận hành (AD-07): ACTIVE</UiBadge>
-            <UiBadge>Liên kết định danh SSO (AD-08): JWT_RBAC_AND_OIDC_READY</UiBadge>
+            <UiBadge tone="success">Cờ chức năng (AD-05): Phân tách nhiệm vụ • Phân bổ theo hạn dùng • Bảo vệ sổ cái bất biến</UiBadge>
+            <UiBadge tone="success">Cảnh báo vận hành (AD-07): Đang bật</UiBadge>
+            <UiBadge>Liên kết định danh một cửa (AD-08): Sẵn sàng xác thực tập trung</UiBadge>
             <UiBadge>Chuỗi đánh số chứng từ (AD-09): PO/ASN/IMP/PUT/EXP/PCK/SHP/TRF/STK</UiBadge>
-            <UiBadge>Chính sách luồng duyệt (AD-10): v2026.10-CANONICAL</UiBadge>
-            <UiBadge>Hồ sơ đính kèm (AD-11): AUDIT_LINKED_IMMUTABLE_METADATA</UiBadge>
-            <UiBadge>Đa ngôn ngữ & chuẩn lưu trữ (AD-12): vi-VN / UTC + Base-UOM</UiBadge>
-            <UiBadge tone="warning">Giữ pháp lý & eDiscovery (AD-13): ENABLED_APPEND_ONLY_RETENTION</UiBadge>
-            <UiBadge tone="success">Bảo vệ dữ liệu cá nhân (AD-14): PII_MASKED_WITH_AUDIT_TRAIL_PRESERVATION</UiBadge>
+            <UiBadge>Chính sách luồng duyệt (AD-10): v2026.10</UiBadge>
+            <UiBadge>Hồ sơ đính kèm (AD-11): Liên kết kiểm toán bất biến</UiBadge>
+            <UiBadge>Đa ngôn ngữ & chuẩn lưu trữ (AD-12): vi-VN / UTC + Đơn vị cơ sở</UiBadge>
+            <UiBadge tone="warning">Giữ pháp lý & truy xuất chứng cứ (AD-13): Đang bật lưu trữ bất biến</UiBadge>
+            <UiBadge tone="success">Bảo vệ dữ liệu cá nhân (AD-14): Ẩn thông tin nhạy cảm & bảo toàn nhật ký</UiBadge>
           </div>
           <div className="ui-inline-actions">
             <button type="button" disabled={evidenceBusy} onClick={() => void exportEvidenceBundle()}>
-              Kết xuất Gói Bằng chứng Kiểm toán & Legal Hold (RP-08, AD-13)
+              Kết xuất Gói Bằng chứng Kiểm toán & Giữ pháp lý (RP-08, AD-13)
             </button>
             {(canReadUserWarehouse || canAssign) && (
               <button type="button" disabled={sodAuditBusy} onClick={() => void verifySodIsolation()}>
@@ -408,12 +408,12 @@ export default function Permissions() {
             )}
             {evidenceBundle && (
               <UiBadge tone="success">
-                {`Gói bằng chứng: ${evidenceBundle.bundleId} • Chính sách: ${evidenceBundle.policyVersion} • Legal Hold: ACTIVE • Append-Only Audit: VERIFIED`}
+                {`Gói bằng chứng: ${evidenceBundle.bundleId} • Chính sách: ${evidenceBundle.policyVersion} • Giữ pháp lý: Đang bật • Nhật ký bất biến: Đã xác minh`}
               </UiBadge>
             )}
             {sodAuditResult && (
               <UiBadge tone={sodAuditResult.sodConflictCount === 0 ? 'success' : 'warning'}>
-                {`Kiểm toán SoD: ${sodAuditResult.status} • Xung đột SoD: ${sodAuditResult.sodConflictCount} • Cô lập đa kho: ${sodAuditResult.multiWarehouseIsolationEnforced ? 'ENFORCED' : 'PENDING'}`}
+                {`Kiểm toán SoD: ${sodAuditResult.status} • Xung đột SoD: ${sodAuditResult.sodConflictCount} • Cô lập đa kho: ${sodAuditResult.multiWarehouseIsolationEnforced ? 'Đang thực thi' : 'Chờ xử lý'}`}
               </UiBadge>
             )}
           </div>
@@ -441,7 +441,7 @@ export default function Permissions() {
                   min="1"
                   value={targetUserIdInput}
                   onChange={e => setTargetUserIdInput(e.target.value)}
-                  placeholder="Nhập User ID..."
+                  placeholder="Nhập ID người dùng..."
                 />
               </UiToolbarField>
               <button type="button" disabled={securityBusy || !targetUserIdInput} onClick={() => void loadUserSecurity()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
@@ -502,7 +502,7 @@ export default function Permissions() {
                   min="1"
                   value={whUserIdInput}
                   onChange={e => setWhUserIdInput(e.target.value)}
-                  placeholder="Nhập User ID..."
+                  placeholder="Nhập ID người dùng..."
                 />
               </UiToolbarField>
               <button type="button" disabled={whBusy || !whUserIdInput} onClick={() => void loadUserWarehouseScope()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
@@ -523,7 +523,7 @@ export default function Permissions() {
                       min="1"
                       value={grantWarehouseIdInput}
                       onChange={e => setGrantWarehouseIdInput(e.target.value)}
-                      placeholder="Nhập Warehouse ID..."
+                      placeholder="Nhập ID kho..."
                     />
                   </UiToolbarField>
                   <button type="button" disabled={whBusy || !grantWarehouseIdInput} onClick={() => void grantWarehouseScope()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
@@ -580,7 +580,7 @@ export default function Permissions() {
 
       {showGovernance && canReadCatalog && (
         <>
-          <UiCard title="Phiên đăng nhập Thiết bị Cá nhân (Self-Service Sessions — Spec 17 §33.4.3 & Spec 113)">
+          <UiCard title="Phiên đăng nhập Thiết bị Cá nhân">
             <div className="ui-inline-actions">
               <button
                 type="button"
@@ -594,7 +594,7 @@ export default function Permissions() {
                     setSelfSessions(
                       rawList.map((s: Record<string, unknown>, idx: number) => ({
                         sessionId: String(s.sessionId ?? s.id ?? `SES-${idx + 1}`),
-                        deviceInfo: String(s.deviceInfo ?? s.userAgent ?? 'Web Browser (Windows)'),
+                        deviceInfo: String(s.deviceInfo ?? s.userAgent ?? 'Trình duyệt web (Windows)'),
                         ipAddress: String(s.ipAddress ?? '127.0.0.1'),
                         isCurrent: Boolean(s.isCurrent ?? idx === 0),
                         createdAtUtc: String(s.createdAtUtc ?? s.createdAt ?? new Date().toISOString()),
@@ -607,12 +607,12 @@ export default function Permissions() {
                   }
                 }}
               >
-                Tải danh sách phiên đăng nhập hiện tại (GET /api/Auth/sessions)
+                Tải danh sách phiên đăng nhập hiện tại
               </button>
             </div>
             {selfSessions.length > 0 && (
               <UiTableScroll>
-                <table aria-label="Danh sách phiên thiết bị cá nhân">
+                <table className="ui-table-compact" aria-label="Danh sách phiên thiết bị cá nhân">
                   <thead>
                     <tr>
                       <th>Mã phiên</th>
@@ -669,7 +669,7 @@ export default function Permissions() {
             </div>
             {auditLoaded && (
               <UiTableScroll>
-                <table aria-label="Nhật ký kiểm toán phân quyền">
+                <table className="ui-table-compact" aria-label="Nhật ký kiểm toán phân quyền">
                   <thead>
                     <tr>
                       <th>Thời gian</th>
@@ -683,15 +683,61 @@ export default function Permissions() {
                     {auditLogs.length === 0 ? (
                       <tr><td colSpan={5} className="ui-empty-cell">Chưa có bản ghi kiểm toán.</td></tr>
                     ) : (
-                      auditLogs.map(log => (
-                        <tr key={log.id}>
-                          <td>{new Date(log.timestamp).toLocaleString('vi-VN')}</td>
-                          <td>{log.userId ? `User #${log.userId}` : 'Hệ thống'}</td>
-                          <td><code>{log.action}</code></td>
-                          <td>{log.entityName} #{log.entityId}</td>
-                          <td><small>{log.newValues || '—'}</small></td>
-                        </tr>
-                      ))
+                      auditLogs.map(log => {
+                        const auditActionLabel = ({
+                          Create: 'Tạo mới',
+                          Update: 'Cập nhật',
+                          Delete: 'Xóa',
+                          Approve: 'Phê duyệt',
+                          Reject: 'Từ chối',
+                          Complete: 'Hoàn tất',
+                          Cancel: 'Hủy',
+                          Dispatch: 'Xuất giao',
+                          Receive: 'Tiếp nhận',
+                          Login: 'Đăng nhập',
+                          Logout: 'Đăng xuất',
+                          Post: 'Ghi sổ',
+                          Lock: 'Khóa',
+                          Unlock: 'Mở khóa',
+                          Acknowledge: 'Tiếp nhận xử lý',
+                          'Authentication.RefreshRotated': 'Làm mới phiên đăng nhập',
+                          'Authentication.LoginSucceeded': 'Đăng nhập thành công',
+                          'Authentication.LogoutSucceeded': 'Đăng xuất',
+                          'QA.IamAndOperationalSeedApplied': 'Khởi tạo dữ liệu vận hành chuẩn',
+                        } as Record<string, string>)[log.action] || log.action;
+                        const auditEntityLabel = ({
+                          ImportReceipt: 'Phiếu nhập',
+                          ExportReceipt: 'Phiếu xuất',
+                          PutawayTask: 'Tác vụ cất hàng',
+                          PickingTask: 'Tác vụ lấy hàng',
+                          PackingSession: 'Phiên đóng gói',
+                          Shipment: 'Chuyến giao hàng',
+                          StockTransfer: 'Phiếu điều chuyển',
+                          Stocktake: 'Phiếu kiểm kê',
+                          Product: 'Sản phẩm',
+                          Warehouse: 'Kho',
+                          WarehouseLocation: 'Vị trí kho',
+                          InventoryLock: 'Khóa tồn kho',
+                          StockReservation: 'Giữ hàng',
+                          StockAllocation: 'Phân bổ tồn kho',
+                          BusinessPartner: 'Đối tác',
+                          User: 'Người dùng',
+                          UserSession: 'Phiên đăng nhập',
+                          LocalQaOperationalSeed: 'Bộ dữ liệu chuẩn',
+                          WarehouseCalendarException: 'Ngoại lệ lịch kho',
+                          Role: 'Vai trò',
+                          UserWarehouseAccess: 'Phân quyền kho',
+                        } as Record<string, string>)[log.entityName] || log.entityName;
+                        return (
+                          <tr key={log.id}>
+                            <td>{new Date(log.timestamp).toLocaleString('vi-VN')}</td>
+                            <td>{log.userId ? `Người dùng #${log.userId}` : 'Hệ thống'}</td>
+                            <td><UiBadge>{auditActionLabel}</UiBadge></td>
+                            <td>{auditEntityLabel}{log.entityId ? ` #${log.entityId}` : ''}</td>
+                            <td><small>{log.newValues || '—'}</small></td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -704,12 +750,14 @@ export default function Permissions() {
       {catalog.length === 0 && <UiCard><p className="ui-muted-text">Chưa có quyền truy cập để hiển thị.</p></UiCard>}
 
       {!canReadRoles && catalog.length > 0 && <UiCard title="Danh mục quyền truy cập">
-        <UiTableScroll>
-          <table className="permissions-table" aria-label="Danh mục quyền truy cập">
-            <thead><tr><th>Quyền</th><th>Mô tả</th></tr></thead>
-            <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td>{permission.description || 'Quyền truy cập hệ thống'}</td></tr>)}</tbody>
-          </table>
-        </UiTableScroll>
+        <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+          <UiTableScroll>
+            <table className="permissions-table ui-table-compact" aria-label="Danh mục quyền truy cập">
+              <thead><tr><th>Quyền</th><th>Mô tả</th></tr></thead>
+              <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td>{permission.description || 'Quyền truy cập hệ thống'}</td></tr>)}</tbody>
+            </table>
+          </UiTableScroll>
+        </div>
       </UiCard>}
 
       {roles.length > 0 && (
@@ -731,7 +779,7 @@ export default function Permissions() {
           <UiToolbarField label="Tìm kiếm quyền">
             <input
               aria-label="Tìm kiếm quyền"
-              placeholder="Nhập tên quyền hoặc mã permission..."
+              placeholder="Nhập tên quyền hoặc mã quyền..."
               value={permissionSearch}
               onChange={e => setPermissionSearch(e.target.value)}
             />
@@ -751,25 +799,27 @@ export default function Permissions() {
               )
             : catalog;
           return <UiCard key={role.id} title={roleLabel(role.roleName)}>
-            <UiTableScroll>
-              <table className="permissions-table" aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
-                <thead><tr><th>Quyền</th><th>Mã permission</th><th>Trạng thái</th>{canAssign && <th>Thao tác</th>}</tr></thead>
-                <tbody>{filteredCatalog.map(permission => {
-                  const granted = role.permissions.includes(permission.code);
-                  return <tr key={permission.code}>
-                    <td>{permissionLabel(permission.code)}</td>
-                    <td><code>{permission.code}</code></td>
-                    <td><UiBadge tone={granted ? 'success' : 'neutral'}>{granted ? 'Đã cấp' : 'Chưa cấp'}</UiBadge></td>
-                    {canAssign && <td>
-                      <button type="button" disabled={pending} onClick={() => void change(role, permission.code, granted)}
-                        aria-label={`${granted ? 'Thu hồi' : 'Cấp'} ${permissionLabel(permission.code)} cho ${roleLabel(role.roleName)}`}>
-                        {pending ? 'Đang lưu...' : granted ? 'Thu hồi quyền' : 'Cấp quyền'}
-                      </button>
-                    </td>}
-                  </tr>;
-                })}</tbody>
-              </table>
-            </UiTableScroll>
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              <UiTableScroll>
+                <table className="permissions-table ui-table-compact" aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
+                  <thead><tr><th>Quyền</th><th>Mã quyền</th><th>Trạng thái</th>{canAssign && <th>Thao tác</th>}</tr></thead>
+                  <tbody>{filteredCatalog.map(permission => {
+                    const granted = role.permissions.includes(permission.code);
+                    return <tr key={permission.code}>
+                      <td>{permissionLabel(permission.code)}</td>
+                      <td><code>{permission.code}</code></td>
+                      <td><UiBadge tone={granted ? 'success' : 'neutral'}>{granted ? 'Đã cấp' : 'Chưa cấp'}</UiBadge></td>
+                      {canAssign && <td>
+                        <button type="button" disabled={pending} onClick={() => void change(role, permission.code, granted)}
+                          aria-label={`${granted ? 'Thu hồi' : 'Cấp'} ${permissionLabel(permission.code)} cho ${roleLabel(role.roleName)}`}>
+                          {pending ? 'Đang lưu...' : granted ? 'Thu hồi quyền' : 'Cấp quyền'}
+                        </button>
+                      </td>}
+                    </tr>;
+                  })}</tbody>
+                </table>
+              </UiTableScroll>
+            </div>
           </UiCard>;
         })}
     </>}

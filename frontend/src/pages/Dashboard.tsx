@@ -88,6 +88,136 @@ type MultiWarehouseControlTowerDto = {
   taskEngineQueues: TaskEngineQueueItem[];
 };
 
+const entityTypeLabel = (type: string) => ({
+  PRODUCT: 'Sản phẩm',
+  LOCATION: 'Vị trí',
+  IMPORT_RECEIPT: 'Phiếu nhập',
+  EXPORT_RECEIPT: 'Phiếu xuất',
+  SHIPMENT: 'Lô giao hàng',
+  PURCHASE_ORDER: 'Đơn mua hàng',
+  ASN: 'Thông báo giao trước',
+  STOCK_TRANSFER: 'Phiếu điều chuyển',
+  STOCKTAKE: 'Phiếu kiểm kê',
+  HANDLING_UNIT: 'Kiện hàng',
+}[type] || type);
+
+const taskTypeLabel = (type: string) => ({
+  PUTAWAY: 'Cất hàng',
+  PICK: 'Lấy hàng',
+  PICKING: 'Lấy hàng',
+  PACK: 'Đóng gói',
+  PACKING: 'Đóng gói',
+  INBOUND_RECEIPT: 'Phiếu nhập nháp',
+  STOCKTAKE: 'Kiểm kê',
+  TRANSFER: 'Điều chuyển',
+  DOCK_YARD: 'Cửa nhận / Bãi xe',
+}[type] || type);
+
+const taskStatusLabel = (status: string) => ({
+  OPEN: 'Đang mở',
+  Open: 'Đang mở',
+  PENDING: 'Chờ xử lý',
+  Pending: 'Chờ xử lý',
+  IN_PROGRESS: 'Đang thực hiện',
+  InProgress: 'Đang thực hiện',
+  DRAFT: 'Nháp',
+  Draft: 'Bản nháp',
+  ASSIGNED: 'Đã phân công',
+  Assigned: 'Đã phân công',
+  ShortPick: 'Thiếu hàng',
+  SCHEDULED: 'Đã lên lịch',
+  Scheduled: 'Đã lên lịch',
+  Arrived: 'Đã đến cổng',
+  CHECKED_IN: 'Đã vào bãi',
+  CheckedIn: 'Đã vào bãi',
+  AT_DOCK: 'Tại cửa nhận/xuất',
+  DockAssigned: 'Đã gán cửa kho',
+  InService: 'Đang bốc dỡ',
+}[status] || status);
+
+const priorityLabel = (priority: string) => ({
+  HIGH: 'Cao',
+  NORMAL: 'Bình thường',
+  MEDIUM: 'Trung bình',
+  LOW: 'Thấp',
+  URGENT: 'Khẩn cấp',
+}[priority] || priority);
+
+const healthStatusLabel = (status: string) => ({
+  HEALTHY: 'Ổn định',
+  ATTENTION: 'Cần chú ý',
+  WARNING: 'Cảnh báo',
+  CRITICAL: 'Nghiêm trọng',
+}[status] || status);
+
+const exceptionCategoryLabel = (category: string) => ({
+  NEGATIVE_OR_INVALID_STOCK: 'Tồn kho bất thường',
+  STALLED_PUTAWAY: 'Cất hàng tồn đọng',
+  STALLED_PICKING: 'Lấy hàng tồn đọng',
+  ACTIVE_INVENTORY_LOCK: 'Khóa tồn kho',
+  INVENTORY_HOLD: 'Khóa tồn kho',
+  PUTAWAY_EXCEPTION: 'Ngoại lệ cất hàng',
+  SHORT_PICK: 'Lấy thiếu hàng',
+  RECEIVING_DISCREPANCY: 'Chênh lệch nhận hàng',
+  SHIPMENT_EXCEPTION: 'Sự cố giao hàng',
+  OVERDUE_TRANSFER: 'Điều chuyển quá hạn',
+  UNRESOLVED_DISCREPANCY: 'Chênh lệch chưa xử lý',
+  CAPACITY_WARNING: 'Cảnh báo sức chứa',
+  EXPIRY_RISK: 'Rủi ro hết hạn',
+}[category] || category);
+
+const severityLabel = (severity: string) => ({
+  HIGH: 'Cao',
+  MEDIUM: 'Trung bình',
+  LOW: 'Thấp',
+  CRITICAL: 'Nghiêm trọng',
+  WARNING: 'Cảnh báo',
+}[severity] || severity);
+
+const actionLabel = (action: string) => ({
+  Create: 'Tạo mới',
+  Update: 'Cập nhật',
+  Delete: 'Xóa',
+  Approve: 'Phê duyệt',
+  Reject: 'Từ chối',
+  Complete: 'Hoàn tất',
+  Cancel: 'Hủy',
+  Dispatch: 'Xuất giao',
+  Receive: 'Tiếp nhận',
+  Login: 'Đăng nhập',
+  Logout: 'Đăng xuất',
+  Post: 'Ghi sổ',
+  Lock: 'Khóa',
+  Unlock: 'Mở khóa',
+  Acknowledge: 'Tiếp nhận xử lý',
+  'Authentication.RefreshRotated': 'Làm mới phiên đăng nhập',
+  'Authentication.LoginSucceeded': 'Đăng nhập thành công',
+  'Authentication.LogoutSucceeded': 'Đăng xuất',
+  'QA.IamAndOperationalSeedApplied': 'Khởi tạo dữ liệu vận hành chuẩn',
+}[action] || action);
+
+const entityNameLabel = (entityName: string) => ({
+  ImportReceipt: 'Phiếu nhập',
+  ExportReceipt: 'Phiếu xuất',
+  PutawayTask: 'Tác vụ cất hàng',
+  PickingTask: 'Tác vụ lấy hàng',
+  PackingSession: 'Phiên đóng gói',
+  Shipment: 'Chuyến giao hàng',
+  StockTransfer: 'Phiếu điều chuyển',
+  Stocktake: 'Phiếu kiểm kê',
+  Product: 'Sản phẩm',
+  Warehouse: 'Kho',
+  WarehouseLocation: 'Vị trí kho',
+  InventoryLock: 'Khóa tồn kho',
+  StockReservation: 'Giữ hàng',
+  StockAllocation: 'Phân bổ tồn kho',
+  BusinessPartner: 'Đối tác',
+  User: 'Người dùng',
+  UserSession: 'Phiên đăng nhập',
+  LocalQaOperationalSeed: 'Bộ dữ liệu chuẩn',
+  WarehouseCalendarException: 'Ngoại lệ lịch kho',
+}[entityName] || entityName);
+
 const Dashboard = () => {
   const demoRuntime = isBlueprintDemoRuntime();
   const [liveSummary, setLiveSummary] = useState<OperationalDashboardSummary | null>(null);
@@ -202,9 +332,9 @@ const Dashboard = () => {
     : liveTasks;
 
   const quickLinks = [
-    { to: '/import-receipts', title: 'Inbound', detail: 'Nhận hàng, QC và posting', icon: ClipboardCheck, permission: 'receipt.read' },
+    { to: '/import-receipts', title: 'Nhập kho', detail: 'Nhận hàng, kiểm định chất lượng và ghi sổ', icon: ClipboardCheck, permission: 'receipt.read' },
     { to: '/inventory', title: 'Tồn kho', detail: 'Số dư, biến động và báo cáo', icon: Boxes, permission: 'inventory.read' },
-    { to: '/inventory-reconciliation', title: 'Đối chiếu', detail: 'Kiểm tra ledger / balance mismatch', icon: PackageSearch },
+    { to: '/inventory-reconciliation', title: 'Đối chiếu', detail: 'Kiểm tra chênh lệch sổ cái và số dư', icon: PackageSearch },
     { to: '/stock-transfers', title: 'Điều chuyển', detail: 'Theo dõi hàng đang vận chuyển giữa các kho', icon: Warehouse },
   ].filter((link) => canAccessNavItem(link));
 
@@ -215,7 +345,7 @@ const Dashboard = () => {
       <UiPageHeader
         eyebrow="Vận hành"
         title="Tổng quan vận hành"
-        description="Điểm vào nhanh tới các work center đã có frontend và trạng thái môi trường đang kiểm thử."
+        description="Điểm vào nhanh tới các phân hệ nghiệp vụ và trạng thái môi trường vận hành."
       />
 
       {liveError && <p role="alert">{liveError}</p>}
@@ -228,7 +358,8 @@ const Dashboard = () => {
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm mã SKU, Barcode, Lô, Sê-ri, Vị trí, PO, ASN, Phiếu nhập/xuất, Lô giao..."
+              placeholder="Tìm mã sản phẩm, mã vạch, lô, sê-ri, vị trí, đơn mua, thông báo giao, phiếu nhập/xuất, lô giao..."
+              style={{ flex: '1 1 360px', minWidth: 260 }}
             />
             <button type="submit" disabled={searchLoading || searchQuery.trim().length < 2}>
               {searchLoading ? 'Đang tìm...' : 'Tìm kiếm'}
@@ -239,7 +370,7 @@ const Dashboard = () => {
           </form>
           {searchResults.length > 0 && (
             <UiTableScroll>
-              <table aria-label="Kết quả tìm kiếm toàn doanh nghiệp">
+              <table className="ui-table-compact" aria-label="Kết quả tìm kiếm toàn doanh nghiệp">
                 <thead>
                   <tr>
                     <th>Loại</th>
@@ -252,7 +383,7 @@ const Dashboard = () => {
                 <tbody>
                   {searchResults.map((item, idx) => (
                     <tr key={`${item.entityType}-${item.code}-${idx}`}>
-                      <td><UiBadge>{item.entityType}</UiBadge></td>
+                      <td><UiBadge>{entityTypeLabel(item.entityType)}</UiBadge></td>
                       <td><strong>{item.code}</strong></td>
                       <td>{item.title}</td>
                       <td>{item.subtitle}</td>
@@ -269,11 +400,11 @@ const Dashboard = () => {
       <UiMetricGrid>
         <UiMetric
           value={demoRuntime ? mockWarehouses.length : (liveSummary ? liveSummary.warehouseCount : '—')}
-          label={demoRuntime ? 'Kho trong demo dataset' : 'Kho đang hoạt động'}
+          label={demoRuntime ? 'Kho trong bộ dữ liệu mẫu' : 'Kho đang hoạt động'}
         />
         <UiMetric
           value={demoRuntime ? mockProducts.length : (liveSummary ? liveSummary.productCount : '—')}
-          label={demoRuntime ? 'SKU trong demo dataset' : 'SKU đang quản lý'}
+          label={demoRuntime ? 'Sản phẩm trong bộ dữ liệu mẫu' : 'Sản phẩm đang quản lý'}
         />
         <UiMetric
           value={demoRuntime ? mockInventoryBalances.length : (liveSummary ? liveSummary.inventoryBucketCount : '—')}
@@ -289,10 +420,10 @@ const Dashboard = () => {
         <UiCard title="Tiếp tục công việc">
           <div className="dashboard-panel-meta">
             {demoRuntime
-              ? operationalRecords.length + ' operational records mẫu'
+              ? operationalRecords.length + ' bản ghi vận hành mẫu'
               : liveSummary
-                ? `Inbound mở: ${liveSummary.openInboundCount} • Putaway mở: ${liveSummary.openPutawayCount} • Outbound mở: ${liveSummary.openOutboundCount} • Điều chuyển mở: ${liveSummary.openTransferCount}`
-                : 'Mở work center nghiệp vụ'}
+                ? `Phiếu nhập mở: ${liveSummary.openInboundCount} • Cất hàng mở: ${liveSummary.openPutawayCount} • Phiếu xuất mở: ${liveSummary.openOutboundCount} • Điều chuyển mở: ${liveSummary.openTransferCount}`
+                : 'Mở phân hệ nghiệp vụ'}
           </div>
           <div className="dashboard-actions">
             {quickLinks.map(({ to, title, detail, icon: Icon }) => (
@@ -305,7 +436,7 @@ const Dashboard = () => {
           </div>
         </UiCard>
 
-        <UiCard title="Màn production UI đã có route">
+        <UiCard title="Màn hình nghiệp vụ đã kích hoạt">
           <div className="dashboard-screen-count">{visibleProductionNavigation.length + 1}</div>
           <div className="dashboard-screen-list">
             {visibleProductionNavigation.map((item) => (
@@ -321,9 +452,9 @@ const Dashboard = () => {
       {!demoRuntime && (
         <UiCard title="Trung tâm Điều hành Kho phân tán & Bộ máy Hàng đợi Nhiệm vụ (OV-05, OV-06)">
           <div className="ui-inline-wrap">
-            <UiBadge tone="success">{`Kho ổn định (HEALTHY): ${controlTower?.healthyWarehousesCount ?? 0}/${controlTower?.totalWarehouses ?? (liveSummary?.warehouseCount ?? 0)}`}</UiBadge>
+            <UiBadge tone="success">{`Kho ổn định: ${controlTower?.healthyWarehousesCount ?? 0}/${controlTower?.totalWarehouses ?? (liveSummary?.warehouseCount ?? 0)}`}</UiBadge>
             <UiBadge tone={(controlTower?.attentionWarehousesCount ?? 0) > 0 ? 'warning' : 'neutral'}>
-              {`Kho cần chú ý (ATTENTION): ${controlTower?.attentionWarehousesCount ?? 0}`}
+              {`Kho cần chú ý: ${controlTower?.attentionWarehousesCount ?? 0}`}
             </UiBadge>
             {(controlTower?.taskEngineQueues ?? [
               { taskType: 'PUTAWAY', openCount: liveSummary?.openPutawayCount ?? 0, route: '/putaway-tasks' },
@@ -334,7 +465,7 @@ const Dashboard = () => {
               { taskType: 'DOCK_YARD', openCount: 0, route: '/dock-yard' },
             ]).map((queue) => (
               <UiBadge key={queue.taskType} tone={queue.openCount > 0 ? 'warning' : 'neutral'}>
-                {`Hàng đợi ${queue.taskType} (OV-06): ${queue.openCount}`}
+                {`Hàng đợi ${taskTypeLabel(queue.taskType)} (OV-06): ${queue.openCount}`}
               </UiBadge>
             ))}
           </div>
@@ -346,8 +477,8 @@ const Dashboard = () => {
                     <th>Kho</th>
                     <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Tồn thực tế</th>
                     <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Đã giữ</th>
-                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Putaway mở</th>
-                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Picking mở</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Cất hàng mở</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Lấy hàng mở</th>
                     <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Khóa tồn</th>
                     <th>Trạng thái sức khỏe</th>
                   </tr>
@@ -363,7 +494,7 @@ const Dashboard = () => {
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.activeLocksCount}</td>
                       <td>
                         <UiBadge tone={wh.healthStatus === 'ATTENTION' ? 'warning' : 'success'}>
-                          {wh.healthStatus}
+                          {healthStatusLabel(wh.healthStatus)}
                         </UiBadge>
                       </td>
                     </tr>
@@ -383,12 +514,12 @@ const Dashboard = () => {
                 Loại tác vụ:{' '}
                 <select aria-label="Lọc loại tác vụ kho" value={taskTypeFilter} onChange={(e) => setTaskTypeFilter(e.target.value)}>
                   <option value="">Tất cả tác vụ</option>
-                  <option value="PUTAWAY">Cất hàng (Putaway)</option>
-                  <option value="PICKING">Lấy hàng (Picking)</option>
-                  <option value="PACKING">Đóng gói (Packing)</option>
+                  <option value="PUTAWAY">Cất hàng</option>
+                  <option value="PICKING">Lấy hàng</option>
+                  <option value="PACKING">Đóng gói</option>
                   <option value="INBOUND_RECEIPT">Phiếu nhập nháp</option>
                   <option value="STOCKTAKE">Kiểm kê nháp</option>
-                  <option value="DOCK_YARD">Lịch hẹn Dock/Yard</option>
+                  <option value="DOCK_YARD">Lịch hẹn cửa nhận / bãi xe</option>
                 </select>
               </label>
             </div>
@@ -410,13 +541,13 @@ const Dashboard = () => {
                   <tbody>
                     {filteredTasks.slice(0, 12).map((task, idx) => (
                       <tr key={`${task.taskType}-${task.code}-${idx}`}>
-                        <td><UiBadge>{task.taskType}</UiBadge></td>
+                        <td><UiBadge>{taskTypeLabel(task.taskType)}</UiBadge></td>
                         <td style={{ whiteSpace: 'nowrap' }}><strong>{task.code}</strong></td>
                         <td>{task.warehouseName}</td>
-                        <td>{task.status}</td>
+                        <td>{taskStatusLabel(task.status)}</td>
                         <td>
                           <UiBadge tone={task.priority === 'HIGH' ? 'danger' : 'neutral'}>
-                            {task.priority}
+                            {priorityLabel(task.priority)}
                           </UiBadge>
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}><Link to={task.route}>Thực thi →</Link></td>
@@ -447,12 +578,12 @@ const Dashboard = () => {
                   <tbody>
                     {liveExceptions.slice(0, 12).map((ex, idx) => (
                       <tr key={`${ex.category}-${ex.code}-${idx}`}>
-                        <td style={{ whiteSpace: 'nowrap' }}><code>{ex.category}</code></td>
+                        <td style={{ whiteSpace: 'nowrap' }}><UiBadge tone="warning">{exceptionCategoryLabel(ex.category)}</UiBadge></td>
                         <td style={{ whiteSpace: 'nowrap' }}><strong>{ex.code}</strong></td>
                         <td>{ex.warehouseName}</td>
                         <td>
                           <UiBadge tone={ex.severity === 'HIGH' ? 'danger' : 'warning'}>
-                            {ex.severity}
+                            {severityLabel(ex.severity)}
                           </UiBadge>
                         </td>
                         <td>{ex.summary}</td>
@@ -460,7 +591,7 @@ const Dashboard = () => {
                           <div className="ui-inline-actions">
                             <Link to={ex.route} style={{ whiteSpace: 'nowrap' }}>Xử lý →</Link>
                             {acknowledgedCodes.includes(ex.code) ? (
-                              <UiBadge tone="success">Đã tiếp nhận (Audit)</UiBadge>
+                              <UiBadge tone="success">Đã tiếp nhận</UiBadge>
                             ) : (
                               <button type="button" disabled={acknowledgingCode === ex.code} onClick={() => void acknowledgeException(ex.code)} style={{ whiteSpace: 'nowrap' }}>
                                 Tiếp nhận xử lý
@@ -486,7 +617,7 @@ const Dashboard = () => {
             <p className="ui-muted-text">Chưa có hoạt động vận hành gần đây trong phạm vi kho được phép.</p>
           ) : (
             <UiTableScroll>
-              <table aria-label="Hoạt động vận hành gần đây">
+              <table className="ui-table-compact" aria-label="Hoạt động vận hành gần đây">
                 <thead>
                   <tr>
                     <th>Thời gian</th>
@@ -500,8 +631,8 @@ const Dashboard = () => {
                   {liveSummary.recentActivities.map((item) => (
                     <tr key={item.id}>
                       <td>{new Date(item.timestamp).toLocaleString('vi-VN')}</td>
-                      <td><code>{item.action}</code></td>
-                      <td>{item.entityName} #{item.entityId}</td>
+                      <td><UiBadge>{actionLabel(item.action)}</UiBadge></td>
+                      <td>{entityNameLabel(item.entityName)}{item.entityId ? ` #${item.entityId}` : ''}</td>
                       <td>{item.warehouseId ? `Kho #${item.warehouseId}` : 'Toàn hệ thống'}</td>
                       <td>
                         <UiBadge tone={item.result === 'Success' || !item.result ? 'success' : 'warning'}>
@@ -519,17 +650,17 @@ const Dashboard = () => {
 
       <UiCard title="Trạng thái môi trường">
         <div className="dashboard-environment">
-          <div><span>Frontend</span><strong>{demoRuntime ? 'Vercel READY' : 'Runtime hiện tại'}</strong></div>
-          <div><span>Data source</span><strong>{demoRuntime ? 'Demo API adapter' : 'Backend API'}</strong></div>
-          <div><span>Write operations</span><strong>{demoRuntime ? 'Blocked (405)' : 'Theo quyền người dùng'}</strong></div>
-          <div><span>Backend staging</span><strong>{demoRuntime ? 'Chưa kết nối' : 'Đã kết nối Live API'}</strong></div>
+          <div><span>Giao diện</span><strong>{demoRuntime ? 'Chế độ trình diễn' : 'Môi trường vận hành'}</strong></div>
+          <div><span>Nguồn dữ liệu</span><strong>{demoRuntime ? 'Bộ dữ liệu mẫu' : 'Dịch vụ máy chủ'}</strong></div>
+          <div><span>Thao tác ghi</span><strong>{demoRuntime ? 'Chặn ghi (405)' : 'Theo quyền người dùng'}</strong></div>
+          <div><span>Kết nối máy chủ</span><strong>{demoRuntime ? 'Chưa kết nối' : 'Đã kết nối trực tiếp'}</strong></div>
         </div>
       </UiCard>
 
       {mismatchCount > 0 && (
         <div className="dashboard-attention" role="status">
           <AlertTriangle size={18} aria-hidden="true" />
-          <span>{demoRuntime ? `Demo dataset hiện có ${mismatchCount} dòng reconciliation cần chú ý.` : `Phát hiện ${mismatchCount} dòng tồn kho bất thường cần đối chiếu.`} Mở work center Đối chiếu tồn kho để xem chi tiết.</span>
+          <span>{demoRuntime ? `Bộ dữ liệu mẫu hiện có ${mismatchCount} dòng đối chiếu cần chú ý.` : `Phát hiện ${mismatchCount} dòng tồn kho bất thường cần đối chiếu.`} Mở phân hệ Đối chiếu tồn kho để xem chi tiết.</span>
         </div>
       )}
     </UiPage>

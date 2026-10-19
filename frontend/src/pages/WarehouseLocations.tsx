@@ -91,7 +91,7 @@ const locationTypeLabels: Record<string, string> = {
   Storage: 'Lưu trữ',
   Damaged: 'Hư hỏng',
   Rejected: 'Hàng bị từ chối',
-  Staging: 'Khu staging outbound',
+  Staging: 'Khu tập kết xuất hàng',
   Receiving: 'Nhận hàng',
   Legacy: 'Tương thích hệ thống',
 };
@@ -162,14 +162,14 @@ const capacityLabel: Record<string, string> = {
   Available: 'Còn sức chứa',
   NearCapacity: 'Gần đầy',
   OverCapacity: 'Vượt sức chứa',
-  ProfileIncomplete: 'Thiếu profile',
-  CompatibilityConflict: 'Xung đột class',
+  ProfileIncomplete: 'Thiếu thông số',
+  CompatibilityConflict: 'Xung đột phân lớp',
   Blocked: 'Bị khóa',
   Inactive: 'Ngừng hoạt động',
 };
 const capacityUsage = (used?: number | null, max?: number | null, unit = '') => {
   if (max == null || !Number.isFinite(max) || max <= 0) return 'Không giới hạn';
-  if (used == null || !Number.isFinite(used)) return 'Thiếu profile / ' + max + (unit ? ' ' + unit : '');
+  if (used == null || !Number.isFinite(used)) return 'Thiếu thông số / ' + max + (unit ? ' ' + unit : '');
   const percent = Math.round((used / max) * 100);
   return used + ' / ' + max + (unit ? ' ' + unit : '') + ' • ' + percent + '%';
 };
@@ -447,7 +447,7 @@ const WarehouseLocations = () => {
       <UiPageHeader
         eyebrow="Dữ liệu nền"
         title="Cấu trúc vị trí kho"
-        description="Quản lý Zone → Aisle → Rack → Level → Bin, Storage Class và sức chứa trên WarehouseLocation thật. Putaway dùng chính constraint này để chặn vị trí không tương thích hoặc vượt capacity."
+        description="Quản lý Khu vực → Dãy → Kệ → Tầng → Ô lưu trữ, phân lớp lưu trữ và sức chứa trên vị trí kho thật. Luồng cất hàng dùng chính ràng buộc này để chặn vị trí không tương thích hoặc vượt sức chứa."
         actions={canManage ? <button type="button" className="ui-primary-button" onClick={openCreate}>Thêm vị trí</button> : undefined}
       />
 
@@ -462,21 +462,21 @@ const WarehouseLocations = () => {
         <UiMetric value={blockedCount} label="Bị khóa" />
         <UiMetric value={inactiveCount} label="Ngừng hoạt động" />
         <UiMetric value={nearCapacityCount} label="Gần đầy" />
-        <UiMetric value={capacityIssueCount} label="Capacity cần xử lý" />
+        <UiMetric value={capacityIssueCount} label="Sức chứa cần xử lý" />
       </UiMetricGrid>
 
-      <UiCard title="Tổng quan Phân bổ Vị trí & Sức chứa Bin (Location & Bin Capacity Governance — WH-02)">
+      <UiCard title="Tổng quan Phân bổ Vị trí & Sức chứa Ô lưu trữ">
         <div className="warehouse-location-capacity-grid">
           <div>
             <strong>Tổng số vị trí & Đang hoạt động</strong><br />
-            {locations.length} vị trí ({locations.filter((location) => location.isActive && !location.isBlocked).length} Active)
+            {locations.length} vị trí ({locations.filter((location) => location.isActive && !location.isBlocked).length} Đang hoạt động)
           </div>
           <div>
             <strong>Vị trí có giới hạn tải trọng / thể tích / pallet</strong><br />
             {locations.filter((location) => location.maxWeightKg != null || location.maxVolumeM3 != null || location.maxPalletEquivalent != null).length} / {locations.length} vị trí đã áp ngưỡng
           </div>
           <div>
-            <strong>Vị trí cho phép lấy hàng (Pickable)</strong><br />
+            <strong>Vị trí cho phép lấy hàng</strong><br />
             {locations.filter((location) => location.isPickable).length} vị trí lấy hàng
           </div>
           <div>
@@ -513,7 +513,7 @@ const WarehouseLocations = () => {
           </button>
           {topologyAuditResult && (
             <UiBadge tone="success">
-              {`Mã kiểm định: ${topologyAuditResult.verificationId} • Cấu trúc: ${topologyAuditResult.zoneBinHierarchyStatus} • Guardrail Sức chứa: ACTIVE`}
+              {`Mã kiểm định: ${topologyAuditResult.verificationId} • Cấu trúc: ${topologyAuditResult.zoneBinHierarchyStatus} • Chốt chặn sức chứa: Đang bật`}
             </UiBadge>
           )}
           <button
@@ -568,7 +568,7 @@ const WarehouseLocations = () => {
             <option value="Storage">Lưu trữ</option>
             <option value="Damaged">Hư hỏng</option>
             <option value="Rejected">Hàng bị từ chối</option>
-            <option value="Staging">Khu staging outbound</option>
+            <option value="Staging">Khu tập kết xuất hàng</option>
             <option value="Receiving">Nhận hàng</option>
             <option value="Legacy">Tương thích hệ thống</option>
           </select>
@@ -581,18 +581,18 @@ const WarehouseLocations = () => {
         <UiEmptyState title="Không có kho nào trong phạm vi được phép." />
       ) : (
         <>
-          <UiCard title="Sức chứa & Storage Constraints">
-            <p className="ui-muted-text">Số liệu sử dụng được tính từ InventoryStock theo base UOM × profile sản phẩm. Trạng thái thiếu profile hoặc xung đột Storage Class sẽ chặn Putaway vào vị trí có constraint tương ứng.</p>
+          <UiCard title="Sức chứa & Ràng buộc Lưu trữ">
+            <p className="ui-muted-text">Số liệu sử dụng được tính từ tồn kho thực tế theo đơn vị cơ sở × thông số sản phẩm. Trạng thái thiếu thông số hoặc xung đột phân lớp lưu trữ sẽ chặn cất hàng vào vị trí có ràng buộc tương ứng.</p>
             {capacities.length === 0 ? (
-              <UiEmptyState title="Chưa có vị trí vật lý để theo dõi capacity." />
+              <UiEmptyState title="Chưa có vị trí vật lý để theo dõi sức chứa." />
             ) : (
               <UiTableScroll>
-                <table aria-label="Sức chứa vị trí kho thật">
-                  <thead><tr><th>Vị trí</th><th>Storage Class</th><th>Trọng lượng</th><th>Thể tích</th><th>Pallet-eq</th><th>Trạng thái</th></tr></thead>
+                <table aria-label="Sức chứa vị trí kho thật" className="ui-table-compact">
+                  <thead><tr><th>Vị trí</th><th>Phân lớp lưu trữ</th><th>Trọng lượng</th><th>Thể tích</th><th>Quy đổi Pallet</th><th>Trạng thái</th></tr></thead>
                   <tbody>{capacities.map((item) => (
                     <tr key={item.locationId}>
                       <td><strong>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
-                      <td>{item.storageClass || 'Không giới hạn class'}</td>
+                      <td>{item.storageClass || 'Không giới hạn phân lớp'}</td>
                       <td>{capacityUsage(item.usedWeightKg, item.maxWeightKg, 'kg')}</td>
                       <td>{capacityUsage(item.usedVolumeM3, item.maxVolumeM3, 'm³')}</td>
                       <td>{capacityUsage(item.usedPalletEquivalent, item.maxPalletEquivalent)}</td>
@@ -606,10 +606,10 @@ const WarehouseLocations = () => {
 
           <UiCard title={'Cây cấu trúc vật lý' + (currentWarehouse ? ' • ' + currentWarehouse.code : '')}>
             {hierarchyRows.length === 0 ? (
-              <UiEmptyState title="Kho chưa có vị trí được gắn StructurePath." detail="Vị trí cũ vẫn được giữ nguyên ở bảng Chưa gắn cấu trúc bên dưới." />
+              <UiEmptyState title="Kho chưa có vị trí được gắn đường dẫn cấu trúc." detail="Vị trí cũ vẫn được giữ nguyên ở bảng Chưa gắn cấu trúc bên dưới." />
             ) : (
               <UiTableScroll>
-                <table aria-label="Cây cấu trúc vị trí thật">
+                <table aria-label="Cây cấu trúc vị trí thật" className="ui-table-compact">
                   <thead><tr><th>Cấp</th><th>Mã / Tên</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Khả dụng</th>{canManage && <th>Thao tác</th>}</tr></thead>
                   <tbody>
                     {hierarchyRows.map((row) => {
@@ -621,7 +621,7 @@ const WarehouseLocations = () => {
                           <td>{row.path}</td>
                           <td>{row.location ? (locationTypeLabels[row.location.locationType] || row.location.locationType) : '—'}</td>
                           <td>{status ? <UiBadge tone={status.tone}>{status.label}</UiBadge> : '—'}</td>
-                          <td>{row.location ? (row.location.isPickable ? 'Có thể pick' : row.location.isReceivable ? 'Có thể nhận' : 'Không pick') : '—'}</td>
+                          <td>{row.location ? (row.location.isPickable ? 'Có thể lấy hàng' : row.location.isReceivable ? 'Có thể nhận' : 'Không lấy hàng') : '—'}</td>
                           {canManage && <td>{row.location && !row.location.isSystemManaged ? <button type="button" onClick={() => openEdit(row.location!)}>Sửa</button> : '—'}</td>}
                         </tr>
                       );
@@ -634,14 +634,14 @@ const WarehouseLocations = () => {
 
           <UiCard title="Danh sách vị trí theo bộ lọc">
             <UiTableScroll>
-              <table aria-label="Danh sách vị trí kho thật">
-                <thead><tr><th>Mã</th><th>Tên</th><th>StructurePath</th><th>Loại</th><th>Trạng thái</th><th>Pick</th>{canManage && <th>Thao tác</th>}</tr></thead>
+              <table aria-label="Danh sách vị trí kho thật" className="ui-table-compact">
+                <thead><tr><th>Mã</th><th>Tên</th><th>Đường dẫn cấu trúc</th><th>Loại</th><th>Trạng thái</th><th>Lấy hàng</th>{canManage && <th>Thao tác</th>}</tr></thead>
                 <tbody>
                   {filtered.map((location) => {
                     const status = locationStatus(location);
                     return (
                       <tr key={location.id}>
-                        <td><strong>{location.code}</strong>{location.isSystemManaged && <><br /><small>System managed</small></>}</td>
+                        <td><strong>{location.code}</strong>{location.isSystemManaged && <><br /><small>Hệ thống quản lý</small></>}</td>
                         <td>{location.name}</td>
                         <td>{splitStructurePath(location.structurePath)?.join(' / ') || '—'}</td>
                         <td>{locationTypeLabels[location.locationType] || location.locationType}</td>
@@ -659,9 +659,9 @@ const WarehouseLocations = () => {
 
           {unmapped.length > 0 && (
             <UiCard title="Vị trí chưa gắn cấu trúc">
-              <p className="ui-muted-text">Dữ liệu cũ được giữ nguyên; hệ thống không tự suy đoán Zone/Aisle/Rack/Level/Bin từ mã vị trí.</p>
+              <p className="ui-muted-text">Dữ liệu cũ được giữ nguyên; hệ thống không tự suy đoán Khu vực / Dãy / Kệ / Tầng / Ô lưu trữ từ mã vị trí.</p>
               <UiTableScroll>
-                <table aria-label="Vị trí thật chưa gắn cấu trúc">
+                <table aria-label="Vị trí thật chưa gắn cấu trúc" className="ui-table-compact">
                   <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
                   <tbody>{unmapped.map((location) => {
                     const status = locationStatus(location);
@@ -674,10 +674,10 @@ const WarehouseLocations = () => {
 
           {systemLocations.length > 0 && (
             <UiCard title="Vị trí hệ thống">
-              <p className="ui-muted-text">RECEIVING/LEGACY do hệ thống quản lý và không tham gia hierarchy vật lý do người dùng cấu hình.</p>
+              <p className="ui-muted-text">Vị trí tiếp nhận / tương thích cũ do hệ thống quản lý và không tham gia cây cấu trúc vật lý do người dùng cấu hình.</p>
               <UiTableScroll>
-                <table aria-label="Vị trí hệ thống thật">
-                  <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Receivable</th><th>Pick</th></tr></thead>
+                <table aria-label="Vị trí hệ thống thật" className="ui-table-compact">
+                  <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Nhận hàng</th><th>Lấy hàng</th></tr></thead>
                   <tbody>{systemLocations.map((location) => <tr key={location.id}><td><strong>{location.code}</strong></td><td>{location.name}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td>{location.isReceivable ? 'Có' : 'Không'}</td><td>{location.isPickable ? 'Có' : 'Không'}</td></tr>)}</tbody>
                 </table>
               </UiTableScroll>
@@ -694,31 +694,31 @@ const WarehouseLocations = () => {
             <div className="warehouse-location-form-grid">
               <label className="ui-stack"><span>Mã vị trí *</span><input aria-label="Mã vị trí" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} disabled={saving || editing} maxLength={64} /></label>
               <label className="ui-stack"><span>Tên vị trí *</span><input aria-label="Tên vị trí" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} disabled={saving} maxLength={200} /></label>
-              <label className="ui-stack"><span>Loại vị trí *</span><select aria-label="Loại vị trí form" value={form.locationType} onChange={(event) => setForm((current) => ({ ...current, locationType: event.target.value as LocationForm['locationType'] }))} disabled={saving || editing}><option value="Storage">Lưu trữ</option><option value="Damaged">Hư hỏng</option><option value="Rejected">Hàng bị từ chối</option><option value="Staging">Khu staging outbound</option></select></label>
+              <label className="ui-stack"><span>Loại vị trí *</span><select aria-label="Loại vị trí form" value={form.locationType} onChange={(event) => setForm((current) => ({ ...current, locationType: event.target.value as LocationForm['locationType'] }))} disabled={saving || editing}><option value="Storage">Lưu trữ</option><option value="Damaged">Hư hỏng</option><option value="Rejected">Hàng bị từ chối</option><option value="Staging">Khu tập kết xuất hàng</option></select></label>
             </div>
 
             <div className="ui-subcard ui-stack">
-              <div className="ui-subcard-title">Storage Class & Capacity</div>
-              <p className="ui-muted-text">Để trống nghĩa là không áp giới hạn theo chiều đó. Nếu đã có tồn kho, backend chỉ cho lưu constraint khi tải hiện tại vẫn hợp lệ.</p>
+              <div className="ui-subcard-title">Phân lớp Lưu trữ & Sức chứa</div>
+              <p className="ui-muted-text">Để trống nghĩa là không áp giới hạn theo chiều đó. Nếu đã có tồn kho, hệ thống chỉ cho lưu ràng buộc khi tải hiện tại vẫn hợp lệ.</p>
               <div className="warehouse-location-capacity-grid">
-                <label className="ui-stack"><span>Storage Class</span><input aria-label="Storage Class vị trí" disabled={saving} value={form.storageClass} onChange={(event) => setForm((current) => ({ ...current, storageClass: event.target.value.toUpperCase() }))} maxLength={32} placeholder="AMBIENT" /></label>
-                <label className="ui-stack"><span>Max kg</span><input aria-label="Giới hạn trọng lượng kg" disabled={saving} type="number" min="0.000001" step="0.000001" value={form.maxWeightKg} onChange={(event) => setForm((current) => ({ ...current, maxWeightKg: event.target.value }))} placeholder="1500" /></label>
-                <label className="ui-stack"><span>Max m³</span><input aria-label="Giới hạn thể tích m3" disabled={saving} type="number" min="0.00000001" step="0.00000001" value={form.maxVolumeM3} onChange={(event) => setForm((current) => ({ ...current, maxVolumeM3: event.target.value }))} placeholder="10" /></label>
-                <label className="ui-stack"><span>Max pallet-eq</span><input aria-label="Giới hạn pallet equivalent" disabled={saving} type="number" min="0.00000001" step="0.00000001" value={form.maxPalletEquivalent} onChange={(event) => setForm((current) => ({ ...current, maxPalletEquivalent: event.target.value }))} placeholder="5" /></label>
+                <label className="ui-stack"><span>Phân lớp lưu trữ</span><input aria-label="Storage Class vị trí" disabled={saving} value={form.storageClass} onChange={(event) => setForm((current) => ({ ...current, storageClass: event.target.value.toUpperCase() }))} maxLength={32} placeholder="AMBIENT" /></label>
+                <label className="ui-stack"><span>Trọng lượng tối đa (kg)</span><input aria-label="Giới hạn trọng lượng kg" disabled={saving} type="number" min="0.000001" step="0.000001" value={form.maxWeightKg} onChange={(event) => setForm((current) => ({ ...current, maxWeightKg: event.target.value }))} placeholder="1500" /></label>
+                <label className="ui-stack"><span>Thể tích tối đa (m³)</span><input aria-label="Giới hạn thể tích m3" disabled={saving} type="number" min="0.00000001" step="0.00000001" value={form.maxVolumeM3} onChange={(event) => setForm((current) => ({ ...current, maxVolumeM3: event.target.value }))} placeholder="10" /></label>
+                <label className="ui-stack"><span>Quy đổi pallet tối đa</span><input aria-label="Giới hạn pallet equivalent" disabled={saving} type="number" min="0.00000001" step="0.00000001" value={form.maxPalletEquivalent} onChange={(event) => setForm((current) => ({ ...current, maxPalletEquivalent: event.target.value }))} placeholder="5" /></label>
               </div>
             </div>
 
             <div className="ui-subcard ui-stack">
-              <div className="ui-subcard-title">Cấu trúc vật lý • Zone / Aisle / Rack / Level / Bin</div>
-              {!editing || hasLockedStructure ? null : <p className="ui-muted-text">Vị trí legacy có thể giữ nguyên chưa gắn cấu trúc. Nếu gán mới, cần nhập đủ cả 5 cấp.</p>}
+              <div className="ui-subcard-title">Cấu trúc vật lý • Khu vực / Dãy / Kệ / Tầng / Ô lưu trữ</div>
+              {!editing || hasLockedStructure ? null : <p className="ui-muted-text">Vị trí cũ có thể giữ nguyên chưa gắn cấu trúc. Nếu gán mới, cần nhập đủ cả 5 cấp.</p>}
               <div className="warehouse-location-path-grid">
-                <label className="ui-stack"><span>Zone *</span><input aria-label="Zone" disabled={saving || hasLockedStructure} value={form.zone} onChange={(event) => setForm((current) => ({ ...current, zone: event.target.value }))} maxLength={32} placeholder="ZONE-A" /></label>
-                <label className="ui-stack"><span>Aisle *</span><input aria-label="Aisle" disabled={saving || hasLockedStructure} value={form.aisle} onChange={(event) => setForm((current) => ({ ...current, aisle: event.target.value }))} maxLength={32} placeholder="A01" /></label>
-                <label className="ui-stack"><span>Rack *</span><input aria-label="Rack" disabled={saving || hasLockedStructure} value={form.rack} onChange={(event) => setForm((current) => ({ ...current, rack: event.target.value }))} maxLength={32} placeholder="R02" /></label>
-                <label className="ui-stack"><span>Level *</span><input aria-label="Level" disabled={saving || hasLockedStructure} value={form.level} onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))} maxLength={32} placeholder="L03" /></label>
-                <label className="ui-stack"><span>Bin *</span><input aria-label="Bin" disabled={saving || hasLockedStructure} value={form.bin} onChange={(event) => setForm((current) => ({ ...current, bin: event.target.value }))} maxLength={32} placeholder="B04" /></label>
+                <label className="ui-stack"><span>Khu vực *</span><input aria-label="Zone" disabled={saving || hasLockedStructure} value={form.zone} onChange={(event) => setForm((current) => ({ ...current, zone: event.target.value }))} maxLength={32} placeholder="ZONE-A" /></label>
+                <label className="ui-stack"><span>Dãy *</span><input aria-label="Aisle" disabled={saving || hasLockedStructure} value={form.aisle} onChange={(event) => setForm((current) => ({ ...current, aisle: event.target.value }))} maxLength={32} placeholder="A01" /></label>
+                <label className="ui-stack"><span>Kệ *</span><input aria-label="Rack" disabled={saving || hasLockedStructure} value={form.rack} onChange={(event) => setForm((current) => ({ ...current, rack: event.target.value }))} maxLength={32} placeholder="R02" /></label>
+                <label className="ui-stack"><span>Tầng *</span><input aria-label="Level" disabled={saving || hasLockedStructure} value={form.level} onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))} maxLength={32} placeholder="L03" /></label>
+                <label className="ui-stack"><span>Ô lưu trữ *</span><input aria-label="Bin" disabled={saving || hasLockedStructure} value={form.bin} onChange={(event) => setForm((current) => ({ ...current, bin: event.target.value }))} maxLength={32} placeholder="B04" /></label>
               </div>
-              {hasLockedStructure && <p className="ui-muted-text">StructurePath đã được khóa. Muốn đổi vị trí vật lý phải tạo mã vị trí mới để không làm sai lịch sử movement.</p>}
+              {hasLockedStructure && <p className="ui-muted-text">Đường dẫn cấu trúc đã được khóa. Muốn đổi vị trí vật lý phải tạo mã vị trí mới để không làm sai lịch sử dịch chuyển.</p>}
             </div>
 
             {editing && (
