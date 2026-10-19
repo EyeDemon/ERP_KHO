@@ -127,15 +127,15 @@ public sealed class InventoryControlController(
                     {
                         inventoryStockId = src.Id,
                         productId = src.ProductId,
-                        productCode = src.ProductCode,
-                        productName = src.ProductName,
+                        productCode = src.ProductCode.Trim(),
+                        productName = src.ProductName.Trim(),
                         warehouseId = src.WarehouseId,
-                        warehouseName = src.WarehouseName,
+                        warehouseName = src.WarehouseName.Trim(),
                         sourceLocationId = src.LocationId,
-                        sourceLocationCode = src.LocationCode,
+                        sourceLocationCode = src.LocationCode.Trim(),
                         availableAtSource = src.AvailableQty,
                         targetLocationId = targetBin.Id,
-                        targetLocationCode = targetBin.Code,
+                        targetLocationCode = targetBin.Code.Trim(),
                         currentAtTarget,
                         suggestedQuantity = suggestedQty
                     });
@@ -204,8 +204,8 @@ public sealed class InventoryControlController(
             .Select(x => new
             {
                 productId = x.ProductId,
-                productCode = x.ProductCode,
-                productName = x.ProductName,
+                productCode = x.ProductCode.Trim(),
+                productName = x.ProductName.Trim(),
                 onHandQty = x.OnHandQty,
                 availableQty = x.AvailableQty,
                 safetyStockTarget = 50m,

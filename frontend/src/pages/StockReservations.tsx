@@ -226,17 +226,17 @@ export default function StockReservations() {
           <table className="ui-table-compact" aria-label="Danh sách giữ hàng">
             <thead>
               <tr>
-                <th>Mã giữ</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 155 }}>Mã giữ</th>
                 <th>Sản phẩm</th>
                 <th>Kho</th>
                 <th>Nguồn</th>
-                <th>Ban đầu</th>
-                <th>Còn giữ</th>
-                <th>Đã phân bổ</th>
-                <th>Chưa phân bổ</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Ban đầu</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Còn giữ</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã phân bổ</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Chưa phân bổ</th>
                 <th>Hết hạn</th>
-                <th>Trạng thái</th>
-                {canOperate && <th>Thao tác</th>}
+                <th style={{ whiteSpace: 'nowrap' }}>Trạng thái</th>
+                {canOperate && <th style={{ whiteSpace: 'nowrap', minWidth: 115 }}>Thao tác</th>}
               </tr>
             </thead>
             <tbody>
@@ -246,21 +246,22 @@ export default function StockReservations() {
                 <tr><td className="ui-empty-cell" colSpan={canOperate ? 11 : 10}>Không có bản ghi giữ hàng phù hợp.</td></tr>
               ) : data.items.map((item) => (
                 <tr key={item.id}>
-                  <td><strong>{item.reservationCode}</strong></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{item.reservationCode}</strong></td>
                   <td>{item.productCode} – {item.productName}</td>
                   <td>{item.warehouseName}</td>
                   <td>{sourceTypeLabel(item.sourceType)}{item.sourceCode ? ` / ${item.sourceCode}` : ''}</td>
-                  <td>{item.quantity}</td>
-                  <td><strong>{item.remainingQuantity}</strong></td>
-                  <td>{item.allocatedQuantity}</td>
-                  <td>{item.allocatableQuantity}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.quantity}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><strong>{item.remainingQuantity}</strong></td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.allocatedQuantity}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.allocatableQuantity}</td>
                   <td>{new Date(item.expiresAt).toLocaleString('vi-VN')}</td>
-                  <td><UiBadge tone={toneOf(item.status)}>{reservationStatusLabel(item.status)}</UiBadge></td>
-                  {canOperate && <td>
+                  <td style={{ whiteSpace: 'nowrap' }}><UiBadge tone={toneOf(item.status)}>{reservationStatusLabel(item.status)}</UiBadge></td>
+                  {canOperate && <td style={{ whiteSpace: 'nowrap' }}>
                     {['Active', 'PartiallyConsumed', 'PartiallyAllocated', 'Allocated'].includes(item.status) ? (
                       <button
                         type="button"
                         disabled={busy}
+                        style={{ whiteSpace: 'nowrap' }}
                         aria-label={`Giải phóng ${item.reservationCode}`}
                         onClick={() => void release(item)}
                       >

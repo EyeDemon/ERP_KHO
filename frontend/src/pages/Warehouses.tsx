@@ -236,16 +236,16 @@ const Warehouses = () => {
       </UiMetricGrid>
 
       <UiCard title="Tổng quan Mạng lưới Kho & Trạng thái Vận hành (Warehouse Network Governance — WH-01)">
-        <div className="ui-form-grid">
-          <div>
+        <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <div className="ui-subcard">
             <strong>Tỷ lệ kho đang vận hành</strong><br />
             {activeCount}/{warehouses.length} kho hoạt động ({warehouses.length > 0 ? Math.round((activeCount / warehouses.length) * 100) : 0}%)
           </div>
-          <div>
+          <div className="ui-subcard">
             <strong>Chuẩn hóa địa chỉ vật lý</strong><br />
             {warehouses.filter((warehouse) => Boolean(warehouse.address && warehouse.address.trim())).length}/{warehouses.length} kho đã khai báo địa chỉ
           </div>
-          <div>
+          <div className="ui-subcard">
             <strong>Kho tạm ngưng hoạt động</strong><br />
             {warehouses.length - activeCount} kho ngừng hoạt động
           </div>
@@ -282,27 +282,27 @@ const Warehouses = () => {
       ) : (
         <UiCard title="Danh sách kho">
           <UiTableScroll>
-            <table aria-label="Danh sách kho">
+            <table className="ui-table-compact" aria-label="Danh sách kho">
               <thead>
                 <tr>
                   <th>Mã kho</th>
                   <th>Tên kho</th>
                   <th>Địa chỉ</th>
                   <th>Trạng thái</th>
-                  {canManage && <th>Thao tác</th>}
+                  {canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((warehouse) => (
                   <tr key={warehouse.id}>
-                    <td><strong>{warehouse.code}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong>{warehouse.code}</strong></td>
                     <td>{warehouse.name}</td>
                     <td>{warehouse.address || '—'}</td>
                     <td><UiBadge tone={warehouse.isActive ? 'success' : 'neutral'}>{warehouse.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
-                    {canManage && <td>
+                    {canManage && <td style={{ whiteSpace: 'nowrap' }}>
                       <div className="ui-inline-actions">
-                        <button type="button" aria-label={`Sửa kho ${warehouse.code}`} onClick={() => openEdit(warehouse)}>Sửa</button>
-                        <button type="button" aria-label={`Xóa kho ${warehouse.code}`} onClick={() => void remove(warehouse)}>Xóa</button>
+                        <button type="button" aria-label={`Sửa kho ${warehouse.code}`} onClick={() => openEdit(warehouse)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>
+                        <button type="button" aria-label={`Xóa kho ${warehouse.code}`} onClick={() => void remove(warehouse)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>
                       </div>
                     </td>}
                   </tr>

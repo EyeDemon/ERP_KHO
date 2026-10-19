@@ -23,8 +23,8 @@ public sealed class InventoryTraceabilityQueryService(
             .Select(x => new InventoryReversalWarehouseDto
             {
                 Id = x.Id,
-                Code = x.Code,
-                Name = x.Name
+                Code = x.Code.Trim(),
+                Name = x.Name.Trim()
             }).ToListAsync(cancellationToken);
     }
 
@@ -223,18 +223,18 @@ public sealed class InventoryTraceabilityQueryService(
             {
                 InventoryStockId = x.Id,
                 ProductId = x.ProductId,
-                ProductCode = x.Product.Code,
-                ProductName = x.Product.Name,
+                ProductCode = x.Product.Code.Trim(),
+                ProductName = x.Product.Name.Trim(),
                 WarehouseId = x.WarehouseId,
-                WarehouseName = x.Warehouse.Name,
+                WarehouseName = x.Warehouse.Name.Trim(),
                 LocationId = x.LocationId,
-                LocationCode = x.Location == null ? null : x.Location.Code,
+                LocationCode = x.Location == null ? null : x.Location.Code.Trim(),
                 InventoryStatus = x.Status.ToString(),
                 LotId = x.LotId,
-                LotNumber = x.Lot == null ? null : x.Lot.LotNumber,
+                LotNumber = x.Lot == null ? null : x.Lot.LotNumber.Trim(),
                 ExpiryDate = x.Lot == null ? null : x.Lot.ExpiryDate,
                 SerialId = x.SerialId,
-                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
+                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber.Trim(),
                 OnHandQuantity = x.Quantity,
                 ReservedQuantity = x.ReservedQuantity
             })
@@ -281,7 +281,14 @@ public sealed class InventoryTraceabilityQueryService(
                 .Take(101)
                 .ToListAsync(cancellationToken);
             relatedDocumentsTruncated = documentWindow.Count > 100;
-            relatedDocuments = documentWindow.Take(100).ToList();
+            relatedDocuments = documentWindow.Take(100)
+                .Select(d =>
+                {
+                    d.WarehouseName = (d.WarehouseName ?? string.Empty).Trim();
+                    d.ReferenceType = (d.ReferenceType ?? string.Empty).Trim();
+                    return d;
+                })
+                .ToList();
         }
 
 
@@ -304,7 +311,7 @@ public sealed class InventoryTraceabilityQueryService(
                 group transaction by new { receipt.Id, receipt.WarehouseId, receipt.Code } into g
                 select new InventoryTraceabilityReceiptExposureDto {
                     ReceiptId = g.Key.Id, WarehouseId = g.Key.WarehouseId,
-                    ReceiptCode = g.Key.Code, PostedQuantity = g.Sum(x => x.Quantity),
+                    ReceiptCode = g.Key.Code.Trim(), PostedQuantity = g.Sum(x => x.Quantity),
                     LastPostedAt = g.Max(x => x.TransactionDate),
                     LedgerEventCount = g.Count(), LastTransactionId = g.Max(x => x.Id)
                 }).OrderByDescending(x => x.LastTransactionId)
@@ -368,7 +375,7 @@ public sealed class InventoryTraceabilityQueryService(
                 {
                     ShipmentId = x.ShipmentId,
                     WarehouseId = x.WarehouseId,
-                    ShipmentCode = x.ShipmentCode,
+                    ShipmentCode = x.ShipmentCode.Trim(),
                     ShipmentStatus = x.Status.ToString(),
                     DispatchedAt = x.DispatchedAt,
                     DispatchedQuantity = x.DispatchedQuantity,
@@ -411,11 +418,11 @@ public sealed class InventoryTraceabilityQueryService(
                     select new InventoryTraceabilityShipmentExportSourceDto
                     {
                         ShipmentId = shipment.Id,
-                        ShipmentCode = shipment.ShipmentCode,
+                        ShipmentCode = shipment.ShipmentCode.Trim(),
                         WarehouseId = shipment.WarehouseId,
                         PickingTaskId = picking.Id,
                         ExportReceiptId = exportReceipt.Id,
-                        ExportReceiptCode = exportReceipt.Code,
+                        ExportReceiptCode = exportReceipt.Code.Trim(),
                         ExportReceiptDispatchedAt = exportReceipt.DispatchedAt,
                         ExportReceiptProductQuantity = context.ExportReceiptDetails
                             .Where(d => d.ExportReceiptId == exportReceipt.Id &&
@@ -460,15 +467,15 @@ public sealed class InventoryTraceabilityQueryService(
                     select new InventoryTraceabilityShipmentPickingEvidenceDto
                     {
                         ShipmentId = shipment.Id,
-                        ShipmentCode = shipment.ShipmentCode,
+                        ShipmentCode = shipment.ShipmentCode.Trim(),
                         WarehouseId = shipment.WarehouseId,
                         PackingSessionId = packing.Id,
-                        PackingSessionCode = packing.SessionCode,
+                        PackingSessionCode = packing.SessionCode.Trim(),
                         PickingTaskId = picking.Id,
-                        PickingTaskCode = picking.TaskCode,
+                        PickingTaskCode = picking.TaskCode.Trim(),
                         PickingTaskLineId = line.Id,
                         AllocationId = allocation.Id,
-                        SourceLocationCode = line.SourceLocation.Code,
+                        SourceLocationCode = line.SourceLocation.Code.Trim(),
                         PickedQuantity = line.PickedQuantity
                     })
                     .OrderByDescending(x => x.ShipmentId)
@@ -553,7 +560,7 @@ public sealed class InventoryTraceabilityQueryService(
                         foreach (var node in parents)
                             huNodes[node.Id] = (node.ParentHandlingUnitId,
                                 node.PackingSessionId, node.WarehouseId,
-                                node.HuCode, node.Barcode);
+                                node.HuCode.Trim(), node.Barcode.Trim());
                         pendingHuIds = parents
                             .Where(x => x.ParentHandlingUnitId.HasValue &&
                                         !huNodes.ContainsKey(x.ParentHandlingUnitId.Value))
@@ -661,33 +668,33 @@ public sealed class InventoryTraceabilityQueryService(
         {
             TransactionId = x.Id,
             ProductId = x.ProductId,
-            ProductCode = x.Product.Code,
-            ProductName = x.Product.Name,
+            ProductCode = x.Product.Code.Trim(),
+            ProductName = x.Product.Name.Trim(),
             WarehouseId = x.WarehouseId,
-            WarehouseName = x.Warehouse.Name,
+            WarehouseName = x.Warehouse.Name.Trim(),
             TransactionType = x.TransactionType.ToString(),
             InventoryStatus = x.InventoryStatus.ToString(),
             FromInventoryStatus = x.FromInventoryStatus.HasValue ? x.FromInventoryStatus.Value.ToString() : null,
             ToInventoryStatus = x.ToInventoryStatus.HasValue ? x.ToInventoryStatus.Value.ToString() : null,
             LocationId = x.LocationId,
-            LocationCode = x.Location == null ? null : x.Location.Code,
+            LocationCode = x.Location == null ? null : x.Location.Code.Trim(),
             FromLocationId = x.FromLocationId,
-            FromLocationCode = x.FromLocation == null ? null : x.FromLocation.Code,
+            FromLocationCode = x.FromLocation == null ? null : x.FromLocation.Code.Trim(),
             ToLocationId = x.ToLocationId,
-            ToLocationCode = x.ToLocation == null ? null : x.ToLocation.Code,
+            ToLocationCode = x.ToLocation == null ? null : x.ToLocation.Code.Trim(),
             LotId = x.LotId,
-            LotNumber = x.Lot == null ? null : x.Lot.LotNumber,
+            LotNumber = x.Lot == null ? null : x.Lot.LotNumber.Trim(),
             ExpiryDate = x.Lot == null ? null : x.Lot.ExpiryDate,
             SerialId = x.SerialId,
-            SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
+            SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber.Trim(),
             Quantity = x.Quantity,
-            ReferenceType = x.ReferenceType,
+            ReferenceType = x.ReferenceType == null ? null : x.ReferenceType.Trim(),
             ReferenceId = x.ReferenceId,
             TransactionDate = x.TransactionDate,
             CreatedBy = x.CreatedBy,
-            CreatedByName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username,
-            Note = x.Note,
-            ReasonCode = x.ReasonCode,
+            CreatedByName = (x.CreatedByUser.FullName ?? x.CreatedByUser.Username).Trim(),
+            Note = x.Note == null ? null : x.Note.Trim(),
+            ReasonCode = x.ReasonCode == null ? null : x.ReasonCode.Trim(),
             ReversalOfTransactionId = x.ReversalOfTransactionId ??
                 (x.TransactionType == TransactionType.Reversal && x.ReferenceType == "InventoryReversal"
                     ? x.ReferenceId

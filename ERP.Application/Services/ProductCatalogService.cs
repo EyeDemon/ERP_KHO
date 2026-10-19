@@ -107,7 +107,7 @@ public sealed partial class ProductCatalogService(IProductCatalogRepository repo
         return normalized;
     }
 
-    private static ProductCategoryDto Map(ProductCategory x) => new() { Id = x.Id, Code = x.Code, Name = x.Name, IsActive = x.IsActive };
-    private static ProductBarcodeDto Map(ProductBarcode x) => new() { Id = x.Id, ProductId = x.ProductId, Value = x.Value };
+    private static ProductCategoryDto Map(ProductCategory x) => new() { Id = x.Id, Code = (x.Code ?? string.Empty).Trim(), Name = (x.Name ?? string.Empty).Trim(), IsActive = x.IsActive };
+    private static ProductBarcodeDto Map(ProductBarcode x) => new() { Id = x.Id, ProductId = x.ProductId, Value = (x.Value ?? string.Empty).Trim() };
     private static BusinessRuleException Conflict(string message) { var ex = new BusinessRuleException(message); ex.Data["HttpStatusCode"] = 409; return ex; }
 }

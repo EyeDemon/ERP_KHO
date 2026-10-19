@@ -340,15 +340,15 @@ const Dashboard = () => {
           </div>
           {controlTower && controlTower.warehouses.length > 0 && (
             <UiTableScroll>
-              <table aria-label="Bảng sức khỏe kho phân tán">
+              <table className="ui-table-compact" aria-label="Bảng sức khỏe kho phân tán">
                 <thead>
                   <tr>
                     <th>Kho</th>
-                    <th>Tồn thực tế</th>
-                    <th>Đã giữ</th>
-                    <th>Putaway mở</th>
-                    <th>Picking mở</th>
-                    <th>Khóa tồn</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Tồn thực tế</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Đã giữ</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Putaway mở</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Picking mở</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Khóa tồn</th>
                     <th>Trạng thái sức khỏe</th>
                   </tr>
                 </thead>
@@ -356,11 +356,11 @@ const Dashboard = () => {
                   {controlTower.warehouses.map((wh) => (
                     <tr key={wh.warehouseId}>
                       <td><strong>{wh.warehouseCode}</strong> — {wh.warehouseName}</td>
-                      <td>{wh.onHandQuantity}</td>
-                      <td>{wh.reservedQuantity}</td>
-                      <td>{wh.openPutawayCount}</td>
-                      <td>{wh.openPickingCount}</td>
-                      <td>{wh.activeLocksCount}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.onHandQuantity}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.reservedQuantity}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.openPutawayCount}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.openPickingCount}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.activeLocksCount}</td>
                       <td>
                         <UiBadge tone={wh.healthStatus === 'ATTENTION' ? 'warning' : 'success'}>
                           {wh.healthStatus}
@@ -396,7 +396,7 @@ const Dashboard = () => {
               <p className="ui-muted-text">Không có tác vụ kho đang mở theo bộ lọc hiện tại.</p>
             ) : (
               <UiTableScroll>
-                <table aria-label="Hàng đợi tác vụ kho đang mở">
+                <table className="ui-table-compact" aria-label="Hàng đợi tác vụ kho đang mở">
                   <thead>
                     <tr>
                       <th>Loại</th>
@@ -404,14 +404,14 @@ const Dashboard = () => {
                       <th>Kho</th>
                       <th>Trạng thái</th>
                       <th>Ưu tiên</th>
-                      <th>Xử lý</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Xử lý</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredTasks.slice(0, 12).map((task, idx) => (
                       <tr key={`${task.taskType}-${task.code}-${idx}`}>
                         <td><UiBadge>{task.taskType}</UiBadge></td>
-                        <td><strong>{task.code}</strong></td>
+                        <td style={{ whiteSpace: 'nowrap' }}><strong>{task.code}</strong></td>
                         <td>{task.warehouseName}</td>
                         <td>{task.status}</td>
                         <td>
@@ -419,7 +419,7 @@ const Dashboard = () => {
                             {task.priority}
                           </UiBadge>
                         </td>
-                        <td><Link to={task.route}>Thực thi →</Link></td>
+                        <td style={{ whiteSpace: 'nowrap' }}><Link to={task.route}>Thực thi →</Link></td>
                       </tr>
                     ))}
                   </tbody>
@@ -433,7 +433,7 @@ const Dashboard = () => {
               <p className="ui-muted-text">Không có ngoại lệ vận hành mở trong phạm vi kho được phép.</p>
             ) : (
               <UiTableScroll>
-                <table aria-label="Trung tâm ngoại lệ vận hành">
+                <table className="ui-table-compact" aria-label="Trung tâm ngoại lệ vận hành">
                   <thead>
                     <tr>
                       <th>Phân loại</th>
@@ -441,14 +441,14 @@ const Dashboard = () => {
                       <th>Kho</th>
                       <th>Mức độ</th>
                       <th>Chi tiết ngoại lệ</th>
-                      <th>Xử lý</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Xử lý</th>
                     </tr>
                   </thead>
                   <tbody>
                     {liveExceptions.slice(0, 12).map((ex, idx) => (
                       <tr key={`${ex.category}-${ex.code}-${idx}`}>
-                        <td><code>{ex.category}</code></td>
-                        <td><strong>{ex.code}</strong></td>
+                        <td style={{ whiteSpace: 'nowrap' }}><code>{ex.category}</code></td>
+                        <td style={{ whiteSpace: 'nowrap' }}><strong>{ex.code}</strong></td>
                         <td>{ex.warehouseName}</td>
                         <td>
                           <UiBadge tone={ex.severity === 'HIGH' ? 'danger' : 'warning'}>
@@ -456,13 +456,13 @@ const Dashboard = () => {
                           </UiBadge>
                         </td>
                         <td>{ex.summary}</td>
-                        <td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
                           <div className="ui-inline-actions">
-                            <Link to={ex.route}>Xử lý →</Link>
+                            <Link to={ex.route} style={{ whiteSpace: 'nowrap' }}>Xử lý →</Link>
                             {acknowledgedCodes.includes(ex.code) ? (
                               <UiBadge tone="success">Đã tiếp nhận (Audit)</UiBadge>
                             ) : (
-                              <button type="button" disabled={acknowledgingCode === ex.code} onClick={() => void acknowledgeException(ex.code)}>
+                              <button type="button" disabled={acknowledgingCode === ex.code} onClick={() => void acknowledgeException(ex.code)} style={{ whiteSpace: 'nowrap' }}>
                                 Tiếp nhận xử lý
                               </button>
                             )}

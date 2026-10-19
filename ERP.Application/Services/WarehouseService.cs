@@ -51,9 +51,9 @@ namespace ERP.Application.Services
             return warehouses.OrderByDescending(w => w.CreatedAt).Select(w => new WarehouseDto
             {
                 Id = w.Id,
-                Code = w.Code,
-                Name = w.Name,
-                Address = w.Address,
+                Code = (w.Code ?? string.Empty).Trim(),
+                Name = (w.Name ?? string.Empty).Trim(),
+                Address = w.Address?.Trim(),
                 IsActive = w.IsActive,
                 CreatedAt = w.CreatedAt
             });
@@ -69,9 +69,9 @@ namespace ERP.Application.Services
             return new WarehouseDto
             {
                 Id = w.Id,
-                Code = w.Code,
-                Name = w.Name,
-                Address = w.Address,
+                Code = (w.Code ?? string.Empty).Trim(),
+                Name = (w.Name ?? string.Empty).Trim(),
+                Address = w.Address?.Trim(),
                 IsActive = w.IsActive,
                 CreatedAt = w.CreatedAt
             };
@@ -86,8 +86,8 @@ namespace ERP.Application.Services
             var warehouse = new Warehouse
             {
                 Code = dto.Code,
-                Name = dto.Name,
-                Address = dto.Address,
+                Name = (dto.Name ?? string.Empty).Trim(),
+                Address = dto.Address?.Trim(),
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
@@ -115,9 +115,9 @@ namespace ERP.Application.Services
             return new WarehouseDto
             {
                 Id = warehouse.Id,
-                Code = warehouse.Code,
-                Name = warehouse.Name,
-                Address = warehouse.Address,
+                Code = warehouse.Code.Trim(),
+                Name = warehouse.Name.Trim(),
+                Address = warehouse.Address?.Trim(),
                 IsActive = warehouse.IsActive,
                 CreatedAt = warehouse.CreatedAt
             };
@@ -140,8 +140,8 @@ namespace ERP.Application.Services
                     throw new BusinessRuleException("Không thể ngừng hoạt động kho khi vẫn còn tồn kho hoặc hàng đang giữ chỗ.");
             }
 
-            warehouse.Name = dto.Name;
-            warehouse.Address = dto.Address;
+            warehouse.Name = (dto.Name ?? string.Empty).Trim();
+            warehouse.Address = dto.Address?.Trim();
             warehouse.IsActive = dto.IsActive;
             warehouse.UpdatedAt = DateTime.UtcNow;
 

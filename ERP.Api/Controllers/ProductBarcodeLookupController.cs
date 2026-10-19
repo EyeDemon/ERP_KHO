@@ -62,14 +62,16 @@ public sealed class ProductBarcodeLookupController(
 
             if (location is not null)
             {
+                var locCode = location.Code.Trim();
+                var locName = location.Name.Trim();
                 return Ok(new BarcodeResolutionDto
                 {
                     EntityType = "Location",
                     EntityId = location.Id,
-                    Code = location.Code,
-                    Name = location.Name,
-                    Barcode = location.Code,
-                    DisplayName = $"{location.Code} - {location.Name}",
+                    Code = locCode,
+                    Name = locName,
+                    Barcode = locCode,
+                    DisplayName = $"{locCode} - {locName}",
                     SubType = location.LocationType,
                     WarehouseId = location.WarehouseId
                 });
@@ -95,14 +97,16 @@ public sealed class ProductBarcodeLookupController(
 
             if (hu is not null)
             {
+                var huCode = hu.HuCode.Trim();
+                var huBarcode = hu.Barcode.Trim();
                 return Ok(new BarcodeResolutionDto
                 {
                     EntityType = "HandlingUnit",
                     EntityId = hu.Id,
-                    Code = hu.HuCode,
+                    Code = huCode,
                     Name = $"{hu.Type} ({hu.Status})",
-                    Barcode = hu.Barcode,
-                    DisplayName = $"{hu.HuCode} ({hu.Type} - {hu.Status})",
+                    Barcode = huBarcode,
+                    DisplayName = $"{huCode} ({hu.Type} - {hu.Status})",
                     SubType = hu.Type,
                     WarehouseId = hu.WarehouseId
                 });
@@ -123,17 +127,20 @@ public sealed class ProductBarcodeLookupController(
 
             if (serial is not null)
             {
+                var sn = serial.SerialNumber.Trim();
+                var pCode = serial.ProductCode.Trim();
+                var pName = serial.ProductName.Trim();
                 return Ok(new BarcodeResolutionDto
                 {
                     EntityType = "Serial",
                     EntityId = serial.Id,
-                    Code = serial.SerialNumber,
-                    Name = serial.ProductName,
-                    Barcode = serial.SerialNumber,
-                    DisplayName = $"SN: {serial.SerialNumber} ({serial.ProductCode} - {serial.ProductName})",
+                    Code = sn,
+                    Name = pName,
+                    Barcode = sn,
+                    DisplayName = $"SN: {sn} ({pCode} - {pName})",
                     ProductId = serial.ProductId,
-                    ProductCode = serial.ProductCode,
-                    ProductName = serial.ProductName
+                    ProductCode = pCode,
+                    ProductName = pName
                 });
             }
 
@@ -152,17 +159,20 @@ public sealed class ProductBarcodeLookupController(
 
             if (lot is not null)
             {
+                var lotNo = lot.LotNumber.Trim();
+                var pCode = lot.ProductCode.Trim();
+                var pName = lot.ProductName.Trim();
                 return Ok(new BarcodeResolutionDto
                 {
                     EntityType = "Lot",
                     EntityId = lot.Id,
-                    Code = lot.LotNumber,
-                    Name = lot.ProductName,
-                    Barcode = lot.LotNumber,
-                    DisplayName = $"LOT: {lot.LotNumber} ({lot.ProductCode} - {lot.ProductName})",
+                    Code = lotNo,
+                    Name = pName,
+                    Barcode = lotNo,
+                    DisplayName = $"LOT: {lotNo} ({pCode} - {pName})",
                     ProductId = lot.ProductId,
-                    ProductCode = lot.ProductCode,
-                    ProductName = lot.ProductName
+                    ProductCode = pCode,
+                    ProductName = pName
                 });
             }
 
@@ -173,17 +183,19 @@ public sealed class ProductBarcodeLookupController(
 
             if (productByCode is not null)
             {
+                var pCode = productByCode.Code.Trim();
+                var pName = productByCode.Name.Trim();
                 return Ok(new BarcodeResolutionDto
                 {
                     EntityType = "Product",
                     EntityId = productByCode.Id,
-                    Code = productByCode.Code,
-                    Name = productByCode.Name,
-                    Barcode = productByCode.Code,
-                    DisplayName = $"{productByCode.Code} - {productByCode.Name}",
+                    Code = pCode,
+                    Name = pName,
+                    Barcode = pCode,
+                    DisplayName = $"{pCode} - {pName}",
                     ProductId = productByCode.Id,
-                    ProductCode = productByCode.Code,
-                    ProductName = productByCode.Name
+                    ProductCode = pCode,
+                    ProductName = pName
                 });
             }
         }
@@ -193,13 +205,13 @@ public sealed class ProductBarcodeLookupController(
         {
             EntityType = "Product",
             EntityId = product.Id,
-            Code = product.Code,
-            Name = product.Name,
+            Code = product.Code.Trim(),
+            Name = product.Name.Trim(),
             Barcode = scan,
-            DisplayName = $"{product.Code} - {product.Name}",
+            DisplayName = $"{product.Code.Trim()} - {product.Name.Trim()}",
             ProductId = product.Id,
-            ProductCode = product.Code,
-            ProductName = product.Name
+            ProductCode = product.Code.Trim(),
+            ProductName = product.Name.Trim()
         });
     }
 }

@@ -327,7 +327,7 @@ export default function InventoryTraceability(){
       description="Xem toàn bộ nhóm tồn của một kho được phép, hoặc truy theo sản phẩm, lô, sê-ri và chứng từ. Dòng thời gian sổ cái giữ nguyên lịch sử bất biến."/>
     {requestError&&<p role="alert">{requestError}</p>}
     <UiCard title="Điều kiện truy vết">
-      <form onSubmit={search} noValidate className="ui-form-grid" aria-busy={loading}>
+      <form onSubmit={search} noValidate className="ui-form-grid" style={{gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:12,alignItems:'end',maxWidth:'100%'}} aria-busy={loading}>
         <UiToolbarField label="Kho truy vết">
           <select aria-label="Kho truy vết" value={form.warehouseId}
             disabled={warehousesLoading||Boolean(warehousesError)||warehouses.length===0}
@@ -337,16 +337,16 @@ export default function InventoryTraceability(){
             {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}
           </select>
         </UiToolbarField>
-        <p id="traceability-warehouse-help" className="ui-muted-text">
+        <p id="traceability-warehouse-help" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
           Chọn một kho để xem toàn bộ tồn hiện tại và sự kiện gần nhất; 500 nhóm tồn mỗi trang. Để truy vết nhiều kho, cần nhập thêm sản phẩm, lô, sê-ri hoặc chứng từ.
         </p>
-        {warehousesLoading&&<p role="status" className="ui-muted-text">Đang tải kho được cấp quyền...</p>}
-        {warehousesError&&<div className="ui-stack">
+        {warehousesLoading&&<p role="status" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>Đang tải kho được cấp quyền...</p>}
+        {warehousesError&&<div className="ui-stack" style={{gridColumn:'1 / -1'}}>
           <p role="alert">{warehousesError}</p>
           <button type="button" onClick={()=>void loadWarehouses()}>Tải lại danh sách kho</button>
         </div>}
         {!warehousesLoading&&!warehousesError&&warehouses.length===0&&
-          <p role="status" className="ui-muted-text">
+          <p role="status" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
             Chưa có kho được cấp quyền truy vết. Liên hệ quản trị để kiểm tra quyền truy cập.
           </p>}
         <UiToolbarField label="ID sản phẩm">
@@ -380,10 +380,10 @@ export default function InventoryTraceability(){
             inputMode="numeric"
           />
         </UiToolbarField>
-        <p id="traceability-reference-help" className="ui-muted-text">
+        <p id="traceability-reference-help" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>
           Loại tham chiếu và ID tham chiếu là một cặp; nhập cả hai khi truy theo chứng từ. Kết hợp chứng từ với bộ lọc khác chỉ lấy nhóm tồn liên quan đến chứng từ đó, kể cả khi giới hạn sự kiện thấp.
         </p>
-        {validationError&&<p id="traceability-validation-error" role="alert">{validationError}</p>}
+        {validationError&&<p id="traceability-validation-error" role="alert" style={{gridColumn:'1 / -1',margin:0}}>{validationError}</p>}
         <UiToolbarField label="Giới hạn sự kiện">
           <select aria-label="Giới hạn sự kiện truy vết" value={eventLimit} disabled={loading}
             onChange={e=>{
@@ -396,28 +396,28 @@ export default function InventoryTraceability(){
             <option value={500}>500 sự kiện</option>
           </select>
         </UiToolbarField>
-        <button type="submit" disabled={loading}>{loading?'Đang truy vết...':'Truy vết'}</button>
-        {resultStatus&&<p role="status" aria-live="polite" className="ui-muted-text">{resultStatus}</p>}
+        <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={loading}>{loading?'Đang truy vết...':'Truy vết'}</button>
+        {resultStatus&&<p role="status" aria-live="polite" className="ui-muted-text" style={{gridColumn:'1 / -1',margin:0}}>{resultStatus}</p>}
       </form>
     </UiCard>
 
     <UiCard title="Tổng quan Chuỗi Truy xuất Nguồn gốc Lô / Sê-ri / Kiện hàng">
-      <div className="ui-form-grid">
-        <div>
-          <strong>Nhóm tồn hiện tại & Tổng lượng thực tế</strong><br/>
-          {result?.currentBuckets.length ?? 0} nhóm tồn • Thực tế: {(result?.currentBuckets ?? []).reduce((sum, item) => sum + item.onHandQuantity, 0)} • Giữ chỗ: {(result?.currentBuckets ?? []).reduce((sum, item) => sum + item.reservedQuantity, 0)}
+      <div className="ui-form-grid" style={{gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:12,maxWidth:'100%'}}>
+        <div className="ui-subcard">
+          <strong>Nhóm tồn hiện tại & Tổng lượng thực tế</strong>
+          <span>{result?.currentBuckets.length ?? 0} nhóm tồn • Thực tế: {(result?.currentBuckets ?? []).reduce((sum, item) => sum + item.onHandQuantity, 0)} • Giữ chỗ: {(result?.currentBuckets ?? []).reduce((sum, item) => sum + item.reservedQuantity, 0)}</span>
         </div>
-        <div>
-          <strong>Định danh Lô / Sê-ri trong kết quả</strong><br/>
-          {new Set((result?.currentBuckets ?? []).map(item => item.lotNumber).filter(Boolean)).size} mã lô • {new Set((result?.currentBuckets ?? []).map(item => item.serialNumber).filter(Boolean)).size} sê-ri
+        <div className="ui-subcard">
+          <strong>Định danh Lô / Sê-ri trong kết quả</strong>
+          <span>{new Set((result?.currentBuckets ?? []).map(item => item.lotNumber).filter(Boolean)).size} mã lô • {new Set((result?.currentBuckets ?? []).map(item => item.serialNumber).filter(Boolean)).size} sê-ri</span>
         </div>
-        <div>
-          <strong>Sự kiện sổ cái & Chuỗi đảo bất biến</strong><br/>
-          {result?.events.length ?? 0} sự kiện • {(result?.events ?? []).filter(item => item.transactionType === 'Reversal' || item.isReversed).length} giao dịch đảo/đã đảo
+        <div className="ui-subcard">
+          <strong>Sự kiện sổ cái & Chuỗi đảo bất biến</strong>
+          <span>{result?.events.length ?? 0} sự kiện • {(result?.events ?? []).filter(item => item.transactionType === 'Reversal' || item.isReversed).length} giao dịch đảo/đã đảo</span>
         </div>
-        <div>
-          <strong>Chứng từ & Chuỗi kiện hàng liên kết</strong><br/>
-          {(result?.relatedDocuments ?? []).length} chứng từ • {(result?.shipmentHuEvidence ?? []).length} chuỗi kiện hàng
+        <div className="ui-subcard">
+          <strong>Chứng từ & Chuỗi kiện hàng liên kết</strong>
+          <span>{(result?.relatedDocuments ?? []).length} chứng từ • {(result?.shipmentHuEvidence ?? []).length} chuỗi kiện hàng</span>
         </div>
       </div>
       <div className="ui-inline-actions" style={{marginTop:8}}>
@@ -438,14 +438,15 @@ export default function InventoryTraceability(){
           Chỉ hiển thị 500 nhóm tồn của trang hiện tại. Vẫn còn dữ liệu khác; chọn “Trang sau” hoặc lọc thêm theo kho, sản phẩm, lô, sê-ri.
         </p>}
         <UiTableScroll><table className="ui-table-compact" aria-label="Nhóm tồn kho hiện tại phục vụ truy vết">
-          <thead><tr><th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Sê-ri</th><th>Tồn thực tế</th><th>Đã giữ</th></tr></thead>
+          <thead><tr><th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Sê-ri</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Tồn thực tế</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Đã giữ</th></tr></thead>
           <tbody>{result.currentBuckets.length===0?<tr><td colSpan={6} className="ui-empty-cell">Không còn nhóm tồn kho hiện tại khớp điều kiện.</td></tr>:
             result.currentBuckets.map(x=><tr key={x.inventoryStockId}>
-              <td><strong>{x.productCode}</strong><br/><small>{x.productName}</small></td>
-              <td>{x.warehouseName}<br/><small>{x.locationCode??'—'}</small></td>
-              <td><UiBadge>{inventoryStatusLabel(x.inventoryStatus)}</UiBadge></td>
+              <td><strong style={{whiteSpace:'nowrap'}}>{x.productCode}</strong><br/><small>{x.productName}</small></td>
+              <td>{x.warehouseName}<br/><small style={{whiteSpace:'nowrap'}}>{x.locationCode??'—'}</small></td>
+              <td style={{whiteSpace:'nowrap'}}><UiBadge>{inventoryStatusLabel(x.inventoryStatus)}</UiBadge></td>
               <td>{x.lotNumber??'—'} / {x.serialNumber??'—'}{x.expiryDate&&<><br/><small>HSD {new Date(x.expiryDate).toLocaleDateString('vi-VN')}</small></>}</td>
-              <td>{x.onHandQuantity}</td><td>{x.reservedQuantity}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.onHandQuantity}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.reservedQuantity}</td>
             </tr>)}
           </tbody>
         </table></UiTableScroll>

@@ -328,7 +328,7 @@ public sealed class WarehouseCalendarService(
 
     private WarehouseCalendarDto Map(Warehouse warehouse, WarehouseCalendar? calendar, IReadOnlyList<AuditLog>? exceptions = null)
     {
-        var timeZoneId = calendar?.TimeZoneId ?? "UTC";
+        var timeZoneId = (calendar?.TimeZoneId ?? "UTC").Trim();
         var zone = ResolveTimeZone(timeZoneId);
         var localNow = TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), zone);
         var days = calendar?.Days.OrderBy(x => x.DayOfWeek).ToList() ?? [];
@@ -344,13 +344,13 @@ public sealed class WarehouseCalendarService(
         return new WarehouseCalendarDto
         {
             WarehouseId = warehouse.Id,
-            WarehouseCode = warehouse.Code,
-            WarehouseName = warehouse.Name,
+            WarehouseCode = (warehouse.Code ?? string.Empty).Trim(),
+            WarehouseName = (warehouse.Name ?? string.Empty).Trim(),
             IsConfigured = calendar is not null,
             TimeZoneId = timeZoneId,
             LocalNow = localNow,
             IsOpenNow = openNow,
-            CurrentShiftCode = currentShift?.Code,
+            CurrentShiftCode = currentShift?.Code?.Trim(),
             RowVersion = Version(calendar?.RowVersion),
             Days = Enumerable.Range(0, 7).Select(day =>
             {
@@ -450,8 +450,8 @@ public sealed class WarehouseCalendarService(
     {
         Id = shift.Id,
         WarehouseId = shift.WarehouseId,
-        Code = shift.Code,
-        Name = shift.Name,
+        Code = (shift.Code ?? string.Empty).Trim(),
+        Name = (shift.Name ?? string.Empty).Trim(),
         StartTimeLocal = Format(shift.StartTimeLocal)!,
         EndTimeLocal = Format(shift.EndTimeLocal)!,
         Overnight = shift.StartTimeLocal > shift.EndTimeLocal,

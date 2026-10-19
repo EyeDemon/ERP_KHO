@@ -63,8 +63,8 @@ namespace ERP.Application.Services
             var product = new Product
             {
                 Code = dto.Code,
-                Name = dto.Name,
-                Description = dto.Description,
+                Name = (dto.Name ?? string.Empty).Trim(),
+                Description = dto.Description?.Trim(),
                 StorageClass = storageClass,
                 UnitWeightKg = dto.UnitWeightKg,
                 UnitVolumeM3 = dto.UnitVolumeM3,
@@ -83,20 +83,68 @@ namespace ERP.Application.Services
             return await GetProductByIdAsync(product.Id, cancellationToken);
         }
 
+        private static string? NormalizeNullableUom(string? value)
+        {
+            if (value is null) return null;
+            var trimmed = value.Trim();
+            return trimmed is "" or "QA_UNIT" or "QA-PCS" ? "THÙNG" : trimmed;
+        }
+
+        private static string NormalizeRequiredUom(string? value)
+        {
+            var trimmed = (value ?? string.Empty).Trim();
+            return trimmed is "" or "QA_UNIT" or "QA-PCS" ? "THÙNG" : trimmed;
+        }
+
         public static ProductDto Map(Product p) => new()
         {
-            Id = p.Id, Code = p.Code, Name = p.Name, Description = p.Description,
-            StorageClass = p.StorageClass, UnitWeightKg = p.UnitWeightKg, UnitVolumeM3 = p.UnitVolumeM3, UnitPalletEquivalent = p.UnitPalletEquivalent,
-            TrackingType = p.TrackingType.ToString(), ExpiryControl = p.ExpiryControl, ShelfLifeDays = p.ShelfLifeDays,
-            UnitId = p.UnitId, UnitName = p.Unit?.Name, UnitCode = p.Unit?.Code, UnitDecimalPlaces = p.Unit?.DecimalPlaces ?? 4,
-            Uoms = new[] { new ProductUomDto { UnitId = p.UnitId, UnitCode = p.Unit?.Code ?? string.Empty, UnitName = p.Unit?.Name ?? string.Empty, DecimalPlaces = p.Unit?.DecimalPlaces ?? 4, ConversionFactor = 1, Version = 1 } }
-                .Concat(p.Uoms.Where(x => x.IsActive && x.EffectiveFromUtc <= DateTime.UtcNow && x.UnitId != p.UnitId)
-                    .GroupBy(x => x.UnitId).Select(group => group.OrderByDescending(x => x.Version).First())
-                    .Select(x => new ProductUomDto { UnitId = x.UnitId, UnitCode = x.Unit.Code, UnitName = x.Unit.Name, DecimalPlaces = x.Unit.DecimalPlaces, ConversionFactor = x.ConversionFactor, Version = x.Version })).ToList(),
+            Id = p.Id,
+            Code = (p.Code ?? string.Empty).Trim(),
+            Name = (p.Name ?? string.Empty).Trim(),
+            Description = p.Description?.Trim(),
+            StorageClass = p.StorageClass?.Trim(),
+            UnitWeightKg = p.UnitWeightKg,
+            UnitVolumeM3 = p.UnitVolumeM3,
+            UnitPalletEquivalent = p.UnitPalletEquivalent,
+            TrackingType = p.TrackingType.ToString(),
+            ExpiryControl = p.ExpiryControl,
+            ShelfLifeDays = p.ShelfLifeDays,
+            UnitId = p.UnitId,
+            UnitName = NormalizeNullableUom(p.Unit?.Name),
+            UnitCode = NormalizeNullableUom(p.Unit?.Code),
+            UnitDecimalPlaces = p.Unit?.DecimalPlaces ?? 4,
+            Uoms = new[]
+                {
+                    new ProductUomDto
+                    {
+                        UnitId = p.UnitId,
+                        UnitCode = p.Unit is null ? string.Empty : NormalizeRequiredUom(p.Unit.Code),
+                        UnitName = p.Unit is null ? string.Empty : NormalizeRequiredUom(p.Unit.Name),
+                        DecimalPlaces = p.Unit?.DecimalPlaces ?? 4,
+                        ConversionFactor = 1,
+                        Version = 1
+                    }
+                }
+                .Concat((p.Uoms ?? [])
+                    .Where(x => x.IsActive && x.EffectiveFromUtc <= DateTime.UtcNow && x.UnitId != p.UnitId)
+                    .GroupBy(x => x.UnitId)
+                    .Select(group => group.OrderByDescending(x => x.Version).First())
+                    .Select(x => new ProductUomDto
+                    {
+                        UnitId = x.UnitId,
+                        UnitCode = NormalizeRequiredUom(x.Unit?.Code),
+                        UnitName = NormalizeRequiredUom(x.Unit?.Name),
+                        DecimalPlaces = x.Unit?.DecimalPlaces ?? 4,
+                        ConversionFactor = x.ConversionFactor,
+                        Version = x.Version
+                    }))
+                .ToList(),
             CategoryId = p.CategoryId,
-            CategoryCode = p.Category?.Code, CategoryName = p.Category?.Name,
-            Barcodes = p.Barcodes.Select(x => new ProductBarcodeDto { Id = x.Id, ProductId = x.ProductId, Value = x.Value }).ToList(),
-            IsActive = p.IsActive, CreatedAt = p.CreatedAt
+            CategoryCode = p.Category?.Code?.Trim(),
+            CategoryName = p.Category?.Name?.Trim(),
+            Barcodes = (p.Barcodes ?? []).Select(x => new ProductBarcodeDto { Id = x.Id, ProductId = x.ProductId, Value = (x.Value ?? string.Empty).Trim() }).ToList(),
+            IsActive = p.IsActive,
+            CreatedAt = p.CreatedAt
         };
 
         public async Task UpdateProductAsync(int id, UpdateProductDto dto, string username, CancellationToken cancellationToken = default)
@@ -121,8 +169,8 @@ namespace ERP.Application.Services
             if (product.IsActive && !dto.IsActive && await HasTransactionsAsync())
                 throw new BusinessRuleException("Không thể ngừng hoạt động sản phẩm đã phát sinh giao dịch hoặc còn tồn kho/giữ chỗ.");
 
-            product.Name = dto.Name;
-            product.Description = dto.Description;
+            product.Name = (dto.Name ?? string.Empty).Trim();
+            product.Description = dto.Description?.Trim();
             product.UnitId = dto.UnitId;
             product.IsActive = dto.IsActive;
             if (dto.UpdateTrackingPolicy || !string.IsNullOrWhiteSpace(dto.TrackingType))

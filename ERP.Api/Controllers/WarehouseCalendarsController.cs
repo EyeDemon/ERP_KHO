@@ -147,9 +147,9 @@ public sealed class WarehouseCalendarsController(
             .Select(a => new WarehouseCalendarExceptionDto(
                 a.Id,
                 warehouseId,
-                a.Action,
-                a.OldValues ?? a.NewValues ?? string.Empty,
-                a.Reason ?? string.Empty,
+                a.Action.Trim(),
+                (a.OldValues ?? a.NewValues ?? string.Empty).Trim(),
+                (a.Reason ?? string.Empty).Trim(),
                 a.UserId,
                 a.Timestamp))
             .ToListAsync(token);

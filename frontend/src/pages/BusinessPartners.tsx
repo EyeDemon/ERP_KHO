@@ -100,20 +100,20 @@ const BusinessPartners = () => {
         </UiMetricGrid>
       </UiCard>
       <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết SLA Đối tác (Carrier & SLA Contracts — MD-06, MD-09)">
-        <div className="ui-form-grid">
-          <div>
+        <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <div className="ui-subcard">
             <strong>Hồ sơ SLA Nhà cung cấp (SUPPLIER_INBOUND_SLA)</strong><br />
             {activeSuppliersCount} hồ sơ • Cam kết Lead-time tiếp nhận chuẩn: 24h
           </div>
-          <div>
+          <div className="ui-subcard">
             <strong>Hồ sơ SLA Khách hàng (CUSTOMER_FULFILLMENT_SLA)</strong><br />
             {activeCustomersCount} hồ sơ • Cam kết Lead-time xuất giao chuẩn: 12h
           </div>
-          <div>
+          <div className="ui-subcard">
             <strong>Đối tác Vai trò kép / Vận chuyển 3PL (ENTERPRISE_3PL_CARRIER)</strong><br />
             {dualRolePartnersCount} đối tác vận chuyển & hậu cần hai chiều
           </div>
-          <div>
+          <div className="ui-subcard">
             <strong>Mục tiêu tỷ lệ giao nhận đúng hạn (On-Time SLA)</strong><br />
             98.5% (24h Inbound / 12h Outbound)
           </div>
@@ -155,13 +155,13 @@ const BusinessPartners = () => {
       </UiToolbar>
 
       <UiCard title="Danh sách đối tác">
-        {loading ? <p role="status">Đang tải đối tác...</p> : <UiTableScroll><table aria-label="Danh sách đối tác kinh doanh">
-          <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Công nợ &amp; Tín dụng</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
+        {loading ? <p role="status">Đang tải đối tác...</p> : <UiTableScroll><table className="ui-table-compact" aria-label="Danh sách đối tác kinh doanh">
+          <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Công nợ &amp; Tín dụng</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
           <tbody>
             {items.length === 0
               ? <tr><td colSpan={canManage ? 7 : 6} className="ui-empty-cell">Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
               : items.map(item => <tr key={item.id}>
-                  <td><strong>{item.code}</strong></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><strong>{item.code}</strong></td>
                   <td><div>{item.name}</div>{item.address && <small>{item.address}</small>}</td>
                   <td>
                     <div className="ui-inline-wrap">
@@ -170,14 +170,14 @@ const BusinessPartners = () => {
                       {!item.isSupplier && !item.isCustomer && <span>—</span>}
                     </div>
                   </td>
-                  <td>
+                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {item.isSupplier && <div><small>AP (Phải trả): <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')}</strong></small></div>}
                     {item.isCustomer && <div><small>AR (Phải thu): <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')}</strong> / Hạn mức: {Number(item.creditLimit ?? 0) > 0 ? Number(item.creditLimit).toLocaleString('vi-VN') : 'Không giới hạn'}</small></div>}
                     <div><small>Kỳ hạn TT: {item.paymentTermDays ?? 30} ngày</small></div>
                   </td>
                   <td><div>{item.phone || '—'}</div>{item.email && <small>{item.email}</small>}</td>
                   <td><UiBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
-                  {canManage && <td><div className="ui-inline-actions"><button onClick={() => openEdit(item)}>Sửa</button><button onClick={() => void remove(item)}>Xóa</button></div></td>}
+                  {canManage && <td style={{ whiteSpace: 'nowrap' }}><div className="ui-inline-actions"><button onClick={() => openEdit(item)} style={{ whiteSpace: 'nowrap' }}>Sửa</button><button onClick={() => void remove(item)} style={{ whiteSpace: 'nowrap' }}>Xóa</button></div></td>}
                 </tr>)}
           </tbody>
         </table></UiTableScroll>}

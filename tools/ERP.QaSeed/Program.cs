@@ -1902,7 +1902,28 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         await context.SaveChangesAsync();
     }
 
-    // 5e. Idempotent lotProduct stock, LOT-QA-002, InventoryLocks, InventoryLocationMovements & InternalMove reversal candidates for Wave-25
+    await context.Database.ExecuteSqlRawAsync(
+        "DELETE FROM DockAppointmentEvents WHERE DockAppointmentId IN (SELECT Id FROM DockAppointments WHERE WarehouseId = {0} AND Code <> 'APT-QA-001'); " +
+        "DELETE FROM DockAppointments WHERE WarehouseId = {0} AND Code <> 'APT-QA-001';",
+        primaryWarehouse.Id);
+
+    // 5e. Idempotent lotProduct stock, LOT-QA-001 & LOT-QA-002, InventoryLocks, InventoryLocationMovements & InternalMove reversal candidates for Wave-26
+    var lotQa001 = await context.InventoryLots.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l => l.ProductId == lotProduct.Id && l.LotNumber == "LOT-QA-001");
+    if (lotQa001 is null)
+    {
+        lotQa001 = new InventoryLot
+        {
+            ProductId = lotProduct.Id,
+            LotNumber = "LOT-QA-001",
+            ManufactureDate = DateTime.UtcNow.Date.AddDays(-60),
+            ExpiryDate = DateTime.UtcNow.Date.AddDays(305),
+            CreatedAt = DateTime.UtcNow.AddDays(-60)
+        };
+        context.InventoryLots.Add(lotQa001);
+        await context.SaveChangesAsync();
+    }
+
     var lotQa002 = await context.InventoryLots.IgnoreQueryFilters()
         .FirstOrDefaultAsync(l => l.ProductId == lotProduct.Id && l.LotNumber == "LOT-QA-002");
     if (lotQa002 is null)
@@ -2092,14 +2113,32 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         });
     }
 
-    var allAllocations = await context.StockAllocations.IgnoreQueryFilters().ToListAsync();
+    var allAllocations = await context.StockAllocations.IgnoreQueryFilters()
+        .OrderBy(a => a.Id)
+        .ToListAsync();
+    var alcCounter = 3;
     foreach (var alloc in allAllocations)
     {
+        if (!string.Equals(alloc.AllocationCode, "ALC-QA-PICK-001", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(alloc.AllocationCode, "ALC-QA-PACK-001", StringComparison.OrdinalIgnoreCase))
+        {
+            alloc.AllocationCode = $"ALC-QA-{alcCounter:D3}";
+            alcCounter++;
+        }
+
         if (string.IsNullOrWhiteSpace(alloc.SelectionReason) ||
             alloc.SelectionReason.Contains("Seed", StringComparison.OrdinalIgnoreCase) ||
             alloc.SelectionReason.Contains("Auto", StringComparison.OrdinalIgnoreCase))
         {
             alloc.SelectionReason = "Phân bổ tự động theo kệ lưu trữ ưu tiên FIFO (BIN-A01-01)";
+        }
+
+        if (!string.IsNullOrWhiteSpace(alloc.ReleaseReason) &&
+            (alloc.ReleaseReason.Contains("Seed", StringComparison.OrdinalIgnoreCase) ||
+             alloc.ReleaseReason.Contains("Release", StringComparison.OrdinalIgnoreCase) ||
+             alloc.ReleaseReason.Contains("Auto", StringComparison.OrdinalIgnoreCase)))
+        {
+            alloc.ReleaseReason = "Giải phóng phân bổ tự động để tái điều phối kệ hàng";
         }
     }
 

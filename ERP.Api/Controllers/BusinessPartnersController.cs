@@ -65,8 +65,8 @@ public sealed class BusinessPartnersController(
                 slaContracts = topItems.Select(x => new
                 {
                     partnerId = x.Id,
-                    code = x.Code,
-                    name = x.Name,
+                    code = (x.Code ?? string.Empty).Trim(),
+                    name = (x.Name ?? string.Empty).Trim(),
                     partnerRole = (x.IsSupplier && x.IsCustomer) ? "SupplierAndCustomer" : x.IsSupplier ? "Supplier" : "Customer",
                     slaTier = (x.IsSupplier && x.IsCustomer) ? "ENTERPRISE_3PL_CARRIER" : x.IsSupplier ? "SUPPLIER_INBOUND_SLA" : "CUSTOMER_FULFILLMENT_SLA",
                     targetLeadTimeHours = x.IsSupplier ? 24 : 12,
@@ -88,8 +88,8 @@ public sealed class BusinessPartnersController(
             slaContracts=items.Where(x=>x.IsActive).Take(15).Select(x=>new
             {
                 partnerId=x.Id,
-                code=x.Code,
-                name=x.Name,
+                code=(x.Code ?? string.Empty).Trim(),
+                name=(x.Name ?? string.Empty).Trim(),
                 partnerRole=(x.IsSupplier&&x.IsCustomer)?"SupplierAndCustomer":x.IsSupplier?"Supplier":"Customer",
                 slaTier=(x.IsSupplier&&x.IsCustomer)?"ENTERPRISE_3PL_CARRIER":x.IsSupplier?"SUPPLIER_INBOUND_SLA":"CUSTOMER_FULFILLMENT_SLA",
                 targetLeadTimeHours=x.IsSupplier?24:12,

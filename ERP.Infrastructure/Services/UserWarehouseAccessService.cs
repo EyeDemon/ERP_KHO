@@ -20,7 +20,7 @@ public sealed class UserWarehouseAccessService(
         var target = await context.Users.AsNoTracking().Where(u => u.Id == userId)
             .Select(u => new { u.WarehouseAccessRevision, Memberships = u.WarehouseAccesses
                 .Where(w => scope.Contains(w.WarehouseId)).OrderBy(w => w.Warehouse.Code)
-                .Select(w => new UserWarehouseAccessDto(w.WarehouseId, w.Warehouse.Code, w.Warehouse.Name, w.CreatedAt)).ToList() })
+                .Select(w => new UserWarehouseAccessDto(w.WarehouseId, w.Warehouse.Code.Trim(), w.Warehouse.Name.Trim(), w.CreatedAt)).ToList() })
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Không tìm thấy người dùng.");
         var canMutate = await context.Users.AnyAsync(u => u.Id == currentUser.UserId &&

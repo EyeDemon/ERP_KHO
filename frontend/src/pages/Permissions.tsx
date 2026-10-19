@@ -444,7 +444,7 @@ export default function Permissions() {
                   placeholder="Nhập User ID..."
                 />
               </UiToolbarField>
-              <button type="button" disabled={securityBusy || !targetUserIdInput} onClick={() => void loadUserSecurity()}>
+              <button type="button" disabled={securityBusy || !targetUserIdInput} onClick={() => void loadUserSecurity()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                 Tra cứu bảo mật
               </button>
             </UiToolbar>
@@ -476,16 +476,16 @@ export default function Permissions() {
                       placeholder="Tối thiểu 8 ký tự..."
                     />
                   </UiToolbarField>
-                  <button type="button" disabled={securityBusy || !userSecurity.isActive || userSecurity.isTemporarilyLocked} onClick={() => void runSecurityAction('lock')}>
+                  <button type="button" disabled={securityBusy || !userSecurity.isActive || userSecurity.isTemporarilyLocked} onClick={() => void runSecurityAction('lock')} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                     Khóa tài khoản
                   </button>
-                  <button type="button" disabled={securityBusy || (userSecurity.isActive && !userSecurity.isTemporarilyLocked)} onClick={() => void runSecurityAction('unlock')}>
+                  <button type="button" disabled={securityBusy || (userSecurity.isActive && !userSecurity.isTemporarilyLocked)} onClick={() => void runSecurityAction('unlock')} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                     Mở khóa tài khoản
                   </button>
-                  <button type="button" disabled={securityBusy} onClick={() => void runSecurityAction('revoke-sessions')}>
+                  <button type="button" disabled={securityBusy} onClick={() => void runSecurityAction('revoke-sessions')} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                     Thu hồi mọi phiên
                   </button>
-                  <button type="button" disabled={securityBusy || !tempPassword} onClick={() => void runSecurityAction('reset-password')}>
+                  <button type="button" disabled={securityBusy || !tempPassword} onClick={() => void runSecurityAction('reset-password')} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                     Đặt lại mật khẩu
                   </button>
                 </UiToolbar>
@@ -505,7 +505,7 @@ export default function Permissions() {
                   placeholder="Nhập User ID..."
                 />
               </UiToolbarField>
-              <button type="button" disabled={whBusy || !whUserIdInput} onClick={() => void loadUserWarehouseScope()}>
+              <button type="button" disabled={whBusy || !whUserIdInput} onClick={() => void loadUserWarehouseScope()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                 Tải phạm vi kho
               </button>
             </UiToolbar>
@@ -526,19 +526,19 @@ export default function Permissions() {
                       placeholder="Nhập Warehouse ID..."
                     />
                   </UiToolbarField>
-                  <button type="button" disabled={whBusy || !grantWarehouseIdInput} onClick={() => void grantWarehouseScope()}>
+                  <button type="button" disabled={whBusy || !grantWarehouseIdInput} onClick={() => void grantWarehouseScope()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                     Cấp quyền kho
                   </button>
                 </UiToolbar>
                 <UiTableScroll>
-                  <table aria-label="Phạm vi kho của người dùng">
+                  <table className="ui-table-compact" aria-label="Phạm vi kho của người dùng">
                     <thead>
                       <tr>
                         <th>Mã kho</th>
                         <th>Tên kho</th>
                         <th>Trạng thái kho</th>
                         <th>Thời điểm cấp</th>
-                        <th>Thao tác</th>
+                        <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -547,20 +547,21 @@ export default function Permissions() {
                       ) : (
                         userWarehouses.warehouses.map(wh => (
                           <tr key={wh.warehouseId}>
-                            <td><code>{wh.warehouseCode}</code></td>
+                            <td style={{ whiteSpace: 'nowrap' }}><code>{wh.warehouseCode}</code></td>
                             <td>{wh.warehouseName}</td>
                             <td>
                               <UiBadge tone={wh.warehouseIsActive ? 'success' : 'neutral'}>
                                 {wh.warehouseIsActive ? 'Hoạt động' : 'Ngừng'}
                               </UiBadge>
                             </td>
-                            <td>{new Date(wh.grantedAt).toLocaleString('vi-VN')}</td>
-                            <td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{new Date(wh.grantedAt).toLocaleString('vi-VN')}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
                               <button
                                 type="button"
                                 disabled={whBusy}
                                 aria-label={`Thu hồi kho ${wh.warehouseCode}`}
                                 onClick={() => void revokeWarehouseScope(wh.warehouseId)}
+                                style={{ whiteSpace: 'nowrap' }}
                               >
                                 Thu hồi kho
                               </button>

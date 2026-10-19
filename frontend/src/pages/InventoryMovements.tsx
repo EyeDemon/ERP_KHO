@@ -26,6 +26,10 @@ const statusLabel=(code:string)=>({
   EXPIRED:'Hết hạn',
   RECALL_BLOCKED:'Khóa thu hồi',
 }[code]??code);
+const locationCodeLabel=(code:string)=>({
+  LEGACY:'KHO-CHUNG (Mặc định)',
+  RECEIVING:'TIEP-NHAN (Nhận hàng)',
+}[code]??code);
 
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
@@ -133,45 +137,26 @@ export default function InventoryMovements(){
       <p className="ui-muted-text">Hệ thống tự động phát hiện vị trí lấy hàng có tồn thấp và đề xuất di chuyển từ vị trí dự trữ trong cùng kho.</p>
       {suggestions.length===0?<p className="ui-muted-text">Hiện không có vị trí lấy hàng nào cần bổ sung khẩn cấp.</p>:<UiTableScroll>
         <table className="ui-table-compact" aria-label="Gợi ý bổ sung vị trí lấy hàng">
-          <thead><tr><th>Sản phẩm</th><th>Kho</th><th>Vị trí nguồn (Dự trữ)</th><th>Khả dụng nguồn</th><th>Vị trí đích (Mặt lấy)</th><th>Tồn tại đích</th><th>SL gợi ý</th>{canMove&&<th>Thao tác nhanh</th>}</tr></thead>
+          <thead><tr><th>Sản phẩm</th><th>Kho</th><th style={{whiteSpace:'nowrap'}}>Vị trí nguồn (Dự trữ)</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Khả dụng nguồn</th><th style={{whiteSpace:'nowrap'}}>Vị trí đích (Mặt lấy)</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Tồn tại đích</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>SL gợi ý</th>{canMove&&<th style={{whiteSpace:'nowrap',minWidth:150}}>Thao tác nhanh</th>}</tr></thead>
           <tbody>
             {suggestions.map(s=><tr key={`${s.inventoryStockId}-${s.targetLocationId}`}>
-              <td><strong>{s.productCode}</strong><br/><small>{s.productName}</small></td>
+              <td><strong style={{whiteSpace:'nowrap'}}>{s.productCode}</strong><br/><small>{s.productName}</small></td>
               <td>{s.warehouseName}</td>
-              <td><code>{s.sourceLocationCode}</code></td>
-              <td>{s.availableAtSource}</td>
-              <td><code>{s.targetLocationCode}</code></td>
-              <td>{s.currentAtTarget}</td>
-              <td><strong>{s.suggestedMoveQuantity??s.suggestedQuantity}</strong></td>
-              {canMove&&<td><button type="button" onClick={()=>void applySuggestion(s)}>Điền lệnh bổ sung</button></td>}
+              <td style={{whiteSpace:'nowrap'}}><code style={{whiteSpace:'nowrap'}}>{locationCodeLabel(s.sourceLocationCode)}</code></td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{s.availableAtSource}</td>
+              <td style={{whiteSpace:'nowrap'}}><code style={{whiteSpace:'nowrap'}}>{locationCodeLabel(s.targetLocationCode)}</code></td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{s.currentAtTarget}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}><strong>{s.suggestedMoveQuantity??s.suggestedQuantity}</strong></td>
+              {canMove&&<td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void applySuggestion(s)}>Điền lệnh bổ sung</button></td>}
             </tr>)}
           </tbody>
         </table>
       </UiTableScroll>}
     </UiCard>
 
-    <UiCard title="Nhóm tồn kho có thể di chuyển">
-      <p className="ui-muted-text">Thao tác di chuyển kiểm tra lại khóa hiệu lực và sức chứa vị trí đích trong cùng giao dịch Serializable. Đảo giao dịch là chức năng riêng, không nằm trong màn này.</p>
-      {loading&&buckets.length===0?<p role="status">Đang tải nhóm tồn kho...</p>:<UiTableScroll>
-        <table className="ui-table-compact" aria-label="Internal move buckets">
-          <thead><tr><th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Sê-ri</th><th>Tồn thực tế</th><th>Đã giữ</th><th>Chưa giữ</th>{canMove&&<th>Thao tác</th>}</tr></thead>
-          <tbody>{buckets.length===0?<tr><td colSpan={canMove?8:7} className="ui-empty-cell">Không có nhóm tồn kho.</td></tr>:
-            buckets.map(x=><tr key={x.inventoryStockId}>
-              <td><strong>{x.productCode}</strong><br/><small>{x.productName}</small></td>
-              <td>{x.warehouseName}<br/><small>{x.locationCode}</small></td>
-              <td><UiBadge>{statusLabel(x.status)}</UiBadge></td>
-              <td>{x.lotNumber??'—'} / {x.serialNumber??'—'}</td>
-              <td>{x.onHandQuantity}</td><td>{x.reservedQuantity}</td><td>{Math.max(0,x.onHandQuantity-x.reservedQuantity)}</td>
-              {canMove&&<td><button type="button" disabled={x.onHandQuantity-x.reservedQuantity<=0} onClick={()=>void select(x)}>Di chuyển</button></td>}
-            </tr>)}
-          </tbody>
-        </table>
-      </UiTableScroll>}
-    </UiCard>
-
-    {selected&&canMove&&<UiCard title={`Di chuyển • ${selected.productCode} • ${selected.locationCode}`}>
-      <form onSubmit={submit} className="ui-form-grid">
-        <p className="ui-muted-text">{statusLabel(selected.status)} • {selected.lotNumber??'không có lô'} • {selected.serialNumber??'không có sê-ri'} • tối đa chưa giữ {Math.max(0,selected.onHandQuantity-selected.reservedQuantity)}</p>
+    {selected&&canMove&&<UiCard title={`Di chuyển • ${selected.productCode} • ${locationCodeLabel(selected.locationCode)}`}>
+      <p className="ui-muted-text" style={{marginBottom:8}}>{statusLabel(selected.status)} • {selected.lotNumber??'không có lô'} • {selected.serialNumber??'không có sê-ri'} • tối đa chưa giữ {Math.max(0,selected.onHandQuantity-selected.reservedQuantity)}</p>
+      <form onSubmit={submit} className="ui-form-grid" style={{gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))',gap:10,alignItems:'end',maxWidth:'100%'}}>
         <UiToolbarField label="Vị trí đích">
           <select aria-label="Vị trí đích internal move" value={form.destinationLocationId} onChange={e=>setForm(x=>({...x,destinationLocationId:e.target.value}))} required>
             <option value="">Chọn vị trí đích</option>
@@ -184,12 +169,33 @@ export default function InventoryMovements(){
         <UiToolbarField label="Lý do di chuyển">
           <input aria-label="Lý do internal move" value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} placeholder="Lý do / bằng chứng" required/>
         </UiToolbarField>
-        <div className="ui-inline-actions">
-          <button type="submit" disabled={busy||!form.destinationLocationId||!form.reason.trim()}>Xác nhận di chuyển</button>
-          <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
+        <div className="ui-inline-actions" style={{alignSelf:'end'}}>
+          <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!form.destinationLocationId||!form.reason.trim()}>Xác nhận di chuyển</button>
+          <button type="button" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
         </div>
       </form>
     </UiCard>}
+
+    <UiCard title="Nhóm tồn kho có thể di chuyển">
+      <p className="ui-muted-text">Thao tác di chuyển kiểm tra lại khóa hiệu lực và sức chứa vị trí đích trong cùng giao dịch tuần tự hóa cô lập. Đảo giao dịch là chức năng riêng, không nằm trong màn này.</p>
+      {loading&&buckets.length===0?<p role="status">Đang tải nhóm tồn kho...</p>:<UiTableScroll>
+        <table className="ui-table-compact" aria-label="Internal move buckets">
+          <thead><tr><th>Sản phẩm</th><th>Kho / Vị trí</th><th style={{whiteSpace:'nowrap'}}>Trạng thái</th><th style={{whiteSpace:'nowrap'}}>Lô / Sê-ri</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Tồn thực tế</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Đã giữ</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Chưa giữ</th>{canMove&&<th style={{whiteSpace:'nowrap',minWidth:110}}>Thao tác</th>}</tr></thead>
+          <tbody>{buckets.length===0?<tr><td colSpan={canMove?8:7} className="ui-empty-cell">Không có nhóm tồn kho.</td></tr>:
+            buckets.map(x=><tr key={x.inventoryStockId}>
+              <td><strong style={{whiteSpace:'nowrap'}}>{x.productCode}</strong><br/><small>{x.productName}</small></td>
+              <td>{x.warehouseName}<br/><small style={{whiteSpace:'nowrap'}}>{locationCodeLabel(x.locationCode)}</small></td>
+              <td style={{whiteSpace:'nowrap'}}><UiBadge>{statusLabel(x.status)}</UiBadge></td>
+              <td style={{whiteSpace:'nowrap'}}>{x.lotNumber??'—'} / {x.serialNumber??'—'}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.onHandQuantity}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.reservedQuantity}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{Math.max(0,x.onHandQuantity-x.reservedQuantity)}</td>
+              {canMove&&<td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} disabled={x.onHandQuantity-x.reservedQuantity<=0} onClick={()=>void select(x)}>Di chuyển</button></td>}
+            </tr>)}
+          </tbody>
+        </table>
+      </UiTableScroll>}
+    </UiCard>
   </UiPage>;
 }
 

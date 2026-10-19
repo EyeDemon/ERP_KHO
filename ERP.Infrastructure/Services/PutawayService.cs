@@ -24,7 +24,7 @@ public sealed class PutawayService(
         return await context.Warehouses.AsNoTracking()
             .Where(x => ids.Contains(x.Id) && x.IsActive)
             .OrderBy(x => x.Code)
-            .Select(x => new WarehouseDto { Id=x.Id, Code=x.Code, Name=x.Name, Address=x.Address, IsActive=x.IsActive, CreatedAt=x.CreatedAt })
+            .Select(x => new WarehouseDto { Id=x.Id, Code=x.Code.Trim(), Name=x.Name.Trim(), Address=x.Address == null ? null : x.Address.Trim(), IsActive=x.IsActive, CreatedAt=x.CreatedAt })
             .ToListAsync(token);
     }
 
@@ -65,7 +65,7 @@ public sealed class PutawayService(
                 || (location.MaxVolumeM3.HasValue && !usedVolume.HasValue)
                 || (location.MaxPalletEquivalent.HasValue && !usedPallet.HasValue);
             var compatibilityConflict = location.StorageClass is not null
-                && rows.Any(x => !string.Equals(x.StorageClass, location.StorageClass, StringComparison.Ordinal));
+                && rows.Any(x => !string.Equals(x.StorageClass?.Trim(), location.StorageClass.Trim(), StringComparison.Ordinal));
             var overCapacity = (location.MaxWeightKg.HasValue && usedWeight.HasValue && usedWeight > location.MaxWeightKg)
                 || (location.MaxVolumeM3.HasValue && usedVolume.HasValue && usedVolume > location.MaxVolumeM3)
                 || (location.MaxPalletEquivalent.HasValue && usedPallet.HasValue && usedPallet > location.MaxPalletEquivalent);
@@ -84,10 +84,10 @@ public sealed class PutawayService(
             return new WarehouseLocationCapacityDto
             {
                 LocationId = location.Id,
-                Code = location.Code,
-                Name = location.Name,
-                StructurePath = location.StructurePath,
-                StorageClass = location.StorageClass,
+                Code = location.Code.Trim(),
+                Name = location.Name.Trim(),
+                StructurePath = location.StructurePath?.Trim(),
+                StorageClass = location.StorageClass?.Trim(),
                 MaxWeightKg = location.MaxWeightKg,
                 UsedWeightKg = usedWeight,
                 MaxVolumeM3 = location.MaxVolumeM3,
@@ -149,10 +149,10 @@ public sealed class PutawayService(
                 return new WarehouseLocationMapItemDto
                 {
                     LocationId = location.Id,
-                    Code = location.Code,
-                    Name = location.Name,
-                    StructurePath = location.StructurePath,
-                    StorageClass = location.StorageClass,
+                    Code = location.Code.Trim(),
+                    Name = location.Name.Trim(),
+                    StructurePath = location.StructurePath?.Trim(),
+                    StorageClass = location.StorageClass?.Trim(),
                     MapX = location.MapX,
                     MapY = location.MapY,
                     MapWidth = location.MapWidth,
@@ -756,10 +756,11 @@ public sealed class PutawayService(
                 var recLoc=activeLocations.FirstOrDefault(l=>l.LocationType==reqType&&(x.InventoryStatus!=InventoryStatus.Available||l.IsPickable)&&(l.StorageClass==null||(prodStorage!=null&&l.StorageClass==prodStorage)));
                 var lastMove=moves.Where(m=>m.ItemId==x.Id).OrderByDescending(m=>m.Id).FirstOrDefault();
                 var fallbackUom=(x.ReceiptLine?.Product?.Unit?.Code??string.Empty).Trim();
+                if(fallbackUom is "QA_UNIT" or "QA-PCS") fallbackUom="THÙNG";
                 var baseUom=!string.IsNullOrWhiteSpace(x.BaseUnitCodeSnapshot)?x.BaseUnitCodeSnapshot.Trim():fallbackUom;
-                if(string.Equals(baseUom,"QA_UNIT",StringComparison.OrdinalIgnoreCase)&&!string.IsNullOrWhiteSpace(fallbackUom)&&!string.Equals(fallbackUom,"QA_UNIT",StringComparison.OrdinalIgnoreCase)) baseUom=fallbackUom;
+                if(baseUom is "" or "QA_UNIT" or "QA-PCS") baseUom=!string.IsNullOrWhiteSpace(fallbackUom)?fallbackUom:"THÙNG";
                 var opUom=!string.IsNullOrWhiteSpace(x.OperationUnitCodeSnapshot)?x.OperationUnitCodeSnapshot.Trim():baseUom;
-                if(string.Equals(opUom,"QA_UNIT",StringComparison.OrdinalIgnoreCase)&&!string.IsNullOrWhiteSpace(baseUom)&&!string.Equals(baseUom,"QA_UNIT",StringComparison.OrdinalIgnoreCase)) opUom=baseUom;
+                if(opUom is "" or "QA_UNIT" or "QA-PCS") opUom=baseUom;
                 if((x.OperationUnitId==x.BaseUnitId&&x.ConversionFactorSnapshot<=1m)||string.Equals(opUom,baseUom,StringComparison.OrdinalIgnoreCase)) opUom=baseUom;
                 return new PutawayTaskItemDto
                 {
@@ -777,7 +778,7 @@ public sealed class PutawayService(
     private static AuditLog Audit(int user,string action,int entity,int warehouse,string values)=>new(){UserId=user,Action=action,EntityName="PutawayTask",EntityId=entity,WarehouseId=warehouse,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
     private static BusinessRuleException Conflict(string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;return e;}
     private static BusinessRuleException ConflictWithCode(string code,string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;e.Data["ErrorCode"]=code;return e;}
-    private WarehouseLocationDto Location(WarehouseLocation x)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,Code=x.Code.Trim(),Name=x.Name.Trim(),StructurePath=x.StructurePath,StorageClass=x.StorageClass,MaxWeightKg=x.MaxWeightKg,MaxVolumeM3=x.MaxVolumeM3,MaxPalletEquivalent=x.MaxPalletEquivalent,MapX=x.MapX,MapY=x.MapY,MapWidth=x.MapWidth,MapHeight=x.MapHeight,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff"?Convert.ToBase64String(x.RowVersion):null};
+    private WarehouseLocationDto Location(WarehouseLocation x)=>new(){Id=x.Id,WarehouseId=x.WarehouseId,Code=x.Code.Trim(),Name=x.Name.Trim(),StructurePath=x.StructurePath?.Trim(),StorageClass=x.StorageClass?.Trim(),MaxWeightKg=x.MaxWeightKg,MaxVolumeM3=x.MaxVolumeM3,MaxPalletEquivalent=x.MaxPalletEquivalent,MapX=x.MapX,MapY=x.MapY,MapWidth=x.MapWidth,MapHeight=x.MapHeight,LocationType=x.LocationType.ToString(),IsActive=x.IsActive,IsBlocked=x.IsBlocked,IsPickable=x.IsPickable,IsReceivable=x.IsReceivable,IsSystemManaged=x.IsSystemManaged,RowVersion=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff"?Convert.ToBase64String(x.RowVersion):null};
     private static decimal? CapacityUtilizationPercent(WarehouseLocationCapacityDto? capacity)
     {
         if (capacity is null) return null;

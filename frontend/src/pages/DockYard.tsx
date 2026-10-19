@@ -733,12 +733,14 @@ const DockYard = () => {
           </UiCard>
 
           <UiCard title="Điều phối Trung chuyển Thẳng (Nhập sang Xuất không qua Cất hàng)">
-            <div className="ui-inline-wrap">
-              <span>Chuyến nhập tại cổng / cửa kho: <strong>{inboundActiveCount}</strong></span>
-              <span>Chuyến xuất chờ ghép hàng: <strong>{outboundActiveCount}</strong></span>
-              <span>Cặp trung chuyển khả thi (Chuyển thẳng ra bãi xuất): <strong>{crossDockMatchedCount}</strong></span>
-              <span>Chính sách điều phối: <strong>Ghép trực tiếp hàng vừa tiếp nhận sang bãi tập kết xuất kho không qua cất hàng lên kệ</strong></span>
-            </div>
+            <UiMetricGrid>
+              <UiMetric value={inboundActiveCount} label="Chuyến nhập tại cổng / cửa kho" />
+              <UiMetric value={outboundActiveCount} label="Chuyến xuất chờ ghép hàng" />
+              <UiMetric value={crossDockMatchedCount} label="Cặp trung chuyển khả thi (Chuyển thẳng ra bãi xuất)" />
+            </UiMetricGrid>
+            <p className="ui-muted-text" style={{ fontSize: 13, margin: '8px 0' }}>
+              Chính sách điều phối: <strong>Ghép trực tiếp hàng vừa tiếp nhận sang bãi tập kết xuất kho không qua cất hàng lên kệ</strong>
+            </p>
             <div className="ui-inline-actions">
               <button
                 type="button"

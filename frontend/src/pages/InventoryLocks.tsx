@@ -197,76 +197,76 @@ export default function InventoryLocks(){
     {recallMsg&&<p role="status" className="ui-success-text">{recallMsg}</p>}
     <div className="ui-stack">
       {canManage&&<UiCard title="Tạo khóa tồn kho">
-        <div className="ui-inline-actions" style={{marginBottom:showCreateForm?12:0}}>
+        <div className="ui-inline-actions" style={{marginBottom:showCreateForm?6:0}}>
           <button type="button" onClick={()=>setShowCreateForm(v=>!v)}>
             {showCreateForm?'Thu gọn biểu mẫu':'Mở biểu mẫu tạo mới'}
           </button>
         </div>
-        {showCreateForm&&<form onSubmit={create} className="ui-form-grid" style={{gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:12,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
+        {showCreateForm&&<form onSubmit={create} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(5, minmax(0, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
           <UiToolbarField label="Loại khóa">
-            <select value={form.lockType} onChange={e=>setForm(x=>({...x,lockType:e.target.value}))}>
+            <select aria-label="Loại khóa" value={form.lockType} onChange={e=>setForm(x=>({...x,lockType:e.target.value}))}>
               {types.map(x=><option key={x} value={x}>{lockTypeLabel(x)}</option>)}
             </select>
           </UiToolbarField>
           <UiToolbarField label="Kho">
-            <select value={form.warehouseId} onChange={e=>setForm(x=>({...x,warehouseId:e.target.value}))} required>
+            <select aria-label="Kho" value={form.warehouseId} onChange={e=>setForm(x=>({...x,warehouseId:e.target.value}))} required>
               <option value="">Chọn kho</option>
               {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="ID vị trí (tùy chọn)">
-            <input type="number" min="1" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))} inputMode="numeric"/>
+          <UiToolbarField label="Mã / ID vị trí (tùy chọn)">
+            <input aria-label="ID vị trí (tùy chọn)" type="number" min="1" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))} inputMode="numeric"/>
           </UiToolbarField>
-          <UiToolbarField label="ID sản phẩm (tùy chọn)">
-            <input type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
+          <UiToolbarField label="Mã / ID sản phẩm (tùy chọn)">
+            <input aria-label="ID sản phẩm (tùy chọn)" type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
           </UiToolbarField>
           <UiToolbarField label="Trạng thái tồn kho (tùy chọn)">
-            <select value={form.inventoryStatus} onChange={e=>setForm(x=>({...x,inventoryStatus:e.target.value}))}>
+            <select aria-label="Trạng thái tồn kho (tùy chọn)" value={form.inventoryStatus} onChange={e=>setForm(x=>({...x,inventoryStatus:e.target.value}))}>
               <option value="">Mọi trạng thái tồn kho</option>
               {statuses.map(x=><option key={x.code} value={x.code}>{inventoryStatusLabel(x.code)}</option>)}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="ID lô (tùy chọn)">
-            <input type="number" min="1" value={form.lotId} onChange={e=>setForm(x=>({...x,lotId:e.target.value}))} inputMode="numeric"/>
+          <UiToolbarField label="Mã / ID lô (tùy chọn)">
+            <input aria-label="ID lô (tùy chọn)" type="number" min="1" value={form.lotId} onChange={e=>setForm(x=>({...x,lotId:e.target.value}))} inputMode="numeric"/>
           </UiToolbarField>
-          <UiToolbarField label="ID sê-ri (tùy chọn)">
-            <input type="number" min="1" value={form.serialId} onChange={e=>setForm(x=>({...x,serialId:e.target.value}))} inputMode="numeric"/>
+          <UiToolbarField label="Mã / ID sê-ri (tùy chọn)">
+            <input aria-label="ID sê-ri (tùy chọn)" type="number" min="1" value={form.serialId} onChange={e=>setForm(x=>({...x,serialId:e.target.value}))} inputMode="numeric"/>
           </UiToolbarField>
           <UiToolbarField label="Hết hiệu lực lúc (tùy chọn)">
-            <input type="datetime-local" value={form.expiresAt} onChange={e=>setForm(x=>({...x,expiresAt:e.target.value}))}/>
+            <input aria-label="Hết hiệu lực lúc (tùy chọn)" type="datetime-local" value={form.expiresAt} onChange={e=>setForm(x=>({...x,expiresAt:e.target.value}))}/>
           </UiToolbarField>
           <UiToolbarField label="Lý do">
-            <input value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} required/>
+            <input aria-label="Lý do" value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} required/>
           </UiToolbarField>
-          <button type="submit" style={{minHeight:40}} disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
+          <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
         </form>}
-        <p className="ui-muted-text">Giữ kiểm định chất lượng, giữ để điều tra và thu hồi lô hàng phải được mở thủ công; không tự hết hiệu lực.</p>
+        <p className="ui-muted-text" style={{margin:'4px 0 0',fontSize:12}}>Giữ kiểm định chất lượng, giữ để điều tra và thu hồi lô hàng phải được mở thủ công; không tự hết hiệu lực.</p>
       </UiCard>}
 
       {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng">
-        <form onSubmit={submitRecallBlock} className="ui-form-grid" style={{gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:12,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
+        <form onSubmit={submitRecallBlock} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(5, minmax(0, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
           <UiToolbarField label="Kho thu hồi">
             <select aria-label="Kho thu hồi" value={recallForm.warehouseId} onChange={e=>setRecallForm(x=>({...x,warehouseId:e.target.value}))} required>
               <option value="">Chọn kho</option>
               {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="ID sản phẩm thu hồi">
+          <UiToolbarField label="Mã / ID sản phẩm thu hồi">
             <input aria-label="ID sản phẩm thu hồi" type="number" min="1" value={recallForm.productId} onChange={e=>setRecallForm(x=>({...x,productId:e.target.value}))} required/>
           </UiToolbarField>
           <UiToolbarField label="Mã lô thu hồi">
             <input aria-label="Mã lô thu hồi" value={recallForm.lotNumber} onChange={e=>setRecallForm(x=>({...x,lotNumber:e.target.value}))} placeholder="LÔ-..." required/>
           </UiToolbarField>
           <UiToolbarField label="Lý do thu hồi lô">
-            <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo thu hồi / bằng chứng kiểm định" required/>
+            <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo / biên bản QC" required/>
           </UiToolbarField>
-          <button type="submit" style={{minHeight:40}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
+          <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
         </form>
       </UiCard>}
 
       <UiCard title="Danh sách khóa tồn kho">
-        <p className="ui-muted-text">Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, đơn vị đóng gói, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
-        <div className="ui-inline-actions" style={{marginBottom:8}}>
+        <p className="ui-muted-text" style={{margin:'0 0 6px'}}>Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, đơn vị đóng gói, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
+        <div className="ui-inline-actions" style={{marginBottom:6}}>
           <button type="button" disabled={lockPrecedenceBusy} onClick={()=>void verifyLockPrecedence()}>
             Kiểm định Độ ưu tiên Khóa Chồng lấp & Cách ly Chất lượng
           </button>
@@ -278,7 +278,7 @@ export default function InventoryLocks(){
         </div>
         {loading&&locks.length===0?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
           <table className="ui-table-compact" aria-label="Danh sách khóa tồn kho">
-            <thead><tr><th>Khóa</th><th>Phạm vi</th><th>Trạng thái</th><th>Lý do</th><th>Thời gian</th>{canManage&&<th>Thao tác</th>}</tr></thead>
+            <thead><tr><th>Khóa</th><th>Phạm vi</th><th>Trạng thái</th><th>Lý do</th><th>Thời gian</th>{canManage&&<th style={{minWidth:100,width:105,whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
             <tbody>{locks.length===0?<tr><td colSpan={canManage?6:5} className="ui-empty-cell">Chưa có khóa tồn kho.</td></tr>:
               locks.map(item=><tr key={item.id}>
                 <td><strong>{lockTypeLabel(item.lockType)}</strong><br/><small>#{item.id}</small></td>
@@ -288,7 +288,7 @@ export default function InventoryLocks(){
                 <td><UiBadge tone={tone(item.status)}>{lockStatusLabel(item.status)}</UiBadge></td>
                 <td>{item.reason}{item.releaseReason&&<><br/><small>Lý do mở khóa: {item.releaseReason}</small></>}</td>
                 <td>{new Date(item.createdAt).toLocaleString('vi-VN')}<br/><small>{item.expiresAt?`Hết hiệu lực ${new Date(item.expiresAt).toLocaleString('vi-VN')}`:'Không tự hết hiệu lực'}</small></td>
-                {canManage&&<td>{item.status==='Active'?<button type="button" onClick={()=>{setRelease(item);setReleaseReason('')}}>Mở khóa</button>:'—'}</td>}
+                {canManage&&<td style={{whiteSpace:'nowrap'}}>{item.status==='Active'?<button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>{setRelease(item);setReleaseReason('')}}>Mở khóa</button>:'—'}</td>}
               </tr>)}
             </tbody>
           </table>

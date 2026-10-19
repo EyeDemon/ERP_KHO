@@ -241,16 +241,16 @@ const Units = () => {
       </UiMetricGrid>
 
       <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi (UOM Governance — MD-02)">
-        <div className="ui-form-grid">
-          <div>
+        <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <div className="ui-subcard">
             <strong>Tỷ lệ đơn vị tính kích hoạt</strong><br />
             {activeCount}/{units.length} ĐVT hoạt động ({units.length > 0 ? Math.round((activeCount / units.length) * 100) : 0}%)
           </div>
-          <div>
+          <div className="ui-subcard">
             <strong>Đơn vị tính ngừng hoạt động (bảo toàn lịch sử)</strong><br />
             {units.length - activeCount} ĐVT ngừng hoạt động
           </div>
-          <div>
+          <div className="ui-subcard">
             <strong>Phạm vi hiển thị theo bộ lọc</strong><br />
             {filtered.length}/{units.length} ĐVT khớp điều kiện tra cứu
           </div>
@@ -293,25 +293,25 @@ const Units = () => {
       ) : (
         <UiCard title="Danh sách đơn vị tính">
           <UiTableScroll>
-            <table aria-label="Danh sách đơn vị tính">
+            <table className="ui-table-compact" aria-label="Danh sách đơn vị tính">
               <thead>
                 <tr>
                   <th>Mã ĐVT</th>
                   <th>Tên đơn vị</th>
                   <th>Trạng thái</th>
-                  {canManage && <th>Thao tác</th>}
+                  {canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((unit) => (
                   <tr key={unit.id}>
-                    <td><strong>{unit.code}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong>{unit.code}</strong></td>
                     <td>{unit.name}</td>
                     <td><UiBadge tone={unit.isActive ? 'success' : 'neutral'}>{unit.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
-                    {canManage && <td>
+                    {canManage && <td style={{ whiteSpace: 'nowrap' }}>
                       <div className="ui-inline-actions">
-                        <button type="button" aria-label={`Sửa đơn vị ${unit.code}`} onClick={() => openEdit(unit)}>Sửa</button>
-                        <button type="button" aria-label={`Xóa đơn vị ${unit.code}`} onClick={() => void remove(unit)}>Xóa</button>
+                        <button type="button" aria-label={`Sửa đơn vị ${unit.code}`} onClick={() => openEdit(unit)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>
+                        <button type="button" aria-label={`Xóa đơn vị ${unit.code}`} onClick={() => void remove(unit)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>
                       </div>
                     </td>}
                   </tr>

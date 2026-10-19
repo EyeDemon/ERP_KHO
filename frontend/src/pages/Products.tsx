@@ -200,9 +200,9 @@ const Products = () => {
 
     <UiToolbar>
       <UiToolbarField label="Tra mã vạch">
-        <form onSubmit={lookup} className="ui-inline">
+        <form onSubmit={lookup} className="ui-inline" style={{ alignItems: 'end' }}>
           <input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" />
-          <button type="submit">Tra mã vạch</button>
+          <button type="submit" style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>Tra mã vạch</button>
         </form>
       </UiToolbarField>
       <UiToolbarField label="Tìm sản phẩm">
@@ -215,12 +215,18 @@ const Products = () => {
 
     {canManageCategories && <UiCard title="Danh mục sản phẩm">
       <div className="ui-stack">
-        <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" />
-        <form onSubmit={addCategory} className="ui-inline-wrap">
-          <input aria-label="Mã danh mục" name="categoryCode" value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
-          <input aria-label="Tên danh mục" name="categoryName" value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required />
-          <button type="submit" disabled={mutating}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>
-          {editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }}>Hủy sửa</button>}
+        <UiToolbarField label="Tìm danh mục">
+          <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" />
+        </UiToolbarField>
+        <form onSubmit={addCategory} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+          <UiToolbarField label="Mã danh mục">
+            <input aria-label="Mã danh mục" name="categoryCode" value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
+          </UiToolbarField>
+          <UiToolbarField label="Tên danh mục">
+            <input aria-label="Tên danh mục" name="categoryName" value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required />
+          </UiToolbarField>
+          <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>
+          {editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>Hủy sửa</button>}
         </form>
         <div className="ui-stack">
           {categories.filter(category => {
@@ -232,9 +238,9 @@ const Products = () => {
               <span>{category.name}</span>
               <UiBadge tone={category.isActive ? 'success' : 'neutral'}>{category.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge>
               <div className="ui-inline-actions ui-auto-actions">
-                <button type="button" aria-label={`Sửa danh mục ${category.code}`} disabled={mutating} onClick={() => editCategory(category)}>Sửa</button>
-                <button type="button" aria-label={`${category.isActive ? 'Ngừng' : 'Kích hoạt'} danh mục ${category.code}`} disabled={mutating} onClick={() => toggleCategory(category)}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
-                <button type="button" aria-label={`Xóa danh mục ${category.code}`} disabled={mutating} onClick={() => deleteCategory(category.id)}>Xóa</button>
+                <button type="button" aria-label={`Sửa danh mục ${category.code}`} disabled={mutating} onClick={() => editCategory(category)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>
+                <button type="button" aria-label={`${category.isActive ? 'Ngừng' : 'Kích hoạt'} danh mục ${category.code}`} disabled={mutating} onClick={() => toggleCategory(category)} style={{ whiteSpace: 'nowrap' }}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
+                <button type="button" aria-label={`Xóa danh mục ${category.code}`} disabled={mutating} onClick={() => deleteCategory(category.id)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>
               </div>
             </div>
           ))}
@@ -299,13 +305,13 @@ const Products = () => {
     </UiCard>}
 
     <UiCard title="Danh sách sản phẩm">
-      {loading ? <p role="status">Đang tải sản phẩm...</p> : <UiTableScroll><table>
-        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Storage profile</th><th>Tracking</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th>Thao tác</th>}</tr></thead>
+      {loading ? <p role="status">Đang tải sản phẩm...</p> : <UiTableScroll><table className="ui-table-compact">
+        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Storage profile</th><th>Tracking</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
         <tbody>
           {visibleProducts.length === 0
             ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 9 : 8} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
             : visibleProducts.map(product => <tr key={product.id}>
-                <td><strong>{product.code}</strong></td>
+                <td style={{ whiteSpace: 'nowrap' }}><strong>{product.code}</strong></td>
                 <td>{product.name}</td>
                 <td>{product.categoryName || '—'}</td>
                 <td>{product.unitName || product.unitId}</td>
@@ -313,10 +319,10 @@ const Products = () => {
                 <td><strong>{product.trackingType || 'None'}</strong><br /><small>{product.expiryControl ? `Expiry${product.shelfLifeDays ? ` • ${product.shelfLifeDays} ngày` : ''}` : 'Không kiểm soát hạn dùng'}</small></td>
                 <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>
                 <td><UiBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Hoạt động' : 'Khóa'}</UiBadge></td>
-                {(canManage || canManageBarcodes || canDeactivate) && <td>
+                {(canManage || canManageBarcodes || canDeactivate) && <td style={{ whiteSpace: 'nowrap' }}>
                   <div className="ui-inline-actions">
-                    {(canManage || canManageBarcodes) && <button onClick={() => editMode(product)}>Sửa</button>}
-                    {canDeactivate && <button onClick={() => deleteProduct(product.id)}>Xóa</button>}
+                    {(canManage || canManageBarcodes) && <button onClick={() => editMode(product)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>}
+                    {canDeactivate && <button onClick={() => deleteProduct(product.id)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>}
                   </div>
                 </td>}
               </tr>)}

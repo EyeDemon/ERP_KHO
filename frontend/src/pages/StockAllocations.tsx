@@ -5,7 +5,7 @@ import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import {
-  UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader,
+  UiBadge, UiCard, UiPage, UiPageHeader,
   UiTableScroll, UiToolbar, UiToolbarField,
 } from '../ui/ProductionUi';
 
@@ -50,10 +50,19 @@ const allocationStatusLabel=(status:string)=>({
 
 const strategyLabel=(strategy:string)=>({
   LocationOrder:'Thứ tự vị trí',
-  Manual:'Thủ công',
-  FEFO:'FEFO (Hết hạn trước)',
-  FIFO:'FIFO (Nhập trước)',
+  Manual:'Chỉ định thủ công',
+  FEFO:'Cận hạn xuất trước',
+  FIFO:'Nhập trước xuất trước',
 }[strategy]??strategy);
+
+const selectionReasonLabel=(reason?:string)=>{
+  if(!reason)return '—';
+  return reason
+    .replace(/Auto-allocated by FEFO/gi,'Phân bổ tự động theo cận hạn xuất trước')
+    .replace(/Auto-allocated by FIFO/gi,'Phân bổ tự động theo nhập trước xuất trước')
+    .replace(/Auto-allocated by location order/gi,'Phân bổ tự động theo thứ tự vị trí')
+    .replace(/Manual location allocation/gi,'Phân bổ thủ công theo vị trí');
+};
 
 const sourceTypeLabel=(sourceType:string)=>({
   ExportReceipt:'Phiếu xuất kho',
@@ -97,11 +106,11 @@ export default function StockAllocations(){
         });
       }else{
         setFefoVerification(null);
-        setError('Phản hồi kiểm định tuân thủ phân bổ FEFO/FIFO không hợp lệ từ máy chủ.');
+        setError('Phản hồi kiểm định tuân thủ phân bổ cận hạn / nhập trước không hợp lệ từ máy chủ.');
       }
     }catch(failure){
       setFefoVerification(null);
-      setError(messageOf(failure,'Không thể kiểm định tuân thủ phân bổ FEFO/FIFO.'));
+      setError(messageOf(failure,'Không thể kiểm định tuân thủ phân bổ cận hạn / nhập trước.'));
     }finally{
       setFefoBusy(false);
     }
@@ -201,35 +210,53 @@ export default function StockAllocations(){
   return <UiPage>
     <UiPageHeader eyebrow="Xuất kho" title="Phân bổ tồn kho theo vị trí"
       description="Gắn phần giữ hàng vào vị trí lấy hàng cụ thể. Phân bổ không làm giảm tồn khả dụng lần thứ hai; tồn thực tế chỉ thay đổi khi xuất giao."
-      actions={<button type="button" disabled={loading||referenceLoading||busy} onClick={()=>void refresh()}><RefreshCw size={16} aria-hidden="true"/> Làm mới</button>}
+      actions={<button type="button" style={{whiteSpace:'nowrap'}} disabled={loading||referenceLoading||busy} onClick={()=>void refresh()}><RefreshCw size={16} aria-hidden="true"/> Làm mới</button>}
     />
     {error&&<p role="alert">{error}</p>}
-    <UiMetricGrid>
-      <UiMetric value={data.totalRecords} label="Phân bổ phù hợp"/>
-      <UiMetric value={activeQuantity} label="SL đang cam kết trên trang"/>
-      <UiMetric value={reservations.length} label="Giữ hàng còn có thể phân bổ"/>
-    </UiMetricGrid>
 
-    <UiCard title="Tổng quan Phân bổ Tồn kho theo Vị trí & Cam kết Chưa phân bổ">
-      <UiMetricGrid>
-        <UiMetric value={activeAllocationsCount} label="Phân bổ đang hiệu lực / soạn hàng"/>
-        <UiMetric value={unallocatedReservationCount} label="Giữ hàng chưa phân bổ hết"/>
-        <UiMetric value={totalUnallocatedQuantity} label="Tổng lượng cam kết chờ phân bổ vị trí"/>
-      </UiMetricGrid>
-      <div className="ui-inline-actions" style={{marginTop:8}}>
-        <button type="button" disabled={fefoBusy||busy} onClick={()=>void verifyFefoCompliance()}>
-          Kiểm định Tuân thủ Phân bổ FEFO/FIFO theo Vị trí
-        </button>
-        {fefoVerification&&(
-          <UiBadge tone="success">
-            {fefoVerification.verificationId} • {fefoVerification.fefoComplianceStatus==='VERIFIED'?'ĐÃ XÁC MINH':fefoVerification.fefoComplianceStatus}
-          </UiBadge>
-        )}
+    <UiCard>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:8}}>
+        <h2 className="ui-card-title" style={{margin:0}}>Tổng quan Phân bổ Tồn kho theo Vị trí & Cam kết Chưa phân bổ</h2>
+        <div className="ui-inline-actions">
+          <button type="button" style={{whiteSpace:'nowrap'}} disabled={fefoBusy||busy} onClick={()=>void verifyFefoCompliance()}>
+            Kiểm định Tuân thủ Phân bổ Cận hạn & Nhập trước theo Vị trí
+          </button>
+          {fefoVerification&&(
+            <UiBadge tone="success">
+              {fefoVerification.verificationId} • {fefoVerification.fefoComplianceStatus==='VERIFIED'?'ĐÃ XÁC MINH':fefoVerification.fefoComplianceStatus}
+            </UiBadge>
+          )}
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(6, minmax(0, 1fr))',gap:8}}>
+        <div className="ui-subcard" style={{padding:'6px 10px'}}>
+          <span className="ui-muted-text" style={{fontSize:12,display:'block'}}>Phân bổ phù hợp</span>
+          <strong style={{fontSize:16,fontVariantNumeric:'tabular-nums'}}>{data.totalRecords}</strong>
+        </div>
+        <div className="ui-subcard" style={{padding:'6px 10px'}}>
+          <span className="ui-muted-text" style={{fontSize:12,display:'block'}}>SL đang cam kết trên trang</span>
+          <strong style={{fontSize:16,fontVariantNumeric:'tabular-nums'}}>{activeQuantity}</strong>
+        </div>
+        <div className="ui-subcard" style={{padding:'6px 10px'}}>
+          <span className="ui-muted-text" style={{fontSize:12,display:'block'}}>Giữ hàng còn có thể phân bổ</span>
+          <strong style={{fontSize:16,fontVariantNumeric:'tabular-nums'}}>{reservations.length}</strong>
+        </div>
+        <div className="ui-subcard" style={{padding:'6px 10px'}}>
+          <span className="ui-muted-text" style={{fontSize:12,display:'block'}}>Phân bổ đang hiệu lực / soạn hàng</span>
+          <strong style={{fontSize:16,fontVariantNumeric:'tabular-nums'}}>{activeAllocationsCount}</strong>
+        </div>
+        <div className="ui-subcard" style={{padding:'6px 10px'}}>
+          <span className="ui-muted-text" style={{fontSize:12,display:'block'}}>Giữ hàng chưa phân bổ hết</span>
+          <strong style={{fontSize:16,fontVariantNumeric:'tabular-nums'}}>{unallocatedReservationCount}</strong>
+        </div>
+        <div className="ui-subcard" style={{padding:'6px 10px'}}>
+          <span className="ui-muted-text" style={{fontSize:12,display:'block'}}>Tổng lượng cam kết chờ phân bổ</span>
+          <strong style={{fontSize:16,fontVariantNumeric:'tabular-nums'}}>{totalUnallocatedQuantity}</strong>
+        </div>
       </div>
     </UiCard>
 
     {canCreate&&<UiCard title="Tạo phân bổ vị trí">
-      <p className="ui-muted-text">Chế độ tự động hiện dùng thứ tự vị trí ổn định. Quy tắc FEFO/FIFO, Lô, Sê-ri và Chủ sở hữu được kiểm soát theo cấu hình kho.</p>
       <UiToolbar>
         <UiToolbarField label="Phiếu giữ hàng">
           <select aria-label="Chọn reservation để Allocation" value={selectedReservationId} disabled={referenceLoading||busy}
@@ -249,41 +276,45 @@ export default function StockAllocations(){
             {candidates.map(item=><option key={item.locationId} value={item.locationId}>#{item.rank} {item.locationCode} • khả dụng {item.allocatableQuantity}</option>)}
           </select>
         </UiToolbarField>
-        <button type="button" disabled={!selectedReservation||busy||referenceLoading} onClick={()=>void allocate(false)}><Layers3 size={16} aria-hidden="true"/> Tự động</button>
-        <button type="button" disabled={!selectedReservation||!locationId||busy||referenceLoading} onClick={()=>void allocate(true)}><Layers3 size={16} aria-hidden="true"/> Theo vị trí</button>
+        <button type="button" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={!selectedReservation||busy||referenceLoading} onClick={()=>void allocate(false)}><Layers3 size={16} aria-hidden="true"/> Tự động</button>
+        <button type="button" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={!selectedReservation||!locationId||busy||referenceLoading} onClick={()=>void allocate(true)}><Layers3 size={16} aria-hidden="true"/> Theo vị trí</button>
       </UiToolbar>
-      {selectedReservation&&<p className="ui-muted-text" role="status">
+      {selectedReservation&&<p className="ui-muted-text" style={{margin:'4px 0 0',fontSize:12}} role="status">
         {selectedReservation.reservationCode} • {selectedReservation.warehouseName} • {selectedReservation.productCode} – {selectedReservation.productName}
         {' '}• Đã giữ {selectedReservation.reservedQuantity} • Đã phân bổ {selectedReservation.allocatedQuantity}
         {' '}• Còn {selectedReservation.allocatableQuantity} • Hết hạn {new Date(selectedReservation.expiresAt).toLocaleString('vi-VN')}
       </p>}
     </UiCard>}
 
-    <UiToolbar>
-      <UiToolbarField label="Trạng thái">
-        <select aria-label="Lọc trạng thái Allocation" value={status} onChange={event=>setStatus(event.target.value)}>
-          <option value="">Tất cả</option>
-          {['Active','Picking','Picked','Consumed','Released','Reallocated'].map(value=><option key={value} value={value}>{allocationStatusLabel(value)}</option>)}
-        </select>
-      </UiToolbarField>
-      <div className="ui-muted-text ui-auto-actions">Trang {data.pageIndex}/{pages} • {data.totalRecords} bản ghi</div>
-    </UiToolbar>
-
     <UiCard title="Danh sách phân bổ vị trí">
+      <div style={{marginBottom:4}}>
+        <UiToolbar>
+          <UiToolbarField label="Trạng thái">
+            <select aria-label="Lọc trạng thái Allocation" value={status} onChange={event=>setStatus(event.target.value)}>
+              <option value="">Tất cả</option>
+              {['Active','Picking','Picked','Consumed','Released','Reallocated'].map(value=><option key={value} value={value}>{allocationStatusLabel(value)}</option>)}
+            </select>
+          </UiToolbarField>
+          <div className="ui-muted-text ui-auto-actions">Trang {data.pageIndex}/{pages} • {data.totalRecords} bản ghi</div>
+        </UiToolbar>
+      </div>
       <UiTableScroll><table className="ui-table-compact" aria-label="Danh sách Allocation">
-        <thead><tr><th>Mã phân bổ</th><th>Giữ hàng / Nguồn</th><th>Sản phẩm</th><th>Kho / Vị trí</th><th>SL</th><th>Chiến lược</th><th>Trạng thái</th><th>Lý do chọn</th>{(canRelease||canReallocate)&&<th>Thao tác</th>}</tr></thead>
+        <thead><tr><th style={{whiteSpace:'nowrap'}}>Mã phân bổ</th><th style={{whiteSpace:'nowrap'}}>Giữ hàng / Nguồn</th><th>Sản phẩm</th><th>Kho / Vị trí</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>SL</th><th>Chiến lược</th><th style={{whiteSpace:'nowrap'}}>Trạng thái</th><th>Lý do chọn</th>{(canRelease||canReallocate)&&<th style={{whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
         <tbody>
           {loading&&data.items.length===0?<tr><td className="ui-empty-cell" colSpan={(canRelease||canReallocate)?9:8}>Đang tải...</td></tr>:
           data.items.length===0?<tr><td className="ui-empty-cell" colSpan={(canRelease||canReallocate)?9:8}>Không có phân bổ vị trí phù hợp.</td></tr>:
           data.items.map(item=><tr key={item.id}>
-            <td><strong>{item.allocationCode}</strong><div className="ui-muted-text">{new Date(item.allocatedAt).toLocaleString('vi-VN')}</div></td>
-            <td>{item.reservationCode}<div className="ui-muted-text">{sourceTypeLabel(item.sourceType)}{item.sourceCode?` / ${item.sourceCode}`:''}</div></td>
-            <td>{item.productCode} – {item.productName}</td>
-            <td>{item.warehouseName}<div className="ui-muted-text">{item.locationCode} – {item.locationName}</div></td>
-            <td><strong>{item.quantity}</strong></td><td>{strategyLabel(item.strategy)}</td><td><UiBadge tone={toneOf(item.status)}>{allocationStatusLabel(item.status)}</UiBadge></td><td>{item.selectionReason||'—'}</td>
-            {(canRelease||canReallocate)&&<td>{item.status==='Active'?<div className="ui-auto-actions">
-              {canRelease&&<button type="button" disabled={busy} onClick={event=>void openAction('release',item,event.currentTarget)}><Unlock size={16} aria-hidden="true"/> Giải phóng</button>}
-              {canReallocate&&<button type="button" disabled={busy} onClick={event=>void openAction('reallocate',item,event.currentTarget)}><Repeat2 size={16} aria-hidden="true"/> Phân bổ lại</button>}
+            <td style={{whiteSpace:'nowrap'}}><strong style={{whiteSpace:'nowrap'}}>{item.allocationCode}</strong><div className="ui-muted-text" style={{whiteSpace:'nowrap'}}>{new Date(item.allocatedAt).toLocaleString('vi-VN')}</div></td>
+            <td><strong style={{whiteSpace:'nowrap'}}>{item.reservationCode}</strong><div className="ui-muted-text">{sourceTypeLabel(item.sourceType)}{item.sourceCode?` / ${item.sourceCode}`:''}</div></td>
+            <td><strong style={{whiteSpace:'nowrap'}}>{item.productCode}</strong> – {item.productName}</td>
+            <td>{item.warehouseName}<div className="ui-muted-text"><span style={{whiteSpace:'nowrap'}}>{item.locationCode}</span> – {item.locationName}</div></td>
+            <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}><strong>{item.quantity}</strong></td>
+            <td>{strategyLabel(item.strategy)}</td>
+            <td style={{whiteSpace:'nowrap'}}><UiBadge tone={toneOf(item.status)}>{allocationStatusLabel(item.status)}</UiBadge></td>
+            <td>{selectionReasonLabel(item.selectionReason)}</td>
+            {(canRelease||canReallocate)&&<td style={{whiteSpace:'nowrap'}}>{item.status==='Active'?<div className="ui-inline-actions" style={{flexWrap:'nowrap',gap:6}}>
+              {canRelease&&<button type="button" style={{whiteSpace:'nowrap',padding:'4px 8px',fontSize:12}} disabled={busy} onClick={event=>void openAction('release',item,event.currentTarget)}><Unlock size={14} aria-hidden="true"/> Giải phóng</button>}
+              {canReallocate&&<button type="button" style={{whiteSpace:'nowrap',padding:'4px 8px',fontSize:12}} disabled={busy} onClick={event=>void openAction('reallocate',item,event.currentTarget)}><Repeat2 size={14} aria-hidden="true"/> Phân bổ lại</button>}
             </div>:'—'}</td>}
           </tr>)}
         </tbody>

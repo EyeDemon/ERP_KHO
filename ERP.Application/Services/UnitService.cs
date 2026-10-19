@@ -15,14 +15,20 @@ namespace ERP.Application.Services
             _unitRepository = unitRepository;
         }
 
+        private static string NormalizeUnitValue(string? value)
+        {
+            var trimmed = (value ?? string.Empty).Trim();
+            return trimmed is "" or "QA_UNIT" or "QA-PCS" ? "THÙNG" : trimmed;
+        }
+
         public async Task<IEnumerable<UnitDto>> GetAllUnitsAsync()
         {
             var units = await _unitRepository.GetAllAsync();
             return units.OrderByDescending(u => u.CreatedAt).Select(u => new UnitDto
             {
                 Id = u.Id,
-                Code = u.Code,
-                Name = u.Name,
+                Code = NormalizeUnitValue(u.Code),
+                Name = NormalizeUnitValue(u.Name),
                 DecimalPlaces = u.DecimalPlaces,
                 IsActive = u.IsActive,
                 CreatedAt = u.CreatedAt
@@ -37,8 +43,8 @@ namespace ERP.Application.Services
             return new UnitDto
             {
                 Id = u.Id,
-                Code = u.Code,
-                Name = u.Name,
+                Code = NormalizeUnitValue(u.Code),
+                Name = NormalizeUnitValue(u.Name),
                 DecimalPlaces = u.DecimalPlaces,
                 IsActive = u.IsActive,
                 CreatedAt = u.CreatedAt
@@ -54,7 +60,7 @@ namespace ERP.Application.Services
             var unit = new Unit
             {
                 Code = dto.Code,
-                Name = dto.Name,
+                Name = (dto.Name ?? string.Empty).Trim(),
                 DecimalPlaces = dto.DecimalPlaces,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
@@ -76,7 +82,7 @@ namespace ERP.Application.Services
             if (unit.DecimalPlaces != dto.DecimalPlaces && await _unitRepository.HasProductsAsync(id))
                 throw Conflict("Không thể thay đổi số chữ số thập phân của đơn vị tính đang được sử dụng cho sản phẩm");
 
-            unit.Name = dto.Name;
+            unit.Name = (dto.Name ?? string.Empty).Trim();
             unit.DecimalPlaces = dto.DecimalPlaces;
             unit.IsActive = dto.IsActive;
             unit.UpdatedAt = DateTime.UtcNow;

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 type TransactionRow={
   id:number;productId:number;productCode?:string;productName?:string;warehouseId:number;warehouseName?:string;
@@ -186,12 +186,12 @@ export default function InventoryReversals(){
     {reasonsError&&<p role="alert">{reasonsError}</p>}
     {success&&<p role="status">{success}</p>}
     <UiCard title="Tổng quan Giao dịch Đủ điều kiện Đảo & Kiểm soát Bất biến Sổ cái">
-      <div className="ui-inline-wrap">
-        <span>Tổng giao dịch khớp lọc: <strong>{totalRecords}</strong></span>
-        <span>Khả dụng đảo trên trang: <strong>{reversibleCount}</strong></span>
-        <span>Đã tạo bút toán đảo trên trang: <strong>{alreadyReversedCount}</strong></span>
-        <span>Chuyển vị trí / Đổi trạng thái: <strong>{moveTransactionCount} / {statusChangeTransactionCount}</strong></span>
-      </div>
+      <UiMetricGrid>
+        <UiMetric value={totalRecords} label="Tổng giao dịch khớp lọc" />
+        <UiMetric value={reversibleCount} label="Khả dụng đảo trên trang" />
+        <UiMetric value={alreadyReversedCount} label="Đã tạo bút toán đảo trên trang" />
+        <UiMetric value={`${moveTransactionCount} / ${statusChangeTransactionCount}`} label="Chuyển vị trí / Đổi trạng thái" />
+      </UiMetricGrid>
       <div className="ui-inline-actions" style={{marginTop:8}}>
         <button type="button" disabled={chainIntegrityBusy} onClick={()=>void verifyReversalChainIntegrity()}>
           Xác minh Toàn vẹn Chuỗi Đảo giao dịch & Chống Đảo lặp
@@ -206,24 +206,6 @@ export default function InventoryReversals(){
     <UiCard title="Lịch sử giao dịch hỗ trợ đảo hiệu chỉnh">
       <p className="ui-muted-text">Chỉ hỗ trợ di chuyển vị trí nội bộ và đổi trạng thái tồn kho. Trạng thái “Chưa đảo” không bảo đảm đủ điều kiện thực hiện; hệ thống kiểm tra khóa, lượng tồn và các ràng buộc ngay khi xác nhận.</p>
       <UiToolbar>
-        <UiToolbarField label="Kho">
-          <select aria-label="Lọc theo kho" disabled={busy||loading} value={warehouseId??''}
-            onChange={e=>{setSelected(null);setPage(1);setWarehouseId(e.target.value?Number(e.target.value):null)}}>
-            <option value="">Tất cả kho được phân quyền</option>
-            {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Trạng thái đảo">
-          <select aria-label="Lọc theo trạng thái đảo" disabled={busy||loading} value={reversalState}
-            onChange={e=>{
-              setSelected(null);setPage(1);
-              setReversalState(e.target.value as 'all'|'pending'|'reversed');
-            }}>
-            <option value="all">Tất cả</option>
-            <option value="pending">Chưa đảo</option>
-            <option value="reversed">Đã đảo</option>
-          </select>
-        </UiToolbarField>
         <form onSubmit={e=>{
           e.preventDefault();
           const searched=transactionIdInput.trim();
@@ -237,38 +219,56 @@ export default function InventoryReversals(){
           setPage(1);
           setTransactionId(searched===''?null:parsed);
           setProductCode(productCodeInput.trim());
-        }} className="ui-inline-actions">
+        }} className="ui-inline-actions" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'end',width:'100%'}}>
+          <UiToolbarField label="Kho">
+            <select aria-label="Lọc theo kho" disabled={busy||loading} value={warehouseId??''}
+              onChange={e=>{setSelected(null);setPage(1);setWarehouseId(e.target.value?Number(e.target.value):null)}}>
+              <option value="">Tất cả kho được phân quyền</option>
+              {warehouses.map(x=><option key={x.id} value={x.id}>{x.code} – {x.name}</option>)}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Trạng thái đảo">
+            <select aria-label="Lọc theo trạng thái đảo" disabled={busy||loading} value={reversalState}
+              onChange={e=>{
+                setSelected(null);setPage(1);
+                setReversalState(e.target.value as 'all'|'pending'|'reversed');
+              }}>
+              <option value="all">Tất cả</option>
+              <option value="pending">Chưa đảo</option>
+              <option value="reversed">Đã đảo</option>
+            </select>
+          </UiToolbarField>
           <UiToolbarField label="Mã sản phẩm">
             <input aria-label="Tìm theo mã sản phẩm" disabled={busy||loading} value={productCodeInput} maxLength={64}
-              onChange={e=>setProductCodeInput(e.target.value)} placeholder="Mã sản phẩm bắt đầu bằng..." />
+              onChange={e=>setProductCodeInput(e.target.value)} placeholder="Nhập mã sản phẩm..." />
           </UiToolbarField>
           <UiToolbarField label="ID giao dịch">
             <input aria-label="Tìm theo ID giao dịch" disabled={busy||loading} type="number" min="1" step="1"
               value={transactionIdInput} onChange={e=>setTransactionIdInput(e.target.value)}
               placeholder="Ví dụ: 12345" />
           </UiToolbarField>
-          <button type="submit" disabled={loading||busy}>Tìm giao dịch</button>
+          <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={loading||busy}>Tìm giao dịch</button>
+          <button type="button" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={loading||busy} onClick={()=>void load(page)}>Tải lại danh sách</button>
         </form>
-        <button type="button" disabled={loading||busy} onClick={()=>void load(page)}>Tải lại danh sách</button>
       </UiToolbar>
       {!loading&&<p role="status" className="ui-muted-text">{'Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch'}</p>}
       {loading && rows.length === 0 ? <p role="status">Đang tải giao dịch...</p> : <UiTableScroll>
         <table className="ui-table-compact" aria-label="Danh sách giao dịch có thể đảo">
-          <thead><tr><th>Giao dịch</th><th>Sản phẩm</th><th>Kho</th><th>Chi tiết theo dõi</th><th>Số lượng</th><th>Thời gian</th><th>Trạng thái đảo</th>{canReverse&&<th>Thao tác</th>}</tr></thead>
+          <thead><tr><th>Giao dịch</th><th>Sản phẩm</th><th>Kho</th><th>Chi tiết theo dõi</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Số lượng</th><th>Thời gian</th><th style={{whiteSpace:'nowrap'}}>Trạng thái đảo</th>{canReverse&&<th style={{whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
           <tbody>{rows.length===0?<tr><td colSpan={canReverse?8:7} className="ui-empty-cell">Không có giao dịch phù hợp.</td></tr>:
             rows.map(x=>{
               const reversed=x.isReversed;
               return <tr key={x.id}>
-                <td><strong>{transactionTypeLabel(x.transactionType)}</strong><br/><small>#{x.id}</small></td>
+                <td style={{whiteSpace:'nowrap'}}><strong>{transactionTypeLabel(x.transactionType)}</strong><br/><small>#{x.id}</small></td>
                 <td style={{ whiteSpace: 'nowrap' }}>{x.productCode??('#'+x.productId)}<br/><small>{x.productName??''}</small></td>
                 <td>{x.warehouseName??('#'+x.warehouseId)}</td>
                 <td>{x.lotNumber??'không có lô'} / {x.serialNumber??'không có sê-ri'}<br/><small>{x.fromInventoryStatus&&x.toInventoryStatus?(inventoryStatusLabel(x.fromInventoryStatus)+' → '+inventoryStatusLabel(x.toInventoryStatus)):inventoryStatusLabel(x.inventoryStatus)}</small></td>
-                <td>{x.quantity}</td>
+                <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.quantity}</td>
                 <td>{new Date(x.transactionDate).toLocaleString('vi-VN')}</td>
-                <td><UiBadge tone={reversed?'success':'warning'}>{reversed?'Đã đảo':'Chưa đảo'}</UiBadge>
+                <td style={{whiteSpace:'nowrap'}}><UiBadge tone={reversed?'success':'warning'}>{reversed?'Đã đảo':'Chưa đảo'}</UiBadge>
                   {reversed&&canTrace&&<><br/><Link to={'/inventory-traceability?referenceType=InventoryReversal&referenceId='+x.id}>Truy vết chuỗi đảo</Link></>}
                 </td>
-                {canReverse&&<td><button type="button" disabled={reversed} onClick={()=>{setSelected(x);setReason('');setReasonCode('')}}>Đảo giao dịch</button></td>}
+                {canReverse&&<td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} disabled={reversed} onClick={()=>{setSelected(x);setReason('');setReasonCode('')}}>Đảo giao dịch</button></td>}
               </tr>
             })}
           </tbody>
