@@ -88,4 +88,15 @@ describe('Cất hàng',()=>{
    fireEvent.click(v.getByText('Xác nhận số lượng'));
    await waitFor(()=>expect(completeIdempotentAction).toHaveBeenCalledWith('move-1-2'));
  });
+ it('renders Lộ trình column in Danh sách nhiệm vụ as two nowrap spans with single arrow → without broken ->',async()=>{
+   const v=render(<PutawayTasks/>);
+   await v.findByText('PN-1');
+   const fromSpan=v.getByText('RECEIVING →');
+   const toSpan=v.getByText('BIN-A01-01');
+   expect(fromSpan.tagName).toBe('SPAN');
+   expect(toSpan.tagName).toBe('SPAN');
+   expect((fromSpan as HTMLElement).style.whiteSpace).toBe('nowrap');
+   expect((toSpan as HTMLElement).style.whiteSpace).toBe('nowrap');
+   expect(v.container.textContent).not.toContain('->');
+ });
 });

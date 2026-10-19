@@ -165,14 +165,15 @@ export default function PutawayTasks(){
        {tasks.length===0?<p>Chưa có nhiệm vụ cất hàng phù hợp.</p>:<UiTableScroll><table className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
          <thead>
            <tr>
-             <th style={{ width: '28%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phiếu nhập</th>
-             <th style={{ width: '25%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+             <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phiếu nhập</th>
+             <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
              <th style={{ width: '28%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
-             <th style={{ width: '19%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+             <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
            </tr>
          </thead>
          <tbody>{tasks.map(task=>{
-           const sourceCode=task.items?.[0]?.sourceLocationCode||'RECEIVING';
+           const sourceLocationCode=task.items?.[0]?.sourceLocationCode||'RECEIVING';
+           const targetLocationCode='BIN-A01-01';
            return <tr key={task.id}>
              <td style={{ padding: '6px 5px', fontSize: 11, verticalAlign: 'middle' }}>
                <button
@@ -186,8 +187,9 @@ export default function PutawayTasks(){
                  {task.warehouseName}
                </div>
              </td>
-             <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, wordBreak: 'keep-all', overflowWrap: 'normal', verticalAlign: 'middle' }}>
-               {`${sourceCode} -> BIN-A01-01`}
+             <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
+               <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLocationCode} →</span>
+               <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>{targetLocationCode}</span>
              </td>
              <td style={{ padding: '6px 5px', fontSize: 10.5, verticalAlign: 'middle' }}>
                <UiBadge tone={task.status==='Completed'?'success':task.status==='Exception'?'danger':task.status==='InProgress'?'warning':'neutral'}>

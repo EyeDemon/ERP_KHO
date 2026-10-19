@@ -521,6 +521,19 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         {
             item.MovedBaseQuantity = 0m;
         }
+
+        var stalePutawayTasks = await context.PutawayTasks.IgnoreQueryFilters()
+            .Include(t => t.Items)
+            .Where(t => t.WarehouseId == primaryWarehouse.Id && t.Id != putawayTask.Id)
+            .ToListAsync();
+        foreach (var staleTask in stalePutawayTasks)
+        {
+            if (staleTask.Items.Count > 0)
+            {
+                context.PutawayTaskItems.RemoveRange(staleTask.Items);
+            }
+            context.PutawayTasks.Remove(staleTask);
+        }
     }
     await context.SaveChangesAsync();
 
