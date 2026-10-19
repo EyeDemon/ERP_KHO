@@ -17,17 +17,28 @@ type LockPrecedenceResult={
 const types=['CountFreeze','QualityHold','InvestigationHold','RecallHold','MaintenanceFreeze','ManualOperationalLock'];
 
 const lockTypeLabel=(value:string)=>({
-  CountFreeze:'Đóng băng kiểm kê',
-  QualityHold:'Giữ do chất lượng',
+  CountFreeze:'Khóa kiểm kê',
+  CycleCount:'Khóa kiểm kê',
+  STOCKTAKE_LOCK:'Khóa kiểm kê',
+  QualityHold:'Giữ kiểm định chất lượng',
+  QC_HOLD:'Giữ kiểm định chất lượng',
   InvestigationHold:'Giữ để điều tra',
-  RecallHold:'Giữ do thu hồi',
+  RecallHold:'Thu hồi lô hàng',
+  Recall:'Thu hồi lô hàng',
+  RECALL_HOLD:'Thu hồi lô hàng',
+  DamagedHold:'Cô lập hàng hỏng',
+  DAMAGED_HOLD:'Cô lập hàng hỏng',
   MaintenanceFreeze:'Đóng băng bảo trì',
   ManualOperationalLock:'Khóa vận hành thủ công',
+  ManualHold:'Khóa thủ công',
+  MANUAL_LOCK:'Khóa thủ công',
 }[value]??value);
 
 const lockStatusLabel=(value:string)=>({
-  Active:'Đang hiệu lực',
-  Released:'Đã mở khóa',
+  Active:'Đang phong tỏa',
+  Locked:'Đang phong tỏa',
+  Released:'Đã giải tỏa',
+  Unlocked:'Đã giải tỏa',
   Expired:'Đã hết hiệu lực',
 }[value]??value);
 
@@ -43,7 +54,7 @@ const inventoryStatusLabel=(value:string)=>({
 }[value]??value);
 
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
-  status==='Active'?'danger':status==='Released'?'success':status==='Expired'?'warning':'neutral';
+  status==='Active'||status==='Locked'?'danger':status==='Released'||status==='Unlocked'?'success':status==='Expired'?'warning':'neutral';
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
   if(r?.data?.code==='INV_STOCK_LOCKED')return r.data.message??'Khóa tồn kho không còn ở trạng thái có thể thay đổi.';
@@ -229,10 +240,10 @@ export default function InventoryLocks(){
           </UiToolbarField>
           <button type="submit" disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
         </form>}
-        <p className="ui-muted-text">Giữ do chất lượng, giữ để điều tra và giữ do thu hồi phải được mở thủ công; không tự hết hiệu lực.</p>
+        <p className="ui-muted-text">Giữ kiểm định chất lượng, giữ để điều tra và thu hồi lô hàng phải được mở thủ công; không tự hết hiệu lực.</p>
       </UiCard>}
 
-      {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng (Recall Campaign Block — QR-05)">
+      {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng — QR-05">
         <form onSubmit={submitRecallBlock} className="ui-form-grid" aria-busy={busy}>
           <UiToolbarField label="Kho thu hồi">
             <select aria-label="Kho thu hồi" value={recallForm.warehouseId} onChange={e=>setRecallForm(x=>({...x,warehouseId:e.target.value}))} required>
@@ -244,29 +255,29 @@ export default function InventoryLocks(){
             <input aria-label="ID sản phẩm thu hồi" type="number" min="1" value={recallForm.productId} onChange={e=>setRecallForm(x=>({...x,productId:e.target.value}))} required/>
           </UiToolbarField>
           <UiToolbarField label="Mã lô thu hồi">
-            <input aria-label="Mã lô thu hồi" value={recallForm.lotNumber} onChange={e=>setRecallForm(x=>({...x,lotNumber:e.target.value}))} placeholder="LOT-..." required/>
+            <input aria-label="Mã lô thu hồi" value={recallForm.lotNumber} onChange={e=>setRecallForm(x=>({...x,lotNumber:e.target.value}))} placeholder="LÔ-..." required/>
           </UiToolbarField>
           <UiToolbarField label="Lý do thu hồi lô">
-            <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo thu hồi / bằng chứng QC" required/>
+            <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo thu hồi / bằng chứng kiểm định" required/>
           </UiToolbarField>
           <button type="submit" disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
         </form>
       </UiCard>}
 
       <UiCard title="Danh sách khóa tồn kho">
-        <p className="ui-muted-text">Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, HU, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
+        <p className="ui-muted-text">Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, đơn vị đóng gói, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
         <div className="ui-inline-actions" style={{marginBottom:8}}>
           <button type="button" disabled={lockPrecedenceBusy} onClick={()=>void verifyLockPrecedence()}>
-            Kiểm định Độ ưu tiên Khóa Chồng lấp & Cách ly QC (INV-07, QR-02)
+            Kiểm định Độ ưu tiên Khóa Chồng lấp & Cách ly Chất lượng
           </button>
           {lockPrecedenceResult&&(
             <span>
-              Mã kiểm định: <strong>{lockPrecedenceResult.verificationId}</strong> • status = <strong>{lockPrecedenceResult.status}</strong> • Precedence: <strong>{lockPrecedenceResult.overlappingHoldPrecedence}</strong>
+              Mã kiểm định: <strong>{lockPrecedenceResult.verificationId}</strong> • Trạng thái: <strong>{lockPrecedenceResult.status}</strong> • Thứ tự ưu tiên: <strong>{lockPrecedenceResult.overlappingHoldPrecedence}</strong>
             </span>
           )}
         </div>
         {loading?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
-          <table aria-label="Danh sách khóa tồn kho">
+          <table className="ui-table-compact" aria-label="Danh sách khóa tồn kho">
             <thead><tr><th>Khóa</th><th>Phạm vi</th><th>Trạng thái</th><th>Lý do</th><th>Thời gian</th>{canManage&&<th>Thao tác</th>}</tr></thead>
             <tbody>{locks.length===0?<tr><td colSpan={canManage?6:5} className="ui-empty-cell">Chưa có khóa tồn kho.</td></tr>:
               locks.map(item=><tr key={item.id}>

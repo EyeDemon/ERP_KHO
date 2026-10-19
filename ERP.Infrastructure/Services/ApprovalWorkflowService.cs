@@ -209,7 +209,7 @@ public sealed class ApprovalWorkflowService(
             if (databaseRole == "Viewer") note = null;
         }
         var history = await GetHistoryAsync(new ApprovalHistoryQuery { DocumentType = documentType, DocumentId = id, PageSize = 20 }, cancellationToken);
-        return new ApprovalDetail { Summary = summary, Note = note, Lines = lines, History = history.Items };
+        return new ApprovalDetail { Summary = summary, Note = note?.Trim(), Lines = lines, History = history.Items };
     }
 
     public async Task<ApprovalActionResult> RejectAsync(string documentType, int id, string reason, CancellationToken cancellationToken = default)
@@ -389,8 +389,8 @@ public sealed class ApprovalWorkflowService(
     }
     private static ApprovalDetailLine DetailLine(Product product, decimal quantity)
     {
-        var rawUnit = (product.Unit?.Name ?? string.Empty).Trim();
-        var unitName = string.Equals(rawUnit, "QA_UNIT", StringComparison.OrdinalIgnoreCase) || string.Equals(rawUnit, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+        var rawUnit = (product.Unit?.Name ?? product.Unit?.Code ?? string.Empty).Trim();
+        var unitName = string.IsNullOrWhiteSpace(rawUnit) || string.Equals(rawUnit, "QA_UNIT", StringComparison.OrdinalIgnoreCase) || string.Equals(rawUnit, "QA-PCS", StringComparison.OrdinalIgnoreCase)
             ? "THÙNG"
             : rawUnit;
         return new() { ProductCode = product.Code.Trim(), ProductName = product.Name.Trim(), UnitName = unitName, Quantity = quantity };
@@ -431,12 +431,26 @@ public sealed class ApprovalWorkflowService(
         return result;
     }
     private static string? State(string? value) => value?.StartsWith("Status: ", StringComparison.Ordinal) == true ? value[8..] : value;
+    private static string FormatDisplayAction(string action)
+    {
+        var clean = action.Trim();
+        if (clean == "ApprovalRejected") return "Bị từ chối";
+        if (clean.EndsWith(".Cancelled", StringComparison.Ordinal)) return "Đã hủy";
+        if (clean.EndsWith(".Approved", StringComparison.Ordinal)) return "Đã phê duyệt";
+        if (clean.EndsWith(".Posted", StringComparison.Ordinal)) return "Đã ghi sổ";
+        if (clean.EndsWith(".Received", StringComparison.Ordinal)) return "Đã nhận hàng";
+        if (clean.EndsWith(".Dispatched", StringComparison.Ordinal)) return "Đã xuất kho";
+        if (clean.EndsWith(".Completed", StringComparison.Ordinal)) return "Đã hoàn tất";
+        if (clean.EndsWith(".Created", StringComparison.Ordinal)) return "Đã khởi tạo";
+        if (clean.EndsWith(".Updated", StringComparison.Ordinal)) return "Đã cập nhật";
+        return clean;
+    }
     private static ApprovalHistoryItem MapHistory(AuditLog x, string code) => new()
     {
         Id = x.Id, TimestampUtc = AsUtc(x.Timestamp), ActorId = x.UserId, ActorName = (x.User?.FullName ?? x.User?.Username ?? string.Empty).Trim(),
-        Action = x.Action.Trim(), DisplayAction = x.Action == "ApprovalRejected" ? "Bị từ chối" : x.Action.EndsWith(".Cancelled") ? "Đã hủy" : x.Action.Trim(),
+        Action = x.Action.Trim(), DisplayAction = FormatDisplayAction(x.Action),
         DocumentType = x.EntityName.Trim(), DocumentId = x.EntityId ?? 0, DocumentCode = code.Trim(), WarehouseId = x.WarehouseId ?? x.SourceWarehouseId,
-        OldState = State(x.OldValues), NewState = State(x.NewValues), Result = x.Result?.Trim(), Reason = x.Action == "ApprovalRejected" ? x.Reason?.Trim() : null,
+        OldState = State(x.OldValues)?.Trim(), NewState = State(x.NewValues)?.Trim(), Result = x.Result?.Trim(), Reason = x.Action == "ApprovalRejected" ? x.Reason?.Trim() : null,
         CorrelationId = x.CorrelationId?.Trim(), Severity = (x.Severity ?? string.Empty).Trim()
     };
 

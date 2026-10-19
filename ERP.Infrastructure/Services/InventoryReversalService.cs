@@ -33,7 +33,7 @@ public sealed class InventoryReversalService(
             .OrderBy(x => x.Code).ThenBy(x => x.Id)
             .Select(x => new InventoryReversalWarehouseDto
             {
-                Id = x.Id, Code = x.Code, Name = x.Name
+                Id = x.Id, Code = x.Code.Trim(), Name = x.Name.Trim()
             }).ToListAsync(cancellationToken);
     }
 
@@ -96,16 +96,16 @@ public sealed class InventoryReversalService(
             {
                 Id = x.Id,
                 ProductId = x.ProductId,
-                ProductCode = x.Product.Code,
-                ProductName = x.Product.Name,
+                ProductCode = x.Product.Code.Trim(),
+                ProductName = x.Product.Name.Trim(),
                 WarehouseId = x.WarehouseId,
-                WarehouseName = x.Warehouse.Name,
+                WarehouseName = x.Warehouse.Name.Trim(),
                 TransactionType = x.TransactionType.ToString(),
                 InventoryStatus = x.InventoryStatus.ToString(),
                 FromInventoryStatus = x.FromInventoryStatus.HasValue ? x.FromInventoryStatus.Value.ToString() : null,
                 ToInventoryStatus = x.ToInventoryStatus.HasValue ? x.ToInventoryStatus.Value.ToString() : null,
-                LotNumber = x.Lot == null ? null : x.Lot.LotNumber,
-                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
+                LotNumber = x.Lot == null ? null : x.Lot.LotNumber.Trim(),
+                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber.Trim(),
                 Quantity = x.Quantity,
                 TransactionDate = x.TransactionDate,
                 // Database-authoritative: never infer reversal state from a limited frontend page.

@@ -1,3 +1,10 @@
+.stocktakes-page {
+  display: grid;
+  gap: var(--ui-space-4);
+  min-width: 0;
+  max-width: 100%;
+}
+
 .stocktakes-page .stocktake-form {
   display: grid;
   gap: var(--ui-space-3);
@@ -23,7 +30,7 @@
 }
 
 .stocktakes-page .stocktake-note {
-  max-width: 240px;
+  max-width: 220px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -49,12 +56,28 @@
 
 .stocktakes-page .stocktake-editor {
   min-width: 0;
-  width: 100%;
+  width: 88px;
+  max-width: 100%;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.stocktakes-page .stocktake-editor::-webkit-outer-spin-button,
+.stocktakes-page .stocktake-editor::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .stocktakes-page .stocktake-editor-note {
   min-width: 0;
   width: 100%;
+  max-width: 180px;
+}
+
+.stocktakes-page .stocktake-detail-table select {
+  max-width: 180px;
+  min-width: 0;
 }
 
 .stocktakes-page .stocktake-row-error {
@@ -87,5 +110,44 @@
 
   .stocktakes-page .stocktake-detail-meta .wide {
     grid-column: auto;
+  }
+
+  .stocktakes-page .ui-table-scroll {
+    overflow-x: hidden;
+  }
+
+  .stocktakes-page table,
+  .stocktakes-page thead,
+  .stocktakes-page tbody {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .stocktakes-page thead tr,
+  .stocktakes-page tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .stocktakes-page th,
+  .stocktakes-page td {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: normal;
+  }
+
+  .stocktakes-page tbody tr > td:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .stocktakes-page .stocktake-note {
+    max-width: 100%;
+    white-space: normal;
   }
 }

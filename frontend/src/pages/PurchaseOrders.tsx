@@ -25,7 +25,7 @@ type PurchaseOrderList = {
 type PurchaseOrderLine = {
   id:number; externalLineId:string; lineNo:number; productId:number; productCode:string; productName:string;
   orderedQuantity:number; operationUnitCode:string; baseOrderedQuantity:number; baseUnitCode:string;
-  unitPrice?:number; taxPercent?:number; lineSubTotal?:number; lineTaxAmount?:number; lineTotalAmount?:number;
+  unitPrice?:number; taxPercent?:number; lineSubTotal?:number; lineTaxAmount?:number; lineTotal?:number; lineTotalAmount?:number;
   allowedOverReceiptPct:number; allowedUnderReceiptPct:number;
 };
 type PurchaseOrderDetail = PurchaseOrderList & {
@@ -38,7 +38,7 @@ type Product={id:number;code:string;name:string;unitId:number;unitCode:string;un
 type LineForm={externalLineId:string;productId:number|'';operationUnitId:number|'';orderedQuantity:number|'';unitPrice:number|'';taxPercent:number|'';allowedOverReceiptPct:number|'';allowedUnderReceiptPct:number|''};
 
 const labels:Record<string,string>={
-  Draft:'Nháp',Open:'Đang mở',PartiallyReceived:'Đã nhận một phần',Received:'Đã nhận đủ',Closed:'Đã đóng',Cancelled:'Đã hủy',
+  Draft:'Nháp',Open:'Đang mở',Approved:'Đã xác nhận',Confirmed:'Đã xác nhận',PartiallyReceived:'Nhận một phần',Received:'Đã nhận đủ',Closed:'Đã đóng',Cancelled:'Đã hủy',
 };
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Received'||status==='Closed'?'success':status==='PartiallyReceived'?'warning':status==='Cancelled'?'danger':'neutral';
@@ -273,24 +273,24 @@ export default function PurchaseOrders(){
     <UiPageHeader
       eyebrow="Nhập kho"
       title="Đơn mua (PO)"
-      description="Theo dõi nguồn hàng dự kiến từ ERP/Procurement trước khi tạo ASN và tiếp nhận. PO không làm tăng tồn kho."
+      description="Theo dõi đơn đặt hàng dự kiến từ hệ thống mua hàng trước khi tạo thông báo giao hàng (ASN) và tiếp nhận. Đơn mua không làm tăng tồn kho."
     />
 
     <InboundPlanningFeedback error={error} success={success}/>
 
     <UiMetricGrid>
-      <UiMetric value={items.length} label="PO trong phạm vi hiện tại"/>
+      <UiMetric value={items.length} label="Đơn mua trong phạm vi hiện tại"/>
       <UiMetric value={items.filter(x=>x.status==='Open').length} label="Đang mở"/>
-      <UiMetric value={items.filter(x=>x.status==='PartiallyReceived').length} label="Đã nhận một phần"/>
+      <UiMetric value={items.filter(x=>x.status==='PartiallyReceived').length} label="Nhận một phần"/>
       <UiMetric value={items.filter(x=>x.status==='Received').length} label="Đã nhận đủ"/>
     </UiMetricGrid>
 
-    <UiCard title="Giám sát Tiến độ Tiếp nhận & SLA Đơn mua (PO Fulfillment & Overdue Monitor — IN-01)">
+    <UiCard title="Giám sát Tiến độ Tiếp nhận & Cam kết Đơn mua">
       <div className="inbound-planning-detail-meta">
         <div>
-          <strong>PO quá hạn ngày dự kiến</strong><br/>
+          <strong>Đơn mua quá hạn ngày dự kiến</strong><br/>
           <UiBadge tone={fulfillmentSummary.overdueExpectedCount>0?'danger':'success'}>
-            {fulfillmentSummary.overdueExpectedCount} PO quá hạn
+            {fulfillmentSummary.overdueExpectedCount} đơn mua quá hạn
           </UiBadge>
         </div>
         <div>
@@ -302,15 +302,15 @@ export default function PurchaseOrders(){
           {fulfillmentSummary.completionRate}% ({fulfillmentSummary.receivedOrClosedCount}/{items.length})
         </div>
         <div>
-          <strong>PO sắp/quá hạn cần ưu tiên tiếp nhận</strong><br/>
+          <strong>Đơn mua sắp/quá hạn cần ưu tiên tiếp nhận</strong><br/>
           {fulfillmentSummary.activePriorityItems.length===0
-            ?'Không có PO mở cần ưu tiên'
+            ?'Không có đơn mua mở cần ưu tiên'
             :fulfillmentSummary.activePriorityItems.map(po=>`${po.code} (${po.supplierCode} • Hạn: ${isoDay(po.expectedDate)})`).join(' | ')}
         </div>
       </div>
       <div className="ui-inline-actions" style={{marginTop:8}}>
         <button type="button" disabled={!!busy||creating||governanceBusy} onClick={()=>void expediteOverdue()}>
-          Gửi Yêu cầu Đôn đốc NCC &amp; Giữ Cửa Tiếp nhận Ưu tiên (IN-01)
+          Gửi Yêu cầu Đôn đốc NCC &amp; Giữ Cửa Tiếp nhận Ưu tiên
         </button>
         {expediteResult&&(
           <UiBadge tone="warning">
@@ -318,7 +318,7 @@ export default function PurchaseOrders(){
           </UiBadge>
         )}
         <button type="button" disabled={!!busy||creating||governanceBusy} onClick={()=>void generateProcurementRecommendations()}>
-          Sinh Đề xuất Mua hàng, Phân tích Lead-Time NCC &amp; Khuyến nghị Expedite/Defer (AX-34, AX-36, AX-37)
+          Sinh Đề xuất Mua hàng, Phân tích Thời gian giao NCC &amp; Khuyến nghị Đôn đốc/Hoãn
         </button>
         {procurementRecResult&&(
           <UiBadge tone="success">
@@ -328,22 +328,22 @@ export default function PurchaseOrders(){
       </div>
     </UiCard>
 
-    <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã PO, mã nguồn, nhà cung cấp, kho"/>
+    <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã đơn mua, mã nguồn, nhà cung cấp, kho"/>
 
     <div className="inbound-planning-grid">
       <UiCard title="Danh sách đơn mua">
-        {filtered.length===0?<UiEmptyState title="Chưa có đơn mua phù hợp" detail="Thay đổi bộ lọc hoặc tạo PO mới nếu bạn có quyền."/>:
+        {filtered.length===0?<UiEmptyState title="Chưa có đơn mua phù hợp" detail="Thay đổi bộ lọc hoặc tạo đơn mua mới nếu bạn có quyền."/>:
           <UiTableScroll>
-            <table className="inbound-planning-table" aria-label="Danh sách đơn mua">
-              <thead><tr><th>Mã PO</th><th>Nhà cung cấp</th><th>Kho</th><th>Ngày dự kiến</th><th className="inbound-planning-numeric">SL cơ sở</th><th className="inbound-planning-numeric">Tổng tiền</th><th>Trạng thái</th></tr></thead>
+            <table className="inbound-planning-table ui-table-compact" aria-label="Danh sách đơn mua">
+              <thead><tr><th>Mã đơn mua</th><th>Nhà cung cấp</th><th>Kho nhận</th><th>Trạng thái</th><th>Ngày dự kiến</th><th className="inbound-planning-numeric">SL đặt</th><th className="inbound-planning-numeric">Tổng tiền</th></tr></thead>
               <tbody>{filtered.map(item=><tr key={item.id}>
-                <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong><br/><small style={{whiteSpace:'nowrap'}}>{item.externalPoId}</small></button></td>
+                <td className="ui-cell-nowrap" style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong><br/><small style={{whiteSpace:'nowrap'}}>{item.externalPoId}</small></button></td>
                 <td><span style={{whiteSpace:'nowrap'}}>{item.supplierCode}</span><br/><small>{item.supplierName}</small></td>
                 <td>{item.warehouseName}</td>
+                <td><UiBadge tone={tone(item.status)}>{labels[item.status]??item.status}</UiBadge></td>
                 <td>{isoDay(item.expectedDate)}</td>
                 <td className="inbound-planning-numeric">{item.baseOrderedQuantity.toLocaleString('vi-VN')}</td>
                 <td className="inbound-planning-numeric">{Number(item.totalAmount||0).toLocaleString('vi-VN')}</td>
-                <td><UiBadge tone={tone(item.status)}>{labels[item.status]??item.status}</UiBadge></td>
               </tr>)}</tbody>
             </table>
           </UiTableScroll>}
@@ -360,7 +360,7 @@ export default function PurchaseOrders(){
             <div><strong>Ngày dự kiến</strong><br/>{isoDay(selected.expectedDate)}</div>
             <div><strong>Tiền tệ tham chiếu</strong><br/>{selected.currency||'—'}</div>
             <div><strong>Tổng SL cơ sở</strong><br/>{selected.baseOrderedQuantity.toLocaleString('vi-VN')}</div>
-            <div><strong>Tổng tiền PO (Đã gồm thuế)</strong><br/>{Number(selected.totalAmount||0).toLocaleString('vi-VN')} {selected.currency||'VND'}</div>
+            <div><strong>Tổng tiền đơn mua (Đã gồm thuế)</strong><br/>{Number(selected.totalAmount||0).toLocaleString('vi-VN')} {selected.currency||'VND'}</div>
           </div>
           <div className="inbound-planning-actions">
             {canRelease&&selected.status==='Draft'&&<button className="ui-primary-button" disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/purchase-orders/'+selected.id+'/open','po-open:'+selected.id,'Đơn mua đã được mở cho quy trình nhận hàng.')}>{busy?'Đang lưu...':'Mở đơn mua'}</button>}
@@ -368,18 +368,19 @@ export default function PurchaseOrders(){
             {canCancel&&['Draft','Open'].includes(selected.status)&&<button disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/purchase-orders/'+selected.id+'/cancel','po-cancel:'+selected.id,'Đơn mua đã được hủy.')}>Hủy đơn mua</button>}
           </div>
           <UiTableScroll>
-            <table aria-label={'Dòng đơn mua '+selected.code}>
-              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th className="inbound-planning-numeric">Đặt mua</th><th className="inbound-planning-numeric">SL cơ sở</th><th className="inbound-planning-numeric">Đơn giá / Thuế</th><th className="inbound-planning-numeric">Thành tiền</th><th>Dung sai</th></tr></thead>
+            <table className="ui-table-compact" aria-label={'Dòng đơn mua '+selected.code}>
+              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th>Đơn vị</th><th className="inbound-planning-numeric">SL đặt</th><th className="inbound-planning-numeric">SL cơ sở</th><th className="inbound-planning-numeric">Đơn giá / Thuế</th><th className="inbound-planning-numeric">Thành tiền</th><th>Dung sai</th></tr></thead>
               <tbody>{selected.lines.map(line=>{
                 const opUnit=normalizeUnitCode(line.operationUnitCode);
                 const baseUnit=normalizeUnitCode(line.baseUnitCode);
                 return <tr key={line.id}>
                 <td>{line.externalLineId}</td>
                 <td><strong style={{whiteSpace:'nowrap'}}>{line.productCode}</strong><br/><small>{line.productName}</small></td>
-                <td className="inbound-planning-numeric">{line.orderedQuantity.toLocaleString('vi-VN')} {opUnit}</td>
+                <td>{opUnit||'—'}</td>
+                <td className="inbound-planning-numeric">{line.orderedQuantity.toLocaleString('vi-VN')}</td>
                 <td className="inbound-planning-numeric">{line.baseOrderedQuantity.toLocaleString('vi-VN')}{(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')&&baseUnit===opUnit?'':' '+baseUnit}</td>
                 <td className="inbound-planning-numeric">{Number(line.unitPrice||0).toLocaleString('vi-VN')} ({Number(line.taxPercent||0)}%)</td>
-                <td className="inbound-planning-numeric">{Number(line.lineTotalAmount||0).toLocaleString('vi-VN')}</td>
+                <td className="inbound-planning-numeric">{Number(line.lineTotal ?? line.lineTotalAmount ?? 0).toLocaleString('vi-VN')}</td>
                 <td>+{line.allowedOverReceiptPct}% / -{line.allowedUnderReceiptPct}%</td>
               </tr>;
               })}</tbody>
@@ -393,12 +394,12 @@ export default function PurchaseOrders(){
               {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
             </button>
           </div>
-          {showCreateForm&&!canPrepareCreate&&<div className="inbound-planning-notice"><strong>Thiếu quyền dữ liệu tham khảo.</strong><br/>Cần quyền đọc kho, sản phẩm và đối tác để tạo PO an toàn.</div>}
+          {showCreateForm&&!canPrepareCreate&&<div className="inbound-planning-notice"><strong>Thiếu quyền dữ liệu tham khảo.</strong><br/>Cần quyền đọc kho, sản phẩm và đối tác để tạo đơn mua an toàn.</div>}
           {showCreateForm&&canPrepareCreate&&<form className="inbound-planning-form" onSubmit={submitCreate}>
             <div className="inbound-planning-form-grid">
               <label>Hệ thống nguồn<input required value={sourceSystem} onChange={e=>setSourceSystem(e.target.value)} /></label>
-              <label>Mã PO ngoài hệ thống<input required value={externalPoId} onChange={e=>setExternalPoId(e.target.value)} /></label>
-              <label>Mã PO WMS<input required value={code} onChange={e=>setCode(e.target.value)} /></label>
+              <label>Mã đơn mua ngoài hệ thống<input required value={externalPoId} onChange={e=>setExternalPoId(e.target.value)} /></label>
+              <label>Mã đơn mua kho<input required value={code} onChange={e=>setCode(e.target.value)} /></label>
               <label>Tiền tệ tham chiếu<input value={currency} onChange={e=>setCurrency(e.target.value.toUpperCase())} maxLength={10}/></label>
               <label>Nhà cung cấp<select required value={supplierId} onChange={e=>setSupplierId(e.target.value?Number(e.target.value):'')}><option value="">Chọn nhà cung cấp</option>{suppliers.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>
               <label>Kho nhận<select required value={warehouseId} onChange={e=>setWarehouseId(e.target.value?Number(e.target.value):'')}><option value="">Chọn kho</option>{warehouses.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
@@ -422,7 +423,7 @@ export default function PurchaseOrders(){
                 </div>)}
               </div>
             </div>
-            <p className="inbound-planning-helper">Tạo PO chỉ ghi nhận expected inbound; tồn kho chỉ thay đổi khi Phiếu nhập được POST.</p>
+            <p className="inbound-planning-helper">Tạo đơn mua chỉ ghi nhận lượng hàng dự kiến về; tồn kho chỉ thay đổi khi Phiếu nhập kho được ghi sổ.</p>
             <div className="inbound-planning-form-actions">
               <button type="submit" disabled={creating}>{creating?'Đang tạo...':'Tạo đơn mua'}</button>
               <button type="button" disabled={creating} onClick={resetForm}>Làm lại</button>

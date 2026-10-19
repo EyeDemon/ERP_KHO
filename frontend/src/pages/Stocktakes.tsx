@@ -178,7 +178,7 @@ const Stocktakes = () => {
 
   const getStatusText = (status: number) => {
     switch (status) {
-      case 0: return 'Bản nháp';
+      case 0: return 'Nháp';
       case 1: return 'Đã duyệt';
       case 2: return 'Đã hủy';
       default: return 'Không xác định';
@@ -279,10 +279,10 @@ const Stocktakes = () => {
         lockType: 'CountFreeze',
         warehouseId: currentDetail.warehouseId,
         ...(locationId ? { locationId } : {}),
-        reason: `Đóng băng kiểm kê (CountFreeze) cho phiếu ${currentDetail.code}`
+        reason: `Đóng băng kiểm kê cho phiếu ${currentDetail.code}`
       }, { headers: idempotencyHeaders(key) });
       completeIdempotentAction(key);
-      setSuccessMsg(`Đã tạo khóa đóng băng kiểm kê (CountFreeze) cho phiếu ${currentDetail.code}.`);
+      setSuccessMsg(`Đã tạo khóa đóng băng kiểm kê cho phiếu ${currentDetail.code}.`);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Không thể tạo khóa đóng băng kiểm kê.');
     } finally {
@@ -421,10 +421,10 @@ const Stocktakes = () => {
   return (
     <UiPage>
       <div className="stocktakes-page">
-        {viewMode === 'list' && (
+        {(viewMode === 'list' || viewMode === 'detail') && (
           <>
             <UiPageHeader
-              eyebrow="Inventory control"
+              eyebrow="Kiểm soát tồn kho"
               title="Kiểm kê kho"
               description="Tạo đợt kiểm kê, nhập số lượng thực tế, theo dõi chênh lệch và duyệt điều chỉnh tồn kho."
               actions={<button type="button" className="ui-primary-button" onClick={handleAddNew}>Tạo phiếu kiểm kê</button>}
@@ -433,24 +433,24 @@ const Stocktakes = () => {
             {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
             {error && <p role="alert">{error} <button type="button" onClick={() => void fetchStocktakes()}>Thử lại</button></p>}
 
-            <UiCard title="Danh mục Mã lý do Chuẩn (MD-07) & Chính sách Điều chỉnh Tồn kho có Phê duyệt SoD (CT-07)">
+            <UiCard title="Danh mục Mã lý do Chuẩn & Chính sách Điều chỉnh Tồn kho có Phê duyệt Độc lập">
               <div className="stocktake-detail-meta">
                 <div>
-                  <strong>Mã lý do chuẩn hóa toàn hệ thống (MD-07):</strong><br />
-                  <code>COUNT_VARIANCE</code> / <code>COUNT_ERROR</code> (Sai sót / Chênh lệch kiểm đếm) • <code>DAMAGED_FOUND</code> / <code>DAMAGED</code> (Hư hỏng vật lý) • <code>MISPLACED_STOCK</code> / <code>MISPLACED</code> (Thất lạc / Sai vị trí) • <code>SUPPLIER_SHORTAGE</code> / <code>SUPPLIER_SHORT</code> (Thiếu từ NCC) • <code>EXPIRY_WRITE_OFF</code> / <code>EXPIRY_SCRAP</code> (Hủy hết hạn) • <code>RECALL_QUARANTINE</code> (Cô lập thu hồi)
+                  <strong>Mã lý do chuẩn hóa toàn hệ thống:</strong><br />
+                  Chênh lệch kiểm đếm • Hư hỏng vật lý • Thất lạc / Sai vị trí • Thiếu từ nhà cung cấp • Hủy hết hạn • Cô lập thu hồi
                 </div>
                 <div>
-                  <strong>Loại bút toán điều chỉnh sổ cái (CT-07):</strong><br />
-                  <code>AdjustmentIncrease</code> (Điều chỉnh tăng) &amp; <code>AdjustmentDecrease</code> (Điều chỉnh giảm)
+                  <strong>Loại bút toán điều chỉnh sổ cái:</strong><br />
+                  Điều chỉnh tăng &amp; Điều chỉnh giảm
                 </div>
                 <div>
-                  <strong>Kiểm soát Phân tách Nhiệm vụ (SoD Maker ≠ Checker):</strong><br />
+                  <strong>Kiểm soát phân tách nhiệm vụ:</strong><br />
                   Người tạo phiếu kiểm kê không được tự phê duyệt điều chỉnh tồn kho (Ngưỡng cảnh báo lệch chuẩn: ±2.0%)
                 </div>
               </div>
               <div className="ui-inline-actions" style={{ marginTop: 8 }}>
                 <button type="button" disabled={proposalBusy} onClick={() => void handleQuickAdjustmentProposal()}>
-                  Tạo nhanh Đề xuất Điều chỉnh qua cổng SoD (CT-07)
+                  Tạo nhanh Đề xuất Điều chỉnh qua Cổng Phê duyệt Độc lập
                 </button>
                 {proposalStatus && (
                   <UiBadge tone="warning">{proposalStatus}</UiBadge>
@@ -471,7 +471,7 @@ const Stocktakes = () => {
               <UiToolbarField label="Trạng thái">
                 <select aria-label="Lọc trạng thái kiểm kê" value={statusFilter} onChange={handleStatusFilterChange}>
                   <option value="">Tất cả trạng thái</option>
-                  <option value="0">Bản nháp</option>
+                  <option value="0">Nháp</option>
                   <option value="1">Đã duyệt</option>
                   <option value="2">Đã hủy</option>
                 </select>
@@ -484,14 +484,14 @@ const Stocktakes = () => {
                 <p role="status">Đang tải...</p>
               ) : (
                 <UiTableScroll>
-                  <table aria-label="Danh sách phiếu kiểm kê">
+                  <table className="ui-table-compact stocktake-list-table" aria-label="Danh sách phiếu kiểm kê">
                     <thead>
                       <tr>
                         <th>Mã phiếu</th>
                         <th>Kho</th>
                         <th>Ngày tạo</th>
                         <th>Trạng thái</th>
-                        <th>SL SP</th>
+                        <th className="ui-cell-numeric">SL SP</th>
                         <th>Ghi chú</th>
                         <th>Hành động</th>
                       </tr>
@@ -499,11 +499,11 @@ const Stocktakes = () => {
                     <tbody>
                       {paginatedStocktakes.map(s => (
                         <tr key={s.id}>
-                          <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{s.code}</strong></td>
+                          <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{s.code}</strong></td>
                           <td>{s.warehouseName}</td>
                           <td>{new Date(s.createdAt).toLocaleString('vi-VN')}</td>
                           <td><UiBadge tone={statusTone(s.status)}>{getStatusText(s.status)}</UiBadge></td>
-                          <td>{s.detailCount}</td>
+                          <td className="ui-cell-numeric">{s.detailCount}</td>
                           <td className="stocktake-note" title={s.note || ''}>{s.note || '—'}</td>
                           <td><button type="button" onClick={() => void loadDetail(s.id)}>Xem chi tiết</button></td>
                         </tr>
@@ -532,7 +532,7 @@ const Stocktakes = () => {
         {viewMode === 'create' && (
           <>
             <UiPageHeader
-              eyebrow="Inventory control"
+              eyebrow="Kiểm soát tồn kho"
               title="Tạo phiếu kiểm kê mới"
               description="Chọn kho cần kiểm kê; hệ thống sẽ tạo danh sách sản phẩm theo tồn hiện tại của kho."
             />
@@ -564,27 +564,27 @@ const Stocktakes = () => {
                 </label>
 
                 <label className="ui-stack">
-                  <span>Vị trí / Bin kiểm kê (Cycle Count - tùy chọn)</span>
+                  <span>Vị trí kệ kiểm kê (Kiểm kê chu kỳ - tùy chọn)</span>
                   <select
                     aria-label="Vị trí kiểm kê"
                     value={createLocationId}
                     onChange={(e) => setCreateLocationId(e.target.value ? parseInt(e.target.value) : '')}
                     disabled={formLoading || createWarehouseId === ''}
                   >
-                    <option value="">-- Toàn bộ kho (Full Warehouse) --</option>
+                    <option value="">-- Toàn bộ kho --</option>
                     {createLocations.map(loc => <option key={loc.id} value={loc.id}>{loc.code} — {loc.name}</option>)}
                   </select>
                 </label>
 
                 <label className="ui-inline-actions">
                   <input
-                    aria-label="Kiểm kê mù (Blind Count)"
+                    aria-label="Kiểm kê mù (Ẩn tồn hệ thống)"
                     type="checkbox"
                     checked={createIsBlindCount}
                     onChange={(e) => setCreateIsBlindCount(e.target.checked)}
                     disabled={formLoading}
                   />
-                  <span>Kiểm kê mù (Blind Count — ẩn số lượng tồn hệ thống khi nhân viên kiểm đếm)</span>
+                  <span>Kiểm kê mù (Ẩn số lượng tồn hệ thống khi nhân viên kiểm đếm)</span>
                 </label>
 
                 <label className="ui-stack">
@@ -611,37 +611,26 @@ const Stocktakes = () => {
 
         {viewMode === 'detail' && currentDetail && (
           <>
-            <UiPageHeader
-              eyebrow="Inventory control"
-              title={'Chi tiết kiểm kê: ' + currentDetail.code}
-              description="Nhập số lượng thực tế cho từng sản phẩm và duyệt phiếu khi toàn bộ dòng đã được kiểm đếm."
-              actions={
-                <div className="stocktake-page-actions">
-                  <button type="button" onClick={() => setViewMode('list')}>Quay lại danh sách</button>
-                  {currentDetail.status === 0 && canApprove && (
-                    <button type="button" onClick={() => void handleCountFreeze()} disabled={freezeLoading || loading}>
-                      {freezeLoading ? 'Đang khóa...' : 'Đóng băng kiểm kê (Count Freeze)'}
-                    </button>
-                  )}
-                  {currentDetail.status === 0 && canApprove && currentDetail.createdBy !== userId && (
-                    <button type="button" className="ui-primary-button" onClick={() => void handleApprove()} disabled={loading}>
-                      {loading ? 'Đang xử lý...' : 'Duyệt phiếu'}
-                    </button>
-                  )}
-                </div>
-              }
-            />
-
-            {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
-            {error && <p role="alert">{error}</p>}
-
-            <UiCard title="Thông tin phiếu">
+            <UiCard title={'Thông tin phiếu • ' + currentDetail.code}>
+              <div className="stocktake-page-actions" style={{ marginBottom: 12 }}>
+                <button type="button" onClick={() => setViewMode('list')}>Quay lại danh sách</button>
+                {currentDetail.status === 0 && canApprove && (
+                  <button type="button" onClick={() => void handleCountFreeze()} disabled={freezeLoading || loading}>
+                    {freezeLoading ? 'Đang khóa...' : 'Đóng băng kiểm kê'}
+                  </button>
+                )}
+                {currentDetail.status === 0 && canApprove && currentDetail.createdBy !== userId && (
+                  <button type="button" className="ui-primary-button" onClick={() => void handleApprove()} disabled={loading}>
+                    {loading ? 'Đang xử lý...' : 'Duyệt phiếu'}
+                  </button>
+                )}
+              </div>
               <div className="stocktake-detail-meta">
                 <div><strong>Kho:</strong> {currentDetail.warehouseName}</div>
                 <div>
                   <strong>Trạng thái:</strong> <UiBadge tone={statusTone(currentDetail.status)}>{getStatusText(currentDetail.status)}</UiBadge>
                   {Boolean(currentDetail.isBlindCount || currentDetail.note?.toUpperCase().startsWith('[BLIND]')) && (
-                    <> {' '}<UiBadge tone="warning">Kiểm kê mù (Blind Count)</UiBadge></>
+                    <> {' '}<UiBadge tone="warning">Kiểm kê mù (Ẩn tồn hệ thống)</UiBadge></>
                   )}
                 </div>
                 <div><strong>Ngày tạo:</strong> {new Date(currentDetail.createdAt).toLocaleString('vi-VN')}</div>
@@ -658,15 +647,15 @@ const Stocktakes = () => {
 
             <UiCard title="Chi tiết kiểm đếm">
               <UiTableScroll>
-                <table aria-label={'Chi tiết kiểm kê ' + currentDetail.code}>
+                <table className="ui-table-compact stocktake-detail-table" aria-label={'Chi tiết kiểm kê ' + currentDetail.code}>
                   <thead>
                     <tr>
                       <th>Mã SP</th>
-                      <th>Tên SP</th>
-                      <th>ĐVT</th>
-                      <th>Tồn hệ thống</th>
-                      <th>Thực tế</th>
-                      <th>Chênh lệch</th>
+                      <th>Tên sản phẩm</th>
+                      <th>Đơn vị</th>
+                      <th className="ui-cell-numeric">Tồn hệ thống</th>
+                      <th className="ui-cell-numeric">Thực đếm</th>
+                      <th className="ui-cell-numeric">Chênh lệch</th>
                       <th>Ghi chú</th>
                       {currentDetail.status === 0 && <th>Hành động</th>}
                     </tr>
@@ -677,11 +666,11 @@ const Stocktakes = () => {
                       const isBlindDraft = currentDetail.status === 0 && Boolean(currentDetail.isBlindCount || currentDetail.note?.toUpperCase().startsWith('[BLIND]'));
                       return (
                         <tr key={row.id}>
-                          <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong>{row.locationCode && <><br /><small style={{ whiteSpace: 'nowrap' }}>{row.locationCode}</small></>}</td>
+                          <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong>{row.locationCode && <><br /><small style={{ whiteSpace: 'nowrap' }}>{row.locationCode}</small></>}</td>
                           <td>{row.productName}</td>
                           <td>{row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName}</td>
-                          <td>{isBlindDraft ? <span className="ui-muted-text">Ẩn (Blind Count)</span> : row.systemQuantity}</td>
-                          <td>
+                          <td className="ui-cell-numeric">{isBlindDraft ? <span className="ui-muted-text">Ẩn (Kiểm kê mù)</span> : row.systemQuantity}</td>
+                          <td className="ui-cell-numeric">
                             {isEditing ? (
                               <input
                                 className="stocktake-editor"
@@ -697,7 +686,7 @@ const Stocktakes = () => {
                               row.actualQuantity !== undefined && row.actualQuantity !== null ? row.actualQuantity : '—'
                             )}
                           </td>
-                          <td>
+                          <td className="ui-cell-numeric">
                             {isBlindDraft
                               ? <span className="stocktake-variance neutral">Ẩn khi đếm mù</span>
                               : (isEditing ? renderVariance(row.systemQuantity, editActualQuantity) : renderVariance(row.systemQuantity, row.actualQuantity))}
@@ -715,17 +704,17 @@ const Stocktakes = () => {
                                   }}
                                   disabled={rowLoading}
                                 >
-                                  <option value="">-- Chọn nhanh mã lý do (CT-06) --</option>
-                                  <option value="COUNT_VARIANCE">COUNT_VARIANCE (Chênh lệch kiểm đếm định kỳ)</option>
-                                  <option value="DAMAGED_FOUND">DAMAGED_FOUND (Phát hiện hàng hư hỏng vật lý)</option>
-                                  <option value="EXPIRY_WRITE_OFF">EXPIRY_WRITE_OFF (Hủy hàng hết hạn sử dụng)</option>
-                                  <option value="SUPPLIER_SHORTAGE">SUPPLIER_SHORTAGE (Thiếu hụt nguồn giao từ NCC)</option>
-                                  <option value="MISPLACED_STOCK">MISPLACED_STOCK (Sai lệch vị trí lưu kho nội bộ)</option>
-                                  <option value="RECALL_QUARANTINE">RECALL_QUARANTINE (Cô lập thu hồi lô hàng khẩn cấp)</option>
-                                  <option value="DAMAGED">DAMAGED (Hư hỏng)</option>
-                                  <option value="MISPLACED">MISPLACED (Thất lạc / Sai vị trí)</option>
-                                  <option value="SUPPLIER_SHORT">SUPPLIER_SHORT (Thiếu từ NCC)</option>
-                                  <option value="COUNT_ERROR">COUNT_ERROR (Sai sót kiểm đếm)</option>
+                                  <option value="">-- Chọn nhanh mã lý do chênh lệch --</option>
+                                  <option value="COUNT_VARIANCE">Chênh lệch kiểm đếm định kỳ</option>
+                                  <option value="DAMAGED_FOUND">Phát hiện hàng hư hỏng vật lý</option>
+                                  <option value="EXPIRY_WRITE_OFF">Hủy hàng hết hạn sử dụng</option>
+                                  <option value="SUPPLIER_SHORTAGE">Thiếu hụt nguồn giao từ nhà cung cấp</option>
+                                  <option value="MISPLACED_STOCK">Sai lệch vị trí lưu kho nội bộ</option>
+                                  <option value="RECALL_QUARANTINE">Cô lập thu hồi lô hàng khẩn cấp</option>
+                                  <option value="DAMAGED">Hư hỏng</option>
+                                  <option value="MISPLACED">Thất lạc / Sai vị trí</option>
+                                  <option value="SUPPLIER_SHORT">Thiếu từ nhà cung cấp</option>
+                                  <option value="COUNT_ERROR">Sai sót kiểm đếm</option>
                                 </select>
                                 <input
                                   className="stocktake-editor-note"
@@ -755,7 +744,7 @@ const Stocktakes = () => {
                                   <button type="button" onClick={() => handleRowEdit(row)}>Nhập SL</button>
                                   {canApprove && row.actualQuantity !== undefined && row.actualQuantity !== null && (
                                     <button type="button" className="ui-btn-secondary" onClick={() => void handleRecount(row)} disabled={rowLoading}>
-                                      Yêu cầu đếm lại (Recount)
+                                      Yêu cầu đếm lại
                                     </button>
                                   )}
                                   {rowSuccessId === row.id && <span role="status" className="stocktake-row-success">✓ Đã lưu</span>}

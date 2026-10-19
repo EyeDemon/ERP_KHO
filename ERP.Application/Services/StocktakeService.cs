@@ -557,8 +557,9 @@ namespace ERP.Application.Services
                 DetailCount = stocktake.Details.Count,
                 Details = stocktake.Details.Select(d =>
                 {
-                    var rawUnit = (d.Product?.Unit?.Name ?? string.Empty).Trim();
-                    var unitName = string.Equals(rawUnit, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                    var rawUnit = (d.Product?.Unit?.Name ?? d.Product?.Unit?.Code ?? string.Empty).Trim();
+                    var unitName = string.IsNullOrWhiteSpace(rawUnit) ||
+                                   string.Equals(rawUnit, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
                                    string.Equals(rawUnit, "QA-PCS", StringComparison.OrdinalIgnoreCase)
                         ? "THÙNG"
                         : rawUnit;

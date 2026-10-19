@@ -32,12 +32,12 @@ public sealed class DockYardService(
             .Select(warehouse => new DockYardWarehouseDto
             {
                 Id = warehouse.Id,
-                Code = warehouse.Code,
-                Name = warehouse.Name,
-                TimeZoneId = context.WarehouseCalendars
+                Code = warehouse.Code.Trim(),
+                Name = warehouse.Name.Trim(),
+                TimeZoneId = (context.WarehouseCalendars
                     .Where(calendar => calendar.WarehouseId == warehouse.Id)
                     .Select(calendar => calendar.TimeZoneId)
-                    .FirstOrDefault() ?? "UTC",
+                    .FirstOrDefault() ?? "UTC").Trim(),
                 CalendarConfigured = context.WarehouseCalendars.Any(calendar => calendar.WarehouseId == warehouse.Id)
             })
             .ToListAsync(token);
@@ -115,7 +115,7 @@ public sealed class DockYardService(
                 && !ReleasedStatuses.Contains(x.Status))
             .Select(x => new { YardSlotId = x.YardSlotId!.Value, x.Code })
             .ToListAsync(token);
-        var occupiedById = occupied.GroupBy(x => x.YardSlotId).ToDictionary(x => x.Key, x => x.OrderBy(y => y.Code).First().Code);
+        var occupiedById = occupied.GroupBy(x => x.YardSlotId).ToDictionary(x => x.Key, x => x.OrderBy(y => y.Code).First().Code.Trim());
 
         var rows = await context.YardSlots.AsNoTracking()
             .Where(x => x.WarehouseId == warehouseId)
@@ -125,8 +125,8 @@ public sealed class DockYardService(
         {
             Id = x.Id,
             WarehouseId = x.WarehouseId,
-            Code = x.Code,
-            Name = x.Name,
+            Code = x.Code.Trim(),
+            Name = x.Name.Trim(),
             IsActive = x.IsActive,
             Occupied = occupiedById.ContainsKey(x.Id),
             OccupiedByAppointmentCode = occupiedById.GetValueOrDefault(x.Id),
@@ -541,7 +541,7 @@ public sealed class DockYardService(
                 po = await context.PurchaseOrders.AsNoTracking().SingleOrDefaultAsync(x => x.Id == receipt.PurchaseOrderId.Value, token);
         }
 
-        return $"PO:{po?.Id}:{po?.Code}|ASN:{asn?.Id}:{asn?.Code}|GR:{receipt?.Id}:{receipt?.Code}";
+        return $"PO:{po?.Id}:{po?.Code?.Trim()}|ASN:{asn?.Id}:{asn?.Code?.Trim()}|GR:{receipt?.Id}:{receipt?.Code?.Trim()}";
     }
 
     private async Task<DockAppointmentDto> TransitionAsync(
@@ -732,9 +732,27 @@ public sealed class DockYardService(
             ActorUserId = currentUser.UserId,
             DockId = dockId,
             YardSlotId = yardSlotId,
-            Note = Optional(note)
+            Note = Optional(note) ?? DefaultDockEventNote(eventType)
         });
     }
+
+    private static string? DefaultDockEventNote(string? eventType) => eventType?.Trim() switch
+    {
+        "Created" => "Đã khởi tạo lịch hẹn tại cổng kho.",
+        "DraftUpdated" => "Đã cập nhật thông tin lịch hẹn nháp.",
+        "Confirmed" => "Đã xác nhận khung giờ lịch hẹn.",
+        "Arrived" => "Phương tiện đã đến cổng kho.",
+        "CheckedIn" => "Đã làm thủ tục check-in tại cổng.",
+        "DockAssigned" => "Đã phân bổ cửa xuất nhập (Dock).",
+        "DockReassigned" => "Đã điều chuyển cửa xuất nhập (Dock).",
+        "ServiceStarted" => "Bắt đầu bốc dỡ hàng hóa tại Dock.",
+        "ServiceCompleted" => "Hoàn tất bốc dỡ hàng hóa tại Dock.",
+        "CheckedOut" => "Phương tiện đã rời bãi (Check-out).",
+        "Cancelled" => "Đã hủy lịch hẹn.",
+        "NoShow" => "Phương tiện không đến theo lịch hẹn (No-show).",
+        "Exception" => "Ghi nhận sự cố / ngoại lệ vận hành.",
+        _ => null
+    };
 
     private void AddAudit(string action, string entityName, int entityId, int warehouseId, string? values) =>
         context.AuditLogs.Add(new AuditLog
@@ -809,11 +827,11 @@ public sealed class DockYardService(
         {
             Id = slot.Id,
             WarehouseId = slot.WarehouseId,
-            Code = slot.Code,
-            Name = slot.Name,
+            Code = slot.Code.Trim(),
+            Name = slot.Name.Trim(),
             IsActive = slot.IsActive,
             Occupied = occupied,
-            OccupiedByAppointmentCode = code,
+            OccupiedByAppointmentCode = code?.Trim(),
             RowVersion = Version(slot.RowVersion)
         };
     }
@@ -822,11 +840,11 @@ public sealed class DockYardService(
     {
         Id = x.Id,
         WarehouseId = x.WarehouseId,
-        Code = x.Code,
-        Name = x.Name,
+        Code = x.Code.Trim(),
+        Name = x.Name.Trim(),
         SupportsInbound = x.SupportsInbound,
         SupportsOutbound = x.SupportsOutbound,
-        AllowedVehicleType = x.AllowedVehicleType,
+        AllowedVehicleType = x.AllowedVehicleType?.Trim(),
         IsTemperatureControlled = x.IsTemperatureControlled,
         HazardAllowed = x.HazardAllowed,
         IsActive = x.IsActive,
@@ -840,52 +858,52 @@ public sealed class DockYardService(
         {
             Id = x.Id,
             WarehouseId = x.WarehouseId,
-            WarehouseCode = x.Warehouse.Code,
-            WarehouseName = x.Warehouse.Name,
-            Code = x.Code,
+            WarehouseCode = (x.Warehouse?.Code ?? string.Empty).Trim(),
+            WarehouseName = (x.Warehouse?.Name ?? string.Empty).Trim(),
+            Code = x.Code.Trim(),
             Direction = x.Direction,
             Status = x.Status,
             PlannedStartUtc = AsUtc(x.PlannedStartUtc),
             PlannedEndUtc = AsUtc(x.PlannedEndUtc),
-            CarrierCode = x.CarrierCode,
-            CarrierName = x.CarrierName,
-            VehiclePlate = x.VehiclePlate,
-            TrailerPlate = x.TrailerPlate,
-            VehicleType = x.VehicleType,
+            CarrierCode = x.CarrierCode?.Trim(),
+            CarrierName = x.CarrierName?.Trim(),
+            VehiclePlate = x.VehiclePlate?.Trim(),
+            TrailerPlate = x.TrailerPlate?.Trim(),
+            VehicleType = x.VehicleType?.Trim(),
             RequiresTemperatureControl = x.RequiresTemperatureControl,
             Hazardous = x.Hazardous,
-            DriverName = x.DriverName,
-            DriverPhone = x.DriverPhone,
-            SealNumber = x.SealNumber,
+            DriverName = x.DriverName?.Trim(),
+            DriverPhone = x.DriverPhone?.Trim(),
+            SealNumber = x.SealNumber?.Trim(),
             YardSlotId = x.YardSlotId,
-            YardSlotCode = x.YardSlot?.Code,
+            YardSlotCode = x.YardSlot?.Code?.Trim(),
             DockId = x.DockId,
-            DockCode = x.Dock?.Code,
+            DockCode = x.Dock?.Code?.Trim(),
             ArrivedAtUtc = AsUtc(x.ArrivedAtUtc),
             CheckedInAtUtc = AsUtc(x.CheckedInAtUtc),
             DockAssignedAtUtc = AsUtc(x.DockAssignedAtUtc),
             ServiceStartedAtUtc = AsUtc(x.ServiceStartedAtUtc),
             ServiceCompletedAtUtc = AsUtc(x.ServiceCompletedAtUtc),
             CheckedOutAtUtc = AsUtc(x.CheckedOutAtUtc),
-            ExceptionCode = x.ExceptionCode,
-            Note = x.Note,
+            ExceptionCode = x.ExceptionCode?.Trim(),
+            Note = x.Note?.Trim(),
             PurchaseOrderId = poId,
-            PurchaseOrderCode = poCode,
+            PurchaseOrderCode = poCode?.Trim(),
             AsnId = asnId,
-            AsnCode = asnCode,
+            AsnCode = asnCode?.Trim(),
             ImportReceiptId = grId,
-            ImportReceiptCode = grCode,
+            ImportReceiptCode = grCode?.Trim(),
             RowVersion = Version(x.RowVersion),
             Events = includeEvents
                 ? x.Events.OrderBy(y => y.EventAtUtc).Select(y => new DockAppointmentEventDto
                 {
                     Id = y.Id,
-                    EventType = y.EventType,
+                    EventType = y.EventType.Trim(),
                     EventAtUtc = AsUtc(y.EventAtUtc),
                     ActorUserId = y.ActorUserId,
                     DockId = y.DockId,
                     YardSlotId = y.YardSlotId,
-                    Note = y.Note
+                    Note = string.IsNullOrWhiteSpace(y.Note) ? DefaultDockEventNote(y.EventType) : y.Note.Trim()
                 }).ToList()
                 : []
         };
@@ -910,7 +928,7 @@ public sealed class DockYardService(
             if (parts.Length < 3) continue;
             var key = parts[0].ToUpperInvariant();
             var parsedId = int.TryParse(parts[1], out var idVal) && idVal > 0 ? idVal : (int?)null;
-            var codeVal = string.IsNullOrWhiteSpace(parts[2]) ? null : parts[2];
+            var codeVal = string.IsNullOrWhiteSpace(parts[2]) ? null : parts[2].Trim();
             switch (key)
             {
                 case "PO":

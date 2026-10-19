@@ -38,11 +38,11 @@ type Product={id:number;code:string;name:string;unitId:number;unitCode:string;un
 type LineForm={purchaseOrderLineId:number|'';productId:number|'';operationUnitId:number|'';expectedQuantity:number|''};
 
 const labels:Record<string,string>={
-  Draft:'Nháp',Confirmed:'Đã xác nhận',InTransit:'Đang vận chuyển',Arrived:'Đã đến',
-  Receiving:'Đang tiếp nhận',Completed:'Hoàn tất ASN',Cancelled:'Đã hủy',
+  Draft:'Nháp',Confirmed:'Đã xác nhận',InTransit:'Đang vận chuyển',Arrived:'Đã đến cổng',
+  Receiving:'Đang tiếp nhận',Received:'Đã hoàn tất',Completed:'Đã hoàn tất',Cancelled:'Đã hủy',
 };
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
-  status==='Completed'?'success':status==='Arrived'||status==='Receiving'?'warning':status==='Cancelled'?'danger':'neutral';
+  status==='Completed'||status==='Received'?'success':status==='Arrived'||status==='Receiving'?'warning':status==='Cancelled'?'danger':'neutral';
 const dateTime=(value?:string)=>value?new Date(value).toLocaleString('vi-VN'):'—';
 const normalizeUnitCode=(unitCode?:string)=>(unitCode==='QA_UNIT'||unitCode==='QA-PCS')?'THÙNG':(unitCode||'');
 const emptyLine=():LineForm=>({purchaseOrderLineId:'',productId:'',operationUnitId:'',expectedQuantity:''});
@@ -270,11 +270,11 @@ export default function Asns(){
     <UiMetricGrid>
       <UiMetric value={items.length} label="ASN trong phạm vi hiện tại"/>
       <UiMetric value={items.filter(x=>x.status==='InTransit').length} label="Đang vận chuyển"/>
-      <UiMetric value={items.filter(x=>x.status==='Arrived').length} label="Đã đến kho"/>
+      <UiMetric value={items.filter(x=>x.status==='Arrived').length} label="Đã đến cổng"/>
       <UiMetric value={items.filter(x=>x.status==='Receiving').length} label="Đang tiếp nhận"/>
     </UiMetricGrid>
 
-    <UiCard title="Giám sát Lịch đến Kho & Liên kết PO của ASN (ASN Arrival & Linkage Monitor — IN-02)">
+    <UiCard title="Giám sát Lịch đến Kho & Liên kết Đơn mua của ASN">
       <div className="inbound-planning-detail-meta">
         <div>
           <strong>ASN trễ giờ dự kiến đến</strong><br/>
@@ -283,8 +283,8 @@ export default function Asns(){
           </UiBadge>
         </div>
         <div>
-          <strong>Liên kết PO nguồn</strong><br/>
-          {arrivalSummary.linkedPoAsnCount} gắn PO / {arrivalSummary.unlinkedPoAsnCount} chưa gắn PO
+          <strong>Liên kết đơn mua nguồn</strong><br/>
+          {arrivalSummary.linkedPoAsnCount} gắn đơn mua / {arrivalSummary.unlinkedPoAsnCount} chưa gắn đơn mua
         </div>
         <div>
           <strong>Tổng SL cơ sở đang về / chờ nhận</strong><br/>
@@ -293,7 +293,7 @@ export default function Asns(){
       </div>
       <div className="ui-inline-actions" style={{marginTop:8}}>
         <button type="button" disabled={!!busy||creating||stagingBusy} onClick={()=>void preAllocateStaging()}>
-          Cấp phát Trước Bãi đệm Tiếp nhận (Pre-Allocate Staging — IN-02)
+          Cấp phát Trước Bãi đệm Tiếp nhận
         </button>
         {stagingReservation&&(
           <UiBadge tone="success">
@@ -303,17 +303,17 @@ export default function Asns(){
       </div>
     </UiCard>
 
-    <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã ASN, PO, nhà cung cấp, kho"/>
+    <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã ASN, đơn mua, nhà cung cấp, kho"/>
 
     <div className="inbound-planning-grid">
       <UiCard title="Danh sách ASN">
         {filtered.length===0?<UiEmptyState title="Chưa có ASN phù hợp" detail="Thay đổi bộ lọc hoặc tạo ASN mới nếu bạn có quyền."/>:
           <UiTableScroll>
-            <table className="inbound-planning-table" aria-label="Danh sách ASN">
-              <thead><tr><th>ASN</th><th>PO nguồn</th><th>Nhà cung cấp</th><th>Kho</th><th>Dự kiến đến</th><th className="inbound-planning-numeric">SL cơ sở</th><th>Trạng thái</th></tr></thead>
+            <table className="inbound-planning-table ui-table-compact" aria-label="Danh sách ASN">
+              <thead><tr><th>Mã ASN</th><th>Đơn mua (PO)</th><th>Nhà cung cấp</th><th>Kho nhận</th><th>Dự kiến đến</th><th className="inbound-planning-numeric">SL dự kiến</th><th>Trạng thái</th></tr></thead>
               <tbody>{filtered.map(item=><tr key={item.id}>
-                <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong></button></td>
-                <td style={{whiteSpace:'nowrap'}}>{item.purchaseOrderCode||'Không gắn PO'}</td>
+                <td className="ui-cell-nowrap" style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong></button></td>
+                <td style={{whiteSpace:'nowrap'}}>{item.purchaseOrderCode||'Không gắn đơn mua'}</td>
                 <td><span style={{whiteSpace:'nowrap'}}>{item.supplierCode}</span><br/><small>{item.supplierName}</small></td>
                 <td>{item.warehouseName}</td>
                 <td>{dateTime(item.expectedArrivalAtUtc)}</td>
@@ -328,7 +328,7 @@ export default function Asns(){
         {selected&&<UiCard title={'Chi tiết '+selected.code}>
           <div className="inbound-planning-detail-meta">
             <div><strong>Trạng thái</strong><br/><UiBadge tone={tone(selected.status)}>{labels[selected.status]??selected.status}</UiBadge></div>
-            <div><strong>PO nguồn</strong><br/>{selected.purchaseOrderCode||'Không gắn PO'}</div>
+            <div><strong>Đơn mua (PO)</strong><br/>{selected.purchaseOrderCode||'Không gắn đơn mua'}</div>
             <div><strong>Nhà cung cấp</strong><br/>{selected.supplierCode} — {selected.supplierName}</div>
             <div><strong>Kho nhận</strong><br/>{selected.warehouseName}</div>
             <div><strong>Dự kiến đến</strong><br/>{dateTime(selected.expectedArrivalAtUtc)}</div>
@@ -346,15 +346,16 @@ export default function Asns(){
             {canCancel&&['Draft','Confirmed'].includes(selected.status)&&<button disabled={!!busy||!selected.rowVersion} onClick={()=>void command('/api/asns/'+selected.id+'/cancel','asn-cancel:'+selected.id,'ASN đã được hủy.')}>Hủy ASN</button>}
           </div>
           <UiTableScroll>
-            <table aria-label={'Dòng ASN '+selected.code}>
-              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th className="inbound-planning-numeric">Dự kiến</th><th className="inbound-planning-numeric">SL cơ sở</th></tr></thead>
+            <table className="ui-table-compact" aria-label={'Dòng ASN '+selected.code}>
+              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th>Đơn vị</th><th className="inbound-planning-numeric">SL dự kiến</th><th className="inbound-planning-numeric">SL cơ sở</th></tr></thead>
               <tbody>{selected.lines.map(line=>{
                 const opUnit=normalizeUnitCode(line.operationUnitCode);
                 const baseUnit=normalizeUnitCode(line.baseUnitCode);
                 return <tr key={line.id}>
                 <td>{line.lineNo}</td>
                 <td><strong style={{whiteSpace:'nowrap'}}>{line.productCode}</strong><br/><small>{line.productName}</small></td>
-                <td className="inbound-planning-numeric">{line.expectedQuantity.toLocaleString('vi-VN')} {opUnit}</td>
+                <td>{opUnit||'—'}</td>
+                <td className="inbound-planning-numeric">{line.expectedQuantity.toLocaleString('vi-VN')}</td>
                 <td className="inbound-planning-numeric">{line.baseExpectedQuantity.toLocaleString('vi-VN')}{(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')&&baseUnit===opUnit?'':' '+baseUnit}</td>
               </tr>;
               })}</tbody>
@@ -372,15 +373,15 @@ export default function Asns(){
           {showCreateForm&&canPrepareCreate&&<form className="inbound-planning-form" onSubmit={submitCreate}>
             <div className="inbound-planning-form-grid">
               <label>Mã ASN<input required value={code} onChange={e=>setCode(e.target.value)}/></label>
-              <label>PO nguồn
+              <label>Đơn mua nguồn
                 <select value={purchaseOrderId} onChange={e=>void choosePurchaseOrder(e.target.value)} disabled={!canReadPo}>
-                  <option value="">{canReadPo?'Không gắn PO':'Không có quyền đọc PO'}</option>
+                  <option value="">{canReadPo?'Không gắn đơn mua':'Không có quyền đọc đơn mua'}</option>
                   {eligiblePurchaseOrders.map(x=><option key={x.id} value={x.id}>{x.code} — {x.supplierCode} — {x.warehouseName}</option>)}
                 </select>
               </label>
               {purchaseOrderId&&poDetail?<>
-                <div><strong>Nhà cung cấp theo PO</strong><br/>{poDetail.supplierCode} — {poDetail.supplierName}</div>
-                <div><strong>Kho theo PO</strong><br/>{poDetail.warehouseName}</div>
+                <div><strong>Nhà cung cấp theo đơn mua</strong><br/>{poDetail.supplierCode} — {poDetail.supplierName}</div>
+                <div><strong>Kho theo đơn mua</strong><br/>{poDetail.warehouseName}</div>
               </>:<>
                 <label>Nhà cung cấp<select required={!purchaseOrderId} value={supplierId} onChange={e=>setSupplierId(e.target.value?Number(e.target.value):'')}><option value="">Chọn nhà cung cấp</option>{suppliers.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>
                 <label>Kho nhận<select required={!purchaseOrderId} value={warehouseId} onChange={e=>setWarehouseId(e.target.value?Number(e.target.value):'')}><option value="">Chọn kho</option>{warehouses.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
@@ -395,7 +396,7 @@ export default function Asns(){
               <div className="ui-inline-wrap inbound-planning-summary"><strong>Dòng hàng dự kiến</strong><button type="button" onClick={()=>setLines(current=>[...current,emptyLine()])}>Thêm dòng</button></div>
               <div className="inbound-planning-lines">
                 {lines.map((line,index)=><div className="inbound-planning-line compact" key={index}>
-                  {purchaseOrderId?<label>Dòng PO<select required value={line.purchaseOrderLineId} onChange={e=>changeLine(index,{purchaseOrderLineId:e.target.value?Number(e.target.value):''})}><option value="">Chọn dòng PO</option>{poDetail?.lines.map(x=><option key={x.id} value={x.id}>{x.externalLineId} — {x.productCode} — còn dự kiến tối đa theo PO</option>)}</select></label>:
+                  {purchaseOrderId?<label>Dòng đơn mua<select required value={line.purchaseOrderLineId} onChange={e=>changeLine(index,{purchaseOrderLineId:e.target.value?Number(e.target.value):''})}><option value="">Chọn dòng đơn mua</option>{poDetail?.lines.map(x=><option key={x.id} value={x.id}>{x.externalLineId} — {x.productCode} — còn dự kiến tối đa theo đơn mua</option>)}</select></label>:
                     <label>Sản phẩm<select required value={line.productId} onChange={e=>changeLine(index,{productId:e.target.value?Number(e.target.value):''})}><option value="">Chọn sản phẩm</option>{products.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>}
                   <label>Đơn vị<select required value={line.operationUnitId} onChange={e=>changeLine(index,{operationUnitId:e.target.value?Number(e.target.value):''})}><option value="">Chọn đơn vị</option>{productUnitOptions(products,line.productId).map(x=><option key={x.unitId} value={x.unitId}>{x.unitCode}</option>)}</select></label>
                   <label>Số lượng dự kiến<input required min="0" step="any" type="number" value={line.expectedQuantity} onChange={e=>changeLine(index,{expectedQuantity:e.target.value===''?'':Number(e.target.value)})}/></label>
@@ -404,7 +405,7 @@ export default function Asns(){
                 </div>)}
               </div>
             </div>
-            <p className="inbound-planning-helper">Tổng ASN theo từng dòng PO không được vượt số lượng đặt cộng dung sai nhận vượt. ASN không tạo tồn kho.</p>
+            <p className="inbound-planning-helper">Tổng ASN theo từng dòng đơn mua không được vượt số lượng đặt cộng dung sai nhận vượt. ASN không tạo tồn kho.</p>
             <div className="inbound-planning-form-actions">
               <button type="submit" disabled={creating}>{creating?'Đang tạo...':'Tạo ASN'}</button>
               <button type="button" disabled={creating} onClick={resetForm}>Làm lại</button>

@@ -60,7 +60,7 @@ describe('Approvals page',()=>{
   it('renders waiting time, textual SLA badge, and the UTC request instant tooltip',async()=>{
     const view=render(<Approvals/>);await view.findByText('TRF-7');
     expect(view.getByText('1 ngày 1 giờ')).toBeTruthy();
-    expect(view.container.querySelector('.approval-sla-warning')?.textContent).toBe('Sắp đến hạn');
+    expect(view.container.querySelector('.approval-sla-warning')?.textContent).toBe('Sắp quá hạn');
     expect(view.getByTitle(`UTC: ${item.requestedAtUtc}`)).toBeTruthy();
   });
   it('hides both actions when server denies capabilities and renders the instant in local time',async()=>{

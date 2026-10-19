@@ -62,24 +62,26 @@
   user-select: all;
 }
 
+.approval-backdrop,
 .approval-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  background: rgba(15, 23, 42, .58);
+  position: static;
+  background: transparent;
+  display: block;
+  padding: 0;
+  margin-top: 16px;
 }
 
 .approval-dialog {
-  width: min(680px, 100%);
-  max-height: 90dvh;
-  overflow: auto;
-  background: var(--ui-surface);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius);
-  padding: 22px;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  overflow: visible;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  box-sizing: border-box;
 }
 
 .approval-dialog label {
@@ -106,13 +108,57 @@
   border-color: var(--ui-danger);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .approval-dialog {
     padding: 14px;
   }
 
   .approval-dialog footer button,
   .approval-row-actions button {
-    min-height: 44px;
+    min-height: 40px;
+  }
+
+  .approval-page .ui-table-scroll {
+    overflow-x: hidden;
+  }
+
+  .approval-page .ui-table {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .approval-page .ui-table thead {
+    display: none;
+  }
+
+  .approval-page .ui-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .approval-page .ui-table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface);
+  }
+
+  .approval-page .ui-table td {
+    display: block;
+    padding: 2px 0 !important;
+    border: 0 !important;
+    min-width: 0;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+
+  .approval-page .ui-table td:last-child {
+    grid-column: 1 / -1;
+    padding-top: 6px !important;
   }
 }
+

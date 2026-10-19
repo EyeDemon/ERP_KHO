@@ -31,9 +31,16 @@ const errorMessage=(e:unknown)=>{
 };
 
 const transactionTypeLabel=(value:string)=>({
+  Import:'Nhập kho',
+  Export:'Xuất kho',
   Move:'Di chuyển vị trí',
+  Ship:'Xuất giao',
+  TransferOut:'Xuất điều chuyển',
+  TransferIn:'Nhập điều chuyển',
+  AdjustmentIncrease:'Điều chỉnh tăng',
+  AdjustmentDecrease:'Điều chỉnh giảm',
   StatusChange:'Đổi trạng thái',
-  Reversal:'Đảo giao dịch',
+  Reversal:'Đảo bút toán',
 }[value]??value);
 
 const inventoryStatusLabel=(value:string)=>({
@@ -178,16 +185,16 @@ export default function InventoryReversals(){
     {warehouseError&&<p role="alert">{warehouseError}</p>}
     {reasonsError&&<p role="alert">{reasonsError}</p>}
     {success&&<p role="status">{success}</p>}
-    <UiCard title="Tổng quan Giao dịch Đủ điều kiện Đảo & Kiểm soát Bất biến Sổ cái (Reversal Governance Summary — INV-09)">
+    <UiCard title="Tổng quan Giao dịch Đủ điều kiện Đảo & Kiểm soát Bất biến Sổ cái">
       <div className="ui-inline-wrap">
         <span>Tổng giao dịch khớp lọc: <strong>{totalRecords}</strong></span>
         <span>Khả dụng đảo trên trang: <strong>{reversibleCount}</strong></span>
         <span>Đã tạo bút toán đảo trên trang: <strong>{alreadyReversedCount}</strong></span>
-        <span>Loại Move / StatusChange: <strong>{moveTransactionCount} / {statusChangeTransactionCount}</strong></span>
+        <span>Chuyển vị trí / Đổi trạng thái: <strong>{moveTransactionCount} / {statusChangeTransactionCount}</strong></span>
       </div>
       <div className="ui-inline-actions" style={{marginTop:8}}>
         <button type="button" disabled={chainIntegrityBusy} onClick={()=>void verifyReversalChainIntegrity()}>
-          Xác minh Toàn vẹn Chuỗi Đảo giao dịch & Chống Đảo lặp (INV-09)
+          Xác minh Toàn vẹn Chuỗi Đảo giao dịch & Chống Đảo lặp
         </button>
         {chainIntegrityResult&&(
           <span>
@@ -231,9 +238,9 @@ export default function InventoryReversals(){
           setTransactionId(searched===''?null:parsed);
           setProductCode(productCodeInput.trim());
         }} className="ui-inline-actions">
-          <UiToolbarField label="Mã sản phẩm (SKU)">
+          <UiToolbarField label="Mã sản phẩm">
             <input aria-label="Tìm theo mã sản phẩm" disabled={busy||loading} value={productCodeInput} maxLength={64}
-              onChange={e=>setProductCodeInput(e.target.value)} placeholder="Mã SKU bắt đầu bằng..." />
+              onChange={e=>setProductCodeInput(e.target.value)} placeholder="Mã sản phẩm bắt đầu bằng..." />
           </UiToolbarField>
           <UiToolbarField label="ID giao dịch">
             <input aria-label="Tìm theo ID giao dịch" disabled={busy||loading} type="number" min="1" step="1"
@@ -246,7 +253,7 @@ export default function InventoryReversals(){
       </UiToolbar>
       {!loading&&<p role="status" className="ui-muted-text">{'Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch'}</p>}
       {loading && rows.length === 0 ? <p role="status">Đang tải giao dịch...</p> : <UiTableScroll>
-        <table aria-label="Danh sách giao dịch có thể đảo">
+        <table className="ui-table-compact" aria-label="Danh sách giao dịch có thể đảo">
           <thead><tr><th>Giao dịch</th><th>Sản phẩm</th><th>Kho</th><th>Chi tiết theo dõi</th><th>Số lượng</th><th>Thời gian</th><th>Trạng thái đảo</th>{canReverse&&<th>Thao tác</th>}</tr></thead>
           <tbody>{rows.length===0?<tr><td colSpan={canReverse?8:7} className="ui-empty-cell">Không có giao dịch phù hợp.</td></tr>:
             rows.map(x=>{

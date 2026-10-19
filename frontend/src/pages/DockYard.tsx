@@ -14,6 +14,7 @@ import {
   UiToolbar,
   UiToolbarField,
 } from '../ui/ProductionUi';
+import './DockYard.css';
 
 type Warehouse = { id: number; code: string; name: string; timeZoneId: string; calendarConfigured: boolean };
 type Dock = {
@@ -70,11 +71,11 @@ type ActionPanel =
 const statusLabel: Record<number, string> = {
   0: 'Nháp',
   1: 'Đã xác nhận',
-  2: 'Đã đến',
-  3: 'Đã vào cổng',
-  4: 'Đã gán cửa kho',
-  5: 'Đang phục vụ',
-  6: 'Hoàn thành',
+  2: 'Đã đến cổng',
+  3: 'Đã vào bãi',
+  4: 'Đang tại cửa kho',
+  5: 'Đang bốc dỡ',
+  6: 'Hoàn tất bốc dỡ',
   7: 'Đã hủy',
   8: 'Không đến',
   9: 'Ngoại lệ',
@@ -86,6 +87,17 @@ const statusTone = (status: number) =>
         : status === 5 ? 'warning' as const
           : 'success' as const;
 const directionLabel = (value: number) => value === 0 ? 'Nhập kho' : 'Xuất kho';
+const vehicleTypeLabel = (value?: string | null) => {
+  if (!value) return 'Mọi loại';
+  const map: Record<string, string> = {
+    TRUCK: 'Xe tải',
+    CONTAINER: 'Xe đầu kéo / Container',
+    VAN: 'Xe tải nhỏ',
+    REEFER: 'Xe lạnh',
+    LORRY: 'Xe tải nặng',
+  };
+  return map[value.toUpperCase()] ?? value;
+};
 
 const eventTypeLabel = (value: string) => ({
   CREATED: 'Đã tạo',
@@ -99,7 +111,7 @@ const eventTypeLabel = (value: string) => ({
   CANCELLED: 'Đã hủy',
   NO_SHOW: 'Không đến',
   EXCEPTION_RECORDED: 'Ghi nhận ngoại lệ',
-  INBOUND_DOCUMENTS_LINKED: 'Liên kết PO / ASN / GR',
+  INBOUND_DOCUMENTS_LINKED: 'Liên kết chứng từ nhập',
 }[value] ?? value);
 const timeZoneParts = (date: Date, timeZone: string) => {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -469,6 +481,7 @@ const DockYard = () => {
 
   return (
     <UiPage>
+      <div className="dock-yard-page">
       <UiPageHeader
         eyebrow="Vận hành"
         title="Điều hành cửa kho & sân bãi"
@@ -512,26 +525,26 @@ const DockYard = () => {
         <>
           <UiCard title="Vận hành lịch hẹn">
             <UiTableScroll>
-              <table aria-label="Danh sách lịch hẹn cửa kho sân bãi">
+              <table className="ui-table-compact" aria-label="Danh sách lịch hẹn cửa kho sân bãi">
                 <thead><tr><th>Lịch hẹn</th><th>Khung giờ</th><th>Đơn vị vận chuyển / Phương tiện</th><th>Sân bãi</th><th>Cửa kho</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
                 <tbody>
                   {filtered.map(item => (
                     <tr key={item.id}>
-                      <td>
+                      <td className="ui-cell-nowrap">
                         <strong>{item.code}</strong><br />
                         <small>{directionLabel(item.direction)}</small>
                         {(item.purchaseOrderCode || item.asnCode || item.importReceiptCode) && (
                           <><br /><small>{[
-                            item.purchaseOrderCode ? 'PO: ' + item.purchaseOrderCode : '',
+                            item.purchaseOrderCode ? 'Đơn mua: ' + item.purchaseOrderCode : '',
                             item.asnCode ? 'ASN: ' + item.asnCode : '',
-                            item.importReceiptCode ? 'GR: ' + item.importReceiptCode : '',
+                            item.importReceiptCode ? 'Phiếu nhập: ' + item.importReceiptCode : '',
                           ].filter(Boolean).join(' • ')}</small></>
                         )}
                       </td>
-                      <td>{displayWarehouseTime(item.plannedStartUtc, warehouseTimeZone)}<br /><small>→ {displayWarehouseTime(item.plannedEndUtc, warehouseTimeZone)} • {warehouseTimeZone}</small></td>
+                      <td>{displayWarehouseTime(item.plannedStartUtc, warehouseTimeZone)}<br /><small>→ {displayWarehouseTime(item.plannedEndUtc, warehouseTimeZone)} • {warehouseTimeZone === 'Asia/Ho_Chi_Minh' ? 'Giờ VN (GMT+7)' : warehouseTimeZone}</small></td>
                       <td>{item.carrierName || item.carrierCode || '—'}<br /><small>{item.vehiclePlate || 'Chưa có biển số'}</small></td>
-                      <td>{item.yardSlotCode || '—'}</td>
-                      <td>{item.dockCode || '—'}</td>
+                      <td className="ui-cell-nowrap">{item.yardSlotCode || '—'}</td>
+                      <td className="ui-cell-nowrap">{item.dockCode || '—'}</td>
                       <td><UiBadge tone={statusTone(item.status)}>{statusLabel[item.status] || item.status}</UiBadge>{item.checkedOutAtUtc && <><br /><small>Đã rời cổng</small></>}</td>
                       <td>
                         <div className="ui-inline-actions">
@@ -550,7 +563,7 @@ const DockYard = () => {
                                 note: '',
                               })}
                             >
-                              Liên kết PO/ASN/GR
+                              Liên kết chứng từ nhập
                             </button>
                           )}
                           {canManageAppointment && item.status === 0 && <button type="button" aria-label={'Xác nhận lịch hẹn ' + item.code} onClick={() => void runCommand(item, 'confirm')}>Xác nhận</button>}
@@ -576,12 +589,12 @@ const DockYard = () => {
           <UiCard title="Danh mục cửa kho">
             {canManageDock && <div className="ui-inline-actions"><button type="button" onClick={() => setDockForm(emptyDock())}>Thêm cửa kho</button></div>}
             <UiTableScroll>
-              <table aria-label="Danh sách cửa kho">
+              <table className="ui-table-compact" aria-label="Danh sách cửa kho">
                 <thead><tr><th>Mã</th><th>Tên</th><th>Luồng</th><th>Phương tiện</th><th>Nhiệt độ</th><th>Hàng nguy hiểm</th><th>Trạng thái</th>{canManageDock && <th>Thao tác</th>}</tr></thead>
                 <tbody>{docks.map(dock => <tr key={dock.id}>
-                  <td><strong>{dock.code}</strong></td><td>{dock.name}</td>
+                  <td className="ui-cell-nowrap"><strong>{dock.code}</strong></td><td>{dock.name}</td>
                   <td>{[dock.supportsInbound ? 'Nhập kho' : '', dock.supportsOutbound ? 'Xuất kho' : ''].filter(Boolean).join(' + ')}</td>
-                  <td>{dock.allowedVehicleType || 'Mọi loại'}</td><td>{dock.isTemperatureControlled ? 'Có' : 'Không'}</td><td>{dock.hazardAllowed ? 'Cho phép' : 'Không'}</td>
+                  <td>{vehicleTypeLabel(dock.allowedVehicleType)}</td><td>{dock.isTemperatureControlled ? 'Có' : 'Không'}</td><td>{dock.hazardAllowed ? 'Cho phép' : 'Không'}</td>
                   <td><UiBadge tone={dock.isActive ? 'success' : 'neutral'}>{dock.isActive ? 'Hoạt động' : 'Ngừng'}</UiBadge></td>
                   {canManageDock && <td><button type="button" aria-label={'Sửa cửa kho ' + dock.code} onClick={() => setDockForm({ id: dock.id, code: dock.code, name: dock.name, supportsInbound: dock.supportsInbound, supportsOutbound: dock.supportsOutbound, allowedVehicleType: dock.allowedVehicleType ?? '', isTemperatureControlled: dock.isTemperatureControlled, hazardAllowed: dock.hazardAllowed, isActive: dock.isActive, rowVersion: dock.rowVersion })}>Sửa</button></td>}
                 </tr>)}</tbody>
@@ -592,10 +605,10 @@ const DockYard = () => {
           <UiCard title="Vị trí sân bãi">
             {canManageDock && <div className="ui-inline-actions"><button type="button" onClick={() => setYardForm(emptyYard())}>Thêm vị trí sân bãi</button></div>}
             <UiTableScroll>
-              <table aria-label="Danh sách vị trí sân bãi">
+              <table className="ui-table-compact" aria-label="Danh sách vị trí sân bãi">
                 <thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th>Tình trạng sử dụng</th>{canManageDock && <th>Thao tác</th>}</tr></thead>
                 <tbody>{yardSlots.map(slot => <tr key={slot.id}>
-                  <td><strong>{slot.code}</strong></td><td>{slot.name}</td><td><UiBadge tone={slot.isActive ? 'success' : 'neutral'}>{slot.isActive ? 'Hoạt động' : 'Ngừng'}</UiBadge></td>
+                  <td className="ui-cell-nowrap"><strong>{slot.code}</strong></td><td>{slot.name}</td><td><UiBadge tone={slot.isActive ? 'success' : 'neutral'}>{slot.isActive ? 'Hoạt động' : 'Ngừng'}</UiBadge></td>
                   <td>{slot.occupied ? <UiBadge tone="warning">{slot.occupiedByAppointmentCode || 'Đang dùng'}</UiBadge> : <UiBadge tone="success">Trống</UiBadge>}</td>
                   {canManageDock && <td><button type="button" aria-label={'Sửa vị trí sân bãi ' + slot.code} onClick={() => setYardForm({ id: slot.id, code: slot.code, name: slot.name, isActive: slot.isActive, rowVersion: slot.rowVersion })}>Sửa</button></td>}
                 </tr>)}</tbody>
@@ -603,22 +616,22 @@ const DockYard = () => {
             </UiTableScroll>
           </UiCard>
 
-          <UiCard title="Giám sát Thời gian lưu bãi & SLA Phương tiện (Yard Dwell Monitor — DY-04)">
+          <UiCard title="Giám sát Thời gian lưu bãi & Cam kết Phương tiện">
             <UiTableScroll>
-              <table aria-label="Bảng giám sát thời gian lưu bãi phương tiện DY-04">
+              <table className="ui-table-compact" aria-label="Bảng giám sát thời gian lưu bãi phương tiện DY-04">
                 <thead>
                   <tr>
                     <th>Lịch hẹn</th>
                     <th>Phương tiện / Đơn vị vận chuyển</th>
                     <th>Vị trí Bãi / Cửa kho</th>
                     <th>Thời gian lưu bãi</th>
-                    <th>Cảnh báo SLA</th>
+                    <th>Trạng thái cam kết</th>
                   </tr>
                 </thead>
                 <tbody>
                   {dwellItems.map(item => (
                     <tr key={item.appointmentId}>
-                      <td>
+                      <td className="ui-cell-nowrap">
                         <strong>{`Phiếu hẹn: ${item.appointmentCode}`}</strong>
                         <br />
                         <small>{directionLabel(item.direction)} • {statusLabel[item.status] || item.status}</small>
@@ -637,10 +650,10 @@ const DockYard = () => {
                       <td>
                         <UiBadge tone={item.slaState === 'OVERDUE' ? 'danger' : item.slaState === 'WARNING' ? 'warning' : 'success'}>
                           {item.slaState === 'OVERDUE'
-                            ? 'Quá hạn > 120p'
+                            ? 'Quá hạn (> 120p)'
                             : item.slaState === 'WARNING'
-                              ? 'Cảnh báo > 60p'
-                              : 'Bình thường'}
+                              ? 'Cảnh báo (> 60p)'
+                              : 'Đúng hạn'}
                         </UiBadge>
                       </td>
                     </tr>
@@ -657,12 +670,12 @@ const DockYard = () => {
             </UiTableScroll>
           </UiCard>
 
-          <UiCard title="Điều phối Trung chuyển thẳng (Cross-Docking Inbound → Outbound — DY-04)">
+          <UiCard title="Điều phối Trung chuyển Thẳng (Nhập sang Xuất không qua Cất hàng)">
             <div className="ui-inline-wrap">
-              <span>Chuyến Nhập tại cổng / cửa kho (Inbound Active): <strong>{inboundActiveCount}</strong></span>
-              <span>Chuyến Xuất chờ ghép hàng (Outbound Active): <strong>{outboundActiveCount}</strong></span>
-              <span>Cặp Cross-Docking khả thi (Chuyển thẳng Staging/Loading): <strong>{crossDockMatchedCount}</strong></span>
-              <span>Chính sách điều phối: <strong>MATCH_INBOUND_RECEIPT_TO_OUTBOUND_STAGING_WITHOUT_PUTAWAY</strong></span>
+              <span>Chuyến nhập tại cổng / cửa kho: <strong>{inboundActiveCount}</strong></span>
+              <span>Chuyến xuất chờ ghép hàng: <strong>{outboundActiveCount}</strong></span>
+              <span>Cặp trung chuyển khả thi (Chuyển thẳng ra bãi xuất): <strong>{crossDockMatchedCount}</strong></span>
+              <span>Chính sách điều phối: <strong>Ghép trực tiếp hàng vừa tiếp nhận sang bãi tập kết xuất kho không qua cất hàng lên kệ</strong></span>
             </div>
             <div className="ui-inline-actions">
               <button
@@ -681,28 +694,28 @@ const DockYard = () => {
                       const data = res?.data ?? {};
                       if (typeof data.dispatchId !== 'string' || !data.dispatchId) {
                         setCrossDockResult(null);
-                        setError('Phản hồi điều phối Cross-Docking không hợp lệ từ máy chủ.');
+                        setError('Phản hồi điều phối trung chuyển thẳng không hợp lệ từ máy chủ.');
                         return;
                       }
                       setCrossDockResult({
                         dispatchId: data.dispatchId,
                         dockDoorCode: typeof data.dockDoorCode === 'string' && data.dockDoorCode ? data.dockDoorCode : (docks[0]?.code ?? 'DOCK-XD-01'),
                         stagedHuCount: typeof data.stagedHuCount === 'number' ? data.stagedHuCount : 0,
-                        status: typeof data.status === 'string' && data.status ? data.status : 'CROSSDOCK_ROUTED',
+                        status: typeof data.status === 'string' && data.status ? data.status : 'Đã định tuyến trung chuyển',
                       });
                     })
                     .catch(failure => {
                       setCrossDockResult(null);
-                      setError(messageOf(failure, 'Không thể điều phối luồng Cross-Docking.'));
+                      setError(messageOf(failure, 'Không thể điều phối luồng trung chuyển thẳng.'));
                     })
                     .finally(() => setCrossDockBusy(false));
                 }}
               >
-                Điều phối Nhanh Luồng Cross-Docking (DY-04)
+                Điều phối Nhanh Luồng Trung chuyển Thẳng
               </button>
               {crossDockResult && (
                 <UiBadge tone="success">
-                  {`Mã lệnh: ${crossDockResult.dispatchId} • Cửa kho: ${crossDockResult.dockDoorCode} • HU chuyển thẳng: ${crossDockResult.stagedHuCount} • Trạng thái: ${crossDockResult.status}`}
+                  {`Mã lệnh: ${crossDockResult.dispatchId} • Cửa kho: ${crossDockResult.dockDoorCode} • Kiện chuyển thẳng: ${crossDockResult.stagedHuCount} • Trạng thái: ${crossDockResult.status}`}
                 </UiBadge>
               )}
             </div>
@@ -716,14 +729,14 @@ const DockYard = () => {
           <p className="ui-muted">
             Chứng từ nhập liên kết:{' '}
             {[
-              selected.purchaseOrderCode ? 'PO: ' + selected.purchaseOrderCode : '',
+              selected.purchaseOrderCode ? 'Đơn mua: ' + selected.purchaseOrderCode : '',
               selected.asnCode ? 'ASN: ' + selected.asnCode : '',
-              selected.importReceiptCode ? 'GR: ' + selected.importReceiptCode : '',
+              selected.importReceiptCode ? 'Phiếu nhập: ' + selected.importReceiptCode : '',
             ].filter(Boolean).join(' • ')}
           </p>
         )}
         <UiTableScroll>
-          <table aria-label="Dòng thời gian lịch hẹn">
+          <table className="ui-table-compact" aria-label="Dòng thời gian lịch hẹn">
             <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Cửa kho</th><th>Sân bãi</th><th>Ghi chú</th></tr></thead>
             <tbody>{(selected.events ?? []).map(event => <tr key={event.id}>
               <td>{new Date(event.eventAtUtc).toLocaleString('vi-VN')}</td><td>{eventTypeLabel(event.eventType)}</td><td>{event.dockId ?? '—'}</td><td>{event.yardSlotId ?? '—'}</td><td>{event.note || '—'}</td>
@@ -837,6 +850,7 @@ const DockYard = () => {
           <div className="ui-inline-actions"><button type="submit" disabled={saving}>Lưu liên kết chứng từ</button><button type="button" onClick={() => setActionPanel(null)} disabled={saving}>Hủy</button></div>
         </form>}
       </UiCard>}
+      </div>
     </UiPage>
   );
 };

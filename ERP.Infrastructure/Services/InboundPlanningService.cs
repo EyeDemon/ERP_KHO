@@ -376,13 +376,14 @@ public sealed class InboundPlanningService(
         if(opId==product.UnitId)
         {
             EnsurePrecision(quantity,product.Unit.DecimalPlaces);
-            return new(opId,product.Unit.Code,product.Unit.DecimalPlaces,product.UnitId,product.Unit.Code,product.Unit.DecimalPlaces,1m,1,quantity);
+            var baseUomCode = NormalizeUomCode(product.Unit.Code, product.Unit.Name);
+            return new(opId,baseUomCode,product.Unit.DecimalPlaces,product.UnitId,baseUomCode,product.Unit.DecimalPlaces,1m,1,quantity);
         }
         var uom=product.Uoms.Where(x=>x.IsActive&&x.EffectiveFromUtc<=now&&x.UnitId==opId).OrderByDescending(x=>x.Version).FirstOrDefault()
             ?? throw new BusinessRuleException("Đơn vị thao tác không hợp lệ cho sản phẩm.");
         EnsurePrecision(quantity,uom.Unit.DecimalPlaces);
         var baseQty=quantity*uom.ConversionFactor; EnsurePrecision(baseQty,product.Unit.DecimalPlaces);
-        return new(opId,uom.Unit.Code,uom.Unit.DecimalPlaces,product.UnitId,product.Unit.Code,product.Unit.DecimalPlaces,uom.ConversionFactor,uom.Version,baseQty);
+        return new(opId,NormalizeUomCode(uom.Unit.Code, uom.Unit.Name),uom.Unit.DecimalPlaces,product.UnitId,NormalizeUomCode(product.Unit.Code, product.Unit.Name),product.Unit.DecimalPlaces,uom.ConversionFactor,uom.Version,baseQty);
     }
 
     private IQueryable<PurchaseOrder> PurchaseOrderQuery()=>context.PurchaseOrders.Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product).ThenInclude(x=>x.Unit);
@@ -391,7 +392,8 @@ public sealed class InboundPlanningService(
     private static string NormalizeUomCode(string? code, string? fallback)
     {
         var raw = !string.IsNullOrWhiteSpace(code) ? code.Trim() : (fallback?.Trim() ?? string.Empty);
-        if (string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+        if (string.IsNullOrWhiteSpace(raw) ||
+            string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(raw, "QA-PCS", StringComparison.OrdinalIgnoreCase))
             return "THÙNG";
         return raw;
@@ -416,7 +418,7 @@ public sealed class InboundPlanningService(
         {
             var lineSub = decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
             var lineTax = decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
-            var (opUom, baseUom) = NormalizeUomPair(l.OperationUnitCodeSnapshot, l.BaseUnitCodeSnapshot, l.Product?.Unit?.Code, l.OperationUnitId, l.BaseUnitId, l.ConversionFactorSnapshot);
+            var (opUom, baseUom) = NormalizeUomPair(l.OperationUnitCodeSnapshot, l.BaseUnitCodeSnapshot, l.Product?.Unit?.Code ?? l.Product?.Unit?.Name, l.OperationUnitId, l.BaseUnitId, l.ConversionFactorSnapshot);
             return new PurchaseOrderLineDto
             {
                 Id = l.Id, ExternalLineId = l.ExternalLineId.Trim(), LineNo = l.LineNo, ProductId = l.ProductId, ProductCode = (l.Product?.Code ?? string.Empty).Trim(), ProductName = (l.Product?.Name ?? string.Empty).Trim(),
@@ -447,7 +449,7 @@ public sealed class InboundPlanningService(
         RowVersion=CanSeeMutationToken()?Convert.ToBase64String(x.RowVersion):null,
         Lines=x.Lines.OrderBy(l=>l.LineNo).Select(l=>
         {
-            var (opUom,baseUom)=NormalizeUomPair(l.OperationUnitCodeSnapshot,l.BaseUnitCodeSnapshot,l.Product?.Unit?.Code,l.OperationUnitId,l.BaseUnitId,l.ConversionFactorSnapshot);
+            var (opUom,baseUom)=NormalizeUomPair(l.OperationUnitCodeSnapshot,l.BaseUnitCodeSnapshot,l.Product?.Unit?.Code ?? l.Product?.Unit?.Name,l.OperationUnitId,l.BaseUnitId,l.ConversionFactorSnapshot);
             return new AsnLineDto
             {
                 Id=l.Id,PurchaseOrderLineId=l.PurchaseOrderLineId,LineNo=l.LineNo,ProductId=l.ProductId,ProductCode=(l.Product?.Code??string.Empty).Trim(),ProductName=(l.Product?.Name??string.Empty).Trim(),

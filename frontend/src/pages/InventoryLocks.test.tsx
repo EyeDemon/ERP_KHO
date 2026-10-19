@@ -31,7 +31,7 @@ describe('InventoryLocks',()=>{
 
   it('shows active lock read-only without manage permission',async()=>{
     const view=render(<InventoryLocks/>);
-    expect(await view.findByText('Giữ do chất lượng')).toBeTruthy();
+    expect(await view.findByText('Giữ kiểm định chất lượng')).toBeTruthy();
     expect(view.getByText(/LOT-A/)).toBeTruthy();
     expect(view.queryByText('Tạo khóa')).toBeNull();
     expect(view.queryByText('Mở khóa')).toBeNull();
@@ -41,7 +41,7 @@ describe('InventoryLocks',()=>{
     permissionState.granted.add('inventory_lock.manage');
     vi.mocked(apiClient.post).mockResolvedValue({data:lock} as never);
     const view=render(<InventoryLocks/>);
-    await view.findByText('Giữ do chất lượng');
+    await view.findByText('Giữ kiểm định chất lượng');
     fireEvent.change(view.getByLabelText('Kho'),{target:{value:'1'}});
     fireEvent.change(view.getByLabelText('ID sản phẩm (tùy chọn)'),{target:{value:'10'}});
     fireEvent.change(view.getByLabelText('Lý do'),{target:{value:'Đóng băng phục vụ kiểm kê'}});
@@ -58,7 +58,7 @@ describe('InventoryLocks',()=>{
     permissionState.granted.add('inventory_lock.manage');
     vi.mocked(apiClient.post).mockResolvedValue({data:{...lock,status:'Released'}} as never);
     const view=render(<InventoryLocks/>);
-    await view.findByText('Giữ do chất lượng');
+    await view.findByText('Giữ kiểm định chất lượng');
     fireEvent.click(view.getByText('Mở khóa'));
     fireEvent.change(view.getByLabelText('Lý do mở khóa'),{target:{value:'Đã hoàn tất điều tra'}});
     fireEvent.click(view.getByText('Xác nhận mở khóa'));

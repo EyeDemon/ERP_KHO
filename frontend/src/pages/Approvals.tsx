@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Eye, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { approvalDisplayAction, validRejectReason } from '../services/approval';
-import AccessibleDialog from '../components/AccessibleDialog';
 import { hasPermission, usePermissionSet } from '../services/authorization';
 import { permissionError } from '../services/permissionPresentation';
 import {
@@ -17,6 +16,83 @@ import {
   UiToolbarField,
 } from '../ui/ProductionUi';
 import './Approvals.css';
+
+function InlineApprovalDialog({
+  titleId,
+  busy = false,
+  onClose,
+  returnFocusTo,
+  children,
+}: {
+  titleId: string;
+  busy?: boolean;
+  onClose: () => void;
+  returnFocusTo?: HTMLElement | null;
+  children: ReactNode;
+}) {
+  const dialog = useRef<HTMLDivElement>(null);
+  const options = useRef({ busy, onClose });
+  useEffect(() => {
+    options.current = { busy, onClose };
+  }, [busy, onClose]);
+  useEffect(() => {
+    const root = dialog.current;
+    const focusable = () =>
+      Array.from(
+        root?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+    (root?.querySelector<HTMLElement>('[data-initial-focus]') ?? focusable()[0])?.focus();
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!options.current.busy) options.current.onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) {
+        event.preventDefault();
+        root?.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', key);
+    const contain = (event: FocusEvent) => {
+      if (!root?.contains(event.target as Node)) (focusable()[0] ?? root)?.focus();
+    };
+    document.addEventListener('focusin', contain);
+    return () => {
+      document.removeEventListener('keydown', key);
+      document.removeEventListener('focusin', contain);
+      returnFocusTo?.focus();
+    };
+  }, [returnFocusTo]);
+  return (
+    <div className="approval-backdrop approval-modal" role="presentation">
+      <div
+        ref={dialog}
+        tabIndex={-1}
+        className="approval-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 type SlaStatus = 'Normal' | 'Warning' | 'Overdue';
 type QueueItem = {
@@ -83,22 +159,28 @@ const errorText = (error: unknown) => {
 
 const stateLabels: Record<string, string> = {
   Draft: 'Nháp',
+  Pending: 'Chờ phê duyệt',
+  PendingApproval: 'Chờ phê duyệt',
   Received: 'Đã nhận hàng',
   QcCompleted: 'Kiểm tra chất lượng đã hoàn tất — chờ duyệt',
   ReadyToPost: 'Chờ ghi nhận tồn kho',
   Posted: 'Đã ghi nhận tồn kho',
   Cancelled: 'Đã hủy',
   Approved: 'Đã duyệt',
+  Rejected: 'Đã từ chối',
+  Submitted: 'Gửi yêu cầu phê duyệt',
 };
 const documentLabels: Record<string, string> = {
-  ImportReceipt: 'Nhập kho',
-  ExportReceipt: 'Xuất kho',
-  StockTransfer: 'Điều chuyển',
-  Stocktake: 'Kiểm kê',
+  ImportReceipt: 'Phiếu nhập kho',
+  ExportReceipt: 'Phiếu xuất kho',
+  StockTransfer: 'Phiếu điều chuyển',
+  Stocktake: 'Phiếu kiểm kê',
+  ReceivingDiscrepancy: 'Biên bản sai lệch nhận hàng',
+  InventoryAdjustment: 'Điều chỉnh tồn kho',
 };
 const slaLabels: Record<SlaStatus, string> = {
-  Normal: 'Bình thường',
-  Warning: 'Sắp đến hạn',
+  Normal: 'Đúng hạn',
+  Warning: 'Sắp quá hạn',
   Overdue: 'Quá hạn',
 };
 
@@ -340,13 +422,13 @@ export default function Approvals() {
 
         {error && <div className="approval-error" role="alert">{error}</div>}
 
-        <UiCard title="Tóm tắt SLA phê duyệt (Approval SLA Governance — AD-05)">
+        <UiCard title="Tóm tắt Cam kết Thời gian Phê duyệt (SLA)">
           <div className="ui-inline-wrap">
-            <span>Bình thường: <strong>{normalCount}</strong></span>
-            <span>Sắp đến hạn: <strong>{warningCount}</strong></span>
+            <span>Đúng hạn: <strong>{normalCount}</strong></span>
+            <span>Sắp quá hạn: <strong>{warningCount}</strong></span>
             <span>Quá hạn: <strong>{overdueCount}</strong></span>
             <button type="button" onClick={() => void triggerEscalateOverdue()}>
-              Leo thang Nhắc duyệt Hồ sơ Quá hạn SLA (AD-05)
+              Leo thang Nhắc duyệt Hồ sơ Quá hạn SLA
             </button>
             {escalationResult && (
               <UiBadge tone="warning">
@@ -367,10 +449,10 @@ export default function Approvals() {
               }}
             >
               <option value="">Tất cả loại</option>
-              <option value="ImportReceipt">Nhập kho</option>
-              <option value="ExportReceipt">Xuất kho</option>
-              <option value="StockTransfer">Điều chuyển</option>
-              <option value="Stocktake">Kiểm kê</option>
+              <option value="ImportReceipt">Phiếu nhập kho</option>
+              <option value="ExportReceipt">Phiếu xuất kho</option>
+              <option value="StockTransfer">Phiếu điều chuyển</option>
+              <option value="Stocktake">Phiếu kiểm kê</option>
             </select>
           </UiToolbarField>
 
@@ -384,8 +466,8 @@ export default function Approvals() {
               }}
             >
               <option value="">Tất cả mức SLA</option>
-              <option value="Normal">Bình thường</option>
-              <option value="Warning">Sắp đến hạn</option>
+              <option value="Normal">Đúng hạn</option>
+              <option value="Warning">Sắp quá hạn</option>
               <option value="Overdue">Quá hạn</option>
             </select>
           </UiToolbarField>
@@ -462,7 +544,7 @@ export default function Approvals() {
             <UiEmptyState title="Không có chứng từ chờ duyệt." />
           ) : (
             <UiTableScroll>
-              <table aria-label="Hàng đợi phê duyệt">
+              <table className="ui-table-compact" aria-label="Hàng đợi phê duyệt">
                 <thead>
                   <tr>
                     <th>Loại</th>
@@ -479,7 +561,7 @@ export default function Approvals() {
                   {data.items.map(item => (
                     <tr key={`${item.documentType}-${item.documentId}`}>
                       <td>{documentLabels[item.documentType] || 'Chứng từ'}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{item.documentCode}</strong></td>
+                      <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{item.documentCode}</strong></td>
                       <td>{item.warehouseName}{item.destinationWarehouseName && ` → ${item.destinationWarehouseName}`}</td>
                       <td>{item.creatorName}</td>
                       <td title={`UTC: ${item.requestedAtUtc}`}>{new Date(item.requestedAtUtc).toLocaleString()}</td>
@@ -561,7 +643,7 @@ export default function Approvals() {
         </UiCard>
 
         {selected && (
-          <AccessibleDialog
+          <InlineApprovalDialog
             titleId="approval-title"
             busy={busy}
             onClose={closeDialog}
@@ -595,7 +677,7 @@ export default function Approvals() {
                 {detail && detail.lines.length > 0 && (
                   <div className="approval-detail-table">
                     <UiTableScroll>
-                      <table aria-label={`Chi tiết ${selected.documentCode}`}>
+                      <table className="ui-table-compact" aria-label={`Chi tiết ${selected.documentCode}`}>
                         <thead>
                           <tr>
                             <th>Sản phẩm</th>
@@ -666,7 +748,7 @@ export default function Approvals() {
                 </button>
               )}
             </footer>
-          </AccessibleDialog>
+          </InlineApprovalDialog>
         )}
       </div>
     </UiPage>

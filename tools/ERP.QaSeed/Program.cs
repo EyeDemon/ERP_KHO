@@ -159,7 +159,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         {
             TenantId = 1,
             Username = "qa_admin",
-            FullName = "QA Admin",
+            FullName = "Quản trị viên Hệ thống",
             Role = roles["Admin"],
             PasswordHash = hasher.HashPassword("QaAdmin@123456!"),
             IsActive = true,
@@ -172,6 +172,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     else
     {
         qaAdmin.TenantId = 1;
+        qaAdmin.FullName = "Quản trị viên Hệ thống";
         qaAdmin.Role = roles["Admin"];
         qaAdmin.PasswordHash = hasher.HashPassword("QaAdmin@123456!");
         qaAdmin.IsActive = true;
@@ -182,10 +183,10 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 
     var definitions = new[]
     {
-        new AccountDefinition("qa_admin_local", "QA Local Admin", roles["Admin"], false),
-        new AccountDefinition("qa_manager_wh01", "QA Manager WH01", roles["Manager"], true),
-        new AccountDefinition("qa_staff_wh01", "QA Warehouse Staff WH01", roles["WarehouseStaff"], true),
-        new AccountDefinition("qa_viewer_wh01", "QA Viewer WH01", roles["Viewer"], true)
+        new AccountDefinition("qa_admin_local", "Quản trị viên Nội bộ", roles["Admin"], false),
+        new AccountDefinition("qa_manager_wh01", "Quản lý Kho WH01", roles["Manager"], true),
+        new AccountDefinition("qa_staff_wh01", "Nhân viên Kho WH01", roles["WarehouseStaff"], true),
+        new AccountDefinition("qa_viewer_wh01", "Giám sát Kho WH01", roles["Viewer"], true)
     };
     var users = new Dictionary<string, User>(StringComparer.Ordinal);
 
@@ -206,6 +207,10 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 IsActive = true
             };
             context.Users.Add(user);
+        }
+        else
+        {
+            user.FullName = definition.FullName;
         }
         users.Add(definition.Username, user);
     }
@@ -393,13 +398,40 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     {
         product = new Product
         {
-            Code = "QA-LAPTOP",
-            Name = "QA Laptop văn phòng",
+            Code = "QA-E2E-001",
+            Name = "Thùng linh kiện điện tử QA-01",
             UnitId = unit.Id,
-            Description = "Laptop dùng cho kiểm thử ERP",
+            Description = "Linh kiện điện tử dùng cho kiểm thử ERP",
             IsActive = true
         };
         context.Products.Add(product);
+        await context.SaveChangesAsync();
+    }
+    else if (product.UnitId != unit.Id)
+    {
+        product.UnitId = unit.Id;
+        await context.SaveChangesAsync();
+    }
+
+    var lotProduct = await context.Products.IgnoreQueryFilters().OrderBy(p => p.Id)
+        .FirstOrDefaultAsync(p => p.IsActive && (p.Code == "QA-LOT-002" || p.Id != product.Id));
+    if (lotProduct is null)
+    {
+        lotProduct = new Product
+        {
+            Code = "QA-LOT-002",
+            Name = "Hộp cảm biến nhiệt độ QA-02",
+            UnitId = unit.Id,
+            Description = "Cảm biến nhiệt độ quản lý theo lô dùng cho kiểm thử ERP",
+            IsActive = true,
+            ShelfLifeDays = 365
+        };
+        context.Products.Add(lotProduct);
+        await context.SaveChangesAsync();
+    }
+    else if (lotProduct.UnitId != unit.Id)
+    {
+        lotProduct.UnitId = unit.Id;
         await context.SaveChangesAsync();
     }
 
@@ -1155,6 +1187,14 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 line.OperationUnitCodeSnapshot = unit.Code;
                 line.BaseUnitId = unit.Id;
                 line.BaseUnitCodeSnapshot = unit.Code;
+                if (line.UnitPrice <= 10000m)
+                {
+                    line.UnitPrice = 250000m;
+                }
+                if (line.TaxPercent <= 0m)
+                {
+                    line.TaxPercent = 10m;
+                }
             }
         }
         await context.SaveChangesAsync();
@@ -1575,6 +1615,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         await context.SaveChangesAsync();
     }
 
+    var qaManagerUser = users.TryGetValue("qa_manager_wh01", out var mgrUser) ? mgrUser : qaAdmin;
     var stocktake = await context.Stocktakes.IgnoreQueryFilters()
         .Include(s => s.Details)
         .FirstOrDefaultAsync(s => s.Code == "STK-QA-001" || s.Code == "STK-QA-2026-01");
@@ -1585,8 +1626,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Code = "STK-QA-001",
             WarehouseId = primaryWarehouse.Id,
             Status = ReceiptStatus.Draft,
-            Note = "[BLIND] Kiểm kê chu kỳ kệ lưu trữ BIN-A01-01",
-            CreatedBy = qaAdmin.Id,
+            Note = "Kiểm kê định kỳ kệ lưu trữ BIN-A01-01",
+            CreatedBy = qaManagerUser.Id,
             CreatedAt = DateTime.UtcNow.AddHours(-2),
             Details =
             [
@@ -1598,6 +1639,15 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                     ActualQuantity = 25m,
                     DifferenceQuantity = 0m,
                     Note = "Khớp tồn kho thực tế tại kệ BIN-A01-01"
+                },
+                new StocktakeDetail
+                {
+                    ProductId = lotProduct.Id,
+                    LocationId = storageBin.Id,
+                    SystemQuantity = 60m,
+                    ActualQuantity = 60m,
+                    DifferenceQuantity = 0m,
+                    Note = "Khớp tồn kho lô cảm biến tại kệ BIN-A01-01"
                 }
             ]
         };
@@ -1608,8 +1658,11 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     {
         stocktake.Code = "STK-QA-001";
         stocktake.WarehouseId = primaryWarehouse.Id;
-        stocktake.Note = "[BLIND] Kiểm kê chu kỳ kệ lưu trữ BIN-A01-01";
-        if (!stocktake.Details.Any())
+        stocktake.Status = ReceiptStatus.Draft;
+        stocktake.CreatedBy = qaManagerUser.Id;
+        stocktake.Note = "Kiểm kê định kỳ kệ lưu trữ BIN-A01-01";
+        var line1 = stocktake.Details.FirstOrDefault(d => d.ProductId == product.Id);
+        if (line1 is null)
         {
             stocktake.Details.Add(new StocktakeDetail
             {
@@ -1619,6 +1672,219 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 ActualQuantity = 25m,
                 DifferenceQuantity = 0m,
                 Note = "Khớp tồn kho thực tế tại kệ BIN-A01-01"
+            });
+        }
+        else
+        {
+            line1.LocationId = storageBin.Id;
+            line1.SystemQuantity = 25m;
+            line1.ActualQuantity = 25m;
+            line1.DifferenceQuantity = 0m;
+            line1.Note = "Khớp tồn kho thực tế tại kệ BIN-A01-01";
+        }
+
+        var line2 = stocktake.Details.FirstOrDefault(d => d.ProductId == lotProduct.Id);
+        if (line2 is null)
+        {
+            stocktake.Details.Add(new StocktakeDetail
+            {
+                ProductId = lotProduct.Id,
+                LocationId = storageBin.Id,
+                SystemQuantity = 60m,
+                ActualQuantity = 60m,
+                DifferenceQuantity = 0m,
+                Note = "Khớp tồn kho lô cảm biến tại kệ BIN-A01-01"
+            });
+        }
+        else
+        {
+            line2.LocationId = storageBin.Id;
+            line2.SystemQuantity = 60m;
+            line2.ActualQuantity = 60m;
+            line2.DifferenceQuantity = 0m;
+            line2.Note = "Khớp tồn kho lô cảm biến tại kệ BIN-A01-01";
+        }
+        await context.SaveChangesAsync();
+    }
+
+    var existingStocktakeAudits = await context.AuditLogs.IgnoreQueryFilters()
+        .AsNoTracking()
+        .Where(a => a.EntityName == "Stocktake" && a.EntityId == stocktake.Id)
+        .ToListAsync();
+    if (!existingStocktakeAudits.Any())
+    {
+        context.AuditLogs.Add(new AuditLog
+        {
+            UserId = qaManagerUser.Id,
+            Action = "Stocktake.Created",
+            EntityName = "Stocktake",
+            EntityId = stocktake.Id,
+            WarehouseId = primaryWarehouse.Id,
+            OldValues = "Status: Draft",
+            NewValues = "Status: Pending",
+            Result = "Success",
+            Reason = "Gửi yêu cầu phê duyệt phiếu kiểm kê định kỳ STK-QA-001",
+            Timestamp = DateTime.UtcNow.AddHours(-2),
+            IpAddress = "127.0.0.1"
+        });
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        await context.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE AuditLogs
+            SET UserId = {qaManagerUser.Id},
+                Action = {"Stocktake.Created"},
+                OldValues = {"Status: Draft"},
+                NewValues = {"Status: Pending"},
+                Reason = {"Gửi yêu cầu phê duyệt phiếu kiểm kê định kỳ STK-QA-001"}
+            WHERE EntityName = {"Stocktake"} AND EntityId = {stocktake.Id}");
+    }
+
+    // 5d. Idempotent Dock ("DOCK-01"), YardSlot ("YARD-A01"), and DockAppointment ("APT-QA-001") in primaryWarehouse
+    var dock01 = await context.Docks.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(d => d.WarehouseId == primaryWarehouse.Id && d.Code == "DOCK-01");
+    if (dock01 is null)
+    {
+        dock01 = new Dock
+        {
+            WarehouseId = primaryWarehouse.Id,
+            Code = "DOCK-01",
+            Name = "Cửa nhập xuất hàng số 01",
+            SupportsInbound = true,
+            SupportsOutbound = true,
+            AllowedVehicleType = "XE TẢI / CONTAINER",
+            IsTemperatureControlled = false,
+            HazardAllowed = false,
+            IsActive = true
+        };
+        context.Docks.Add(dock01);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        dock01.Name = "Cửa nhập xuất hàng số 01";
+        dock01.SupportsInbound = true;
+        dock01.SupportsOutbound = true;
+        dock01.AllowedVehicleType = "XE TẢI / CONTAINER";
+        dock01.IsActive = true;
+        await context.SaveChangesAsync();
+    }
+
+    var yardA01 = await context.YardSlots.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(y => y.WarehouseId == primaryWarehouse.Id && y.Code == "YARD-A01");
+    if (yardA01 is null)
+    {
+        yardA01 = new YardSlot
+        {
+            WarehouseId = primaryWarehouse.Id,
+            Code = "YARD-A01",
+            Name = "Bãi đỗ xe tải A01",
+            IsActive = true
+        };
+        context.YardSlots.Add(yardA01);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        yardA01.Name = "Bãi đỗ xe tải A01";
+        yardA01.IsActive = true;
+        await context.SaveChangesAsync();
+    }
+
+    var aptQa001 = await context.DockAppointments.IgnoreQueryFilters()
+        .Include(a => a.Events)
+        .FirstOrDefaultAsync(a => a.WarehouseId == primaryWarehouse.Id && a.Code == "APT-QA-001");
+    var aptNow = DateTime.UtcNow;
+    if (aptQa001 is null)
+    {
+        aptQa001 = new DockAppointment
+        {
+            WarehouseId = primaryWarehouse.Id,
+            Code = "APT-QA-001",
+            Direction = DockAppointmentDirection.Inbound,
+            Status = DockAppointmentStatus.DockAssigned,
+            PlannedStartUtc = aptNow.AddMinutes(-45),
+            PlannedEndUtc = aptNow.AddMinutes(75),
+            CarrierCode = "VTP",
+            CarrierName = "Viettel Post Logistics",
+            VehiclePlate = "51C-889.99",
+            TrailerPlate = "51R-102.88",
+            VehicleType = "XE TẢI",
+            RequiresTemperatureControl = false,
+            Hazardous = false,
+            DriverName = "Nguyễn Văn Tài",
+            DriverPhone = "0909111222",
+            SealNumber = "SEAL-QA-001",
+            YardSlotId = yardA01.Id,
+            DockId = dock01.Id,
+            ArrivedAtUtc = aptNow.AddMinutes(-35),
+            CheckedInAtUtc = aptNow.AddMinutes(-30),
+            DockAssignedAtUtc = aptNow.AddMinutes(-20),
+            Note = "Lịch hẹn xe giao hàng PO-QA-001 & ASN-QA-001 tại cửa DOCK-01",
+            CreatedBy = qaAdmin.Id,
+            CreatedAtUtc = aptNow.AddHours(-2),
+            UpdatedBy = qaAdmin.Id,
+            UpdatedAtUtc = aptNow.AddMinutes(-20),
+            Events =
+            [
+                new DockAppointmentEvent
+                {
+                    EventType = "Created",
+                    EventAtUtc = aptNow.AddHours(-2),
+                    ActorUserId = qaAdmin.Id,
+                    Note = "Khởi tạo lịch hẹn xe giao hàng APT-QA-001"
+                },
+                new DockAppointmentEvent
+                {
+                    EventType = "INBOUND_DOC_LINK",
+                    EventAtUtc = aptNow.AddHours(-2).AddMinutes(1),
+                    ActorUserId = qaAdmin.Id,
+                    Note = $"PO:{purchaseOrder.Id}:PO-QA-001|ASN:{asn.Id}:ASN-QA-001|GR:{irQa001.Id}:IR-QA-001"
+                },
+                new DockAppointmentEvent
+                {
+                    EventType = "DockAssigned",
+                    EventAtUtc = aptNow.AddMinutes(-20),
+                    ActorUserId = qaAdmin.Id,
+                    DockId = dock01.Id,
+                    YardSlotId = yardA01.Id,
+                    Note = "Đã điều phối xe 51C-889.99 vào cửa DOCK-01"
+                }
+            ]
+        };
+        context.DockAppointments.Add(aptQa001);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        aptQa001.Direction = DockAppointmentDirection.Inbound;
+        aptQa001.Status = DockAppointmentStatus.DockAssigned;
+        aptQa001.PlannedStartUtc = aptNow.AddMinutes(-45);
+        aptQa001.PlannedEndUtc = aptNow.AddMinutes(75);
+        aptQa001.CarrierCode = "VTP";
+        aptQa001.CarrierName = "Viettel Post Logistics";
+        aptQa001.VehiclePlate = "51C-889.99";
+        aptQa001.TrailerPlate = "51R-102.88";
+        aptQa001.VehicleType = "XE TẢI";
+        aptQa001.DriverName = "Nguyễn Văn Tài";
+        aptQa001.DriverPhone = "0909111222";
+        aptQa001.SealNumber = "SEAL-QA-001";
+        aptQa001.YardSlotId = yardA01.Id;
+        aptQa001.DockId = dock01.Id;
+        aptQa001.ArrivedAtUtc = aptNow.AddMinutes(-35);
+        aptQa001.CheckedInAtUtc = aptNow.AddMinutes(-30);
+        aptQa001.DockAssignedAtUtc = aptNow.AddMinutes(-20);
+        aptQa001.CheckedOutAtUtc = null;
+        aptQa001.Note = "Lịch hẹn xe giao hàng PO-QA-001 & ASN-QA-001 tại cửa DOCK-01";
+        if (!aptQa001.Events.Any(e => e.EventType == "INBOUND_DOC_LINK"))
+        {
+            aptQa001.Events.Add(new DockAppointmentEvent
+            {
+                EventType = "INBOUND_DOC_LINK",
+                EventAtUtc = aptNow.AddHours(-1),
+                ActorUserId = qaAdmin.Id,
+                Note = $"PO:{purchaseOrder.Id}:PO-QA-001|ASN:{asn.Id}:ASN-QA-001|GR:{irQa001.Id}:IR-QA-001"
             });
         }
         await context.SaveChangesAsync();
