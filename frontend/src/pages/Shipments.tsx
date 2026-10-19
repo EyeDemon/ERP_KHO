@@ -39,6 +39,30 @@ const statusLabels:Record<string,string>={
 const huLabels:Record<string,string>={
   InUse:'Đang đóng gói',Closed:'Đã đóng',Staged:'Đã staging',Loaded:'Đã load',Shipped:'Đã ship',
 };
+const huTypeLabels:Record<string,string>={
+  Carton:'Thùng carton',Pallet:'Pallet',Tote:'Khay nhựa (Tote)',Box:'Hộp',
+};
+const trackingEventLabels:Record<string,string>={
+  ShipmentCreated:'Khởi tạo chuyến giao hàng',
+  Staged:'Đã đưa vào vị trí tập kết',
+  ShipmentStaged:'Đã đưa vào vị trí tập kết',
+  LoadingStarted:'Bắt đầu xếp hàng lên xe',
+  HuLoaded:'Đã xếp hàng hoàn tất',
+  Loaded:'Đã xếp hàng hoàn tất',
+  LoadingCompleted:'Đã xếp hàng hoàn tất',
+  Dispatched:'Đã xuất bến giao hàng',
+  ShipmentDispatched:'Đã xuất bến giao hàng',
+  InTransit:'Đang trên đường vận chuyển',
+  Delivered:'Đã giao hàng thành công',
+  DeliveryFailed:'Giao hàng không thành công',
+  ReturnInitiated:'Khởi tạo hoàn trả về kho',
+  ReturnToWarehouse:'Khởi tạo hoàn trả về kho',
+};
+const trackingSourceLabels:Record<string,string>={
+  Internal:'Hệ thống nội bộ',
+  CarrierWebhook:'Hãng vận chuyển',
+  Manual:'Cập nhật thủ công',
+};
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   ['Loaded','Dispatched','Delivered','Completed'].includes(status)?'success':
   ['DeliveryFailed','Cancelled'].includes(status)?'danger':
@@ -158,25 +182,25 @@ export default function Shipments(){
 
   return <UiPage>
     <UiPageHeader
-      eyebrow="Outbound"
-      title="Shipment Execution"
-      description="Shipment READY → STAGING → LOADING → LOADED → DISPATCHED → IN_TRANSIT → DELIVERED/FAILED. Dispatch là inventory boundary; tracking, POD, retry và return-initiate không tạo thêm inventory movement."
+      eyebrow="Xuất kho"
+      title="Điều phối Vận chuyển & Xuất giao"
+      description="Luồng vận chuyển: Sẵn sàng → Tập kết → Xếp hàng → Đã xếp → Xuất bến → Đang giao → Hoàn tất. Tồn kho chỉ trừ một lần duy nhất tại thời điểm Xuất bến."
     />
     {error&&<div role="alert">{error}</div>}
     <div className="ui-stack">
-      <UiCard title="Giám sát Chu trình Xuất giao & SLA Vận chuyển (Shipment Execution & Delivery SLA — OUT-08 / OUT-10)">
+      <UiCard title="Giám sát Chu trình Xuất giao & Cam kết Giao hàng">
         <div className="ui-inline-wrap">
-          <span>Chờ xuất (Ready/Staging/Loading/Loaded): <strong>{preDispatchCount}</strong></span>
-          <span>Đang vận chuyển (Dispatched/InTransit): <strong>{inTransitCount}</strong></span>
-          <span>Đã giao hoàn tất (Delivered/Completed): <strong>{deliveredOrCompletedCount}</strong></span>
-          <span>Giao thất bại / Hoàn kho (DeliveryFailed/ReturnToWarehouse): <strong>{exceptionOrReturnCount}</strong></span>
+          <span>Chờ xuất bến: <strong>{preDispatchCount}</strong></span>
+          <span>Đang vận chuyển: <strong>{inTransitCount}</strong></span>
+          <span>Đã giao hoàn tất: <strong>{deliveredOrCompletedCount}</strong></span>
+          <span>Ngoại lệ / Hoàn kho: <strong>{exceptionOrReturnCount}</strong></span>
         </div>
       </UiCard>
       <UiCard title="Lập kế hoạch Xếp tải Xe (AX-12) & Tích hợp Đơn vị Vận chuyển / TMS (IG-06)">
         <div className="ui-inline-wrap">
-          <span>Khu vực Tập kết / Xếp tải (Staging/Loading): <strong>{stagingOrLoadingCount}</strong></span>
-          <span>Đã gán Hãng vận chuyển / Phương tiện (Carrier): <strong>{carrierAssignedCount}</strong></span>
-          <span>Đã niêm phong kẹp chì (Seal): <strong>{sealVerifiedCount}</strong></span>
+          <span>Chờ tập kết / xếp xe: <strong>{stagingOrLoadingCount}</strong></span>
+          <span>Hãng vận chuyển: <strong>{carrierAssignedCount}</strong></span>
+          <span>Đã niêm phong chì: <strong>{sealVerifiedCount}</strong></span>
           <span>Đồng bộ sự kiện TMS / POD: <strong>Đồng bộ Webhook &amp; biên bản giao hàng (POD) chống trùng lặp</strong></span>
         </div>
         <div className="ui-inline-actions">
@@ -222,10 +246,10 @@ export default function Shipments(){
           )}
         </div>
       </UiCard>
-      <UiCard title="Shipment">
+      <UiCard title="Danh sách chuyến giao hàng">
         {rows.length===0?<p>Chưa có Shipment. Shipment được tạo khi Packing đạt PACKED.</p>:<UiTableScroll>
           <table aria-label="Danh sách Shipment">
-            <thead><tr><th>Shipment</th><th>Nguồn</th><th>Kho</th><th>Trạng thái</th><th>HU</th><th>Dock / xe</th></tr></thead>
+            <thead><tr><th>Mã chuyến</th><th>Đơn nguồn</th><th>Kho</th><th>Trạng thái</th><th>Số kiện</th><th>Cửa kho / Xe</th></tr></thead>
             <tbody>{rows.map(item=><tr key={item.id}>
               <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void detail(item.id)}>{item.shipmentCode}</button></td>
               <td style={{whiteSpace:'nowrap'}}>{item.sourceCode??item.packingSessionCode}</td>
@@ -242,21 +266,21 @@ export default function Shipments(){
         <div className="ui-inline-wrap">
           <UiBadge tone={tone(selected.status)}>{statusLabels[selected.status]??selected.status}</UiBadge>
           <span className="ui-muted-text">{selected.packingSessionCode} • {selected.sourceCode??selected.sourceType} • {selected.warehouseName}</span>
-          <span>HU loaded <strong>{selected.loadedHandlingUnitCount}</strong> / {selected.handlingUnitCount}</span>
-          {selected.stagingLocationCode&&<span>Staging: <strong>{selected.stagingLocationCode}</strong></span>}
+          <span>Đã xếp: <strong>{selected.loadedHandlingUnitCount}</strong> / {selected.handlingUnitCount} kiện</span>
+          {selected.stagingLocationCode&&<span>Vị trí tập kết: <strong>{selected.stagingLocationCode}</strong></span>}
           {selected.exportReceiptCode&&<UiBadge tone="success">{`Phiếu xuất kho: ${selected.exportReceiptCode}`}</UiBadge>}
         </div>
         <p className="ui-muted-text">
-          Quản lý vận đơn xuyên suốt từ sẵn sàng (READY), tập kết (STAGING), xếp hàng lên xe (LOADING), xuất bến (DISPATCHED) đến xác nhận giao hàng (POD). Dispatch là ranh giới trừ tồn duy nhất; mọi trạng thái sau đó không trừ/cộng OnHand lần hai.
+          Quản lý vận đơn xuyên suốt từ sẵn sàng, tập kết, xếp hàng lên xe, xuất bến đến xác nhận giao hàng. Xuất bến là thời điểm trừ tồn kho duy nhất; mọi trạng thái sau đó không làm thay đổi tồn kho thực tế.
         </p>
 
         <UiTableScroll>
           <table aria-label="Handling Unit của Shipment">
-            <thead><tr><th>#</th><th>HU</th><th>Loại</th><th>Số lượng</th><th>Trạng thái</th></tr></thead>
+            <thead><tr><th>#</th><th>Mã kiện</th><th>Loại</th><th>Số lượng</th><th>Trạng thái</th></tr></thead>
             <tbody>{(selected.handlingUnits??[]).map(hu=><tr key={hu.id}>
               <td>{hu.sequence}</td>
               <td><strong style={{whiteSpace:'nowrap'}}>{hu.huCode}</strong><div className="ui-muted-text" style={{whiteSpace:'nowrap'}}>{hu.barcode}</div></td>
-              <td>{hu.type}</td>
+              <td>{huTypeLabels[hu.type]??hu.type}</td>
               <td>{hu.contentQuantity}</td>
               <td><UiBadge tone={tone(hu.status)}>{huLabels[hu.status]??hu.status}</UiBadge></td>
             </tr>)}</tbody>
@@ -264,9 +288,9 @@ export default function Shipments(){
         </UiTableScroll>
 
         {selected.status==='Ready'&&canStage&&<div className="ui-subcard ui-stack">
-          <div className="ui-subcard-title">Đưa vào Staging</div>
+          <div className="ui-subcard-title">Đưa vào Khu vực Tập kết</div>
           <div className="ui-inline-wrap">
-            <label>Quét / nhập staging location
+            <label>Quét hoặc nhập mã vị trí tập kết
               <input
                 aria-label="Shipment staging location"
                 value={stagingCode}
@@ -278,7 +302,7 @@ export default function Shipments(){
             <button type="button" disabled={!!busy||!sanitizeScannerCode(stagingCode)} onClick={()=>void mutate(
               'shipment-stage-'+selected.id,'/api/shipments/'+selected.id+'/stage',
               {stagingLocationCode:sanitizeScannerCode(stagingCode),rowVersion:selected.rowVersion}
-            )}>Xác nhận Staging</button>
+            )}>Xác nhận Tập kết</button>
           </div>
         </div>}
 
@@ -452,15 +476,15 @@ export default function Shipments(){
           <strong>Shipment đã COMPLETED.</strong> POD đã được ghi nhận và không có inventory movement bổ sung sau Dispatch.
         </div>}
 
-        {(selected.trackingEvents??[]).length>0&&<UiCard title="Tracking timeline">
+        {(selected.trackingEvents??[]).length>0&&<UiCard title="Lịch sử theo dõi vận chuyển">
           <UiTableScroll>
             <table aria-label="Shipment tracking timeline">
               <thead><tr><th>Thời điểm</th><th>Sự kiện</th><th>Trạng thái</th><th>Nguồn</th><th>Lý do / ghi chú</th></tr></thead>
               <tbody>{[...(selected.trackingEvents??[])].sort((a,b)=>a.occurredAt.localeCompare(b.occurredAt)).map(event=><tr key={event.id}>
                 <td>{new Date(event.occurredAt).toLocaleString('vi-VN')}</td>
-                <td>{event.eventType}</td>
+                <td>{trackingEventLabels[event.eventType]??event.eventType}</td>
                 <td>{statusLabels[event.fromStatus]??event.fromStatus} → {statusLabels[event.toStatus]??event.toStatus}</td>
-                <td>{event.source}</td>
+                <td>{trackingSourceLabels[event.source]??event.source}</td>
                 <td>{[event.reasonCode,event.note].filter(Boolean).join(' • ')||'—'}</td>
               </tr>)}</tbody>
             </table>

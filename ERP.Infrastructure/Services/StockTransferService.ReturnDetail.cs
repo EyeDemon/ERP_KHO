@@ -11,8 +11,8 @@ public sealed partial class StockTransferService
         var entity = await GetScopedAsync(id, cancellationToken);
         var dto = Map(entity);
         dto.ReverseOfTransferId = entity.ReverseOfTransferId;
-        dto.ReverseReasonCode = entity.ReverseReasonCode;
-        dto.ReverseReason = entity.ReverseReason;
+        dto.ReverseReasonCode = entity.ReverseReasonCode?.Trim();
+        dto.ReverseReason = entity.ReverseReason?.Trim();
         dto.ReverseTransferId = await context.StockTransfers.AsNoTracking()
             .Where(x => x.ReverseOfTransferId == id)
             .Select(x => (int?)x.Id).SingleOrDefaultAsync(cancellationToken);
@@ -25,8 +25,8 @@ public sealed partial class StockTransferService
                 .OrderBy(x => x.Id)
                 .Select(x => new { x.ReasonCode, x.Note })
                 .FirstOrDefaultAsync(cancellationToken);
-            dto.ReturnReasonCode = returned?.ReasonCode;
-            dto.ReturnReason = returned?.Note;
+            dto.ReturnReasonCode = returned?.ReasonCode?.Trim();
+            dto.ReturnReason = returned?.Note?.Trim();
         }
         return dto;
     }

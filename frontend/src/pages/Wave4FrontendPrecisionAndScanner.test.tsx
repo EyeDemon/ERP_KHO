@@ -71,13 +71,13 @@ describe('Wave-4 Sector D (REM-16): Frontend Precision, Scanner Hygiene & Idempo
     );
 
     await waitFor(() => expect(getSpy).toHaveBeenCalledWith('/api/importreceipts/55/inventory-identities'));
-    expect(screen.getByText('AVAILABLE 0.2/0.3 KG')).toBeTruthy();
+    expect(screen.getByText('Khả dụng: 0.2/0.3 KG')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Thêm lot' }));
 
     const qtyInput2 = screen.getByLabelText('Identity quantity SKU-DEC-01 2') as HTMLInputElement;
     expect(qtyInput2.value).toBe('0.1');
-    expect(screen.getByText('AVAILABLE 0.3/0.3 KG')).toBeTruthy();
+    expect(screen.getByText('Khả dụng: 0.3/0.3 KG')).toBeTruthy();
 
     const lotInput2 = screen.getByLabelText('Identity lot SKU-DEC-01 2');
     fireEvent.change(lotInput2, { target: { value: '\u001d009988\r\n\u200b' } });

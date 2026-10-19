@@ -403,21 +403,21 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         await context.SaveChangesAsync();
     }
 
-    // 4. Idempotent PutawayTask ("PUT-QA-001") in Open status
+    // 4. Idempotent PutawayTask ("PUT-QA-001") backed by ImportReceipt ("IR-QA-002") in Open status
     var putawayReceipt = await context.ImportReceipts.IgnoreQueryFilters()
         .Include(r => r.Details)
-        .FirstOrDefaultAsync(r => r.Code == "PUT-QA-001");
+        .FirstOrDefaultAsync(r => r.Code == "IR-QA-002" || r.Code == "PUT-QA-001");
     if (putawayReceipt is null)
     {
         putawayReceipt = new ImportReceipt
         {
-            Code = "PUT-QA-001",
+            Code = "IR-QA-002",
             WarehouseId = primaryWarehouse.Id,
             SupplierId = supplier.Id,
             SupplierCodeSnapshot = supplier.Code,
             SupplierNameSnapshot = supplier.Name,
             Status = ReceiptStatus.Posted,
-            Note = "Phiếu nhập mẫu phục vụ nhiệm vụ cất hàng PUT-QA-001",
+            Note = "Phiếu nhập kho lô hàng chờ cất kệ IR-QA-002",
             CreatedBy = qaAdmin.Id,
             CreatedAt = DateTime.UtcNow,
             ApprovedBy = qaAdmin.Id,
@@ -428,7 +428,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 {
                     ProductId = product.Id,
                     Quantity = 10m,
-                    UnitPrice = 1000m,
+                    UnitPrice = 250000m,
                     Note = "Dòng hàng mẫu cần cất từ RECEIVING sang BIN-A01-01",
                     OperationUnitId = unit.Id,
                     OperationUnitCodeSnapshot = unit.Code,
@@ -455,10 +455,23 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         context.ImportReceipts.Add(putawayReceipt);
         await context.SaveChangesAsync();
     }
+    else
+    {
+        putawayReceipt.Code = "IR-QA-002";
+        putawayReceipt.SupplierId = supplier.Id;
+        putawayReceipt.SupplierCodeSnapshot = supplier.Code;
+        putawayReceipt.SupplierNameSnapshot = supplier.Name;
+        putawayReceipt.Note = "Phiếu nhập kho lô hàng chờ cất kệ IR-QA-002";
+    }
 
     var putawayReceiptLine = putawayReceipt.Details.First();
     putawayReceiptLine.OperationUnitCodeSnapshot = unit.Code;
     putawayReceiptLine.BaseUnitCodeSnapshot = unit.Code;
+    if (putawayReceiptLine.UnitPrice <= 10000m)
+    {
+        putawayReceiptLine.UnitPrice = 250000m;
+    }
+    await context.SaveChangesAsync();
     var receivingStock = await context.InventoryStocks.IgnoreQueryFilters()
         .FirstOrDefaultAsync(s =>
             s.WarehouseId == primaryWarehouse.Id &&
@@ -663,11 +676,28 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                     OrderedQuantity = 5m,
                     CancelledQuantity = 0m,
                     UomCode = unit.Code,
-                    UnitPrice = 1200m
+                    UnitPrice = 1800000m,
+                    TaxPercent = 10m
                 }
             ]
         };
         context.SalesOrders.Add(salesOrder);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        foreach (var l in salesOrder.Lines)
+        {
+            l.UomCode = unit.Code;
+            if (l.UnitPrice <= 10000m || l.UnitPrice == 1200000m)
+            {
+                l.UnitPrice = 1800000m;
+            }
+            if (l.TaxPercent <= 0m)
+            {
+                l.TaxPercent = 10m;
+            }
+        }
         await context.SaveChangesAsync();
     }
 
@@ -801,11 +831,28 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                     OrderedQuantity = 4m,
                     CancelledQuantity = 0m,
                     UomCode = unit.Code,
-                    UnitPrice = 1200m
+                    UnitPrice = 1800000m,
+                    TaxPercent = 10m
                 }
             ]
         };
         context.SalesOrders.Add(packSalesOrder);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        foreach (var l in packSalesOrder.Lines)
+        {
+            l.UomCode = unit.Code;
+            if (l.UnitPrice <= 10000m || l.UnitPrice == 1200000m)
+            {
+                l.UnitPrice = 1800000m;
+            }
+            if (l.TaxPercent <= 0m)
+            {
+                l.TaxPercent = 10m;
+            }
+        }
         await context.SaveChangesAsync();
     }
 
@@ -1202,7 +1249,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         .Include(r => r.Details)
         .OrderBy(r => r.Id)
         .ToListAsync();
-    var nonPutawayReceipts = allImportReceipts.Where(r => r.Code != "PUT-QA-001").ToList();
+    var nonPutawayReceipts = allImportReceipts.Where(r => r.Id != putawayReceipt.Id).ToList();
     var irQa001 = nonPutawayReceipts.FirstOrDefault(r => r.Code == "IR-QA-001") ?? nonPutawayReceipts.FirstOrDefault();
     if (irQa001 is null)
     {
@@ -1269,7 +1316,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     for (var idx = 0; idx < otherNonPutaway.Count; idx++)
     {
         var r = otherNonPutaway[idx];
-        r.Code = $"IR-QA-{idx + 2:D3}";
+        r.Code = $"IR-QA-{idx + 3:D3}";
         r.SupplierId ??= supplier.Id;
         r.SupplierCodeSnapshot = supplier.Code;
         r.SupplierNameSnapshot = supplier.Name;
@@ -1287,6 +1334,10 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             d.OperationUnitCodeSnapshot = unit.Code;
             d.BaseUnitId = unit.Id;
             d.BaseUnitCodeSnapshot = unit.Code;
+            if (d.UnitPrice <= 10000m)
+            {
+                d.UnitPrice = 250000m;
+            }
         }
     }
     await context.SaveChangesAsync();
@@ -1406,7 +1457,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 {
                     ProductId = product.Id,
                     Quantity = 5m,
-                    UnitPrice = 1200000m,
+                    UnitPrice = 1800000m,
                     TaxPercent = 10m,
                     Note = "Xuất giao lô hàng chuẩn QA",
                     BaseUomIdSnapshot = unit.Id,
@@ -1450,7 +1501,14 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 d.BaseUomCodeSnapshot = unit.Code;
                 d.BaseUomNameSnapshot = unit.Name;
                 d.BaseUomDecimalPlacesSnapshot = unit.DecimalPlaces;
-                if (d.UnitPrice <= 0m) d.UnitPrice = 1200000m;
+                if (d.UnitPrice <= 10000m || d.UnitPrice == 1200000m)
+                {
+                    d.UnitPrice = 1800000m;
+                }
+                if (d.TaxPercent <= 0m)
+                {
+                    d.TaxPercent = 10m;
+                }
                 if (string.IsNullOrWhiteSpace(d.Note) || d.Note.Contains("E2E", StringComparison.OrdinalIgnoreCase))
                 {
                     d.Note = "Xuất giao lô hàng chuẩn QA";

@@ -66,7 +66,7 @@ public sealed partial class StockTransferService
                 ReverseOfTransferId = original.Id,
                 ReverseReasonCode = code,
                 ReverseReason = reason,
-                Note = $"Điều chuyển ngược từ {original.Code}",
+                Note = $"Điều chuyển ngược từ {original.Code.Trim()}",
                 CreatedBy = currentUser.UserId,
                 CreatedAt = now,
                 Details = lines.Select(x => new StockTransferDetail

@@ -465,7 +465,7 @@ const ImportReceipts = () => {
     <UiPage>
       <div className="import-receipts">
         <UiPageHeader
-          eyebrow="Inbound"
+          eyebrow="Nhập kho"
           title="Quản lý nhập kho"
           description="Tạo và theo dõi phiếu nhập từ nhận hàng, xử lý sai lệch, kiểm tra chất lượng đến ghi nhận tồn kho."
         />
@@ -483,21 +483,21 @@ const ImportReceipts = () => {
           }}
         />
 
-        <UiCard title="Tổng quan Pipeline Tiếp nhận, QC & Ghi sổ Phiếu nhập (Inbound Receiving Pipeline — IN-04..IN-07)">
+        <UiCard title="Tổng quan Luồng Tiếp nhận Hàng đến — IN-04..IN-07">
           <div className="ui-inline-wrap">
             <UiBadge>{`Tổng số phiếu nhập: ${receipts.length}`}</UiBadge>
             <UiBadge tone="warning">{`Đang soạn / Nhận tại cửa: ${receipts.filter(r => r.status === 'Draft' || r.status === 'Received' || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
             <UiBadge tone="warning">{`Đang chờ QC / Chờ duyệt: ${receipts.filter(r => r.status === 'QcPending' || r.status === 'QcCompleted' || r.status === 'ReadyToPost').length}`}</UiBadge>
-            <UiBadge tone="success">{`Đã ghi sổ tồn kho (Posted): ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
+            <UiBadge tone="success">{`Đã ghi sổ tồn kho: ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
             <UiBadge tone="danger">{`Phiếu đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`}</UiBadge>
           </div>
         </UiCard>
 
-        <UiCard title="Trung tâm Kiểm định Chất lượng (QC Work Center — QR-01) & Tiếp nhận Hàng trả lại / RMA (QR-04)">
+        <UiCard title="Mở Bàn làm việc Kiểm định Chất lượng — QR-01">
           <div className="ui-inline-wrap">
             <UiBadge tone="warning">{`Đang kiểm định QC / Xử lý chênh lệch: ${receipts.filter(r => r.requiresQc || r.status === 'QcPending' || r.status === 'QcCompleted' || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
-            <UiBadge tone="success">{`Hoàn tất QC & đã Post vào tồn kho: ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
-            <UiBadge>{`Hàng khách trả lại / RMA (Tiếp nhận → Kiểm định QC → Phân loại AVAILABLE / QUARANTINE / DAMAGED): ${receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
+            <UiBadge tone="success">{`Hoàn tất QC & đã ghi sổ tồn kho: ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
+            <UiBadge>{`Hàng khách trả lại / RMA (Khả dụng / Biệt trữ / Hư hỏng): ${receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
             <button
               type="button"
               disabled={governanceBusy}
@@ -713,24 +713,24 @@ const ImportReceipts = () => {
                     <td>{r.createdByName || (selectedReceipt?.id === r.id ? selectedReceipt.createdByName : '') || (r.createdBy ? 'QA Manager WH01' : '—')}</td>
                     <td className="import-status-cell"><UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge></td>
                     <td>
-                      <div className="import-row-actions">
-                        <button type="button" onClick={() => handleViewDetails(r.id)}>Chi tiết</button>
-                        <button type="button" disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)}>
+                      <div className="import-row-actions" style={{ display: 'inline-flex', gap: 6, flexWrap: 'nowrap', alignItems: 'center' }}>
+                        <button type="button" style={{ whiteSpace: 'nowrap' }} onClick={() => handleViewDetails(r.id)}>Chi tiết</button>
+                        <button type="button" style={{ whiteSpace: 'nowrap' }} disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)}>
                           {printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}
                         </button>
                         {r.status === 'Draft' && (
                           <>
-                            {canObserve && <button type="button" disabled={workflowId === r.id} onClick={() => void observeReceipt(r.id)}>{workflowId === r.id ? 'Đang ghi nhận...' : 'Ghi nhận số lượng thực tế'}</button>}
-                            {canCancel && <button type="button" onClick={() => handleCancel(r.id)}>Hủy</button>}
+                            {canObserve && <button type="button" style={{ whiteSpace: 'nowrap' }} disabled={workflowId === r.id} onClick={() => void observeReceipt(r.id)}>{workflowId === r.id ? 'Đang ghi nhận...' : 'Ghi nhận số lượng thực tế'}</button>}
+                            {canCancel && <button type="button" style={{ whiteSpace: 'nowrap' }} onClick={() => handleCancel(r.id)}>Hủy</button>}
                           </>
                         )}
                         {(r.status === 'Received' || (r.status === 'QcCompleted' && canApproveQc)) && canApprove && r.createdBy !== userId && (
-                          <button type="button" onClick={() => handleApprove(r.id)} disabled={approvingId === r.id}>
+                          <button type="button" style={{ whiteSpace: 'nowrap' }} onClick={() => handleApprove(r.id)} disabled={approvingId === r.id}>
                             {approvingId === r.id ? 'Đang duyệt...' : 'Duyệt để ghi nhận tồn kho'}
                           </button>
                         )}
                         {r.status === 'ReadyToPost' && canPost && r.createdBy !== userId && (
-                          <button type="button" disabled={workflowId === r.id} onClick={() => void runWorkflow(r.id, 'post')}>
+                          <button type="button" style={{ whiteSpace: 'nowrap' }} disabled={workflowId === r.id} onClick={() => void runWorkflow(r.id, 'post')}>
                             {workflowId === r.id ? 'Đang ghi nhận tồn kho...' : 'Ghi nhận tồn kho'}
                           </button>
                         )}

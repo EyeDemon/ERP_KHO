@@ -625,9 +625,59 @@ public sealed class MvpInboundOutboundApArLifecycleSqlTests
                 autoExport.Status.Should().Be(ReceiptStatus.Dispatched);
                 autoExport.RowVersion.Should().NotBeNullOrEmpty();
                 autoExport.Details.Should().ContainSingle();
-                autoExport.Details.Single().Quantity.Should().Be(40m);
-                autoExport.Details.Single().UnitPrice.Should().Be(150_000m);
-                autoExport.Details.Single().TaxPercent.Should().Be(10m);
+                var autoExportDetail = autoExport.Details.Single();
+                autoExportDetail.Quantity.Should().Be(40m);
+                autoExportDetail.UnitPrice.Should().Be(150_000m);
+                autoExportDetail.TaxPercent.Should().Be(10m);
+                autoExportDetail.BaseUomIdSnapshot.Should().Be(state.UnitId);
+                autoExportDetail.BaseUomCodeSnapshot.Should().NotBeNullOrWhiteSpace();
+                autoExportDetail.BaseUomCodeSnapshot.Should().Be(autoExportDetail.BaseUomCodeSnapshot!.Trim());
+                autoExportDetail.BaseUomNameSnapshot.Should().NotBeNullOrWhiteSpace();
+                autoExportDetail.BaseUomNameSnapshot.Should().Be(autoExportDetail.BaseUomNameSnapshot!.Trim());
+
+                var exportReceiptService = new ExportReceiptService(
+                    new ExportReceiptRepository(verifyArDb),
+                    new InventoryStockRepository(verifyArDb),
+                    new InventoryTransactionRepository(verifyArDb),
+                    new UnitOfWork(verifyArDb),
+                    new AuditLogRepository(verifyArDb));
+                var autoExportDto = await exportReceiptService.GetByIdAsync(autoExport.Id);
+                autoExportDto.Should().NotBeNull();
+                autoExportDto!.SubTotalAmount.Should().Be(6_000_000m);
+                autoExportDto.TaxAmount.Should().Be(600_000m);
+                autoExportDto.TotalAmount.Should().Be(6_600_000m);
+                var autoExportDetailDto = autoExportDto.Details.Single();
+                autoExportDetailDto.UnitName.Should().NotBeNullOrWhiteSpace();
+                autoExportDetailDto.UnitName.Should().Be(autoExportDetailDto.UnitName!.Trim());
+                autoExportDetailDto.BaseUomCodeSnapshot.Should().NotBeNullOrWhiteSpace();
+                autoExportDetailDto.BaseUomCodeSnapshot.Should().Be(autoExportDetailDto.BaseUomCodeSnapshot!.Trim());
+                autoExportDetailDto.UnitPrice.Should().Be(150_000m);
+                autoExportDetailDto.TaxPercent.Should().Be(10m);
+                autoExportDetailDto.LineSubTotal.Should().Be(6_000_000m);
+                autoExportDetailDto.LineTaxAmount.Should().Be(600_000m);
+                autoExportDetailDto.LineTotal.Should().Be(6_600_000m);
+
+                var verifyShipmentService = CreateShipmentService(verifyArDb, state.MakerId);
+                var dispatchedShipmentDto = await verifyShipmentService.GetAsync(state.ShipmentId);
+                dispatchedShipmentDto.HandlingUnits.Should().ContainSingle();
+                Assert.All(dispatchedShipmentDto.HandlingUnits, huDto =>
+                {
+                    Assert.Equal(huDto.HuCode.Trim(), huDto.HuCode);
+                    Assert.Equal(huDto.Barcode.Trim(), huDto.Barcode);
+                });
+
+                var shipmentTrackingDto = await verifyShipmentService.GetTrackingAsync(state.ShipmentId);
+                shipmentTrackingDto.ShipmentCode.Should().Be(shipmentTrackingDto.ShipmentCode.Trim());
+                shipmentTrackingDto.Events.Should().NotBeEmpty();
+                Assert.All(shipmentTrackingDto.Events, ev =>
+                {
+                    Assert.Equal(ev.EventType.Trim(), ev.EventType);
+                    Assert.Equal(ev.Source.Trim(), ev.Source);
+                    if (ev.Note is not null)
+                    {
+                        Assert.Equal(ev.Note.Trim(), ev.Note);
+                    }
+                });
 
                 // Customer ReceivableBalance must equal 6,600,000 VND with exactly 1 AR Invoice
                 var customer = await verifyArDb.BusinessPartners.AsNoTracking()

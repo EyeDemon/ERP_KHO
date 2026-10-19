@@ -64,7 +64,7 @@ describe('Outbound demand and backorder workbench',()=>{
     expect(await view.findByText(/BO-0009\s+—\s+SKU-1001/)).toBeTruthy();
     expect(view.queryByText('Release demand')).toBeNull();
     expect(view.queryByText('Reallocate')).toBeNull();
-    expect(view.queryByText('Tạo Sales Order')).toBeNull();
+    expect(view.queryByText('Tạo Đơn bán hàng')).toBeNull();
   });
 
   it('releases sales order once with idempotency',async()=>{
@@ -99,13 +99,13 @@ describe('Outbound demand and backorder workbench',()=>{
     grant('sales_order.read','backorder.read','sales_order.create');
     const first=render(<OutboundDemand/>);
     await first.findByText('SO-0088');
-    expect(first.queryByText('Tạo Sales Order')).toBeNull();
+    expect(first.queryByText('Tạo Đơn bán hàng')).toBeNull();
     cleanup();
 
     grant('sales_order.read','backorder.read','sales_order.create','partner.read','product.read','warehouse.read');
     reads();
     const second=render(<OutboundDemand/>);
-    const create=await second.findByText('Tạo Sales Order');
+    const create=await second.findByText('Tạo Đơn bán hàng');
     fireEvent.click(create);
     expect(await second.findByLabelText('External Order ID')).toBeTruthy();
     expect(second.getByLabelText('Khách hàng Sales Order')).toBeTruthy();

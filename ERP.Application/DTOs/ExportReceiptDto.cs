@@ -44,7 +44,7 @@ namespace ERP.Application.DTOs
         public int ProductId { get; set; }
         public string? ProductCode { get; set; }
         public string? ProductName { get; set; }
-        public string? UnitName { get; set; }
+        public string? UnitName { get; set; } = "THÙNG";
         public decimal Quantity { get; set; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public decimal? UnitPrice { get; set; }
@@ -54,8 +54,8 @@ namespace ERP.Application.DTOs
         public decimal LineTotal { get; set; }
         public string? Note { get; set; }
         public int? BaseUomIdSnapshot { get; set; }
-        public string? BaseUomCodeSnapshot { get; set; }
-        public string? BaseUomNameSnapshot { get; set; }
+        public string? BaseUomCodeSnapshot { get; set; } = "THÙNG";
+        public string? BaseUomNameSnapshot { get; set; } = "THÙNG";
         public int? BaseUomDecimalPlacesSnapshot { get; set; }
         public decimal? AvailableQuantity { get; set; }
     }

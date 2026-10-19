@@ -239,7 +239,8 @@ namespace ERP.Application.Services
         private static string NormalizeUomCode(string? code, string? fallback)
         {
             var raw = !string.IsNullOrWhiteSpace(code) ? code.Trim() : (fallback?.Trim() ?? string.Empty);
-            if (string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+            if (string.IsNullOrWhiteSpace(raw) ||
+                string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(raw, "QA-PCS", StringComparison.OrdinalIgnoreCase))
                 return "THÙNG";
             return raw;
@@ -269,7 +270,10 @@ namespace ERP.Application.Services
                         opUom = baseUom;
                 }
                 var rawUnitName = (!string.IsNullOrWhiteSpace(d.OperationUnitCodeSnapshot) ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Name)?.Trim();
-                var unitName = string.Equals(rawUnitName, "QA_UNIT", StringComparison.OrdinalIgnoreCase) || string.Equals(rawUnitName, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                var unitName = string.IsNullOrWhiteSpace(rawUnitName) ||
+                               opUom == "THÙNG" ||
+                               string.Equals(rawUnitName, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(rawUnitName, "QA-PCS", StringComparison.OrdinalIgnoreCase)
                     ? "THÙNG"
                     : rawUnitName;
                 return new ImportReceiptDetailDto

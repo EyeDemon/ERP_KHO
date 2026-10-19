@@ -11,6 +11,7 @@ interface ExportReceiptDetail {
   id: number;
   productCode: string;
   productName: string;
+  unitName?: string;
   quantity: number;
   unitPrice?: number;
   taxPercent?: number;
@@ -464,12 +465,12 @@ const ExportReceipts = () => {
           </div>
         )}
 
-        <UiCard title="Tổng quan Pipeline Phiếu xuất kho & Ranh giới Xuất giao (Export Receipt Pipeline — OUT-01)">
+        <UiCard title="Tổng quan Luồng Phiếu xuất Kho — OUT-01">
           <div className="ui-inline-wrap">
             <UiBadge>{`Tổng phiếu xuất: ${receipts.length}`}</UiBadge>
-            <UiBadge tone="warning">{`Đang soạn (Draft): ${receipts.filter(r => r.status === 'Draft').length}`}</UiBadge>
+            <UiBadge tone="warning">{`Đang soạn: ${receipts.filter(r => r.status === 'Draft').length}`}</UiBadge>
             <UiBadge tone="warning">{`Đã duyệt & Giữ hàng chờ xuất: ${receipts.filter(r => r.status === 'Approved').length}`}</UiBadge>
-            <UiBadge tone="success">{`Đã xuất giao khỏi kho (Dispatched): ${receipts.filter(r => r.status === 'Dispatched' || r.status === 'Completed').length}`}</UiBadge>
+            <UiBadge tone="success">{`Đã xuất kho: ${receipts.filter(r => r.status === 'Dispatched' || r.status === 'Completed').length}`}</UiBadge>
             <UiBadge tone="danger">{`Phiếu xuất đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`}</UiBadge>
             <button
               type="button"
@@ -736,17 +737,22 @@ const ExportReceipts = () => {
                     <th>Sản phẩm</th>
                     <th className="export-numeric">Số lượng</th>
                     <th className="export-numeric">Đơn giá</th>
+                    <th className="export-numeric">Thành tiền</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedReceipt.details.map(d => (
+                  {selectedReceipt.details.map(d => {
+                    const unitDisplay = !d.unitName || d.unitName === 'QA_UNIT' || d.unitName === 'QA-PCS' ? 'THÙNG' : d.unitName;
+                    return (
                     <tr key={d.id}>
                       <td><strong style={{ whiteSpace: 'nowrap' }}>{d.productCode}</strong> - {d.productName}</td>
-                      <td className="export-numeric">{d.quantity}</td>
-                      <td className="export-numeric">{d.unitPrice == null ? '—' : d.unitPrice}</td>
+                      <td className="export-numeric">{d.quantity} {unitDisplay}</td>
+                      <td className="export-numeric">{Number(d.unitPrice || 0).toLocaleString('vi-VN')} VND</td>
+                      <td className="export-numeric">{(Number(d.quantity || 0) * Number(d.unitPrice || 0)).toLocaleString('vi-VN')} VND</td>
                     </tr>
-                  ))}
-                  {selectedReceipt.details.length === 0 && <tr><td colSpan={3} className="ui-empty-cell">Không có chi tiết</td></tr>}
+                    );
+                  })}
+                  {selectedReceipt.details.length === 0 && <tr><td colSpan={4} className="ui-empty-cell">Không có chi tiết</td></tr>}
                 </tbody>
               </table>
             </UiTableScroll>

@@ -35,7 +35,7 @@ describe('Shipment staging & loading workbench',()=>{
     await view.findByText('SHIP-2026-7701');
     fireEvent.click(view.getByText('SHIP-2026-7701'));
     expect(await view.findByText(/Quản lý vận đơn xuyên suốt từ sẵn sàng/)).toBeTruthy();
-    expect(view.queryByText('Đưa vào Staging')).toBeNull();
+    expect(view.queryByText('Đưa vào Khu vực Tập kết')).toBeNull();
     expect(view.queryByText('Bắt đầu Loading')).toBeNull();
   });
 
@@ -47,7 +47,7 @@ describe('Shipment staging & loading workbench',()=>{
     fireEvent.click(view.getByText('SHIP-2026-7701'));
     const input=await view.findByLabelText('Shipment staging location');
     fireEvent.change(input,{target:{value:'STG-OUT-01'}});
-    const button=view.getByText('Xác nhận Staging');
+    const button=view.getByText('Xác nhận Tập kết');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/shipments/7701/stage',{stagingLocationCode:'STG-OUT-01',rowVersion:'AQ=='},{headers:{'Idempotency-Key':'key:shipment-stage-7701'}});

@@ -131,16 +131,18 @@ namespace ERP.Application.Services
                     throw new BusinessRuleException($"Sản phẩm có ID {detailDto.ProductId} không đủ tồn kho. Tồn khả dụng: {currentStock}, yêu cầu xuất: {detailDto.Quantity}");
                 }
 
+                var baseUomCode = NormalizeUomValue(stock.Product.Unit.Code);
+                var baseUomName = baseUomCode == "THÙNG" ? "THÙNG" : NormalizeUomValue(stock.Product.Unit.Name);
                 receipt.Details.Add(new ERP.Domain.Entities.ExportReceiptDetail
                 {
                     ProductId = detailDto.ProductId,
                     Quantity = detailDto.Quantity,
                     UnitPrice = detailDto.UnitPrice,
                     TaxPercent = detailDto.TaxPercent,
-                    Note = detailDto.Note,
+                    Note = detailDto.Note?.Trim(),
                     BaseUomIdSnapshot = stock.Product.Unit.Id,
-                    BaseUomCodeSnapshot = stock.Product.Unit.Code,
-                    BaseUomNameSnapshot = stock.Product.Unit.Name,
+                    BaseUomCodeSnapshot = baseUomCode,
+                    BaseUomNameSnapshot = baseUomName,
                     BaseUomDecimalPlacesSnapshot = stock.Product.Unit.DecimalPlaces
                 });
             }
@@ -474,9 +476,9 @@ namespace ERP.Application.Services
             return (subTotal, taxAmount);
         }
 
-        private static string? NormalizeUomValue(string? value)
+        private static string NormalizeUomValue(string? value)
         {
-            if (string.IsNullOrWhiteSpace(value)) return null;
+            if (string.IsNullOrWhiteSpace(value)) return "THÙNG";
             var trimmed = value.Trim();
             return string.Equals(trimmed, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(trimmed, "QA-PCS", StringComparison.OrdinalIgnoreCase)
@@ -493,6 +495,7 @@ namespace ERP.Application.Services
                 var lineTax = viewer ? 0m : decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
                 var baseUomCode = NormalizeUomValue(!string.IsNullOrWhiteSpace(d.BaseUomCodeSnapshot) ? d.BaseUomCodeSnapshot : d.Product?.Unit?.Code);
                 var baseUomName = NormalizeUomValue(!string.IsNullOrWhiteSpace(d.BaseUomNameSnapshot) ? d.BaseUomNameSnapshot : d.Product?.Unit?.Name);
+                if (baseUomCode == "THÙNG") baseUomName = "THÙNG";
                 return new ExportReceiptDetailDto
                 {
                     Id = d.Id,

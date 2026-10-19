@@ -31,6 +31,24 @@ const messageOf=(e:unknown)=>{
 const requiredFor=(line:ReceiptTrackingLine,status:IdentityRow['targetStatus'])=>
   status==='AVAILABLE'?line.baseAcceptedQuantity:status==='DAMAGED'?line.baseDamagedQuantity:line.baseRejectedQuantity;
 
+const trackingTypeLabels:Record<string,string>={
+  Lot:'Theo lô',
+  Serial:'Theo sê-ri',
+};
+
+const receiptStatusLabels:Record<string,string>={
+  Posted:'Đã ghi sổ tồn kho',
+  ReadyToPost:'Sẵn sàng ghi sổ',
+  PutawayInProgress:'Đang cất hàng',
+  PutawayCompleted:'Hoàn tất cất hàng',
+  Draft:'Nháp',
+  Approved:'Đã duyệt',
+  Received:'Đã nhận hàng',
+  QcPending:'Chờ kiểm định QC',
+  QcCompleted:'Hoàn tất QC',
+  Cancelled:'Đã hủy',
+};
+
 export default function ReceiptInventoryIdentityEditor({
   receiptId,status,lines,canUpdate,
 }:{receiptId:number;status:string;lines:ReceiptTrackingLine[];canUpdate:boolean}){
@@ -116,22 +134,21 @@ export default function ReceiptInventoryIdentityEditor({
     finally{lock.current=false;setBusy(false)}
   };
 
-  return <UiCard title="Lot / Serial / Expiry trước Post">
+  return <UiCard title="Khai báo Lô / Sê-ri / Hạn dùng trước khi Ghi sổ">
     <p className="ui-muted-text">
-      Tổng identity theo AVAILABLE / DAMAGED / REJECTED phải khớp Base UOM của từng dòng. Serial luôn 1 đơn vị.
-      Post receipt là inventory boundary duy nhất.
+      Tổng số lượng định danh theo trạng thái Khả dụng / Hư hỏng / Từ chối phải khớp với đơn vị cơ sở của từng dòng hàng. Mỗi mã Sê-ri tương ứng 1 đơn vị.
     </p>
     {error&&<p role="alert">{error}</p>}
     {loading?<p role="status">Đang tải Lot/Serial...</p>:<>
       {tracked.map(line=>{
         const unitLabel=(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')?'THÙNG':line.baseUnitCode;
         return <div key={line.id} className="ui-subcard ui-stack">
-        <div className="ui-subcard-title"><span style={{whiteSpace:'nowrap'}}>{line.productCode}</span> — {line.productName} <UiBadge>{line.trackingType}</UiBadge></div>
+        <div className="ui-subcard-title"><span style={{whiteSpace:'nowrap'}}>{line.productCode}</span> — {line.productName} <UiBadge>{trackingTypeLabels[line.trackingType]??line.trackingType}</UiBadge></div>
         <div className="ui-inline-wrap">
-          <span>AVAILABLE {allocated(line.id,'AVAILABLE')}/{roundQty4(line.baseAcceptedQuantity)} {unitLabel}</span>
-          <span>DAMAGED {allocated(line.id,'DAMAGED')}/{roundQty4(line.baseDamagedQuantity)} {unitLabel}</span>
-          <span>REJECTED {allocated(line.id,'REJECTED')}/{roundQty4(line.baseRejectedQuantity)} {unitLabel}</span>
-          {line.expiryControl&&<span>Expiry bắt buộc{line.shelfLifeDays?` • shelf life ${line.shelfLifeDays} ngày`:''}</span>}
+          <span>Khả dụng: {allocated(line.id,'AVAILABLE')}/{roundQty4(line.baseAcceptedQuantity)} {unitLabel}</span>
+          <span>• Hư hỏng: {allocated(line.id,'DAMAGED')}/{roundQty4(line.baseDamagedQuantity)} {unitLabel}</span>
+          <span>• Từ chối: {allocated(line.id,'REJECTED')}/{roundQty4(line.baseRejectedQuantity)} {unitLabel}</span>
+          {line.expiryControl&&<span>• Bắt buộc hạn dùng{line.shelfLifeDays?` • Vòng đời: ${line.shelfLifeDays} ngày`:''}</span>}
           {editable&&<button type="button" onClick={()=>addRow(line)}>Thêm {line.trackingType==='Serial'?'serial':'lot'}</button>}
         </div>
         <UiTableScroll>
@@ -149,14 +166,14 @@ export default function ReceiptInventoryIdentityEditor({
                 <td><input aria-label={`Identity serial ${line.productCode} ${index}`} disabled={!editable} value={row.serialNumber??''} onChange={e=>update(index,{serialNumber:e.target.value})}/></td>
                 {editable&&<td><button type="button" onClick={()=>remove(index)}>Xóa</button></td>}
               </tr>)}
-              {rows.every(row=>row.lineId!==line.id)&&<tr><td colSpan={editable?7:6} className="ui-empty-cell">Chưa khai báo identity.</td></tr>}
+              {rows.every(row=>row.lineId!==line.id)&&<tr><td colSpan={editable?7:6} className="ui-empty-cell">Chưa khai báo định danh Lô / Sê-ri.</td></tr>}
             </tbody>
           </table>
         </UiTableScroll>
       </div>;
       })}
       {editable&&<div className="ui-inline-actions"><button type="button" disabled={busy} onClick={()=>void save()}>{busy?'Đang lưu...':'Lưu Lot / Serial / Expiry'}</button></div>}
-      {!editable&&<p className="ui-muted-text">Identity đang ở chế độ chỉ đọc tại trạng thái {status}.</p>}
+      {!editable&&<p className="ui-muted-text">Thông tin định danh Lô / Sê-ri đang ở chế độ chỉ đọc tại trạng thái {receiptStatusLabels[status]??status}.</p>}
     </>}
   </UiCard>;
 }

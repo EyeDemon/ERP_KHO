@@ -272,6 +272,18 @@
   }
 }
 
+.transfer-dialog.detail input[type="number"]::-webkit-outer-spin-button,
+.transfer-dialog.detail input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.transfer-dialog.detail input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+  text-align: center;
+}
+
 @media (max-width: 560px) {
   .transfer-dialog {
     padding: 14px;

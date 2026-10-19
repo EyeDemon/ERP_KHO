@@ -260,6 +260,18 @@
   outline: none;
 }
 
+.production-ui table input[type="number"]::-webkit-outer-spin-button,
+.production-ui table input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.production-ui table input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+  text-align: center;
+}
+
 .production-ui input::placeholder,
 .production-ui textarea::placeholder {
   color: #64748B;

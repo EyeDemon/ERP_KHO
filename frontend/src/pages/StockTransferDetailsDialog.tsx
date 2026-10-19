@@ -171,7 +171,7 @@ export default function StockTransferDetailsDialog({
                     key={name}
                   >
                     <span>{index + 1}</span>
-                    <small>{statusLabel[name]}</small>
+                    <small style={{ whiteSpace: 'nowrap' }}>{name === 'InTransit' ? 'Vận chuyển' : statusLabel[name]}</small>
                   </div>
                 ))}
               </div>

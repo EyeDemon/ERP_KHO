@@ -398,7 +398,7 @@ public sealed class ShipmentService(
                 ShipmentStatus.Dispatched,
                 dispatchedAt,
                 null,
-                "Inventory SHIP boundary committed.");
+                "Đã xác nhận xuất kho và trừ tồn thực tế.");
 
             if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
             {
@@ -492,6 +492,19 @@ public sealed class ShipmentService(
                             var shippedBaseQty = group.Sum(x => x.PickedQuantity);
                             var unitPricePerBase = soLine?.UnitPrice ?? 0m;
                             var taxPercent = soLine?.TaxPercent ?? 0m;
+                            var rawUomCode = (!string.IsNullOrWhiteSpace(soLine?.UomCode) ? soLine.UomCode : soLine?.Product?.Unit?.Code)?.Trim();
+                            var uomCode = string.IsNullOrWhiteSpace(rawUomCode) ||
+                                          string.Equals(rawUomCode, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                                          string.Equals(rawUomCode, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                                ? "THÙNG"
+                                : rawUomCode;
+                            var rawUomName = soLine?.Product?.Unit?.Name?.Trim();
+                            var uomName = string.IsNullOrWhiteSpace(rawUomName) ||
+                                          uomCode == "THÙNG" ||
+                                          string.Equals(rawUomName, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                                          string.Equals(rawUomName, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                                ? "THÙNG"
+                                : rawUomName;
 
                             existingReceipt.Details.Add(new ExportReceiptDetail
                             {
@@ -500,10 +513,10 @@ public sealed class ShipmentService(
                                 UnitPrice = unitPricePerBase,
                                 TaxPercent = taxPercent,
                                 BaseUomIdSnapshot = soLine?.Product?.UnitId,
-                                BaseUomCodeSnapshot = soLine?.Product?.Unit?.Code,
-                                BaseUomNameSnapshot = soLine?.Product?.Unit?.Name,
+                                BaseUomCodeSnapshot = uomCode,
+                                BaseUomNameSnapshot = uomName,
                                 BaseUomDecimalPlacesSnapshot = soLine?.Product?.Unit?.DecimalPlaces,
-                                Note = $"Xuất theo Shipment {shipment.ShipmentCode}"
+                                Note = $"Xuất theo Shipment {shipment.ShipmentCode.Trim()}"
                             });
                         }
 
@@ -927,19 +940,26 @@ public sealed class ShipmentService(
             throw new BusinessRuleException("Tọa độ POD không hợp lệ.");
     }
 
-    private static ShipmentTrackingEventDto MapTrackingEvent(ShipmentTrackingEvent item) => new()
+    private static ShipmentTrackingEventDto MapTrackingEvent(ShipmentTrackingEvent item)
     {
-        Id = item.Id,
-        EventType = item.EventType.Trim(),
-        FromStatus = item.FromStatus.ToString(),
-        ToStatus = item.ToStatus.ToString(),
-        OccurredAt = item.OccurredAt,
-        RecordedAt = item.RecordedAt,
-        Source = item.Source.Trim(),
-        SourceEventId = item.SourceEventId?.Trim(),
-        ReasonCode = item.ReasonCode?.Trim(),
-        Note = item.Note?.Trim()
-    };
+        var rawNote = item.Note?.Trim();
+        var normalizedNote = string.Equals(rawNote, "Inventory SHIP boundary committed.", StringComparison.OrdinalIgnoreCase)
+            ? "Đã xác nhận xuất kho và trừ tồn thực tế."
+            : rawNote;
+        return new ShipmentTrackingEventDto
+        {
+            Id = item.Id,
+            EventType = item.EventType.Trim(),
+            FromStatus = item.FromStatus.ToString(),
+            ToStatus = item.ToStatus.ToString(),
+            OccurredAt = item.OccurredAt,
+            RecordedAt = item.RecordedAt,
+            Source = item.Source.Trim(),
+            SourceEventId = item.SourceEventId?.Trim(),
+            ReasonCode = item.ReasonCode?.Trim(),
+            Note = normalizedNote
+        };
+    }
 
     private static ShipmentProofOfDeliveryDto? MapProofOfDelivery(ShipmentProofOfDelivery? pod) =>
         pod is null ? null : new ShipmentProofOfDeliveryDto

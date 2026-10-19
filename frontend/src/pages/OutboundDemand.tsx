@@ -31,11 +31,11 @@ type Product = { id:number; code:string; name:string; isActive:boolean };
 type CreateLine = { externalLineId:string; productId:string; quantity:string; unitPrice?:string; taxPercent?:string };
 
 const orderLabels:Record<string,string>={
-  Draft:'Nháp',Hold:'Tạm giữ',Released:'Đã release',PartiallyFulfilled:'Fulfill một phần',
+  Draft:'Nháp',Hold:'Tạm giữ',Released:'Đã phát hành',PartiallyFulfilled:'Giao một phần',
   Fulfilled:'Hoàn tất',Cancelled:'Đã hủy',
 };
 const backorderLabels:Record<string,string>={
-  Open:'Mở',PartiallyAllocated:'Recover một phần',Allocated:'Đã recover',Fulfilled:'Đã fulfill',Cancelled:'Đã hủy',
+  Open:'Mở',PartiallyAllocated:'Khôi phục một phần',Allocated:'Đã khôi phục',Fulfilled:'Đã giao',Cancelled:'Đã hủy',
 };
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   ['Fulfilled'].includes(status)?'success':
@@ -274,29 +274,29 @@ export default function OutboundDemand(){
 
   return <UiPage>
     <UiPageHeader
-      eyebrow="Outbound"
-      title="Sales Order & Backorder"
-      description="Theo dõi Ordered / Reserved / Allocated / Picked / Shipped / Backorder / Cancelled. Release chỉ tạo commitment; OnHand chỉ giảm tại Shipment Dispatch."
-      actions={canCreate&&masterReady&&!showCreate?<button type="button" onClick={()=>setShowCreate(true)}>Tạo Sales Order</button>:undefined}
+      eyebrow="Xuất kho"
+      title="Quản lý Đơn bán hàng & Đơn nợ hàng"
+      description="Theo dõi toàn trình từ Đặt hàng → Giữ hàng → Phân bổ → Lấy hàng → Giao hàng → Đơn nợ hàng (Backorder). Phát hành đơn chỉ tạo cam kết giữ chỗ; tồn kho thực tế chỉ giảm khi Xuất bến giao hàng."
+      actions={canCreate&&masterReady&&!showCreate?<button type="button" onClick={()=>setShowCreate(true)}>Tạo Đơn bán hàng</button>:undefined}
     />
     {error&&<div role="alert">{error}</div>}
     {notice&&<p role="status" className="ui-success-text">{notice}</p>}
-    {canCreate&&!masterReady&&<p className="ui-muted-text">Tạo Sales Order trên UI cần thêm partner.read, product.read và warehouse.read để chọn master data.</p>}
+    {canCreate&&!masterReady&&<p className="ui-muted-text">Tạo Đơn bán hàng trên UI cần thêm partner.read, product.read và warehouse.read để chọn dữ liệu danh mục.</p>}
 
     <div className="ui-stack">
-      <UiCard title="Tổng quan Tỷ lệ Đáp ứng Đơn hàng & Tồn thiếu Backorder (Demand & Backorder Summary — OUT-01 / OUT-09)">
+      <UiCard title="Tổng quan Tỷ lệ Đáp ứng Đơn hàng & Đơn nợ hàng — OUT-01 / OUT-09">
         <div className="ui-inline-wrap">
-          <span>Tổng cầu (Ordered): <strong>{totalOrderedQty}</strong></span>
-          <span>Đã giữ/Phân bổ (Reserved/Allocated): <strong>{totalReservedQty} / {totalAllocatedQty}</strong></span>
-          <span>Đã giao (Shipped): <strong>{totalShippedQty}</strong></span>
-          <span>Tồn thiếu (Backorder): <strong>{totalBackorderQty}</strong> (Còn mở: {openBackorderRemaining})</span>
+          <span>Tổng cầu: <strong>{totalOrderedQty}</strong></span>
+          <span>Đã giữ / Phân bổ: <strong>{totalReservedQty} / {totalAllocatedQty}</strong></span>
+          <span>Đã giao: <strong>{totalShippedQty}</strong></span>
+          <span>Đơn nợ hàng: <strong>{totalBackorderQty}</strong> (Còn mở: {openBackorderRemaining})</span>
           <span>Tỷ lệ đáp ứng (%): <strong>{fulfillmentRatePct}%</strong></span>
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void triggerExpediteBackorder()}>
             Kích hoạt Ưu tiên Cấp phát Đơn tồn thiếu Backorder (OUT-09)
           </button>
           {expediteResult&&(
             <UiBadge tone="success">
-              {`Đã kích hoạt ${expediteResult.expediteId} • ${expediteResult.orderNumber} (Wave Queued: ${String(expediteResult.allocationWaveQueued)})`}
+              {`Đã kích hoạt ${expediteResult.expediteId} • ${expediteResult.orderNumber} (Đã xếp hàng đợt cấp phát)`}
             </UiBadge>
           )}
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void evaluateAtpRouting()}>
@@ -309,7 +309,7 @@ export default function OutboundDemand(){
           )}
         </div>
       </UiCard>
-      {showCreate&&canCreate&&masterReady&&<UiCard title="Tạo Sales Order">
+      {showCreate&&canCreate&&masterReady&&<UiCard title="Tạo Đơn bán hàng mới">
         <form onSubmit={createOrder} className="ui-stack">
           <div className="ui-inline-wrap">
             <label style={{display:'flex',flexDirection:'column',gap:6}}>External Order ID
@@ -327,13 +327,13 @@ export default function OutboundDemand(){
                 {warehouses.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
               </select>
             </label>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Requested ship date
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Ngày giao dự kiến
               <input aria-label="Requested ship date" type="date" value={requestedShipDate} onChange={e=>setRequestedShipDate(e.target.value)}/>
             </label>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Priority
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Độ ưu tiên
               <input aria-label="Sales Order priority" type="number" min="0" value={priority} onChange={e=>setPriority(e.target.value)}/>
             </label>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Shipping method
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Phương thức giao
               <input aria-label="Shipping method" value={shippingMethod} onChange={e=>setShippingMethod(e.target.value)}/>
             </label>
           </div>
@@ -344,7 +344,7 @@ export default function OutboundDemand(){
                 <input aria-label={`External Line ID ${index+1}`} value={line.externalLineId}
                   onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,externalLineId:e.target.value}:item))}/>
               </label>
-              <label style={{display:'flex',flexDirection:'column',gap:6}}>SKU
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Sản phẩm
                 <select aria-label={`SKU Sales Order ${index+1}`} value={line.productId}
                   onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}>
                   <option value="">Chọn SKU</option>
@@ -374,10 +374,10 @@ export default function OutboundDemand(){
         </form>
       </UiCard>}
 
-      {canReadOrders&&<UiCard title="Sales Order demand">
-        {orders.length===0?<p>Chưa có Sales Order.</p>:<UiTableScroll>
+      {canReadOrders&&<UiCard title="Danh sách Đơn bán hàng">
+        {orders.length===0?<p>Chưa có đơn bán hàng nào.</p>:<UiTableScroll>
           <table aria-label="Danh sách Sales Order demand">
-            <thead><tr><th>Order</th><th>Khách hàng</th><th>Kho</th><th>Trạng thái</th><th>Ordered</th><th>Reserved</th><th>Allocated</th><th>Picked</th><th>Shipped</th><th>Backorder</th><th>Cancelled</th><th>Open</th></tr></thead>
+            <thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Kho</th><th>Trạng thái</th><th>Đặt hàng</th><th>Đã giữ</th><th>Phân bổ</th><th>Đã lấy</th><th>Đã giao</th><th>Nợ hàng</th><th>Đã hủy</th><th>Còn mở</th></tr></thead>
             <tbody>{orders.map(order=><tr key={order.id}>
               <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void detail(order.id)}>{order.orderCode}</button><div className="ui-muted-text" style={{whiteSpace:'nowrap'}}>{order.externalOrderId}</div></td>
               <td><span style={{whiteSpace:'nowrap'}}>{order.customerCode}</span> — {order.customerName}</td><td>{order.warehouseName}</td>
@@ -394,10 +394,10 @@ export default function OutboundDemand(){
         <div className="ui-inline-wrap">
           <UiBadge tone={tone(selected.status)}>{orderLabels[selected.status]??selected.status}</UiBadge>
           <span>{selected.externalOrderId} • {selected.customerName} • {selected.warehouseName}</span>
-          <span>Ordered {selected.orderedQuantity} = Shipped {selected.shippedQuantity} + Open {selected.openQuantity} + Cancelled {selected.cancelledQuantity}</span>
+          <span>Đặt hàng: {selected.orderedQuantity} • Đã giao: {selected.shippedQuantity} • Còn mở: {selected.openQuantity} • Đã hủy: {selected.cancelledQuantity}</span>
           {Number(selected.totalAmount||0)>0&&<span>Tổng giá trị: <strong>{Number(selected.totalAmount).toLocaleString('vi-VN')} {selected.currency||'VND'}</strong></span>}
         </div>
-        <p className="ui-muted-text">Giải phóng đơn theo tồn khả dụng, tự động tạo giữ hàng (Reservation), phân bổ (Allocation) cho phần đủ tồn và tạo đơn nợ hàng (Backorder) cho phần thiếu.</p>
+        <p className="ui-muted-text">Phát hành đơn theo tồn khả dụng, tự động tạo giữ hàng, phân bổ cho phần đủ tồn và tạo đơn nợ hàng (Backorder) cho phần thiếu.</p>
         <div className="ui-inline-wrap">
           {canHold&&selected.status==='Draft'&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
             `sales-order-hold-${selected.id}`,`/api/sales-orders/${selected.id}/hold`,{rowVersion:selected.rowVersion},'Đã đưa Sales Order vào HOLD.'
@@ -412,12 +412,12 @@ export default function OutboundDemand(){
             <button type="button" disabled={!!busy||!orderCancelReason.trim()} onClick={()=>void mutate(
               `sales-order-cancel-${selected.id}`,`/api/sales-orders/${selected.id}/cancel`,
               {rowVersion:selected.rowVersion,reason:orderCancelReason},'Đã hủy phần demand chưa shipped.'
-            )}>Hủy phần chưa fulfill</button>
+            )}>Hủy phần chưa giao</button>
           </>}
         </div>
         <UiTableScroll>
           <table aria-label="Dòng Sales Order">
-            <thead><tr><th>SKU</th><th>Ordered</th><th>Reserved</th><th>Allocated</th><th>Picked</th><th>Shipped</th><th>Backorder</th><th>Cancelled</th><th>Open</th><th>Đơn giá / Thuế</th></tr></thead>
+            <thead><tr><th>Sản phẩm</th><th>Đặt hàng</th><th>Đã giữ</th><th>Phân bổ</th><th>Đã lấy</th><th>Đã giao</th><th>Nợ hàng</th><th>Đã hủy</th><th>Còn mở</th><th>Đơn giá / Thuế</th></tr></thead>
             <tbody>{(selected.lines??[]).map(line=><tr key={line.id}>
               <td><strong style={{whiteSpace:'nowrap'}}>{line.productCode}</strong> — {line.productName}<div className="ui-muted-text">{(line.uomCode==='QA_UNIT'||line.uomCode==='QA-PCS')?'THÙNG':line.uomCode}</div></td>
               <td>{line.orderedQuantity}</td><td>{line.reservedQuantity}</td><td>{line.allocatedQuantity}</td>
@@ -429,8 +429,8 @@ export default function OutboundDemand(){
         </UiTableScroll>
       </UiCard>}
 
-      {canReadBackorders&&<UiCard title="Backorder workbench">
-        {backorders.length===0?<p>Không có Backorder đang theo dõi.</p>:<div className="ui-stack">
+      {canReadBackorders&&<UiCard title="Danh sách Đơn nợ hàng (Backorder)">
+        {backorders.length===0?<p>Không có đơn nợ hàng nào đang mở.</p>:<div className="ui-stack">
           {backorders.map(item=><div className="ui-subcard" key={item.id}>
             <div className="ui-subcard-title" style={{whiteSpace:'nowrap'}}>{item.backorderCode} — {item.productCode}</div>
             <div className="ui-inline-wrap">

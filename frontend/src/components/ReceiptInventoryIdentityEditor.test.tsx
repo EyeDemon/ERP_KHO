@@ -37,7 +37,7 @@ describe('ReceiptInventoryIdentityEditor',()=>{
 
     const view=render(<ReceiptInventoryIdentityEditor receiptId={88} status="ReadyToPost" lines={[lotLine]} canUpdate={true}/>);
     expect(await view.findByDisplayValue('LOT-001')).toBeTruthy();
-    expect(view.getByText(/Identity đang ở chế độ chỉ đọc/)).toBeTruthy();
+    expect(view.getByText(/Thông tin định danh Lô \/ Sê-ri đang ở chế độ chỉ đọc/)).toBeTruthy();
     expect(view.queryByText('Lưu Lot / Serial / Expiry')).toBeNull();
   });
 
@@ -46,7 +46,7 @@ describe('ReceiptInventoryIdentityEditor',()=>{
     vi.mocked(apiClient.post).mockImplementation(async (_url,body)=>({data:(body as {lines:unknown[]}).lines} as never));
 
     const view=render(<ReceiptInventoryIdentityEditor receiptId={88} status="Received" lines={[lotLine]} canUpdate={true}/>);
-    await view.findByText('Chưa khai báo identity.');
+    await view.findByText('Chưa khai báo định danh Lô / Sê-ri.');
     fireEvent.click(view.getByText('Thêm lot'));
     fireEvent.change(view.getByLabelText('Identity lot SKU-LOT 0'),{target:{value:'LOT-NEW'}});
     fireEvent.change(view.getByLabelText('Identity manufacture SKU-LOT 0'),{target:{value:'2026-09-01'}});
@@ -67,7 +67,7 @@ describe('ReceiptInventoryIdentityEditor',()=>{
   it('locks serial quantity to one per identity row',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:[]} as never);
     const view=render(<ReceiptInventoryIdentityEditor receiptId={89} status="Received" lines={[serialLine]} canUpdate={true}/>);
-    await view.findByText('Chưa khai báo identity.');
+    await view.findByText('Chưa khai báo định danh Lô / Sê-ri.');
     fireEvent.click(view.getByText('Thêm serial'));
     const quantity=view.getByLabelText('Identity quantity SKU-SERIAL 0') as HTMLInputElement;
     expect(quantity.value).toBe('1');

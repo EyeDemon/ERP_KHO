@@ -122,7 +122,7 @@ public sealed class SalesOrderBackorderService(
                 OrderedQuantity = line.OrderedQuantity,
                 UnitPrice = line.UnitPrice,
                 TaxPercent = line.TaxPercent,
-                UomCode = product.Unit.Code
+                UomCode = NormalizeUomCode(product.Unit.Code, null)
             });
         }
 
@@ -587,7 +587,8 @@ public sealed class SalesOrderBackorderService(
     private static string NormalizeUomCode(string? code, string? fallback)
     {
         var raw = !string.IsNullOrWhiteSpace(code) ? code.Trim() : (fallback?.Trim() ?? string.Empty);
-        if (string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+        if (string.IsNullOrWhiteSpace(raw) ||
+            string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(raw, "QA-PCS", StringComparison.OrdinalIgnoreCase))
             return "THÙNG";
         return raw;
