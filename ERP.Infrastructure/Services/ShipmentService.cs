@@ -52,12 +52,12 @@ public sealed class ShipmentService(
             if (linkedExportReceipts.TryGetValue(r.Id, out var er))
             {
                 dto.ExportReceiptId = er.Id;
-                dto.ExportReceiptCode = er.Code;
+                dto.ExportReceiptCode = er.Code.Trim();
             }
             else if (r.SourceType == "ExportReceipt" && r.SourceId.HasValue)
             {
                 dto.ExportReceiptId = r.SourceId;
-                dto.ExportReceiptCode = r.SourceCode;
+                dto.ExportReceiptCode = r.SourceCode?.Trim();
             }
             return dto;
         }).ToList();
@@ -74,12 +74,12 @@ public sealed class ShipmentService(
         if (linkedEr is not null)
         {
             dto.ExportReceiptId = linkedEr.Id;
-            dto.ExportReceiptCode = linkedEr.Code;
+            dto.ExportReceiptCode = linkedEr.Code.Trim();
         }
         else if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
         {
             dto.ExportReceiptId = shipment.SourceId;
-            dto.ExportReceiptCode = shipment.SourceCode;
+            dto.ExportReceiptCode = shipment.SourceCode?.Trim();
         }
         return dto;
     }
@@ -726,12 +726,12 @@ public sealed class ShipmentService(
                 if (linkedEr is not null)
                 {
                     dto.ExportReceiptId = linkedEr.Id;
-                    dto.ExportReceiptCode = linkedEr.Code;
+                    dto.ExportReceiptCode = linkedEr.Code.Trim();
                 }
                 else if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
                 {
                     dto.ExportReceiptId = shipment.SourceId;
-                    dto.ExportReceiptCode = shipment.SourceCode;
+                    dto.ExportReceiptCode = shipment.SourceCode?.Trim();
                 }
                 return dto;
             }
@@ -930,34 +930,34 @@ public sealed class ShipmentService(
     private static ShipmentTrackingEventDto MapTrackingEvent(ShipmentTrackingEvent item) => new()
     {
         Id = item.Id,
-        EventType = item.EventType,
+        EventType = item.EventType.Trim(),
         FromStatus = item.FromStatus.ToString(),
         ToStatus = item.ToStatus.ToString(),
         OccurredAt = item.OccurredAt,
         RecordedAt = item.RecordedAt,
-        Source = item.Source,
-        SourceEventId = item.SourceEventId,
-        ReasonCode = item.ReasonCode,
-        Note = item.Note
+        Source = item.Source.Trim(),
+        SourceEventId = item.SourceEventId?.Trim(),
+        ReasonCode = item.ReasonCode?.Trim(),
+        Note = item.Note?.Trim()
     };
 
     private static ShipmentProofOfDeliveryDto? MapProofOfDelivery(ShipmentProofOfDelivery? pod) =>
         pod is null ? null : new ShipmentProofOfDeliveryDto
         {
             DeliveredAt = pod.DeliveredAt,
-            ReceiverName = pod.ReceiverName,
-            EvidenceReference = pod.EvidenceReference,
+            ReceiverName = pod.ReceiverName.Trim(),
+            EvidenceReference = pod.EvidenceReference?.Trim(),
             Latitude = pod.Latitude,
             Longitude = pod.Longitude,
-            CarrierReference = pod.CarrierReference,
-            DeliveryNote = pod.DeliveryNote,
+            CarrierReference = pod.CarrierReference?.Trim(),
+            DeliveryNote = pod.DeliveryNote?.Trim(),
             CreatedAt = pod.CreatedAt
         };
 
     private static ShipmentTrackingDto MapTracking(Shipment shipment) => new()
     {
         ShipmentId = shipment.Id,
-        ShipmentCode = shipment.ShipmentCode,
+        ShipmentCode = shipment.ShipmentCode.Trim(),
         Status = shipment.Status.ToString(),
         DispatchedAt = shipment.DispatchedAt,
         InTransitAt = shipment.InTransitAt,
@@ -988,33 +988,33 @@ public sealed class ShipmentService(
     private static ShipmentListDto MapList(Shipment shipment) => new()
     {
         Id = shipment.Id,
-        ShipmentCode = shipment.ShipmentCode,
+        ShipmentCode = shipment.ShipmentCode.Trim(),
         PackingSessionId = shipment.PackingSessionId,
-        PackingSessionCode = shipment.PackingSession.SessionCode,
+        PackingSessionCode = shipment.PackingSession.SessionCode.Trim(),
         WarehouseId = shipment.WarehouseId,
-        WarehouseName = shipment.Warehouse.Name,
-        SourceType = shipment.SourceType,
+        WarehouseName = shipment.Warehouse.Name.Trim(),
+        SourceType = shipment.SourceType.Trim(),
         SourceId = shipment.SourceId,
-        SourceCode = shipment.SourceCode,
+        SourceCode = shipment.SourceCode?.Trim(),
         Status = shipment.Status.ToString(),
         StagingLocationId = shipment.StagingLocationId,
-        StagingLocationCode = shipment.StagingLocation?.Code,
+        StagingLocationCode = shipment.StagingLocation?.Code?.Trim(),
         HandlingUnitCount = shipment.HandlingUnits.Count,
         LoadedHandlingUnitCount = shipment.HandlingUnits.Count(x => x.LoadedAt.HasValue),
         DockAppointmentId = shipment.DockAppointmentId,
-        DockAppointmentCode = shipment.DockAppointment?.Code,
+        DockAppointmentCode = shipment.DockAppointment?.Code?.Trim(),
         DockId = shipment.DockId,
-        DockCode = shipment.Dock?.Code,
-        VehiclePlate = shipment.VehiclePlate,
-        TrailerPlate = shipment.TrailerPlate,
-        SealNumber = shipment.SealNumber,
+        DockCode = shipment.Dock?.Code?.Trim(),
+        VehiclePlate = shipment.VehiclePlate?.Trim(),
+        TrailerPlate = shipment.TrailerPlate?.Trim(),
+        SealNumber = shipment.SealNumber?.Trim(),
         CreatedAt = shipment.CreatedAt,
         StagedAt = shipment.StagedAt,
         LoadingStartedAt = shipment.LoadingStartedAt,
         LoadedAt = shipment.LoadedAt,
         DispatchedAt = shipment.DispatchedAt,
         DispatchedBy = shipment.DispatchedBy,
-        DispatchedByName = shipment.DispatchedByUser?.FullName,
+        DispatchedByName = shipment.DispatchedByUser?.FullName?.Trim(),
         InTransitAt = shipment.InTransitAt,
         DeliveryFailedAt = shipment.DeliveryFailedAt,
         ReturnInitiatedAt = shipment.ReturnInitiatedAt,
@@ -1071,9 +1071,9 @@ public sealed class ShipmentService(
                 {
                     Id = link.Id,
                     HandlingUnitId = link.HandlingUnitId,
-                    HuCode = link.HandlingUnit.HuCode,
-                    Barcode = link.HandlingUnit.Barcode,
-                    Sscc = link.HandlingUnit.Sscc,
+                    HuCode = link.HandlingUnit.HuCode.Trim(),
+                    Barcode = link.HandlingUnit.Barcode.Trim(),
+                    Sscc = link.HandlingUnit.Sscc?.Trim(),
                     Type = link.HandlingUnit.Type.ToString(),
                     Status = link.HandlingUnit.Status.ToString(),
                     Sequence = link.Sequence,

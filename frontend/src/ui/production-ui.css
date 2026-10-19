@@ -618,7 +618,6 @@
     word-break: normal;
   }
 
-  .production-ui th,
   .production-ui .ui-cell-nowrap,
   .production-ui .ui-cell-nowrap *,
   .production-ui .ui-cell-numeric,
@@ -635,13 +634,21 @@
   }
 
   .production-ui table {
-    min-width: 680px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .production-ui th,
+  .production-ui td {
+    padding: 6px 4px;
+    font-size: 11px;
   }
 }
 
 @media (max-width: 480px) {
   .production-ui table {
-    min-width: 620px;
+    min-width: 0;
+    width: 100%;
   }
 }
 

@@ -1,6 +1,6 @@
 .inbound-planning-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .9fr);
+  grid-template-columns: 1fr;
   gap: var(--ui-space-4);
   align-items: start;
 }

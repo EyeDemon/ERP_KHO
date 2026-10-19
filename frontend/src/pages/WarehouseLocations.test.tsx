@@ -111,7 +111,7 @@ describe('WarehouseLocations production UI', () => {
     expect(row).toBeTruthy();
     fireEvent.click(within(row!).getByRole('button', { name: 'Sửa' }));
     const zone = view.getByLabelText('Zone') as HTMLInputElement;
-    expect(zone.closest('fieldset')?.disabled).toBe(true);
+    expect(zone.disabled).toBe(true);
     fireEvent.change(view.getByLabelText('Tên vị trí'), { target: { value: 'Ô chính mới' } });
     fireEvent.submit(view.getByText('Lưu vị trí').closest('form')!);
     await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/101', expect.objectContaining({

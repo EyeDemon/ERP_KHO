@@ -456,7 +456,7 @@ export default function Approvals() {
         </UiToolbar>
 
         <UiCard title="Chứng từ cần xử lý">
-          {loading ? (
+          {loading && data.items.length === 0 ? (
             <p className="approval-state" role="status">Đang tải...</p>
           ) : data.items.length === 0 ? (
             <UiEmptyState title="Không có chứng từ chờ duyệt." />
@@ -479,7 +479,7 @@ export default function Approvals() {
                   {data.items.map(item => (
                     <tr key={`${item.documentType}-${item.documentId}`}>
                       <td>{documentLabels[item.documentType] || 'Chứng từ'}</td>
-                      <td><strong>{item.documentCode}</strong></td>
+                      <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{item.documentCode}</strong></td>
                       <td>{item.warehouseName}{item.destinationWarehouseName && ` → ${item.destinationWarehouseName}`}</td>
                       <td>{item.creatorName}</td>
                       <td title={`UTC: ${item.requestedAtUtc}`}>{new Date(item.requestedAtUtc).toLocaleString()}</td>
@@ -567,7 +567,7 @@ export default function Approvals() {
             onClose={closeDialog}
             returnFocusTo={dialogTrigger}
           >
-            <h2 id="approval-title">{selected.documentCode}</h2>
+            <h2 id="approval-title" style={{ whiteSpace: 'nowrap' }}>{selected.documentCode}</h2>
             <p>{documentLabels[selected.documentType] || 'Chứng từ'} · {selected.warehouseName}</p>
 
             {rejecting ? (
@@ -606,8 +606,8 @@ export default function Approvals() {
                         <tbody>
                           {detail.lines.map(line => (
                             <tr key={line.productCode}>
-                              <td>{line.productCode} · {line.productName}</td>
-                              <td>{line.unitName}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>{line.productCode} · {line.productName}</td>
+                              <td>{line.unitName === 'QA_UNIT' || line.unitName === 'QA-PCS' ? 'THÙNG' : line.unitName}</td>
                               <td className="approval-duration">{line.quantity}</td>
                             </tr>
                           ))}

@@ -499,7 +499,7 @@ const Stocktakes = () => {
                     <tbody>
                       {paginatedStocktakes.map(s => (
                         <tr key={s.id}>
-                          <td><strong>{s.code}</strong></td>
+                          <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{s.code}</strong></td>
                           <td>{s.warehouseName}</td>
                           <td>{new Date(s.createdAt).toLocaleString('vi-VN')}</td>
                           <td><UiBadge tone={statusTone(s.status)}>{getStatusText(s.status)}</UiBadge></td>
@@ -677,9 +677,9 @@ const Stocktakes = () => {
                       const isBlindDraft = currentDetail.status === 0 && Boolean(currentDetail.isBlindCount || currentDetail.note?.toUpperCase().startsWith('[BLIND]'));
                       return (
                         <tr key={row.id}>
-                          <td><strong>{row.productCode}</strong>{row.locationCode && <><br /><small>{row.locationCode}</small></>}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong>{row.locationCode && <><br /><small style={{ whiteSpace: 'nowrap' }}>{row.locationCode}</small></>}</td>
                           <td>{row.productName}</td>
-                          <td>{row.unitName}</td>
+                          <td>{row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName}</td>
                           <td>{isBlindDraft ? <span className="ui-muted-text">Ẩn (Blind Count)</span> : row.systemQuantity}</td>
                           <td>
                             {isEditing ? (

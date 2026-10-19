@@ -96,11 +96,11 @@ public sealed class ApprovalWorkflowService(
                 var aging = ApprovalAgingCalculator.Calculate(x.CreatedAt, nowUtc, true, options);
                 return new ApprovalQueueItem
                 {
-                DocumentType = x.Type, DocumentId = x.Id, DocumentCode = x.Code, CreatorId = x.CreatorId,
-                CreatorName = x.CreatorName, RequestedAtUtc = AsUtc(x.CreatedAt), WarehouseId = x.WarehouseId,
+                DocumentType = x.Type.Trim(), DocumentId = x.Id, DocumentCode = x.Code.Trim(), CreatorId = x.CreatorId,
+                CreatorName = x.CreatorName.Trim(), RequestedAtUtc = AsUtc(x.CreatedAt), WarehouseId = x.WarehouseId,
                 WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus,
-                WarehouseName = x.WarehouseName, DestinationWarehouseId = x.DestinationWarehouseId,
-                DestinationWarehouseName = x.DestinationWarehouseName, TotalQuantity = x.TotalQuantity,
+                WarehouseName = x.WarehouseName.Trim(), DestinationWarehouseId = x.DestinationWarehouseId,
+                DestinationWarehouseName = x.DestinationWarehouseName?.Trim(), TotalQuantity = x.TotalQuantity,
                 PendingState = x.Type == "ImportReceipt" ? (x.QcCompleted ? "QcCompleted" : "Received") : "Draft",
                 CanApprove = x.CreatorId != currentUser.UserId && (x.Type switch
                 {
@@ -380,14 +380,21 @@ public sealed class ApprovalWorkflowService(
         IdempotencyKeyHash = requestMetadata.IdempotencyKeyHash, RequestFingerprint = requestMetadata.RequestFingerprint,
         Severity = "Information", Timestamp = DateTime.UtcNow
     };
-    private ApprovalActionResult Result(string type, int id, string code) => new() { DocumentType = type, DocumentId = id, DocumentCode = code, CorrelationId = requestMetadata.CorrelationId };
+    private ApprovalActionResult Result(string type, int id, string code) => new() { DocumentType = type.Trim(), DocumentId = id, DocumentCode = code.Trim(), CorrelationId = requestMetadata.CorrelationId };
     private ApprovalQueueItem DetailSummary(string type, int id, string code, string state, int creatorId, string creatorName, DateTime createdAt, int warehouseId, string warehouseName, int? destinationId, string? destinationName)
     {
         var pending = type == "ImportReceipt" ? state is "Received" or "QcCompleted" : state == "Draft"; var checker = creatorId != currentUser.UserId;
         var aging = ApprovalAgingCalculator.Calculate(createdAt, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime, pending, agingOptions ?? new ApprovalAgingOptions());
-        return new ApprovalQueueItem { DocumentType = type, DocumentId = id, DocumentCode = code, PendingState = state, CreatorId = creatorId, CreatorName = creatorName, RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName, DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName, CanApprove = pending && checker, CanReject = pending && checker, DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
+        return new ApprovalQueueItem { DocumentType = type.Trim(), DocumentId = id, DocumentCode = code.Trim(), PendingState = state, CreatorId = creatorId, CreatorName = creatorName.Trim(), RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName.Trim(), DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName?.Trim(), CanApprove = pending && checker, CanReject = pending && checker, DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
     }
-    private static ApprovalDetailLine DetailLine(Product product, decimal quantity) => new() { ProductCode = product.Code, ProductName = product.Name, UnitName = product.Unit.Name, Quantity = quantity };
+    private static ApprovalDetailLine DetailLine(Product product, decimal quantity)
+    {
+        var rawUnit = (product.Unit?.Name ?? string.Empty).Trim();
+        var unitName = string.Equals(rawUnit, "QA_UNIT", StringComparison.OrdinalIgnoreCase) || string.Equals(rawUnit, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+            ? "THÙNG"
+            : rawUnit;
+        return new() { ProductCode = product.Code.Trim(), ProductName = product.Name.Trim(), UnitName = unitName, Quantity = quantity };
+    }
     private async Task<HashSet<string>> PermissionsAsync(CancellationToken token)
     {
         if (!currentUser.IsAuthenticated) throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
@@ -417,20 +424,20 @@ public sealed class ApprovalWorkflowService(
         var exportIds = rows.Where(x => x.EntityName == "ExportReceipt" && x.EntityId.HasValue).Select(x => x.EntityId!.Value).Distinct().ToList();
         var transferIds = rows.Where(x => x.EntityName == "StockTransfer" && x.EntityId.HasValue).Select(x => x.EntityId!.Value).Distinct().ToList();
         var stocktakeIds = rows.Where(x => x.EntityName == "Stocktake" && x.EntityId.HasValue).Select(x => x.EntityId!.Value).Distinct().ToList();
-        foreach (var x in await context.ImportReceipts.Where(x => importIds.Contains(x.Id)).Select(x => new { x.Id, x.Code }).ToListAsync(token)) result[("ImportReceipt", x.Id)] = x.Code;
-        foreach (var x in await context.ExportReceipts.Where(x => exportIds.Contains(x.Id)).Select(x => new { x.Id, x.Code }).ToListAsync(token)) result[("ExportReceipt", x.Id)] = x.Code;
-        foreach (var x in await context.StockTransfers.Where(x => transferIds.Contains(x.Id)).Select(x => new { x.Id, x.Code }).ToListAsync(token)) result[("StockTransfer", x.Id)] = x.Code;
-        foreach (var x in await context.Stocktakes.Where(x => stocktakeIds.Contains(x.Id)).Select(x => new { x.Id, x.Code }).ToListAsync(token)) result[("Stocktake", x.Id)] = x.Code;
+        foreach (var x in await context.ImportReceipts.Where(x => importIds.Contains(x.Id)).Select(x => new { x.Id, x.Code }).ToListAsync(token)) result[("ImportReceipt", x.Id)] = x.Code.Trim();
+        foreach (var x in await context.ExportReceipts.Where(x => exportIds.Contains(x.Id)).Select(x => new { x.Id, x.Code }).ToListAsync(token)) result[("ExportReceipt", x.Id)] = x.Code.Trim();
+        foreach (var x in await context.StockTransfers.Where(x => transferIds.Contains(x.Id)).Select(x => new { x.Id, x.Code }).ToListAsync(token)) result[("StockTransfer", x.Id)] = x.Code.Trim();
+        foreach (var x in await context.Stocktakes.Where(x => stocktakeIds.Contains(x.Id)).Select(x => new { x.Id, x.Code }).ToListAsync(token)) result[("Stocktake", x.Id)] = x.Code.Trim();
         return result;
     }
     private static string? State(string? value) => value?.StartsWith("Status: ", StringComparison.Ordinal) == true ? value[8..] : value;
     private static ApprovalHistoryItem MapHistory(AuditLog x, string code) => new()
     {
-        Id = x.Id, TimestampUtc = AsUtc(x.Timestamp), ActorId = x.UserId, ActorName = x.User?.FullName ?? x.User?.Username ?? string.Empty,
-        Action = x.Action, DisplayAction = x.Action == "ApprovalRejected" ? "Bị từ chối" : x.Action.EndsWith(".Cancelled") ? "Đã hủy" : x.Action,
-        DocumentType = x.EntityName, DocumentId = x.EntityId ?? 0, DocumentCode = code, WarehouseId = x.WarehouseId ?? x.SourceWarehouseId,
-        OldState = State(x.OldValues), NewState = State(x.NewValues), Result = x.Result, Reason = x.Action == "ApprovalRejected" ? x.Reason : null,
-        CorrelationId = x.CorrelationId, Severity = x.Severity
+        Id = x.Id, TimestampUtc = AsUtc(x.Timestamp), ActorId = x.UserId, ActorName = (x.User?.FullName ?? x.User?.Username ?? string.Empty).Trim(),
+        Action = x.Action.Trim(), DisplayAction = x.Action == "ApprovalRejected" ? "Bị từ chối" : x.Action.EndsWith(".Cancelled") ? "Đã hủy" : x.Action.Trim(),
+        DocumentType = x.EntityName.Trim(), DocumentId = x.EntityId ?? 0, DocumentCode = code.Trim(), WarehouseId = x.WarehouseId ?? x.SourceWarehouseId,
+        OldState = State(x.OldValues), NewState = State(x.NewValues), Result = x.Result?.Trim(), Reason = x.Action == "ApprovalRejected" ? x.Reason?.Trim() : null,
+        CorrelationId = x.CorrelationId?.Trim(), Severity = (x.Severity ?? string.Empty).Trim()
     };
 
     private static DateTime AsUtc(DateTime value) => value.Kind switch

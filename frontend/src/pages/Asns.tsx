@@ -44,6 +44,7 @@ const labels:Record<string,string>={
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Completed'?'success':status==='Arrived'||status==='Receiving'?'warning':status==='Cancelled'?'danger':'neutral';
 const dateTime=(value?:string)=>value?new Date(value).toLocaleString('vi-VN'):'—';
+const normalizeUnitCode=(unitCode?:string)=>(unitCode==='QA_UNIT'||unitCode==='QA-PCS')?'THÙNG':(unitCode||'');
 const emptyLine=():LineForm=>({purchaseOrderLineId:'',productId:'',operationUnitId:'',expectedQuantity:''});
 
 export default function Asns(){
@@ -311,9 +312,9 @@ export default function Asns(){
             <table className="inbound-planning-table" aria-label="Danh sách ASN">
               <thead><tr><th>ASN</th><th>PO nguồn</th><th>Nhà cung cấp</th><th>Kho</th><th>Dự kiến đến</th><th className="inbound-planning-numeric">SL cơ sở</th><th>Trạng thái</th></tr></thead>
               <tbody>{filtered.map(item=><tr key={item.id}>
-                <td><button type="button" onClick={()=>void viewDetail(item.id)}><strong>{item.code}</strong></button></td>
-                <td>{item.purchaseOrderCode||'Không gắn PO'}</td>
-                <td>{item.supplierCode}<br/><small>{item.supplierName}</small></td>
+                <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong></button></td>
+                <td style={{whiteSpace:'nowrap'}}>{item.purchaseOrderCode||'Không gắn PO'}</td>
+                <td><span style={{whiteSpace:'nowrap'}}>{item.supplierCode}</span><br/><small>{item.supplierName}</small></td>
                 <td>{item.warehouseName}</td>
                 <td>{dateTime(item.expectedArrivalAtUtc)}</td>
                 <td className="inbound-planning-numeric">{item.baseExpectedQuantity.toLocaleString('vi-VN')}</td>
@@ -347,12 +348,16 @@ export default function Asns(){
           <UiTableScroll>
             <table aria-label={'Dòng ASN '+selected.code}>
               <thead><tr><th>Dòng</th><th>Sản phẩm</th><th className="inbound-planning-numeric">Dự kiến</th><th className="inbound-planning-numeric">SL cơ sở</th></tr></thead>
-              <tbody>{selected.lines.map(line=><tr key={line.id}>
+              <tbody>{selected.lines.map(line=>{
+                const opUnit=normalizeUnitCode(line.operationUnitCode);
+                const baseUnit=normalizeUnitCode(line.baseUnitCode);
+                return <tr key={line.id}>
                 <td>{line.lineNo}</td>
-                <td>{line.productCode}<br/><small>{line.productName}</small></td>
-                <td className="inbound-planning-numeric">{line.expectedQuantity.toLocaleString('vi-VN')} {line.operationUnitCode}</td>
-                <td className="inbound-planning-numeric">{line.baseExpectedQuantity.toLocaleString('vi-VN')} {line.baseUnitCode}</td>
-              </tr>)}</tbody>
+                <td><strong style={{whiteSpace:'nowrap'}}>{line.productCode}</strong><br/><small>{line.productName}</small></td>
+                <td className="inbound-planning-numeric">{line.expectedQuantity.toLocaleString('vi-VN')} {opUnit}</td>
+                <td className="inbound-planning-numeric">{line.baseExpectedQuantity.toLocaleString('vi-VN')}{(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')&&baseUnit===opUnit?'':' '+baseUnit}</td>
+              </tr>;
+              })}</tbody>
             </table>
           </UiTableScroll>
         </UiCard>}

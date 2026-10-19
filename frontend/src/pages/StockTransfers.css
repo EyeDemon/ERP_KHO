@@ -56,7 +56,18 @@
 }
 
 .transfer-dialog.detail {
-  width: min(1050px, 100%);
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+}
+
+.transfer-modal:has(.transfer-dialog.detail) {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  background: transparent;
+  padding: 0;
+  display: block;
 }
 
 .transfer-dialog h2 {
@@ -105,6 +116,8 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   margin: 25px 0;
+  padding-top: 16px;
+  overflow: visible;
 }
 
 .timeline div {
@@ -153,6 +166,112 @@
   }
 }
 
+@media (max-width: 768px) {
+  table[aria-label="Danh sách phiếu điều chuyển"] {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] th:nth-child(1),
+  table[aria-label="Danh sách phiếu điều chuyển"] td:nth-child(1) {
+    width: 26%;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] th:nth-child(2),
+  table[aria-label="Danh sách phiếu điều chuyển"] td:nth-child(2) {
+    width: 28%;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] th:nth-child(3),
+  table[aria-label="Danh sách phiếu điều chuyển"] td:nth-child(3) {
+    width: 23%;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] th:nth-child(4),
+  table[aria-label="Danh sách phiếu điều chuyển"] td:nth-child(4) {
+    display: none;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] th:nth-child(5),
+  table[aria-label="Danh sách phiếu điều chuyển"] td:nth-child(5) {
+    width: 23%;
+    padding-right: 4px !important;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] th,
+  table[aria-label="Danh sách phiếu điều chuyển"] td {
+    padding: 6px 4px;
+    font-size: 11px;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] th {
+    white-space: normal !important;
+    font-size: 10px;
+    line-height: 1.15;
+    word-break: normal;
+    overflow-wrap: break-word;
+    vertical-align: bottom;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] .transfer-flow span {
+    white-space: normal !important;
+    font-size: 10.5px;
+    line-height: 1.2;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] .ui-badge {
+    white-space: normal !important;
+    font-size: 10px;
+    line-height: 1.15;
+    text-align: center;
+    padding: 2px 4px;
+  }
+
+  table[aria-label="Danh sách phiếu điều chuyển"] td button {
+    white-space: normal !important;
+    font-size: 10.5px;
+    line-height: 1.15;
+    padding: 4px 4px;
+    min-height: 32px;
+    width: 100%;
+  }
+
+  .transfer-dialog.detail {
+    padding: 12px;
+  }
+
+  .transfer-dialog.detail table {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .transfer-dialog.detail th,
+  .transfer-dialog.detail td {
+    padding: 6px 3px;
+    font-size: 11px;
+    word-break: break-word;
+  }
+
+  .transfer-dialog.detail th {
+    white-space: normal !important;
+    font-size: 10px;
+    line-height: 1.15;
+    vertical-align: bottom;
+  }
+
+  .transfer-dialog.detail th:first-child,
+  .transfer-dialog.detail td:first-child {
+    width: 32%;
+  }
+
+  .transfer-dialog td input {
+    min-width: 0;
+    width: 100%;
+    padding: 4px 2px;
+    font-size: 11px;
+  }
+}
+
 @media (max-width: 560px) {
   .transfer-dialog {
     padding: 14px;
@@ -163,10 +282,11 @@
   }
 
   .timeline {
-    overflow-x: auto;
+    padding-top: 16px;
+    overflow: visible;
   }
 
   .timeline small {
-    font-size: 12px;
+    font-size: 11px;
   }
 }

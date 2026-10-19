@@ -155,7 +155,7 @@ export default function StockTransferDetailsDialog({
             >
               <div className="dialog-title">
                 <div>
-                  <h2 id="transfer-detail-title">{selected.code}</h2>
+                  <h2 id="transfer-detail-title" style={{ whiteSpace: 'nowrap' }}>{selected.code}</h2>
                   <UiBadge tone={statusTone(status)}>{statusLabel[status]}</UiBadge>
                 </div>
                 <button ref={closeButtonRef} type="button" aria-label="Đóng chi tiết điều chuyển" onClick={onClose}>
@@ -203,7 +203,7 @@ export default function StockTransferDetailsDialog({
                   <tbody>
                     {selected.details.map(line => (
                       <tr key={line.productId}>
-                        <td>{line.productCode} - {line.productName}</td>
+                        <td><strong style={{ whiteSpace: 'nowrap' }}>{line.productCode}</strong><br /><small>{line.productName}</small></td>
                         <td>{line.requestedQuantity}</td>
                         <td>{line.dispatchedQuantity}</td>
                         {status === 'InTransit' ? (

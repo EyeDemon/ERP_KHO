@@ -345,7 +345,14 @@ public sealed class MvpInboundOutboundApArLifecycleSqlTests
                     RowVersion = task.RowVersion!
                 });
                 completedTask.Status.Should().Be("Completed");
-                completedTask.Items.Single().MovedBaseQuantity.Should().Be(100m);
+                completedTask.ReceiptCode.Should().Be($"IR-MVP-{suffix}").And.Be(completedTask.ReceiptCode.Trim());
+                completedTask.WarehouseName.Should().Be($"MVP Primary Warehouse {suffix}").And.Be(completedTask.WarehouseName.Trim());
+                var completedItem = completedTask.Items.Single();
+                completedItem.MovedBaseQuantity.Should().Be(100m);
+                completedItem.SourceLocationCode.Should().Be("RECEIVING").And.Be(completedItem.SourceLocationCode.Trim());
+                var completedMovement = completedTask.Movements.Single();
+                completedMovement.FromLocationCode.Should().Be("RECEIVING").And.Be(completedMovement.FromLocationCode.Trim());
+                completedMovement.ToLocationCode.Should().Be(state.StorageBinCode).And.Be(completedMovement.ToLocationCode.Trim());
 
                 // Verify TransactionType.Move was written to InventoryTransactions with FromLocationId & ToLocationId
                 var moveTx = await putawayDb.InventoryTransactions.AsNoTracking()

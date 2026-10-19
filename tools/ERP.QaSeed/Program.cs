@@ -125,17 +125,27 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
 
     var wh01 = await context.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(warehouse => warehouse.Code == "WH01") ?? primaryWarehouse;
+    if (wh01.Name is "QA Kho TP.HCM" or "Local QA Warehouse")
+    {
+        wh01.Name = "Kho Chính TP.HCM";
+    }
     var wh02 = await context.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(warehouse => warehouse.Code == "WH02" || warehouse.Code == "QA-HN");
     if (wh02 is null)
     {
         wh02 = new Warehouse
         {
             Code = "WH02",
-            Name = "Kho QA ngoài phạm vi",
-            Address = "Local QA only",
+            Name = "Kho Chi Nhánh Hà Nội",
+            Address = "Quận Cầu Giấy, Hà Nội",
             IsActive = true
         };
         context.Warehouses.Add(wh02);
+        await context.SaveChangesAsync();
+    }
+    else if (wh02.Name is "Kho QA ngoài phạm vi" or "QA Kho Hà Nội")
+    {
+        wh02.Name = "Kho Chi Nhánh Hà Nội";
+        wh02.Address = "Quận Cầu Giấy, Hà Nội";
         await context.SaveChangesAsync();
     }
 
@@ -205,6 +215,10 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     if (!await context.UserWarehouses.IgnoreQueryFilters().AnyAsync(access => access.UserId == qaAdmin.Id && access.WarehouseId == primaryWarehouse.Id))
     {
         context.UserWarehouses.Add(new UserWarehouse { UserId = qaAdmin.Id, WarehouseId = primaryWarehouse.Id, CreatedBy = qaAdmin.Id });
+    }
+    if (!await context.UserWarehouses.IgnoreQueryFilters().AnyAsync(access => access.UserId == qaAdmin.Id && access.WarehouseId == wh02.Id))
+    {
+        context.UserWarehouses.Add(new UserWarehouse { UserId = qaAdmin.Id, WarehouseId = wh02.Id, CreatedBy = qaAdmin.Id });
     }
 
     foreach (var definition in definitions.Where(item => item.AssignWh01))
@@ -276,7 +290,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     await context.SaveChangesAsync();
 
-    // 2. Ensure RECEIVING and storage bin BIN-A01-01 exist in the default warehouse
+    // 2. Ensure RECEIVING, STAGING, and storage bin BIN-A01-01 exist in the default warehouse
     var receivingLocation = await context.WarehouseLocations.IgnoreQueryFilters()
         .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == "RECEIVING");
     if (receivingLocation is null)
@@ -296,6 +310,28 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             CreatedBy = qaAdmin.Id
         };
         context.WarehouseLocations.Add(receivingLocation);
+        await context.SaveChangesAsync();
+    }
+
+    var stagingLocation = await context.WarehouseLocations.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == "STAGING");
+    if (stagingLocation is null)
+    {
+        stagingLocation = new WarehouseLocation
+        {
+            WarehouseId = primaryWarehouse.Id,
+            Code = "STAGING",
+            Name = "Khu vực tập kết xuất hàng",
+            LocationType = WarehouseLocationType.Staging,
+            IsActive = true,
+            IsBlocked = false,
+            IsPickable = false,
+            IsReceivable = false,
+            IsSystemManaged = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = qaAdmin.Id
+        };
+        context.WarehouseLocations.Add(stagingLocation);
         await context.SaveChangesAsync();
     }
 
@@ -327,17 +363,28 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
 
     // 3. Resolve Unit and Product for QA operational tasks
-    var unit = await context.Units.IgnoreQueryFilters().OrderBy(u => u.Id).FirstOrDefaultAsync(u => u.IsActive);
+    var allUnits = await context.Units.IgnoreQueryFilters().OrderBy(u => u.Id).ToListAsync();
+    foreach (var u in allUnits)
+    {
+        if (u.Code is "QA_UNIT" or "QA-PCS")
+        {
+            u.Code = "THÙNG";
+            u.Name = "Thùng";
+        }
+        else if (u.Code == "QA-BOX")
+        {
+            u.Code = "HỘP";
+            u.Name = "Hộp";
+        }
+    }
+    await context.SaveChangesAsync();
+
+    var unit = allUnits.FirstOrDefault(u => u.IsActive && u.Code == "THÙNG")
+               ?? allUnits.FirstOrDefault(u => u.IsActive);
     if (unit is null)
     {
         unit = new Unit { Code = "THÙNG", Name = "Thùng", DecimalPlaces = 0, IsActive = true };
         context.Units.Add(unit);
-        await context.SaveChangesAsync();
-    }
-    else if (unit.Code is "QA_UNIT" or "QA-PCS")
-    {
-        unit.Code = "THÙNG";
-        unit.Name = "Thùng";
         await context.SaveChangesAsync();
     }
 
@@ -973,6 +1020,548 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             firstContent.PickingTaskLineId = packTaskLine.Id;
             firstContent.ProductId = product.Id;
             firstContent.Quantity = 2m;
+        }
+        await context.SaveChangesAsync();
+    }
+
+    // 5c. Idempotent PO-QA-001, ASN-QA-001, IR-QA-001, SHP-QA-001, ER-QA-001, STF-QA-001, STK-QA-001
+    var purchaseOrder = await context.PurchaseOrders.IgnoreQueryFilters()
+        .Include(p => p.Lines)
+        .FirstOrDefaultAsync(p => p.Code == "PO-QA-001" || p.Code == "PO-QA-2026-01" || p.ExternalPoId == "EXT-PO-QA-001");
+    if (purchaseOrder is null)
+    {
+        purchaseOrder = new PurchaseOrder
+        {
+            Code = "PO-QA-001",
+            ExternalPoId = "EXT-PO-QA-001",
+            SourceSystem = "MANUAL",
+            SupplierId = supplier.Id,
+            WarehouseId = primaryWarehouse.Id,
+            OrderDate = DateTime.UtcNow.Date.AddDays(-3),
+            ExpectedDate = DateTime.UtcNow.Date.AddDays(3),
+            Currency = "VND",
+            Status = PurchaseOrderStatus.Open,
+            CreatedAtUtc = DateTime.UtcNow.AddDays(-3),
+            CreatedBy = qaAdmin.Id,
+            Lines =
+            [
+                new PurchaseOrderLine
+                {
+                    ExternalLineId = "EXT-PO-QA-001-L1",
+                    LineNo = 1,
+                    ProductId = product.Id,
+                    OrderedQuantity = 100m,
+                    UnitPrice = 250000m,
+                    TaxPercent = 10m,
+                    OperationUnitId = unit.Id,
+                    OperationUnitCodeSnapshot = unit.Code,
+                    OperationUnitDecimalPlaces = unit.DecimalPlaces,
+                    BaseUnitId = unit.Id,
+                    BaseUnitCodeSnapshot = unit.Code,
+                    BaseUnitDecimalPlaces = unit.DecimalPlaces,
+                    ConversionFactorSnapshot = 1m,
+                    ConversionVersionSnapshot = 1,
+                    BaseOrderedQuantity = 100m,
+                    AllowedOverReceiptPct = 5m,
+                    AllowedUnderReceiptPct = 5m
+                }
+            ]
+        };
+        context.PurchaseOrders.Add(purchaseOrder);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        purchaseOrder.Code = "PO-QA-001";
+        purchaseOrder.SupplierId = supplier.Id;
+        purchaseOrder.WarehouseId = primaryWarehouse.Id;
+        purchaseOrder.Currency = "VND";
+        purchaseOrder.ExpectedDate ??= DateTime.UtcNow.Date.AddDays(3);
+        if (!purchaseOrder.Lines.Any())
+        {
+            purchaseOrder.Lines.Add(new PurchaseOrderLine
+            {
+                ExternalLineId = "EXT-PO-QA-001-L1",
+                LineNo = 1,
+                ProductId = product.Id,
+                OrderedQuantity = 100m,
+                UnitPrice = 250000m,
+                TaxPercent = 10m,
+                OperationUnitId = unit.Id,
+                OperationUnitCodeSnapshot = unit.Code,
+                OperationUnitDecimalPlaces = unit.DecimalPlaces,
+                BaseUnitId = unit.Id,
+                BaseUnitCodeSnapshot = unit.Code,
+                BaseUnitDecimalPlaces = unit.DecimalPlaces,
+                ConversionFactorSnapshot = 1m,
+                ConversionVersionSnapshot = 1,
+                BaseOrderedQuantity = 100m,
+                AllowedOverReceiptPct = 5m,
+                AllowedUnderReceiptPct = 5m
+            });
+        }
+        else
+        {
+            foreach (var line in purchaseOrder.Lines)
+            {
+                line.OperationUnitId = unit.Id;
+                line.OperationUnitCodeSnapshot = unit.Code;
+                line.BaseUnitId = unit.Id;
+                line.BaseUnitCodeSnapshot = unit.Code;
+            }
+        }
+        await context.SaveChangesAsync();
+    }
+
+    var poLine = purchaseOrder.Lines.First();
+    var asn = await context.Asns.IgnoreQueryFilters()
+        .Include(a => a.Lines)
+        .FirstOrDefaultAsync(a => a.Code == "ASN-QA-001" || a.Code == "ASN-QA-2026-01");
+    if (asn is null)
+    {
+        asn = new Asn
+        {
+            Code = "ASN-QA-001",
+            PurchaseOrderId = purchaseOrder.Id,
+            SupplierId = supplier.Id,
+            WarehouseId = primaryWarehouse.Id,
+            ExpectedArrivalAtUtc = DateTime.UtcNow.AddHours(6),
+            CarrierName = "Viettel Post Logistics",
+            VehiclePlate = "51C-889.99",
+            Note = "Thông báo giao hàng trước cho đơn mua PO-QA-001",
+            Status = AsnStatus.Confirmed,
+            CreatedAtUtc = DateTime.UtcNow.AddHours(-12),
+            CreatedBy = qaAdmin.Id,
+            Lines =
+            [
+                new AsnLine
+                {
+                    PurchaseOrderLineId = poLine.Id,
+                    LineNo = 1,
+                    ProductId = product.Id,
+                    ExpectedQuantity = 100m,
+                    OperationUnitId = unit.Id,
+                    OperationUnitCodeSnapshot = unit.Code,
+                    OperationUnitDecimalPlaces = unit.DecimalPlaces,
+                    BaseUnitId = unit.Id,
+                    BaseUnitCodeSnapshot = unit.Code,
+                    BaseUnitDecimalPlaces = unit.DecimalPlaces,
+                    ConversionFactorSnapshot = 1m,
+                    ConversionVersionSnapshot = 1,
+                    BaseExpectedQuantity = 100m
+                }
+            ]
+        };
+        context.Asns.Add(asn);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        asn.Code = "ASN-QA-001";
+        asn.PurchaseOrderId = purchaseOrder.Id;
+        asn.SupplierId = supplier.Id;
+        asn.WarehouseId = primaryWarehouse.Id;
+        asn.ExpectedArrivalAtUtc ??= DateTime.UtcNow.AddHours(6);
+        asn.CarrierName = string.IsNullOrWhiteSpace(asn.CarrierName) ? "Viettel Post Logistics" : asn.CarrierName;
+        asn.VehiclePlate = string.IsNullOrWhiteSpace(asn.VehiclePlate) ? "51C-889.99" : asn.VehiclePlate;
+        asn.Note = "Thông báo giao hàng trước cho đơn mua PO-QA-001";
+        if (!asn.Lines.Any())
+        {
+            asn.Lines.Add(new AsnLine
+            {
+                PurchaseOrderLineId = poLine.Id,
+                LineNo = 1,
+                ProductId = product.Id,
+                ExpectedQuantity = 100m,
+                OperationUnitId = unit.Id,
+                OperationUnitCodeSnapshot = unit.Code,
+                OperationUnitDecimalPlaces = unit.DecimalPlaces,
+                BaseUnitId = unit.Id,
+                BaseUnitCodeSnapshot = unit.Code,
+                BaseUnitDecimalPlaces = unit.DecimalPlaces,
+                ConversionFactorSnapshot = 1m,
+                ConversionVersionSnapshot = 1,
+                BaseExpectedQuantity = 100m
+            });
+        }
+        else
+        {
+            foreach (var line in asn.Lines)
+            {
+                line.PurchaseOrderLineId ??= poLine.Id;
+                line.OperationUnitId = unit.Id;
+                line.OperationUnitCodeSnapshot = unit.Code;
+                line.BaseUnitId = unit.Id;
+                line.BaseUnitCodeSnapshot = unit.Code;
+            }
+        }
+        await context.SaveChangesAsync();
+    }
+
+    var allImportReceipts = await context.ImportReceipts.IgnoreQueryFilters()
+        .Include(r => r.Details)
+        .OrderBy(r => r.Id)
+        .ToListAsync();
+    var nonPutawayReceipts = allImportReceipts.Where(r => r.Code != "PUT-QA-001").ToList();
+    var irQa001 = nonPutawayReceipts.FirstOrDefault(r => r.Code == "IR-QA-001") ?? nonPutawayReceipts.FirstOrDefault();
+    if (irQa001 is null)
+    {
+        irQa001 = new ImportReceipt
+        {
+            Code = "IR-QA-001",
+            WarehouseId = primaryWarehouse.Id,
+            SupplierId = supplier.Id,
+            SupplierCodeSnapshot = supplier.Code,
+            SupplierNameSnapshot = supplier.Name,
+            PurchaseOrderId = purchaseOrder.Id,
+            AsnId = asn.Id,
+            Status = ReceiptStatus.Posted,
+            Note = "Phiếu nhập kho lô hàng thiết bị định kỳ IR-QA-001",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2),
+            ApprovedBy = qaAdmin.Id,
+            ApprovedAt = DateTime.UtcNow.AddDays(-2),
+            Details =
+            [
+                new ImportReceiptDetail
+                {
+                    ProductId = product.Id,
+                    Quantity = 100m,
+                    UnitPrice = 250000m,
+                    Note = "Nhập kho theo đơn mua PO-QA-001",
+                    OperationUnitId = unit.Id,
+                    OperationUnitCodeSnapshot = unit.Code,
+                    OperationUnitDecimalPlaces = unit.DecimalPlaces,
+                    BaseUnitId = unit.Id,
+                    BaseUnitCodeSnapshot = unit.Code,
+                    BaseUnitDecimalPlaces = unit.DecimalPlaces,
+                    ConversionFactor = 1m,
+                    ConversionVersion = 1,
+                    ExpectedQuantity = 100m,
+                    ReceivedQuantity = 100m,
+                    ObservedQuantity = 100m,
+                    FinalReceivedQuantity = 100m,
+                    AcceptedQuantity = 100m,
+                    PostedQuantity = 100m,
+                    BaseExpectedQuantity = 100m,
+                    BaseReceivedQuantity = 100m,
+                    BaseObservedQuantity = 100m,
+                    BaseFinalReceivedQuantity = 100m,
+                    BaseAcceptedQuantity = 100m
+                }
+            ]
+        };
+        context.ImportReceipts.Add(irQa001);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        irQa001.Code = "IR-QA-001";
+        irQa001.SupplierId = supplier.Id;
+        irQa001.SupplierCodeSnapshot = supplier.Code;
+        irQa001.SupplierNameSnapshot = supplier.Name;
+        irQa001.PurchaseOrderId = purchaseOrder.Id;
+        irQa001.AsnId = asn.Id;
+        irQa001.Note = "Phiếu nhập kho lô hàng thiết bị định kỳ IR-QA-001";
+    }
+
+    var otherNonPutaway = nonPutawayReceipts.Where(r => r.Id != irQa001.Id).ToList();
+    for (var idx = 0; idx < otherNonPutaway.Count; idx++)
+    {
+        var r = otherNonPutaway[idx];
+        r.Code = $"IR-QA-{idx + 2:D3}";
+        r.SupplierId ??= supplier.Id;
+        r.SupplierCodeSnapshot = supplier.Code;
+        r.SupplierNameSnapshot = supplier.Name;
+        if (string.IsNullOrWhiteSpace(r.Note) || r.Note.Contains("E2E", StringComparison.OrdinalIgnoreCase))
+        {
+            r.Note = $"Phiếu nhập kho bổ sung {r.Code}";
+        }
+    }
+
+    foreach (var r in await context.ImportReceipts.IgnoreQueryFilters().Include(x => x.Details).ToListAsync())
+    {
+        foreach (var d in r.Details)
+        {
+            d.OperationUnitId = unit.Id;
+            d.OperationUnitCodeSnapshot = unit.Code;
+            d.BaseUnitId = unit.Id;
+            d.BaseUnitCodeSnapshot = unit.Code;
+        }
+    }
+    await context.SaveChangesAsync();
+
+    var primaryHu = packingSession.HandlingUnits.First();
+    var shipment = await context.Shipments.IgnoreQueryFilters()
+        .Include(s => s.HandlingUnits)
+        .Include(s => s.TrackingEvents)
+        .FirstOrDefaultAsync(s => s.ShipmentCode == "SHP-QA-001" || s.PackingSessionId == packingSession.Id);
+    if (shipment is null)
+    {
+        shipment = new Shipment
+        {
+            ShipmentCode = "SHP-QA-001",
+            PackingSessionId = packingSession.Id,
+            WarehouseId = primaryWarehouse.Id,
+            SourceType = "SalesOrder",
+            SourceId = packSalesOrder.Id,
+            SourceCode = packSalesOrder.OrderCode,
+            Status = ShipmentStatus.Ready,
+            StagingLocationId = stagingLocation.Id,
+            VehiclePlate = "51C-889.99",
+            TrailerPlate = "51R-102.88",
+            SealNumber = "SEAL-QA-001",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-8),
+            CreatedBy = qaAdmin.Id,
+            HandlingUnits =
+            [
+                new ShipmentHandlingUnit
+                {
+                    HandlingUnitId = primaryHu.Id,
+                    Sequence = 1,
+                    AssignedAt = DateTime.UtcNow.AddMinutes(-7)
+                }
+            ],
+            TrackingEvents =
+            [
+                new ShipmentTrackingEvent
+                {
+                    EventType = "ShipmentCreated",
+                    FromStatus = ShipmentStatus.Draft,
+                    ToStatus = ShipmentStatus.Ready,
+                    OccurredAt = DateTime.UtcNow.AddMinutes(-8),
+                    RecordedAt = DateTime.UtcNow.AddMinutes(-8),
+                    Source = "Internal",
+                    Note = "Khởi tạo chuyến giao hàng SHP-QA-001 từ phiên đóng gói PACK-QA-001",
+                    RecordedBy = qaAdmin.Id
+                }
+            ]
+        };
+        context.Shipments.Add(shipment);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        shipment.ShipmentCode = "SHP-QA-001";
+        shipment.SourceType = "SalesOrder";
+        shipment.SourceId = packSalesOrder.Id;
+        shipment.SourceCode = packSalesOrder.OrderCode;
+        shipment.StagingLocationId ??= stagingLocation.Id;
+        shipment.VehiclePlate = "51C-889.99";
+        shipment.TrailerPlate = "51R-102.88";
+        shipment.SealNumber = "SEAL-QA-001";
+        if (!shipment.HandlingUnits.Any(x => x.HandlingUnitId == primaryHu.Id))
+        {
+            shipment.HandlingUnits.Add(new ShipmentHandlingUnit
+            {
+                HandlingUnitId = primaryHu.Id,
+                Sequence = 1,
+                AssignedAt = DateTime.UtcNow.AddMinutes(-7)
+            });
+        }
+        if (!shipment.TrackingEvents.Any())
+        {
+            shipment.TrackingEvents.Add(new ShipmentTrackingEvent
+            {
+                EventType = "ShipmentCreated",
+                FromStatus = ShipmentStatus.Draft,
+                ToStatus = ShipmentStatus.Ready,
+                OccurredAt = DateTime.UtcNow.AddMinutes(-8),
+                RecordedAt = DateTime.UtcNow.AddMinutes(-8),
+                Source = "Internal",
+                Note = "Khởi tạo chuyến giao hàng SHP-QA-001 từ phiên đóng gói PACK-QA-001",
+                RecordedBy = qaAdmin.Id
+            });
+        }
+        await context.SaveChangesAsync();
+    }
+
+    var allExportReceipts = await context.ExportReceipts.IgnoreQueryFilters()
+        .Include(e => e.Details)
+        .OrderBy(e => e.Id)
+        .ToListAsync();
+    if (!allExportReceipts.Any())
+    {
+        var erQa001 = new ExportReceipt
+        {
+            Code = "ER-QA-001",
+            WarehouseId = primaryWarehouse.Id,
+            CustomerId = customer.Id,
+            CustomerCodeSnapshot = customer.Code,
+            CustomerNameSnapshot = customer.Name,
+            SalesOrderId = salesOrder.Id,
+            ShipmentId = shipment.Id,
+            Status = ReceiptStatus.Dispatched,
+            DispatchMode = ExportDispatchMode.DispatchOnApproval,
+            Note = "Phiếu xuất kho giao hàng theo đơn bán SO-QA-001",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ApprovedBy = qaAdmin.Id,
+            ApprovedAt = DateTime.UtcNow.AddDays(-1),
+            DispatchedBy = qaAdmin.Id,
+            DispatchedAt = DateTime.UtcNow.AddDays(-1),
+            Details =
+            [
+                new ExportReceiptDetail
+                {
+                    ProductId = product.Id,
+                    Quantity = 5m,
+                    UnitPrice = 1200000m,
+                    TaxPercent = 10m,
+                    Note = "Xuất giao lô hàng chuẩn QA",
+                    BaseUomIdSnapshot = unit.Id,
+                    BaseUomCodeSnapshot = unit.Code,
+                    BaseUomNameSnapshot = unit.Name,
+                    BaseUomDecimalPlacesSnapshot = unit.DecimalPlaces
+                }
+            ]
+        };
+        context.ExportReceipts.Add(erQa001);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        for (var idx = 0; idx < allExportReceipts.Count; idx++)
+        {
+            var er = allExportReceipts[idx];
+            er.Code = $"ER-QA-{idx + 1:D3}";
+            er.CustomerId = customer.Id;
+            er.CustomerCodeSnapshot = customer.Code;
+            er.CustomerNameSnapshot = customer.Name;
+            if (idx == 0)
+            {
+                er.SalesOrderId = salesOrder.Id;
+                er.ShipmentId = shipment.Id;
+                er.Note = "Phiếu xuất kho giao hàng theo đơn bán SO-QA-001";
+            }
+            else if (idx == 1)
+            {
+                er.SalesOrderId = packSalesOrder.Id;
+                er.Note = "Phiếu xuất kho xuất thẳng đơn bán SO-QA-002";
+            }
+            else
+            {
+                er.Note = $"Phiếu xuất kho đã xử lý {er.Code}";
+            }
+
+            foreach (var d in er.Details)
+            {
+                d.BaseUomIdSnapshot = unit.Id;
+                d.BaseUomCodeSnapshot = unit.Code;
+                d.BaseUomNameSnapshot = unit.Name;
+                d.BaseUomDecimalPlacesSnapshot = unit.DecimalPlaces;
+                if (d.UnitPrice <= 0m) d.UnitPrice = 1200000m;
+                if (string.IsNullOrWhiteSpace(d.Note) || d.Note.Contains("E2E", StringComparison.OrdinalIgnoreCase))
+                {
+                    d.Note = "Xuất giao lô hàng chuẩn QA";
+                }
+            }
+        }
+        await context.SaveChangesAsync();
+    }
+
+    var stockTransfer = await context.StockTransfers.IgnoreQueryFilters()
+        .Include(t => t.Details)
+        .FirstOrDefaultAsync(t => t.Code == "STF-QA-001" || t.Code == "STF-QA-2026-01");
+    if (stockTransfer is null)
+    {
+        stockTransfer = new StockTransfer
+        {
+            Code = "STF-QA-001",
+            SourceWarehouseId = primaryWarehouse.Id,
+            DestinationWarehouseId = wh02.Id,
+            Status = StockTransferStatus.InTransit,
+            Note = "Điều chuyển hàng từ Kho Chính TP.HCM ra Kho Chi Nhánh Hà Nội",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddHours(-4),
+            ApprovedBy = qaAdmin.Id,
+            ApprovedAt = DateTime.UtcNow.AddHours(-3),
+            DispatchedBy = qaAdmin.Id,
+            DispatchedAt = DateTime.UtcNow.AddHours(-2),
+            Details =
+            [
+                new StockTransferDetail
+                {
+                    ProductId = product.Id,
+                    RequestedQuantity = 15m,
+                    DispatchedQuantity = 15m,
+                    ReceivedQuantity = 0m,
+                    MissingQuantity = 0m,
+                    DamagedQuantity = 0m,
+                    Note = "Điều chuyển bổ sung tồn kho chi nhánh"
+                }
+            ]
+        };
+        context.StockTransfers.Add(stockTransfer);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        stockTransfer.Code = "STF-QA-001";
+        stockTransfer.SourceWarehouseId = primaryWarehouse.Id;
+        stockTransfer.DestinationWarehouseId = wh02.Id;
+        stockTransfer.Note = "Điều chuyển hàng từ Kho Chính TP.HCM ra Kho Chi Nhánh Hà Nội";
+        if (!stockTransfer.Details.Any())
+        {
+            stockTransfer.Details.Add(new StockTransferDetail
+            {
+                ProductId = product.Id,
+                RequestedQuantity = 15m,
+                DispatchedQuantity = 15m,
+                ReceivedQuantity = 0m,
+                MissingQuantity = 0m,
+                DamagedQuantity = 0m,
+                Note = "Điều chuyển bổ sung tồn kho chi nhánh"
+            });
+        }
+        await context.SaveChangesAsync();
+    }
+
+    var stocktake = await context.Stocktakes.IgnoreQueryFilters()
+        .Include(s => s.Details)
+        .FirstOrDefaultAsync(s => s.Code == "STK-QA-001" || s.Code == "STK-QA-2026-01");
+    if (stocktake is null)
+    {
+        stocktake = new Stocktake
+        {
+            Code = "STK-QA-001",
+            WarehouseId = primaryWarehouse.Id,
+            Status = ReceiptStatus.Draft,
+            Note = "[BLIND] Kiểm kê chu kỳ kệ lưu trữ BIN-A01-01",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddHours(-2),
+            Details =
+            [
+                new StocktakeDetail
+                {
+                    ProductId = product.Id,
+                    LocationId = storageBin.Id,
+                    SystemQuantity = 25m,
+                    ActualQuantity = 25m,
+                    DifferenceQuantity = 0m,
+                    Note = "Khớp tồn kho thực tế tại kệ BIN-A01-01"
+                }
+            ]
+        };
+        context.Stocktakes.Add(stocktake);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        stocktake.Code = "STK-QA-001";
+        stocktake.WarehouseId = primaryWarehouse.Id;
+        stocktake.Note = "[BLIND] Kiểm kê chu kỳ kệ lưu trữ BIN-A01-01";
+        if (!stocktake.Details.Any())
+        {
+            stocktake.Details.Add(new StocktakeDetail
+            {
+                ProductId = product.Id,
+                LocationId = storageBin.Id,
+                SystemQuantity = 25m,
+                ActualQuantity = 25m,
+                DifferenceQuantity = 0m,
+                Note = "Khớp tồn kho thực tế tại kệ BIN-A01-01"
+            });
         }
         await context.SaveChangesAsync();
     }

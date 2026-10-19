@@ -543,33 +543,41 @@ namespace ERP.Application.Services
             return new DTOs.StocktakeResponseDto
             {
                 Id = stocktake.Id,
-                Code = stocktake.Code,
+                Code = stocktake.Code.Trim(),
                 WarehouseId = stocktake.WarehouseId,
-                WarehouseName = stocktake.Warehouse?.Name ?? string.Empty,
+                WarehouseName = (stocktake.Warehouse?.Name ?? string.Empty).Trim(),
                 Status = stocktake.Status,
-                Note = stocktake.Note,
+                Note = stocktake.Note?.Trim(),
                 CreatedBy = stocktake.CreatedBy,
-                CreatedByName = stocktake.CreatedByUser?.FullName ?? string.Empty,
+                CreatedByName = (stocktake.CreatedByUser?.FullName ?? string.Empty).Trim(),
                 ApprovedBy = stocktake.ApprovedBy,
-                ApprovedByName = stocktake.ApprovedByUser?.FullName,
+                ApprovedByName = stocktake.ApprovedByUser?.FullName?.Trim(),
                 CreatedAt = stocktake.CreatedAt,
                 ApprovedAt = stocktake.ApprovedAt,
                 DetailCount = stocktake.Details.Count,
-                Details = stocktake.Details.Select(d => new DTOs.StocktakeDetailRowDto
+                Details = stocktake.Details.Select(d =>
                 {
-                    Id = d.Id,
-                    StocktakeId = d.StocktakeId,
-                    ProductId = d.ProductId,
-                    LocationId = d.LocationId,
-                    LocationCode = d.Location?.Code,
-                    LocationName = d.Location?.Name,
-                    ProductCode = d.Product?.Code ?? string.Empty,
-                    ProductName = d.Product?.Name ?? string.Empty,
-                    UnitName = d.Product?.Unit?.Name ?? string.Empty,
-                    SystemQuantity = maskBlindSnapshot ? 0m : d.SystemQuantity,
-                    ActualQuantity = d.ActualQuantity,
-                    DifferenceQuantity = maskBlindSnapshot ? 0m : d.DifferenceQuantity,
-                    Note = d.Note
+                    var rawUnit = (d.Product?.Unit?.Name ?? string.Empty).Trim();
+                    var unitName = string.Equals(rawUnit, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                                   string.Equals(rawUnit, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                        ? "THÙNG"
+                        : rawUnit;
+                    return new DTOs.StocktakeDetailRowDto
+                    {
+                        Id = d.Id,
+                        StocktakeId = d.StocktakeId,
+                        ProductId = d.ProductId,
+                        LocationId = d.LocationId,
+                        LocationCode = d.Location?.Code?.Trim(),
+                        LocationName = d.Location?.Name?.Trim(),
+                        ProductCode = (d.Product?.Code ?? string.Empty).Trim(),
+                        ProductName = (d.Product?.Name ?? string.Empty).Trim(),
+                        UnitName = unitName,
+                        SystemQuantity = maskBlindSnapshot ? 0m : d.SystemQuantity,
+                        ActualQuantity = d.ActualQuantity,
+                        DifferenceQuantity = maskBlindSnapshot ? 0m : d.DifferenceQuantity,
+                        Note = d.Note?.Trim()
+                    };
                 }).ToList()
             };
         }

@@ -684,14 +684,14 @@ export default function StockTransfers() {
                   <tbody>
                     {inTransitItems.map(row => (
                       <tr key={`${row.transferId}-${row.productId}`}>
-                        <td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
                           <button type="button" onClick={() => void openDetail(row.transferId)}>
-                            <strong>{row.transferCode}</strong>
+                            <strong style={{ whiteSpace: 'nowrap' }}>{row.transferCode}</strong>
                           </button>
                         </td>
                         <td>{row.sourceWarehouseName} → {row.destinationWarehouseName}</td>
-                        <td><strong>{row.productCode}</strong> — {row.productName}</td>
-                        <td>{row.unitName}</td>
+                        <td><strong style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong> — {row.productName}</td>
+                        <td>{row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName}</td>
                         <td className="ui-number">{row.dispatchedQuantity}</td>
                         <td className="ui-number">
                           <UiBadge tone="warning">{row.inTransitQuantity}</UiBadge>
@@ -729,22 +729,23 @@ export default function StockTransfers() {
                     const normalized = normalizeStatus(item.status);
                     return (
                       <tr key={item.id}>
-                        <td><strong>{item.code}</strong></td>
+                        <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{item.code}</strong></td>
                         <td>
                           <span className="transfer-flow" style={{ display: 'block', lineHeight: 1.25 }}>
-                            <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>
+                            <span style={{ display: 'block', color: '#475569' }}>
                               {item.sourceWarehouseName} →
                             </span>
-                            <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>
+                            <span style={{ display: 'block', fontWeight: 600, color: '#0f172a' }}>
                               {item.destinationWarehouseName}
                             </span>
                           </span>
                         </td>
                         <td><UiBadge tone={statusTone(normalized)}>{statusLabel[normalized]}</UiBadge></td>
                         <td>{new Date(item.createdAt).toLocaleString('vi-VN')}</td>
-                        <td style={{ paddingRight: 10 }}>
+                        <td style={{ paddingRight: 6 }}>
                           <button
                             type="button"
+                            style={{ whiteSpace: 'nowrap', padding: '4px 6px', minHeight: 28, fontSize: 11 }}
                             aria-label={`Xem chi tiết ${item.code}`}
                             onClick={() => void openDetail(item.id)}
                           >

@@ -191,7 +191,7 @@ export default function InventoryReversals(){
         </button>
         {chainIntegrityResult&&(
           <span>
-            Mã xác minh: <strong>{chainIntegrityResult.verificationId}</strong> • appendOnlyLedgerStatus = <strong>{chainIntegrityResult.appendOnlyLedgerStatus}</strong> • Chống đảo lặp: <strong>{chainIntegrityResult.duplicateReversalBlocked?'ĐÃ KHÓA':'MỞ'}</strong>
+            Mã xác minh: <strong>{chainIntegrityResult.verificationId}</strong> • Sổ cái chỉ ghi thêm: <strong>{chainIntegrityResult.appendOnlyLedgerStatus}</strong> • Chống đảo lặp: <strong>{chainIntegrityResult.duplicateReversalBlocked?'ĐÃ KHÓA':'MỞ'}</strong>
           </span>
         )}
       </div>
@@ -245,7 +245,7 @@ export default function InventoryReversals(){
         <button type="button" disabled={loading||busy} onClick={()=>void load(page)}>Tải lại danh sách</button>
       </UiToolbar>
       {!loading&&<p role="status" className="ui-muted-text">{'Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch'}</p>}
-      {loading?<p role="status">Đang tải giao dịch...</p>:<UiTableScroll>
+      {loading && rows.length === 0 ? <p role="status">Đang tải giao dịch...</p> : <UiTableScroll>
         <table aria-label="Danh sách giao dịch có thể đảo">
           <thead><tr><th>Giao dịch</th><th>Sản phẩm</th><th>Kho</th><th>Chi tiết theo dõi</th><th>Số lượng</th><th>Thời gian</th><th>Trạng thái đảo</th>{canReverse&&<th>Thao tác</th>}</tr></thead>
           <tbody>{rows.length===0?<tr><td colSpan={canReverse?8:7} className="ui-empty-cell">Không có giao dịch phù hợp.</td></tr>:
@@ -253,7 +253,7 @@ export default function InventoryReversals(){
               const reversed=x.isReversed;
               return <tr key={x.id}>
                 <td><strong>{transactionTypeLabel(x.transactionType)}</strong><br/><small>#{x.id}</small></td>
-                <td>{x.productCode??('#'+x.productId)}<br/><small>{x.productName??''}</small></td>
+                <td style={{ whiteSpace: 'nowrap' }}>{x.productCode??('#'+x.productId)}<br/><small>{x.productName??''}</small></td>
                 <td>{x.warehouseName??('#'+x.warehouseId)}</td>
                 <td>{x.lotNumber??'không có lô'} / {x.serialNumber??'không có sê-ri'}<br/><small>{x.fromInventoryStatus&&x.toInventoryStatus?(inventoryStatusLabel(x.fromInventoryStatus)+' → '+inventoryStatusLabel(x.toInventoryStatus)):inventoryStatusLabel(x.inventoryStatus)}</small></td>
                 <td>{x.quantity}</td>

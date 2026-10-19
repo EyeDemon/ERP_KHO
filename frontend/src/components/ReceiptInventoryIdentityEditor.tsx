@@ -123,18 +123,20 @@ export default function ReceiptInventoryIdentityEditor({
     </p>
     {error&&<p role="alert">{error}</p>}
     {loading?<p role="status">Đang tải Lot/Serial...</p>:<>
-      {tracked.map(line=><fieldset key={line.id} className="ui-stack">
-        <legend>{line.productCode} — {line.productName} <UiBadge>{line.trackingType}</UiBadge></legend>
+      {tracked.map(line=>{
+        const unitLabel=(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')?'THÙNG':line.baseUnitCode;
+        return <div key={line.id} className="ui-subcard ui-stack">
+        <div className="ui-subcard-title"><span style={{whiteSpace:'nowrap'}}>{line.productCode}</span> — {line.productName} <UiBadge>{line.trackingType}</UiBadge></div>
         <div className="ui-inline-wrap">
-          <span>AVAILABLE {allocated(line.id,'AVAILABLE')}/{roundQty4(line.baseAcceptedQuantity)} {line.baseUnitCode}</span>
-          <span>DAMAGED {allocated(line.id,'DAMAGED')}/{roundQty4(line.baseDamagedQuantity)} {line.baseUnitCode}</span>
-          <span>REJECTED {allocated(line.id,'REJECTED')}/{roundQty4(line.baseRejectedQuantity)} {line.baseUnitCode}</span>
+          <span>AVAILABLE {allocated(line.id,'AVAILABLE')}/{roundQty4(line.baseAcceptedQuantity)} {unitLabel}</span>
+          <span>DAMAGED {allocated(line.id,'DAMAGED')}/{roundQty4(line.baseDamagedQuantity)} {unitLabel}</span>
+          <span>REJECTED {allocated(line.id,'REJECTED')}/{roundQty4(line.baseRejectedQuantity)} {unitLabel}</span>
           {line.expiryControl&&<span>Expiry bắt buộc{line.shelfLifeDays?` • shelf life ${line.shelfLifeDays} ngày`:''}</span>}
           {editable&&<button type="button" onClick={()=>addRow(line)}>Thêm {line.trackingType==='Serial'?'serial':'lot'}</button>}
         </div>
         <UiTableScroll>
           <table aria-label={`Lot Serial ${line.productCode}`}>
-            <thead><tr><th>Status</th><th>Base Qty</th><th>Lot</th><th>Manufacture</th><th>Expiry</th><th>Serial</th>{editable&&<th>Thao tác</th>}</tr></thead>
+            <thead><tr><th>Trạng thái</th><th>SL cơ sở</th><th>Số lô (Lot)</th><th>Ngày SX</th><th>Hạn dùng</th><th>Số sê-ri</th>{editable&&<th>Thao tác</th>}</tr></thead>
             <tbody>
               {rows.map((row,index)=>({row,index})).filter(x=>x.row.lineId===line.id).map(({row,index})=><tr key={row.id??`new-${index}`}>
                 <td><select aria-label={`Identity status ${line.productCode} ${index}`} disabled={!editable} value={row.targetStatus} onChange={e=>update(index,{targetStatus:e.target.value as IdentityRow['targetStatus']})}>
@@ -151,7 +153,8 @@ export default function ReceiptInventoryIdentityEditor({
             </tbody>
           </table>
         </UiTableScroll>
-      </fieldset>)}
+      </div>;
+      })}
       {editable&&<div className="ui-inline-actions"><button type="button" disabled={busy} onClick={()=>void save()}>{busy?'Đang lưu...':'Lưu Lot / Serial / Expiry'}</button></div>}
       {!editable&&<p className="ui-muted-text">Identity đang ở chế độ chỉ đọc tại trạng thái {status}.</p>}
     </>}

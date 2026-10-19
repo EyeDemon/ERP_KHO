@@ -53,7 +53,7 @@
 .import-receipts .import-quantity-editor {
   display: grid;
   gap: var(--ui-space-1);
-  min-width: 190px;
+  min-width: 0;
 }
 
 .import-receipts .import-quantity-editor label {
@@ -106,7 +106,7 @@
 }
 
 .import-receipts .import-status-cell {
-  min-width: 150px;
+  min-width: 0;
 }
 
 .import-receipts .import-section-actions {

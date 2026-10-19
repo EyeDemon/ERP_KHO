@@ -697,29 +697,29 @@ const WarehouseLocations = () => {
               <label className="ui-stack"><span>Loại vị trí *</span><select aria-label="Loại vị trí form" value={form.locationType} onChange={(event) => setForm((current) => ({ ...current, locationType: event.target.value as LocationForm['locationType'] }))} disabled={saving || editing}><option value="Storage">Lưu trữ</option><option value="Damaged">Hư hỏng</option><option value="Rejected">Hàng bị từ chối</option><option value="Staging">Khu staging outbound</option></select></label>
             </div>
 
-            <fieldset disabled={saving}>
-              <legend>Storage Class & Capacity</legend>
+            <div className="ui-subcard ui-stack">
+              <div className="ui-subcard-title">Storage Class & Capacity</div>
               <p className="ui-muted-text">Để trống nghĩa là không áp giới hạn theo chiều đó. Nếu đã có tồn kho, backend chỉ cho lưu constraint khi tải hiện tại vẫn hợp lệ.</p>
               <div className="warehouse-location-capacity-grid">
-                <label className="ui-stack"><span>Storage Class</span><input aria-label="Storage Class vị trí" value={form.storageClass} onChange={(event) => setForm((current) => ({ ...current, storageClass: event.target.value.toUpperCase() }))} maxLength={32} placeholder="AMBIENT" /></label>
-                <label className="ui-stack"><span>Max kg</span><input aria-label="Giới hạn trọng lượng kg" type="number" min="0.000001" step="0.000001" value={form.maxWeightKg} onChange={(event) => setForm((current) => ({ ...current, maxWeightKg: event.target.value }))} placeholder="1500" /></label>
-                <label className="ui-stack"><span>Max m³</span><input aria-label="Giới hạn thể tích m3" type="number" min="0.00000001" step="0.00000001" value={form.maxVolumeM3} onChange={(event) => setForm((current) => ({ ...current, maxVolumeM3: event.target.value }))} placeholder="10" /></label>
-                <label className="ui-stack"><span>Max pallet-eq</span><input aria-label="Giới hạn pallet equivalent" type="number" min="0.00000001" step="0.00000001" value={form.maxPalletEquivalent} onChange={(event) => setForm((current) => ({ ...current, maxPalletEquivalent: event.target.value }))} placeholder="5" /></label>
+                <label className="ui-stack"><span>Storage Class</span><input aria-label="Storage Class vị trí" disabled={saving} value={form.storageClass} onChange={(event) => setForm((current) => ({ ...current, storageClass: event.target.value.toUpperCase() }))} maxLength={32} placeholder="AMBIENT" /></label>
+                <label className="ui-stack"><span>Max kg</span><input aria-label="Giới hạn trọng lượng kg" disabled={saving} type="number" min="0.000001" step="0.000001" value={form.maxWeightKg} onChange={(event) => setForm((current) => ({ ...current, maxWeightKg: event.target.value }))} placeholder="1500" /></label>
+                <label className="ui-stack"><span>Max m³</span><input aria-label="Giới hạn thể tích m3" disabled={saving} type="number" min="0.00000001" step="0.00000001" value={form.maxVolumeM3} onChange={(event) => setForm((current) => ({ ...current, maxVolumeM3: event.target.value }))} placeholder="10" /></label>
+                <label className="ui-stack"><span>Max pallet-eq</span><input aria-label="Giới hạn pallet equivalent" disabled={saving} type="number" min="0.00000001" step="0.00000001" value={form.maxPalletEquivalent} onChange={(event) => setForm((current) => ({ ...current, maxPalletEquivalent: event.target.value }))} placeholder="5" /></label>
               </div>
-            </fieldset>
+            </div>
 
-            <fieldset disabled={saving || hasLockedStructure}>
-              <legend>Cấu trúc vật lý • Zone / Aisle / Rack / Level / Bin</legend>
+            <div className="ui-subcard ui-stack">
+              <div className="ui-subcard-title">Cấu trúc vật lý • Zone / Aisle / Rack / Level / Bin</div>
               {!editing || hasLockedStructure ? null : <p className="ui-muted-text">Vị trí legacy có thể giữ nguyên chưa gắn cấu trúc. Nếu gán mới, cần nhập đủ cả 5 cấp.</p>}
               <div className="warehouse-location-path-grid">
-                <label className="ui-stack"><span>Zone *</span><input aria-label="Zone" value={form.zone} onChange={(event) => setForm((current) => ({ ...current, zone: event.target.value }))} maxLength={32} placeholder="ZONE-A" /></label>
-                <label className="ui-stack"><span>Aisle *</span><input aria-label="Aisle" value={form.aisle} onChange={(event) => setForm((current) => ({ ...current, aisle: event.target.value }))} maxLength={32} placeholder="A01" /></label>
-                <label className="ui-stack"><span>Rack *</span><input aria-label="Rack" value={form.rack} onChange={(event) => setForm((current) => ({ ...current, rack: event.target.value }))} maxLength={32} placeholder="R02" /></label>
-                <label className="ui-stack"><span>Level *</span><input aria-label="Level" value={form.level} onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))} maxLength={32} placeholder="L03" /></label>
-                <label className="ui-stack"><span>Bin *</span><input aria-label="Bin" value={form.bin} onChange={(event) => setForm((current) => ({ ...current, bin: event.target.value }))} maxLength={32} placeholder="B04" /></label>
+                <label className="ui-stack"><span>Zone *</span><input aria-label="Zone" disabled={saving || hasLockedStructure} value={form.zone} onChange={(event) => setForm((current) => ({ ...current, zone: event.target.value }))} maxLength={32} placeholder="ZONE-A" /></label>
+                <label className="ui-stack"><span>Aisle *</span><input aria-label="Aisle" disabled={saving || hasLockedStructure} value={form.aisle} onChange={(event) => setForm((current) => ({ ...current, aisle: event.target.value }))} maxLength={32} placeholder="A01" /></label>
+                <label className="ui-stack"><span>Rack *</span><input aria-label="Rack" disabled={saving || hasLockedStructure} value={form.rack} onChange={(event) => setForm((current) => ({ ...current, rack: event.target.value }))} maxLength={32} placeholder="R02" /></label>
+                <label className="ui-stack"><span>Level *</span><input aria-label="Level" disabled={saving || hasLockedStructure} value={form.level} onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))} maxLength={32} placeholder="L03" /></label>
+                <label className="ui-stack"><span>Bin *</span><input aria-label="Bin" disabled={saving || hasLockedStructure} value={form.bin} onChange={(event) => setForm((current) => ({ ...current, bin: event.target.value }))} maxLength={32} placeholder="B04" /></label>
               </div>
               {hasLockedStructure && <p className="ui-muted-text">StructurePath đã được khóa. Muốn đổi vị trí vật lý phải tạo mã vị trí mới để không làm sai lịch sử movement.</p>}
-            </fieldset>
+            </div>
 
             {editing && (
               <div className="warehouse-location-flags">

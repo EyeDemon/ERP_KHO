@@ -48,11 +48,13 @@
 }
 
 .stocktakes-page .stocktake-editor {
-  min-width: 120px;
+  min-width: 0;
+  width: 100%;
 }
 
 .stocktakes-page .stocktake-editor-note {
-  min-width: 220px;
+  min-width: 0;
+  width: 100%;
 }
 
 .stocktakes-page .stocktake-row-error {

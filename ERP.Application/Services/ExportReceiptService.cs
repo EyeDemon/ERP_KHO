@@ -474,6 +474,16 @@ namespace ERP.Application.Services
             return (subTotal, taxAmount);
         }
 
+        private static string? NormalizeUomValue(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var trimmed = value.Trim();
+            return string.Equals(trimmed, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(trimmed, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                ? "THÙNG"
+                : trimmed;
+        }
+
         private ExportReceiptDto MapToDto(ERP.Domain.Entities.ExportReceipt receipt)
         {
             var viewer = string.Equals(_currentUser?.Role, "Viewer", StringComparison.Ordinal);
@@ -481,23 +491,25 @@ namespace ERP.Application.Services
             {
                 var lineSub = viewer ? 0m : decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero);
                 var lineTax = viewer ? 0m : decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                var baseUomCode = NormalizeUomValue(!string.IsNullOrWhiteSpace(d.BaseUomCodeSnapshot) ? d.BaseUomCodeSnapshot : d.Product?.Unit?.Code);
+                var baseUomName = NormalizeUomValue(!string.IsNullOrWhiteSpace(d.BaseUomNameSnapshot) ? d.BaseUomNameSnapshot : d.Product?.Unit?.Name);
                 return new ExportReceiptDetailDto
                 {
                     Id = d.Id,
                     ProductId = d.ProductId,
-                    ProductCode = d.Product?.Code,
-                    ProductName = d.Product?.Name,
-                    UnitName = d.BaseUomNameSnapshot ?? d.Product?.Unit?.Name,
+                    ProductCode = d.Product?.Code?.Trim(),
+                    ProductName = d.Product?.Name?.Trim(),
+                    UnitName = baseUomName,
                     Quantity = d.Quantity,
                     UnitPrice = viewer ? null : d.UnitPrice,
                     TaxPercent = d.TaxPercent,
                     LineSubTotal = lineSub,
                     LineTaxAmount = lineTax,
                     LineTotal = lineSub + lineTax,
-                    Note = viewer ? null : d.Note,
+                    Note = viewer ? null : d.Note?.Trim(),
                     BaseUomIdSnapshot = d.BaseUomIdSnapshot ?? d.Product?.UnitId,
-                    BaseUomCodeSnapshot = !string.IsNullOrWhiteSpace(d.BaseUomCodeSnapshot) ? d.BaseUomCodeSnapshot : d.Product?.Unit?.Code,
-                    BaseUomNameSnapshot = !string.IsNullOrWhiteSpace(d.BaseUomNameSnapshot) ? d.BaseUomNameSnapshot : d.Product?.Unit?.Name,
+                    BaseUomCodeSnapshot = baseUomCode,
+                    BaseUomNameSnapshot = baseUomName,
                     BaseUomDecimalPlacesSnapshot = d.BaseUomDecimalPlacesSnapshot ?? d.Product?.Unit?.DecimalPlaces
                 };
             }).ToList();
@@ -508,25 +520,25 @@ namespace ERP.Application.Services
             return new ExportReceiptDto
             {
                 Id = receipt.Id,
-                Code = receipt.Code,
+                Code = receipt.Code.Trim(),
                 WarehouseId = receipt.WarehouseId,
-                WarehouseCode = receipt.Warehouse?.Code,
-                WarehouseName = receipt.Warehouse?.Name,
+                WarehouseCode = receipt.Warehouse?.Code?.Trim(),
+                WarehouseName = receipt.Warehouse?.Name?.Trim(),
                 Status = receipt.Status.ToString(),
-                Note = viewer ? null : receipt.Note,
+                Note = viewer ? null : receipt.Note?.Trim(),
                 CreatedBy = receipt.CreatedBy,
-                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
+                CreatedByName = (receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username)?.Trim(),
                 ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
+                ApprovedByName = (receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username)?.Trim(),
                 CreatedAt = receipt.CreatedAt,
                 ApprovedAt = receipt.ApprovedAt,
                 DispatchMode = receipt.DispatchMode?.ToString(),
                 DispatchedBy = receipt.DispatchedBy,
-                DispatchedByName = receipt.DispatchedByUser?.FullName ?? receipt.DispatchedByUser?.Username,
+                DispatchedByName = (receipt.DispatchedByUser?.FullName ?? receipt.DispatchedByUser?.Username)?.Trim(),
                 DispatchedAt = receipt.DispatchedAt,
                 CustomerId = receipt.CustomerId,
-                CustomerCode = !string.IsNullOrWhiteSpace(receipt.CustomerCodeSnapshot) ? receipt.CustomerCodeSnapshot : receipt.Customer?.Code,
-                CustomerName = !string.IsNullOrWhiteSpace(receipt.CustomerNameSnapshot) ? receipt.CustomerNameSnapshot : receipt.Customer?.Name,
+                CustomerCode = (!string.IsNullOrWhiteSpace(receipt.CustomerCodeSnapshot) ? receipt.CustomerCodeSnapshot : receipt.Customer?.Code)?.Trim(),
+                CustomerName = (!string.IsNullOrWhiteSpace(receipt.CustomerNameSnapshot) ? receipt.CustomerNameSnapshot : receipt.Customer?.Name)?.Trim(),
                 SalesOrderId = receipt.SalesOrderId,
                 ShipmentId = receipt.ShipmentId,
                 SubTotalAmount = subTotal,

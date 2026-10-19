@@ -236,6 +236,15 @@ namespace ERP.Application.Services
             }
         }
 
+        private static string NormalizeUomCode(string? code, string? fallback)
+        {
+            var raw = !string.IsNullOrWhiteSpace(code) ? code.Trim() : (fallback?.Trim() ?? string.Empty);
+            if (string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(raw, "QA-PCS", StringComparison.OrdinalIgnoreCase))
+                return "THÙNG";
+            return raw;
+        }
+
         private ImportReceiptDto MapToDto(ImportReceipt receipt)
         {
             var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role == "Manager";
@@ -249,20 +258,34 @@ namespace ERP.Application.Services
                         : (d.ReceivedQuantity > 0 ? d.ReceivedQuantity : (d.ExpectedQuantity > 0 ? d.ExpectedQuantity : d.Quantity)));
                 var lineSub = canReadCost ? decimal.Round(billableQty * d.UnitPrice, 2, MidpointRounding.AwayFromZero) : 0m;
                 var lineTax = canReadCost ? decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
+                var fallbackUom = d.Product?.Unit?.Code;
+                var baseUom = NormalizeUomCode(d.BaseUnitCodeSnapshot, fallbackUom);
+                var opUom = NormalizeUomCode(d.OperationUnitCodeSnapshot, baseUom);
+                if (baseUom == "THÙNG" || opUom == "THÙNG" || ((d.OperationUnitId == d.BaseUnitId || d.OperationUnitId <= 0 || d.BaseUnitId <= 0) && factor <= 1m) || string.Equals(opUom, baseUom, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (baseUom == "THÙNG" || opUom == "THÙNG")
+                        baseUom = opUom = "THÙNG";
+                    else
+                        opUom = baseUom;
+                }
+                var rawUnitName = (!string.IsNullOrWhiteSpace(d.OperationUnitCodeSnapshot) ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Name)?.Trim();
+                var unitName = string.Equals(rawUnitName, "QA_UNIT", StringComparison.OrdinalIgnoreCase) || string.Equals(rawUnitName, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                    ? "THÙNG"
+                    : rawUnitName;
                 return new ImportReceiptDetailDto
                 {
                     Id = d.Id,
                     ProductId = d.ProductId,
                     PurchaseOrderLineId = d.PurchaseOrderLineId,
                     AsnLineId = d.AsnLineId,
-                    ProductCode = d.Product?.Code,
-                    ProductName = d.Product?.Name,
-                    UnitName = !string.IsNullOrWhiteSpace(d.OperationUnitCodeSnapshot) ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Name,
+                    ProductCode = d.Product?.Code?.Trim(),
+                    ProductName = d.Product?.Name?.Trim(),
+                    UnitName = unitName,
                     OperationUnitId = d.OperationUnitId > 0 ? d.OperationUnitId : d.Product?.UnitId ?? 0,
-                    OperationUnitCode = !string.IsNullOrWhiteSpace(d.OperationUnitCodeSnapshot) ? d.OperationUnitCodeSnapshot : (d.Product?.Unit?.Code ?? string.Empty),
+                    OperationUnitCode = opUom,
                     OperationUnitDecimalPlaces = d.OperationUnitDecimalPlaces,
                     BaseUnitId = d.BaseUnitId > 0 ? d.BaseUnitId : d.Product?.UnitId ?? 0,
-                    BaseUnitCode = !string.IsNullOrWhiteSpace(d.BaseUnitCodeSnapshot) ? d.BaseUnitCodeSnapshot : (d.Product?.Unit?.Code ?? string.Empty),
+                    BaseUnitCode = baseUom,
                     BaseUnitDecimalPlaces = d.BaseUnitDecimalPlaces,
                     ConversionFactor = d.ConversionFactor > 0 ? d.ConversionFactor : 1,
                     ConversionVersion = d.ConversionVersion > 0 ? d.ConversionVersion : 1,
@@ -290,15 +313,15 @@ namespace ERP.Application.Services
                     LineSubTotal = lineSub,
                     LineTaxAmount = lineTax,
                     LineTotal = lineSub + lineTax,
-                    Note = d.Note,
+                    Note = d.Note?.Trim(),
                     RequiresQc = d.RequiresQc,
                     QcState = d.QcState.ToString(),
                     QcPolicyId = d.QcPolicyId,
                     QcPolicyVersion = d.QcPolicyVersion,
-                    QcPolicySource = d.QcPolicySourceSnapshot,
+                    QcPolicySource = d.QcPolicySourceSnapshot?.Trim(),
                     QcPolicyEffectiveAtUtc = d.QcPolicyEffectiveAtUtc,
-                    QcDispositionReasonCode = d.QcDispositionReasonCode,
-                    QcDispositionNote = d.QcDispositionNote
+                    QcDispositionReasonCode = d.QcDispositionReasonCode?.Trim(),
+                    QcDispositionNote = d.QcDispositionNote?.Trim()
                 };
             }).ToList();
 
@@ -308,25 +331,25 @@ namespace ERP.Application.Services
             return new ImportReceiptDto
             {
                 Id = receipt.Id,
-                Code = receipt.Code,
+                Code = receipt.Code.Trim(),
                 WarehouseId = receipt.WarehouseId,
-                WarehouseCode = receipt.Warehouse?.Code,
-                WarehouseName = receipt.Warehouse?.Name,
+                WarehouseCode = receipt.Warehouse?.Code?.Trim(),
+                WarehouseName = receipt.Warehouse?.Name?.Trim(),
                 Status = receipt.Status.ToString(),
-                Note = receipt.Note,
+                Note = receipt.Note?.Trim(),
                 CreatedBy = receipt.CreatedBy,
-                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
+                CreatedByName = (receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username)?.Trim(),
                 ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
+                ApprovedByName = (receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username)?.Trim(),
                 CreatedAt = receipt.CreatedAt,
                 ApprovedAt = receipt.ApprovedAt,
                 SupplierId = receipt.SupplierId,
                 PurchaseOrderId = receipt.PurchaseOrderId,
-                PurchaseOrderCode = receipt.PurchaseOrder?.Code,
+                PurchaseOrderCode = receipt.PurchaseOrder?.Code?.Trim(),
                 AsnId = receipt.AsnId,
-                AsnCode = receipt.Asn?.Code,
-                SupplierCode = !string.IsNullOrWhiteSpace(receipt.SupplierCodeSnapshot) ? receipt.SupplierCodeSnapshot : receipt.Supplier?.Code,
-                SupplierName = !string.IsNullOrWhiteSpace(receipt.SupplierNameSnapshot) ? receipt.SupplierNameSnapshot : receipt.Supplier?.Name,
+                AsnCode = receipt.Asn?.Code?.Trim(),
+                SupplierCode = (!string.IsNullOrWhiteSpace(receipt.SupplierCodeSnapshot) ? receipt.SupplierCodeSnapshot : receipt.Supplier?.Code)?.Trim(),
+                SupplierName = (!string.IsNullOrWhiteSpace(receipt.SupplierNameSnapshot) ? receipt.SupplierNameSnapshot : receipt.Supplier?.Name)?.Trim(),
                 RequiresQc = receipt.Details.Any(x => x.RequiresQc),
                 SubTotalAmount = subTotal,
                 TaxAmount = taxAmount,

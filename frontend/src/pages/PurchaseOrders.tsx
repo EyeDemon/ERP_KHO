@@ -43,6 +43,7 @@ const labels:Record<string,string>={
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Received'||status==='Closed'?'success':status==='PartiallyReceived'?'warning':status==='Cancelled'?'danger':'neutral';
 const isoDay=(value?:string)=>value?new Date(value).toLocaleDateString('vi-VN'):'—';
+const normalizeUnitCode=(unitCode?:string)=>(unitCode==='QA_UNIT'||unitCode==='QA-PCS')?'THÙNG':(unitCode||'');
 const emptyLine=():LineForm=>({externalLineId:'',productId:'',operationUnitId:'',orderedQuantity:'',unitPrice:0,taxPercent:0,allowedOverReceiptPct:0,allowedUnderReceiptPct:0});
 
 export default function PurchaseOrders(){
@@ -336,8 +337,8 @@ export default function PurchaseOrders(){
             <table className="inbound-planning-table" aria-label="Danh sách đơn mua">
               <thead><tr><th>Mã PO</th><th>Nhà cung cấp</th><th>Kho</th><th>Ngày dự kiến</th><th className="inbound-planning-numeric">SL cơ sở</th><th className="inbound-planning-numeric">Tổng tiền</th><th>Trạng thái</th></tr></thead>
               <tbody>{filtered.map(item=><tr key={item.id}>
-                <td><button type="button" onClick={()=>void viewDetail(item.id)}><strong>{item.code}</strong><br/><small>{item.externalPoId}</small></button></td>
-                <td>{item.supplierCode}<br/><small>{item.supplierName}</small></td>
+                <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong><br/><small style={{whiteSpace:'nowrap'}}>{item.externalPoId}</small></button></td>
+                <td><span style={{whiteSpace:'nowrap'}}>{item.supplierCode}</span><br/><small>{item.supplierName}</small></td>
                 <td>{item.warehouseName}</td>
                 <td>{isoDay(item.expectedDate)}</td>
                 <td className="inbound-planning-numeric">{item.baseOrderedQuantity.toLocaleString('vi-VN')}</td>
@@ -369,15 +370,19 @@ export default function PurchaseOrders(){
           <UiTableScroll>
             <table aria-label={'Dòng đơn mua '+selected.code}>
               <thead><tr><th>Dòng</th><th>Sản phẩm</th><th className="inbound-planning-numeric">Đặt mua</th><th className="inbound-planning-numeric">SL cơ sở</th><th className="inbound-planning-numeric">Đơn giá / Thuế</th><th className="inbound-planning-numeric">Thành tiền</th><th>Dung sai</th></tr></thead>
-              <tbody>{selected.lines.map(line=><tr key={line.id}>
+              <tbody>{selected.lines.map(line=>{
+                const opUnit=normalizeUnitCode(line.operationUnitCode);
+                const baseUnit=normalizeUnitCode(line.baseUnitCode);
+                return <tr key={line.id}>
                 <td>{line.externalLineId}</td>
-                <td>{line.productCode}<br/><small>{line.productName}</small></td>
-                <td className="inbound-planning-numeric">{line.orderedQuantity.toLocaleString('vi-VN')} {line.operationUnitCode}</td>
-                <td className="inbound-planning-numeric">{line.baseOrderedQuantity.toLocaleString('vi-VN')} {line.baseUnitCode}</td>
+                <td><strong style={{whiteSpace:'nowrap'}}>{line.productCode}</strong><br/><small>{line.productName}</small></td>
+                <td className="inbound-planning-numeric">{line.orderedQuantity.toLocaleString('vi-VN')} {opUnit}</td>
+                <td className="inbound-planning-numeric">{line.baseOrderedQuantity.toLocaleString('vi-VN')}{(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')&&baseUnit===opUnit?'':' '+baseUnit}</td>
                 <td className="inbound-planning-numeric">{Number(line.unitPrice||0).toLocaleString('vi-VN')} ({Number(line.taxPercent||0)}%)</td>
                 <td className="inbound-planning-numeric">{Number(line.lineTotalAmount||0).toLocaleString('vi-VN')}</td>
                 <td>+{line.allowedOverReceiptPct}% / -{line.allowedUnderReceiptPct}%</td>
-              </tr>)}</tbody>
+              </tr>;
+              })}</tbody>
             </table>
           </UiTableScroll>
         </UiCard>}

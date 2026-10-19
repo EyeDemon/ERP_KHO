@@ -584,6 +584,15 @@ public sealed class SalesOrderBackorderService(
         return MapOrderDto(order, progress, includeLines);
     }
 
+    private static string NormalizeUomCode(string? code, string? fallback)
+    {
+        var raw = !string.IsNullOrWhiteSpace(code) ? code.Trim() : (fallback?.Trim() ?? string.Empty);
+        if (string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(raw, "QA-PCS", StringComparison.OrdinalIgnoreCase))
+            return "THÙNG";
+        return raw;
+    }
+
     private static SalesOrderListDto MapOrderDto(
         SalesOrder order,
         IReadOnlyDictionary<int, LineProgress> progress,
@@ -598,11 +607,11 @@ public sealed class SalesOrderBackorderService(
             return new SalesOrderLineDto
             {
                 Id = line.Id,
-                ExternalLineId = line.ExternalLineId,
+                ExternalLineId = line.ExternalLineId.Trim(),
                 ProductId = line.ProductId,
-                ProductCode = line.Product.Code,
-                ProductName = line.Product.Name,
-                UomCode = !string.IsNullOrWhiteSpace(line.UomCode) ? line.UomCode : (line.Product?.Unit?.Code ?? string.Empty),
+                ProductCode = line.Product.Code.Trim(),
+                ProductName = line.Product.Name.Trim(),
+                UomCode = NormalizeUomCode(line.UomCode, line.Product?.Unit?.Code),
                 OrderedQuantity = line.OrderedQuantity,
                 UnitPrice = line.UnitPrice,
                 TaxPercent = line.TaxPercent,
@@ -629,18 +638,18 @@ public sealed class SalesOrderBackorderService(
 
         SalesOrderListDto dto = includeLines ? new SalesOrderDto() : new SalesOrderListDto();
         dto.Id = order.Id;
-        dto.OrderCode = order.OrderCode;
-        dto.ExternalOrderId = order.ExternalOrderId;
+        dto.OrderCode = order.OrderCode.Trim();
+        dto.ExternalOrderId = order.ExternalOrderId.Trim();
         dto.CustomerId = order.CustomerId;
-        dto.CustomerCode = order.Customer.Code;
-        dto.CustomerName = order.Customer.Name;
+        dto.CustomerCode = order.Customer.Code.Trim();
+        dto.CustomerName = order.Customer.Name.Trim();
         dto.WarehouseId = order.WarehouseId;
-        dto.WarehouseCode = order.Warehouse.Code;
-        dto.WarehouseName = order.Warehouse.Name;
+        dto.WarehouseCode = order.Warehouse.Code.Trim();
+        dto.WarehouseName = order.Warehouse.Name.Trim();
         dto.RequestedShipDate = order.RequestedShipDate;
         dto.Priority = order.Priority;
-        dto.ShippingMethod = order.ShippingMethod;
-        dto.Currency = string.IsNullOrWhiteSpace(order.Currency) ? "VND" : order.Currency;
+        dto.ShippingMethod = order.ShippingMethod?.Trim();
+        dto.Currency = string.IsNullOrWhiteSpace(order.Currency) ? "VND" : order.Currency.Trim().ToUpperInvariant();
         dto.Status = status.ToString();
         dto.OrderedQuantity = ordered;
         dto.ReservedQuantity = lines.Sum(x => x.ReservedQuantity);
@@ -797,17 +806,17 @@ public sealed class SalesOrderBackorderService(
         return new BackorderDto
         {
             Id = row.Id,
-            BackorderCode = row.BackorderCode,
+            BackorderCode = row.BackorderCode.Trim(),
             SalesOrderId = order.Id,
-            OrderCode = order.OrderCode,
-            ExternalOrderId = order.ExternalOrderId,
+            OrderCode = order.OrderCode.Trim(),
+            ExternalOrderId = order.ExternalOrderId.Trim(),
             SalesOrderLineId = line.Id,
             WarehouseId = row.WarehouseId,
-            WarehouseCode = row.Warehouse.Code,
-            WarehouseName = row.Warehouse.Name,
+            WarehouseCode = row.Warehouse.Code.Trim(),
+            WarehouseName = row.Warehouse.Name.Trim(),
             ProductId = line.ProductId,
-            ProductCode = line.Product.Code,
-            ProductName = line.Product.Name,
+            ProductCode = line.Product.Code.Trim(),
+            ProductName = line.Product.Name.Trim(),
             OrderedQuantity = line.OrderedQuantity,
             Quantity = row.Quantity,
             RecoveredQuantity = row.RecoveredQuantity,

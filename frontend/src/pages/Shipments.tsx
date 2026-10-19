@@ -37,7 +37,7 @@ const statusLabels:Record<string,string>={
   ReturnToWarehouse:'Đang trả về kho',Completed:'Hoàn tất',Cancelled:'Đã hủy',
 };
 const huLabels:Record<string,string>={
-  Closed:'Đã đóng',Staged:'Đã staging',Loaded:'Đã load',Shipped:'Đã ship',
+  InUse:'Đang đóng gói',Closed:'Đã đóng',Staged:'Đã staging',Loaded:'Đã load',Shipped:'Đã ship',
 };
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   ['Loaded','Dispatched','Delivered','Completed'].includes(status)?'success':
@@ -177,7 +177,7 @@ export default function Shipments(){
           <span>Khu vực Tập kết / Xếp tải (Staging/Loading): <strong>{stagingOrLoadingCount}</strong></span>
           <span>Đã gán Hãng vận chuyển / Phương tiện (Carrier): <strong>{carrierAssignedCount}</strong></span>
           <span>Đã niêm phong kẹp chì (Seal): <strong>{sealVerifiedCount}</strong></span>
-          <span>Đồng bộ sự kiện TMS / POD: <strong>IDEMPOTENT_CARRIER_WEBHOOK_AND_POD_SYNC</strong></span>
+          <span>Đồng bộ sự kiện TMS / POD: <strong>Đồng bộ Webhook &amp; biên bản giao hàng (POD) chống trùng lặp</strong></span>
         </div>
         <div className="ui-inline-actions">
           <button
@@ -227,8 +227,8 @@ export default function Shipments(){
           <table aria-label="Danh sách Shipment">
             <thead><tr><th>Shipment</th><th>Nguồn</th><th>Kho</th><th>Trạng thái</th><th>HU</th><th>Dock / xe</th></tr></thead>
             <tbody>{rows.map(item=><tr key={item.id}>
-              <td><button type="button" onClick={()=>void detail(item.id)}>{item.shipmentCode}</button></td>
-              <td>{item.sourceCode??item.packingSessionCode}</td>
+              <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void detail(item.id)}>{item.shipmentCode}</button></td>
+              <td style={{whiteSpace:'nowrap'}}>{item.sourceCode??item.packingSessionCode}</td>
               <td>{item.warehouseName}</td>
               <td><UiBadge tone={tone(item.status)}>{statusLabels[item.status]??item.status}</UiBadge></td>
               <td>{item.loadedHandlingUnitCount}/{item.handlingUnitCount}</td>
@@ -247,18 +247,15 @@ export default function Shipments(){
           {selected.exportReceiptCode&&<UiBadge tone="success">{`Phiếu xuất kho: ${selected.exportReceiptCode}`}</UiBadge>}
         </div>
         <p className="ui-muted-text">
-          Foundation hiện quản lý Shipment từ READY đến DISPATCHED và post-dispatch internal workflow IN_TRANSIT / DELIVERY_FAILED /
-          DELIVERED / COMPLETED / RETURN_TO_WAREHOUSE, kèm POD metadata và tracking timeline. Dispatch là inventory boundary duy nhất;
-          mọi trạng thái sau đó không trừ/cộng OnHand lần hai. Carrier/TMS booking, authenticated webhook + dedupe/out-of-order ingestion,
-          attachment upload/storage, return receipt linkage và delivery SLA vẫn chưa hoàn tất.
+          Quản lý vận đơn xuyên suốt từ sẵn sàng (READY), tập kết (STAGING), xếp hàng lên xe (LOADING), xuất bến (DISPATCHED) đến xác nhận giao hàng (POD). Dispatch là ranh giới trừ tồn duy nhất; mọi trạng thái sau đó không trừ/cộng OnHand lần hai.
         </p>
 
         <UiTableScroll>
           <table aria-label="Handling Unit của Shipment">
-            <thead><tr><th>#</th><th>HU</th><th>Loại</th><th>Quantity</th><th>Trạng thái</th></tr></thead>
+            <thead><tr><th>#</th><th>HU</th><th>Loại</th><th>Số lượng</th><th>Trạng thái</th></tr></thead>
             <tbody>{(selected.handlingUnits??[]).map(hu=><tr key={hu.id}>
               <td>{hu.sequence}</td>
-              <td><strong>{hu.huCode}</strong><div className="ui-muted-text">{hu.barcode}</div></td>
+              <td><strong style={{whiteSpace:'nowrap'}}>{hu.huCode}</strong><div className="ui-muted-text" style={{whiteSpace:'nowrap'}}>{hu.barcode}</div></td>
               <td>{hu.type}</td>
               <td>{hu.contentQuantity}</td>
               <td><UiBadge tone={tone(hu.status)}>{huLabels[hu.status]??hu.status}</UiBadge></td>
@@ -266,8 +263,8 @@ export default function Shipments(){
           </table>
         </UiTableScroll>
 
-        {selected.status==='Ready'&&canStage&&<fieldset>
-          <legend>Đưa vào Staging</legend>
+        {selected.status==='Ready'&&canStage&&<div className="ui-subcard ui-stack">
+          <div className="ui-subcard-title">Đưa vào Staging</div>
           <div className="ui-inline-wrap">
             <label>Quét / nhập staging location
               <input
@@ -283,10 +280,10 @@ export default function Shipments(){
               {stagingLocationCode:sanitizeScannerCode(stagingCode),rowVersion:selected.rowVersion}
             )}>Xác nhận Staging</button>
           </div>
-        </fieldset>}
+        </div>}
 
-        {selected.status==='Staging'&&canLoad&&<fieldset>
-          <legend>Bắt đầu Loading</legend>
+        {selected.status==='Staging'&&canLoad&&<div className="ui-subcard ui-stack">
+          <div className="ui-subcard-title">Bắt đầu Loading</div>
           <div className="ui-inline-wrap">
             <label>Outbound appointment IN_SERVICE
               <select aria-label="Outbound appointment loading" value={appointmentId} onChange={e=>setAppointmentId(e.target.value)}>
@@ -301,10 +298,10 @@ export default function Shipments(){
               {dockAppointmentId:Number(appointmentId),rowVersion:selected.rowVersion}
             )}>Bắt đầu Loading</button>
           </div>
-        </fieldset>}
+        </div>}
 
-        {selected.status==='Loading'&&canLoad&&<fieldset>
-          <legend>Scan HU lên xe</legend>
+        {selected.status==='Loading'&&canLoad&&<div className="ui-subcard ui-stack">
+          <div className="ui-subcard-title">Scan HU lên xe</div>
           <div className="ui-inline-wrap">
             <label>HU barcode / code / SSCC
               <input aria-label="Shipment HU scan" value={huScan} onChange={e=>setHuScan(e.target.value)} autoComplete="off"/>
@@ -328,10 +325,10 @@ export default function Shipments(){
               {sealNumber:seal||undefined,rowVersion:selected.rowVersion}
             )}>Xác nhận LOADED</button>
           </div>
-        </fieldset>}
+        </div>}
 
-        {selected.status==='Loaded'&&<fieldset>
-          <legend>Dispatch Shipment</legend>
+        {selected.status==='Loaded'&&<div className="ui-subcard ui-stack">
+          <div className="ui-subcard-title">Dispatch Shipment</div>
           <p>
             Shipment đã LOADED. Dispatch sẽ consume Reservation/Allocation, chuyển HU sang SHIPPED,
             ghi SHIP ledger theo Location và giảm OnHand. Thao tác này là inventory boundary.
@@ -341,10 +338,10 @@ export default function Shipments(){
             'shipment-dispatch-'+selected.id,'/api/shipments/'+selected.id+'/dispatch',
             {rowVersion:selected.rowVersion}
           )}>Dispatch Shipment</button>:<p className="ui-muted-text">Bạn không có quyền shipment.dispatch.</p>}
-        </fieldset>}
+        </div>}
 
-        {selected.status==='Dispatched'&&<fieldset>
-          <legend>Post-dispatch tracking</legend>
+        {selected.status==='Dispatched'&&<div className="ui-subcard ui-stack">
+          <div className="ui-subcard-title">Post-dispatch tracking</div>
           <p>
             <strong>Shipment đã DISPATCHED.</strong> SHIP ledger đã được ghi và OnHand đã giảm tại inventory boundary này.
             {selected.dispatchedAt&&<> Thời điểm: {new Date(selected.dispatchedAt).toLocaleString('vi-VN')}.</>}
@@ -356,11 +353,11 @@ export default function Shipments(){
                 {rowVersion:selected.rowVersion}
               )}>Chuyển IN_TRANSIT</button>
             : <p className="ui-muted-text">Bạn cần shipment.update để cập nhật trạng thái vận chuyển.</p>}
-        </fieldset>}
+        </div>}
 
         {selected.status==='InTransit'&&<div className="ui-stack">
-          {canConfirmDelivery&&<fieldset>
-            <legend>Xác nhận giao hàng / POD</legend>
+          {canConfirmDelivery&&<div className="ui-subcard ui-stack">
+            <div className="ui-subcard-title">Xác nhận giao hàng / POD</div>
             <div className="ui-inline-wrap">
               <label>Người nhận
                 <input aria-label="POD receiver name" value={receiverName} onChange={e=>setReceiverName(e.target.value)}/>
@@ -385,10 +382,10 @@ export default function Shipments(){
                 }
               )}>Xác nhận DELIVERED</button>
             </div>
-          </fieldset>}
+          </div>}
 
-          {canUpdate&&<fieldset>
-            <legend>Delivery exception</legend>
+          {canUpdate&&<div className="ui-subcard ui-stack">
+            <div className="ui-subcard-title">Delivery exception</div>
             <div className="ui-inline-wrap">
               <label>Mã lý do thất bại
                 <input aria-label="Delivery failure reason" value={failureReason} onChange={e=>setFailureReason(e.target.value)} placeholder="CUSTOMER_UNAVAILABLE"/>
@@ -413,11 +410,11 @@ export default function Shipments(){
                 {reasonCode:returnReason.trim(),note:returnNote.trim()||undefined,rowVersion:selected.rowVersion}
               )}>Khởi tạo RETURN_TO_WAREHOUSE</button>
             </div>
-          </fieldset>}
+          </div>}
         </div>}
 
-        {selected.status==='DeliveryFailed'&&canUpdate&&<fieldset>
-          <legend>Xử lý giao thất bại</legend>
+        {selected.status==='DeliveryFailed'&&canUpdate&&<div className="ui-subcard ui-stack">
+          <div className="ui-subcard-title">Xử lý giao thất bại</div>
           <p>Retry/return chỉ thay đổi logistics workflow; không tạo thêm SHIP transaction.</p>
           <div className="ui-inline-wrap">
             <button type="button" disabled={!!busy} onClick={()=>void mutate(
@@ -432,10 +429,10 @@ export default function Shipments(){
               {reasonCode:returnReason.trim(),note:returnNote.trim()||undefined,rowVersion:selected.rowVersion}
             )}>RETURN_TO_WAREHOUSE</button>
           </div>
-        </fieldset>}
+        </div>}
 
-        {['Delivered','Completed'].includes(selected.status)&&<fieldset>
-          <legend>Proof of Delivery</legend>
+        {['Delivered','Completed'].includes(selected.status)&&<div className="ui-subcard ui-stack">
+          <div className="ui-subcard-title">Proof of Delivery</div>
           {selected.proofOfDelivery&&<p>
             Đã giao cho <strong>{selected.proofOfDelivery.receiverName}</strong> lúc {new Date(selected.proofOfDelivery.deliveredAt).toLocaleString('vi-VN')}.
             {selected.proofOfDelivery.evidenceReference&&<> Evidence: {selected.proofOfDelivery.evidenceReference}.</>}
@@ -445,7 +442,7 @@ export default function Shipments(){
             'shipment-complete-'+selected.id,'/api/shipments/'+selected.id+'/complete',
             {rowVersion:selected.rowVersion}
           )}>Hoàn tất Shipment</button>}
-        </fieldset>}
+        </div>}
 
         {selected.status==='ReturnToWarehouse'&&<div role="status">
           <strong>Return-to-warehouse đã được khởi tạo.</strong> Trạng thái này không cộng OnHand. Hàng chỉ quay lại tồn qua Return/Receiving/Post workflow riêng.

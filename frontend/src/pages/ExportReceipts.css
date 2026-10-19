@@ -22,7 +22,7 @@
 
 .export-receipts .export-stock {
   align-self: center;
-  min-width: 100px;
+  min-width: 0;
   color: var(--ui-muted);
   font-size: 13px;
   font-variant-numeric: tabular-nums;

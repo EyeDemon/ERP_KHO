@@ -644,7 +644,7 @@ const ExportReceipts = () => {
               <tbody>
                 {receipts.map(r => (
                   <tr key={r.id}>
-                    <td><strong>{r.code}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong>{r.code}</strong></td>
                     <td>{r.warehouseName}</td>
                     <td>{r.customerCode ? r.customerCode + ' - ' + r.customerName : '—'}</td>
                     <td><UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge></td>
@@ -741,7 +741,7 @@ const ExportReceipts = () => {
                 <tbody>
                   {selectedReceipt.details.map(d => (
                     <tr key={d.id}>
-                      <td>{d.productCode} - {d.productName}</td>
+                      <td><strong style={{ whiteSpace: 'nowrap' }}>{d.productCode}</strong> - {d.productName}</td>
                       <td className="export-numeric">{d.quantity}</td>
                       <td className="export-numeric">{d.unitPrice == null ? '—' : d.unitPrice}</td>
                     </tr>

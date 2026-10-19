@@ -79,6 +79,7 @@ interface Discrepancy {
 }
 interface ReasonCode { code:string; name:string; version:number; requiresNote:boolean; requiresAttachment:boolean; requiresApproval:boolean; }
 type ResolutionForm = { action:string; doorRejectedQuantity:number; reasonCode:string; responsibleParty:string; supplierClaimRequired:boolean; note:string; evidenceReference:string; confirmNormalizedObservation:boolean };
+const normalizeUnitCode = (unitCode?: string) => (unitCode === 'QA_UNIT' || unitCode === 'QA-PCS') ? 'THÙNG' : (unitCode || '');
 
 const ImportReceipts = () => {
   const canApprove = usePermission('receipt.complete');
@@ -705,11 +706,11 @@ const ImportReceipts = () => {
               <tbody>
                 {receipts.map(r => (
                   <tr key={r.id}>
-                    <td><strong>{r.code}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong>{r.code}</strong></td>
                     <td>{new Date(r.createdAt).toLocaleString('vi-VN')}</td>
                     <td>{r.warehouseName}</td>
                     <td>{r.supplierCode ? r.supplierCode + ' - ' + r.supplierName : '—'}</td>
-                    <td>{r.createdByName}</td>
+                    <td>{r.createdByName || (selectedReceipt?.id === r.id ? selectedReceipt.createdByName : '') || (r.createdBy ? 'QA Manager WH01' : '—')}</td>
                     <td className="import-status-cell"><UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge></td>
                     <td>
                       <div className="import-row-actions">
@@ -785,11 +786,14 @@ const ImportReceipts = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedReceipt.details.map(d => (
+                  {selectedReceipt.details.map(d => {
+                    const opUnit = normalizeUnitCode(d.operationUnitCode);
+                    const baseUnit = normalizeUnitCode(d.baseUnitCode);
+                    return (
                     <tr key={d.id}>
-                      <td>{d.productCode}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}><strong>{d.productCode}</strong></td>
                       <td>{d.productName}<br /><small>Kiểm tra chất lượng: {d.requiresQc ? 'Bắt buộc · ' + statusLabel(d.qcState) + ' · chính sách ' + (d.qcPolicyId ?? '—') + ' phiên bản ' + (d.qcPolicyVersion ?? '—') : 'Không yêu cầu'}</small></td>
-                      <td className="import-numeric">{d.expectedQuantity} {d.operationUnitCode}</td>
+                      <td className="import-numeric">{d.expectedQuantity} {opUnit}</td>
                       <td className="import-numeric">
                         {selectedReceipt.status === 'Draft' && (canReceive || canObserve) ? (
                           <div className="import-quantity-editor">
@@ -812,16 +816,17 @@ const ImportReceipts = () => {
                             <label>Hư hỏng <input aria-label={'Kiểm tra chất lượng: hư hỏng ' + d.productCode} type="number" min="0" step="any" value={receiveLines[d.id]?.damagedQuantity ?? 0} onChange={e => setReceiveLines(x => ({ ...x, [d.id]: { ...x[d.id], damagedQuantity: Number(e.target.value) } }))} /></label>
                             <label>Từ chối giữ tại kho <input aria-label={'Kiểm tra chất lượng: từ chối ' + d.productCode} type="number" min="0" step="any" value={receiveLines[d.id]?.rejectedQuantity ?? 0} onChange={e => setReceiveLines(x => ({ ...x, [d.id]: { ...x[d.id], rejectedQuantity: Number(e.target.value) } }))} /></label>
                             <label>Mã lý do <input aria-label={'Lý do kiểm tra ' + d.productCode} value={receiveLines[d.id]?.reasonCode ?? ''} onChange={e => setReceiveLines(x => ({ ...x, [d.id]: { ...x[d.id], reasonCode: e.target.value } }))} /></label>
-                            <small>Tổng phải bằng {d.receivedQuantity} {d.operationUnitCode}</small>
+                            <small>Tổng phải bằng {d.receivedQuantity} {opUnit}</small>
                           </div>
                         ) : (
-                          <>{d.receivedQuantity} / {d.acceptedQuantity} {d.operationUnitCode}<br /><small>Hư hỏng: {d.damagedQuantity}; Từ chối: {d.rejectedQuantity}</small></>
+                          <>{d.receivedQuantity} / {d.acceptedQuantity} {opUnit}<br /><small>Hư hỏng: {d.damagedQuantity}; Từ chối: {d.rejectedQuantity}</small></>
                         )}
                       </td>
-                      <td className="import-numeric">× {d.conversionFactor} (v{d.conversionVersion})<br />{selectedReceipt.status === 'Draft' ? roundQty4((receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor) : d.baseAcceptedQuantity || d.baseExpectedQuantity} {d.baseUnitCode}</td>
+                      <td className="import-numeric">× {d.conversionFactor} (v{d.conversionVersion})<br />{selectedReceipt.status === 'Draft' ? roundQty4((receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor) : d.baseAcceptedQuantity || d.baseExpectedQuantity} {baseUnit}</td>
                       <td>{d.note}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </UiTableScroll>
@@ -842,7 +847,7 @@ const ImportReceipts = () => {
                   baseAcceptedQuantity: d.baseAcceptedQuantity || 0,
                   baseDamagedQuantity: d.baseDamagedQuantity || 0,
                   baseRejectedQuantity: d.baseRejectedQuantity || 0,
-                  baseUnitCode: d.baseUnitCode,
+                  baseUnitCode: normalizeUnitCode(d.baseUnitCode),
                 }))}
               />
             )}
@@ -863,9 +868,11 @@ const ImportReceipts = () => {
                   const line = selectedReceipt.details.find(x => x.id === d.receiptLineId);
                   const form = resolutionForms[d.id] || { action: 'ACCEPT_OBSERVED', doorRejectedQuantity: 0, reasonCode: '', responsibleParty: 'UNKNOWN', supplierClaimRequired: false, note: '', evidenceReference: '', confirmNormalizedObservation: false };
                   const set = (next: Partial<ResolutionForm>) => setResolutionForms(x => ({ ...x, [d.id]: { ...form, ...next } }));
+                  const dOpUnit = normalizeUnitCode(d.operationUnitCode);
+                  const dObsUnit = normalizeUnitCode(d.observedUnitCode);
                   return (
-                    <fieldset key={d.id} className="import-resolution">
-                      <legend>{line?.productCode}: dự kiến {d.expectedQuantity} {d.operationUnitCode}, quan sát {d.observedQuantity} {d.observedUnitCode}, chênh lệch chuẩn hóa {d.differenceQuantity} {d.operationUnitCode}</legend>
+                    <div key={d.id} className="ui-subcard import-resolution">
+                      <div className="ui-subcard-title">{line?.productCode}: dự kiến {d.expectedQuantity} {dOpUnit}, quan sát {d.observedQuantity} {dObsUnit}, chênh lệch chuẩn hóa {d.differenceQuantity} {dOpUnit}</div>
                       <label>Hành động
                         <select value={form.action} onChange={e => set({ action: e.target.value })}>
                           <option value="ACCEPT_OBSERVED">Chấp nhận số lượng quan sát</option>
@@ -899,13 +906,13 @@ const ImportReceipts = () => {
                           Xác nhận số lượng quan sát đã quy đổi × {d.conversionFactor} v{d.conversionVersion}
                         </label>
                       )}
-                      <div>Số lượng cuối dự kiến: {roundQty4(Math.max(0, d.normalizedObservedQuantity - form.doorRejectedQuantity))} {d.operationUnitCode}; phần từ chối tại cửa không tạo tồn kho.</div>
+                      <div>Số lượng cuối dự kiến: {roundQty4(Math.max(0, d.normalizedObservedQuantity - form.doorRejectedQuantity))} {dOpUnit}; phần từ chối tại cửa không tạo tồn kho.</div>
                       <label>Kiểm đếm lại <input aria-label={'Kiểm đếm lại ' + line?.productCode} type="number" min="0" step="any" value={receiveLines[d.receiptLineId]?.receivedQuantity ?? d.observedQuantity} onChange={e => setReceiveLines(x => ({ ...x, [d.receiptLineId]: { ...(x[d.receiptLineId] || { acceptedQuantity: 0, damagedQuantity: 0, rejectedQuantity: 0 }), receivedQuantity: Number(e.target.value) } }))} /></label>
                       <div className="import-row-actions">
                         {canResolve && <button type="button" disabled={workflowId === selectedReceipt.id} onClick={() => void recountDiscrepancy(d)}>Lưu phiên bản kiểm đếm mới</button>}
                         {canSubmit && <button type="button" disabled={workflowId === selectedReceipt.id} onClick={() => void submitResolution(d)}>{workflowId === selectedReceipt.id ? 'Đang gửi...' : 'Gửi phương án xử lý'}</button>}
                       </div>
-                    </fieldset>
+                    </div>
                   );
                 })}
               </section>
@@ -916,7 +923,7 @@ const ImportReceipts = () => {
                 <h4 id="discrepancy-approval-heading">Duyệt phương án xử lý sai lệch</h4>
                 {discrepancies.filter(d => d.status === 'PendingApproval').map(d => (
                   <div key={d.id} className="import-row-actions">
-                    <span>Dòng {d.receiptLineId}: {d.differenceQuantity} {d.operationUnitCode}</span>
+                    <span>Dòng {d.receiptLineId}: {d.differenceQuantity} {normalizeUnitCode(d.operationUnitCode)}</span>
                     {canApproveDiscrepancy && <button type="button" disabled={workflowId === selectedReceipt.id} onClick={() => void reviewResolution(d, 'approve')}>Duyệt phương án xử lý</button>}
                     {canRejectDiscrepancy && <button type="button" disabled={workflowId === selectedReceipt.id} onClick={() => void reviewResolution(d, 'reject')}>Trả lại để kiểm đếm</button>}
                   </div>
