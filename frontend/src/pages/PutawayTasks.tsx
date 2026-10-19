@@ -166,9 +166,9 @@ export default function PutawayTasks(){
          <thead>
            <tr>
              <th style={{ width: '28%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phiếu nhập</th>
-             <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
-             <th style={{ width: '29%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
-             <th style={{ width: '16%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+             <th style={{ width: '25%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+             <th style={{ width: '28%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+             <th style={{ width: '19%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
            </tr>
          </thead>
          <tbody>{tasks.map(task=>{
@@ -196,7 +196,7 @@ export default function PutawayTasks(){
                  </span>
                </UiBadge>
              </td>
-             <td style={{ padding: '6px 5px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+             <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
                <strong>{task.movedBaseQuantity}</strong> / {task.requiredBaseQuantity}
              </td>
            </tr>;

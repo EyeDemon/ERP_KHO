@@ -253,4 +253,66 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     fireEvent.click(view.getByText('Đóng'));
     expect(view.queryByText('Điền mã mẫu')).toBeNull();
   });
+
+  it('keeps invoice table mounted and filters Sổ phụ ledger strictly to AP-IR-QA0001 without leaking AR-ER-QA0001', async () => {
+    const qaApInvoice = {
+      ...mockApInvoice,
+      id: 201,
+      code: 'AP-IR-QA0001',
+    };
+    const qaArInvoice = {
+      ...mockArInvoice,
+      id: 202,
+      code: 'AR-ER-QA0001',
+    };
+    const qaMixedLedger = [
+      {
+        ...mockLedger[0],
+        id: 9101,
+        invoiceId: 201,
+        invoiceCode: 'AP-IR-QA0001',
+        debtType: 'AP',
+        referenceCode: 'NK-QA-001',
+      },
+      {
+        ...mockLedger[0],
+        id: 9102,
+        partnerId: 11,
+        partnerCode: 'CUS-01',
+        partnerName: 'Công ty Xây dựng Minh Long',
+        invoiceId: 202,
+        invoiceCode: 'AR-ER-QA0001',
+        debtType: 'AR',
+        referenceType: 'ExportReceipt',
+        referenceCode: 'PXK-QA-001',
+      },
+    ];
+
+    get.mockImplementation((url: string) => {
+      if (url === '/api/partner-debts/summary') {
+        return Promise.resolve({ data: mockSummary } as never);
+      }
+      if (url === '/api/partner-debts/invoices') {
+        return Promise.resolve({ data: [qaApInvoice, qaArInvoice] } as never);
+      }
+      if (url === '/api/partner-debts/ledger') {
+        return Promise.resolve({ data: qaMixedLedger } as never);
+      }
+      return Promise.resolve({ data: {} } as never);
+    });
+
+    const view = render(<PartnerDebts />);
+    await view.findAllByText('AP-IR-QA0001');
+
+    fireEvent.click(view.getAllByText('Sổ phụ')[0]);
+
+    expect(view.queryByText('Đang tải danh sách hóa đơn công nợ...')).toBeNull();
+    const invoiceTable = view.getByRole('table', { name: 'Danh sách hóa đơn công nợ' });
+    expect(invoiceTable.textContent).toContain('AP-IR-QA0001');
+    expect(invoiceTable.textContent).toContain('AR-ER-QA0001');
+
+    const ledgerTable = view.getByRole('table', { name: 'Sổ cái biến động công nợ đối tác' });
+    expect(ledgerTable.textContent).toContain('AP-IR-QA0001');
+    expect(ledgerTable.textContent).not.toContain('AR-ER-QA0001');
+  });
 });

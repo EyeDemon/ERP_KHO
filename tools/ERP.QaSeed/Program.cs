@@ -79,7 +79,7 @@ static async Task<bool> CanConnectToLocalErpKhoAsync(string connectionString)
 {
     try
     {
-        var probeBuilder = new SqlConnectionStringBuilder(connectionString) { ConnectTimeout = 3 };
+        var probeBuilder = new SqlConnectionStringBuilder(connectionString) { ConnectTimeout = 15 };
         await using var sqlConn = new SqlConnection(probeBuilder.ConnectionString);
         await sqlConn.OpenAsync();
         await using var cmd = sqlConn.CreateCommand();
@@ -142,7 +142,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     var hasher = new PasswordHasherService();
     var qaAdmin = await context.Users.IgnoreQueryFilters()
         .OrderBy(u => u.Id)
-        .FirstOrDefaultAsync(u => u.Username == "qa_admin" && u.IsActive);
+        .FirstOrDefaultAsync(u => u.Username == "qa_admin");
     if (qaAdmin is null)
     {
         qaAdmin = new User
@@ -154,6 +154,13 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             IsActive = true
         };
         context.Users.Add(qaAdmin);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        qaAdmin.Role = roles["Admin"];
+        qaAdmin.PasswordHash = hasher.HashPassword("QaAdmin@123456!");
+        qaAdmin.IsActive = true;
         await context.SaveChangesAsync();
     }
 
@@ -715,21 +722,33 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     else
     {
+        apInvoice.PartnerId = supplier.Id;
+        apInvoice.DebtType = PartnerDebtType.AP;
         apInvoice.SourceType = "ImportReceipt";
         apInvoice.SourceCode = "IR-QA-001";
         apInvoice.SubTotalAmount = 25_000_000m;
         apInvoice.TaxAmount = 2_500_000m;
         apInvoice.TotalAmount = 27_500_000m;
-        if (apInvoice.Status == PartnerDebtInvoiceStatus.Paid)
-        {
-            apInvoice.PaidAmount = 0m;
-            apInvoice.RemainingAmount = 27_500_000m;
-            apInvoice.Status = PartnerDebtInvoiceStatus.Open;
-        }
+        apInvoice.PaidAmount = 0m;
+        apInvoice.RemainingAmount = 27_500_000m;
+        apInvoice.Status = PartnerDebtInvoiceStatus.Open;
     }
 
-    if (!await context.PartnerDebtLedgers.IgnoreQueryFilters().AnyAsync(l => l.InvoiceId == apInvoice.Id))
+    var existingApLedgers = await context.PartnerDebtLedgers.IgnoreQueryFilters().AsNoTracking()
+        .Where(l => l.InvoiceId == apInvoice.Id)
+        .ToListAsync();
+    if (existingApLedgers.Count != 1 ||
+        existingApLedgers[0].DebtType != PartnerDebtType.AP ||
+        existingApLedgers[0].TransactionType != PartnerDebtTransactionType.InvoiceCreated ||
+        existingApLedgers[0].AmountDelta != 27_500_000m ||
+        existingApLedgers[0].BalanceAfter != 27_500_000m)
     {
+        if (existingApLedgers.Count > 0)
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM PartnerDebtLedgers WHERE InvoiceId = {apInvoice.Id}");
+        }
+
         context.PartnerDebtLedgers.Add(new PartnerDebtLedger
         {
             PartnerId = supplier.Id,
@@ -777,21 +796,31 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     else
     {
+        arInvoice.PartnerId = customer.Id;
+        arInvoice.DebtType = PartnerDebtType.AR;
         arInvoice.SourceType = "ExportReceipt";
         arInvoice.SourceCode = "ER-QA-001";
         arInvoice.SubTotalAmount = 18_000_000m;
         arInvoice.TaxAmount = 1_800_000m;
         arInvoice.TotalAmount = 19_800_000m;
-        if (arInvoice.Status == PartnerDebtInvoiceStatus.Paid)
-        {
-            arInvoice.PaidAmount = 5_000_000m;
-            arInvoice.RemainingAmount = 14_800_000m;
-            arInvoice.Status = PartnerDebtInvoiceStatus.PartiallyPaid;
-        }
+        arInvoice.PaidAmount = 5_000_000m;
+        arInvoice.RemainingAmount = 14_800_000m;
+        arInvoice.Status = PartnerDebtInvoiceStatus.PartiallyPaid;
     }
 
-    if (!await context.PartnerDebtLedgers.IgnoreQueryFilters().AnyAsync(l => l.InvoiceId == arInvoice.Id))
+    var existingArLedgers = await context.PartnerDebtLedgers.IgnoreQueryFilters().AsNoTracking()
+        .Where(l => l.InvoiceId == arInvoice.Id)
+        .OrderBy(l => l.Id)
+        .ToListAsync();
+    if (existingArLedgers.Count != 2 ||
+        existingArLedgers.Any(l => l.DebtType != PartnerDebtType.AR))
     {
+        if (existingArLedgers.Count > 0)
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM PartnerDebtLedgers WHERE InvoiceId = {arInvoice.Id}");
+        }
+
         context.PartnerDebtLedgers.AddRange(
             new PartnerDebtLedger
             {
@@ -826,10 +855,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             });
     }
 
-    if (supplier.PayableBalance < apInvoice.RemainingAmount)
-        supplier.PayableBalance = apInvoice.RemainingAmount;
-    if (customer.ReceivableBalance < arInvoice.RemainingAmount)
-        customer.ReceivableBalance = arInvoice.RemainingAmount;
+    supplier.PayableBalance = apInvoice.RemainingAmount;
+    customer.ReceivableBalance = arInvoice.RemainingAmount;
 
     context.AuditLogs.Add(new AuditLog
     {

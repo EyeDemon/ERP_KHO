@@ -154,9 +154,13 @@ export default function PartnerDebts() {
           },
         }),
       ]);
+      const nextInvoices = Array.isArray(invRes.data) ? invRes.data : [];
       setSummary(sumRes.data);
-      setInvoices(Array.isArray(invRes.data) ? invRes.data : []);
+      setInvoices(nextInvoices);
       setLedger(Array.isArray(ledRes.data) ? ledRes.data : []);
+      setSelectedInvoice(prev =>
+        prev ? nextInvoices.find(x => x.id === prev.id || x.code === prev.code) ?? prev : null,
+      );
     } catch (e: any) {
       setError(e?.response?.data?.message || 'Không thể tải dữ liệu công nợ đối tác (AP/AR).');
     } finally {
@@ -214,6 +218,12 @@ export default function PartnerDebts() {
       setSubmitting(false);
     }
   };
+
+  const displayedLedger = selectedInvoice
+    ? ledger.filter(
+        entry => entry.invoiceId === selectedInvoice.id || entry.invoiceCode === selectedInvoice.code,
+      )
+    : ledger;
 
   return (
     <UiPage>
@@ -349,7 +359,7 @@ export default function PartnerDebts() {
       )}
 
       <UiCard title="Danh sách Hóa đơn Công nợ (Partner Debt Invoices)">
-        {loading ? (
+        {loading && invoices.length === 0 ? (
           <p role="status">Đang tải danh sách hóa đơn công nợ...</p>
         ) : (
           <UiTableScroll>
@@ -472,14 +482,14 @@ export default function PartnerDebts() {
               </tr>
             </thead>
             <tbody>
-              {ledger.length === 0 ? (
+              {displayedLedger.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="ui-empty-cell">
                     Chưa có bút toán sổ cái công nợ.
                   </td>
                 </tr>
               ) : (
-                ledger.map(entry => (
+                displayedLedger.map(entry => (
                   <tr key={entry.id}>
                     <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', padding: '6px 8px', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
                       {new Date(entry.createdAtUtc).toLocaleString('vi-VN')}

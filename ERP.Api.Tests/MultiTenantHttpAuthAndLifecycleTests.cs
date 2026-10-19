@@ -1127,6 +1127,73 @@ public sealed class MultiTenantHttpAuthAndLifecycleTests
             using var viewerPayDebtResp = await client.SendAsync(viewerPayDebtReq);
             viewerPayDebtResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
+
+        // 2i. Ledger filter by invoiceId (/api/partner-debts/ledger?invoiceId={apInv202Id}) strictly isolates AP vs AR entries within the same tenant
+        int apInv202Id;
+        await using (var apSeedDb = new ErpKhoDbContext(dbOptions, tenantContext: tenant202Ctx))
+        {
+            var apInv202 = new PartnerDebtInvoice
+            {
+                Code = "AP-202-0001",
+                PartnerId = poSupplier202Id,
+                DebtType = ERP.Domain.Enums.PartnerDebtType.AP,
+                SourceType = "ImportReceipt",
+                SourceId = 20202,
+                SourceCode = "IR-202-0001",
+                SubTotalAmount = 500_000m,
+                TaxAmount = 50_000m,
+                TotalAmount = 550_000m,
+                PaidAmount = 0m,
+                RemainingAmount = 550_000m,
+                Status = ERP.Domain.Enums.PartnerDebtInvoiceStatus.Open,
+                IssuedAtUtc = DateTime.UtcNow,
+                CreatedBy = admin202Id
+            };
+            var apLedger202 = new PartnerDebtLedger
+            {
+                PartnerId = poSupplier202Id,
+                Invoice = apInv202,
+                DebtType = ERP.Domain.Enums.PartnerDebtType.AP,
+                TransactionType = ERP.Domain.Enums.PartnerDebtTransactionType.InvoiceCreated,
+                ReferenceType = "ImportReceipt",
+                ReferenceId = 20202,
+                ReferenceCode = "IR-202-0001",
+                AmountDelta = 550_000m,
+                BalanceAfter = 550_000m,
+                CreatedAtUtc = DateTime.UtcNow,
+                CreatedBy = admin202Id
+            };
+            apSeedDb.PartnerDebtInvoices.Add(apInv202);
+            apSeedDb.PartnerDebtLedgers.Add(apLedger202);
+            await apSeedDb.SaveChangesAsync();
+            apInv202Id = apInv202.Id;
+        }
+
+        using (var apInvoiceLedgerReq = new HttpRequestMessage(HttpMethod.Get, $"/api/partner-debts/ledger?invoiceId={apInv202Id}"))
+        {
+            apInvoiceLedgerReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var apInvoiceLedgerResp = await client.SendAsync(apInvoiceLedgerReq);
+            apInvoiceLedgerResp.StatusCode.Should().Be(HttpStatusCode.OK, await apInvoiceLedgerResp.Content.ReadAsStringAsync());
+            using var apLedgerDoc = JsonDocument.Parse(await apInvoiceLedgerResp.Content.ReadAsStringAsync());
+            var apLedgerItems = apLedgerDoc.RootElement.EnumerateArray().ToList();
+            apLedgerItems.Should().NotBeEmpty();
+            apLedgerItems.Should().OnlyContain(x =>
+                x.GetProperty("invoiceId").GetInt32() == apInv202Id &&
+                x.GetProperty("debtType").GetString() == "AP");
+        }
+
+        using (var arInvoiceLedgerReq = new HttpRequestMessage(HttpMethod.Get, $"/api/partner-debts/ledger?invoiceId={inv202Id}"))
+        {
+            arInvoiceLedgerReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token202);
+            using var arInvoiceLedgerResp = await client.SendAsync(arInvoiceLedgerReq);
+            arInvoiceLedgerResp.StatusCode.Should().Be(HttpStatusCode.OK, await arInvoiceLedgerResp.Content.ReadAsStringAsync());
+            using var arLedgerDoc = JsonDocument.Parse(await arInvoiceLedgerResp.Content.ReadAsStringAsync());
+            var arLedgerItems = arLedgerDoc.RootElement.EnumerateArray().ToList();
+            arLedgerItems.Should().NotBeEmpty();
+            arLedgerItems.Should().OnlyContain(x =>
+                x.GetProperty("invoiceId").GetInt32() == inv202Id &&
+                x.GetProperty("debtType").GetString() == "AR");
+        }
     }
 
     private static async Task EnsurePermissionsForRoleAsync(

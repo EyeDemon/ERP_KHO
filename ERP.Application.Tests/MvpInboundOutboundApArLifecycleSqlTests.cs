@@ -658,6 +658,25 @@ public sealed class MvpInboundOutboundApArLifecycleSqlTests
 
                 var summary = await debtService.GetSummaryAsync();
                 summary.Should().NotBeNull();
+
+                // Verify ListLedgerAsync(invoiceId) strictly isolates AP vs AR invoice ledger entries
+                var apInvoiceLedger = await debtService.ListLedgerAsync(invoiceId: state.ApInvoiceId);
+                apInvoiceLedger.Should().HaveCount(3);
+                Assert.All(apInvoiceLedger, x =>
+                {
+                    Assert.Equal(state.ApInvoiceId, x.InvoiceId);
+                    Assert.Equal("AP", x.DebtType);
+                });
+                Assert.DoesNotContain(apInvoiceLedger, x => x.DebtType == "AR" || x.InvoiceId != state.ApInvoiceId);
+
+                var arInvoiceLedger = await debtService.ListLedgerAsync(invoiceId: arInvoice.Id);
+                arInvoiceLedger.Should().HaveCount(2);
+                Assert.All(arInvoiceLedger, x =>
+                {
+                    Assert.Equal(arInvoice.Id, x.InvoiceId);
+                    Assert.Equal("AR", x.DebtType);
+                });
+                Assert.DoesNotContain(arInvoiceLedger, x => x.DebtType == "AP" || x.InvoiceId != arInvoice.Id);
             }
 
             // =========================================================================
