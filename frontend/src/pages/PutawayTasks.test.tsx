@@ -88,9 +88,11 @@ describe('Cất hàng',()=>{
    fireEvent.click(v.getByText('Xác nhận số lượng'));
    await waitFor(()=>expect(completeIdempotentAction).toHaveBeenCalledWith('move-1-2'));
  });
- it('renders Lộ trình column in Danh sách nhiệm vụ as two nowrap spans with single arrow → without broken ->',async()=>{
+ it('renders Lộ trình column in Danh sách nhiệm vụ as two nowrap spans with single arrow → without broken ->, nowrap task button, ui-subcard, and normalized QA_UNIT',async()=>{
+   mockReads({...detail,items:[{...detail.items[0],operationUnitCode:'QA_UNIT',baseUnitCode:'QA_UNIT'}]});
    const v=render(<PutawayTasks/>);
-   await v.findByText('PN-1');
+   const btn=await v.findByText('PN-1');
+   expect((btn as HTMLElement).style.whiteSpace).toBe('nowrap');
    const fromSpan=v.getByText('RECEIVING');
    const toSpan=v.getByText('→ BIN-A01-01');
    expect(fromSpan.tagName).toBe('SPAN');
@@ -98,5 +100,10 @@ describe('Cất hàng',()=>{
    expect((fromSpan as HTMLElement).style.whiteSpace).toBe('nowrap');
    expect((toSpan as HTMLElement).style.whiteSpace).toBe('nowrap');
    expect(v.container.textContent).not.toContain('->');
+   fireEvent.click(btn);
+   const destSelect=await v.findByLabelText('Vị trí đích SP1');
+   expect(destSelect.closest('.ui-subcard')).toBeTruthy();
+   expect(v.queryByText(/QA_UNIT/)).toBeNull();
+   expect(v.getByText(/10 THÙNG/)).toBeTruthy();
  });
 });

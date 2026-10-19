@@ -30,9 +30,9 @@ describe('Packing workbench',()=>{
     const view=render(<PackingSessions/>);
     await view.findByText('PACK-2026-0077');
     fireEvent.click(view.getByText('PACK-2026-0077'));
-    expect(await view.findByText(/Foundation hiện có HU create/)).toBeTruthy();
-    expect(view.queryByText('Xác nhận Pack')).toBeNull();
-    expect(view.queryByText('Tạo HU')).toBeNull();
+    expect(await view.findByText(/Quản lý tạo kiện đóng gói/)).toBeTruthy();
+    expect(view.queryByText('Xác nhận đóng gói')).toBeNull();
+    expect(view.queryByText('Tạo kiện')).toBeNull();
   });
 
   it('submits scan-first pack once with idempotency',async()=>{
@@ -45,7 +45,7 @@ describe('Packing workbench',()=>{
     fireEvent.change(view.getByLabelText('HU đích SKU-1001'),{target:{value:'91'}});
     fireEvent.change(view.getByLabelText('Product barcode packing SKU-1001'),{target:{value:'SKU-1001'}});
     fireEvent.change(view.getByLabelText('Packing quantity SKU-1001'),{target:{value:'2'}});
-    const button=view.getByText('Xác nhận Pack');
+    const button=view.getByText('Xác nhận đóng gói');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/packing-sessions/77/pack',{
@@ -64,7 +64,7 @@ describe('Packing workbench',()=>{
     fireEvent.change(view.getByLabelText('HU đích SKU-1001'),{target:{value:'91'}});
     fireEvent.change(view.getByLabelText('Product barcode packing SKU-1001'),{target:{value:'SKU-1001'}});
     fireEvent.change(view.getByLabelText('Packing quantity SKU-1001'),{target:{value:'9'}});
-    fireEvent.click(view.getByText('Xác nhận Pack'));
+    fireEvent.click(view.getByText('Xác nhận đóng gói'));
     await waitFor(()=>expect(view.getByRole('alert').textContent).toContain('vượt số lượng đã Picking'));
   });
 
@@ -80,7 +80,7 @@ describe('Packing workbench',()=>{
     const view=render(<PackingSessions/>);
     await view.findByText('PACK-2026-0077');
     fireEvent.click(view.getByText('PACK-2026-0077'));
-    expect(await view.findByText('Tạo HU')).toBeTruthy();
+    expect(await view.findByText('Tạo kiện')).toBeTruthy();
     expect(view.getByText('Hủy HU rỗng')).toBeTruthy();
   });
 
@@ -88,6 +88,9 @@ describe('Packing workbench',()=>{
     grant('packing.read','packing.execute');
     const view=render(<PackingSessions/>);
     await view.findByText('PACK-2026-0077');
+    const sessionCodeBtn=view.getByText('PACK-2026-0077');
+    expect(sessionCodeBtn.style.whiteSpace).toBe('nowrap');
+    expect(view.getByText('1 kiện')).toBeTruthy();
     const routeSourceSpan=view.getByText('PICK-2026-0088');
     const routeTargetSpan=view.getByText('→ EX-2026-5108');
     expect(routeSourceSpan.tagName).toBe('SPAN');
@@ -96,8 +99,9 @@ describe('Packing workbench',()=>{
     expect(routeTargetSpan.style.whiteSpace).toBe('nowrap');
     const progressHeader=view.getByRole('columnheader',{name:'Tiến độ'});
     expect(progressHeader.style.paddingRight).toBe('10px');
-    fireEvent.click(view.getByText('PACK-2026-0077'));
+    fireEvent.click(sessionCodeBtn);
     const huSelect=await view.findByLabelText('HU đích SKU-1001');
     expect(huSelect.closest('label')?.style.flexDirection).toBe('column');
+    expect(huSelect.closest('.ui-subcard')).toBeTruthy();
   });
 });

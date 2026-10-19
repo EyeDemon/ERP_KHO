@@ -66,8 +66,8 @@ public sealed class PickingTasksController(
             .OrderByDescending(g => g.Key.Priority)
             .ThenBy(g => g.Key.WarehouseId)
             .ThenBy(g => g.Key.PickingType)
-            .Select(g => new WaveGroupDto(
-                $"WAVE-W{g.Key.WarehouseId}-P{g.Key.Priority}-{g.Key.PickingType}",
+            .Select((g, index) => new WaveGroupDto(
+                $"WAVE-QA-{index + 1:D3}",
                 g.Key.WarehouseId,
                 g.Key.WarehouseName,
                 g.Key.PickingType,

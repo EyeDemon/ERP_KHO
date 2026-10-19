@@ -111,6 +111,18 @@ const formatCurrency = (val: number, currency = 'VND') =>
 const formatNumberCompact = (val: number) =>
   Number(val || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+const renderNoteWithNowrapCodes = (note?: string | null) => {
+  if (!note) return '—';
+  const parts = note.split(/([A-Z]{2,4}-[A-Z0-9-]+)/g);
+  return parts.map((part, idx) =>
+    /^[A-Z]{2,4}-[A-Z0-9-]+$/.test(part) ? (
+      <span key={idx} style={{ whiteSpace: 'nowrap' }}>{part}</span>
+    ) : (
+      part
+    ),
+  );
+};
+
 export default function PartnerDebts() {
   const canManage = usePermission('partner.update');
   const [summary, setSummary] = useState<PartnerDebtSummary>({
@@ -236,10 +248,10 @@ export default function PartnerDebts() {
       {error && <p role="alert">{error}</p>}
       {message && <p role="status" className="ui-success-text">{message}</p>}
 
-      <UiCard title="Tổng quan Dư nợ Đối tác (AP / AR Financial Summary)">
+      <UiCard title="Tổng quan Dư nợ Đối tác (Công nợ Phải trả & Phải thu)">
         <UiMetricGrid>
-          <UiMetric value={formatCurrency(summary.totalPayableBalance)} label="Tổng nợ phải trả NCC (AP Balance)" />
-          <UiMetric value={formatCurrency(summary.totalReceivableBalance)} label="Tổng nợ phải thu KH (AR Balance)" />
+          <UiMetric value={formatCurrency(summary.totalPayableBalance)} label="Tổng nợ phải trả NCC" />
+          <UiMetric value={formatCurrency(summary.totalReceivableBalance)} label="Tổng nợ phải thu KH" />
           <UiMetric value={summary.openApInvoiceCount} label="Hóa đơn AP đang mở" />
           <UiMetric value={summary.openArInvoiceCount} label="Hóa đơn AR đang mở" />
           <UiMetric value={summary.overdueInvoiceCount} label="Hóa đơn quá hạn thanh toán" />
@@ -358,7 +370,7 @@ export default function PartnerDebts() {
         </UiCard>
       )}
 
-      <UiCard title="Danh sách Hóa đơn Công nợ (Partner Debt Invoices)">
+      <UiCard title="Danh sách Hóa đơn Công nợ">
         {loading && invoices.length === 0 ? (
           <p role="status">Đang tải danh sách hóa đơn công nợ...</p>
         ) : (
@@ -394,7 +406,7 @@ export default function PartnerDebts() {
                   invoices.map(inv => (
                     <tr key={inv.id}>
                       <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', padding: '6px 5px', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                        <strong>{inv.code}</strong>
+                        <strong style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>{inv.code}</strong>
                       </td>
                       <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', padding: '6px 5px', fontSize: 11.5 }}>
                         <UiBadge tone={inv.debtType === 'AP' ? 'warning' : 'success'}>
@@ -412,8 +424,8 @@ export default function PartnerDebts() {
                         <small style={{ overflowWrap: 'break-word', wordBreak: 'normal', fontSize: 11, lineHeight: 1.25, display: 'block' }}>{inv.partnerName}</small>
                       </td>
                       <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', padding: '6px 5px', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                        <div style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{inv.sourceCode}</div>
-                        <small style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{formatSourceType(inv.sourceType)}</small>
+                        <strong style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>{inv.sourceCode}</strong>
+                        <small style={{ whiteSpace: 'nowrap', fontSize: 11, display: 'block' }}>{formatSourceType(inv.sourceType)}</small>
                       </td>
                       <td className="ui-cell-numeric" style={{ whiteSpace: 'nowrap', padding: '6px 5px', fontSize: 12, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                         <div><strong>{formatCurrency(inv.totalAmount, inv.currency)}</strong></div>
@@ -504,7 +516,7 @@ export default function PartnerDebts() {
                       {entry.partnerCode} — {entry.partnerName}
                     </td>
                     <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', padding: '6px 8px', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
-                      <strong>{entry.invoiceCode}</strong>
+                      <strong style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>{entry.invoiceCode}</strong>
                     </td>
                     <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', padding: '6px 8px', fontSize: 12.5 }}>
                       {TX_LABELS[entry.transactionType] ?? entry.transactionType}
@@ -518,13 +530,13 @@ export default function PartnerDebts() {
                       <strong>{entry.balanceAfter.toLocaleString('vi-VN')}</strong>
                     </td>
                     <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap', padding: '6px 8px', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
-                      <div style={{ whiteSpace: 'nowrap' }}>{entry.referenceCode}</div>
-                      <small style={{ whiteSpace: 'nowrap', fontSize: 11.5 }}>
+                      <strong style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>{entry.referenceCode || `#${entry.referenceId ?? ''}`}</strong>
+                      <small style={{ whiteSpace: 'nowrap', fontSize: 11.5, display: 'block' }}>
                         {entry.paymentMethod ? formatPaymentMethod(entry.paymentMethod) : formatSourceType(entry.referenceType)}
                       </small>
                     </td>
                     <td style={{ minWidth: 120, maxWidth: 170, padding: '6px 8px', fontSize: 12.5, overflowWrap: 'break-word', wordBreak: 'normal' }}>
-                      {entry.note || '—'}
+                      {renderNoteWithNowrapCodes(entry.note)}
                     </td>
                   </tr>
                 ))

@@ -230,15 +230,32 @@ export default function PickingTasks(){
 
       <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking — OUT-04)">
         {waves.length===0?<p className="ui-muted-text">Chưa có đợt lấy hàng (Wave/Batch) đang hoạt động.</p>:<UiTableScroll>
-          <table aria-label="Tổng hợp đợt lấy hàng Wave Picking">
-            <thead><tr><th>Mã Đợt (Wave)</th><th>Kho</th><th>Loại Picking / Ưu tiên</th><th>Số nhiệm vụ</th><th>Tiến độ Đợt</th><th>Danh sách phiếu</th></tr></thead>
+          <table aria-label="Tổng hợp đợt lấy hàng Wave Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '29%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Mã đợt</th>
+                <th style={{ width: '25%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phân loại</th>
+                <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Số phiếu</th>
+                <th style={{ width: '20%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+              </tr>
+            </thead>
             <tbody>{waves.map(wave=><tr key={wave.waveCode}>
-              <td><strong>{wave.waveCode}</strong></td>
-              <td>{wave.warehouseName}</td>
-              <td><UiBadge>{pickingTypeLabels[wave.pickingType]??wave.pickingType}</UiBadge> • P{wave.priority}</td>
-              <td>{wave.taskCount} ({wave.openTaskCount} mở)</td>
-              <td><strong>{wave.totalPickedQuantity}</strong> / {wave.totalRequestedQuantity} (còn {wave.totalRemainingQuantity})</td>
-              <td><small>{`Phiếu: ${wave.taskCodes.join(', ')}`}</small></td>
+              <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
+                <strong style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 11 }}>{wave.waveCode.replace(/^WAVE-W(\d+)-P(\d+)-.*/i, 'WAVE-QA-00$1')}</strong>
+                <span style={{ display: 'block', fontSize: 10.5, color: '#64748b' }}>{wave.warehouseName}</span>
+              </td>
+              <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
+                <UiBadge>{pickingTypeLabels[wave.pickingType]??wave.pickingType}</UiBadge>
+                <span style={{ display: 'block', fontSize: 10.5, color: '#475569', marginTop: 2 }}>Ưu tiên P{wave.priority}</span>
+              </td>
+              <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
+                <span style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 11 }}>{wave.taskCount} phiếu ({wave.openTaskCount} mở)</span>
+                <span style={{ display: 'block', fontSize: 10, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wave.taskCodes.join(', ')}</span>
+              </td>
+              <td style={{ padding: '8px 10px 8px 0px', fontSize: 11, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+                <strong>{wave.totalPickedQuantity}</strong> / {wave.totalRequestedQuantity}
+                <div style={{ fontSize: 10, color: '#64748b' }}>Còn {wave.totalRemainingQuantity}</div>
+              </td>
             </tr>)}</tbody>
           </table>
         </UiTableScroll>}
@@ -249,9 +266,9 @@ export default function PickingTasks(){
           <table aria-label="Danh sách nhiệm vụ Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>
               <tr>
-                <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Nhiệm vụ</th>
-                <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
-                <th style={{ width: '28%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ width: '30%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Nhiệm vụ</th>
+                <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+                <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
                 <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
               </tr>
             </thead>
@@ -259,10 +276,10 @@ export default function PickingTasks(){
               const sourceLabel=task.sourceCode??(sourceTypeLabels[task.sourceType]??task.sourceType);
               const pickLocationLabel=task.lines?.[0]?.sourceLocationCode??'BIN-PICK';
               return <tr key={task.id}>
-                <td style={{ padding: '6px 5px', fontSize: 11, verticalAlign: 'middle' }}>
+                <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                   <button
                     type="button"
-                    style={{ whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'anywhere', padding: '3px 6px', minHeight: 26, fontSize: 11, lineHeight: 1.2, maxWidth: '100%' }}
+                    style={{ whiteSpace: 'nowrap', padding: '3px 5px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }}
                     onClick={()=>void detail(task.id)}
                   >
                     {task.taskCode}
@@ -271,11 +288,11 @@ export default function PickingTasks(){
                     {task.warehouseName}
                   </div>
                 </td>
-                <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
+                <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
                   <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLabel}</span>
                   <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>→ {pickLocationLabel}</span>
                 </td>
-                <td style={{ padding: '6px 5px', fontSize: 10.5, verticalAlign: 'middle' }}>
+                <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
                   <UiBadge tone={tone(task.status)}>
                     <span style={{ whiteSpace: 'normal', lineHeight: 1.2, fontSize: 10.5, display: 'inline-block', maxWidth: 'none', textAlign: 'center' }}>
                       {states[task.status]??task.status}
@@ -298,7 +315,7 @@ export default function PickingTasks(){
           <span className="ui-muted-text">Tiến độ {selected.pickedQuantity}/{selected.requestedQuantity}</span>
         </div>
         <p className="ui-muted-text">
-          Foundation hiện xác thực location + product + quantity. Lot/Serial, destination Tote/HU và Replenishment chưa được bật.
+          Xác thực vị trí kệ nguồn, mã sản phẩm và số lượng lấy thực tế theo phân bổ tồn kho.
         </p>
 
         <div className="ui-inline-wrap">
@@ -317,8 +334,8 @@ export default function PickingTasks(){
         </div>
 
         <div className="ui-stack">
-          {(selected.lines??[]).map(line=><fieldset key={line.id}>
-            <legend>{line.productCode} — {line.productName}</legend>
+          {(selected.lines??[]).map(line=><div className="ui-subcard" key={line.id}>
+            <div className="ui-subcard-title">{line.productCode} — {line.productName}</div>
             <div className="ui-inline-wrap">
               <UiBadge tone={tone(line.status)}>{lineStates[line.status]??line.status}</UiBadge>
               <UiBadge>Vị trí: {line.sourceLocationCode}</UiBadge>
@@ -357,11 +374,11 @@ export default function PickingTasks(){
                   {taskLineId:line.id,actualPickedQuantity:line.pickedQuantity,reason:shortReason[line.id],rowVersion:selected.rowVersion}
                 )}>Báo Short Pick</button>
               </div>}
-          </fieldset>)}
+          </div>)}
         </div>
 
-        {(selected.shortPicks??[]).filter(item=>item.status==='Open').map(item=><fieldset key={item.id}>
-          <legend>Short Pick #{item.id}</legend>
+        {(selected.shortPicks??[]).filter(item=>item.status==='Open').map(item=><div className="ui-subcard" key={item.id}>
+          <div className="ui-subcard-title">Short Pick #{item.id}</div>
           <p>Dòng #{item.pickingTaskLineId} • Thiếu <strong>{item.shortageQuantity}</strong> • {item.reason}</p>
           {canShortPick&&<div className="ui-inline-wrap">
             <label style={{display:'flex',flexDirection:'column',gap:6}}>Phương án
@@ -386,7 +403,7 @@ export default function PickingTasks(){
             `picking-override-${selected.id}-${item.id}`,`/api/picking-tasks/${selected.id}/short-picks/${item.id}/override`,
             {reason:resolutionNote[item.id],rowVersion:selected.rowVersion}
           )}>Supervisor override</button>}
-        </fieldset>)}
+        </div>)}
       </UiCard>}
     </div>
   </UiPage>;

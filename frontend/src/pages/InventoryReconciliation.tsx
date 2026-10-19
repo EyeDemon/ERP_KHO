@@ -651,7 +651,7 @@ export default function InventoryReconciliation() {
       <UiPageHeader
         eyebrow="Inventory Control"
         title="Đối chiếu tồn kho & ledger"
-        description="So sánh operational balance với immutable ledger để phát hiện chênh lệch. Work center này chỉ đọc; mọi sửa sai phải đi qua transaction có kiểm soát."
+        description="Đối chiếu số dư tồn kho thực tế với sổ cái bất biến (Ledger) để phát hiện chênh lệch. Trạm kiểm soát này chỉ đọc; mọi điều chỉnh phải thực hiện qua giao dịch đảo có phê duyệt."
       />
       <p role="note" className="ui-muted-text">
         Danh sách hiển thị riêng số liệu AVAILABLE và kết luận đối chiếu cả 8 trạng thái.
@@ -670,7 +670,7 @@ export default function InventoryReconciliation() {
 
       <UiMetricGrid>
         <UiMetric value={numberFormat.format(result?.totalRecords ?? 0)} label="Cặp kho / sản phẩm" />
-        <UiMetric value={numberFormat.format(mismatchCount)} label="Mismatch trang hiện tại" />
+        <UiMetric value={numberFormat.format(mismatchCount)} label="Lệch số dư trang hiện tại" />
         <UiMetric value={numberFormat.format(indeterminateCount)} label="Chưa xác định trang hiện tại" />
         <UiMetric value={numberFormat.format(absoluteDifference)} label="Độ lệch đã xác định" />
         {!demoRuntime && <UiMetric
@@ -699,15 +699,15 @@ export default function InventoryReconciliation() {
         <div className="ui-form-grid">
           <div>
             <strong>Đồng bộ MDM / PO / SO & Hộp thư Inbox/Outbox (IG-01..IG-06)</strong><br />
-            MDM: SYNCED • PO/SO: ACTIVE • Outbox: SAME_TX_COMMIT • Inbox: IDEMPOTENT_ENABLED • TMS Webhook: DEDUPED_EVENT_INGESTION
+            MDM: Đã đồng bộ • PO/SO: Đang hoạt động • Outbox: Giao dịch nguyên tử • Inbox: Chống trùng lặp • Webhook TMS: Lọc trùng sự kiện
           </div>
           <div>
             <strong>Hàng đợi Lỗi DLQ & Ranh giới Khóa sổ Tài chính (IG-07..IG-10)</strong><br />
-            DLQ lỗi: 0 • Thao tác lô: PREVIEW_AND_AUDIT_REQUIRED • Khóa sổ: IMMUTABLE_LEDGER_WATERMARK • Đối soát: {mismatchCount === 0 && indeterminateCount === 0 ? 'MATCHED' : 'MISMATCH_DETECTED'}
+            DLQ lỗi: 0 • Thao tác lô: Bắt buộc xem trước & ghi nhật ký • Khóa sổ: Mốc sổ cái bất biến • Đối soát: {mismatchCount === 0 && indeterminateCount === 0 ? 'Khớp toàn bộ' : 'Phát hiện lệch'}
           </div>
           <div>
             <strong>Checklist Mở/Đóng Kho, Sao lưu & Sửa lệch Kiểm soát (OP-01..OP-11)</strong><br />
-            Mở/Đóng kho: {mismatchCount === 0 ? 'READY' : 'BLOCKED_BY_MISMATCH'} • Diễn tập Sao lưu/Khôi phục: VERIFIED_14_OF_14_TESTS • Sửa sai: CONTROLLED_REVERSAL_ONLY
+            Mở/Đóng kho: {mismatchCount === 0 ? 'Sẵn sàng' : 'Chặn do lệch số dư'} • Diễn tập Sao lưu/Khôi phục: Đạt 14/14 bài kiểm tra • Sửa sai: Chỉ qua giao dịch đảo có kiểm soát
           </div>
         </div>
         <div className="ui-inline-actions">
@@ -742,7 +742,7 @@ export default function InventoryReconciliation() {
           </button>
           {siteReadinessVerdict && (
             <UiBadge tone={siteReadinessVerdict.readinessVerdict === 'APPROVED_FOR_OPEN_CLOSE' ? 'success' : 'danger'}>
-              {`Kết luận: ${siteReadinessVerdict.readinessVerdict} • Đã kiểm tra: ${siteReadinessVerdict.checkedRows} dòng • Outbox: SYNCED`}
+              {`Kết luận: ${siteReadinessVerdict.readinessVerdict === 'APPROVED_FOR_OPEN_CLOSE' ? 'Đủ điều kiện Mở/Đóng kho' : siteReadinessVerdict.readinessVerdict === 'BLOCKED_BY_MISMATCH' ? 'Tạm chặn do lệch số dư' : siteReadinessVerdict.readinessVerdict} • Đã kiểm tra: ${siteReadinessVerdict.checkedRows} dòng • Outbox: Đã đồng bộ`}
             </UiBadge>
           )}
         </div>
@@ -786,7 +786,7 @@ export default function InventoryReconciliation() {
                   <th>Tồn hiện tại</th>
                   <th>Ledger kỳ vọng</th>
                   <th>Chênh lệch</th>
-                  <th>Trạng thái AVAILABLE</th>
+                  <th>Trạng thái khả dụng</th>
                   <th>Đối chiếu 8 trạng thái</th>
                   <th>Thành phần biến động</th>
                   <th>Bằng chứng</th>
@@ -807,7 +807,7 @@ export default function InventoryReconciliation() {
                           ? 'reconciliation-mismatch' : undefined}>
                       <td>{row.warehouseName}</td>
                       <td>
-                        <strong>{row.productCode}</strong>
+                        <strong style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>{row.productCode}</strong>
                         <span className="reconciliation-product-name">{row.productName}</span>
                       </td>
                       <td>{numberFormat.format(row.currentQuantity)}</td>
@@ -852,6 +852,7 @@ export default function InventoryReconciliation() {
                       </td>
                       <td>
                         <button type="button" disabled={demoRuntime || investigating || loading}
+                          style={{ whiteSpace: 'nowrap', padding: '5px 8px', minHeight: 30, fontSize: 11.5 }}
                           aria-label={`Xem bằng chứng ${row.productCode} tại ${row.warehouseName}`}
                           onClick={event => {
                             investigationTrigger.current = event.currentTarget;

@@ -186,22 +186,22 @@ export default function PackingSessions(){
         </div>
       </UiCard>
 
-      <UiCard title="Packing sessions">
+      <UiCard title="Danh sách phiên đóng gói">
         {sessions.length===0?<p>Chưa có Packing session. Session được tạo khi Picking hoàn tất.</p>:<UiTableScroll>
           <table aria-label="Danh sách Packing session" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>
               <tr>
-                <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Session</th>
-                <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
-                <th style={{ width: '26%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                <th style={{ width: '20%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+                <th style={{ width: '30%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Mã phiên</th>
+                <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+                <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
               </tr>
             </thead>
             <tbody>{sessions.map(item=><tr key={item.id}>
-              <td style={{ padding: '6px 5px', fontSize: 11, verticalAlign: 'middle' }}>
+              <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                 <button
                   type="button"
-                  style={{ whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'anywhere', padding: '3px 6px', minHeight: 26, fontSize: 11, lineHeight: 1.2, maxWidth: '100%' }}
+                  style={{ whiteSpace: 'nowrap', padding: '3px 5px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }}
                   onClick={()=>void detail(item.id)}
                 >
                   {item.sessionCode}
@@ -210,11 +210,11 @@ export default function PackingSessions(){
                   {item.warehouseName}
                 </div>
               </td>
-              <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
+              <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
                 <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{item.pickingTaskCode||'PICK'}</span>
                 <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>→ {item.sourceCode??item.sourceType}</span>
               </td>
-              <td style={{ padding: '6px 5px', fontSize: 10.5, verticalAlign: 'middle' }}>
+              <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
                 <UiBadge tone={tone(item.status)}>
                   <span style={{ whiteSpace: 'normal', lineHeight: 1.2, fontSize: 10.5, display: 'inline-block', maxWidth: 'none', textAlign: 'center' }}>
                     {stateLabels[item.status]??item.status}
@@ -223,7 +223,7 @@ export default function PackingSessions(){
               </td>
               <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
                 <strong>{item.packedQuantity}</strong> / {item.requiredQuantity}
-                <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{item.handlingUnitCount} HU</div>
+                <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{item.handlingUnitCount} kiện</div>
               </td>
             </tr>)}</tbody>
           </table>
@@ -234,20 +234,19 @@ export default function PackingSessions(){
         <div className="ui-inline-wrap">
           <UiBadge tone={tone(selected.status)}>{stateLabels[selected.status]??selected.status}</UiBadge>
           <span className="ui-muted-text">{selected.pickingTaskCode} • {selected.sourceCode??selected.sourceType} • {selected.warehouseName}</span>
-          <span>Đã pack <strong>{selected.packedQuantity}</strong> / {selected.requiredQuantity} • Còn {selected.remainingQuantity}</span>
+          <span>Đã đóng gói: <strong>{selected.packedQuantity}</strong> / {selected.requiredQuantity} • Còn lại: {selected.remainingQuantity}</span>
         </div>
         <p className="ui-muted-text">
-          Foundation hiện có HU create/content confirmation/close/nesting và quantity conservation. Lot/Serial canonical, split/merge/repack,
-          label printing, cartonization recommendation và Shipment ownership/loading chưa được bật.
+          Quản lý tạo kiện đóng gói, xác nhận hàng hóa vào kiện, niêm phong kiện, lồng ghép kiện (Pallet) và in nhãn vận chuyển.
         </p>
 
-        {canCreateHu&&['Open','InProgress'].includes(selected.status)&&<fieldset>
-          <legend>Tạo Handling Unit</legend>
+        {canCreateHu&&['Open','InProgress'].includes(selected.status)&&<div className="ui-subcard">
+          <div className="ui-subcard-title">Tạo kiện đóng gói</div>
           <div className="ui-inline-wrap">
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Loại HU
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Loại kiện đóng gói
               <select aria-label="Loại Handling Unit" value={huType} onChange={e=>setHuType(e.target.value)}>
-                <option value="Carton">Carton</option><option value="Tote">Tote</option><option value="Pallet">Pallet</option>
-                <option value="Container">Container</option><option value="Custom">Custom</option>
+                <option value="Carton">Thùng carton (Carton)</option><option value="Tote">Khay nhựa (Tote)</option><option value="Pallet">Pallet tiêu chuẩn (Pallet)</option>
+                <option value="Container">Thùng hàng lớn (Container)</option><option value="Custom">Tùy chỉnh (Custom)</option>
               </select>
             </label>
             <label style={{display:'flex',flexDirection:'column',gap:6}}>Mã/Barcode tùy chọn
@@ -256,19 +255,19 @@ export default function PackingSessions(){
             <button type="button" disabled={!!busy} onClick={()=>void mutate(
               `packing-create-hu-${selected.id}`,`/api/packing-sessions/${selected.id}/create-hu`,
               {type:huType,huCode:sanitizeScannerCode(huCode)||undefined,barcode:sanitizeScannerCode(huCode)||undefined,rowVersion:selected.rowVersion}
-            )}>Tạo HU</button>
+            )}>Tạo kiện</button>
           </div>
-        </fieldset>}
+        </div>}
 
         <div className="ui-stack">
-          {(selected.lines??[]).map(line=><fieldset key={line.pickingTaskLineId}>
-            <legend>{line.productCode} — {line.productName}</legend>
-            <p>Picked <strong>{line.pickedQuantity}</strong> • Packed {line.packedQuantity} • Còn {line.remainingQuantity}</p>
+          {(selected.lines??[]).map(line=><div className="ui-subcard" key={line.pickingTaskLineId}>
+            <div className="ui-subcard-title">{line.productCode} — {line.productName}</div>
+            <p>Đã lấy: <strong>{line.pickedQuantity}</strong> • Đã đóng gói: {line.packedQuantity} • Còn lại: {line.remainingQuantity}</p>
             {canExecute&&selected.status!=='Packed'&&selected.status!=='Closed'&&line.remainingQuantity>0&&<div className="ui-inline-wrap">
-              <label style={{display:'flex',flexDirection:'column',gap:6}}>HU đích
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Kiện đích
                 <select aria-label={`HU đích ${line.productCode}`} value={packForm[line.pickingTaskLineId]?.huId??''}
                   onChange={e=>setPackForm(v=>({...v,[line.pickingTaskLineId]:{...(v[line.pickingTaskLineId]??{barcode:'',quantity:''}),huId:e.target.value}}))}>
-                  <option value="">Chọn HU đang mở</option>
+                  <option value="">Chọn kiện đang mở</option>
                   {packableHus.map(hu=><option value={hu.id} key={hu.id}>{hu.huCode} ({hu.type})</option>)}
                 </select>
               </label>
@@ -284,51 +283,51 @@ export default function PackingSessions(){
                 onClick={()=>void mutate(
                   `packing-pack-${selected.id}-${line.pickingTaskLineId}`,`/api/packing-sessions/${selected.id}/pack`,
                   {handlingUnitId:Number(packForm[line.pickingTaskLineId]?.huId),pickingTaskLineId:line.pickingTaskLineId,productBarcode:sanitizeScannerCode(packForm[line.pickingTaskLineId]?.barcode??''),quantity:roundQty4(Number(packForm[line.pickingTaskLineId]?.quantity)),rowVersion:selected.rowVersion}
-                )}>Xác nhận Pack</button>
+                )}>Xác nhận đóng gói</button>
             </div>}
-          </fieldset>)}
+          </div>)}
         </div>
 
         <div className="ui-stack">
-          {(selected.handlingUnits??[]).map(hu=><fieldset key={hu.id}>
-            <legend>{hu.huCode} — {hu.type}</legend>
+          {(selected.handlingUnits??[]).map(hu=><div className="ui-subcard" key={hu.id}>
+            <div className="ui-subcard-title">{hu.huCode} — {hu.type}</div>
             <div className="ui-inline-wrap">
               <UiBadge tone={tone(hu.status)}>{huStateLabels[hu.status]??hu.status}</UiBadge>
               <span>Barcode: <strong>{hu.barcode}</strong></span>
               {hu.sscc&&<span>SSCC: <code>{hu.sscc}</code></span>}
               {hu.parentHandlingUnitCode&&<span>Trong HU: {hu.parentHandlingUnitCode}</span>}
-              <span>Content: {roundQty4(hu.contents.reduce((sum,item)=>sum+item.quantity,0))}</span>
+              <span>Số lượng trong kiện: {roundQty4(hu.contents.reduce((sum,item)=>sum+item.quantity,0))}</span>
             </div>
             {hu.contents.length>0&&<ul>{hu.contents.map(item=><li key={item.id}>{item.productCode}: {item.quantity}</li>)}</ul>}
 
             <div className="ui-inline-wrap">
-              <button type="button" className="ui-btn-secondary" onClick={()=>setLabelPreviewHu(hu)}>Xem / In nhãn HU</button>
+              <button type="button" className="ui-btn-secondary" onClick={()=>setLabelPreviewHu(hu)}>Xem / In nhãn kiện</button>
               {canExecute&&['Open','InUse'].includes(hu.status)&&hu.contents.length>0&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
                 `packing-close-hu-${selected.id}-${hu.id}`,`/api/packing-sessions/${selected.id}/handling-units/${hu.id}/close`,
                 {rowVersion:selected.rowVersion}
-              )}>Đóng HU</button>}
+              )}>Đóng kiện</button>}
               {canModifyHu&&['Open','InUse','Closed'].includes(hu.status)&&!hu.parentHandlingUnitId&&activeHus.some(parent=>parent.id!==hu.id&&['Open','InUse'].includes(parent.status))&&<>
-                <label style={{display:'flex',flexDirection:'column',gap:6}}>HU cha
+                <label style={{display:'flex',flexDirection:'column',gap:6}}>Kiện cha
                   <select aria-label={`HU cha ${hu.huCode}`} value={parents[hu.id]??''} onChange={e=>setParents(v=>({...v,[hu.id]:e.target.value}))}>
-                    <option value="">Chọn HU cha</option>
+                    <option value="">Chọn kiện cha</option>
                     {activeHus.filter(parent=>parent.id!==hu.id&&['Open','InUse'].includes(parent.status)).map(parent=><option key={parent.id} value={parent.id}>{parent.huCode}</option>)}
                   </select>
                 </label>
                 <button type="button" disabled={!!busy||!parents[hu.id]} onClick={()=>void mutate(
                   `hu-nest-${selected.id}-${hu.id}`,`/api/packing-sessions/${selected.id}/handling-units/${hu.id}/nest`,
                   {parentHandlingUnitId:Number(parents[hu.id]),rowVersion:selected.rowVersion}
-                )}>Lồng HU</button>
+                )}>Lồng kiện</button>
               </>}
               {canModifyHu&&hu.parentHandlingUnitId&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
                 `hu-unnest-${selected.id}-${hu.id}`,`/api/packing-sessions/${selected.id}/handling-units/${hu.id}/unnest`,
                 {rowVersion:selected.rowVersion}
-              )}>Tách khỏi HU cha</button>}
+              )}>Tách khỏi kiện cha</button>}
               {canModifyHu&&['Open','InUse'].includes(hu.status)&&hu.contents.length===0&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
                 `hu-cancel-${selected.id}-${hu.id}`,`/api/packing-sessions/${selected.id}/handling-units/${hu.id}/cancel`,
                 {rowVersion:selected.rowVersion}
               )}>Hủy HU rỗng</button>}
             </div>
-          </fieldset>)}
+          </div>)}
         </div>
 
         <div className="ui-inline-wrap">
@@ -370,28 +369,31 @@ export default function PackingSessions(){
       <UiCard title="Danh mục Đơn vị xử lý (HU Registry) & Trung tâm Nhãn Barcode/SSCC (HU-01..HU-04)">
         <p className="ui-muted-text">Tra cứu toàn bộ Pallet / Thùng / Khay theo kho, trạng thái phân cấp và in nhãn mã vạch / SSCC.</p>
         {huRegistry.length===0?<p className="ui-muted-text">Chưa có dữ liệu danh mục Handling Unit độc lập hoặc đang hiển thị theo Packing Session phía trên.</p>:<UiTableScroll>
-          <table aria-label="Danh mục Đơn vị xử lý HU Registry">
+          <table aria-label="Danh mục Đơn vị xử lý HU Registry" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>
               <tr>
-                <th>Mã HU</th>
-                <th>Loại</th>
-                <th>Barcode / SSCC</th>
-                <th>HU cha</th>
-                <th>Trạng thái</th>
-                <th>Tổng SL</th>
-                <th>Thao tác nhãn</th>
+                <th style={{ width: '28%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Mã kiện</th>
+                <th style={{ width: '28%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Mã vạch</th>
+                <th style={{ width: '22%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ width: '22%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Nhãn</th>
               </tr>
             </thead>
             <tbody>
               {huRegistry.map(item=><tr key={item.id}>
-                <td><strong>{item.huCode}</strong></td>
-                <td>{item.type}</td>
-                <td><code>{item.barcode}</code>{item.sscc?<><br/><small>SSCC: {item.sscc}</small></>:null}</td>
-                <td>{item.parentHandlingUnitCode||'—'}</td>
-                <td><UiBadge tone={tone(item.status)}>{huStateLabels[item.status]??item.status}</UiBadge></td>
-                <td>{roundQty4((item.contents??[]).reduce((sum,c)=>sum+c.quantity,0))}</td>
-                <td>
-                  <button type="button" className="ui-btn-secondary" onClick={()=>setLabelPreviewHu(item)}>Xem / In nhãn HU</button>
+                <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
+                  <strong style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 11 }}>{item.huCode}</strong>
+                  <span style={{ display: 'block', fontSize: 10.5, color: '#64748b' }}>{item.type}{item.parentHandlingUnitCode?` • ${item.parentHandlingUnitCode}`:''}</span>
+                </td>
+                <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
+                  <code style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 10.5 }}>{item.barcode}</code>
+                  {item.sscc?<small style={{ display: 'block', fontSize: 10, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>SSCC: {item.sscc}</small>:null}
+                </td>
+                <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
+                  <UiBadge tone={tone(item.status)}>{huStateLabels[item.status]??item.status}</UiBadge>
+                  <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>SL: {roundQty4((item.contents??[]).reduce((sum,c)=>sum+c.quantity,0))}</div>
+                </td>
+                <td style={{ padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+                  <button type="button" className="ui-btn-secondary" style={{ whiteSpace: 'nowrap', padding: '3px 6px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }} onClick={()=>setLabelPreviewHu(item)}>In nhãn</button>
                 </td>
               </tr>)}
             </tbody>

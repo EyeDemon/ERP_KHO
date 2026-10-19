@@ -165,9 +165,9 @@ export default function PutawayTasks(){
        {tasks.length===0?<p>Chưa có nhiệm vụ cất hàng phù hợp.</p>:<UiTableScroll><table className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
          <thead>
            <tr>
-             <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phiếu nhập</th>
-             <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
-             <th style={{ width: '28%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+             <th style={{ width: '30%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phiếu nhập</th>
+             <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+             <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
              <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
            </tr>
          </thead>
@@ -175,10 +175,10 @@ export default function PutawayTasks(){
            const sourceLocationCode=task.items?.[0]?.sourceLocationCode||'RECEIVING';
            const targetLocationCode='BIN-A01-01';
            return <tr key={task.id}>
-             <td style={{ padding: '6px 5px', fontSize: 11, verticalAlign: 'middle' }}>
+             <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                <button
                  type="button"
-                 style={{ whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'anywhere', padding: '3px 6px', minHeight: 26, fontSize: 11, lineHeight: 1.2, maxWidth: '100%' }}
+                 style={{ whiteSpace: 'nowrap', padding: '3px 5px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }}
                  onClick={()=>void detail(task.id)}
                >
                  {task.receiptCode}
@@ -187,11 +187,11 @@ export default function PutawayTasks(){
                  {task.warehouseName}
                </div>
              </td>
-             <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
+             <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
                <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLocationCode}</span>
                <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>→ {targetLocationCode}</span>
              </td>
-             <td style={{ padding: '6px 5px', fontSize: 10.5, verticalAlign: 'middle' }}>
+             <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
                <UiBadge tone={task.status==='Completed'?'success':task.status==='Exception'?'danger':task.status==='InProgress'?'warning':'neutral'}>
                  <span style={{ whiteSpace: 'normal', lineHeight: 1.2, fontSize: 10.5, display: 'inline-block', maxWidth: 'none', textAlign: 'center' }}>
                    {states[task.status]??'Không xác định'}
@@ -248,20 +248,26 @@ export default function PutawayTasks(){
        </div>
 
        <div className="ui-stack">
-         {selected.items.map(item=><fieldset key={item.id}>
-           <legend>{item.productCode} — {item.productName}</legend>
-           <div className="ui-inline-wrap">
-             <UiBadge>{inventory[item.inventoryStatus]??'Không xác định'}</UiBadge>
-             <UiBadge>Vị trí nguồn: {item.sourceLocationCode}</UiBadge>
-           </div>
-           <p>Cần cất: <strong>{item.requiredOperationQuantity} {item.operationUnitCode}</strong> ({item.requiredBaseQuantity} {item.baseUnitCode})</p>
-           <p>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>
-           {canExecute&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
-             <label style={{display:'flex',flexDirection:'column',gap:6}}>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
-             <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0.0001" step="0.0001" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:e.target.value===''?'':roundQty4(Number(e.target.value))}))}/></label>
-             <button disabled={!!busy||!destination[item.id]||!(Number(quantity[item.id])>0)} onClick={()=>void mutate(`move-${selected.id}-${item.id}`,`/api/putaway-tasks/${selected.id}/move`,{itemId:item.id,destinationLocationId:destination[item.id],quantity:roundQty4(Number(quantity[item.id])),unitCode:item.operationUnitCode,rowVersion:selected.rowVersion,...(scannedBin[item.id]?{destinationLocationBarcode:scannedBin[item.id]}:{}),...(scannedProduct[item.id]?{productBarcode:scannedProduct[item.id]}:{})})}>{busy===`move-${selected.id}-${item.id}`?'Đang hoàn thành...':'Xác nhận số lượng'}</button>
-           </div>}
-         </fieldset>)}
+         {selected.items.map(item=>{
+           const formatUnitLabel=(u?:string)=>(!u||u==='QA_UNIT'||u==='QA-PCS')?'THÙNG':u;
+           const opUnit=formatUnitLabel(item.operationUnitCode);
+           const baseUnit=formatUnitLabel(item.baseUnitCode);
+           const sameUnitAndQty=opUnit===baseUnit&&item.requiredOperationQuantity===item.requiredBaseQuantity;
+           return <div key={item.id} className="ui-subcard">
+             <div className="ui-subcard-title">{item.productCode} — {item.productName}</div>
+             <div className="ui-inline-wrap">
+               <UiBadge>{inventory[item.inventoryStatus]??'Không xác định'}</UiBadge>
+               <UiBadge>Vị trí nguồn: {item.sourceLocationCode}</UiBadge>
+             </div>
+             <p>Cần cất: <strong>{item.requiredOperationQuantity} {opUnit}</strong>{!sameUnitAndQty?` (${item.requiredBaseQuantity} ${baseUnit})`:''}</p>
+             <p>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>
+             {canExecute&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
+               <label style={{display:'flex',flexDirection:'column',gap:6}}>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
+               <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0.0001" step="0.0001" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:e.target.value===''?'':roundQty4(Number(e.target.value))}))}/></label>
+               <button disabled={!!busy||!destination[item.id]||!(Number(quantity[item.id])>0)} onClick={()=>void mutate(`move-${selected.id}-${item.id}`,`/api/putaway-tasks/${selected.id}/move`,{itemId:item.id,destinationLocationId:destination[item.id],quantity:roundQty4(Number(quantity[item.id])),unitCode:item.operationUnitCode,rowVersion:selected.rowVersion,...(scannedBin[item.id]?{destinationLocationBarcode:scannedBin[item.id]}:{}),...(scannedProduct[item.id]?{productBarcode:scannedProduct[item.id]}:{})})}>{busy===`move-${selected.id}-${item.id}`?'Đang hoàn thành...':'Xác nhận số lượng'}</button>
+             </div>}
+           </div>;
+         })}
        </div>
      </UiCard>}
    </div>

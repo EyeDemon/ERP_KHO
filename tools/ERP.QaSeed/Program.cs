@@ -330,8 +330,14 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     var unit = await context.Units.IgnoreQueryFilters().OrderBy(u => u.Id).FirstOrDefaultAsync(u => u.IsActive);
     if (unit is null)
     {
-        unit = new Unit { Code = "QA-PCS", Name = "QA Cái", DecimalPlaces = 0, IsActive = true };
+        unit = new Unit { Code = "THÙNG", Name = "Thùng", DecimalPlaces = 0, IsActive = true };
         context.Units.Add(unit);
+        await context.SaveChangesAsync();
+    }
+    else if (unit.Code is "QA_UNIT" or "QA-PCS")
+    {
+        unit.Code = "THÙNG";
+        unit.Name = "Thùng";
         await context.SaveChangesAsync();
     }
 
@@ -404,6 +410,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
 
     var putawayReceiptLine = putawayReceipt.Details.First();
+    putawayReceiptLine.OperationUnitCodeSnapshot = unit.Code;
+    putawayReceiptLine.BaseUnitCodeSnapshot = unit.Code;
     var receivingStock = await context.InventoryStocks.IgnoreQueryFilters()
         .FirstOrDefaultAsync(s =>
             s.WarehouseId == primaryWarehouse.Id &&
@@ -523,9 +531,14 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 MovedBaseQuantity = 0m
             });
         }
-        else if (item.MovedBaseQuantity >= item.RequiredBaseQuantity)
+        else
         {
-            item.MovedBaseQuantity = 0m;
+            item.OperationUnitCodeSnapshot = unit.Code;
+            item.BaseUnitCodeSnapshot = unit.Code;
+            if (item.MovedBaseQuantity >= item.RequiredBaseQuantity)
+            {
+                item.MovedBaseQuantity = 0m;
+            }
         }
 
         var stalePutawayTasks = await context.PutawayTasks.IgnoreQueryFilters()

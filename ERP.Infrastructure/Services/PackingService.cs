@@ -561,14 +561,14 @@ public sealed class PackingService(
         return new PackingSessionListDto
         {
             Id = session.Id,
-            SessionCode = session.SessionCode,
+            SessionCode = (session.SessionCode ?? string.Empty).Trim(),
             PickingTaskId = session.PickingTaskId,
-            PickingTaskCode = session.PickingTask.TaskCode,
-            SourceType = session.PickingTask.SourceType,
+            PickingTaskCode = (session.PickingTask.TaskCode ?? string.Empty).Trim(),
+            SourceType = (session.PickingTask.SourceType ?? string.Empty).Trim(),
             SourceId = session.PickingTask.SourceId,
-            SourceCode = session.PickingTask.SourceCode,
+            SourceCode = (session.PickingTask.SourceCode ?? string.Empty).Trim(),
             WarehouseId = session.WarehouseId,
-            WarehouseName = session.Warehouse.Name,
+            WarehouseName = (session.Warehouse.Name ?? string.Empty).Trim(),
             Status = session.Status.ToString(),
             RequiredQuantity = required,
             PackedQuantity = packed,
@@ -614,8 +614,8 @@ public sealed class PackingService(
                 {
                     PickingTaskLineId = line.Id,
                     ProductId = line.ProductId,
-                    ProductCode = line.Product.Code,
-                    ProductName = line.Product.Name,
+                    ProductCode = (line.Product.Code ?? string.Empty).Trim(),
+                    ProductName = (line.Product.Name ?? string.Empty).Trim(),
                     PickedQuantity = line.PickedQuantity,
                     PackedQuantity = packed,
                     RemainingQuantity = Math.Max(0m, line.PickedQuantity - packed)
@@ -628,13 +628,13 @@ public sealed class PackingService(
     private static HandlingUnitDto MapHandlingUnit(HandlingUnit hu) => new()
     {
         Id = hu.Id,
-        HuCode = hu.HuCode,
-        Barcode = hu.Barcode,
-        Sscc = hu.Sscc,
+        HuCode = (hu.HuCode ?? string.Empty).Trim(),
+        Barcode = (hu.Barcode ?? string.Empty).Trim(),
+        Sscc = hu.Sscc?.Trim(),
         WarehouseId = hu.WarehouseId,
         PackingSessionId = hu.PackingSessionId,
         ParentHandlingUnitId = hu.ParentHandlingUnitId,
-        ParentHandlingUnitCode = hu.ParentHandlingUnit?.HuCode,
+        ParentHandlingUnitCode = hu.ParentHandlingUnit?.HuCode?.Trim(),
         Type = hu.Type.ToString(),
         Status = hu.Status.ToString(),
         GrossWeightKg = hu.GrossWeightKg,
@@ -649,8 +649,8 @@ public sealed class PackingService(
             Id = x.Id,
             PickingTaskLineId = x.PickingTaskLineId,
             ProductId = x.ProductId,
-            ProductCode = x.Product.Code,
-            ProductName = x.Product.Name,
+            ProductCode = (x.Product.Code ?? string.Empty).Trim(),
+            ProductName = (x.Product.Name ?? string.Empty).Trim(),
             Quantity = x.Quantity,
             PackedAt = x.PackedAt
         }).ToList()

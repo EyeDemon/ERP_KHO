@@ -590,15 +590,15 @@ public sealed class PartnerDebtService(
     private static PartnerDebtInvoiceDto MapInvoice(PartnerDebtInvoice x) => new()
     {
         Id = x.Id,
-        Code = x.Code,
+        Code = (x.Code ?? string.Empty).Trim(),
         PartnerId = x.PartnerId,
-        PartnerCode = x.Partner?.Code ?? string.Empty,
-        PartnerName = x.Partner?.Name ?? string.Empty,
+        PartnerCode = (x.Partner?.Code ?? string.Empty).Trim(),
+        PartnerName = (x.Partner?.Name ?? string.Empty).Trim(),
         DebtType = x.DebtType.ToString(),
         SourceType = NormalizeSourceOrReferenceType(x.SourceType),
         SourceId = x.SourceId,
-        SourceCode = x.SourceCode,
-        Currency = x.Currency,
+        SourceCode = (x.SourceCode ?? string.Empty).Trim(),
+        Currency = string.IsNullOrWhiteSpace(x.Currency) ? "VND" : x.Currency.Trim().ToUpperInvariant(),
         SubTotalAmount = x.SubTotalAmount,
         TaxAmount = x.TaxAmount,
         TotalAmount = x.TotalAmount,
@@ -607,7 +607,7 @@ public sealed class PartnerDebtService(
         Status = x.Status.ToString(),
         IssuedAtUtc = x.IssuedAtUtc,
         DueDateUtc = x.DueDateUtc,
-        Note = x.Note,
+        Note = x.Note?.Trim(),
         RowVersion = Convert.ToBase64String(x.RowVersion)
     };
 
@@ -615,19 +615,19 @@ public sealed class PartnerDebtService(
     {
         Id = x.Id,
         PartnerId = x.PartnerId,
-        PartnerCode = x.Partner?.Code ?? string.Empty,
-        PartnerName = x.Partner?.Name ?? string.Empty,
+        PartnerCode = (x.Partner?.Code ?? string.Empty).Trim(),
+        PartnerName = (x.Partner?.Name ?? string.Empty).Trim(),
         InvoiceId = x.InvoiceId,
-        InvoiceCode = x.Invoice?.Code ?? string.Empty,
+        InvoiceCode = (x.Invoice?.Code ?? string.Empty).Trim(),
         DebtType = x.DebtType.ToString(),
         TransactionType = x.TransactionType.ToString(),
         AmountDelta = x.AmountDelta,
         BalanceAfter = x.BalanceAfter,
         ReferenceType = NormalizeSourceOrReferenceType(x.ReferenceType),
         ReferenceId = x.ReferenceId,
-        ReferenceCode = x.ReferenceCode,
+        ReferenceCode = (x.ReferenceCode ?? string.Empty).Trim(),
         PaymentMethod = string.IsNullOrWhiteSpace(x.PaymentMethod) ? null : x.PaymentMethod.Trim().ToUpperInvariant(),
-        Note = x.Note,
+        Note = x.Note?.Trim(),
         CreatedBy = x.CreatedBy,
         CreatedAtUtc = x.CreatedAtUtc
     };

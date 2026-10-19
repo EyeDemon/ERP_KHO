@@ -285,17 +285,59 @@
   gap: 6px;
 }
 
+.production-ui .ui-subcard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0;
+  background: #f8fafc;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.production-ui .ui-subcard-title {
+  display: block;
+  width: 100%;
+  float: none;
+  margin: 0;
+  padding: 0 0 6px 0;
+  border-bottom: 1px dashed #e2e8f0;
+  font-weight: 700;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
 .production-ui fieldset {
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius);
-  background: var(--ui-surface);
-  padding: var(--ui-space-4);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0;
+  background: #f8fafc;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .production-ui legend {
-  color: var(--ui-primary);
+  display: block;
+  width: 100%;
+  float: left;
+  margin: 0 0 8px 0;
+  padding: 0 0 6px 0;
+  border-bottom: 1px dashed #e2e8f0;
   font-weight: 700;
-  padding: 0 6px;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.production-ui fieldset > *:not(legend) {
+  clear: both;
 }
 
 .production-ui a {
@@ -339,12 +381,15 @@
 
 .production-ui .ui-page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--ui-space-4);
   min-width: 0;
+  max-width: 100%;
   width: 100%;
 }
 .production-ui .ui-page > * {
   min-width: 0;
+  max-width: 100%;
 }
 
 .production-ui .ui-page-header {
@@ -394,12 +439,14 @@
 
 .production-ui .ui-toolbar-group {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--ui-space-1);
 }
 
 .production-ui .ui-card {
   min-width: 0;
   max-width: 100%;
+  box-sizing: border-box;
   background: var(--ui-surface);
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius);
@@ -488,6 +535,7 @@
   min-width: 0;
   max-width: 100%;
   width: 100%;
+  box-sizing: border-box;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   border-radius: var(--ui-radius);
@@ -498,9 +546,9 @@
 .production-ui .ui-inline-wrap{display:flex;align-items:center;gap:var(--ui-space-2);flex-wrap:wrap}
 .production-ui .ui-inline-actions{display:flex;align-items:center;gap:var(--ui-space-2);flex-wrap:wrap}
 .production-ui .ui-auto-actions{margin-left:auto}
-.production-ui .ui-stack{display:grid;gap:var(--ui-space-2);min-width:0;max-width:100%}
+.production-ui .ui-stack{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--ui-space-2);min-width:0;max-width:100%}
 .production-ui .ui-stack>*,.production-ui .ui-card>*,.production-ui .ui-form-grid>*{min-width:0;max-width:100%}
-.production-ui .ui-form-grid{display:grid;gap:var(--ui-space-2);max-width:min(760px,100%);min-width:0}
+.production-ui .ui-form-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--ui-space-2);max-width:min(760px,100%);min-width:0}
 .production-ui :where(div, section):has(> table){min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
 .production-ui .ui-muted-text{color:var(--ui-muted);font-size:12px}
 .production-ui .ui-success-text{color:var(--ui-success);margin:0}

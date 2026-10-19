@@ -224,7 +224,7 @@ describe('InventoryReconciliation', () => {
 
     expect(await view.findByText('SKU-010')).toBeTruthy();
     expect(view.getByText('Lệch')).toBeTruthy();
-    expect(view.getByText('Mismatch trang hiện tại').previousSibling?.textContent).toBe('1');
+    expect(view.getByText('Lệch số dư trang hiện tại').previousSibling?.textContent).toBe('1');
     expect(view.getByText('Độ lệch đã xác định').previousSibling?.textContent).toBe('2');
   });
 
@@ -1198,7 +1198,7 @@ describe('InventoryReconciliation', () => {
     const view = render(<InventoryReconciliation />);
     expect(await view.findByText('QA-UNKNOWN')).toBeTruthy();
     expect(view.getAllByText('Chưa xác định').length).toBeGreaterThanOrEqual(3);
-    expect(view.getByText('Mismatch trang hiện tại').previousSibling?.textContent).toBe('0');
+    expect(view.getByText('Lệch số dư trang hiện tại').previousSibling?.textContent).toBe('0');
     expect(view.getByText('Chưa xác định trang hiện tại').previousSibling?.textContent).toBe('1');
     expect(view.getByText('Độ lệch đã xác định').previousSibling?.textContent).toBe('0');
     expect(view.getByText('Đổi trạng thái +0 / -4')).toBeTruthy();
