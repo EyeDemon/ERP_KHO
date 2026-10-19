@@ -401,7 +401,7 @@ export default function InventoryTraceability(){
       </form>
     </UiCard>
 
-    <UiCard title="Tổng quan Chuỗi Truy xuất Nguồn gốc Lô / Sê-ri / LPN (Genealogy & Traceability Summary — QR-01)">
+    <UiCard title="Tổng quan Chuỗi Truy xuất Nguồn gốc Lô / Sê-ri / Kiện hàng">
       <div className="ui-form-grid">
         <div>
           <strong>Nhóm tồn hiện tại & Tổng lượng thực tế</strong><br/>
@@ -416,17 +416,17 @@ export default function InventoryTraceability(){
           {result?.events.length ?? 0} sự kiện • {(result?.events ?? []).filter(item => item.transactionType === 'Reversal' || item.isReversed).length} giao dịch đảo/đã đảo
         </div>
         <div>
-          <strong>Chứng từ & Chuỗi kiện LPN/HU liên kết</strong><br/>
-          {(result?.relatedDocuments ?? []).length} chứng từ • {(result?.shipmentHuEvidence ?? []).length} chuỗi HU
+          <strong>Chứng từ & Chuỗi kiện hàng liên kết</strong><br/>
+          {(result?.relatedDocuments ?? []).length} chứng từ • {(result?.shipmentHuEvidence ?? []).length} chuỗi kiện hàng
         </div>
       </div>
       <div className="ui-inline-actions" style={{marginTop:8}}>
         <button type="button" disabled={recallSimulating} onClick={()=>void simulateRecallTree()}>
-          Truy vết Nhanh Cây Phả hệ Lô/Sê-ri & Khoanh vùng Thu hồi (INV-10, QR-05)
+          Truy vết Nhanh Cây Phả hệ Lô/Sê-ri & Khoanh vùng Thu hồi
         </button>
         {recallSimulation&&(
           <span>
-            Mã mô phỏng: <strong>{recallSimulation.simulationId}</strong> ({recallSimulation.query}) • recallContainmentReady = <strong>{String(recallSimulation.recallContainmentReady)}</strong>
+            Mã mô phỏng: <strong>{recallSimulation.simulationId}</strong> ({recallSimulation.query}) • Sẵn sàng khoanh vùng thu hồi: <strong>{recallSimulation.recallContainmentReady?'ĐÃ SẴN SÀNG':'CHƯA SẴN SÀNG'}</strong>
           </span>
         )}
       </div>
@@ -437,7 +437,7 @@ export default function InventoryTraceability(){
         {result.bucketsTruncated&&<p role="status" className="ui-muted-text">
           Chỉ hiển thị 500 nhóm tồn của trang hiện tại. Vẫn còn dữ liệu khác; chọn “Trang sau” hoặc lọc thêm theo kho, sản phẩm, lô, sê-ri.
         </p>}
-        <UiTableScroll><table aria-label="Nhóm tồn kho hiện tại phục vụ truy vết">
+        <UiTableScroll><table className="ui-table-compact" aria-label="Nhóm tồn kho hiện tại phục vụ truy vết">
           <thead><tr><th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Sê-ri</th><th>Tồn thực tế</th><th>Đã giữ</th></tr></thead>
           <tbody>{result.currentBuckets.length===0?<tr><td colSpan={6} className="ui-empty-cell">Không còn nhóm tồn kho hiện tại khớp điều kiện.</td></tr>:
             result.currentBuckets.map(x=><tr key={x.inventoryStockId}>
@@ -470,7 +470,7 @@ export default function InventoryTraceability(){
           {result.relatedDocumentsTruncated&&<p role="status" className="ui-muted-text">
             Chỉ hiển thị 100 chứng từ mới nhất trong phạm vi truy vết. Hãy chọn một kho hoặc lọc thêm sê-ri để thu hẹp kết quả.
           </p>}
-          <UiTableScroll><table aria-label="Chứng từ liên quan cùng lô hoặc sê-ri">
+          <UiTableScroll><table className="ui-table-compact" aria-label="Chứng từ liên quan cùng lô hoặc sê-ri">
             <thead><tr><th>Chứng từ</th><th>Kho</th><th>Sự kiện</th><th>Phát sinh đầu</th><th>Phát sinh cuối</th></tr></thead>
             <tbody>{!result.relatedDocuments?.length?
               <tr><td colSpan={5} className="ui-empty-cell">Chưa có chứng từ có giao dịch sổ cái khớp lô hoặc sê-ri trong phạm vi được phép.</td></tr>:
@@ -490,13 +490,13 @@ export default function InventoryTraceability(){
       {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
         <UiCard title="Phiếu nhập đã ghi sổ cùng lô / sê-ri">
           <p className="ui-muted-text">
-            Chỉ hiển thị phiếu nhập đã ghi sổ thực tế (IMPORT) khớp sản phẩm và lô/sê-ri trong kho được cấp quyền.
-            Số lượng là tổng nhập theo sổ cái tại mốc lịch sử, không chứng minh QC riêng từng lô hoặc nguồn trực tiếp của Shipment.
+            Chỉ hiển thị phiếu nhập đã ghi sổ thực tế khớp sản phẩm và lô/sê-ri trong kho được cấp quyền.
+            Số lượng là tổng nhập theo sổ cái tại mốc lịch sử, không chứng minh QC riêng từng lô hoặc nguồn trực tiếp của chuyến giao.
           </p>
           {result.receiptExposuresTruncated&&<p role="status" className="ui-muted-text">
             Đã đạt giới hạn 100 phiếu nhập; hãy chọn một kho hoặc thu hẹp lô/sê-ri để xem đầy đủ.
           </p>}
-          <UiTableScroll><table aria-label="Phiếu nhập đã ghi sổ theo lô hoặc sê-ri">
+          <UiTableScroll><table className="ui-table-compact" aria-label="Phiếu nhập đã ghi sổ theo lô hoặc sê-ri">
             <thead><tr><th>Mã phiếu nhập</th><th>Trạng thái</th><th>Lần ghi sổ cuối</th><th>Đã nhập</th><th>Giao dịch sổ cái</th></tr></thead>
             <tbody>{!result.receiptExposures?.length?
               <tr><td colSpan={5} className="ui-empty-cell">Không có phiếu nhập đã ghi sổ khớp danh tính hàng hóa trong phạm vi được phép.</td></tr>:
@@ -513,19 +513,19 @@ export default function InventoryTraceability(){
         </UiCard>}
 
       {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
-        <UiCard title="Shipment cần rà soát khi thu hồi">
+        <UiCard title="Chuyến giao hàng cần rà soát khi thu hồi">
           <p className="ui-muted-text">
-            Chỉ hiển thị chuyến hàng có giao dịch xuất giao thực tế (SHIP) khớp sản phẩm và lô/sê-ri.
+            Chỉ hiển thị chuyến hàng có giao dịch xuất giao thực tế khớp sản phẩm và lô/sê-ri.
             Số lượng là tổng đã xuất, chưa trừ hàng hoàn; trạng thái giao hàng có thể thay đổi sau mốc lịch sử.
             Danh sách này là dữ liệu hỗ trợ rà soát, không tự động thu hồi hoặc xác định người nhận cuối.
           </p>
           {result.shipmentExposuresTruncated&&<p role="status" className="ui-muted-text">
             Đã đạt giới hạn 100 Shipment; hãy chọn một kho hoặc thu hẹp điều kiện để xem đầy đủ.
           </p>}
-          <UiTableScroll><table aria-label="Shipment có giao dịch xuất giao cần rà soát">
-            <thead><tr><th>Mã Shipment</th><th>Trạng thái hiện tại</th><th>Xuất giao lúc</th><th>Đã xuất</th><th>Giao dịch sổ cái</th></tr></thead>
+          <UiTableScroll><table className="ui-table-compact" aria-label="Shipment có giao dịch xuất giao cần rà soát">
+            <thead><tr><th>Mã chuyến giao</th><th>Trạng thái hiện tại</th><th>Xuất giao lúc</th><th>Đã xuất</th><th>Giao dịch sổ cái</th></tr></thead>
             <tbody>{!result.shipmentExposures?.length?
-              <tr><td colSpan={5} className="ui-empty-cell">Không tìm thấy Shipment đã ghi nhận xuất giao trong phạm vi truy vết.</td></tr>:
+              <tr><td colSpan={5} className="ui-empty-cell">Không tìm thấy chuyến giao hàng đã ghi nhận xuất giao trong phạm vi truy vết.</td></tr>:
               result.shipmentExposures.map(shipment=>
                 <tr key={shipment.warehouseId+'-'+shipment.shipmentId}>
                   <td><strong>{shipment.shipmentCode}</strong><br/><small>#{shipment.shipmentId} • Kho #{shipment.warehouseId}</small></td>
@@ -540,19 +540,19 @@ export default function InventoryTraceability(){
 
 
       {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
-        <UiCard title="Liên kết Shipment → Packing → Picking đã ghi nhận">
+        <UiCard title="Liên kết Chuyến giao → Đóng gói → Lấy hàng đã ghi nhận">
           <p className="ui-muted-text">
-            Liên kết được đối chiếu trực tiếp theo Shipment, phiên đóng gói, dòng Picking và phân bổ tồn,
-            đồng thời bắt buộc có sự kiện xuất giao SHIP khớp vị trí, trạng thái và lô/sê-ri.
-            Số lượng bên dưới là đã Picking, không phải lượng đã giao; chưa chứng minh quan hệ đến phiếu nhập hoặc Handling Unit riêng.
+            Liên kết được đối chiếu trực tiếp theo chuyến giao, phiên đóng gói, dòng lấy hàng và phân bổ tồn,
+            đồng thời bắt buộc có sự kiện xuất giao khớp vị trí, trạng thái và lô/sê-ri.
+            Số lượng bên dưới là đã lấy hàng, không phải lượng đã giao; chưa chứng minh quan hệ đến phiếu nhập hoặc kiện hàng riêng.
           </p>
           {result.shipmentPickingEvidenceTruncated&&<p role="status" className="ui-muted-text">
             Chỉ hiển thị 100 dòng Picking liên kết đầu tiên; hãy giới hạn thêm kho hoặc lô/sê-ri để xem đầy đủ.
           </p>}
-          <UiTableScroll><table aria-label="Liên kết Shipment Packing Picking theo lô hoặc sê-ri">
-            <thead><tr><th>Shipment</th><th>Packing</th><th>Picking</th><th>Phân bổ / Vị trí</th><th>Đã Picking</th></tr></thead>
+          <UiTableScroll><table className="ui-table-compact" aria-label="Liên kết Shipment Packing Picking theo lô hoặc sê-ri">
+            <thead><tr><th>Chuyến giao</th><th>Đóng gói</th><th>Lấy hàng</th><th>Phân bổ / Vị trí</th><th>Đã lấy hàng</th></tr></thead>
             <tbody>{!result.shipmentPickingEvidence?.length?
-              <tr><td colSpan={5} className="ui-empty-cell">Chưa có dòng Picking được xác thực bằng sự kiện xuất giao trong phạm vi truy vết.</td></tr>:
+              <tr><td colSpan={5} className="ui-empty-cell">Chưa có dòng lấy hàng được xác thực bằng sự kiện xuất giao trong phạm vi truy vết.</td></tr>:
               result.shipmentPickingEvidence.map(link=>
                 <tr key={link.shipmentId+'-'+link.pickingTaskLineId}>
                   <td><strong>{link.shipmentCode}</strong><small> #{link.shipmentId}</small></td>
@@ -567,20 +567,20 @@ export default function InventoryTraceability(){
 
 
       {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
-        <UiCard title="Chuỗi kiện HU của Shipment đã xuất">
+        <UiCard title="Chuỗi kiện hàng của chuyến giao đã xuất">
           <p className="ui-muted-text">
-            Chỉ hiển thị kiện đã đóng hàng theo dòng Picking và nối tới HU gốc thực sự gắn Shipment.
-            Mỗi chuỗi được đối chiếu cùng giao dịch SHIP, sản phẩm, vị trí, trạng thái và lô/sê-ri trong kho được phép.
-            Cấu trúc HU là trạng thái hiện tại, còn giao dịch SHIP được cố định theo mốc lịch sử.
+            Chỉ hiển thị kiện đã đóng hàng theo dòng lấy hàng và nối tới kiện gốc thực sự gắn chuyến giao.
+            Mỗi chuỗi được đối chiếu cùng giao dịch xuất giao, sản phẩm, vị trí, trạng thái và lô/sê-ri trong kho được phép.
+            Cấu trúc kiện là trạng thái hiện tại, còn giao dịch xuất giao được cố định theo mốc lịch sử.
             Số lượng đã đóng không phải số lượng giao thành công hoặc hoàn trả.
           </p>
           {result.shipmentHuEvidenceTruncated&&<p role="status" className="ui-muted-text">
             Dữ liệu kiện HU có giới hạn truy vết (100 dòng, tối đa 16 cấp cha). Hãy thu hẹp kho/lô/sê-ri; không coi danh sách này là đầy đủ để ra quyết định thu hồi.
           </p>}
-          <UiTableScroll><table aria-label="Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri">
-            <thead><tr><th>Shipment</th><th>HU gốc</th><th>Chuỗi HU</th><th>Mã quét kiện chứa hàng</th><th>Dòng Picking</th><th>Đã đóng</th></tr></thead>
+          <UiTableScroll><table className="ui-table-compact" aria-label="Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri">
+            <thead><tr><th>Chuyến giao</th><th>Kiện gốc</th><th>Chuỗi kiện</th><th>Mã quét kiện chứa hàng</th><th>Dòng lấy hàng</th><th>Đã đóng gói</th></tr></thead>
             <tbody>{!result.shipmentHuEvidence?.length?
-              <tr><td colSpan={6} className="ui-empty-cell">Chưa xác minh được kiện HU gắn Shipment với sản phẩm/lô/sê-ri này.</td></tr>:
+              <tr><td colSpan={6} className="ui-empty-cell">Chưa xác minh được kiện hàng gắn chuyến giao với sản phẩm/lô/sê-ri này.</td></tr>:
               result.shipmentHuEvidence.map(hu=>
                 <tr key={hu.shipmentId+'-'+hu.contentHandlingUnitId+'-'+hu.pickingTaskLineId}>
                   <td>#{hu.shipmentId}</td>
@@ -596,18 +596,18 @@ export default function InventoryTraceability(){
 
 
       {form.productId&&(form.lotNumber.trim()||form.serialNumber.trim())&&!form.referenceType.trim()&&
-        <UiCard title="Phiếu xuất kho nguồn của Shipment">
+        <UiCard title="Phiếu xuất kho nguồn của chuyến giao">
           <p className="ui-muted-text">
-            Liên kết chứng từ thật: Shipment và Picking cùng tham chiếu phiếu xuất đã chuyển trạng thái xuất giao,
-            có dòng sản phẩm khớp và giao dịch SHIP trong kho được phép.
+            Liên kết chứng từ thật: chuyến giao và tác vụ lấy hàng cùng tham chiếu phiếu xuất đã chuyển trạng thái xuất giao,
+            có dòng sản phẩm khớp và giao dịch xuất giao trong kho được phép.
             Số lượng trên phiếu xuất tính theo sản phẩm, không phân chia theo lô/sê-ri;
             đây không phải bằng chứng lô hàng bắt nguồn từ phiếu nhập nào hoặc đã giao thành công.
           </p>
           {result.shipmentExportSourcesTruncated&&<p role="status" className="ui-muted-text">
             Danh sách chứng từ xuất nguồn chưa đầy đủ vì giới hạn 100 Shipment; hãy thu hẹp kho hoặc mã lô/sê-ri.
           </p>}
-          <UiTableScroll><table aria-label="Liên kết Shipment Picking với phiếu xuất kho nguồn">
-            <thead><tr><th>Shipment</th><th>Phiếu xuất nguồn</th><th>Picking</th><th>Phiếu đã xuất lúc</th><th>Số lượng sản phẩm trên phiếu</th></tr></thead>
+          <UiTableScroll><table className="ui-table-compact" aria-label="Liên kết Shipment Picking với phiếu xuất kho nguồn">
+            <thead><tr><th>Chuyến giao</th><th>Phiếu xuất nguồn</th><th>Tác vụ lấy hàng</th><th>Phiếu đã xuất lúc</th><th>Số lượng sản phẩm trên phiếu</th></tr></thead>
             <tbody>{!result.shipmentExportSources?.length?
               <tr><td colSpan={5} className="ui-empty-cell">Chưa xác minh được phiếu xuất kho nguồn phù hợp trong phạm vi truy vết.</td></tr>:
               result.shipmentExportSources.map(source=>
@@ -627,7 +627,7 @@ export default function InventoryTraceability(){
         {result.eventsTruncated&&<p role="status" className="ui-muted-text">
           Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; dùng “Sự kiện sau” để xem trang kế tiếp hoặc thu hẹp điều kiện tìm kiếm.
         </p>}
-        <UiTableScroll><table aria-label="Dòng thời gian sổ cái phục vụ truy vết">
+        <UiTableScroll><table className="ui-table-compact" aria-label="Dòng thời gian sổ cái phục vụ truy vết">
           <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Sản phẩm</th><th>Vị trí / Trạng thái</th><th>Lô / Sê-ri</th><th>Số lượng</th><th>Tham chiếu</th><th>Chuỗi đảo giao dịch</th><th>Người thực hiện / Ghi chú</th></tr></thead>
           <tbody>{result.events.length===0?<tr><td colSpan={9} className="ui-empty-cell">Không có sự kiện sổ cái khớp điều kiện.</td></tr>:
             result.events.map(x=><tr key={x.transactionId}>
@@ -637,7 +637,7 @@ export default function InventoryTraceability(){
               <td>{x.fromLocationCode&&x.toLocationCode?(x.fromLocationCode+' → '+x.toLocationCode):(x.locationCode??'—')}<br/><small>{x.fromInventoryStatus&&x.toInventoryStatus?(inventoryStatusLabel(x.fromInventoryStatus)+' → '+inventoryStatusLabel(x.toInventoryStatus)):inventoryStatusLabel(x.inventoryStatus)}</small></td>
               <td>{x.lotNumber??'—'} / {x.serialNumber??'—'}</td>
               <td>{x.quantity}</td>
-              <td>{x.referenceType?(x.referenceType+' #'+(x.referenceId??'—')):'—'}</td>
+              <td>{x.referenceType?(referenceTypeLabel(x.referenceType)+' #'+(x.referenceId??'—')):'—'}</td>
               <td>
                 {x.reversalOfTransactionId?<>Gốc #{x.reversalOfTransactionId}<br/></>:null}
                 {x.correctiveTransactionId?<>Hiệu chỉnh #{x.correctiveTransactionId}<br/></>:null}

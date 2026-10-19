@@ -71,7 +71,21 @@ namespace ERP.Infrastructure.Queries
                 projectedQuery = projectedQuery.Where(x => x.AvailableQuantity <= lowStockThreshold.Value);
             }
 
-            return await projectedQuery.ToListAsync();
+            var items = await projectedQuery.ToListAsync();
+            foreach (var item in items)
+            {
+                item.ProductCode = (item.ProductCode ?? string.Empty).Trim();
+                item.ProductName = (item.ProductName ?? string.Empty).Trim();
+                item.WarehouseName = (item.WarehouseName ?? string.Empty).Trim();
+                var rawUnit = (item.UnitName ?? string.Empty).Trim();
+                item.UnitName = string.IsNullOrWhiteSpace(rawUnit) ||
+                                string.Equals(rawUnit, "QA_UNIT", System.StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(rawUnit, "QA-PCS", System.StringComparison.OrdinalIgnoreCase)
+                    ? "THÙNG"
+                    : rawUnit;
+            }
+
+            return items;
         }
     }
 }

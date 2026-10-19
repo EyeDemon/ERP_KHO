@@ -35,7 +35,7 @@ describe('InventoryMovements',()=>{
   it('shows buckets read-only without movement permission',async()=>{
     const view=render(<InventoryMovements/>);
     expect(await view.findByText(/LOT-A/)).toBeTruthy();
-    expect(view.queryByText('Move')).toBeNull();
+    expect(view.queryByText('Di chuyển')).toBeNull();
   });
 
   it('posts internal move once and preserves idempotency key',async()=>{
@@ -43,12 +43,12 @@ describe('InventoryMovements',()=>{
     vi.mocked(apiClient.post).mockResolvedValue({data:{movementId:1}} as never);
     const view=render(<InventoryMovements/>);
     await view.findByText(/LOT-A/);
-    fireEvent.click(view.getByText('Move'));
+    fireEvent.click(view.getByText('Di chuyển'));
     await view.findByLabelText('Vị trí đích internal move');
     fireEvent.change(view.getByLabelText('Vị trí đích internal move'),{target:{value:'8'}});
     fireEvent.change(view.getByLabelText('Số lượng internal move'),{target:{value:'4'}});
     fireEvent.change(view.getByLabelText('Lý do internal move'),{target:{value:'Slotting optimization'}});
-    const button=view.getByText('Xác nhận Move');
+    const button=view.getByText('Xác nhận di chuyển');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/movements',{
@@ -62,12 +62,12 @@ describe('InventoryMovements',()=>{
     vi.mocked(apiClient.post).mockRejectedValue({response:{status:409,data:{code:'INV_STOCK_LOCKED',message:'Inventory bucket đang bị khóa bởi Inventory Lock.'}}});
     const view=render(<InventoryMovements/>);
     await view.findByText(/LOT-A/);
-    fireEvent.click(view.getByText('Move'));
+    fireEvent.click(view.getByText('Di chuyển'));
     await view.findByLabelText('Vị trí đích internal move');
     fireEvent.change(view.getByLabelText('Vị trí đích internal move'),{target:{value:'8'}});
     fireEvent.change(view.getByLabelText('Số lượng internal move'),{target:{value:'1'}});
     fireEvent.change(view.getByLabelText('Lý do internal move'),{target:{value:'Move blocked'}});
-    fireEvent.click(view.getByText('Xác nhận Move'));
+    fireEvent.click(view.getByText('Xác nhận di chuyển'));
     expect((await view.findByRole('alert')).textContent).toContain('khóa');
   });
 });

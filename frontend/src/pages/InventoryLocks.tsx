@@ -202,7 +202,7 @@ export default function InventoryLocks(){
             {showCreateForm?'Thu gọn biểu mẫu':'Mở biểu mẫu tạo mới'}
           </button>
         </div>
-        {showCreateForm&&<form onSubmit={create} className="ui-form-grid" aria-busy={busy}>
+        {showCreateForm&&<form onSubmit={create} className="ui-form-grid" style={{gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:12,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
           <UiToolbarField label="Loại khóa">
             <select value={form.lockType} onChange={e=>setForm(x=>({...x,lockType:e.target.value}))}>
               {types.map(x=><option key={x} value={x}>{lockTypeLabel(x)}</option>)}
@@ -238,13 +238,13 @@ export default function InventoryLocks(){
           <UiToolbarField label="Lý do">
             <input value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} required/>
           </UiToolbarField>
-          <button type="submit" disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
+          <button type="submit" style={{minHeight:40}} disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
         </form>}
         <p className="ui-muted-text">Giữ kiểm định chất lượng, giữ để điều tra và thu hồi lô hàng phải được mở thủ công; không tự hết hiệu lực.</p>
       </UiCard>}
 
-      {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng — QR-05">
-        <form onSubmit={submitRecallBlock} className="ui-form-grid" aria-busy={busy}>
+      {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng">
+        <form onSubmit={submitRecallBlock} className="ui-form-grid" style={{gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:12,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
           <UiToolbarField label="Kho thu hồi">
             <select aria-label="Kho thu hồi" value={recallForm.warehouseId} onChange={e=>setRecallForm(x=>({...x,warehouseId:e.target.value}))} required>
               <option value="">Chọn kho</option>
@@ -260,7 +260,7 @@ export default function InventoryLocks(){
           <UiToolbarField label="Lý do thu hồi lô">
             <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo thu hồi / bằng chứng kiểm định" required/>
           </UiToolbarField>
-          <button type="submit" disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
+          <button type="submit" style={{minHeight:40}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
         </form>
       </UiCard>}
 
@@ -276,7 +276,7 @@ export default function InventoryLocks(){
             </span>
           )}
         </div>
-        {loading?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
+        {loading&&locks.length===0?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
           <table className="ui-table-compact" aria-label="Danh sách khóa tồn kho">
             <thead><tr><th>Khóa</th><th>Phạm vi</th><th>Trạng thái</th><th>Lý do</th><th>Thời gian</th>{canManage&&<th>Thao tác</th>}</tr></thead>
             <tbody>{locks.length===0?<tr><td colSpan={canManage?6:5} className="ui-empty-cell">Chưa có khóa tồn kho.</td></tr>:
@@ -288,7 +288,7 @@ export default function InventoryLocks(){
                 <td><UiBadge tone={tone(item.status)}>{lockStatusLabel(item.status)}</UiBadge></td>
                 <td>{item.reason}{item.releaseReason&&<><br/><small>Lý do mở khóa: {item.releaseReason}</small></>}</td>
                 <td>{new Date(item.createdAt).toLocaleString('vi-VN')}<br/><small>{item.expiresAt?`Hết hiệu lực ${new Date(item.expiresAt).toLocaleString('vi-VN')}`:'Không tự hết hiệu lực'}</small></td>
-                {canManage&&<td>{item.status==='Active'&&<button type="button" onClick={()=>{setRelease(item);setReleaseReason('')}}>Mở khóa</button>}</td>}
+                {canManage&&<td>{item.status==='Active'?<button type="button" onClick={()=>{setRelease(item);setReleaseReason('')}}>Mở khóa</button>:'—'}</td>}
               </tr>)}
             </tbody>
           </table>

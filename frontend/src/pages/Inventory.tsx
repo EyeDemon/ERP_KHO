@@ -129,6 +129,24 @@ interface WarehouseOption {
   isActive: boolean;
 }
 
+const formatUnitName = (unit?: string | null) =>
+  !unit || unit === 'QA_UNIT' || unit === 'QA-PCS' ? 'THÙNG' : unit;
+
+const referenceTypeLabel = (value?: string | null) => ({
+  ImportReceipt: 'Phiếu nhập kho',
+  GoodsReceipt: 'Phiếu nhập kho',
+  Receipt: 'Phiếu nhập kho',
+  ExportReceipt: 'Phiếu xuất kho',
+  StockTransfer: 'Phiếu điều chuyển',
+  Stocktake: 'Phiếu kiểm kê',
+  Shipment: 'Chuyến giao hàng',
+  InventoryReversal: 'Phiếu đảo giao dịch',
+  InventoryAdjustment: 'Phiếu điều chỉnh',
+  InventoryMove: 'Phiếu di chuyển',
+  Return: 'Phiếu trả hàng',
+  PickTask: 'Tác vụ lấy hàng',
+}[value ?? ''] ?? value ?? '');
+
 const transactionTypeLabel = (value: string) => ({
   Import: 'Nhập kho',
   Export: 'Xuất kho',
@@ -535,11 +553,11 @@ const Inventory = () => {
       </form>
 
       {stockError && <p role="alert">{stockError}</p>}
-      {stockLoading ? (
+      {stockLoading && stocks.length === 0 ? (
         <p role="status">Đang tải...</p>
       ) : (
         <UiTableScroll>
-          <table aria-label="Tồn kho hiện tại" className="inventory-table-wide">
+          <table aria-label="Tồn kho hiện tại" className="ui-table-compact inventory-table-wide">
             <thead>
               <tr>
                 <th>Mã SP</th>
@@ -560,7 +578,7 @@ const Inventory = () => {
                   <tr key={item.productId + '-' + item.warehouseId + '-' + index}>
                     <td><strong>{item.productCode}</strong></td>
                     <td>{item.productName}</td>
-                    <td>{item.unitName}</td>
+                    <td>{formatUnitName(item.unitName)}</td>
                     <td>{item.warehouseName}</td>
                     <td className="inventory-numeric">{item.onHandQuantity}</td>
                     <td className="inventory-numeric">{item.reservedQuantity}</td>
@@ -632,7 +650,7 @@ const Inventory = () => {
       ) : (
         <>
           <UiTableScroll>
-            <table aria-label="Lịch sử giao dịch tồn kho">
+            <table aria-label="Lịch sử giao dịch tồn kho" className="ui-table-compact">
               <thead>
                 <tr>
                   <th>Ngày GD</th>
@@ -667,9 +685,9 @@ const Inventory = () => {
                         </td>
                         <td>{item.lotNumber || '—'}{item.serialNumber ? ` / ${item.serialNumber}` : ''}</td>
                         <td className={'inventory-numeric ' + quantityClass}>
-                          {item.quantity} {item.unitName}
+                          {item.quantity} {formatUnitName(item.unitName)}
                         </td>
-                        <td>{item.referenceType ? '[' + item.referenceType + '] #' + item.referenceId : ''}</td>
+                        <td>{item.referenceType ? '[' + referenceTypeLabel(item.referenceType) + '] #' + item.referenceId : '—'}</td>
                         <td>{item.note}</td>
                       </tr>
                     );
@@ -728,11 +746,11 @@ const Inventory = () => {
           </form>
 
           {inoutError && <p role="alert">{inoutError}</p>}
-          {inoutLoading ? (
+          {inoutLoading && !inoutReport ? (
             <p role="status">Đang tải...</p>
           ) : (
             <UiTableScroll>
-              <table aria-label="Báo cáo xuất nhập tồn">
+              <table aria-label="Báo cáo xuất nhập tồn" className="ui-table-compact">
                 <thead>
                   <tr>
                     <th>Mã SP</th>
@@ -753,7 +771,7 @@ const Inventory = () => {
                       <tr key={item.productId + '-' + item.warehouseId + '-' + index}>
                         <td><strong>{item.productCode}</strong></td>
                         <td>{item.productName}</td>
-                        <td>{item.unitName}</td>
+                        <td>{formatUnitName(item.unitName)}</td>
                         <td>{item.warehouseName}</td>
                         <td className="inventory-numeric">{item.openingQuantity}</td>
                         <td className="inventory-numeric">{item.inQuantity}</td>
@@ -788,7 +806,7 @@ const Inventory = () => {
     };
 
     return (
-      <UiCard title="Báo cáo Hạn dùng (FEFO) & Tuổi tồn kho (Aging)">
+      <UiCard title="Báo cáo Hạn dùng & Tuổi tồn kho">
         <form onSubmit={handleExpiryFilterSubmit}>
           <UiToolbar>
             <UiToolbarField label="Kho">
@@ -819,14 +837,16 @@ const Inventory = () => {
                 onChange={e => setExpiryFilter({ ...expiryFilter, nearExpiryDays: e.target.value })}
               />
             </UiToolbarField>
-            <label className="ui-checkbox-label">
-              <input
-                type="checkbox"
-                checked={expiryFilter.onlyLots}
-                onChange={e => setExpiryFilter({ ...expiryFilter, onlyLots: e.target.checked })}
-              />
-              Chỉ hiển thị dòng có Lô (Lot)
-            </label>
+            <UiToolbarField label="Phạm vi lô hàng">
+              <label className="ui-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={expiryFilter.onlyLots}
+                  onChange={e => setExpiryFilter({ ...expiryFilter, onlyLots: e.target.checked })}
+                />
+                Chỉ hiển thị dòng có Lô
+              </label>
+            </UiToolbarField>
             <div className="inventory-toolbar-actions">
               <button type="submit">Lọc Hạn Dùng & Tuổi Tồn</button>
             </div>
@@ -834,16 +854,16 @@ const Inventory = () => {
         </form>
 
         {expiryError && <p role="alert">{expiryError}</p>}
-        {expiryLoading ? (
+        {expiryLoading && expiryReport.length === 0 ? (
           <p role="status">Đang tải...</p>
         ) : (
           <UiTableScroll>
-            <table aria-label="Báo cáo hạn dùng và tuổi tồn" className="inventory-table-wide">
+            <table aria-label="Báo cáo hạn dùng và tuổi tồn" className="ui-table-compact inventory-table-wide">
               <thead>
                 <tr>
                   <th>Kho / Vị trí</th>
                   <th>Sản phẩm</th>
-                  <th>Lô (Lot)</th>
+                  <th>Mã lô</th>
                   <th>Trạng thái tồn</th>
                   <th>Ngày SX</th>
                   <th>Hạn sử dụng</th>
@@ -867,8 +887,8 @@ const Inventory = () => {
                       <td>{row.expiryDate ? new Date(row.expiryDate).toLocaleDateString('vi-VN') : '—'}</td>
                       <td>{expiryBadge(row.expiryStatus, row.daysToExpiry)}</td>
                       <td className="inventory-numeric">{row.ageDays}</td>
-                      <td className="inventory-numeric">{row.quantity} {row.unitName}</td>
-                      <td className="inventory-numeric inventory-available">{row.availableQuantity} {row.unitName}</td>
+                      <td className="inventory-numeric">{row.quantity} {formatUnitName(row.unitName)}</td>
+                      <td className="inventory-numeric inventory-available">{row.availableQuantity} {formatUnitName(row.unitName)}</td>
                     </tr>
                   ))
                 )}
@@ -882,14 +902,14 @@ const Inventory = () => {
 
   const renderAnalyticsTab = () => {
     const velocityBadge = (cls: string) => {
-      if (cls === 'FAST_MOVING') return <UiBadge tone="success">Luân chuyển nhanh (Fast)</UiBadge>;
-      if (cls === 'NORMAL_MOVING' || cls === 'NORMAL') return <UiBadge tone="neutral">Bình thường (Normal)</UiBadge>;
-      if (cls === 'DEAD_STOCK' || cls === 'NON_MOVING') return <UiBadge tone="danger">Tồn đọng / Không xuất (Dead Stock)</UiBadge>;
-      return <UiBadge tone="warning">Luân chuyển chậm (Slow)</UiBadge>;
+      if (cls === 'FAST_MOVING') return <UiBadge tone="success">Luân chuyển nhanh</UiBadge>;
+      if (cls === 'NORMAL_MOVING' || cls === 'NORMAL') return <UiBadge tone="neutral">Luân chuyển bình thường</UiBadge>;
+      if (cls === 'DEAD_STOCK' || cls === 'NON_MOVING') return <UiBadge tone="danger">Tồn đọng / Không xuất</UiBadge>;
+      return <UiBadge tone="warning">Luân chuyển chậm</UiBadge>;
     };
 
     return (
-      <UiCard title="Phân tích Hiệu suất SLA, Độ chính xác Kiểm kê & Vòng quay Tồn kho (RP-03, RP-05, RP-09)">
+      <UiCard title="Phân tích Hiệu suất Cam kết, Độ chính xác Kiểm kê & Vòng quay Tồn kho">
         <form onSubmit={handleAnalyticsFilterSubmit}>
           <UiToolbar>
             <UiToolbarField label="Kho">
@@ -913,7 +933,7 @@ const Inventory = () => {
               />
             </UiToolbarField>
             <div className="inventory-toolbar-actions">
-              <button type="submit">Tải phân tích KPI</button>
+              <button type="submit">Tải phân tích chỉ số</button>
             </div>
           </UiToolbar>
         </form>
@@ -924,26 +944,26 @@ const Inventory = () => {
         ) : (
           <div className="ui-stack">
             <div className="ui-grid-2">
-              <UiCard title={`Hiệu suất SLA Nhập / Xuất (${analyticsReport.windowDays} ngày qua — RP-03)`}>
+              <UiCard title={`Hiệu suất Nhập / Xuất (${analyticsReport.windowDays} ngày qua)`}>
                 <div className="ui-stack-xs">
                   <div><strong>Phiếu nhập hoàn tất:</strong> {analyticsReport.inboundOutboundSla.completedReceiptsCount} phiếu</div>
-                  <div><strong>Lead-time Nhập kho TB:</strong> {analyticsReport.inboundOutboundSla.avgInboundLeadTimeHours} giờ</div>
-                  <div><strong>Tồn đọng chờ cất hàng (Putaway Backlog):</strong> {analyticsReport.inboundOutboundSla.openPutawayBacklogCount} task</div>
+                  <div><strong>Thời gian xử lý Nhập kho TB:</strong> {analyticsReport.inboundOutboundSla.avgInboundLeadTimeHours} giờ</div>
+                  <div><strong>Tồn đọng chờ cất hàng:</strong> {analyticsReport.inboundOutboundSla.openPutawayBacklogCount} nhiệm vụ</div>
                   <hr />
-                  <div><strong>Phiếu xuất đã giao (Dispatched):</strong> {analyticsReport.inboundOutboundSla.dispatchedExportsCount} phiếu</div>
-                  <div><strong>Lead-time Xuất kho TB:</strong> {analyticsReport.inboundOutboundSla.avgOutboundLeadTimeHours} giờ</div>
-                  <div><strong>Tồn đọng chờ lấy hàng (Picking Backlog):</strong> {analyticsReport.inboundOutboundSla.openPickingBacklogCount} task</div>
+                  <div><strong>Phiếu xuất đã giao:</strong> {analyticsReport.inboundOutboundSla.dispatchedExportsCount} phiếu</div>
+                  <div><strong>Thời gian xử lý Xuất kho TB:</strong> {analyticsReport.inboundOutboundSla.avgOutboundLeadTimeHours} giờ</div>
+                  <div><strong>Tồn đọng chờ lấy hàng:</strong> {analyticsReport.inboundOutboundSla.openPickingBacklogCount} nhiệm vụ</div>
                 </div>
               </UiCard>
 
-              <UiCard title={`Độ chính xác Kiểm kê & Chênh lệch (${analyticsReport.windowDays} ngày qua — RP-05)`}>
+              <UiCard title={`Độ chính xác Kiểm kê & Chênh lệch (${analyticsReport.windowDays} ngày qua)`}>
                 <div className="ui-stack-xs">
                   <div><strong>Số đợt kiểm kê đã duyệt:</strong> {analyticsReport.stocktakeAccuracy.approvedStocktakesCount} đợt</div>
                   <div><strong>Tổng số dòng kiểm đếm:</strong> {analyticsReport.stocktakeAccuracy.totalLinesCounted} dòng</div>
                   <div><strong>Dòng khớp tuyệt đối:</strong> {analyticsReport.stocktakeAccuracy.exactMatchLinesCount} dòng</div>
                   <div><strong>Dòng có lệch kiểm kê:</strong> {analyticsReport.stocktakeAccuracy.varianceLinesCount} dòng</div>
                   <div>
-                    <strong>Tỷ lệ chính xác kiểm kê (Accuracy Rate):</strong>{' '}
+                    <strong>Tỷ lệ chính xác kiểm kê:</strong>{' '}
                     <UiBadge tone={analyticsReport.stocktakeAccuracy.accuracyRatePercent >= 98 ? 'success' : 'warning'}>
                       {analyticsReport.stocktakeAccuracy.accuracyRatePercent}%
                     </UiBadge>
@@ -953,9 +973,9 @@ const Inventory = () => {
               </UiCard>
             </div>
 
-            <UiCard title={`Bảng Vòng quay Tồn kho & Số ngày tồn (Days On Hand — RP-09)`}>
+            <UiCard title="Bảng Vòng quay Tồn kho & Số ngày tồn">
               <UiTableScroll>
-                <table aria-label="Bảng vòng quay tồn kho và số ngày tồn">
+                <table aria-label="Bảng vòng quay tồn kho và số ngày tồn" className="ui-table-compact">
                   <thead>
                     <tr>
                       <th>Mã SP</th>
@@ -964,20 +984,20 @@ const Inventory = () => {
                       <th className="inventory-numeric">Tồn hiện tại</th>
                       <th className="inventory-numeric">Nhập trong kỳ</th>
                       <th className="inventory-numeric">Xuất trong kỳ</th>
-                      <th className="inventory-numeric">Hệ số vòng quay (Turnover)</th>
-                      <th className="inventory-numeric">Số ngày tồn (DOH)</th>
+                      <th className="inventory-numeric">Hệ số vòng quay</th>
+                      <th className="inventory-numeric">Số ngày tồn</th>
                       <th>Phân nhóm tốc độ</th>
                     </tr>
                   </thead>
                   <tbody>
                     {analyticsReport.turnoverAndDaysOnHand.length === 0 ? (
-                      <tr><td colSpan={9} className="ui-empty-cell">Không có dữ liệu vòng quay SKU</td></tr>
+                      <tr><td colSpan={9} className="ui-empty-cell">Không có dữ liệu vòng quay sản phẩm</td></tr>
                     ) : (
                       analyticsReport.turnoverAndDaysOnHand.map(item => (
                         <tr key={item.productId}>
                           <td><strong>{item.productCode}</strong></td>
                           <td>{item.productName}</td>
-                          <td>{item.unitName}</td>
+                          <td>{formatUnitName(item.unitName)}</td>
                           <td className="inventory-numeric">{item.onHandQuantity}</td>
                           <td className="inventory-numeric">{item.periodInQuantity}</td>
                           <td className="inventory-numeric">{item.periodOutQuantity}</td>
@@ -992,51 +1012,51 @@ const Inventory = () => {
               </UiTableScroll>
             </UiCard>
 
-            <UiCard title="Hoạch định & Tối ưu hóa WMS Nâng cao: Phân loại ABC/XYZ, Tồn an toàn (Safety Stock), ATP/CTP & Cân bằng Mạng lưới (AX-01..AX-42)">
+            <UiCard title="Hoạch định & Tối ưu hóa Kho nâng cao: Phân loại ABC/XYZ, Tồn an toàn, Cam kết Giao hàng & Cân bằng Mạng lưới">
               <div className="ui-stack-sm">
                 <div className="ui-grid-2">
                   <div>
-                    <strong>Phân nhóm ABC/XYZ & Điểm đặt hàng lại (AX-28, AX-29, AX-34):</strong>
+                    <strong>Phân nhóm ABC/XYZ & Điểm đặt hàng lại:</strong>
                     <div className="ui-stack-xs">
                       <div>
                         • Nhóm <strong>A (Luân chuyển cao)</strong>:{' '}
-                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'FAST_MOVING').length} SKU
+                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'FAST_MOVING').length} mặt hàng
                       </div>
                       <div>
                         • Nhóm <strong>B (Luân chuyển vừa)</strong>:{' '}
-                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'NORMAL_MOVING' || x.velocityClass === 'NORMAL').length} SKU
+                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'NORMAL_MOVING' || x.velocityClass === 'NORMAL').length} mặt hàng
                       </div>
                       <div>
                         • Nhóm <strong>C / Z (Chậm & Tồn đọng)</strong>:{' '}
-                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass !== 'FAST_MOVING' && x.velocityClass !== 'NORMAL_MOVING' && x.velocityClass !== 'NORMAL').length} SKU
+                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass !== 'FAST_MOVING' && x.velocityClass !== 'NORMAL_MOVING' && x.velocityClass !== 'NORMAL').length} mặt hàng
                       </div>
                       <div>
-                        • Đề xuất bổ sung Tồn an toàn (Safety Stock &lt; 50):{' '}
-                        <strong>{analyticsReport.turnoverAndDaysOnHand.filter(x => x.onHandQuantity < 50).length} SKU</strong> cần tạo PO / Điều chuyển
+                        • Đề xuất bổ sung Tồn an toàn (&lt; 50):{' '}
+                        <strong>{analyticsReport.turnoverAndDaysOnHand.filter(x => x.onHandQuantity < 50).length} mặt hàng</strong> cần tạo đơn mua / điều chuyển
                       </div>
                     </div>
                   </div>
                   <div>
-                    <strong>Cam kết ATP / CTP, Cân bằng Mạng lưới & Quản trị Quyết định (AX-23, AX-24, AX-31, AX-42):</strong>
+                    <strong>Cam kết Giao hàng, Cân bằng Mạng lưới & Quản trị Quyết định:</strong>
                     <div className="ui-stack-xs">
                       <div>
-                        • Tổng lượng <strong>ATP (Available-to-Promise)</strong> khả dụng cam kết ngay:{' '}
-                        <strong>{analyticsReport.turnoverAndDaysOnHand.reduce((sum, x) => sum + x.onHandQuantity, 0)}</strong> đvt (Lead-time chuẩn: 24h)
+                        • Tổng lượng <strong>tồn khả dụng cam kết ngay</strong>:{' '}
+                        <strong>{analyticsReport.turnoverAndDaysOnHand.reduce((sum, x) => sum + x.onHandQuantity, 0)}</strong> đvt (Thời gian xử lý chuẩn: 24h)
                       </div>
                       <div>
-                        • Số kho đang hoạt động trong mạng lưới cân bằng tồn (Network Balancing):{' '}
+                        • Số kho đang hoạt động trong mạng lưới cân bằng tồn:{' '}
                         <strong>{warehouses.length} kho</strong>
                       </div>
                       <div>
-                        • Chính sách quyết định (<strong>AX-42 Human-in-the-Loop</strong>):{' '}
-                        <UiBadge tone="success">AX-2026.10-HUMAN-IN-THE-LOOP</UiBadge> — Mọi đề xuất Slotting, Mua hàng, Điều chuyển và Cân bằng mạng lưới chỉ mang tính khuyến nghị trên ảnh chụp bất biến; bắt buộc qua bước con người phê duyệt trước khi sinh chứng từ.
+                        • Chính sách quyết định (<strong>Phê duyệt con người</strong>):{' '}
+                        <UiBadge tone="success">ĐÃ KÍCH HOẠT PHÊ DUYỆT</UiBadge> — Mọi đề xuất sắp xếp vị trí, mua hàng, điều chuyển và cân bằng mạng lưới chỉ mang tính khuyến nghị trên ảnh chụp bất biến; bắt buộc qua bước con người phê duyệt trước khi sinh chứng từ.
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="ui-stack-xs" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle, #e2e8f0)' }}>
-                  <strong>Mô phỏng Giả định What-If (Demand Spike & Cân bằng Mạng lưới — AX-31, AX-41):</strong>
+                  <strong>Mô phỏng Giả định Biến động Cầu & Cân bằng Mạng lưới:</strong>
                   <div className="inventory-filter-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span>Hệ số biến động cầu:</span>
                     {[1.2, 1.5, 2.0].map((mult) => (
@@ -1068,16 +1088,16 @@ const Inventory = () => {
                             return;
                           }
                           setWhatIfResult(null);
-                          setAnalyticsError('Phản hồi mô phỏng kịch bản giả định What-If không hợp lệ từ máy chủ.');
+                          setAnalyticsError('Phản hồi mô phỏng kịch bản giả định không hợp lệ từ máy chủ.');
                         } catch {
                           setWhatIfResult(null);
-                          setAnalyticsError('Không thể chạy mô phỏng kịch bản giả định What-If.');
+                          setAnalyticsError('Không thể chạy mô phỏng kịch bản giả định.');
                         } finally {
                           setGovernanceBusy(false);
                         }
                       }}
                     >
-                      Chạy Mô phỏng What-If
+                      Chạy Mô phỏng Giả định
                     </button>
                     <button
                       type="button"
@@ -1114,13 +1134,13 @@ const Inventory = () => {
                           .finally(() => setGovernanceBusy(false));
                       }}
                     >
-                      Kiểm định Sổ đăng ký Chính sách Quyết định, Chấm điểm Rủi ro & Phát hiện Bất thường Cầu (AX-27..32, AX-35, AX-38, AX-42)
+                      Kiểm định Sổ đăng ký Chính sách Quyết định, Chấm điểm Rủi ro & Phát hiện Bất thường Cầu
                     </button>
                   </div>
                   {whatIfResult && (
                     <div role="status" aria-label="Kết quả mô phỏng kịch bản giả định What-If">
                       • Kết quả kịch bản <strong>{whatIfResult.demandMultiplier.toFixed(1)}x</strong>: Tồn khả dụng hiện tại{' '}
-                      <strong>{whatIfResult.totalAvailable}</strong> đvt vs Cầu kịch bản{' '}
+                      <strong>{whatIfResult.totalAvailable}</strong> đvt so với Cầu kịch bản{' '}
                       <strong>{whatIfResult.simulatedDemand}</strong> đvt → Chênh lệch dự kiến:{' '}
                       <strong>{whatIfResult.projectedNetBalance}</strong> đvt (
                       <UiBadge tone={whatIfResult.projectedNetBalance < 0 ? 'warning' : 'success'}>

@@ -176,11 +176,11 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
       </p>
       <div className="ui-inline-actions" style={{marginBottom:8}}>
         <button type="button" disabled={invariantVerifying} onClick={()=>void verifyBucketInvariants()}>
-          Kiểm định Bất biến 5 Nhóm Tồn kho & Quy tắc Chuyển trạng thái (INV-05, QR-03, QR-06)
+          Kiểm định Bất biến 5 Nhóm Tồn kho & Quy tắc Chuyển trạng thái
         </button>
         {invariantVerification&&(
           <span>
-            Mã kiểm định: <strong>{invariantVerification.verificationId}</strong> • fiveBucketEquationStatus = <strong>{invariantVerification.fiveBucketEquationStatus}</strong> • scrapApprovalGuard = <strong>{invariantVerification.scrapApprovalGuard}</strong>
+            Mã kiểm định: <strong>{invariantVerification.verificationId}</strong> • Cân bằng 5 nhóm tồn: <strong>{invariantVerification.fiveBucketEquationStatus}</strong> • Kiểm soát thanh hủy: <strong>{invariantVerification.scrapApprovalGuard}</strong>
           </span>
         )}
       </div>
@@ -202,18 +202,18 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
             </select>
           </UiToolbarField>
           <UiToolbarField label="Lô">
-            <input aria-label="Lọc mã lô" value={filters.lotNumber} onChange={e=>setFilters(x=>({...x,lotNumber:e.target.value}))} placeholder="LOT-..."/>
+            <input aria-label="Lọc mã lô" value={filters.lotNumber} onChange={e=>setFilters(x=>({...x,lotNumber:e.target.value}))} placeholder="LÔ-..."/>
           </UiToolbarField>
           <UiToolbarField label="Sê-ri">
-            <input aria-label="Lọc số sê-ri" value={filters.serialNumber} onChange={e=>setFilters(x=>({...x,serialNumber:e.target.value}))} placeholder="SER-..."/>
+            <input aria-label="Lọc số sê-ri" value={filters.serialNumber} onChange={e=>setFilters(x=>({...x,serialNumber:e.target.value}))} placeholder="SR-..."/>
           </UiToolbarField>
           <button type="submit">Lọc nhóm tồn</button>
         </UiToolbar>
       </form>
 
       {error&&<p role="alert">{error}</p>}
-      {loading?<p role="status">Đang tải nhóm tồn kho...</p>:<UiTableScroll>
-        <table aria-label="Nhóm tồn kho">
+      {loading&&buckets.length===0?<p role="status">Đang tải nhóm tồn kho...</p>:<UiTableScroll>
+        <table className="ui-table-compact" aria-label="Nhóm tồn kho">
           <thead><tr>
             <th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Hạn dùng</th><th>Sê-ri</th>
             <th>Điều kiện sử dụng</th><th className="inventory-numeric">Tồn thực tế</th><th className="inventory-numeric">Đã giữ</th><th className="inventory-numeric">Khả dụng</th>
@@ -248,7 +248,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
       </UiTableScroll>}
     </UiCard>
 
-    {selected&&canChange&&<UiCard title={`Đổi trạng thái • ${selected.productCode} • ${selected.status}`}>
+    {selected&&canChange&&<UiCard title={`Đổi trạng thái • ${selected.productCode} • ${inventoryStatusLabel(selected.status)}`}>
       <form onSubmit={submit} className="ui-form-grid">
         <p className="ui-muted-text">
           Nhóm tồn {selected.locationCode} • {selected.lotNumber||'không có lô'} • {selected.serialNumber||'không có sê-ri'}.
@@ -256,7 +256,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
         </p>
         <UiToolbarField label="Trạng thái đích"><select aria-label="Trạng thái đích" value={change.toStatus} onChange={e=>setChange(x=>({...x,toStatus:e.target.value}))} required>
           <option value="">Chọn trạng thái đích</option>
-          {statuses.filter(x=>x.code!==selected.status).map(x=><option key={x.code} value={x.code}>{x.code} — {x.name}</option>)}
+          {statuses.filter(x=>x.code!==selected.status).map(x=><option key={x.code} value={x.code}>{inventoryStatusLabel(x.code)}</option>)}
         </select></UiToolbarField>
         <UiToolbarField label="Số lượng"><input aria-label="Số lượng" type="number" min="0.0001" step="any" max={Math.max(0,selected.onHandQuantity-selected.reservedQuantity)} value={change.quantity} onChange={e=>setChange(x=>({...x,quantity:e.target.value}))} required/></UiToolbarField>
         <UiToolbarField label="Lý do"><input aria-label="Lý do" value={change.reason} onChange={e=>setChange(x=>({...x,reason:e.target.value}))} placeholder="Lý do / bằng chứng" required/></UiToolbarField>
@@ -267,18 +267,18 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
       </form>
     </UiCard>}
 
-    {dispositionBucket&&canChange&&<UiCard title={`Xử lý chất lượng / Thanh hủy (Disposition) • ${dispositionBucket.productCode} • ${dispositionBucket.status}`}>
+    {dispositionBucket&&canChange&&<UiCard title={`Xử lý chất lượng / Thanh hủy • ${dispositionBucket.productCode} • ${inventoryStatusLabel(dispositionBucket.status)}`}>
       <form onSubmit={submitDisposition} className="ui-form-grid">
         <p className="ui-muted-text">
           Nhóm tồn {dispositionBucket.locationCode} • {dispositionBucket.lotNumber||'không có lô'} • {dispositionBucket.serialNumber||'không có sê-ri'}.
           Tối đa chưa được giữ: {Math.max(0,dispositionBucket.onHandQuantity-dispositionBucket.reservedQuantity)}.
         </p>
         <UiToolbarField label="Quyết định xử lý"><select aria-label="Quyết định xử lý" value={disposition.action} onChange={e=>setDisposition(x=>({...x,action:e.target.value}))} required>
-          {!['EXPIRED','RECALL_BLOCKED'].includes(dispositionBucket.status)&&<option value="ReleaseToAvailable">Phát hành về Khả dụng (Release to AVAILABLE)</option>}
-          <option value="Scrap">Thanh hủy / Xuất hủy (Scrap - ghi sổ cái giảm tồn)</option>
+          {!['EXPIRED','RECALL_BLOCKED'].includes(dispositionBucket.status)&&<option value="ReleaseToAvailable">Phát hành về Khả dụng</option>}
+          <option value="Scrap">Thanh hủy / Xuất hủy (Ghi sổ cái giảm tồn)</option>
         </select></UiToolbarField>
         <UiToolbarField label="Số lượng xử lý"><input aria-label="Số lượng xử lý" type="number" min="0.0001" step="any" max={Math.max(0,dispositionBucket.onHandQuantity-dispositionBucket.reservedQuantity)} value={disposition.quantity} onChange={e=>setDisposition(x=>({...x,quantity:e.target.value}))} required/></UiToolbarField>
-        <UiToolbarField label="Biên bản / Lý do xử lý"><input aria-label="Biên bản / Lý do xử lý" value={disposition.reason} onChange={e=>setDisposition(x=>({...x,reason:e.target.value}))} placeholder="Số biên bản QC / lý do thanh hủy" required/></UiToolbarField>
+        <UiToolbarField label="Biên bản / Lý do xử lý"><input aria-label="Biên bản / Lý do xử lý" value={disposition.reason} onChange={e=>setDisposition(x=>({...x,reason:e.target.value}))} placeholder="Số biên bản kiểm định / lý do thanh hủy" required/></UiToolbarField>
         <div className="ui-inline-actions">
           <button type="submit" disabled={busy||!disposition.action||!disposition.reason.trim()}>Xác nhận xử lý</button>
           <button type="button" disabled={busy} onClick={()=>setDispositionBucket(null)}>Hủy</button>

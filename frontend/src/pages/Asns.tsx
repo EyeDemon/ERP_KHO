@@ -395,13 +395,13 @@ export default function Asns(){
             <div>
               <div className="ui-inline-wrap inbound-planning-summary"><strong>Dòng hàng dự kiến</strong><button type="button" onClick={()=>setLines(current=>[...current,emptyLine()])}>Thêm dòng</button></div>
               <div className="inbound-planning-lines">
-                {lines.map((line,index)=><div className="inbound-planning-line compact" key={index}>
+                {lines.map((line,index)=><div className="inbound-planning-line inbound-planning-line-grid compact" key={index}>
                   {purchaseOrderId?<label>Dòng đơn mua<select required value={line.purchaseOrderLineId} onChange={e=>changeLine(index,{purchaseOrderLineId:e.target.value?Number(e.target.value):''})}><option value="">Chọn dòng đơn mua</option>{poDetail?.lines.map(x=><option key={x.id} value={x.id}>{x.externalLineId} — {x.productCode} — còn dự kiến tối đa theo đơn mua</option>)}</select></label>:
                     <label>Sản phẩm<select required value={line.productId} onChange={e=>changeLine(index,{productId:e.target.value?Number(e.target.value):''})}><option value="">Chọn sản phẩm</option>{products.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>}
                   <label>Đơn vị<select required value={line.operationUnitId} onChange={e=>changeLine(index,{operationUnitId:e.target.value?Number(e.target.value):''})}><option value="">Chọn đơn vị</option>{productUnitOptions(products,line.productId).map(x=><option key={x.unitId} value={x.unitId}>{x.unitCode}</option>)}</select></label>
                   <label>Số lượng dự kiến<input required min="0" step="any" type="number" value={line.expectedQuantity} onChange={e=>changeLine(index,{expectedQuantity:e.target.value===''?'':Number(e.target.value)})}/></label>
                   <div><strong>{products.find(x=>x.id===line.productId)?.code||'Chưa chọn'}</strong><br/><small>{products.find(x=>x.id===line.productId)?.name||'Chọn nguồn dòng để xác định sản phẩm'}</small></div>
-                  <button type="button" disabled={lines.length===1} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}>Xóa</button>
+                  <button type="button" style={{ height: 38, alignSelf: 'end' }} disabled={lines.length===1} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}>Xóa</button>
                 </div>)}
               </div>
             </div>

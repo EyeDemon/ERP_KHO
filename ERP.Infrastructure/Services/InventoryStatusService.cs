@@ -23,8 +23,8 @@ public sealed class InventoryStatusService(
             .OrderBy(x => x.Id)
             .Select(x => new InventoryStatusDefinitionDto
             {
-                Code = x.Code,
-                Name = x.Name,
+                Code = x.Code.Trim(),
+                Name = x.Name.Trim(),
                 IsAvailable = x.IsAvailable,
                 IsReservable = x.IsReservable,
                 IsAllocatable = x.IsAllocatable,
@@ -80,13 +80,13 @@ public sealed class InventoryStatusService(
             {
                 InventoryStockId = x.Id,
                 ProductId = x.ProductId,
-                ProductCode = x.Product.Code,
-                ProductName = x.Product.Name,
+                ProductCode = x.Product.Code.Trim(),
+                ProductName = x.Product.Name.Trim(),
                 WarehouseId = x.WarehouseId,
-                WarehouseName = x.Warehouse.Name,
+                WarehouseName = x.Warehouse.Name.Trim(),
                 LocationId = x.LocationId ?? 0,
-                LocationCode = x.Location == null ? string.Empty : x.Location.Code,
-                Status = x.StatusDefinition.Code,
+                LocationCode = x.Location == null ? string.Empty : x.Location.Code.Trim(),
+                Status = x.StatusDefinition.Code.Trim(),
                 IsReservable = x.StatusDefinition.IsReservable &&
                                (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
                 IsAllocatable = x.StatusDefinition.IsAllocatable &&
@@ -96,11 +96,11 @@ public sealed class InventoryStatusService(
                 IsShippable = x.StatusDefinition.IsShippable &&
                               (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
                 LotId = x.LotId,
-                LotNumber = x.Lot == null ? null : x.Lot.LotNumber,
+                LotNumber = x.Lot == null ? null : x.Lot.LotNumber.Trim(),
                 ManufactureDate = x.Lot == null ? null : x.Lot.ManufactureDate,
                 ExpiryDate = x.Lot == null ? null : x.Lot.ExpiryDate,
                 SerialId = x.SerialId,
-                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
+                SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber.Trim(),
                 OnHandQuantity = x.Quantity,
                 ReservedQuantity = x.ReservedQuantity,
                 AvailableQuantity = x.StatusDefinition.IsAvailable &&
@@ -670,7 +670,7 @@ public sealed class InventoryStatusService(
                     WarehouseId = request.WarehouseId,
                     ProductId = request.ProductId,
                     LotId = lot.Id,
-                    LotNumber = lot.LotNumber,
+                    LotNumber = lot.LotNumber.Trim(),
                     AffectedBucketCount = affectedCount,
                     BlockedQuantity = totalBlocked,
                     InventoryLockId = recallLock.Id,

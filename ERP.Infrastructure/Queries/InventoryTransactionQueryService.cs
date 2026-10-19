@@ -146,6 +146,23 @@ namespace ERP.Infrastructure.Queries
             });
 
             var items = await projectedQuery.ToListAsync();
+            foreach (var item in items)
+            {
+                item.ProductCode = (item.ProductCode ?? string.Empty).Trim();
+                item.ProductName = (item.ProductName ?? string.Empty).Trim();
+                item.WarehouseName = (item.WarehouseName ?? string.Empty).Trim();
+                var rawUnit = (item.UnitName ?? string.Empty).Trim();
+                item.UnitName = string.IsNullOrWhiteSpace(rawUnit) ||
+                                string.Equals(rawUnit, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(rawUnit, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                    ? "THÙNG"
+                    : rawUnit;
+                item.LotNumber = item.LotNumber?.Trim();
+                item.SerialNumber = item.SerialNumber?.Trim();
+                item.ReferenceType = item.ReferenceType?.Trim();
+                item.CreatedByName = (item.CreatedByName ?? string.Empty).Trim();
+                item.Note = item.Note?.Trim();
+            }
 
             return new PagedResult<InventoryTransactionHistoryDto>
             {

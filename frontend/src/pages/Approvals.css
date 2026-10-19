@@ -120,45 +120,29 @@
 
   .approval-page .ui-table-scroll {
     overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
   }
 
-  .approval-page .ui-table {
-    display: block;
+  .approval-page table {
+    display: table;
+    table-layout: fixed;
     width: 100% !important;
     min-width: 0 !important;
+    max-width: 100% !important;
   }
 
-  .approval-page .ui-table thead {
-    display: none;
-  }
-
-  .approval-page .ui-table tbody {
-    display: grid;
-    gap: 10px;
-  }
-
-  .approval-page .ui-table tr {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-surface);
-  }
-
-  .approval-page .ui-table td {
-    display: block;
-    padding: 2px 0 !important;
-    border: 0 !important;
+  .approval-page th,
+  .approval-page td {
     min-width: 0;
-    text-align: left !important;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: normal !important;
     overflow-wrap: anywhere;
-  }
-
-  .approval-page .ui-table td:last-child {
-    grid-column: 1 / -1;
-    padding-top: 6px !important;
+    word-break: break-word;
+    padding: 6px 4px !important;
+    font-size: 12px;
   }
 }
+
 

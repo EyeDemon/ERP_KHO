@@ -557,6 +557,8 @@
 .production-ui .ui-inline{display:flex;align-items:center;gap:var(--ui-space-2)}
 .production-ui .ui-inline-wrap{display:flex;align-items:center;gap:var(--ui-space-2);flex-wrap:wrap}
 .production-ui .ui-inline-actions{display:flex;align-items:center;gap:var(--ui-space-2);flex-wrap:wrap}
+.production-ui .ui-inline-actions:has(.ui-toolbar-field){align-items:flex-end}
+.production-ui .ui-toolbar button,.production-ui .ui-inline-actions:has(.ui-toolbar-field) button{min-height:40px}
 .production-ui .ui-auto-actions{margin-left:auto}
 .production-ui .ui-stack{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--ui-space-2);min-width:0;max-width:100%}
 .production-ui .ui-stack>*,.production-ui .ui-card>*,.production-ui .ui-form-grid>*{min-width:0;max-width:100%}

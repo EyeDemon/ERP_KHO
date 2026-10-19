@@ -295,7 +295,9 @@ export default function InventoryReversals(){
               </option>)}
           </select>
         </UiToolbarField>
-        <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do / bằng chứng bắt buộc (tối đa 400 ký tự)" maxLength={400} required/>
+        <UiToolbarField label="Lý do đảo giao dịch">
+          <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do / bằng chứng bắt buộc (tối đa 400 ký tự)" maxLength={400} required/>
+        </UiToolbarField>
         <div className="ui-inline-actions">
           <button type="submit" disabled={busy||!reason.trim()||!reasonCode||reversalReasons.length===0}>Xác nhận đảo giao dịch</button>
           <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>

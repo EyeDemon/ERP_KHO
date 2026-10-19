@@ -561,10 +561,10 @@ export default function Approvals() {
                   {data.items.map(item => (
                     <tr key={`${item.documentType}-${item.documentId}`}>
                       <td>{documentLabels[item.documentType] || 'Chứng từ'}</td>
-                      <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{item.documentCode}</strong></td>
+                      <td className="ui-cell-nowrap"><strong style={{ whiteSpace: 'nowrap' }}>{item.documentCode}</strong></td>
                       <td>{item.warehouseName}{item.destinationWarehouseName && ` → ${item.destinationWarehouseName}`}</td>
                       <td>{item.creatorName}</td>
-                      <td title={`UTC: ${item.requestedAtUtc}`}>{new Date(item.requestedAtUtc).toLocaleString()}</td>
+                      <td title={`UTC: ${item.requestedAtUtc}`}>{new Date(item.requestedAtUtc).toLocaleString('vi-VN')}</td>
                       <td className="approval-duration">{waitingText(item.waitingMinutes)}</td>
                       <td>
                         {item.slaStatus && (
@@ -707,7 +707,7 @@ export default function Approvals() {
                     {history.map(item => (
                       <li key={item.id}>
                         <strong>{approvalDisplayAction(item.displayAction)}</strong>
-                        {' · '}{item.actorName}{' · '}{new Date(item.timestampUtc).toLocaleString()}
+                        {' · '}{item.actorName}{' · '}{new Date(item.timestampUtc).toLocaleString('vi-VN')}
                         <div>
                           {stateLabels[item.oldState || ''] || 'Không áp dụng'} →{' '}
                           {stateLabels[item.newState || ''] || 'Không áp dụng'}

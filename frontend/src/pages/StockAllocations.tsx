@@ -38,6 +38,29 @@ const toneOf=(status:string):'neutral'|'success'|'warning'|'danger'=> {
   return 'neutral';
 };
 
+const allocationStatusLabel=(status:string)=>({
+  Active:'Đang hiệu lực',
+  Allocated:'Đã phân bổ',
+  Picking:'Đang lấy hàng',
+  Picked:'Đã lấy hàng',
+  Consumed:'Đã xuất kho',
+  Released:'Đã giải phóng',
+  Reallocated:'Đã phân bổ lại',
+}[status]??status);
+
+const strategyLabel=(strategy:string)=>({
+  LocationOrder:'Thứ tự vị trí',
+  Manual:'Thủ công',
+  FEFO:'FEFO (Hết hạn trước)',
+  FIFO:'FIFO (Nhập trước)',
+}[strategy]??strategy);
+
+const sourceTypeLabel=(sourceType:string)=>({
+  ExportReceipt:'Phiếu xuất kho',
+  SalesOrder:'Đơn bán hàng',
+  StockTransfer:'Phiếu điều chuyển',
+}[sourceType]??sourceType);
+
 export default function StockAllocations(){
   const canCreate=usePermission('allocation.create');
   const canRelease=usePermission('allocation.release');
@@ -94,7 +117,7 @@ export default function StockAllocations(){
     try{
       const response=await apiClient.get('/api/inventory/allocations',{params:{page,pageSize:20,status:status||undefined}});
       setData(response.data);
-    }catch(failure){setError(messageOf(failure,'Không thể tải danh sách Allocation.'))}
+    }catch(failure){setError(messageOf(failure,'Không thể tải danh sách phân bổ vị trí.'))}
     finally{setLoading(false)}
   },[status]);
 
@@ -105,7 +128,7 @@ export default function StockAllocations(){
       const items=response.data as AllocatableReservation[];
       setReservations(items);
       setSelectedReservationId(current=>current&&items.some(item=>item.reservationId===current)?current:(items[0]?.reservationId??''));
-    }catch(failure){setError(messageOf(failure,'Không thể tải reservation có thể Allocation.'))}
+    }catch(failure){setError(messageOf(failure,'Không thể tải danh sách giữ hàng có thể phân bổ.'))}
     finally{setReferenceLoading(false)}
   },[]);
 
@@ -116,7 +139,7 @@ export default function StockAllocations(){
     let active=true;setReferenceLoading(true);
     apiClient.get('/api/inventory/allocations/candidates',{params:{reservationId:selectedReservationId}})
       .then(response=>{if(active){setCandidates(response.data);setLocationId('')}})
-      .catch(failure=>{if(active)setError(messageOf(failure,'Không thể tải vị trí có thể Allocation.'))})
+      .catch(failure=>{if(active)setError(messageOf(failure,'Không thể tải vị trí có thể phân bổ.'))})
       .finally(()=>{if(active)setReferenceLoading(false)});
     return()=>{active=false};
   },[selectedReservationId]);
@@ -128,9 +151,9 @@ export default function StockAllocations(){
     if(submitting.current||!selectedReservation)return;
     const parsed=Number(quantity);
     if(!Number.isFinite(parsed)||parsed<=0||parsed>selectedReservation.allocatableQuantity){
-      setError('Số lượng Allocation phải lớn hơn 0 và không vượt phần reservation còn có thể phân bổ.');return;
+      setError('Số lượng phân bổ phải lớn hơn 0 và không vượt phần giữ hàng còn có thể phân bổ.');return;
     }
-    if(manual&&!locationId){setError('Hãy chọn vị trí khi Allocation thủ công.');return}
+    if(manual&&!locationId){setError('Hãy chọn vị trí khi phân bổ thủ công.');return}
     submitting.current=true;setBusy(true);setError('');
     const logical=`allocation:${manual?'manual':'auto'}:${selectedReservation.reservationId}:${parsed}:${manual?locationId:'auto'}`;
     try{
@@ -138,7 +161,7 @@ export default function StockAllocations(){
         reservationId:selectedReservation.reservationId,quantity:parsed,locationId:manual?locationId:null,
       },{headers:idempotencyHeaders(logical)});
       completeIdempotentAction(logical);await refresh();
-    }catch(failure){setError(messageOf(failure,'Không thể tạo Allocation.'))}
+    }catch(failure){setError(messageOf(failure,'Không thể tạo phân bổ vị trí.'))}
     finally{submitting.current=false;setBusy(false)}
   };
 
@@ -165,7 +188,7 @@ export default function StockAllocations(){
           {locationId:actionLocationId||null,reason:cleaned},{headers:idempotencyHeaders(logical)});
       }
       completeIdempotentAction(logical);setAction(null);setReason('');setActionLocationId('');await refresh();
-    }catch(failure){setError(messageOf(failure,action.kind==='release'?'Không thể giải phóng Allocation.':'Không thể phân bổ lại Allocation.'))}
+    }catch(failure){setError(messageOf(failure,action.kind==='release'?'Không thể giải phóng phân bổ.':'Không thể phân bổ lại vị trí.'))}
     finally{submitting.current=false;setBusy(false)}
   };
 
@@ -176,42 +199,42 @@ export default function StockAllocations(){
   const totalUnallocatedQuantity=reservations.reduce((sum,item)=>sum+item.allocatableQuantity,0);
 
   return <UiPage>
-    <UiPageHeader eyebrow="Outbound" title="Allocation theo vị trí"
-      description="Gắn phần reservation đã giữ vào vị trí pickable cụ thể. Allocation không làm giảm Available lần thứ hai; OnHand chỉ thay đổi khi dispatch/consume."
+    <UiPageHeader eyebrow="Xuất kho" title="Phân bổ tồn kho theo vị trí"
+      description="Gắn phần giữ hàng vào vị trí lấy hàng cụ thể. Phân bổ không làm giảm tồn khả dụng lần thứ hai; tồn thực tế chỉ thay đổi khi xuất giao."
       actions={<button type="button" disabled={loading||referenceLoading||busy} onClick={()=>void refresh()}><RefreshCw size={16} aria-hidden="true"/> Làm mới</button>}
     />
     {error&&<p role="alert">{error}</p>}
     <UiMetricGrid>
-      <UiMetric value={data.totalRecords} label="Allocation phù hợp"/>
-      <UiMetric value={activeQuantity} label="Qty đang cam kết trên trang"/>
-      <UiMetric value={reservations.length} label="Reservation còn có thể Allocation"/>
+      <UiMetric value={data.totalRecords} label="Phân bổ phù hợp"/>
+      <UiMetric value={activeQuantity} label="SL đang cam kết trên trang"/>
+      <UiMetric value={reservations.length} label="Giữ hàng còn có thể phân bổ"/>
     </UiMetricGrid>
 
-    <UiCard title="Tổng quan Phân bổ Tồn kho theo Vị trí & Cam kết Chưa phân bổ (Allocation & Bin Coverage — OUT-03)">
+    <UiCard title="Tổng quan Phân bổ Tồn kho theo Vị trí & Cam kết Chưa phân bổ">
       <UiMetricGrid>
-        <UiMetric value={activeAllocationsCount} label="Allocation đang hiệu lực / soạn hàng"/>
-        <UiMetric value={unallocatedReservationCount} label="Reservation chưa phân bổ hết"/>
+        <UiMetric value={activeAllocationsCount} label="Phân bổ đang hiệu lực / soạn hàng"/>
+        <UiMetric value={unallocatedReservationCount} label="Giữ hàng chưa phân bổ hết"/>
         <UiMetric value={totalUnallocatedQuantity} label="Tổng lượng cam kết chờ phân bổ vị trí"/>
       </UiMetricGrid>
       <div className="ui-inline-actions" style={{marginTop:8}}>
         <button type="button" disabled={fefoBusy||busy} onClick={()=>void verifyFefoCompliance()}>
-          Kiểm định Tuân thủ Phân bổ FEFO/FIFO theo Vị trí (OUT-03)
+          Kiểm định Tuân thủ Phân bổ FEFO/FIFO theo Vị trí
         </button>
         {fefoVerification&&(
           <UiBadge tone="success">
-            {fefoVerification.verificationId} • {fefoVerification.fefoComplianceStatus}
+            {fefoVerification.verificationId} • {fefoVerification.fefoComplianceStatus==='VERIFIED'?'ĐÃ XÁC MINH':fefoVerification.fefoComplianceStatus}
           </UiBadge>
         )}
       </div>
     </UiCard>
 
-    {canCreate&&<UiCard title="Tạo Allocation">
-      <p className="ui-muted-text">Tự động hiện dùng thứ tự Location ổn định. FEFO/FIFO, Lot, Serial và Owner chưa được bật trong foundation này.</p>
+    {canCreate&&<UiCard title="Tạo phân bổ vị trí">
+      <p className="ui-muted-text">Chế độ tự động hiện dùng thứ tự vị trí ổn định. Quy tắc FEFO/FIFO, Lô, Sê-ri và Chủ sở hữu được kiểm soát theo cấu hình kho.</p>
       <UiToolbar>
-        <UiToolbarField label="Reservation">
+        <UiToolbarField label="Phiếu giữ hàng">
           <select aria-label="Chọn reservation để Allocation" value={selectedReservationId} disabled={referenceLoading||busy}
             onChange={event=>setSelectedReservationId(event.target.value?Number(event.target.value):'')}>
-            <option value="">Chọn reservation</option>
+            <option value="">Chọn phiếu giữ hàng</option>
             {reservations.map(item=><option key={item.reservationId} value={item.reservationId}>{item.reservationCode} • {item.productCode} • còn {item.allocatableQuantity}</option>)}
           </select>
         </UiToolbarField>
@@ -231,7 +254,7 @@ export default function StockAllocations(){
       </UiToolbar>
       {selectedReservation&&<p className="ui-muted-text" role="status">
         {selectedReservation.reservationCode} • {selectedReservation.warehouseName} • {selectedReservation.productCode} – {selectedReservation.productName}
-        {' '}• Reserved {selectedReservation.reservedQuantity} • Đã Allocation {selectedReservation.allocatedQuantity}
+        {' '}• Đã giữ {selectedReservation.reservedQuantity} • Đã phân bổ {selectedReservation.allocatedQuantity}
         {' '}• Còn {selectedReservation.allocatableQuantity} • Hết hạn {new Date(selectedReservation.expiresAt).toLocaleString('vi-VN')}
       </p>}
     </UiCard>}
@@ -240,24 +263,24 @@ export default function StockAllocations(){
       <UiToolbarField label="Trạng thái">
         <select aria-label="Lọc trạng thái Allocation" value={status} onChange={event=>setStatus(event.target.value)}>
           <option value="">Tất cả</option>
-          {['Active','Picking','Picked','Consumed','Released','Reallocated'].map(value=><option key={value} value={value}>{value}</option>)}
+          {['Active','Picking','Picked','Consumed','Released','Reallocated'].map(value=><option key={value} value={value}>{allocationStatusLabel(value)}</option>)}
         </select>
       </UiToolbarField>
       <div className="ui-muted-text ui-auto-actions">Trang {data.pageIndex}/{pages} • {data.totalRecords} bản ghi</div>
     </UiToolbar>
 
-    <UiCard title="Danh sách Allocation">
-      <UiTableScroll><table aria-label="Danh sách Allocation">
-        <thead><tr><th>Mã Allocation</th><th>Reservation / nguồn</th><th>Sản phẩm</th><th>Kho / vị trí</th><th>Qty</th><th>Chiến lược</th><th>Trạng thái</th><th>Lý do chọn</th>{(canRelease||canReallocate)&&<th>Thao tác</th>}</tr></thead>
+    <UiCard title="Danh sách phân bổ vị trí">
+      <UiTableScroll><table className="ui-table-compact" aria-label="Danh sách Allocation">
+        <thead><tr><th>Mã phân bổ</th><th>Giữ hàng / Nguồn</th><th>Sản phẩm</th><th>Kho / Vị trí</th><th>SL</th><th>Chiến lược</th><th>Trạng thái</th><th>Lý do chọn</th>{(canRelease||canReallocate)&&<th>Thao tác</th>}</tr></thead>
         <tbody>
-          {loading?<tr><td className="ui-empty-cell" colSpan={(canRelease||canReallocate)?9:8}>Đang tải...</td></tr>:
-          data.items.length===0?<tr><td className="ui-empty-cell" colSpan={(canRelease||canReallocate)?9:8}>Không có Allocation phù hợp.</td></tr>:
+          {loading&&data.items.length===0?<tr><td className="ui-empty-cell" colSpan={(canRelease||canReallocate)?9:8}>Đang tải...</td></tr>:
+          data.items.length===0?<tr><td className="ui-empty-cell" colSpan={(canRelease||canReallocate)?9:8}>Không có phân bổ vị trí phù hợp.</td></tr>:
           data.items.map(item=><tr key={item.id}>
             <td><strong>{item.allocationCode}</strong><div className="ui-muted-text">{new Date(item.allocatedAt).toLocaleString('vi-VN')}</div></td>
-            <td>{item.reservationCode}<div className="ui-muted-text">{item.sourceType}{item.sourceCode?` / ${item.sourceCode}`:''}</div></td>
+            <td>{item.reservationCode}<div className="ui-muted-text">{sourceTypeLabel(item.sourceType)}{item.sourceCode?` / ${item.sourceCode}`:''}</div></td>
             <td>{item.productCode} – {item.productName}</td>
             <td>{item.warehouseName}<div className="ui-muted-text">{item.locationCode} – {item.locationName}</div></td>
-            <td><strong>{item.quantity}</strong></td><td>{item.strategy}</td><td><UiBadge tone={toneOf(item.status)}>{item.status}</UiBadge></td><td>{item.selectionReason||'—'}</td>
+            <td><strong>{item.quantity}</strong></td><td>{strategyLabel(item.strategy)}</td><td><UiBadge tone={toneOf(item.status)}>{allocationStatusLabel(item.status)}</UiBadge></td><td>{item.selectionReason||'—'}</td>
             {(canRelease||canReallocate)&&<td>{item.status==='Active'?<div className="ui-auto-actions">
               {canRelease&&<button type="button" disabled={busy} onClick={event=>void openAction('release',item,event.currentTarget)}><Unlock size={16} aria-hidden="true"/> Giải phóng</button>}
               {canReallocate&&<button type="button" disabled={busy} onClick={event=>void openAction('reallocate',item,event.currentTarget)}><Repeat2 size={16} aria-hidden="true"/> Phân bổ lại</button>}
@@ -273,7 +296,7 @@ export default function StockAllocations(){
     </UiCard>
 
     {action&&<AccessibleDialog titleId="allocation-action-title" busy={busy} returnFocusTo={action.trigger} onClose={()=>setAction(null)}>
-      <h2 id="allocation-action-title">{action.kind==='release'?'Giải phóng Allocation':'Phân bổ lại Allocation'}</h2>
+      <h2 id="allocation-action-title">{action.kind==='release'?'Giải phóng phân bổ':'Phân bổ lại vị trí'}</h2>
       <p><strong>{action.allocation.allocationCode}</strong> • {action.allocation.productCode} • {action.allocation.quantity} tại {action.allocation.locationCode}</p>
       {action.kind==='reallocate'&&<label>Vị trí mới
         <select aria-label="Vị trí phân bổ lại" value={actionLocationId} disabled={busy} onChange={event=>setActionLocationId(event.target.value?Number(event.target.value):'')}>

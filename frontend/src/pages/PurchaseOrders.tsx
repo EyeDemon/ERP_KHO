@@ -410,7 +410,7 @@ export default function PurchaseOrders(){
             <div>
               <div className="ui-inline-wrap inbound-planning-summary"><strong>Dòng hàng</strong><button type="button" onClick={()=>setLines(current=>[...current,emptyLine()])}>Thêm dòng</button></div>
               <div className="inbound-planning-lines">
-                {lines.map((line,index)=><div className="inbound-planning-line" key={index}>
+                {lines.map((line,index)=><div className="inbound-planning-line inbound-planning-line-grid" key={index}>
                   <label>Mã dòng nguồn<input required value={line.externalLineId} onChange={e=>changeLine(index,{externalLineId:e.target.value})}/></label>
                   <label>Sản phẩm<select required value={line.productId} onChange={e=>changeLine(index,{productId:e.target.value?Number(e.target.value):''})}><option value="">Chọn sản phẩm</option>{products.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>
                   <label>Đơn vị<select required value={line.operationUnitId} onChange={e=>changeLine(index,{operationUnitId:e.target.value?Number(e.target.value):''})}><option value="">Chọn đơn vị</option>{productUnitOptions(products,line.productId).map(x=><option key={x.unitId} value={x.unitId}>{x.unitCode}</option>)}</select></label>
@@ -419,7 +419,7 @@ export default function PurchaseOrders(){
                   <label>Thuế %<input min="0" max="100" step="any" type="number" value={line.taxPercent} onChange={e=>changeLine(index,{taxPercent:e.target.value===''?'':Number(e.target.value)})}/></label>
                   <label>Nhận vượt %<input min="0" max="100" step="any" type="number" value={line.allowedOverReceiptPct} onChange={e=>changeLine(index,{allowedOverReceiptPct:e.target.value===''?'':Number(e.target.value)})}/></label>
                   <label>Nhận thiếu %<input min="0" max="100" step="any" type="number" value={line.allowedUnderReceiptPct} onChange={e=>changeLine(index,{allowedUnderReceiptPct:e.target.value===''?'':Number(e.target.value)})}/></label>
-                  <button type="button" disabled={lines.length===1} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}>Xóa</button>
+                  <button type="button" style={{ height: 38, alignSelf: 'end' }} disabled={lines.length===1} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}>Xóa</button>
                 </div>)}
               </div>
             </div>

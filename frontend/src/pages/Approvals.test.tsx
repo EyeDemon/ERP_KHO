@@ -67,7 +67,7 @@ describe('Approvals page',()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:page([{...item,canReject:false}])});
     const view=render(<Approvals/>);await view.findByText('TRF-7');
     expect(view.queryByTitle('Duyệt')).toBeNull();expect(view.queryByTitle('Từ chối')).toBeNull();
-    expect(view.getByText(new Date(item.requestedAtUtc).toLocaleString())).toBeTruthy();
+    expect(view.getByText(new Date(item.requestedAtUtc).toLocaleString('vi-VN'))).toBeTruthy();
   });
   it('requires approve confirmation, blocks duplicate submits, and closes on success',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:page([{...item,canApprove:true}])});

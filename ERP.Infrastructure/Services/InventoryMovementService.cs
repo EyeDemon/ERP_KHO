@@ -129,6 +129,12 @@ public sealed class InventoryMovementService(
                     destination.LastUpdated = DateTime.UtcNow;
                 }
 
+                var rawUnitCode = (source.Product.Unit?.Code ?? source.Product.Unit?.Name ?? string.Empty).Trim();
+                var normalizedUnitCode = string.IsNullOrWhiteSpace(rawUnitCode) ||
+                                         string.Equals(rawUnitCode, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                                         string.Equals(rawUnitCode, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                    ? "THÙNG"
+                    : rawUnitCode;
                 var movement = new InventoryLocationMovement
                 {
                     WarehouseId = source.WarehouseId,
@@ -140,7 +146,7 @@ public sealed class InventoryMovementService(
                     ToLocationId = destinationLocation.Id,
                     BaseQuantity = request.Quantity,
                     EnteredQuantity = request.Quantity,
-                    EnteredUnitCode = source.Product.Unit?.Code ?? string.Empty,
+                    EnteredUnitCode = normalizedUnitCode,
                     ReferenceType = "InventoryMove",
                     CreatedBy = currentUser.UserId,
                     CreatedAt = DateTime.UtcNow
@@ -242,7 +248,7 @@ public sealed class InventoryMovementService(
         CancellationToken token)
     {
         if (location.StorageClass is not null &&
-            !string.Equals(location.StorageClass, product.StorageClass, StringComparison.Ordinal))
+            !string.Equals(location.StorageClass.Trim(), product.StorageClass?.Trim(), StringComparison.Ordinal))
             throw Conflict("INV_BUCKET_CONFLICT", "Storage Class của vị trí đích không phù hợp Product.");
 
         var rows = await context.InventoryStocks.AsNoTracking()

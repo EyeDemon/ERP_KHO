@@ -775,12 +775,18 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Quantity = 5m,
             Status = StockAllocationStatus.Active,
             Strategy = AllocationStrategy.LocationOrder,
-            SelectionReason = "QA seed allocation at BIN-A01-01",
+            SelectionReason = "Phân bổ tự động theo thứ tự vị trí tại kệ BIN-A01-01",
             AllocatedAt = DateTime.UtcNow,
             AllocatedBy = qaAdmin.Id,
             Version = 1
         };
         context.StockAllocations.Add(pickAllocation);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        pickAllocation.AllocationCode = "ALC-QA-PICK-001";
+        pickAllocation.SelectionReason = "Phân bổ tự động theo thứ tự vị trí tại kệ BIN-A01-01";
         await context.SaveChangesAsync();
     }
 
@@ -930,12 +936,18 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Quantity = 4m,
             Status = StockAllocationStatus.Active,
             Strategy = AllocationStrategy.LocationOrder,
-            SelectionReason = "QA seed packing allocation at BIN-A01-01",
+            SelectionReason = "Phân bổ đóng gói theo đơn SO-QA-002 tại kệ BIN-A01-01",
             AllocatedAt = DateTime.UtcNow.AddMinutes(-31),
             AllocatedBy = qaAdmin.Id,
             Version = 1
         };
         context.StockAllocations.Add(packAllocation);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        packAllocation.AllocationCode = "ALC-QA-PACK-001";
+        packAllocation.SelectionReason = "Phân bổ đóng gói theo đơn SO-QA-002 tại kệ BIN-A01-01";
         await context.SaveChangesAsync();
     }
 
@@ -1889,6 +1901,231 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         }
         await context.SaveChangesAsync();
     }
+
+    // 5e. Idempotent lotProduct stock, LOT-QA-002, InventoryLocks, InventoryLocationMovements & InternalMove reversal candidates for Wave-25
+    var lotQa002 = await context.InventoryLots.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l => l.ProductId == lotProduct.Id && l.LotNumber == "LOT-QA-002");
+    if (lotQa002 is null)
+    {
+        lotQa002 = new InventoryLot
+        {
+            ProductId = lotProduct.Id,
+            LotNumber = "LOT-QA-002",
+            ManufactureDate = DateTime.UtcNow.Date.AddDays(-30),
+            ExpiryDate = DateTime.UtcNow.Date.AddDays(335),
+            CreatedAt = DateTime.UtcNow.AddDays(-30)
+        };
+        context.InventoryLots.Add(lotQa002);
+        await context.SaveChangesAsync();
+    }
+
+    var lotStorageStock = await context.InventoryStocks.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(s =>
+            s.WarehouseId == primaryWarehouse.Id &&
+            s.ProductId == lotProduct.Id &&
+            s.LocationId == storageBin.Id &&
+            s.Status == InventoryStatus.Available &&
+            s.LotId == null &&
+            s.SerialId == null);
+    if (lotStorageStock is null)
+    {
+        lotStorageStock = new InventoryStock
+        {
+            WarehouseId = primaryWarehouse.Id,
+            ProductId = lotProduct.Id,
+            LocationId = storageBin.Id,
+            Status = InventoryStatus.Available,
+            Quantity = 60m,
+            ReservedQuantity = 0m,
+            LastUpdated = DateTime.UtcNow
+        };
+        context.InventoryStocks.Add(lotStorageStock);
+    }
+    else if (lotStorageStock.Quantity < 60m)
+    {
+        lotStorageStock.Quantity = 60m;
+        lotStorageStock.LastUpdated = DateTime.UtcNow;
+    }
+
+    var activeQcLock = await context.InventoryLocks.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l =>
+            l.WarehouseId == primaryWarehouse.Id &&
+            l.ProductId == lotProduct.Id &&
+            l.LockType == InventoryLockType.ManualOperationalLock);
+    if (activeQcLock is null)
+    {
+        activeQcLock = new InventoryLock
+        {
+            WarehouseId = primaryWarehouse.Id,
+            LocationId = storageBin.Id,
+            ProductId = lotProduct.Id,
+            LotId = lotQa002.Id,
+            InventoryStatus = InventoryStatus.QcHold,
+            LockType = InventoryLockType.ManualOperationalLock,
+            Status = InventoryLockStatus.Active,
+            Reason = "Phong tỏa lô LOT-QA-002 tại kệ BIN-A01-01 chờ kiểm định chất lượng định kỳ",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddHours(-6),
+            ExpiresAt = DateTime.UtcNow.AddDays(7)
+        };
+        context.InventoryLocks.Add(activeQcLock);
+    }
+    else
+    {
+        activeQcLock.LocationId = storageBin.Id;
+        activeQcLock.LotId = lotQa002.Id;
+        activeQcLock.InventoryStatus = InventoryStatus.QcHold;
+        activeQcLock.Status = InventoryLockStatus.Active;
+        activeQcLock.Reason = "Phong tỏa lô LOT-QA-002 tại kệ BIN-A01-01 chờ kiểm định chất lượng định kỳ";
+        activeQcLock.ExpiresAt = DateTime.UtcNow.AddDays(7);
+        activeQcLock.ReleasedAt = null;
+        activeQcLock.ReleasedBy = null;
+        activeQcLock.ReleaseReason = null;
+    }
+
+    var releasedCountLock = await context.InventoryLocks.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l =>
+            l.WarehouseId == primaryWarehouse.Id &&
+            l.LocationId == storageBin.Id &&
+            l.ProductId == product.Id &&
+            l.LockType == InventoryLockType.CountFreeze);
+    if (releasedCountLock is null)
+    {
+        releasedCountLock = new InventoryLock
+        {
+            WarehouseId = primaryWarehouse.Id,
+            LocationId = storageBin.Id,
+            ProductId = product.Id,
+            InventoryStatus = InventoryStatus.Available,
+            LockType = InventoryLockType.CountFreeze,
+            Status = InventoryLockStatus.Released,
+            Reason = "Khóa tạm thời kệ BIN-A01-01 phục vụ đối chiếu kiểm kê định kỳ",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddHours(-24),
+            ReleasedBy = qaAdmin.Id,
+            ReleasedAt = DateTime.UtcNow.AddHours(-20),
+            ReleaseReason = "Đã hoàn tất đối chiếu số liệu kiểm kê tại kệ BIN-A01-01"
+        };
+        context.InventoryLocks.Add(releasedCountLock);
+    }
+    else
+    {
+        releasedCountLock.Status = InventoryLockStatus.Released;
+        releasedCountLock.Reason = "Khóa tạm thời kệ BIN-A01-01 phục vụ đối chiếu kiểm kê định kỳ";
+        releasedCountLock.ReleasedBy = qaAdmin.Id;
+        releasedCountLock.ReleasedAt ??= DateTime.UtcNow.AddHours(-20);
+        releasedCountLock.ReleaseReason = "Đã hoàn tất đối chiếu số liệu kiểm kê tại kệ BIN-A01-01";
+    }
+
+    if (!await context.InventoryLocationMovements.IgnoreQueryFilters().AsNoTracking().AnyAsync(m =>
+            m.WarehouseId == primaryWarehouse.Id &&
+            m.ProductId == product.Id &&
+            m.FromLocationId == receivingLocation.Id &&
+            m.ToLocationId == storageBin.Id))
+    {
+        var locationMove = new InventoryLocationMovement
+        {
+            WarehouseId = primaryWarehouse.Id,
+            ProductId = product.Id,
+            InventoryStatus = InventoryStatus.Available,
+            FromLocationId = receivingLocation.Id,
+            ToLocationId = storageBin.Id,
+            BaseQuantity = 10m,
+            EnteredQuantity = 10m,
+            EnteredUnitCode = "THÙNG",
+            ReferenceType = "InventoryMove",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddHours(-3)
+        };
+        context.InventoryLocationMovements.Add(locationMove);
+        await context.SaveChangesAsync();
+        locationMove.ReferenceId = locationMove.Id;
+        await context.SaveChangesAsync();
+    }
+
+    if (!await context.InventoryTransactions.IgnoreQueryFilters().AsNoTracking().AnyAsync(t =>
+            t.WarehouseId == primaryWarehouse.Id &&
+            t.TransactionType == TransactionType.Move &&
+            t.ReferenceType == "InternalMove" &&
+            t.ReferenceId == 9001))
+    {
+        context.InventoryTransactions.Add(new InventoryTransaction
+        {
+            WarehouseId = primaryWarehouse.Id,
+            ProductId = product.Id,
+            LocationId = storageBin.Id,
+            FromLocationId = receivingLocation.Id,
+            ToLocationId = storageBin.Id,
+            InventoryStatus = InventoryStatus.Available,
+            TransactionType = TransactionType.Move,
+            Quantity = 10m,
+            ReferenceType = "InternalMove",
+            ReferenceId = 9001,
+            TransactionDate = DateTime.UtcNow.AddHours(-3),
+            CreatedBy = qaAdmin.Id,
+            Note = "Điều chuyển nội bộ 10 thùng linh kiện QA-01 từ khu tiếp nhận RECEIVING vào kệ lưu trữ BIN-A01-01"
+        });
+    }
+
+    if (!await context.InventoryTransactions.IgnoreQueryFilters().AsNoTracking().AnyAsync(t =>
+            t.WarehouseId == primaryWarehouse.Id &&
+            t.TransactionType == TransactionType.Move &&
+            t.ReferenceType == "InternalMove" &&
+            t.ReferenceId == 9002))
+    {
+        context.InventoryTransactions.Add(new InventoryTransaction
+        {
+            WarehouseId = primaryWarehouse.Id,
+            ProductId = lotProduct.Id,
+            LocationId = storageBin.Id,
+            FromLocationId = receivingLocation.Id,
+            ToLocationId = storageBin.Id,
+            LotId = lotQa002.Id,
+            InventoryStatus = InventoryStatus.Available,
+            TransactionType = TransactionType.Move,
+            Quantity = 5m,
+            ReferenceType = "InternalMove",
+            ReferenceId = 9002,
+            TransactionDate = DateTime.UtcNow.AddHours(-2),
+            CreatedBy = qaAdmin.Id,
+            Note = "Điều chuyển nội bộ 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) từ RECEIVING vào kệ BIN-A01-01"
+        });
+    }
+
+    var allAllocations = await context.StockAllocations.IgnoreQueryFilters().ToListAsync();
+    foreach (var alloc in allAllocations)
+    {
+        if (string.IsNullOrWhiteSpace(alloc.SelectionReason) ||
+            alloc.SelectionReason.Contains("Seed", StringComparison.OrdinalIgnoreCase) ||
+            alloc.SelectionReason.Contains("Auto", StringComparison.OrdinalIgnoreCase))
+        {
+            alloc.SelectionReason = "Phân bổ tự động theo kệ lưu trữ ưu tiên FIFO (BIN-A01-01)";
+        }
+    }
+
+    var allReservations = await context.StockReservations.IgnoreQueryFilters()
+        .OrderBy(r => r.Id)
+        .ToListAsync();
+    var rsvCounter = 3;
+    foreach (var rsv in allReservations)
+    {
+        if (!string.Equals(rsv.ReservationCode, "RSV-QA-PICK-001", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(rsv.ReservationCode, "RSV-QA-PACK-001", StringComparison.OrdinalIgnoreCase))
+        {
+            rsv.ReservationCode = $"RSV-QA-{rsvCounter:D3}";
+            if (rsv.SourceCode != null && rsv.SourceCode.Contains("QA-EXP", StringComparison.OrdinalIgnoreCase))
+            {
+                rsv.SourceCode = $"ER-QA-{rsvCounter - 2:D3}";
+            }
+            rsvCounter++;
+        }
+    }
+    await context.SaveChangesAsync();
+
+    await context.Database.ExecuteSqlRawAsync(
+        "UPDATE InventoryLocationMovements SET EnteredUnitCode = N'THÙNG' WHERE EnteredUnitCode IN ('QA_UNIT', 'QA-PCS') OR EnteredUnitCode IS NULL; " +
+        "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 10 thùng linh kiện QA-01 từ khu tiếp nhận RECEIVING vào kệ lưu trữ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9001; " +
+        "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) từ RECEIVING vào kệ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9002;");
 
     // 6. Idempotent PartnerDebtInvoices ("AP-IR-QA0001" and "AR-ER-QA0001") & PartnerDebtLedgers
     var nowUtc = DateTime.UtcNow;

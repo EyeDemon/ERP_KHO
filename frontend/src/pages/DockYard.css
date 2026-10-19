@@ -5,13 +5,23 @@
   max-width: 100%;
 }
 
-.dock-yard-page .ui-cell-nowrap,
-.dock-yard-page .ui-cell-nowrap strong {
-  white-space: nowrap;
+.dock-yard-page table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0 !important;
 }
 
-.dock-yard-page table td:last-child .ui-inline-actions {
-  max-width: 240px;
+.dock-yard-page th,
+.dock-yard-page td {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+.dock-yard-page .ui-cell-nowrap strong {
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
@@ -21,52 +31,47 @@
     max-width: 100%;
   }
 
-  .dock-yard-page table,
-  .dock-yard-page thead,
-  .dock-yard-page tbody {
-    display: block;
+  .dock-yard-page table {
+    display: table;
+    table-layout: fixed;
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
   }
 
-  .dock-yard-page thead tr,
-  .dock-yard-page tbody tr {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px 12px;
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-
   .dock-yard-page th,
   .dock-yard-page td,
+  .dock-yard-page .ui-table-compact th,
+  .dock-yard-page .ui-table-compact td,
+  .dock-yard-page .ui-table-compact tr > :last-child,
   .dock-yard-page .ui-cell-nowrap,
   .dock-yard-page .ui-cell-nowrap strong,
   .dock-yard-page .ui-cell-nowrap small {
-    display: block;
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
     white-space: normal !important;
     overflow-wrap: anywhere;
     word-break: break-word;
-    overflow: hidden;
+    padding: 6px 4px !important;
+    font-size: 12px;
   }
 
-  .dock-yard-page tbody tr > td:first-child,
-  .dock-yard-page thead tr > th:first-child {
-    grid-column: 1 / -1;
-  }
-
-  .dock-yard-page tbody tr > td:last-child {
-    grid-column: 1 / -1;
-  }
-
-  .dock-yard-page table td:last-child .ui-inline-actions {
+  .dock-yard-page .ui-table-compact .ui-badge {
+    white-space: normal !important;
+    font-size: 0.7rem !important;
+    padding: 2px 5px !important;
+    line-height: 1.2;
+    text-align: center;
     max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .dock-yard-page .ui-table-compact button {
+    max-width: 100%;
+    white-space: normal;
+    padding: 4px 6px;
+    font-size: 11px;
   }
 }
-
