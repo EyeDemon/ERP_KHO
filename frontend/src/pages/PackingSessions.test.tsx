@@ -83,4 +83,21 @@ describe('Packing workbench',()=>{
     expect(await view.findByText('Tạo HU')).toBeTruthy();
     expect(view.getByText('Hủy HU rỗng')).toBeTruthy();
   });
+
+  it('renders mobile 2-line nowrap route cells with →, right padding >= 8px, and vertical label stacking',async()=>{
+    grant('packing.read','packing.execute');
+    const view=render(<PackingSessions/>);
+    await view.findByText('PACK-2026-0077');
+    const routeSourceSpan=view.getByText('PICK-2026-0088');
+    const routeTargetSpan=view.getByText('→ EX-2026-5108');
+    expect(routeSourceSpan.tagName).toBe('SPAN');
+    expect(routeSourceSpan.style.whiteSpace).toBe('nowrap');
+    expect(routeTargetSpan.tagName).toBe('SPAN');
+    expect(routeTargetSpan.style.whiteSpace).toBe('nowrap');
+    const progressHeader=view.getByRole('columnheader',{name:'Tiến độ'});
+    expect(progressHeader.style.paddingRight).toBe('10px');
+    fireEvent.click(view.getByText('PACK-2026-0077'));
+    const huSelect=await view.findByLabelText('HU đích SKU-1001');
+    expect(huSelect.closest('label')?.style.flexDirection).toBe('column');
+  });
 });

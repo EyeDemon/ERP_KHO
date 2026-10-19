@@ -107,7 +107,7 @@ export default function PackingSessions(){
     }finally{lock.current.delete(key);setBusy('')}
   };
 
-  if(loading)return <p role="status">Đang tải Packing session...</p>;
+  if(loading&&sessions.length===0)return <p role="status">Đang tải Packing session...</p>;
   const activeHus=(selected?.handlingUnits??[]).filter(x=>!['Cancelled','Staged','Loaded','Shipped'].includes(x.status));
   const packableHus=activeHus.filter(x=>['Open','InUse'].includes(x.status));
   const verifyPackagingProfile=async()=>{
@@ -188,15 +188,43 @@ export default function PackingSessions(){
 
       <UiCard title="Packing sessions">
         {sessions.length===0?<p>Chưa có Packing session. Session được tạo khi Picking hoàn tất.</p>:<UiTableScroll>
-          <table aria-label="Danh sách Packing session">
-            <thead><tr><th>Session</th><th>Nguồn</th><th>Kho</th><th>Trạng thái</th><th>Tiến độ</th><th>HU</th></tr></thead>
+          <table aria-label="Danh sách Packing session" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Session</th>
+                <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+                <th style={{ width: '26%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ width: '20%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+              </tr>
+            </thead>
             <tbody>{sessions.map(item=><tr key={item.id}>
-              <td><button type="button" onClick={()=>void detail(item.id)}>{item.sessionCode}</button></td>
-              <td>{item.sourceCode??item.pickingTaskCode}</td>
-              <td>{item.warehouseName}</td>
-              <td><UiBadge tone={tone(item.status)}>{stateLabels[item.status]??item.status}</UiBadge></td>
-              <td><strong>{item.packedQuantity}</strong> / {item.requiredQuantity}</td>
-              <td>{item.handlingUnitCount}</td>
+              <td style={{ padding: '6px 5px', fontSize: 11, verticalAlign: 'middle' }}>
+                <button
+                  type="button"
+                  style={{ whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'anywhere', padding: '3px 6px', minHeight: 26, fontSize: 11, lineHeight: 1.2, maxWidth: '100%' }}
+                  onClick={()=>void detail(item.id)}
+                >
+                  {item.sessionCode}
+                </button>
+                <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>
+                  {item.warehouseName}
+                </div>
+              </td>
+              <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
+                <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{item.pickingTaskCode||'PICK'}</span>
+                <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>→ {item.sourceCode??item.sourceType}</span>
+              </td>
+              <td style={{ padding: '6px 5px', fontSize: 10.5, verticalAlign: 'middle' }}>
+                <UiBadge tone={tone(item.status)}>
+                  <span style={{ whiteSpace: 'normal', lineHeight: 1.2, fontSize: 10.5, display: 'inline-block', maxWidth: 'none', textAlign: 'center' }}>
+                    {stateLabels[item.status]??item.status}
+                  </span>
+                </UiBadge>
+              </td>
+              <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+                <strong>{item.packedQuantity}</strong> / {item.requiredQuantity}
+                <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{item.handlingUnitCount} HU</div>
+              </td>
             </tr>)}</tbody>
           </table>
         </UiTableScroll>}
@@ -216,13 +244,13 @@ export default function PackingSessions(){
         {canCreateHu&&['Open','InProgress'].includes(selected.status)&&<fieldset>
           <legend>Tạo Handling Unit</legend>
           <div className="ui-inline-wrap">
-            <label>Loại HU
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Loại HU
               <select aria-label="Loại Handling Unit" value={huType} onChange={e=>setHuType(e.target.value)}>
                 <option value="Carton">Carton</option><option value="Tote">Tote</option><option value="Pallet">Pallet</option>
                 <option value="Container">Container</option><option value="Custom">Custom</option>
               </select>
             </label>
-            <label>Mã/Barcode tùy chọn
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Mã/Barcode tùy chọn
               <input aria-label="Mã Handling Unit" value={huCode} onChange={e=>setHuCode(e.target.value)} placeholder="Tự sinh nếu bỏ trống"/>
             </label>
             <button type="button" disabled={!!busy} onClick={()=>void mutate(
@@ -237,18 +265,18 @@ export default function PackingSessions(){
             <legend>{line.productCode} — {line.productName}</legend>
             <p>Picked <strong>{line.pickedQuantity}</strong> • Packed {line.packedQuantity} • Còn {line.remainingQuantity}</p>
             {canExecute&&selected.status!=='Packed'&&selected.status!=='Closed'&&line.remainingQuantity>0&&<div className="ui-inline-wrap">
-              <label>HU đích
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>HU đích
                 <select aria-label={`HU đích ${line.productCode}`} value={packForm[line.pickingTaskLineId]?.huId??''}
                   onChange={e=>setPackForm(v=>({...v,[line.pickingTaskLineId]:{...(v[line.pickingTaskLineId]??{barcode:'',quantity:''}),huId:e.target.value}}))}>
                   <option value="">Chọn HU đang mở</option>
                   {packableHus.map(hu=><option value={hu.id} key={hu.id}>{hu.huCode} ({hu.type})</option>)}
                 </select>
               </label>
-              <label>Quét SKU/barcode
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Quét SKU/barcode
                 <input aria-label={`Product barcode packing ${line.productCode}`} value={packForm[line.pickingTaskLineId]?.barcode??''}
                   onChange={e=>setPackForm(v=>({...v,[line.pickingTaskLineId]:{...(v[line.pickingTaskLineId]??{huId:'',quantity:''}),barcode:e.target.value}}))}/>
               </label>
-              <label>Số lượng
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng
                 <input aria-label={`Packing quantity ${line.productCode}`} type="number" min="0" step="any" value={packForm[line.pickingTaskLineId]?.quantity??''}
                   onChange={e=>setPackForm(v=>({...v,[line.pickingTaskLineId]:{...(v[line.pickingTaskLineId]??{huId:'',barcode:''}),quantity:e.target.value}}))}/>
               </label>
@@ -280,7 +308,7 @@ export default function PackingSessions(){
                 {rowVersion:selected.rowVersion}
               )}>Đóng HU</button>}
               {canModifyHu&&['Open','InUse','Closed'].includes(hu.status)&&!hu.parentHandlingUnitId&&activeHus.some(parent=>parent.id!==hu.id&&['Open','InUse'].includes(parent.status))&&<>
-                <label>HU cha
+                <label style={{display:'flex',flexDirection:'column',gap:6}}>HU cha
                   <select aria-label={`HU cha ${hu.huCode}`} value={parents[hu.id]??''} onChange={e=>setParents(v=>({...v,[hu.id]:e.target.value}))}>
                     <option value="">Chọn HU cha</option>
                     {activeHus.filter(parent=>parent.id!==hu.id&&['Open','InUse'].includes(parent.status)).map(parent=><option key={parent.id} value={parent.id}>{parent.huCode}</option>)}

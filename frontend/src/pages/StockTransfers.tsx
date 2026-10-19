@@ -708,7 +708,7 @@ export default function StockTransfers() {
         )}
 
         <UiCard title="Danh sách phiếu điều chuyển">
-          {loading ? (
+          {loading && items.length === 0 ? (
             <p role="status">Đang tải...</p>
           ) : items.length === 0 ? (
             <UiEmptyState title="Chưa có phiếu điều chuyển phù hợp." />
@@ -721,7 +721,7 @@ export default function StockTransfers() {
                     <th>Luồng kho</th>
                     <th>Trạng thái</th>
                     <th>Ngày tạo</th>
-                    <th>Hành động</th>
+                    <th style={{ paddingRight: 10 }}>Hành động</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -731,15 +731,18 @@ export default function StockTransfers() {
                       <tr key={item.id}>
                         <td><strong>{item.code}</strong></td>
                         <td>
-                          <span className="transfer-flow">
-                            {item.sourceWarehouseName}
-                            <ArrowRight size={14} aria-hidden="true" />
-                            {item.destinationWarehouseName}
+                          <span className="transfer-flow" style={{ display: 'block', lineHeight: 1.25 }}>
+                            <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>
+                              {item.sourceWarehouseName} →
+                            </span>
+                            <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>
+                              {item.destinationWarehouseName}
+                            </span>
                           </span>
                         </td>
                         <td><UiBadge tone={statusTone(normalized)}>{statusLabel[normalized]}</UiBadge></td>
                         <td>{new Date(item.createdAt).toLocaleString('vi-VN')}</td>
-                        <td>
+                        <td style={{ paddingRight: 10 }}>
                           <button
                             type="button"
                             aria-label={`Xem chi tiết ${item.code}`}

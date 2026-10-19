@@ -270,7 +270,7 @@ export default function OutboundDemand(){
   const openBackorderRemaining=roundQty4(backorders.reduce((sum,item)=>sum+item.remainingQuantity,0));
   const fulfillmentRatePct=totalOrderedQty>0?Math.round((totalShippedQty*10000)/totalOrderedQty)/100:100;
 
-  if(loading)return <p role="status">Đang tải Demand & Backorder...</p>;
+  if(loading&&orders.length===0&&backorders.length===0)return <p role="status">Đang tải Demand & Backorder...</p>;
 
   return <UiPage>
     <UiPageHeader
@@ -312,54 +312,54 @@ export default function OutboundDemand(){
       {showCreate&&canCreate&&masterReady&&<UiCard title="Tạo Sales Order">
         <form onSubmit={createOrder} className="ui-stack">
           <div className="ui-inline-wrap">
-            <label>External Order ID
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>External Order ID
               <input aria-label="External Order ID" value={externalOrderId} onChange={e=>setExternalOrderId(e.target.value)}/>
             </label>
-            <label>Khách hàng
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Khách hàng
               <select aria-label="Khách hàng Sales Order" value={customerId} onChange={e=>setCustomerId(e.target.value)}>
                 <option value="">Chọn khách hàng</option>
                 {partners.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
               </select>
             </label>
-            <label>Kho
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Kho
               <select aria-label="Kho Sales Order" value={warehouseId} onChange={e=>setWarehouseId(e.target.value)}>
                 <option value="">Chọn kho</option>
                 {warehouses.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
               </select>
             </label>
-            <label>Requested ship date
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Requested ship date
               <input aria-label="Requested ship date" type="date" value={requestedShipDate} onChange={e=>setRequestedShipDate(e.target.value)}/>
             </label>
-            <label>Priority
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Priority
               <input aria-label="Sales Order priority" type="number" min="0" value={priority} onChange={e=>setPriority(e.target.value)}/>
             </label>
-            <label>Shipping method
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Shipping method
               <input aria-label="Shipping method" value={shippingMethod} onChange={e=>setShippingMethod(e.target.value)}/>
             </label>
           </div>
           {createLines.map((line,index)=><fieldset key={index}>
             <legend>Dòng {index+1}</legend>
             <div className="ui-inline-wrap">
-              <label>External Line ID
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>External Line ID
                 <input aria-label={`External Line ID ${index+1}`} value={line.externalLineId}
                   onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,externalLineId:e.target.value}:item))}/>
               </label>
-              <label>SKU
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>SKU
                 <select aria-label={`SKU Sales Order ${index+1}`} value={line.productId}
                   onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,productId:e.target.value}:item))}>
                   <option value="">Chọn SKU</option>
                   {products.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}
                 </select>
               </label>
-              <label>Số lượng
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng
                 <input aria-label={`Sales Order quantity ${index+1}`} type="number" min="0" step="any" value={line.quantity}
                   onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))}/>
               </label>
-              <label>Đơn giá
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Đơn giá
                 <input aria-label={`Sales Order unit price ${index+1}`} type="number" min="0" step="any" value={line.unitPrice??'0'}
                   onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,unitPrice:e.target.value}:item))}/>
               </label>
-              <label>Thuế %
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Thuế %
                 <input aria-label={`Sales Order tax percent ${index+1}`} type="number" min="0" max="100" step="any" value={line.taxPercent??'0'}
                   onChange={e=>setCreateLines(lines=>lines.map((item,i)=>i===index?{...item,taxPercent:e.target.value}:item))}/>
               </label>
@@ -406,7 +406,7 @@ export default function OutboundDemand(){
             `sales-order-release-${selected.id}`,`/api/sales-orders/${selected.id}/release`,{rowVersion:selected.rowVersion},'Đã release Sales Order.'
           )}>Release demand</button>}
           {canCancel&&!['Cancelled','Fulfilled'].includes(selected.status)&&<>
-            <label>Lý do hủy
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Lý do hủy
               <input aria-label="Lý do hủy Sales Order" value={orderCancelReason} onChange={e=>setOrderCancelReason(e.target.value)}/>
             </label>
             <button type="button" disabled={!!busy||!orderCancelReason.trim()} onClick={()=>void mutate(
@@ -442,7 +442,7 @@ export default function OutboundDemand(){
               <span>Còn <strong>{item.remainingQuantity}</strong></span>
             </div>
             {canManageBackorders&&['Open','PartiallyAllocated'].includes(item.status)&&item.remainingQuantity>0&&<div className="ui-inline-wrap">
-              <label>Số lượng recover
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng recover
                 <input aria-label={`Recover quantity ${item.backorderCode}`} type="number" min="0.0001" step="0.0001"
                   value={recoverQty[item.id]??''} onChange={e=>setRecoverQty(v=>({...v,[item.id]:e.target.value}))}
                   placeholder={String(item.remainingQuantity)}/>
@@ -451,12 +451,12 @@ export default function OutboundDemand(){
                 `backorder-reallocate-${item.id}`,`/api/backorders/${item.id}/reallocate`,
                 {quantity:recoverQty[item.id]?roundQty4(Number(recoverQty[item.id])):undefined,rowVersion:item.rowVersion},'Đã thử recover Backorder theo tồn Available hiện tại.'
               )}>Reallocate</button>
-              <label>Số lượng hủy
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng hủy
                 <input aria-label={`Cancel backorder quantity ${item.backorderCode}`} type="number" min="0.0001" step="0.0001"
                   value={backorderCancelQty[item.id]??''} onChange={e=>setBackorderCancelQty(v=>({...v,[item.id]:e.target.value}))}
                   placeholder={String(item.remainingQuantity)}/>
               </label>
-              <label>Lý do
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Lý do
                 <input aria-label={`Cancel backorder reason ${item.backorderCode}`}
                   value={backorderCancelReason[item.id]??''} onChange={e=>setBackorderCancelReason(v=>({...v,[item.id]:e.target.value}))}/>
               </label>

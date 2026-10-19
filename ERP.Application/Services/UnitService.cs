@@ -70,6 +70,12 @@ namespace ERP.Application.Services
             var unit = await _unitRepository.GetByIdAsync(id);
             if (unit == null) throw new NotFoundException($"Không tìm thấy đơn vị tính id {id}");
 
+            if (unit.IsActive && !dto.IsActive && await _unitRepository.HasProductsAsync(id))
+                throw Conflict("Không thể ngừng hoạt động đơn vị tính đang được sử dụng cho sản phẩm");
+
+            if (unit.DecimalPlaces != dto.DecimalPlaces && await _unitRepository.HasProductsAsync(id))
+                throw Conflict("Không thể thay đổi số chữ số thập phân của đơn vị tính đang được sử dụng cho sản phẩm");
+
             unit.Name = dto.Name;
             unit.DecimalPlaces = dto.DecimalPlaces;
             unit.IsActive = dto.IsActive;
@@ -84,9 +90,16 @@ namespace ERP.Application.Services
             if (unit == null) throw new NotFoundException($"Không tìm thấy đơn vị tính id {id}");
 
             var hasProducts = await _unitRepository.HasProductsAsync(id);
-            if (hasProducts) throw new BusinessRuleException("Không thể xóa đơn vị tính đang được sử dụng cho sản phẩm");
+            if (hasProducts) throw Conflict("Không thể xóa đơn vị tính đang được sử dụng cho sản phẩm");
 
             await _unitRepository.DeleteAsync(unit);
+        }
+
+        private static BusinessRuleException Conflict(string message)
+        {
+            var ex = new BusinessRuleException(message);
+            ex.Data["HttpStatusCode"] = 409;
+            return ex;
         }
     }
 }

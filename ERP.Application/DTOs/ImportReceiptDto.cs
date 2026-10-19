@@ -7,6 +7,7 @@ namespace ERP.Application.DTOs
         public int Id { get; set; }
         public string Code { get; set; } = string.Empty;
         public int WarehouseId { get; set; }
+        public string? WarehouseCode { get; set; }
         public string? WarehouseName { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? Note { get; set; }

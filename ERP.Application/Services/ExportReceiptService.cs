@@ -495,10 +495,10 @@ namespace ERP.Application.Services
                     LineTaxAmount = lineTax,
                     LineTotal = lineSub + lineTax,
                     Note = viewer ? null : d.Note,
-                    BaseUomIdSnapshot = d.BaseUomIdSnapshot,
-                    BaseUomCodeSnapshot = d.BaseUomCodeSnapshot,
-                    BaseUomNameSnapshot = d.BaseUomNameSnapshot,
-                    BaseUomDecimalPlacesSnapshot = d.BaseUomDecimalPlacesSnapshot
+                    BaseUomIdSnapshot = d.BaseUomIdSnapshot ?? d.Product?.UnitId,
+                    BaseUomCodeSnapshot = !string.IsNullOrWhiteSpace(d.BaseUomCodeSnapshot) ? d.BaseUomCodeSnapshot : d.Product?.Unit?.Code,
+                    BaseUomNameSnapshot = !string.IsNullOrWhiteSpace(d.BaseUomNameSnapshot) ? d.BaseUomNameSnapshot : d.Product?.Unit?.Name,
+                    BaseUomDecimalPlacesSnapshot = d.BaseUomDecimalPlacesSnapshot ?? d.Product?.Unit?.DecimalPlaces
                 };
             }).ToList();
 
@@ -510,6 +510,7 @@ namespace ERP.Application.Services
                 Id = receipt.Id,
                 Code = receipt.Code,
                 WarehouseId = receipt.WarehouseId,
+                WarehouseCode = receipt.Warehouse?.Code,
                 WarehouseName = receipt.Warehouse?.Name,
                 Status = receipt.Status.ToString(),
                 Note = viewer ? null : receipt.Note,
@@ -524,8 +525,8 @@ namespace ERP.Application.Services
                 DispatchedByName = receipt.DispatchedByUser?.FullName ?? receipt.DispatchedByUser?.Username,
                 DispatchedAt = receipt.DispatchedAt,
                 CustomerId = receipt.CustomerId,
-                CustomerCode = receipt.Status == ReceiptStatus.Draft ? receipt.Customer?.Code : receipt.CustomerCodeSnapshot,
-                CustomerName = receipt.Status == ReceiptStatus.Draft ? receipt.Customer?.Name : receipt.CustomerNameSnapshot,
+                CustomerCode = !string.IsNullOrWhiteSpace(receipt.CustomerCodeSnapshot) ? receipt.CustomerCodeSnapshot : receipt.Customer?.Code,
+                CustomerName = !string.IsNullOrWhiteSpace(receipt.CustomerNameSnapshot) ? receipt.CustomerNameSnapshot : receipt.Customer?.Name,
                 SalesOrderId = receipt.SalesOrderId,
                 ShipmentId = receipt.ShipmentId,
                 SubTotalAmount = subTotal,

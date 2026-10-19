@@ -480,7 +480,7 @@ const Stocktakes = () => {
             </UiToolbar>
 
             <UiCard title="Danh sách phiếu kiểm kê">
-              {loading ? (
+              {loading && stocktakes.length === 0 ? (
                 <p role="status">Đang tải...</p>
               ) : (
                 <UiTableScroll>

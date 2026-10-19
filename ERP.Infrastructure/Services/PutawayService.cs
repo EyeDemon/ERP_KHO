@@ -315,7 +315,7 @@ public sealed class PutawayService(
     {
         var ids = await warehouses.GetAccessibleWarehouseIdsAsync(token);
         return await context.PutawayTasks.AsNoTracking().Where(x => ids.Contains(x.WarehouseId)).OrderByDescending(x => x.CreatedAt)
-            .Select(x => new PutawayTaskListDto { Id=x.Id, ReceiptId=x.ReceiptId, ReceiptCode=x.Receipt.Code, WarehouseId=x.WarehouseId, WarehouseName=x.Warehouse.Name,
+            .Select(x => new PutawayTaskListDto { Id=x.Id, ReceiptId=x.ReceiptId, ReceiptCode=x.Receipt.Code, WarehouseId=x.WarehouseId, WarehouseCode=x.Warehouse.Code, WarehouseName=x.Warehouse.Name,
                 Status=x.Status.ToString(), AssignedUserId=x.AssignedUserId, RequiredBaseQuantity=x.Items.Sum(i=>i.RequiredBaseQuantity), MovedBaseQuantity=x.Items.Sum(i=>i.MovedBaseQuantity), CreatedAt=x.CreatedAt }).ToListAsync(token);
     }
 
@@ -721,12 +721,39 @@ public sealed class PutawayService(
         (context.Database.IsSqlServer()
             ? context.Products.FromSqlInterpolated($"SELECT * FROM dbo.Products WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = {context.CurrentTenantId} AND Id = {id}").AsNoTracking()
             : context.Products.AsNoTracking().Where(x => x.Id == id)).SingleOrDefaultAsync(token);
-    private IQueryable<PutawayTask> Query()=>context.PutawayTasks.Include(x=>x.Receipt).Include(x=>x.Warehouse).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).ThenInclude(x=>x.Barcodes).Include(x=>x.Items).ThenInclude(x=>x.SourceLocation);
+    private IQueryable<PutawayTask> Query()=>context.PutawayTasks.Include(x=>x.Receipt).Include(x=>x.Warehouse).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).ThenInclude(x=>x.Barcodes).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).ThenInclude(x=>x.Unit).Include(x=>x.Items).ThenInclude(x=>x.SourceLocation);
     private void EnsureActor(PutawayTask task){if(task.AssignedUserId!=currentUser.UserId&&!currentUser.IsGlobalAdmin&&currentUser.Role is not "Admin" and not "Manager")throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");}
     private static decimal ToBase(decimal qty,string unit,PutawayTaskItem item){var code=unit.Trim().ToUpperInvariant();var result=code==item.BaseUnitCodeSnapshot.ToUpperInvariant()?qty:code==item.OperationUnitCodeSnapshot.ToUpperInvariant()?qty*item.ConversionFactorSnapshot:throw new BusinessRuleException("Đơn vị tính không được hỗ trợ.");if(decimal.Round(result,item.BaseUnitDecimalPlaces)!=result)throw new BusinessRuleException("Số lượng vượt quá độ chính xác cho phép; hệ thống không tự làm tròn.");return result;}
     private static WarehouseLocationType RequiredType(InventoryStatus s)=>s switch{InventoryStatus.Available=>WarehouseLocationType.Storage,InventoryStatus.Damaged=>WarehouseLocationType.Damaged,InventoryStatus.Rejected=>WarehouseLocationType.Rejected,_=>throw new BusinessRuleException("Trạng thái tồn kho không thuộc luồng cất hàng tự động.")};
     private static void ApplyVersion(byte[] actual,string encoded,Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry<PutawayTask,byte[]> p){byte[] expected;try{expected=Convert.FromBase64String(encoded);}catch{throw new BusinessRuleException("Phiên bản dữ liệu không hợp lệ.");}if(!actual.SequenceEqual(expected))throw Conflict("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");p.OriginalValue=expected;}
-    private async Task<PutawayTaskDto> MapAsync(PutawayTask t,CancellationToken token){var moves=await context.InventoryLocationMovements.AsNoTracking().Where(x=>x.PutawayTaskId==t.Id&&x.PutawayTaskItemId.HasValue).Join(context.WarehouseLocations,x=>x.FromLocationId,x=>x.Id,(m,f)=>new{m,f}).Join(context.WarehouseLocations,x=>x.m.ToLocationId,x=>x.Id,(x,d)=>new PutawayMovementDto{Id=x.m.Id,ItemId=x.m.PutawayTaskItemId.GetValueOrDefault(),FromLocationCode=x.f.Code,ToLocationCode=d.Code,BaseQuantity=x.m.BaseQuantity,CreatedAt=x.m.CreatedAt}).ToListAsync(token);var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";return new PutawayTaskDto{Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=t.Receipt.Code,WarehouseId=t.WarehouseId,WarehouseName=t.Warehouse.Name,Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,Items=t.Items.Select(x=>new PutawayTaskItemDto{Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=x.ReceiptLine.Product.Code,ProductName=x.ReceiptLine.Product.Name,ProductBarcodes=x.ReceiptLine.Product.Barcodes.Select(b=>b.Value).ToList(),InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=x.SourceLocation.Code,OperationUnitCode=x.OperationUnitCodeSnapshot,BaseUnitCode=x.BaseUnitCodeSnapshot,RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate?Convert.ToBase64String(x.RowVersion):null}).ToList(),Movements=moves};}
+    private async Task<PutawayTaskDto> MapAsync(PutawayTask t,CancellationToken token)
+    {
+        var moves=await context.InventoryLocationMovements.AsNoTracking().Where(x=>x.PutawayTaskId==t.Id&&x.PutawayTaskItemId.HasValue).Join(context.WarehouseLocations,x=>x.FromLocationId,x=>x.Id,(m,f)=>new{m,f}).Join(context.WarehouseLocations,x=>x.m.ToLocationId,x=>x.Id,(x,d)=>new PutawayMovementDto{Id=x.m.Id,ItemId=x.m.PutawayTaskItemId.GetValueOrDefault(),FromLocationId=x.f.Id,FromLocationCode=x.f.Code,ToLocationId=d.Id,ToLocationCode=d.Code,BaseQuantity=x.m.BaseQuantity,CreatedAt=x.m.CreatedAt}).ToListAsync(token);
+        var activeLocations=await context.WarehouseLocations.AsNoTracking().Where(x=>x.WarehouseId==t.WarehouseId&&x.IsActive&&!x.IsBlocked).OrderBy(x=>x.Code).ToListAsync(token);
+        var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";
+        return new PutawayTaskDto
+        {
+            Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=t.Receipt.Code,WarehouseId=t.WarehouseId,WarehouseCode=t.Warehouse.Code,WarehouseName=t.Warehouse.Name,Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,
+            Items=t.Items.Select(x=>
+            {
+                var reqType=RequiredType(x.InventoryStatus);
+                var prodStorage=x.ReceiptLine?.Product?.StorageClass;
+                var recLoc=activeLocations.FirstOrDefault(l=>l.LocationType==reqType&&(x.InventoryStatus!=InventoryStatus.Available||l.IsPickable)&&(l.StorageClass==null||(prodStorage!=null&&l.StorageClass==prodStorage)));
+                var lastMove=moves.Where(m=>m.ItemId==x.Id).OrderByDescending(m=>m.Id).FirstOrDefault();
+                var fallbackUom=x.ReceiptLine?.Product?.Unit?.Code??string.Empty;
+                return new PutawayTaskItemDto
+                {
+                    Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=x.ReceiptLine?.Product?.Code??string.Empty,ProductName=x.ReceiptLine?.Product?.Name??string.Empty,ProductBarcodes=x.ReceiptLine?.Product?.Barcodes.Select(b=>b.Value).ToList()??[],InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=x.SourceLocation.Code,
+                    RecommendedLocationId=recLoc?.Id,RecommendedLocationCode=recLoc?.Code,
+                    ConfirmedLocationId=lastMove?.ToLocationId,ConfirmedLocationCode=lastMove?.ToLocationCode,
+                    OperationUnitCode=!string.IsNullOrWhiteSpace(x.OperationUnitCodeSnapshot)?x.OperationUnitCodeSnapshot:fallbackUom,
+                    BaseUnitCode=!string.IsNullOrWhiteSpace(x.BaseUnitCodeSnapshot)?x.BaseUnitCodeSnapshot:fallbackUom,
+                    RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate?Convert.ToBase64String(x.RowVersion):null
+                };
+            }).ToList(),
+            Movements=moves
+        };
+    }
     private static AuditLog Audit(int user,string action,int entity,int warehouse,string values)=>new(){UserId=user,Action=action,EntityName="PutawayTask",EntityId=entity,WarehouseId=warehouse,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
     private static BusinessRuleException Conflict(string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;return e;}
     private static BusinessRuleException ConflictWithCode(string code,string message){var e=new BusinessRuleException(message);e.Data["HttpStatusCode"]=409;e.Data["ErrorCode"]=code;return e;}

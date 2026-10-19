@@ -147,20 +147,26 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     {
         qaAdmin = new User
         {
+            TenantId = 1,
             Username = "qa_admin",
             FullName = "QA Admin",
             Role = roles["Admin"],
             PasswordHash = hasher.HashPassword("QaAdmin@123456!"),
-            IsActive = true
+            IsActive = true,
+            FailedLoginCount = 0,
+            LockoutEnd = null
         };
         context.Users.Add(qaAdmin);
         await context.SaveChangesAsync();
     }
     else
     {
+        qaAdmin.TenantId = 1;
         qaAdmin.Role = roles["Admin"];
         qaAdmin.PasswordHash = hasher.HashPassword("QaAdmin@123456!");
         qaAdmin.IsActive = true;
+        qaAdmin.FailedLoginCount = 0;
+        qaAdmin.LockoutEnd = null;
         await context.SaveChangesAsync();
     }
 
@@ -555,17 +561,17 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             LocationId = storageBin.Id,
             Status = InventoryStatus.Available,
             Quantity = 25m,
-            ReservedQuantity = 5m,
+            ReservedQuantity = 9m,
             LastUpdated = DateTime.UtcNow
         };
         context.InventoryStocks.Add(storageStock);
     }
     else
     {
-        if (storageStock.ReservedQuantity < 5m)
-            storageStock.ReservedQuantity = 5m;
-        if (storageStock.Quantity < storageStock.ReservedQuantity + 15m)
-            storageStock.Quantity = storageStock.ReservedQuantity + 15m;
+        if (storageStock.ReservedQuantity < 9m)
+            storageStock.ReservedQuantity = 9m;
+        if (storageStock.Quantity < storageStock.ReservedQuantity + 16m)
+            storageStock.Quantity = storageStock.ReservedQuantity + 16m;
         storageStock.LastUpdated = DateTime.UtcNow;
     }
     await context.SaveChangesAsync();
@@ -658,8 +664,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 
     var pickingTask = await context.PickingTasks.IgnoreQueryFilters()
         .Include(t => t.Lines)
-        .FirstOrDefaultAsync(t => t.TaskCode == "PICK-QA-001" ||
-                                  (t.SourceType == "SalesOrder" && t.SourceId == salesOrder.Id));
+        .FirstOrDefaultAsync(t => t.TaskCode == "PICK-QA-001");
     if (pickingTask is null)
     {
         pickingTask = new PickingTask
@@ -691,16 +696,272 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         };
         context.PickingTasks.Add(pickingTask);
     }
-    else if (pickingTask.Status is not (PickingTaskStatus.Open or PickingTaskStatus.Assigned))
+    else
     {
-        pickingTask.Status = PickingTaskStatus.Open;
-        pickingTask.StartedAt = null;
-        pickingTask.CompletedAt = null;
-        foreach (var line in pickingTask.Lines)
+        pickingTask.CreatedAt = DateTime.UtcNow;
+        if (pickingTask.Status is not (PickingTaskStatus.Open or PickingTaskStatus.Assigned))
         {
-            line.PickedQuantity = 0m;
-            line.Status = PickingTaskLineStatus.Open;
+            pickingTask.Status = PickingTaskStatus.Open;
+            pickingTask.StartedAt = null;
+            pickingTask.CompletedAt = null;
+            foreach (var line in pickingTask.Lines)
+            {
+                line.PickedQuantity = 0m;
+                line.Status = PickingTaskLineStatus.Open;
+            }
         }
+    }
+    await context.SaveChangesAsync();
+
+    // 5b. Idempotent Completed PickingTask ("PICK-QA-002") & Active PackingSession ("PACK-QA-001") + HandlingUnit ("HU-QA-001")
+    var packSalesOrder = await context.SalesOrders.IgnoreQueryFilters()
+        .Include(o => o.Lines)
+        .FirstOrDefaultAsync(o => o.OrderCode == "SO-QA-002");
+    if (packSalesOrder is null)
+    {
+        packSalesOrder = new SalesOrder
+        {
+            OrderCode = "SO-QA-002",
+            ExternalOrderId = "EXT-SO-QA-002",
+            CustomerId = customer.Id,
+            WarehouseId = primaryWarehouse.Id,
+            RequestedShipDate = DateTime.UtcNow.Date.AddDays(1),
+            Priority = 1,
+            ShippingMethod = "EXPRESS",
+            Status = SalesOrderStatus.Released,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-35),
+            CreatedBy = qaAdmin.Id,
+            ReleasedAt = DateTime.UtcNow.AddMinutes(-32),
+            Lines =
+            [
+                new SalesOrderLine
+                {
+                    ExternalLineId = "EXT-SO-QA-002-L1",
+                    ProductId = product.Id,
+                    OrderedQuantity = 4m,
+                    CancelledQuantity = 0m,
+                    UomCode = unit.Code,
+                    UnitPrice = 1200m
+                }
+            ]
+        };
+        context.SalesOrders.Add(packSalesOrder);
+        await context.SaveChangesAsync();
+    }
+
+    var packReservation = await context.StockReservations.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(r => r.ReservationCode == "RSV-QA-PACK-001" ||
+                                  (r.SourceType == "SalesOrder" && r.SourceId == packSalesOrder.Id && r.ProductId == product.Id));
+    if (packReservation is null)
+    {
+        packReservation = new StockReservation
+        {
+            ReservationCode = "RSV-QA-PACK-001",
+            ProductId = product.Id,
+            WarehouseId = primaryWarehouse.Id,
+            Quantity = 4m,
+            AllocatedQuantity = 4m,
+            ConsumedQuantity = 0m,
+            ReleasedQuantity = 0m,
+            Status = StockReservationStatus.Allocated,
+            SourceType = "SalesOrder",
+            SourceId = packSalesOrder.Id,
+            SourceCode = packSalesOrder.OrderCode,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-33),
+            CreatedBy = qaAdmin.Id,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+            AllocationVersion = 1
+        };
+        context.StockReservations.Add(packReservation);
+        await context.SaveChangesAsync();
+    }
+
+    var packAllocation = await context.StockAllocations.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(a => a.AllocationCode == "ALC-QA-PACK-001" || a.ReservationId == packReservation.Id);
+    if (packAllocation is null)
+    {
+        packAllocation = new StockAllocation
+        {
+            AllocationCode = "ALC-QA-PACK-001",
+            ReservationId = packReservation.Id,
+            WarehouseId = primaryWarehouse.Id,
+            ProductId = product.Id,
+            LocationId = storageBin.Id,
+            InventoryStatus = InventoryStatus.Available,
+            Quantity = 4m,
+            Status = StockAllocationStatus.Active,
+            Strategy = AllocationStrategy.LocationOrder,
+            SelectionReason = "QA seed packing allocation at BIN-A01-01",
+            AllocatedAt = DateTime.UtcNow.AddMinutes(-31),
+            AllocatedBy = qaAdmin.Id,
+            Version = 1
+        };
+        context.StockAllocations.Add(packAllocation);
+        await context.SaveChangesAsync();
+    }
+
+    var packPickingTask = await context.PickingTasks.IgnoreQueryFilters()
+        .Include(t => t.Lines)
+        .FirstOrDefaultAsync(t => t.TaskCode == "PICK-QA-002" ||
+                                  (t.SourceType == "SalesOrder" && t.SourceId == packSalesOrder.Id));
+    if (packPickingTask is null)
+    {
+        packPickingTask = new PickingTask
+        {
+            TaskCode = "PICK-QA-002",
+            SourceType = "SalesOrder",
+            SourceId = packSalesOrder.Id,
+            SourceCode = packSalesOrder.OrderCode,
+            WarehouseId = primaryWarehouse.Id,
+            PickingType = "SingleOrder",
+            Status = PickingTaskStatus.Completed,
+            Priority = 1,
+            AssignedUserId = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-30),
+            StartedAt = DateTime.UtcNow.AddMinutes(-25),
+            CompletedAt = DateTime.UtcNow.AddMinutes(-20),
+            CreatedBy = qaAdmin.Id,
+            Lines =
+            [
+                new PickingTaskLine
+                {
+                    Sequence = 1,
+                    AllocationId = packAllocation.Id,
+                    ProductId = product.Id,
+                    SourceLocationId = storageBin.Id,
+                    RequestedQuantity = 4m,
+                    PickedQuantity = 4m,
+                    Status = PickingTaskLineStatus.Picked
+                }
+            ]
+        };
+        context.PickingTasks.Add(packPickingTask);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        packPickingTask.Status = PickingTaskStatus.Completed;
+        packPickingTask.CompletedAt ??= DateTime.UtcNow.AddMinutes(-20);
+        foreach (var line in packPickingTask.Lines)
+        {
+            line.RequestedQuantity = 4m;
+            line.PickedQuantity = 4m;
+            line.Status = PickingTaskLineStatus.Picked;
+        }
+        await context.SaveChangesAsync();
+    }
+
+    var packTaskLine = packPickingTask.Lines.First();
+    var packingSession = await context.PackingSessions.IgnoreQueryFilters()
+        .Include(s => s.HandlingUnits)
+        .ThenInclude(h => h.Contents)
+        .FirstOrDefaultAsync(s => s.SessionCode == "PACK-QA-001" || s.PickingTaskId == packPickingTask.Id);
+    if (packingSession is null)
+    {
+        packingSession = new PackingSession
+        {
+            SessionCode = "PACK-QA-001",
+            PickingTaskId = packPickingTask.Id,
+            WarehouseId = primaryWarehouse.Id,
+            Status = PackingSessionStatus.InProgress,
+            CreatedAt = DateTime.UtcNow,
+            StartedAt = DateTime.UtcNow.AddMinutes(-15),
+            CreatedBy = qaAdmin.Id,
+            HandlingUnits =
+            [
+                new HandlingUnit
+                {
+                    HuCode = "HU-QA-001",
+                    Barcode = "HU-QA-001",
+                    Sscc = "003893000000000018",
+                    WarehouseId = primaryWarehouse.Id,
+                    Type = HandlingUnitType.Carton,
+                    Status = HandlingUnitStatus.InUse,
+                    GrossWeightKg = 8.4m,
+                    NetWeightKg = 8.0m,
+                    VolumeM3 = 0.04m,
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-14),
+                    CreatedBy = qaAdmin.Id,
+                    Contents =
+                    [
+                        new HandlingUnitContent
+                        {
+                            PickingTaskLineId = packTaskLine.Id,
+                            ProductId = product.Id,
+                            Quantity = 2m,
+                            PackedAt = DateTime.UtcNow.AddMinutes(-10),
+                            PackedBy = qaAdmin.Id
+                        }
+                    ]
+                }
+            ]
+        };
+        context.PackingSessions.Add(packingSession);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        packingSession.SessionCode = "PACK-QA-001";
+        packingSession.Status = PackingSessionStatus.InProgress;
+        packingSession.CreatedAt = DateTime.UtcNow;
+        packingSession.StartedAt ??= DateTime.UtcNow.AddMinutes(-15);
+        packingSession.PackedAt = null;
+        packingSession.ClosedAt = null;
+        var hu = packingSession.HandlingUnits.FirstOrDefault(h => h.HuCode == "HU-QA-001")
+                 ?? packingSession.HandlingUnits.FirstOrDefault();
+        if (hu is null)
+        {
+            hu = new HandlingUnit
+            {
+                HuCode = "HU-QA-001",
+                Barcode = "HU-QA-001",
+                Sscc = "003893000000000018",
+                WarehouseId = primaryWarehouse.Id,
+                PackingSessionId = packingSession.Id,
+                Type = HandlingUnitType.Carton,
+                Status = HandlingUnitStatus.InUse,
+                GrossWeightKg = 8.4m,
+                NetWeightKg = 8.0m,
+                VolumeM3 = 0.04m,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-14),
+                CreatedBy = qaAdmin.Id
+            };
+            packingSession.HandlingUnits.Add(hu);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            hu.HuCode = "HU-QA-001";
+            hu.Barcode = "HU-QA-001";
+            hu.Sscc = "003893000000000018";
+            hu.Type = HandlingUnitType.Carton;
+            hu.Status = HandlingUnitStatus.InUse;
+            hu.GrossWeightKg = 8.4m;
+            hu.NetWeightKg = 8.0m;
+            hu.VolumeM3 = 0.04m;
+            hu.ClosedAt = null;
+            hu.SealedAt = null;
+        }
+
+        if (!hu.Contents.Any())
+        {
+            hu.Contents.Add(new HandlingUnitContent
+            {
+                PickingTaskLineId = packTaskLine.Id,
+                ProductId = product.Id,
+                Quantity = 2m,
+                PackedAt = DateTime.UtcNow.AddMinutes(-10),
+                PackedBy = qaAdmin.Id
+            });
+        }
+        else
+        {
+            var firstContent = hu.Contents.First();
+            firstContent.PickingTaskLineId = packTaskLine.Id;
+            firstContent.ProductId = product.Id;
+            firstContent.Quantity = 2m;
+        }
+        await context.SaveChangesAsync();
     }
 
     // 6. Idempotent PartnerDebtInvoices ("AP-IR-QA0001" and "AR-ER-QA0001") & PartnerDebtLedgers
@@ -871,19 +1132,97 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     supplier.PayableBalance = apInvoice.RemainingAmount;
     customer.ReceivableBalance = arInvoice.RemainingAmount;
 
+    // 7. Idempotent Inventory Reconciliation pass — ensure 100% Match across all (WarehouseId, ProductId, Status) pairs
+    await context.Database.ExecuteSqlRawAsync(
+        "DELETE FROM InventoryTransactions WHERE ReferenceType = 'QASeedReconcile' OR Quantity <= 0 OR TransactionType = 6; " +
+        "DELETE FROM InventoryStocks WHERE Status <> 0 AND Quantity <= 0 AND ReservedQuantity <= 0;");
+
+    var allStocks = await context.InventoryStocks.IgnoreQueryFilters().ToListAsync();
+    foreach (var stock in allStocks)
+    {
+        if (stock.Quantity < 0m)
+            stock.Quantity = 0m;
+        if (stock.ReservedQuantity < 0m)
+            stock.ReservedQuantity = 0m;
+        if (stock.ReservedQuantity > stock.Quantity)
+            stock.ReservedQuantity = stock.Quantity;
+    }
+    await context.SaveChangesAsync();
+
+    var allTransactions = await context.InventoryTransactions.IgnoreQueryFilters().AsNoTracking().ToListAsync();
+    var allPairs = allStocks
+        .Select(s => (s.TenantId, s.WarehouseId, s.ProductId))
+        .Union(allTransactions.Select(t => (t.TenantId, t.WarehouseId, t.ProductId)))
+        .Distinct()
+        .ToList();
+
+    var reconciledPairCount = 0;
+    foreach (var (tenantId, warehouseId, productId) in allPairs)
+    {
+        var pairStocks = allStocks
+            .Where(s => s.TenantId == tenantId && s.WarehouseId == warehouseId && s.ProductId == productId)
+            .ToList();
+        var pairTxs = allTransactions
+            .Where(t => t.TenantId == tenantId && t.WarehouseId == warehouseId && t.ProductId == productId)
+            .ToList();
+
+        var expectedByStatus = Enum.GetValues<InventoryStatus>().ToDictionary(st => st, _ => 0m);
+        foreach (var tx in pairTxs)
+        {
+            if (tx.TransactionType == TransactionType.Move)
+                continue;
+            if (tx.TransactionType == TransactionType.StatusChange &&
+                tx.FromInventoryStatus.HasValue &&
+                tx.ToInventoryStatus.HasValue)
+            {
+                expectedByStatus[tx.FromInventoryStatus.Value] -= tx.Quantity;
+                expectedByStatus[tx.ToInventoryStatus.Value] += tx.Quantity;
+            }
+            else if (Enum.IsDefined(tx.InventoryStatus))
+            {
+                expectedByStatus[tx.InventoryStatus] += tx.TransactionType.ApplySign(tx.Quantity);
+            }
+        }
+
+        foreach (var status in Enum.GetValues<InventoryStatus>())
+        {
+            var actualQty = pairStocks.Where(s => s.Status == status).Sum(s => s.Quantity);
+            var expectedQty = expectedByStatus[status];
+            var delta = actualQty - expectedQty;
+            if (delta != 0m)
+            {
+                context.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    TenantId = tenantId,
+                    WarehouseId = warehouseId,
+                    ProductId = productId,
+                    InventoryStatus = status,
+                    TransactionType = delta > 0m ? TransactionType.Import : TransactionType.AdjustmentDecrease,
+                    Quantity = Math.Abs(delta),
+                    ReferenceType = "QASeedReconcile",
+                    ReferenceId = productId,
+                    TransactionDate = DateTime.UtcNow.AddMinutes(-1),
+                    CreatedBy = qaAdmin.Id,
+                    Note = "Đồng bộ đối chiếu sổ cái tồn kho chuẩn QA (100% Match)"
+                });
+                reconciledPairCount++;
+            }
+        }
+    }
+
     context.AuditLogs.Add(new AuditLog
     {
         UserId = qaAdmin.Id,
         Action = "QA.IamAndOperationalSeedApplied",
         EntityName = "LocalQaOperationalSeed",
-        NewValues = $"Warehouse={primaryWarehouse.Code};PutawayTask=PUT-QA-001({putawayTask.Status});PickingTask={pickingTask.TaskCode}({pickingTask.Status});AP={apInvoice.Code};AR={arInvoice.Code};CleanedPartners={cleanedPartnersCount}",
+        NewValues = $"Warehouse={primaryWarehouse.Code};PutawayTask=PUT-QA-001({putawayTask.Status});PickingTask={pickingTask.TaskCode}({pickingTask.Status});PackingSession={packingSession.SessionCode}({packingSession.Status});AP={apInvoice.Code};AR={arInvoice.Code};Reconciled={reconciledPairCount};CleanedPartners={cleanedPartnersCount}",
         Timestamp = DateTime.UtcNow,
         IpAddress = "local-cli"
     });
     await context.SaveChangesAsync();
     await transaction.CommitAsync();
 
-    Console.WriteLine($"[{dataSource}] Local ERP_KHO QA seed completed: PutawayTask=PUT-QA-001 ({putawayTask.Status}), PickingTask={pickingTask.TaskCode} ({pickingTask.Status}), AP={apInvoice.Code}, AR={arInvoice.Code}, CleanedPartners={cleanedPartnersCount}.");
+    Console.WriteLine($"[{dataSource}] Local ERP_KHO QA seed completed: PutawayTask=PUT-QA-001 ({putawayTask.Status}), PickingTask={pickingTask.TaskCode} ({pickingTask.Status}), PackingSession={packingSession.SessionCode} ({packingSession.Status}), AP={apInvoice.Code}, AR={arInvoice.Code}, ReconciledDeltas={reconciledPairCount}, CleanedPartners={cleanedPartnersCount}.");
 }
 
 static async Task RevokeQaSessionsAsync(ErpKhoDbContext context)

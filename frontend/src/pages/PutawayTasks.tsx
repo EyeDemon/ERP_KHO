@@ -76,7 +76,7 @@ export default function PutawayTasks(){
      setSlottingBusy(false);
    }
  };
- if(loading)return <p role="status">Đang tải nhiệm vụ cất hàng...</p>;
+ if(loading&&tasks.length===0)return <p role="status">Đang tải nhiệm vụ cất hàng...</p>;
  const openOrAssignedCount=tasks.filter(x=>x.status==='Open'||x.status==='Assigned').length;
  const inProgressCount=tasks.filter(x=>x.status==='InProgress').length;
  const completedCount=tasks.filter(x=>x.status==='Completed').length;
@@ -188,8 +188,8 @@ export default function PutawayTasks(){
                </div>
              </td>
              <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
-               <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLocationCode} →</span>
-               <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>{targetLocationCode}</span>
+               <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLocationCode}</span>
+               <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>→ {targetLocationCode}</span>
              </td>
              <td style={{ padding: '6px 5px', fontSize: 10.5, verticalAlign: 'middle' }}>
                <UiBadge tone={task.status==='Completed'?'success':task.status==='Exception'?'danger':task.status==='InProgress'?'warning':'neutral'}>
@@ -240,7 +240,7 @@ export default function PutawayTasks(){
          {canAssign&&selected.status==='Open'&&<button disabled={!!busy} onClick={()=>void mutate(`assign-${selected.id}`,`/api/putaway-tasks/${selected.id}/assign`,{assignedUserId:currentUserId(),rowVersion:selected.rowVersion})}>{busy?'Đang lưu...':'Nhận nhiệm vụ'}</button>}
          {canExecute&&selected.status==='Assigned'&&<button disabled={!!busy} onClick={()=>void mutate(`start-${selected.id}`,`/api/putaway-tasks/${selected.id}/start`,{rowVersion:selected.rowVersion})}>{busy?'Đang lưu...':'Bắt đầu cất hàng'}</button>}
          {canExecute&&selected.status==='InProgress'&&<>
-           <label>Lý do cần xử lý<input value={exceptionReason} onChange={e=>setExceptionReason(e.target.value)} /></label>
+           <label style={{display:'flex',flexDirection:'column',gap:6}}>Lý do cần xử lý<input value={exceptionReason} onChange={e=>setExceptionReason(e.target.value)} /></label>
            <button disabled={!!busy||!exceptionReason.trim()} onClick={()=>void mutate(`exception-${selected.id}`,`/api/putaway-tasks/${selected.id}/exception`,{reason:exceptionReason,rowVersion:selected.rowVersion})}>Báo cần xử lý</button>
          </>}
          {canExecute&&selected.status==='Exception'&&<button disabled={!!busy} onClick={()=>void mutate(`resume-${selected.id}`,`/api/putaway-tasks/${selected.id}/resume`,{rowVersion:selected.rowVersion})}>Tiếp tục cất hàng</button>}
@@ -257,8 +257,8 @@ export default function PutawayTasks(){
            <p>Cần cất: <strong>{item.requiredOperationQuantity} {item.operationUnitCode}</strong> ({item.requiredBaseQuantity} {item.baseUnitCode})</p>
            <p>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>
            {canExecute&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
-             <label>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
-             <label>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0.0001" step="0.0001" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:e.target.value===''?'':roundQty4(Number(e.target.value))}))}/></label>
+             <label style={{display:'flex',flexDirection:'column',gap:6}}>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
+             <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0.0001" step="0.0001" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:e.target.value===''?'':roundQty4(Number(e.target.value))}))}/></label>
              <button disabled={!!busy||!destination[item.id]||!(Number(quantity[item.id])>0)} onClick={()=>void mutate(`move-${selected.id}-${item.id}`,`/api/putaway-tasks/${selected.id}/move`,{itemId:item.id,destinationLocationId:destination[item.id],quantity:roundQty4(Number(quantity[item.id])),unitCode:item.operationUnitCode,rowVersion:selected.rowVersion,...(scannedBin[item.id]?{destinationLocationBarcode:scannedBin[item.id]}:{}),...(scannedProduct[item.id]?{productBarcode:scannedProduct[item.id]}:{})})}>{busy===`move-${selected.id}-${item.id}`?'Đang hoàn thành...':'Xác nhận số lượng'}</button>
            </div>}
          </fieldset>)}

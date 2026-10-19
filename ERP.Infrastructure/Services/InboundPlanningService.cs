@@ -36,7 +36,7 @@ public sealed class InboundPlanningService(
             return new PurchaseOrderListDto
             {
                 Id = x.Id, ExternalPoId = x.ExternalPoId, Code = x.Code, SupplierCode = x.Supplier.Code, SupplierName = x.Supplier.Name,
-                WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, Status = x.Status.ToString(), OrderDate = x.OrderDate,
+                WarehouseId = x.WarehouseId, WarehouseCode = x.Warehouse.Code, WarehouseName = x.Warehouse.Name, Status = x.Status.ToString(), OrderDate = x.OrderDate,
                 ExpectedDate = x.ExpectedDate, Currency = x.Currency ?? "VND", BaseOrderedQuantity = x.Lines.Sum(l => l.BaseOrderedQuantity),
                 SubTotalAmount = subTotal, TaxAmount = taxAmount, TotalAmount = subTotal + taxAmount
             };
@@ -128,7 +128,7 @@ public sealed class InboundPlanningService(
         return await query.OrderByDescending(x=>x.CreatedAtUtc).Select(x=>new AsnListDto
         {
             Id=x.Id,Code=x.Code,PurchaseOrderId=x.PurchaseOrderId,PurchaseOrderCode=x.PurchaseOrder!=null?x.PurchaseOrder.Code:null,
-            SupplierCode=x.Supplier.Code,SupplierName=x.Supplier.Name,WarehouseId=x.WarehouseId,WarehouseName=x.Warehouse.Name,
+            SupplierCode=x.Supplier.Code,SupplierName=x.Supplier.Name,WarehouseId=x.WarehouseId,WarehouseCode=x.Warehouse.Code,WarehouseName=x.Warehouse.Name,
             Status=x.Status.ToString(),ExpectedArrivalAtUtc=x.ExpectedArrivalAtUtc,BaseExpectedQuantity=x.Lines.Sum(l=>l.BaseExpectedQuantity)
         }).ToListAsync(token);
     }
@@ -385,8 +385,8 @@ public sealed class InboundPlanningService(
         return new(opId,uom.Unit.Code,uom.Unit.DecimalPlaces,product.UnitId,product.Unit.Code,product.Unit.DecimalPlaces,uom.ConversionFactor,uom.Version,baseQty);
     }
 
-    private IQueryable<PurchaseOrder> PurchaseOrderQuery()=>context.PurchaseOrders.Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product);
-    private IQueryable<Asn> AsnQuery()=>context.Asns.Include(x=>x.PurchaseOrder).Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product);
+    private IQueryable<PurchaseOrder> PurchaseOrderQuery()=>context.PurchaseOrders.Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product).ThenInclude(x=>x.Unit);
+    private IQueryable<Asn> AsnQuery()=>context.Asns.Include(x=>x.PurchaseOrder).Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product).ThenInclude(x=>x.Unit);
 
     private PurchaseOrderDto Map(PurchaseOrder x)
     {
@@ -394,11 +394,12 @@ public sealed class InboundPlanningService(
         {
             var lineSub = decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
             var lineTax = decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+            var fallbackUom = l.Product?.Unit?.Code ?? string.Empty;
             return new PurchaseOrderLineDto
             {
-                Id = l.Id, ExternalLineId = l.ExternalLineId, LineNo = l.LineNo, ProductId = l.ProductId, ProductCode = l.Product.Code, ProductName = l.Product.Name,
-                OrderedQuantity = l.OrderedQuantity, OperationUnitCode = l.OperationUnitCodeSnapshot, BaseOrderedQuantity = l.BaseOrderedQuantity,
-                BaseUnitCode = l.BaseUnitCodeSnapshot, UnitPrice = l.UnitPrice, TaxPercent = l.TaxPercent,
+                Id = l.Id, ExternalLineId = l.ExternalLineId, LineNo = l.LineNo, ProductId = l.ProductId, ProductCode = l.Product?.Code ?? string.Empty, ProductName = l.Product?.Name ?? string.Empty,
+                OrderedQuantity = l.OrderedQuantity, OperationUnitCode = !string.IsNullOrWhiteSpace(l.OperationUnitCodeSnapshot) ? l.OperationUnitCodeSnapshot : fallbackUom, BaseOrderedQuantity = l.BaseOrderedQuantity,
+                BaseUnitCode = !string.IsNullOrWhiteSpace(l.BaseUnitCodeSnapshot) ? l.BaseUnitCodeSnapshot : fallbackUom, UnitPrice = l.UnitPrice, TaxPercent = l.TaxPercent,
                 LineSubTotal = lineSub, LineTaxAmount = lineTax, LineTotal = lineSub + lineTax,
                 AllowedOverReceiptPct = l.AllowedOverReceiptPct, AllowedUnderReceiptPct = l.AllowedUnderReceiptPct
             };
@@ -408,7 +409,7 @@ public sealed class InboundPlanningService(
         return new()
         {
             Id = x.Id, ExternalPoId = x.ExternalPoId, SourceSystem = x.SourceSystem, Code = x.Code, SupplierCode = x.Supplier.Code, SupplierName = x.Supplier.Name,
-            WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, Status = x.Status.ToString(), OrderDate = x.OrderDate, ExpectedDate = x.ExpectedDate,
+            WarehouseId = x.WarehouseId, WarehouseCode = x.Warehouse.Code, WarehouseName = x.Warehouse.Name, Status = x.Status.ToString(), OrderDate = x.OrderDate, ExpectedDate = x.ExpectedDate,
             Currency = x.Currency ?? "VND", ExternalVersion = x.ExternalVersion, BaseOrderedQuantity = x.Lines.Sum(l => l.BaseOrderedQuantity),
             SubTotalAmount = subTotal, TaxAmount = taxAmount, TotalAmount = subTotal + taxAmount,
             RowVersion = CanSeeMutationToken() ? Convert.ToBase64String(x.RowVersion) : null,
@@ -419,13 +420,18 @@ public sealed class InboundPlanningService(
     private AsnDto Map(Asn x)=>new()
     {
         Id=x.Id,Code=x.Code,PurchaseOrderId=x.PurchaseOrderId,PurchaseOrderCode=x.PurchaseOrder?.Code,SupplierCode=x.Supplier.Code,SupplierName=x.Supplier.Name,
-        WarehouseId=x.WarehouseId,WarehouseName=x.Warehouse.Name,Status=x.Status.ToString(),ExpectedArrivalAtUtc=x.ExpectedArrivalAtUtc,
+        WarehouseId=x.WarehouseId,WarehouseCode=x.Warehouse.Code,WarehouseName=x.Warehouse.Name,Status=x.Status.ToString(),ExpectedArrivalAtUtc=x.ExpectedArrivalAtUtc,
         BaseExpectedQuantity=x.Lines.Sum(l=>l.BaseExpectedQuantity),CarrierName=x.CarrierName,VehiclePlate=x.VehiclePlate,Note=x.Note,
         RowVersion=CanSeeMutationToken()?Convert.ToBase64String(x.RowVersion):null,
-        Lines=x.Lines.OrderBy(l=>l.LineNo).Select(l=>new AsnLineDto
+        Lines=x.Lines.OrderBy(l=>l.LineNo).Select(l=>
         {
-            Id=l.Id,PurchaseOrderLineId=l.PurchaseOrderLineId,LineNo=l.LineNo,ProductId=l.ProductId,ProductCode=l.Product.Code,ProductName=l.Product.Name,
-            ExpectedQuantity=l.ExpectedQuantity,OperationUnitCode=l.OperationUnitCodeSnapshot,BaseExpectedQuantity=l.BaseExpectedQuantity,BaseUnitCode=l.BaseUnitCodeSnapshot
+            var fallbackUom=l.Product?.Unit?.Code??string.Empty;
+            return new AsnLineDto
+            {
+                Id=l.Id,PurchaseOrderLineId=l.PurchaseOrderLineId,LineNo=l.LineNo,ProductId=l.ProductId,ProductCode=l.Product?.Code??string.Empty,ProductName=l.Product?.Name??string.Empty,
+                ExpectedQuantity=l.ExpectedQuantity,OperationUnitCode=!string.IsNullOrWhiteSpace(l.OperationUnitCodeSnapshot)?l.OperationUnitCodeSnapshot:fallbackUom,
+                BaseExpectedQuantity=l.BaseExpectedQuantity,BaseUnitCode=!string.IsNullOrWhiteSpace(l.BaseUnitCodeSnapshot)?l.BaseUnitCodeSnapshot:fallbackUom
+            };
         }).ToList()
     };
 

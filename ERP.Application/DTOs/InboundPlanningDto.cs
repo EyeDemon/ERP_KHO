@@ -8,6 +8,7 @@ public class PurchaseOrderListDto
     public string SupplierCode { get; set; } = string.Empty;
     public string SupplierName { get; set; } = string.Empty;
     public int WarehouseId { get; set; }
+    public string WarehouseCode { get; set; } = string.Empty;
     public string WarehouseName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime OrderDate { get; set; }
@@ -93,6 +94,7 @@ public class AsnListDto
     public string SupplierCode { get; set; } = string.Empty;
     public string SupplierName { get; set; } = string.Empty;
     public int WarehouseId { get; set; }
+    public string WarehouseCode { get; set; } = string.Empty;
     public string WarehouseName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime? ExpectedArrivalAtUtc { get; set; }

@@ -266,7 +266,7 @@ export default function PurchaseOrders(){
       mutationLock,setBusy,setError,setSuccess,setSelected,reload:loadList,
     });
 
-  if(loading)return <p role="status">Đang tải đơn mua...</p>;
+  if(loading&&items.length===0)return <p role="status">Đang tải đơn mua...</p>;
 
   return <UiPage>
     <UiPageHeader

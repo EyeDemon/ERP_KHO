@@ -91,8 +91,8 @@ describe('Cất hàng',()=>{
  it('renders Lộ trình column in Danh sách nhiệm vụ as two nowrap spans with single arrow → without broken ->',async()=>{
    const v=render(<PutawayTasks/>);
    await v.findByText('PN-1');
-   const fromSpan=v.getByText('RECEIVING →');
-   const toSpan=v.getByText('BIN-A01-01');
+   const fromSpan=v.getByText('RECEIVING');
+   const toSpan=v.getByText('→ BIN-A01-01');
    expect(fromSpan.tagName).toBe('SPAN');
    expect(toSpan.tagName).toBe('SPAN');
    expect((fromSpan as HTMLElement).style.whiteSpace).toBe('nowrap');

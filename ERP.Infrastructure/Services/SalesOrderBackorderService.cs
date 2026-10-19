@@ -602,7 +602,7 @@ public sealed class SalesOrderBackorderService(
                 ProductId = line.ProductId,
                 ProductCode = line.Product.Code,
                 ProductName = line.Product.Name,
-                UomCode = line.UomCode,
+                UomCode = !string.IsNullOrWhiteSpace(line.UomCode) ? line.UomCode : (line.Product?.Unit?.Code ?? string.Empty),
                 OrderedQuantity = line.OrderedQuantity,
                 UnitPrice = line.UnitPrice,
                 TaxPercent = line.TaxPercent,
@@ -635,6 +635,7 @@ public sealed class SalesOrderBackorderService(
         dto.CustomerCode = order.Customer.Code;
         dto.CustomerName = order.Customer.Name;
         dto.WarehouseId = order.WarehouseId;
+        dto.WarehouseCode = order.Warehouse.Code;
         dto.WarehouseName = order.Warehouse.Name;
         dto.RequestedShipDate = order.RequestedShipDate;
         dto.Priority = order.Priority;
@@ -802,6 +803,7 @@ public sealed class SalesOrderBackorderService(
             ExternalOrderId = order.ExternalOrderId,
             SalesOrderLineId = line.Id,
             WarehouseId = row.WarehouseId,
+            WarehouseCode = row.Warehouse.Code,
             WarehouseName = row.Warehouse.Name,
             ProductId = line.ProductId,
             ProductCode = line.Product.Code,

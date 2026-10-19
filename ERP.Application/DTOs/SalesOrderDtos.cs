@@ -36,6 +36,7 @@ public class SalesOrderListDto
     public string CustomerCode { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
     public int WarehouseId { get; set; }
+    public string WarehouseCode { get; set; } = string.Empty;
     public string WarehouseName { get; set; } = string.Empty;
     public DateTime? RequestedShipDate { get; set; }
     public int Priority { get; set; }
@@ -95,6 +96,7 @@ public sealed class BackorderDto
     public string ExternalOrderId { get; set; } = string.Empty;
     public int SalesOrderLineId { get; set; }
     public int WarehouseId { get; set; }
+    public string WarehouseCode { get; set; } = string.Empty;
     public string WarehouseName { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public string ProductCode { get; set; } = string.Empty;

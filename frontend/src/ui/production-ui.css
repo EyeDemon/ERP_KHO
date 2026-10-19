@@ -157,6 +157,10 @@
   font-size: 12px;
 }
 
+.production-ui .ui-table-compact tr > :last-child {
+  padding-right: 10px;
+}
+
 .production-ui .ui-table-compact .ui-badge {
   padding: 2px 6px;
   font-size: 11px;
@@ -272,6 +276,13 @@
   color: var(--ui-secondary);
   font-size: 12px;
   font-weight: 650;
+}
+
+.production-ui label:has(> input:not([type="checkbox"]):not([type="radio"]), > select, > textarea) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }
 
 .production-ui fieldset {

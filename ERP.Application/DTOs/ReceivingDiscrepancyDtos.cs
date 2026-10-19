@@ -49,6 +49,9 @@ public sealed class ReceivingDiscrepancyDto
 {
     public int Id { get; set; }
     public int ReceiptLineId { get; set; }
+    public int ProductId { get; set; }
+    public string ProductCode { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public decimal ExpectedQuantity { get; set; }
     public decimal BaseExpectedQuantity { get; set; }

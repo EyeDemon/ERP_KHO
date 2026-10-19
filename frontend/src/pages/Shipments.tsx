@@ -146,7 +146,7 @@ export default function Shipments(){
     }finally{lock.current.delete(key);setBusy('')}
   };
 
-  if(loading)return <p role="status">Đang tải Shipment...</p>;
+  if(loading&&rows.length===0)return <p role="status">Đang tải Shipment...</p>;
 
   const preDispatchCount=rows.filter(x=>['Ready','Staging','Loading','Loaded'].includes(x.status)).length;
   const inTransitCount=rows.filter(x=>['Dispatched','InTransit'].includes(x.status)).length;

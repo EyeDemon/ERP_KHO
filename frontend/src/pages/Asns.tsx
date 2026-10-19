@@ -255,7 +255,7 @@ export default function Asns(){
 
   const eligiblePurchaseOrders=purchaseOrders.filter(x=>['Open','PartiallyReceived'].includes(x.status));
 
-  if(loading)return <p role="status">Đang tải ASN...</p>;
+  if(loading&&items.length===0)return <p role="status">Đang tải ASN...</p>;
 
   return <UiPage>
     <UiPageHeader

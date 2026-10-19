@@ -78,4 +78,21 @@ describe('Picking workbench',()=>{
     expect(await view.findByLabelText('Short pick resolution 9')).toBeTruthy();
     expect(view.queryByText('Supervisor override')).toBeNull();
   });
+
+  it('renders mobile 2-line nowrap route cells with →, right padding >= 8px, and vertical label stacking',async()=>{
+    grant('picking.read','picking.execute');
+    const view=render(<PickingTasks/>);
+    await view.findByText('PICK-2026-0088');
+    const routeSourceSpan=view.getByText('EX-2026-5108');
+    const routeTargetSpan=view.getByText('→ BIN-PICK');
+    expect(routeSourceSpan.tagName).toBe('SPAN');
+    expect(routeSourceSpan.style.whiteSpace).toBe('nowrap');
+    expect(routeTargetSpan.tagName).toBe('SPAN');
+    expect(routeTargetSpan.style.whiteSpace).toBe('nowrap');
+    const progressHeader=view.getByRole('columnheader',{name:'Tiến độ'});
+    expect(progressHeader.style.paddingRight).toBe('10px');
+    fireEvent.click(view.getByText('PICK-2026-0088'));
+    const locInput=await view.findByLabelText('Location barcode SKU-1001');
+    expect(locInput.closest('label')?.style.flexDirection).toBe('column');
+  });
 });

@@ -34,6 +34,14 @@ const states:Record<string,string>={
 const lineStates:Record<string,string>={
   Open:'Chưa bắt đầu',InProgress:'Đang lấy',Picked:'Đã lấy đủ',ShortPick:'Thiếu hàng',Resolved:'Đã xử lý',
 };
+const pickingTypeLabels:Record<string,string>={
+  Standard:'Tiêu chuẩn',STANDARD:'Tiêu chuẩn',Single:'Đơn lẻ',SINGLE:'Đơn lẻ',
+  SingleOrder:'Đơn lẻ',SINGLEORDER:'Đơn lẻ',SINGLE_ORDER:'Đơn lẻ',
+  Wave:'Theo đợt (Wave)',WAVE:'Theo đợt (Wave)',Batch:'Theo lô (Batch)',BATCH:'Theo lô (Batch)',
+};
+const sourceTypeLabels:Record<string,string>={
+  ExportReceipt:'Phiếu xuất kho',SalesOrder:'Đơn bán hàng',StockTransfer:'Phiếu điều chuyển',
+};
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Completed'||status==='Picked'?'success':status==='ShortPick'?'danger':status==='InProgress'||status==='Assigned'?'warning':'neutral';
 
@@ -119,7 +127,7 @@ export default function PickingTasks(){
     }finally{lock.current.delete(key);setBusy('')}
   };
 
-  if(loading)return <p role="status">Đang tải nhiệm vụ Picking...</p>;
+  if(loading&&tasks.length===0)return <p role="status">Đang tải nhiệm vụ Picking...</p>;
 
   const mobileReadyTasksCount=tasks.filter(x=>['Open','Assigned','InProgress'].includes(x.status)).length;
   const shortPickExceptionTasksCount=tasks.filter(x=>x.status==='ShortPick').length;
@@ -136,7 +144,7 @@ export default function PickingTasks(){
       if(matchedLine){
         setMobileScanResult(`Khớp dòng: ${matchedLine.productCode} tại vị trí ${matchedLine.sourceLocationCode} (Còn: ${matchedLine.remainingQuantity})`);
       }else if(matchedTask){
-        setMobileScanResult(`Khớp nhiệm vụ: ${matchedTask.taskCode} • Kho: ${matchedTask.warehouseName} (${matchedTask.status})`);
+        setMobileScanResult(`Khớp nhiệm vụ: ${matchedTask.taskCode} • Kho: ${matchedTask.warehouseName} (${states[matchedTask.status]??matchedTask.status})`);
       }else{
         setMobileScanResult(`Không tìm thấy nhiệm vụ/SKU/vị trí khớp với mã quét: ${q}`);
       }
@@ -227,7 +235,7 @@ export default function PickingTasks(){
             <tbody>{waves.map(wave=><tr key={wave.waveCode}>
               <td><strong>{wave.waveCode}</strong></td>
               <td>{wave.warehouseName}</td>
-              <td><UiBadge>{wave.pickingType}</UiBadge> • P{wave.priority}</td>
+              <td><UiBadge>{pickingTypeLabels[wave.pickingType]??wave.pickingType}</UiBadge> • P{wave.priority}</td>
               <td>{wave.taskCount} ({wave.openTaskCount} mở)</td>
               <td><strong>{wave.totalPickedQuantity}</strong> / {wave.totalRequestedQuantity} (còn {wave.totalRemainingQuantity})</td>
               <td><small>{`Phiếu: ${wave.taskCodes.join(', ')}`}</small></td>
@@ -238,15 +246,47 @@ export default function PickingTasks(){
 
       <UiCard title="Danh sách nhiệm vụ Picking">
         {tasks.length===0?<p>Chưa có nhiệm vụ Picking phù hợp.</p>:<UiTableScroll>
-          <table aria-label="Danh sách nhiệm vụ Picking">
-            <thead><tr><th>Nhiệm vụ</th><th>Nguồn</th><th>Kho</th><th>Trạng thái</th><th>Tiến độ</th></tr></thead>
-            <tbody>{tasks.map(task=><tr key={task.id}>
-              <td><button type="button" onClick={()=>void detail(task.id)}>{task.taskCode}</button></td>
-              <td>{task.sourceCode??task.sourceType}</td>
-              <td>{task.warehouseName}</td>
-              <td><UiBadge tone={tone(task.status)}>{states[task.status]??task.status}</UiBadge></td>
-              <td><strong>{task.pickedQuantity}</strong> / {task.requestedQuantity}</td>
-            </tr>)}</tbody>
+          <table aria-label="Danh sách nhiệm vụ Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Nhiệm vụ</th>
+                <th style={{ width: '27%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+                <th style={{ width: '28%', padding: '6px 5px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+              </tr>
+            </thead>
+            <tbody>{tasks.map(task=>{
+              const sourceLabel=task.sourceCode??(sourceTypeLabels[task.sourceType]??task.sourceType);
+              const pickLocationLabel=task.lines?.[0]?.sourceLocationCode??'BIN-PICK';
+              return <tr key={task.id}>
+                <td style={{ padding: '6px 5px', fontSize: 11, verticalAlign: 'middle' }}>
+                  <button
+                    type="button"
+                    style={{ whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'anywhere', padding: '3px 6px', minHeight: 26, fontSize: 11, lineHeight: 1.2, maxWidth: '100%' }}
+                    onClick={()=>void detail(task.id)}
+                  >
+                    {task.taskCode}
+                  </button>
+                  <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>
+                    {task.warehouseName}
+                  </div>
+                </td>
+                <td style={{ padding: '6px 5px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
+                  <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLabel}</span>
+                  <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>→ {pickLocationLabel}</span>
+                </td>
+                <td style={{ padding: '6px 5px', fontSize: 10.5, verticalAlign: 'middle' }}>
+                  <UiBadge tone={tone(task.status)}>
+                    <span style={{ whiteSpace: 'normal', lineHeight: 1.2, fontSize: 10.5, display: 'inline-block', maxWidth: 'none', textAlign: 'center' }}>
+                      {states[task.status]??task.status}
+                    </span>
+                  </UiBadge>
+                </td>
+                <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+                  <strong>{task.pickedQuantity}</strong> / {task.requestedQuantity}
+                </td>
+              </tr>;
+            })}</tbody>
           </table>
         </UiTableScroll>}
       </UiCard>
@@ -254,7 +294,7 @@ export default function PickingTasks(){
       {selected&&<UiCard title={`Chi tiết ${selected.taskCode}`}>
         <div className="ui-inline-wrap">
           <UiBadge tone={tone(selected.status)}>{states[selected.status]??selected.status}</UiBadge>
-          <span className="ui-muted-text">{selected.sourceCode??selected.sourceType} • {selected.warehouseName}</span>
+          <span className="ui-muted-text">{selected.sourceCode??(sourceTypeLabels[selected.sourceType]??selected.sourceType)} • {selected.warehouseName}</span>
           <span className="ui-muted-text">Tiến độ {selected.pickedQuantity}/{selected.requestedQuantity}</span>
         </div>
         <p className="ui-muted-text">
@@ -287,15 +327,15 @@ export default function PickingTasks(){
 
             {canExecute&&selected.status==='InProgress'&&['Open','InProgress'].includes(line.status)&&line.remainingQuantity>0&&
               <div className="ui-inline-wrap">
-                <label>Quét location
+                <label style={{display:'flex',flexDirection:'column',gap:6}}>Quét location
                   <input aria-label={`Location barcode ${line.productCode}`} value={scan[line.id]?.location??''}
                     onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{product:'',quantity:''}),location:e.target.value}}))}/>
                 </label>
-                <label>Quét sản phẩm
+                <label style={{display:'flex',flexDirection:'column',gap:6}}>Quét sản phẩm
                   <input aria-label={`Product barcode ${line.productCode}`} value={scan[line.id]?.product??''}
                     onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{location:'',quantity:''}),product:e.target.value}}))}/>
                 </label>
-                <label>Số lượng
+                <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng
                   <input aria-label={`Pick quantity ${line.productCode}`} type="number" min="0" step="any" value={scan[line.id]?.quantity??''}
                     onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{location:'',product:''}),quantity:e.target.value}}))}/>
                 </label>
@@ -308,7 +348,7 @@ export default function PickingTasks(){
 
             {canShortPick&&selected.status==='InProgress'&&['Open','InProgress'].includes(line.status)&&line.remainingQuantity>0&&
               <div className="ui-inline-wrap">
-                <label>Lý do Short Pick
+                <label style={{display:'flex',flexDirection:'column',gap:6}}>Lý do Short Pick
                   <input aria-label={`Short pick reason ${line.productCode}`} value={shortReason[line.id]??''}
                     onChange={e=>setShortReason(v=>({...v,[line.id]:e.target.value}))}/>
                 </label>
@@ -324,16 +364,16 @@ export default function PickingTasks(){
           <legend>Short Pick #{item.id}</legend>
           <p>Dòng #{item.pickingTaskLineId} • Thiếu <strong>{item.shortageQuantity}</strong> • {item.reason}</p>
           {canShortPick&&<div className="ui-inline-wrap">
-            <label>Phương án
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Phương án
               <select aria-label={`Short pick resolution ${item.id}`} value={resolution[item.id]??''}
                 onChange={e=>setResolution(v=>({...v,[item.id]:e.target.value}))}>
                 <option value="">Chọn phương án</option>
                 <option value="AlternativeLocation">Vị trí khác</option>
-                <option value="Backorder">Backorder</option>
+                <option value="Backorder">Tạo đơn bù sau (Backorder)</option>
                 <option value="CancelRemainder">Hủy phần thiếu</option>
               </select>
             </label>
-            <label>Ghi chú
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Ghi chú
               <input aria-label={`Short pick note ${item.id}`} value={resolutionNote[item.id]??''}
                 onChange={e=>setResolutionNote(v=>({...v,[item.id]:e.target.value}))}/>
             </label>

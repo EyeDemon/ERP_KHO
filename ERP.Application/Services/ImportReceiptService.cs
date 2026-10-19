@@ -257,12 +257,12 @@ namespace ERP.Application.Services
                     AsnLineId = d.AsnLineId,
                     ProductCode = d.Product?.Code,
                     ProductName = d.Product?.Name,
-                    UnitName = d.OperationUnitCodeSnapshot.Length > 0 ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Name,
+                    UnitName = !string.IsNullOrWhiteSpace(d.OperationUnitCodeSnapshot) ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Name,
                     OperationUnitId = d.OperationUnitId > 0 ? d.OperationUnitId : d.Product?.UnitId ?? 0,
-                    OperationUnitCode = d.OperationUnitCodeSnapshot.Length > 0 ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Code ?? string.Empty,
+                    OperationUnitCode = !string.IsNullOrWhiteSpace(d.OperationUnitCodeSnapshot) ? d.OperationUnitCodeSnapshot : (d.Product?.Unit?.Code ?? string.Empty),
                     OperationUnitDecimalPlaces = d.OperationUnitDecimalPlaces,
                     BaseUnitId = d.BaseUnitId > 0 ? d.BaseUnitId : d.Product?.UnitId ?? 0,
-                    BaseUnitCode = d.BaseUnitCodeSnapshot.Length > 0 ? d.BaseUnitCodeSnapshot : d.Product?.Unit?.Code ?? string.Empty,
+                    BaseUnitCode = !string.IsNullOrWhiteSpace(d.BaseUnitCodeSnapshot) ? d.BaseUnitCodeSnapshot : (d.Product?.Unit?.Code ?? string.Empty),
                     BaseUnitDecimalPlaces = d.BaseUnitDecimalPlaces,
                     ConversionFactor = d.ConversionFactor > 0 ? d.ConversionFactor : 1,
                     ConversionVersion = d.ConversionVersion > 0 ? d.ConversionVersion : 1,
@@ -310,6 +310,7 @@ namespace ERP.Application.Services
                 Id = receipt.Id,
                 Code = receipt.Code,
                 WarehouseId = receipt.WarehouseId,
+                WarehouseCode = receipt.Warehouse?.Code,
                 WarehouseName = receipt.Warehouse?.Name,
                 Status = receipt.Status.ToString(),
                 Note = receipt.Note,
@@ -324,8 +325,8 @@ namespace ERP.Application.Services
                 PurchaseOrderCode = receipt.PurchaseOrder?.Code,
                 AsnId = receipt.AsnId,
                 AsnCode = receipt.Asn?.Code,
-                SupplierCode = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Code : receipt.SupplierCodeSnapshot,
-                SupplierName = receipt.Status == ReceiptStatus.Draft ? receipt.Supplier?.Name : receipt.SupplierNameSnapshot,
+                SupplierCode = !string.IsNullOrWhiteSpace(receipt.SupplierCodeSnapshot) ? receipt.SupplierCodeSnapshot : receipt.Supplier?.Code,
+                SupplierName = !string.IsNullOrWhiteSpace(receipt.SupplierNameSnapshot) ? receipt.SupplierNameSnapshot : receipt.Supplier?.Name,
                 RequiresQc = receipt.Details.Any(x => x.RequiresQc),
                 SubTotalAmount = subTotal,
                 TaxAmount = taxAmount,
@@ -438,6 +439,8 @@ namespace ERP.Application.Services
                     detail.BaseDamagedQuantity = 0;
                     detail.BaseRejectedQuantity = 0;
                 }
+                receipt.SupplierCodeSnapshot ??= receipt.Supplier?.Code;
+                receipt.SupplierNameSnapshot ??= receipt.Supplier?.Name;
                 receipt.Status = receipt.Details.Any(x => x.RequiresQc) ? ReceiptStatus.QcPending : ReceiptStatus.Received;
                 if (_inboundPlanning is not null) await _inboundPlanning.MarkReceivingAsync(receipt);
                 await _importReceiptRepository.UpdateAsync(receipt);

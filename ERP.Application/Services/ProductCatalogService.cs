@@ -29,6 +29,8 @@ public sealed partial class ProductCatalogService(IProductCatalogRepository repo
     public async Task UpdateCategoryAsync(int id, UpdateProductCategoryDto dto, CancellationToken ct = default)
     {
         var entity = await repository.GetCategoryAsync(id, ct) ?? throw new NotFoundException($"Không tìm thấy danh mục id {id}");
+        if (entity.IsActive && !dto.IsActive && await repository.CategoryHasProductsAsync(id, ct))
+            throw Conflict("Không thể ngừng hoạt động danh mục đang được sản phẩm sử dụng.");
         entity.Name = NormalizeName(dto.Name);
         entity.IsActive = dto.IsActive;
         entity.UpdatedAt = DateTime.UtcNow;
