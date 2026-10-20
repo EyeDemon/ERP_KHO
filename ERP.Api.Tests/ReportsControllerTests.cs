@@ -1012,5 +1012,243 @@ namespace ERP.Api.Tests
                 row.GetProperty("movementClass").GetString().Should().Be("NON_MOVING");
             }
         }
+
+        [Fact]
+        public async Task Wave28_OperationalDashboard_FiltersSessionRefreshNoise_AndTranslatesVietnameseLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH-01", Name = "Kho trung tâm", IsActive = true });
+            var now = DateTime.UtcNow;
+
+            for (var i = 0; i < 9; i++)
+            {
+                db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    EntityName = "UserSession",
+                    Action = "Auth.Refresh",
+                    Result = "Success",
+                    Timestamp = now.AddMinutes(-i)
+                });
+            }
+
+            db.AuditLogs.AddRange(
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "ImportReceipt", Action = "ImportReceipt.Posted", Result = "Success", Timestamp = now.AddMinutes(-10) },
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "PickingTask", Action = "PickingTask.Completed", Result = "Success", Timestamp = now.AddMinutes(-11) },
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "PackingSession", Action = "Packing.Completed", Result = "Success", Timestamp = now.AddMinutes(-12) },
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "Shipment", Action = "Shipment.Dispatched", Result = "Success", Timestamp = now.AddMinutes(-13) },
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "PutawayTask", Action = "Putaway.Moved", Result = "Success", Timestamp = now.AddMinutes(-14) },
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "InventoryLock", Action = "InventoryLock.Created", Result = "Success", Timestamp = now.AddMinutes(-15) },
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "StocktakeAdjustmentProposal", Action = "COUNT_VARIANCE", Result = "Approved", Timestamp = now.AddMinutes(-16) },
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "RtvRefurbish", Action = "ImportReceipt.ExecuteRtvRefurbish", Result = "Success", Timestamp = now.AddMinutes(-17) },
+                new ERP.Domain.Entities.AuditLog { WarehouseId = 1, EntityName = "CrossdockDispatch", Action = "DockYard.DispatchCrossdock", Result = "CROSSDOCK_ROUTED", Timestamp = now.AddMinutes(-18) }
+            );
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+
+            var controller = new ReportsController(_mockService.Object, db, warehouseAuth.Object);
+            var response = await controller.GetOperationalDashboard(db, warehouseAuth.Object);
+            var ok = response.Should().BeOfType<OkObjectResult>().Subject;
+
+            using var doc = System.Text.Json.JsonSerializer.SerializeToDocument(ok.Value);
+            var activities = doc.RootElement.GetProperty("recentActivities");
+            activities.GetArrayLength().Should().Be(9);
+
+            var actions = new List<string>();
+            for (var i = 0; i < activities.GetArrayLength(); i++)
+            {
+                actions.Add(activities[i].GetProperty("Action").GetString()!);
+            }
+
+            actions.Should().NotContain("Làm mới phiên đăng nhập");
+            actions.Should().Contain(new[]
+            {
+                "Ghi sổ phiếu nhập",
+                "Hoàn tất lấy hàng",
+                "Đóng gói kiện hàng",
+                "Xuất giao chuyến hàng",
+                "Di chuyển vị trí nội bộ",
+                "Phong tỏa lô hàng",
+                "Phê duyệt điều chỉnh kiểm kê",
+                "Xử lý hàng hỏng / trả NCC",
+                "Điều phối trung chuyển thẳng"
+            });
+        }
+
+        [Fact]
+        public async Task Wave28_StocktakeAdjustmentProposal_Approve_MutatesStockAndAppendsLedgerAndAuditLog()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH-01", Name = "Kho 1", IsActive = true });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation { Id = 10, WarehouseId = 1, Code = "A-01-01-01-01", Name = "Kệ A1", IsActive = true, LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage });
+            db.Products.Add(new ERP.Domain.Entities.Product { Id = 100, Code = "SKU-ADJ-01", Name = "Sản phẩm điều chỉnh", UnitId = 1 });
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 500,
+                WarehouseId = 1,
+                ProductId = 100,
+                LocationId = 10,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 20m,
+                ReservedQuantity = 2m
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+
+            var stocktakeService = new Mock<IStocktakeService>();
+            var stocktakeQuery = new Mock<IStocktakeQueryService>();
+            var controller = new StocktakesController(stocktakeService.Object, stocktakeQuery.Object, db, warehouseAuth.Object);
+
+            var createRes = await controller.CreateAdjustmentProposal(new StocktakesController.CreateAdjustmentProposalRequest(
+                WarehouseId: 1,
+                ProductCode: "SKU-ADJ-01",
+                DeltaQuantity: -5m,
+                ReasonCode: "COUNT_VARIANCE",
+                Note: "Kiểm đếm thiếu 5 thùng",
+                ProductId: 100,
+                LocationId: 10));
+            var createOk = createRes.Should().BeOfType<OkObjectResult>().Subject;
+            using var createDoc = System.Text.Json.JsonSerializer.SerializeToDocument(createOk.Value);
+            var proposalAuditId = createDoc.RootElement.GetProperty("proposalAuditId").GetInt64();
+
+            var approveRes = await controller.ApproveAdjustmentProposal(proposalAuditId, new StocktakesController.ApproveAdjustmentProposalRequest(LocationId: 10));
+            var approveOk = approveRes.Should().BeOfType<OkObjectResult>().Subject;
+            using var approveDoc = System.Text.Json.JsonSerializer.SerializeToDocument(approveOk.Value);
+            approveDoc.RootElement.GetProperty("status").GetString().Should().Be("Đã phê duyệt & Ghi sổ");
+            approveDoc.RootElement.GetProperty("resultingQuantity").GetDecimal().Should().Be(15m);
+
+            var updatedStock = await db.InventoryStocks.AsNoTracking().SingleAsync(s => s.Id == 500);
+            updatedStock.Quantity.Should().Be(15m);
+
+            var ledgerRow = await db.InventoryTransactions.AsNoTracking().SingleAsync();
+            ledgerRow.TransactionType.Should().Be(ERP.Domain.Enums.TransactionType.AdjustmentDecrease);
+            ledgerRow.Quantity.Should().Be(5m);
+            ledgerRow.ReferenceType.Should().Be("StocktakeAdjustment");
+
+            var listRes = await controller.GetReasonCodesAndAdjustments(1);
+            var listOk = listRes.Should().BeOfType<OkObjectResult>().Subject;
+            using var listDoc = System.Text.Json.JsonSerializer.SerializeToDocument(listOk.Value);
+            var proposals = listDoc.RootElement.GetProperty("recentProposals");
+            proposals.GetArrayLength().Should().Be(1);
+            proposals[0].GetProperty("status").GetString().Should().Be("Đã phê duyệt & Ghi sổ");
+        }
+
+        [Fact]
+        public async Task Wave28_ImportReceipts_ExecuteRtvRefurbish_MutatesBucketsAndAppendsLedger()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH-01", Name = "Kho 1", IsActive = true });
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 600,
+                WarehouseId = 1,
+                ProductId = 200,
+                LocationId = 20,
+                Status = ERP.Domain.Enums.InventoryStatus.Damaged,
+                Quantity = 8m,
+                ReservedQuantity = 0m
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            var importService = new Mock<IImportReceiptService>();
+            var controller = new ImportReceiptsController(importService.Object, null, db, warehouseAuth.Object);
+
+            // 1. RTV write-off 3 units from Damaged bucket
+            var rtvRes = await controller.ExecuteRtvRefurbish(new ImportReceiptsController.ExecuteRtvRefurbishRequest(
+                WarehouseId: 1,
+                DispositionType: "RTV",
+                ProductId: 200,
+                LocationId: 20,
+                ExecuteStockMutation: true,
+                ActionType: "RTV",
+                Quantity: 3m));
+            var rtvOk = rtvRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(rtvOk.Value))
+            {
+                doc.RootElement.GetProperty("status").GetString().Should().Be("Đã thực thi & Ghi sổ kiểm toán");
+                doc.RootElement.GetProperty("ledgerUpdated").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("resultingStockQuantity").GetDecimal().Should().Be(5m);
+            }
+
+            // 2. Refurbish remaining 5 units to Available
+            var refRes = await controller.ExecuteRtvRefurbish(new ImportReceiptsController.ExecuteRtvRefurbishRequest(
+                WarehouseId: 1,
+                DispositionType: "REFURBISH",
+                ProductId: 200,
+                LocationId: 20,
+                ExecuteStockMutation: true,
+                ActionType: "REFURBISH",
+                Quantity: 5m));
+            var refOk = refRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(refOk.Value))
+            {
+                doc.RootElement.GetProperty("status").GetString().Should().Be("Đã thực thi & Ghi sổ kiểm toán");
+                doc.RootElement.GetProperty("ledgerUpdated").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("resultingStatus").GetString().Should().Be("Available");
+                doc.RootElement.GetProperty("resultingStockQuantity").GetDecimal().Should().Be(5m);
+            }
+
+            var updatedBucket = await db.InventoryStocks.AsNoTracking().SingleAsync(s => s.Id == 600);
+            updatedBucket.Status.Should().Be(ERP.Domain.Enums.InventoryStatus.Available);
+            updatedBucket.Quantity.Should().Be(5m);
+        }
+
+        [Fact]
+        public async Task Wave28_DockYard_CrossdockCandidatesAndDispatch_PairsOutboundOrdersWithVietnameseStatus()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.ImportReceipts.Add(new ERP.Domain.Entities.ImportReceipt { Id = 1, WarehouseId = 1, Code = "PNK-XD-01", Status = ERP.Domain.Enums.ReceiptStatus.Draft });
+            db.SalesOrders.Add(new ERP.Domain.Entities.SalesOrder { Id = 1, WarehouseId = 1, OrderCode = "SO-XD-99", CustomerId = 1, Status = ERP.Domain.Enums.SalesOrderStatus.Released, Priority = 1 });
+            await db.SaveChangesAsync();
+
+            var dockService = new Mock<IDockYardService>();
+            dockService.Setup(x => x.GetAppointmentsAsync(It.IsAny<DockAppointmentQueryDto>(), default))
+                .ReturnsAsync(Array.Empty<DockAppointmentDto>());
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+
+            var controller = new DockYardController(dockService.Object, db, warehouseAuth.Object);
+
+            var candRes = await controller.GetCrossDockCandidates(1, default);
+            var candOk = candRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(candOk.Value))
+            {
+                doc.RootElement.GetProperty("inboundAppointmentCode").GetString().Should().Be("PNK-XD-01");
+                doc.RootElement.GetProperty("outboundReferenceCode").GetString().Should().Be("SO-XD-99");
+                doc.RootElement.GetProperty("dispatchStatus").GetString().Should().Be("Đã phát lệnh điều phối trung chuyển thẳng");
+                doc.RootElement.GetProperty("priorityLabel").GetString().Should().Be("Ưu tiên cao");
+            }
+
+            var dispRes = await controller.DispatchCrossdock(new DispatchCrossdockRequest(WarehouseId: 1, DockDoorCode: "DOCK-XD-02"), default);
+            var dispOk = dispRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(dispOk.Value))
+            {
+                doc.RootElement.GetProperty("inboundAppointmentCode").GetString().Should().Be("PNK-XD-01");
+                doc.RootElement.GetProperty("outboundReferenceCode").GetString().Should().Be("SO-XD-99");
+                doc.RootElement.GetProperty("dispatchStatus").GetString().Should().Be("Đã phát lệnh điều phối trung chuyển thẳng");
+                doc.RootElement.GetProperty("priorityLabel").GetString().Should().Be("Ưu tiên cao");
+            }
+        }
     }
 }

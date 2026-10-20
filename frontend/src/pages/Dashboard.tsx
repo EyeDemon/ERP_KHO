@@ -216,6 +216,7 @@ const entityNameLabel = (entityName: string) => ({
   UserSession: 'Phiên đăng nhập',
   LocalQaOperationalSeed: 'Bộ dữ liệu chuẩn',
   WarehouseCalendarException: 'Ngoại lệ lịch kho',
+  InventoryLocationMovement: 'Di chuyển vị trí kho',
 }[entityName] || entityName);
 
 const Dashboard = () => {
@@ -339,6 +340,9 @@ const Dashboard = () => {
   ].filter((link) => canAccessNavItem(link));
 
   const visibleProductionNavigation = productionNavigation.filter((item) => item.path !== '/' && canAccessNavItem(item));
+  const rawRecentActivities = liveSummary?.recentActivities ?? [];
+  const operationalRecentActivities = rawRecentActivities.filter((item) => item.action !== 'Authentication.RefreshRotated' && item.action !== 'Refresh' && item.entityName !== 'UserSession');
+  const visibleRecentActivities = operationalRecentActivities.length > 0 ? operationalRecentActivities : rawRecentActivities;
 
   return (
     <UiPage>
@@ -586,9 +590,9 @@ const Dashboard = () => {
                             {severityLabel(ex.severity)}
                           </UiBadge>
                         </td>
-                        <td style={{ whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 160 }}>{ex.summary}</td>
+                        <td style={{ minWidth: 260 }}>{ex.summary}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>
-                          <div className="ui-inline-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
+                          <div className="ui-inline-actions" style={{ display: 'inline-flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
                             <Link to={ex.route} style={{ whiteSpace: 'nowrap' }}>Xử lý →</Link>
                             {acknowledgedCodes.includes(ex.code) ? (
                               <UiBadge tone="success">Đã tiếp nhận</UiBadge>
@@ -613,7 +617,7 @@ const Dashboard = () => {
         <UiCard title="Hoạt động vận hành gần đây">
           {liveLoading ? (
             <p role="status">Đang tải nhật ký vận hành...</p>
-          ) : !liveSummary || liveSummary.recentActivities.length === 0 ? (
+          ) : !liveSummary || visibleRecentActivities.length === 0 ? (
             <p className="ui-muted-text">Chưa có hoạt động vận hành gần đây trong phạm vi kho được phép.</p>
           ) : (
             <UiTableScroll>
@@ -628,7 +632,7 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {liveSummary.recentActivities.map((item) => (
+                  {visibleRecentActivities.map((item) => (
                     <tr key={item.id}>
                       <td>{new Date(item.timestamp).toLocaleString('vi-VN')}</td>
                       <td><UiBadge>{actionLabel(item.action)}</UiBadge></td>

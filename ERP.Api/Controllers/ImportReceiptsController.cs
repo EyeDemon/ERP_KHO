@@ -241,7 +241,15 @@ namespace ERP.Api.Controllers
             });
         }
 
-        public sealed record ExecuteRtvRefurbishRequest(int? WarehouseId = null, string? DispositionType = null);
+        public sealed record ExecuteRtvRefurbishRequest(
+            int? WarehouseId = null,
+            string? DispositionType = null,
+            int? ProductId = null,
+            int? LocationId = null,
+            string? LotNumber = null,
+            bool ExecuteStockMutation = false,
+            string? ActionType = null,
+            decimal Quantity = 1m);
 
         [HttpPost("execute-rtv-refurbish")]
         [IdempotentCommand("ImportReceipt.ExecuteRtvRefurbish")]
@@ -263,6 +271,205 @@ namespace ERP.Api.Controllers
                     accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
             }
 
+            var now = DateTime.UtcNow;
+            var dispositionCode = $"DISP-RTV-{now:yyyyMMdd-HHmm}";
+            var rawAction = !string.IsNullOrWhiteSpace(request?.ActionType)
+                ? request.ActionType.Trim().ToUpperInvariant()
+                : (!string.IsNullOrWhiteSpace(request?.DispositionType) ? request.DispositionType.Trim().ToUpperInvariant() : "REFURBISH_AND_RTV_SPLIT");
+            var isRtvOrScrap = rawAction is "RTV" or "SCRAP" ||
+                               (rawAction.StartsWith("RTV", StringComparison.Ordinal) && !rawAction.Contains("REFURBISH", StringComparison.Ordinal)) ||
+                               rawAction.StartsWith("SCRAP", StringComparison.Ordinal);
+
+            var ledgerUpdated = false;
+            int? ledgerTransactionId = null;
+            decimal? resultingStockQuantity = null;
+            string? resultingStatus = null;
+
+            var actorUserId = int.TryParse(
+                User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+
+            if (_db != null && request?.ExecuteStockMutation == true && request.ProductId.HasValue && request.LocationId.HasValue)
+            {
+                var isRelational = _db.Database.IsRelational();
+                await using var tx = isRelational && _db.Database.CurrentTransaction == null
+                    ? await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken)
+                    : null;
+
+                try
+                {
+                    var stockQuery = _db.InventoryStocks
+                        .Where(s => s.ProductId == request.ProductId.Value && s.LocationId == request.LocationId.Value);
+                    if (warehouseId.HasValue)
+                        stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                    else if (accessibleIds != null)
+                        stockQuery = stockQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
+
+                    if (!string.IsNullOrWhiteSpace(request.LotNumber))
+                    {
+                        var normalizedLot = request.LotNumber.Trim();
+                        stockQuery = stockQuery.Where(s => s.Lot != null && s.Lot.LotNumber == normalizedLot);
+                    }
+
+                    var stock = await stockQuery
+                        .OrderBy(s => s.Status == ERP.Domain.Enums.InventoryStatus.Available ? 1 : 0)
+                        .ThenByDescending(s => s.Quantity - s.ReservedQuantity)
+                        .ThenBy(s => s.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (stock == null)
+                    {
+                        if (tx != null) await tx.RollbackAsync(cancellationToken);
+                        return NotFound(new { message = "Không tìm thấy tồn kho phù hợp để thực thi xử lý hàng hỏng / trả NCC / tân trang." });
+                    }
+
+                    warehouseId ??= stock.WarehouseId;
+
+                    if (isRtvOrScrap)
+                    {
+                        var writeOffQty = request.Quantity > 0m ? request.Quantity : 1m;
+                        var availableInBucket = stock.Quantity - stock.ReservedQuantity;
+                        if (availableInBucket < writeOffQty)
+                        {
+                            if (tx != null) await tx.RollbackAsync(cancellationToken);
+                            return BadRequest(new
+                            {
+                                message = $"Không đủ tồn kho khả dụng để xử lý {rawAction} (Khả dụng: {availableInBucket}, Yêu cầu: {writeOffQty})."
+                            });
+                        }
+
+                        stock.Quantity -= writeOffQty;
+                        stock.LastUpdated = now;
+
+                        var ledgerTx = new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = stock.ProductId,
+                            WarehouseId = stock.WarehouseId,
+                            LocationId = stock.LocationId,
+                            LotId = stock.LotId,
+                            SerialId = stock.SerialId,
+                            InventoryStatus = stock.Status,
+                            FromInventoryStatus = stock.Status,
+                            ToInventoryStatus = null,
+                            TransactionType = ERP.Domain.Enums.TransactionType.AdjustmentDecrease,
+                            Quantity = writeOffQty,
+                            ReferenceId = stock.Id,
+                            ReferenceType = rawAction.StartsWith("RTV", StringComparison.Ordinal)
+                                ? "QualityDispositionRtv"
+                                : "QualityDispositionScrap",
+                            TransactionDate = now,
+                            CreatedBy = actorUserId ?? 1,
+                            Note = $"{dispositionCode}: Xử lý {rawAction}"
+                        };
+                        _db.InventoryTransactions.Add(ledgerTx);
+                        await _db.SaveChangesAsync(cancellationToken);
+
+                        ledgerUpdated = true;
+                        ledgerTransactionId = ledgerTx.Id;
+                        resultingStockQuantity = stock.Quantity;
+                        resultingStatus = stock.Status.ToString();
+                    }
+                    else
+                    {
+                        var fromStatus = stock.Status;
+                        var moveQty = request.Quantity > 0m && request.Quantity <= stock.Quantity
+                            ? request.Quantity
+                            : stock.Quantity;
+
+                        if (stock.Quantity - stock.ReservedQuantity < moveQty)
+                        {
+                            if (tx != null) await tx.RollbackAsync(cancellationToken);
+                            return BadRequest(new
+                            {
+                                message = $"Không thể tân trang phần tồn kho đang giữ chỗ (Khả dụng: {stock.Quantity - stock.ReservedQuantity}, Yêu cầu: {moveQty})."
+                            });
+                        }
+
+                        var existingAvailable = await _db.InventoryStocks
+                            .FirstOrDefaultAsync(s =>
+                                s.Id != stock.Id &&
+                                s.WarehouseId == stock.WarehouseId &&
+                                s.ProductId == stock.ProductId &&
+                                s.LocationId == stock.LocationId &&
+                                s.LotId == stock.LotId &&
+                                s.SerialId == stock.SerialId &&
+                                s.Status == ERP.Domain.Enums.InventoryStatus.Available,
+                                cancellationToken);
+
+                        if (existingAvailable != null && stock.Status != ERP.Domain.Enums.InventoryStatus.Available)
+                        {
+                            stock.Quantity -= moveQty;
+                            stock.LastUpdated = now;
+                            existingAvailable.Quantity += moveQty;
+                            existingAvailable.LastUpdated = now;
+                            resultingStockQuantity = existingAvailable.Quantity;
+                        }
+                        else if (moveQty < stock.Quantity && stock.Status != ERP.Domain.Enums.InventoryStatus.Available)
+                        {
+                            stock.Quantity -= moveQty;
+                            stock.LastUpdated = now;
+                            var createdAvailable = new ERP.Domain.Entities.InventoryStock
+                            {
+                                WarehouseId = stock.WarehouseId,
+                                ProductId = stock.ProductId,
+                                LocationId = stock.LocationId,
+                                LotId = stock.LotId,
+                                SerialId = stock.SerialId,
+                                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                                Quantity = moveQty,
+                                ReservedQuantity = 0m,
+                                LastUpdated = now
+                            };
+                            _db.InventoryStocks.Add(createdAvailable);
+                            resultingStockQuantity = createdAvailable.Quantity;
+                        }
+                        else
+                        {
+                            stock.Status = ERP.Domain.Enums.InventoryStatus.Available;
+                            stock.LastUpdated = now;
+                            resultingStockQuantity = stock.Quantity;
+                        }
+
+                        var effectiveFromStatus = fromStatus == ERP.Domain.Enums.InventoryStatus.Available
+                            ? ERP.Domain.Enums.InventoryStatus.Quarantine
+                            : fromStatus;
+                        var statusTx = new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = stock.ProductId,
+                            WarehouseId = stock.WarehouseId,
+                            LocationId = stock.LocationId,
+                            FromLocationId = stock.LocationId,
+                            ToLocationId = stock.LocationId,
+                            LotId = stock.LotId,
+                            SerialId = stock.SerialId,
+                            InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                            FromInventoryStatus = effectiveFromStatus,
+                            ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                            TransactionType = ERP.Domain.Enums.TransactionType.StatusChange,
+                            Quantity = moveQty > 0m ? moveQty : 1m,
+                            ReferenceId = stock.Id,
+                            ReferenceType = "InventoryStatusChange",
+                            TransactionDate = now,
+                            CreatedBy = actorUserId ?? 1,
+                            Note = $"{dispositionCode}: Tân trang & chuyển về hàng khả dụng"
+                        };
+                        _db.InventoryTransactions.Add(statusTx);
+                        await _db.SaveChangesAsync(cancellationToken);
+
+                        ledgerUpdated = true;
+                        ledgerTransactionId = statusTx.Id;
+                        resultingStatus = ERP.Domain.Enums.InventoryStatus.Available.ToString();
+                    }
+
+                    if (tx != null) await tx.CommitAsync(cancellationToken);
+                }
+                catch
+                {
+                    if (tx != null) await tx.RollbackAsync(CancellationToken.None);
+                    throw;
+                }
+            }
+
             var nonAvailableBucketsCount = 0;
             if (_db != null)
             {
@@ -273,15 +480,7 @@ namespace ERP.Api.Controllers
                 else if (accessibleIds != null)
                     query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
                 nonAvailableBucketsCount = await query.CountAsync(cancellationToken);
-            }
 
-            var now = DateTime.UtcNow;
-            var dispositionCode = $"DISP-RTV-{now:yyyyMMdd-HHmm}";
-            if (_db != null)
-            {
-                var actorUserId = int.TryParse(
-                    User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
-                    out var uid) ? uid : (int?)null;
                 _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                 {
                     UserId = actorUserId,
@@ -289,7 +488,7 @@ namespace ERP.Api.Controllers
                     Action = "ImportReceipt.ExecuteRtvRefurbish",
                     EntityName = "RtvRefurbish",
                     NewValues = dispositionCode,
-                    Result = "Success",
+                    Result = "Đã thực thi & Ghi sổ kiểm toán",
                     Timestamp = now
                 });
                 await _db.SaveChangesAsync(cancellationToken);
@@ -300,9 +499,15 @@ namespace ERP.Api.Controllers
                 dispositionCode,
                 warehouseId,
                 nonAvailableBucketsCount,
-                dispositionType = string.IsNullOrWhiteSpace(request?.DispositionType) ? "REFURBISH_AND_RTV_SPLIT" : request.DispositionType,
-                refurbishRouting = "REPAIR_BENCH_TO_AVAILABLE_GRADE_B",
-                rtvClaimStatus = "VENDOR_DEBIT_MEMO_AND_OUTBOUND_RTV_READY",
+                dispositionType = string.IsNullOrWhiteSpace(request?.DispositionType) ? rawAction : request.DispositionType,
+                actionType = rawAction,
+                status = "Đã thực thi & Ghi sổ kiểm toán",
+                ledgerUpdated,
+                ledgerTransactionId,
+                resultingStockQuantity,
+                resultingStatus,
+                refurbishRouting = "Chuyển tồn kho sau tân trang về khu vực hàng khả dụng",
+                rtvClaimStatus = "Đã ghi nhận giảm trừ tồn kho và sẵn sàng hoàn trả nhà cung cấp",
                 executedAtUtc = now
             });
         }

@@ -3105,15 +3105,78 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         }
     }
 
-    context.AuditLogs.Add(new AuditLog
+    var dualPartner = allPartners.FirstOrDefault(p => p.Code == "DT-QA-01" || (p.IsSupplier && p.IsCustomer && p.IsActive));
+    if (dualPartner is null)
     {
-        UserId = qaAdmin.Id,
-        Action = "QA.IamAndOperationalSeedApplied",
-        EntityName = "LocalQaOperationalSeed",
-        NewValues = $"Warehouse={primaryWarehouse.Code};PutawayTask=PUT-QA-001({putawayTask.Status});PickingTask={pickingTask.TaskCode}({pickingTask.Status});PackingSession={packingSession.SessionCode}({packingSession.Status});AP={apInvoice.Code};AR={arInvoice.Code};Reconciled={reconciledPairCount};CleanedPartners={cleanedPartnersCount}",
-        Timestamp = DateTime.UtcNow,
-        IpAddress = "local-cli"
-    });
+        dualPartner = new BusinessPartner
+        {
+            Code = "DT-QA-01",
+            Name = "Công ty Cổ phần Logistics & Thương Mại Mekong QA",
+            IsSupplier = true,
+            IsCustomer = true,
+            IsActive = true,
+            Phone = "0909666888",
+            Email = "mekong-logistics@qa.local",
+            Address = "Khu Công Nghệ Cao Quận 9, TP.HCM",
+            CreditLimit = 150_000_000m,
+            PaymentTermDays = 45,
+            PayableBalance = 0m,
+            ReceivableBalance = 0m
+        };
+        context.BusinessPartners.Add(dualPartner);
+    }
+    else
+    {
+        dualPartner.IsSupplier = true;
+        dualPartner.IsCustomer = true;
+        dualPartner.IsActive = true;
+        dualPartner.Phone ??= "0909666888";
+        dualPartner.Email ??= "mekong-logistics@qa.local";
+        dualPartner.Address ??= "Khu Công Nghệ Cao Quận 9, TP.HCM";
+        if (dualPartner.CreditLimit <= 0m) dualPartner.CreditLimit = 150_000_000m;
+        if (dualPartner.PaymentTermDays <= 0) dualPartner.PaymentTermDays = 45;
+    }
+
+    foreach (var bp in allPartners.Where(x => x.IsActive))
+    {
+        if (bp.CreditLimit <= 0m) bp.CreditLimit = bp.IsCustomer ? 80_000_000m : 100_000_000m;
+        if (bp.PaymentTermDays <= 0) bp.PaymentTermDays = 30;
+        bp.Phone ??= "0909000111";
+        bp.Email ??= $"{bp.Code.ToLowerInvariant()}@qa.local";
+        bp.Address ??= "TP.HCM";
+    }
+
+    await context.Database.ExecuteSqlRawAsync(
+        "DELETE FROM AuditLogs WHERE IpAddress = '10.0.10.25' OR (EntityName = 'UserSession' AND (Action LIKE '%Refresh%' OR Action LIKE N'%Làm mới%')) OR EntityName = 'LocalQaOperationalSeed' OR Action LIKE 'QA.%';");
+
+    var operationalAudits = new (string Action, string EntityName, int EntityId, string Reason, int MinutesAgo)[]
+    {
+        ("Ghi sổ phiếu nhập kho", "ImportReceipt", irQa001.Id, "Ghi sổ phiếu nhập IR-QA-001 (65 thùng cảm biến LOT-QA-002) tại khu tiếp nhận TIEP-NHAN", 8),
+        ("Hoàn tất cất hàng vào kệ", "PutawayTask", putawayTask.Id, "Hoàn tất tác vụ cất hàng PUT-QA-001 từ khu tiếp nhận vào kệ lưu trữ BIN-A01-01", 7),
+        ("Hoàn tất lấy hàng theo đơn", "PickingTask", pickingTask.Id, "Hoàn tất lấy hàng PICK-QA-003 theo chiến lược FEFO lô LOT-QA-002 tại kệ BIN-A01-01", 6),
+        ("Đóng gói đơn vị xử lý (HU)", "PackingSession", packingSession.Id, "Đóng gói hoàn tất kiện hàng HU-QA-002 (BC-HU-QA-002) thuộc phiên PACK-QA-002", 5),
+        ("Xuất giao chuyến hàng", "Shipment", shipment.Id, "Xuất giao chuyến hàng SHP-QA-002 (xe 51D-668.88, niêm phong SEAL-QA-002) theo phiếu ER-QA-001", 4),
+        ("Di chuyển vị trí nội bộ", "InventoryLocationMovement", 9001, "Điều chuyển nội bộ 10 thùng linh kiện từ TIEP-NHAN sang kệ lưu trữ BIN-A01-01", 3),
+        ("Phong tỏa lô hàng chờ QC", "InventoryLock", activeQcLock.Id, "Phong tỏa lô LOT-QA-002 tại kệ BIN-A01-01 chờ kiểm định chất lượng định kỳ", 2),
+        ("Phê duyệt điều chỉnh kiểm kê", "Stocktake", 1, "Phê duyệt biên bản kiểm kê định kỳ STK-QA-001 tại Kho Chính TP.HCM", 1)
+    };
+
+    foreach (var op in operationalAudits)
+    {
+        context.AuditLogs.Add(new AuditLog
+        {
+            UserId = qaAdmin.Id,
+            WarehouseId = primaryWarehouse.Id,
+            Action = op.Action,
+            EntityName = op.EntityName,
+            EntityId = op.EntityId,
+            Reason = op.Reason,
+            NewValues = op.Reason,
+            Result = "Success",
+            Timestamp = DateTime.UtcNow.AddMinutes(-op.MinutesAgo),
+            IpAddress = "10.0.10.25"
+        });
+    }
     await context.SaveChangesAsync();
     await transaction.CommitAsync();
 

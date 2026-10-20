@@ -1,5 +1,5 @@
 .dashboard-metric-warning{border-color:#FDE68A!important;background:var(--ui-warning-soft)!important}
-.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:var(--ui-space-3)}
+.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:var(--ui-space-3)}.dashboard-grid>.ui-card:has(table){grid-column:1 / -1}.dashboard-grid+.ui-card+.dashboard-grid{grid-template-columns:1fr}
 .dashboard-panel-meta{color:var(--ui-muted);font-size:12px;margin:-4px 0 var(--ui-space-3)}
 .dashboard-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--ui-space-2)}
 .dashboard-actions a{display:grid;grid-template-columns:auto 1fr auto;gap:var(--ui-space-2);align-items:center;min-height:58px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-sm);padding:10px;text-decoration:none;color:var(--ui-foreground);background:var(--ui-surface);transition:background-color var(--ui-motion-fast) ease,border-color var(--ui-motion-fast) ease}

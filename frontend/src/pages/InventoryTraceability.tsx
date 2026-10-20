@@ -484,14 +484,14 @@ export default function InventoryTraceability(){
             Chỉ hiển thị 100 chứng từ mới nhất trong phạm vi truy vết. Hãy chọn một kho hoặc lọc thêm sê-ri để thu hẹp kết quả.
           </p>}
           <UiTableScroll><table className="ui-table-compact" aria-label="Chứng từ liên quan cùng lô hoặc sê-ri">
-            <thead><tr><th>Chứng từ</th><th>Kho</th><th>Sự kiện</th><th>Phát sinh đầu</th><th>Phát sinh cuối</th></tr></thead>
+            <thead><tr><th>Chứng từ</th><th>Kho</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Sự kiện</th><th>Phát sinh đầu</th><th>Phát sinh cuối</th></tr></thead>
             <tbody>{!result.relatedDocuments?.length?
               <tr><td colSpan={5} className="ui-empty-cell">Chưa có chứng từ có giao dịch sổ cái khớp lô hoặc sê-ri trong phạm vi được phép.</td></tr>:
               result.relatedDocuments.map(doc=>
                 <tr key={doc.warehouseId+'-'+doc.referenceType+'-'+doc.referenceId}>
                   <td><strong>{referenceTypeLabel(doc.referenceType)}</strong><br/><small>Mã tham chiếu #{doc.referenceId}</small></td>
                   <td>{doc.warehouseName}</td>
-                  <td>{doc.eventCount}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{doc.eventCount}</td>
                   <td>{new Date(doc.firstTransactionDate).toLocaleString('vi-VN')}</td>
                   <td>{new Date(doc.lastTransactionDate).toLocaleString('vi-VN')}</td>
                 </tr>)}
@@ -510,7 +510,7 @@ export default function InventoryTraceability(){
             Đã đạt giới hạn 100 phiếu nhập; hãy chọn một kho hoặc thu hẹp lô/sê-ri để xem đầy đủ.
           </p>}
           <UiTableScroll><table className="ui-table-compact" aria-label="Phiếu nhập đã ghi sổ theo lô hoặc sê-ri">
-            <thead><tr><th>Mã phiếu nhập</th><th>Trạng thái</th><th>Lần ghi sổ cuối</th><th>Đã nhập</th><th>Giao dịch sổ cái</th></tr></thead>
+            <thead><tr><th>Mã phiếu nhập</th><th>Trạng thái</th><th>Lần ghi sổ cuối</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Đã nhập</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Giao dịch sổ cái</th></tr></thead>
             <tbody>{!result.receiptExposures?.length?
               <tr><td colSpan={5} className="ui-empty-cell">Không có phiếu nhập đã ghi sổ khớp danh tính hàng hóa trong phạm vi được phép.</td></tr>:
               result.receiptExposures.map(receipt=>
@@ -518,8 +518,8 @@ export default function InventoryTraceability(){
                   <td><strong>{receipt.receiptCode}</strong><br/><small>#{receipt.receiptId} • Kho #{receipt.warehouseId}</small></td>
                   <td><UiBadge>Đã ghi sổ</UiBadge></td>
                   <td>{new Date(receipt.lastPostedAt).toLocaleString('vi-VN')}</td>
-                  <td>{receipt.postedQuantity}</td>
-                  <td>{receipt.ledgerEventCount}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{receipt.postedQuantity}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{receipt.ledgerEventCount}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>
@@ -536,7 +536,7 @@ export default function InventoryTraceability(){
             Đã đạt giới hạn 100 Shipment; hãy chọn một kho hoặc thu hẹp điều kiện để xem đầy đủ.
           </p>}
           <UiTableScroll><table className="ui-table-compact" aria-label="Shipment có giao dịch xuất giao cần rà soát">
-            <thead><tr><th>Mã chuyến giao</th><th>Trạng thái hiện tại</th><th>Xuất giao lúc</th><th>Đã xuất</th><th>Giao dịch sổ cái</th></tr></thead>
+            <thead><tr><th>Mã chuyến giao</th><th>Trạng thái hiện tại</th><th>Xuất giao lúc</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Đã xuất</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Giao dịch sổ cái</th></tr></thead>
             <tbody>{!result.shipmentExposures?.length?
               <tr><td colSpan={5} className="ui-empty-cell">Không tìm thấy chuyến giao hàng đã ghi nhận xuất giao trong phạm vi truy vết.</td></tr>:
               result.shipmentExposures.map(shipment=>
@@ -544,8 +544,8 @@ export default function InventoryTraceability(){
                   <td><strong>{shipment.shipmentCode}</strong><br/><small>#{shipment.shipmentId} • Kho #{shipment.warehouseId}</small></td>
                   <td><UiBadge>{shipmentStatusLabel(shipment.shipmentStatus)}</UiBadge></td>
                   <td>{shipment.dispatchedAt?new Date(shipment.dispatchedAt).toLocaleString('vi-VN'):'—'}</td>
-                  <td>{shipment.dispatchedQuantity}</td>
-                  <td>{shipment.ledgerEventCount}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{shipment.dispatchedQuantity}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{shipment.ledgerEventCount}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>
@@ -563,7 +563,7 @@ export default function InventoryTraceability(){
             Chỉ hiển thị 100 dòng Picking liên kết đầu tiên; hãy giới hạn thêm kho hoặc lô/sê-ri để xem đầy đủ.
           </p>}
           <UiTableScroll><table className="ui-table-compact" aria-label="Liên kết Shipment Packing Picking theo lô hoặc sê-ri">
-            <thead><tr><th>Chuyến giao</th><th>Đóng gói</th><th>Lấy hàng</th><th>Phân bổ / Vị trí</th><th>Đã lấy hàng</th></tr></thead>
+            <thead><tr><th>Chuyến giao</th><th>Đóng gói</th><th>Lấy hàng</th><th>Phân bổ / Vị trí</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Đã lấy hàng</th></tr></thead>
             <tbody>{!result.shipmentPickingEvidence?.length?
               <tr><td colSpan={5} className="ui-empty-cell">Chưa có dòng lấy hàng được xác thực bằng sự kiện xuất giao trong phạm vi truy vết.</td></tr>:
               result.shipmentPickingEvidence.map(link=>
@@ -572,7 +572,7 @@ export default function InventoryTraceability(){
                   <td>{link.packingSessionCode}<br/><small>#{link.packingSessionId}</small></td>
                   <td>{link.pickingTaskCode}<br/><small>Dòng #{link.pickingTaskLineId}</small></td>
                   <td>#{link.allocationId}<br/><small>{locationCodeLabel(link.sourceLocationCode)}</small></td>
-                  <td>{link.pickedQuantity}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{link.pickedQuantity}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>
@@ -591,7 +591,7 @@ export default function InventoryTraceability(){
             Dữ liệu kiện HU có giới hạn truy vết (100 dòng, tối đa 16 cấp cha). Hãy thu hẹp kho/lô/sê-ri; không coi danh sách này là đầy đủ để ra quyết định thu hồi.
           </p>}
           <UiTableScroll><table className="ui-table-compact" aria-label="Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri">
-            <thead><tr><th>Chuyến giao</th><th>Kiện gốc</th><th>Chuỗi kiện</th><th>Mã quét kiện chứa hàng</th><th>Dòng lấy hàng</th><th>Đã đóng gói</th></tr></thead>
+            <thead><tr><th>Chuyến giao</th><th>Kiện gốc</th><th>Chuỗi kiện</th><th>Mã quét kiện chứa hàng</th><th>Dòng lấy hàng</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Đã đóng gói</th></tr></thead>
             <tbody>{!result.shipmentHuEvidence?.length?
               <tr><td colSpan={6} className="ui-empty-cell">Chưa xác minh được kiện hàng gắn chuyến giao với sản phẩm/lô/sê-ri này.</td></tr>:
               result.shipmentHuEvidence.map(hu=>
@@ -601,7 +601,7 @@ export default function InventoryTraceability(){
                   <td>{hu.hierarchyPath}<br/><small>Kiện chứa hàng: #{hu.contentHandlingUnitId}</small></td>
                   <td>{hu.contentHandlingUnitBarcode}</td>
                   <td>#{hu.pickingTaskLineId}</td>
-                  <td>{hu.packedQuantity}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{hu.packedQuantity}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>
@@ -620,7 +620,7 @@ export default function InventoryTraceability(){
             Danh sách chứng từ xuất nguồn chưa đầy đủ vì giới hạn 100 Shipment; hãy thu hẹp kho hoặc mã lô/sê-ri.
           </p>}
           <UiTableScroll><table className="ui-table-compact" aria-label="Liên kết Shipment Picking với phiếu xuất kho nguồn">
-            <thead><tr><th>Chuyến giao</th><th>Phiếu xuất nguồn</th><th>Tác vụ lấy hàng</th><th>Phiếu đã xuất lúc</th><th>Số lượng sản phẩm trên phiếu</th></tr></thead>
+            <thead><tr><th>Chuyến giao</th><th>Phiếu xuất nguồn</th><th>Tác vụ lấy hàng</th><th>Phiếu đã xuất lúc</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Số lượng sản phẩm trên phiếu</th></tr></thead>
             <tbody>{!result.shipmentExportSources?.length?
               <tr><td colSpan={5} className="ui-empty-cell">Chưa xác minh được phiếu xuất kho nguồn phù hợp trong phạm vi truy vết.</td></tr>:
               result.shipmentExportSources.map(source=>
@@ -629,7 +629,7 @@ export default function InventoryTraceability(){
                   <td><strong>{source.exportReceiptCode}</strong><br/><small>#{source.exportReceiptId}</small></td>
                   <td>#{source.pickingTaskId}</td>
                   <td>{source.exportReceiptDispatchedAt?new Date(source.exportReceiptDispatchedAt).toLocaleString('vi-VN'):'—'}</td>
-                  <td>{source.exportReceiptProductQuantity}</td>
+                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{source.exportReceiptProductQuantity}</td>
                 </tr>)}
             </tbody>
           </table></UiTableScroll>
@@ -641,7 +641,7 @@ export default function InventoryTraceability(){
           Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; dùng “Sự kiện sau” để xem trang kế tiếp hoặc thu hẹp điều kiện tìm kiếm.
         </p>}
         <UiTableScroll><table className="ui-table-compact" aria-label="Dòng thời gian sổ cái phục vụ truy vết">
-          <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Sản phẩm</th><th>Vị trí / Trạng thái</th><th>Lô / Sê-ri</th><th>Số lượng</th><th>Tham chiếu</th><th>Chuỗi đảo giao dịch</th><th>Người thực hiện / Ghi chú</th></tr></thead>
+          <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Sản phẩm</th><th>Vị trí / Trạng thái</th><th>Lô / Sê-ri</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Số lượng</th><th>Tham chiếu</th><th>Chuỗi đảo giao dịch</th><th>Người thực hiện / Ghi chú</th></tr></thead>
           <tbody>{result.events.length===0?<tr><td colSpan={9} className="ui-empty-cell">Không có sự kiện sổ cái khớp điều kiện.</td></tr>:
             result.events.map(x=><tr key={x.transactionId}>
               <td>{new Date(x.transactionDate).toLocaleString('vi-VN')}</td>
@@ -649,7 +649,7 @@ export default function InventoryTraceability(){
               <td>{x.productCode}<br/><small>{x.warehouseName}</small></td>
               <td>{x.fromLocationCode&&x.toLocationCode?(locationCodeLabel(x.fromLocationCode)+' → '+locationCodeLabel(x.toLocationCode)):locationCodeLabel(x.locationCode)}<br/><small>{x.fromInventoryStatus&&x.toInventoryStatus?(inventoryStatusLabel(x.fromInventoryStatus)+' → '+inventoryStatusLabel(x.toInventoryStatus)):inventoryStatusLabel(x.inventoryStatus)}</small></td>
               <td>{x.lotNumber??'—'} / {x.serialNumber??'—'}</td>
-              <td>{x.quantity}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.quantity}</td>
               <td>{x.referenceType?(referenceTypeLabel(x.referenceType)+' #'+(x.referenceId??'—')):'—'}</td>
               <td>
                 {x.reversalOfTransactionId?<>Gốc #{x.reversalOfTransactionId}<br/></>:null}

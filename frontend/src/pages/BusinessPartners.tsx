@@ -156,7 +156,7 @@ const BusinessPartners = () => {
 
       <UiCard title="Danh sách đối tác">
         {loading ? <p role="status">Đang tải đối tác...</p> : <UiTableScroll><table className="ui-table-compact" aria-label="Danh sách đối tác kinh doanh">
-          <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th>Công nợ &amp; Tín dụng</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+          <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Công nợ &amp; Tín dụng</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
           <tbody>
             {items.length === 0
               ? <tr><td colSpan={canManage ? 7 : 6} className="ui-empty-cell">Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
@@ -170,14 +170,14 @@ const BusinessPartners = () => {
                       {!item.isSupplier && !item.isCustomer && <span>—</span>}
                     </div>
                   </td>
-                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     {item.isSupplier && <div><small>Công nợ phải trả: <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')}</strong></small></div>}
                     {item.isCustomer && <div><small>Công nợ phải thu: <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')}</strong> / Hạn mức: {Number(item.creditLimit ?? 0) > 0 ? Number(item.creditLimit).toLocaleString('vi-VN') : 'Không giới hạn'}</small></div>}
                     <div><small>Kỳ hạn TT: {item.paymentTermDays ?? 30} ngày</small></div>
                   </td>
                   <td><div>{item.phone || '—'}</div>{item.email && <small>{item.email}</small>}</td>
                   <td><UiBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
-                  {canManage && <td style={{ whiteSpace: 'nowrap' }}><div className="ui-inline-actions"><button onClick={() => openEdit(item)} style={{ whiteSpace: 'nowrap' }}>Sửa</button><button onClick={() => void remove(item)} style={{ whiteSpace: 'nowrap' }}>Xóa</button></div></td>}
+                  {canManage && <td style={{ whiteSpace: 'nowrap' }}><div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}><button type="button" onClick={() => openEdit(item)} style={{ whiteSpace: 'nowrap' }}>Sửa</button><button type="button" onClick={() => void remove(item)} style={{ whiteSpace: 'nowrap' }}>Xóa</button></div></td>}
                 </tr>)}
           </tbody>
         </table></UiTableScroll>}
@@ -190,7 +190,7 @@ const BusinessPartners = () => {
     </>}
 
     {showForm && <UiCard title={editing ? 'Sửa đối tác' : 'Thêm đối tác'}>
-      <form onSubmit={submit} className="ui-form-grid">
+      <form onSubmit={submit} className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }}>
         <label>Mã đối tác *<input aria-label="Mã đối tác" value={form.code || ''} disabled={!!editing || loading} maxLength={50} onChange={event => field('code', event.target.value)} /></label>
         <label>Tên đối tác *<input aria-label="Tên đối tác" value={form.name || ''} disabled={loading} maxLength={200} onChange={event => field('name', event.target.value)} /></label>
         <div className="ui-inline-wrap">
@@ -202,7 +202,7 @@ const BusinessPartners = () => {
         <label>Email<input aria-label="Email đối tác" value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
         <label>Hạn mức tín dụng (VND)<input aria-label="Hạn mức tín dụng đối tác" type="number" min="0" step="1000" value={form.creditLimit ?? 0} onChange={event => field('creditLimit', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
         <label>Kỳ hạn thanh toán (ngày)<input aria-label="Kỳ hạn thanh toán đối tác" type="number" min="0" max="3650" value={form.paymentTermDays ?? 30} onChange={event => field('paymentTermDays', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
-        <label>Địa chỉ<textarea aria-label="Địa chỉ đối tác" value={form.address || ''} maxLength={500} rows={3} onChange={event => field('address', event.target.value)} /></label>
+        <label>Địa chỉ<textarea aria-label="Địa chỉ đối tác" value={form.address || ''} maxLength={500} rows={1} onChange={event => field('address', event.target.value)} /></label>
         <div className="ui-inline-actions">
           <button type="submit" disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu'}</button>
           <button type="button" disabled={loading} onClick={() => setShowForm(false)}>Hủy</button>

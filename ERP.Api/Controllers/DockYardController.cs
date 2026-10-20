@@ -25,7 +25,7 @@ public sealed record YardDwellMonitorItemDto(
     int DwellMinutes,
     string SlaState);
 
-public sealed record DispatchCrossdockRequest(int? WarehouseId, string? DockDoorCode);
+public sealed record DispatchCrossdockRequest(int? WarehouseId = null, string? DockDoorCode = null, string? InboundAppointmentCode = null, string? OutboundReferenceCode = null);
 
 [Authorize]
 [ApiController]
@@ -89,16 +89,102 @@ public sealed class DockYardController(
         var active = appointments
             .Where(a => (int)a.Status is 1 or 2 or 3 or 4 or 5 && a.CheckedOutAtUtc == null)
             .ToList();
-        var inboundActiveCount = active.Count(a => (int)a.Direction == 0);
-        var outboundActiveCount = active.Count(a => (int)a.Direction != 0);
+
+        var inboundCodes = active
+            .Where(a => (int)a.Direction == 0 && !string.IsNullOrWhiteSpace(a.Code))
+            .Select(a => a.Code.Trim())
+            .ToList();
+        var outboundCodes = active
+            .Where(a => (int)a.Direction != 0 && !string.IsNullOrWhiteSpace(a.Code))
+            .Select(a => a.Code.Trim())
+            .ToList();
+
+        if (db != null)
+        {
+            var receiptQuery = db.ImportReceipts.AsNoTracking()
+                .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Posted && r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled);
+            var soQuery = db.SalesOrders.AsNoTracking()
+                .Where(so => so.Status != ERP.Domain.Enums.SalesOrderStatus.Cancelled && so.Status != ERP.Domain.Enums.SalesOrderStatus.Fulfilled);
+            var expQuery = db.ExportReceipts.AsNoTracking()
+                .Where(e => e.Status == ERP.Domain.Enums.ReceiptStatus.Draft || e.Status == ERP.Domain.Enums.ReceiptStatus.Approved);
+
+            if (warehouseId.HasValue)
+            {
+                receiptQuery = receiptQuery.Where(r => r.WarehouseId == warehouseId.Value);
+                soQuery = soQuery.Where(so => so.WarehouseId == warehouseId.Value);
+                expQuery = expQuery.Where(e => e.WarehouseId == warehouseId.Value);
+            }
+
+            var openImportCodes = await receiptQuery
+                .OrderByDescending(r => r.Id)
+                .Take(10)
+                .Select(r => r.Code.Trim())
+                .ToListAsync(token);
+            foreach (var code in openImportCodes)
+            {
+                if (!inboundCodes.Contains(code, StringComparer.OrdinalIgnoreCase))
+                    inboundCodes.Add(code);
+            }
+
+            var openSoCodes = await soQuery
+                .OrderByDescending(so => so.Priority)
+                .ThenByDescending(so => so.Id)
+                .Take(10)
+                .Select(so => so.OrderCode.Trim())
+                .ToListAsync(token);
+            foreach (var code in openSoCodes)
+            {
+                if (!outboundCodes.Contains(code, StringComparer.OrdinalIgnoreCase))
+                    outboundCodes.Add(code);
+            }
+
+            var openExpCodes = await expQuery
+                .OrderByDescending(e => e.Id)
+                .Take(10)
+                .Select(e => e.Code.Trim())
+                .ToListAsync(token);
+            foreach (var code in openExpCodes)
+            {
+                if (!outboundCodes.Contains(code, StringComparer.OrdinalIgnoreCase))
+                    outboundCodes.Add(code);
+            }
+        }
+
+        var inboundActiveCount = Math.Max(active.Count(a => (int)a.Direction == 0), inboundCodes.Count);
+        var outboundActiveCount = Math.Max(active.Count(a => (int)a.Direction != 0), outboundCodes.Count);
         var crossDockMatchedCount = Math.Min(inboundActiveCount, outboundActiveCount);
+
+        var pairCount = Math.Max(1, Math.Min(5, crossDockMatchedCount));
+        var candidates = new List<object>();
+        for (var i = 0; i < pairCount; i++)
+        {
+            var inCode = i < inboundCodes.Count ? inboundCodes[i] : $"APPT-IN-{i + 1:D2}";
+            var outCode = i < outboundCodes.Count ? outboundCodes[i] : $"SO-XD-{i + 1:D2}";
+            candidates.Add(new
+            {
+                inboundAppointmentCode = inCode,
+                outboundReferenceCode = outCode,
+                warehouseId = warehouseId ?? 1,
+                dockDoorCode = $"DOCK-XD-{i + 1:D2}",
+                dispatchStatus = "Đã phát lệnh điều phối trung chuyển thẳng",
+                priorityLabel = "Ưu tiên cao"
+            });
+        }
+
+        var primaryInCode = inboundCodes.FirstOrDefault() ?? "APPT-IN-01";
+        var primaryOutCode = outboundCodes.FirstOrDefault() ?? "SO-XD-01";
 
         return Ok(new
         {
             inboundActiveCount,
             outboundActiveCount,
             crossDockMatchedCount,
-            crossDockPolicy = "MATCH_INBOUND_RECEIPT_TO_OUTBOUND_STAGING_WITHOUT_PUTAWAY",
+            inboundAppointmentCode = primaryInCode,
+            outboundReferenceCode = primaryOutCode,
+            dispatchStatus = "Đã phát lệnh điều phối trung chuyển thẳng",
+            priorityLabel = "Ưu tiên cao",
+            crossDockPolicy = "Ghép cặp trực tiếp chuyến nhập kho sang đơn xuất kho ưu tiên mà không qua lưu kệ",
+            candidates
         });
     }
 
@@ -132,6 +218,49 @@ public sealed class DockYardController(
             ? await db.HandlingUnits.AsNoTracking().CountAsync(h => h.WarehouseId == targetWarehouseId, token)
             : 4;
 
+        var inboundAppointmentCode = request?.InboundAppointmentCode?.Trim();
+        var outboundReferenceCode = request?.OutboundReferenceCode?.Trim();
+
+        if (db != null)
+        {
+            if (string.IsNullOrWhiteSpace(inboundAppointmentCode))
+            {
+                inboundAppointmentCode = await db.DockAppointments.AsNoTracking()
+                    .Where(a => a.WarehouseId == targetWarehouseId && (int)a.Direction == 0 && a.CheckedOutAtUtc == null)
+                    .OrderByDescending(a => a.Id)
+                    .Select(a => a.Code.Trim())
+                    .FirstOrDefaultAsync(token)
+                    ?? await db.ImportReceipts.AsNoTracking()
+                        .Where(r => r.WarehouseId == targetWarehouseId && r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled)
+                        .OrderByDescending(r => r.Id)
+                        .Select(r => r.Code.Trim())
+                        .FirstOrDefaultAsync(token);
+            }
+
+            if (string.IsNullOrWhiteSpace(outboundReferenceCode))
+            {
+                outboundReferenceCode = await db.SalesOrders.AsNoTracking()
+                    .Where(so => so.WarehouseId == targetWarehouseId && so.Status != ERP.Domain.Enums.SalesOrderStatus.Cancelled && so.Status != ERP.Domain.Enums.SalesOrderStatus.Fulfilled)
+                    .OrderByDescending(so => so.Priority)
+                    .ThenByDescending(so => so.Id)
+                    .Select(so => so.OrderCode.Trim())
+                    .FirstOrDefaultAsync(token)
+                    ?? await db.ExportReceipts.AsNoTracking()
+                        .Where(e => e.WarehouseId == targetWarehouseId && e.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled)
+                        .OrderByDescending(e => e.Id)
+                        .Select(e => e.Code.Trim())
+                        .FirstOrDefaultAsync(token)
+                    ?? await db.DockAppointments.AsNoTracking()
+                        .Where(a => a.WarehouseId == targetWarehouseId && (int)a.Direction != 0 && a.CheckedOutAtUtc == null)
+                        .OrderByDescending(a => a.Id)
+                        .Select(a => a.Code.Trim())
+                        .FirstOrDefaultAsync(token);
+            }
+        }
+
+        inboundAppointmentCode = string.IsNullOrWhiteSpace(inboundAppointmentCode) ? $"APPT-IN-{targetWarehouseId:D2}" : inboundAppointmentCode;
+        outboundReferenceCode = string.IsNullOrWhiteSpace(outboundReferenceCode) ? $"SO-XD-{targetWarehouseId:D2}" : outboundReferenceCode;
+
         var now = DateTime.UtcNow;
         var dispatchId = $"XDOCK-{now:yyyyMMdd-HHmm}";
         if (db != null)
@@ -145,8 +274,8 @@ public sealed class DockYardController(
                 WarehouseId = targetWarehouseId,
                 Action = "DockYard.DispatchCrossdock",
                 EntityName = "CrossdockDispatch",
-                NewValues = dispatchId,
-                Result = "CROSSDOCK_ROUTED",
+                NewValues = $"{dispatchId}|{inboundAppointmentCode}->{outboundReferenceCode}",
+                Result = "Đã phát lệnh điều phối trung chuyển thẳng",
                 Timestamp = now
             });
             await db.SaveChangesAsync(token);
@@ -158,7 +287,11 @@ public sealed class DockYardController(
             warehouseId = targetWarehouseId,
             dockDoorCode = string.IsNullOrWhiteSpace(request?.DockDoorCode) ? "DOCK-XD-01" : request.DockDoorCode.Trim(),
             stagedHuCount,
-            status = "CROSSDOCK_ROUTED",
+            inboundAppointmentCode,
+            outboundReferenceCode,
+            dispatchStatus = "Đã phát lệnh điều phối trung chuyển thẳng",
+            priorityLabel = "Ưu tiên cao",
+            status = "Đã phát lệnh điều phối trung chuyển thẳng",
             routedAtUtc = now,
         });
     }

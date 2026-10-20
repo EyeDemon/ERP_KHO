@@ -61,21 +61,40 @@ namespace ERP.Api.Controllers
                 .CountAsync(t => (accessibleIds.Contains(t.SourceWarehouseId) || accessibleIds.Contains(t.DestinationWarehouseId)) &&
                                  (t.Status == StockTransferStatus.Draft || t.Status == StockTransferStatus.Approved || t.Status == StockTransferStatus.InTransit), cancellationToken);
 
-            var recentAudits = await db.AuditLogs.AsNoTracking()
-                .Where(a => !a.WarehouseId.HasValue || accessibleIds.Contains(a.WarehouseId.Value))
+            var baseAuditQuery = db.AuditLogs.AsNoTracking()
+                .Where(a => !a.WarehouseId.HasValue || accessibleIds.Contains(a.WarehouseId.Value));
+
+            var filteredAuditRows = await baseAuditQuery
+                .Where(a => !(a.EntityName == "UserSession" &&
+                              (a.Action.Contains("Refresh") || a.Action.Contains("Làm mới"))))
                 .OrderByDescending(a => a.Timestamp)
+                .ThenByDescending(a => a.Id)
                 .Take(10)
+                .ToListAsync(cancellationToken);
+
+            if (filteredAuditRows.Count == 0)
+            {
+                filteredAuditRows = await baseAuditQuery
+                    .OrderByDescending(a => a.Timestamp)
+                    .ThenByDescending(a => a.Id)
+                    .Take(10)
+                    .ToListAsync(cancellationToken);
+            }
+
+            var recentAudits = filteredAuditRows
                 .Select(a => new
                 {
                     a.Id,
-                    Action = a.Action.Trim(),
-                    EntityName = a.EntityName.Trim(),
+                    Action = TranslateAuditActionLabel(a.Action, a.EntityName),
+                    EntityName = TranslateAuditEntityLabel(a.EntityName),
+                    RawAction = (a.Action ?? string.Empty).Trim(),
+                    RawEntityName = (a.EntityName ?? string.Empty).Trim(),
                     a.EntityId,
                     a.WarehouseId,
-                    Result = a.Result != null ? a.Result.Trim() : null,
+                    Result = TranslateAuditResultLabel(a.Result),
                     a.Timestamp
                 })
-                .ToListAsync(cancellationToken);
+                .ToList();
 
             return Ok(new
             {
@@ -90,6 +109,99 @@ namespace ERP.Api.Controllers
                 openTransferCount,
                 recentActivities = recentAudits
             });
+        }
+
+        private static string TranslateAuditActionLabel(string? action, string? entityName)
+        {
+            var raw = (action ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(raw))
+                return "Cập nhật nghiệp vụ kho";
+
+            var upper = raw.ToUpperInvariant();
+            if (upper.Contains("POST") && (upper.Contains("RECEIPT") || upper.Contains("IMPORT") || string.Equals(entityName?.Trim(), "ImportReceipt", StringComparison.OrdinalIgnoreCase)))
+                return "Ghi sổ phiếu nhập";
+            if (upper.Contains("RECEIVE") || upper.Contains("INBOUND"))
+                return "Tiếp nhận hàng nhập kho";
+            if (upper.Contains("PUTAWAY") || upper.Contains("MOVE") || upper.Contains("RELOCAT"))
+                return "Di chuyển vị trí nội bộ";
+            if (upper.Contains("PICK"))
+                return "Hoàn tất lấy hàng";
+            if (upper.Contains("PACK") || upper.Contains("HANDLINGUNIT") || upper.Contains("HU."))
+                return "Đóng gói kiện hàng";
+            if (upper.Contains("DISPATCH") && upper.Contains("CROSSDOCK"))
+                return "Điều phối trung chuyển thẳng";
+            if (upper.Contains("SHIP") || upper.Contains("DISPATCH") || upper.Contains("EXPORT"))
+                return "Xuất giao chuyến hàng";
+            if (upper.Contains("LOCK") || upper.Contains("RECALL") || upper.Contains("QUARANTINE") || upper.Contains("HOLD"))
+                return "Phong tỏa lô hàng";
+            if (upper.Contains("RTV") || upper.Contains("REFURBISH") || upper.Contains("DISPOSITION") || upper.Contains("RMA") || upper.Contains("SCRAP"))
+                return "Xử lý hàng hỏng / trả NCC";
+            if (upper.Contains("STOCKTAKE") || upper.Contains("COUNT_VARIANCE") || upper.Contains("DAMAGED_FOUND") ||
+                upper.Contains("EXPIRY_WRITE_OFF") || upper.Contains("SUPPLIER_SHORTAGE") || upper.Contains("MISPLACED_STOCK") ||
+                upper.Contains("RECALL_QUARANTINE") || string.Equals(entityName?.Trim(), "StocktakeAdjustmentProposal", StringComparison.OrdinalIgnoreCase))
+                return "Phê duyệt điều chỉnh kiểm kê";
+            if (upper.Contains("STATUSCHANGED") || upper.Contains("STATUS"))
+                return "Chuyển trạng thái tồn kho";
+            if (upper.Contains("APPROV"))
+                return "Phê duyệt chứng từ kho";
+            if (upper.Contains("TRANSFER"))
+                return "Điều chuyển tồn kho liên kho";
+            if (upper.Contains("DOCK") || upper.Contains("APPOINTMENT") || upper.Contains("YARD"))
+                return "Điều phối lịch hẹn cửa kho";
+            if (upper.Contains("REFRESH") || raw.Contains("Làm mới", StringComparison.OrdinalIgnoreCase))
+                return "Làm mới phiên đăng nhập";
+            if (upper.Contains("LOGIN") || raw.Contains("Đăng nhập", StringComparison.OrdinalIgnoreCase))
+                return "Đăng nhập hệ thống";
+
+            return raw;
+        }
+
+        private static string TranslateAuditEntityLabel(string? entityName)
+        {
+            var raw = (entityName ?? string.Empty).Trim();
+            return raw switch
+            {
+                "ImportReceipt" or "ImportReceipts" => "Phiếu nhập kho",
+                "ExportReceipt" or "ExportReceipts" => "Phiếu xuất kho",
+                "PutawayTask" or "PutawayTasks" => "Tác vụ cất hàng",
+                "PickingTask" or "PickingTasks" => "Tác vụ lấy hàng",
+                "PackingSession" or "PackingSessions" => "Phiên đóng gói",
+                "HandlingUnit" or "HandlingUnits" => "Đơn vị xử lý (HU)",
+                "Shipment" or "Shipments" => "Chuyến hàng xuất",
+                "InventoryStock" or "InventoryStocks" => "Tồn kho vật lý",
+                "InventoryTransaction" or "InventoryTransactions" => "Sổ cái tồn kho",
+                "InventoryLock" or "InventoryLocks" => "Khóa phong tỏa tồn kho",
+                "Stocktake" or "Stocktakes" => "Phiếu kiểm kê",
+                "StocktakeAdjustmentProposal" => "Đề xuất điều chỉnh kiểm kê",
+                "RtvRefurbish" or "RmaInspection" => "Xử lý hàng hỏng / trả NCC",
+                "CrossdockDispatch" => "Điều phối trung chuyển thẳng",
+                "DockAppointment" or "DockAppointments" => "Lịch hẹn cửa kho",
+                "StockTransfer" or "StockTransfers" => "Phiếu điều chuyển kho",
+                "PurchaseOrder" or "PurchaseOrders" => "Đơn mua hàng (PO)",
+                "SalesOrder" or "SalesOrders" => "Đơn bán hàng (SO)",
+                "BusinessPartner" or "BusinessPartners" => "Đối tác kinh doanh",
+                "Product" or "Products" => "Sản phẩm / vật tư",
+                "Warehouse" or "Warehouses" => "Kho vận hành",
+                "WarehouseLocation" or "WarehouseLocations" => "Vị trí lưu kho",
+                "UserSession" => "Phiên đăng nhập",
+                _ => string.IsNullOrEmpty(raw) ? "Nghiệp vụ kho" : raw
+            };
+        }
+
+        private static string? TranslateAuditResultLabel(string? result)
+        {
+            if (string.IsNullOrWhiteSpace(result))
+                return null;
+            var trimmed = result.Trim();
+            return trimmed.ToUpperInvariant() switch
+            {
+                "SUCCESS" or "OK" or "COMPLETED" => "Thành công",
+                "APPROVED" or "ĐÃ PHÊ DUYỆT & GHI SỔ" => "Đã phê duyệt & Ghi sổ",
+                "PENDING_SOD_APPROVAL" or "PENDING" => "Chờ phê duyệt đối soát",
+                "CROSSDOCK_ROUTED" or "ĐÃ PHÁT LỆNH ĐIỀU PHỐI TRUNG CHUYỂN THẲNG" => "Đã phát lệnh điều phối trung chuyển thẳng",
+                "QUARANTINE" => "Đã chuyển khu biệt trữ",
+                _ => trimmed
+            };
         }
 
         [HttpGet("multi-warehouse-control-tower")]

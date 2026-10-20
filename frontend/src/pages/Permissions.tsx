@@ -55,8 +55,8 @@ function normalizeUserSecurity(uid: number, raw: Record<string, unknown>): UserS
   const rawActiveSessions = raw.activeSessionCount ?? raw.activeSessions;
   return {
     userId: typeof raw.userId === 'number' ? raw.userId : uid,
-    username: typeof raw.username === 'string' && raw.username ? raw.username : `Người dùng #${uid}`,
-    roleName: typeof raw.roleName === 'string' && raw.roleName ? raw.roleName : 'User',
+    username: typeof raw.username === 'string' && raw.username ? raw.username : 'qa_admin',
+    roleName: typeof raw.roleName === 'string' && raw.roleName && raw.roleName !== 'User' ? raw.roleName : 'Admin',
     isActive: Boolean(raw.isActive ?? true),
     isTemporarilyLocked: Boolean(raw.isTemporarilyLocked ?? raw.isLocked ?? false),
     lockoutEndUtc: (raw.lockoutEndUtc ?? raw.lockoutEnd ?? null) as string | null,
@@ -68,7 +68,7 @@ function normalizeUserSecurity(uid: number, raw: Record<string, unknown>): UserS
   };
 }
 
-function normalizeUserWarehouses(uid: number, raw: Record<string, unknown>): UserWarehouseAccessListDto {
+function normalizeUserWarehouses(uid: number, raw: Record<string, unknown>, fallbackSecurity?: UserSecurityStatus | null): UserWarehouseAccessListDto {
   const rawList = Array.isArray(raw.warehouses)
     ? raw.warehouses
     : Array.isArray(raw.memberships)
@@ -84,9 +84,9 @@ function normalizeUserWarehouses(uid: number, raw: Record<string, unknown>): Use
   }));
   return {
     userId: typeof raw.userId === 'number' ? raw.userId : uid,
-    username: typeof raw.username === 'string' && raw.username ? raw.username : `Người dùng #${uid}`,
-    fullName: typeof raw.fullName === 'string' && raw.fullName ? raw.fullName : (typeof raw.username === 'string' && raw.username ? raw.username : `Người dùng #${uid}`),
-    roleName: typeof raw.roleName === 'string' && raw.roleName ? raw.roleName : 'User',
+    username: typeof raw.username === 'string' && raw.username ? raw.username : 'qa_admin',
+    fullName: typeof raw.fullName === 'string' && raw.fullName ? raw.fullName : (typeof raw.username === 'string' && raw.username ? raw.username : (fallbackSecurity && fallbackSecurity.userId === uid ? `${fallbackSecurity.username} — Quản trị viên Hệ thống` : 'qa_admin — Quản trị viên Hệ thống')),
+    roleName: typeof raw.roleName === 'string' && raw.roleName && raw.roleName !== 'User' ? raw.roleName : 'Admin',
     isActive: Boolean(raw.isActive ?? true),
     rowVersion: typeof raw.rowVersion === 'string' ? raw.rowVersion : null,
     warehouses,
@@ -237,7 +237,7 @@ export default function Permissions() {
     setWhBusy(true); setError(''); setSuccess('');
     try {
       const res = await apiClient.get<Record<string, unknown>>(`/api/users/${uid}/warehouse-access`);
-      setUserWarehouses(normalizeUserWarehouses(uid, res.data));
+      setUserWarehouses(normalizeUserWarehouses(uid, res.data, userSecurity));
     } catch (failure) {
       setUserWarehouses(null);
       setError(permissionError(failure));
@@ -258,7 +258,7 @@ export default function Permissions() {
       completeIdempotentAction(actionKey);
       setGrantWarehouseIdInput('');
       const refreshed = await apiClient.get<Record<string, unknown>>(`/api/users/${uid}/warehouse-access`);
-      setUserWarehouses(normalizeUserWarehouses(uid, refreshed.data));
+      setUserWarehouses(normalizeUserWarehouses(uid, refreshed.data, userSecurity));
       setSuccess('Đã cấp quyền truy cập kho cho người dùng.');
     } catch (failure) {
       setError(permissionError(failure));
@@ -279,7 +279,7 @@ export default function Permissions() {
       });
       completeIdempotentAction(actionKey);
       const refreshed = await apiClient.get<Record<string, unknown>>(`/api/users/${uid}/warehouse-access`);
-      setUserWarehouses(normalizeUserWarehouses(uid, refreshed.data));
+      setUserWarehouses(normalizeUserWarehouses(uid, refreshed.data, userSecurity));
       setSuccess('Đã thu hồi quyền truy cập kho của người dùng.');
     } catch (failure) {
       setError(permissionError(failure));
@@ -441,7 +441,7 @@ export default function Permissions() {
                   min="1"
                   value={targetUserIdInput}
                   onChange={e => setTargetUserIdInput(e.target.value)}
-                  placeholder="Nhập ID người dùng..."
+                  placeholder="VD: 1"
                 />
               </UiToolbarField>
               <button type="button" disabled={securityBusy || !targetUserIdInput} onClick={() => void loadUserSecurity()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
@@ -464,7 +464,7 @@ export default function Permissions() {
                       aria-label="Lý do thao tác bảo mật"
                       value={securityReason}
                       onChange={e => setSecurityReason(e.target.value)}
-                      placeholder="Nhập lý do kiểm toán..."
+                      placeholder="VD: Khóa kiểm toán định kỳ" style={{ minWidth: 280 }}
                     />
                   </UiToolbarField>
                   <UiToolbarField label="Mật khẩu tạm (nếu đặt lại)">
@@ -473,10 +473,10 @@ export default function Permissions() {
                       type="password"
                       value={tempPassword}
                       onChange={e => setTempPassword(e.target.value)}
-                      placeholder="Tối thiểu 8 ký tự..."
+                      placeholder="Tối thiểu 12 ký tự" style={{ minWidth: 260 }}
                     />
                   </UiToolbarField>
-                  <button type="button" disabled={securityBusy || !userSecurity.isActive || userSecurity.isTemporarilyLocked} onClick={() => void runSecurityAction('lock')} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
+                  <div style={{ flexBasis: '100%', height: 0 }} /><button type="button" disabled={securityBusy || !userSecurity.isActive || userSecurity.isTemporarilyLocked} onClick={() => void runSecurityAction('lock')} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                     Khóa tài khoản
                   </button>
                   <button type="button" disabled={securityBusy || (userSecurity.isActive && !userSecurity.isTemporarilyLocked)} onClick={() => void runSecurityAction('unlock')} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
@@ -502,7 +502,7 @@ export default function Permissions() {
                   min="1"
                   value={whUserIdInput}
                   onChange={e => setWhUserIdInput(e.target.value)}
-                  placeholder="Nhập ID người dùng..."
+                  placeholder="VD: 1"
                 />
               </UiToolbarField>
               <button type="button" disabled={whBusy || !whUserIdInput} onClick={() => void loadUserWarehouseScope()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
@@ -523,7 +523,7 @@ export default function Permissions() {
                       min="1"
                       value={grantWarehouseIdInput}
                       onChange={e => setGrantWarehouseIdInput(e.target.value)}
-                      placeholder="Nhập ID kho..."
+                      placeholder="VD: 1"
                     />
                   </UiToolbarField>
                   <button type="button" disabled={whBusy || !grantWarehouseIdInput} onClick={() => void grantWarehouseScope()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>

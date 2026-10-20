@@ -1,12 +1,14 @@
 using ERP.Application.Interfaces;
 using ERP.Application.DTOs;
 using ERP.Domain.Entities;
+using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
+using System.Data;
 using System.Globalization;
 using System.Security.Claims;
 
@@ -71,13 +73,40 @@ namespace ERP.Api.Controllers
                     .Take(50)
                     .ToListAsync(cancellationToken);
 
+                var approvedProposalEntityIds = logs
+                    .Where(a => string.Equals(a.Result, "Approved", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(a.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase))
+                    .Select(a => a.EntityId)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToHashSet();
+
+                var approvedProposalCodes = logs
+                    .Where(a => (string.Equals(a.Result, "Approved", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(a.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase)) &&
+                                !string.IsNullOrWhiteSpace(a.NewValues))
+                    .Select(a => a.NewValues!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var a in logs)
                 {
+                    var codeKey = a.NewValues ?? $"ADJ-{a.Timestamp:yyyyMMdd}-{a.Id:D3}";
+                    if (!seenCodes.Add(codeKey))
+                        continue;
+
                     decimal.TryParse(a.OldValues, NumberStyles.Any, CultureInfo.InvariantCulture, out var deltaQty);
+                    var isApproved = string.Equals(a.Result, "Approved", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(a.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase) ||
+                                     approvedProposalEntityIds.Contains((int)(a.Id % int.MaxValue)) ||
+                                     approvedProposalCodes.Contains(codeKey);
+                    var normalizedStatus = isApproved
+                        ? "Đã phê duyệt & Ghi sổ"
+                        : (string.IsNullOrWhiteSpace(a.Result) ? "PENDING_SOD_APPROVAL" : a.Result);
                     recentProposals.Add(new
                     {
                         id = a.Id,
-                        proposalCode = a.NewValues ?? $"ADJ-{a.Timestamp:yyyyMMdd}-{a.Id:D3}",
+                        proposalCode = codeKey,
                         warehouseId = a.WarehouseId ?? 0,
                         productId = a.EntityId,
                         productCode = !string.IsNullOrWhiteSpace(a.CorrelationId)
@@ -86,7 +115,7 @@ namespace ERP.Api.Controllers
                         deltaQuantity = deltaQty,
                         reasonCode = a.Action,
                         note = a.Reason,
-                        status = string.IsNullOrWhiteSpace(a.Result) ? "PENDING_SOD_APPROVAL" : a.Result,
+                        status = normalizedStatus,
                         createdAtUtc = a.Timestamp
                     });
                 }
@@ -119,7 +148,17 @@ namespace ERP.Api.Controllers
             decimal DeltaQuantity = 0m,
             string ReasonCode = "COUNT_VARIANCE",
             string? Note = null,
-            int? ProductId = null);
+            int? ProductId = null,
+            int? LocationId = null,
+            string? LotNumber = null,
+            bool ExecuteImmediately = false,
+            decimal? QuantityDelta = null,
+            string? Sku = null);
+
+        public sealed record ApproveAdjustmentProposalRequest(
+            int? LocationId = null,
+            string? LotNumber = null,
+            string? Note = null);
 
         [HttpPost("adjustment-proposals")]
         [IdempotentCommand("Stocktake.CreateAdjustmentProposal")]
@@ -150,9 +189,11 @@ namespace ERP.Api.Controllers
             var reasonCode = string.IsNullOrWhiteSpace(request?.ReasonCode)
                 ? "COUNT_VARIANCE"
                 : request.ReasonCode.Trim().ToUpperInvariant();
-            var productCode = request?.ProductCode?.Trim() ?? string.Empty;
+            var productCode = (!string.IsNullOrWhiteSpace(request?.ProductCode) ? request.ProductCode : request?.Sku)?.Trim() ?? string.Empty;
             var resolvedProductId = request?.ProductId;
-            var deltaQuantity = request?.DeltaQuantity ?? 0m;
+            var deltaQuantity = (request != null && request.DeltaQuantity != 0m)
+                ? request.DeltaQuantity
+                : (request?.QuantityDelta ?? 0m);
 
             if (_db != null)
             {
@@ -180,6 +221,7 @@ namespace ERP.Api.Controllers
             var userIdStr = User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("Id");
             int? userId = int.TryParse(userIdStr, out var parsedUserId) ? parsedUserId : null;
 
+            long proposalAuditId = 0;
             if (_db != null)
             {
                 var log = new AuditLog
@@ -198,10 +240,52 @@ namespace ERP.Api.Controllers
                 };
                 _db.AuditLogs.Add(log);
                 await _db.SaveChangesAsync(cancellationToken);
+                proposalAuditId = log.Id;
+
+                if (request?.ExecuteImmediately == true && deltaQuantity != 0m && resolvedWarehouseId.HasValue && resolvedProductId.HasValue)
+                {
+                    var execResult = await ExecuteProposalAdjustmentCoreAsync(
+                        log.Id,
+                        proposalCode,
+                        reasonCode,
+                        request.Note?.Trim() ?? reasonCode,
+                        string.IsNullOrWhiteSpace(productCode) ? null : productCode,
+                        resolvedWarehouseId.Value,
+                        resolvedProductId.Value,
+                        request.LocationId,
+                        request.LotNumber,
+                        deltaQuantity,
+                        userId,
+                        cancellationToken);
+
+                    if (!execResult.Success)
+                        return BadRequest(new { message = execResult.ErrorMessage });
+
+                    return Ok(new
+                    {
+                        id = log.Id,
+                        proposalAuditId = log.Id,
+                        proposalCode,
+                        warehouseId = resolvedWarehouseId,
+                        productId = resolvedProductId,
+                        productCode,
+                        locationId = execResult.LocationId,
+                        deltaQuantity,
+                        resultingQuantity = execResult.ResultingQuantity,
+                        ledgerTransactionId = execResult.LedgerTransactionId,
+                        referenceCode = $"ADJ-PROP-{log.Id}",
+                        reasonCode,
+                        afterState = "Approved",
+                        status = "Đã phê duyệt & Ghi sổ",
+                        createdAtUtc = now
+                    });
+                }
             }
 
             return Ok(new
             {
+                id = proposalAuditId,
+                proposalAuditId,
                 proposalCode,
                 warehouseId = resolvedWarehouseId,
                 productId = resolvedProductId,
@@ -211,6 +295,245 @@ namespace ERP.Api.Controllers
                 status = "PENDING_SOD_APPROVAL",
                 createdAtUtc = now
             });
+        }
+
+        [HttpPost("adjustment-proposals/{proposalAuditId:long}/approve")]
+        [IdempotentCommand("Stocktake.ApproveAdjustmentProposal")]
+        [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager}")]
+        public async Task<IActionResult> ApproveAdjustmentProposal(
+            long proposalAuditId,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ApproveAdjustmentProposalRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+
+            if (_db == null)
+                return BadRequest(new { message = "Không thể kết nối cơ sở dữ liệu để phê duyệt đề xuất điều chỉnh." });
+
+            var original = await _db.AuditLogs.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == proposalAuditId && a.EntityName == "StocktakeAdjustmentProposal", cancellationToken);
+            if (original == null)
+                return NotFound(new { message = "Không tìm thấy đề xuất điều chỉnh tồn kho." });
+
+            var warehouseId = original.WarehouseId ?? 1;
+            if (_warehouseAccess != null)
+            {
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+            }
+
+            var refEntityId = (int)(proposalAuditId % int.MaxValue);
+            var alreadyApproved = string.Equals(original.Result, "Approved", StringComparison.OrdinalIgnoreCase) ||
+                                  string.Equals(original.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase) ||
+                                  await _db.AuditLogs.AsNoTracking().AnyAsync(
+                                      a => a.EntityName == "StocktakeAdjustmentProposal" &&
+                                           (a.Result == "Approved" || a.Result == "Đã phê duyệt & Ghi sổ") &&
+                                           (a.EntityId == refEntityId || (original.NewValues != null && a.NewValues == original.NewValues)),
+                                      cancellationToken);
+            if (alreadyApproved)
+            {
+                return Conflict(new { message = "Đề xuất điều chỉnh này đã được phê duyệt và ghi sổ trước đó." });
+            }
+
+            decimal.TryParse(original.OldValues, NumberStyles.Any, CultureInfo.InvariantCulture, out var deltaQuantity);
+            if (deltaQuantity == 0m)
+                return BadRequest(new { message = "Số lượng điều chỉnh bằng 0, không thể thực thi ghi sổ." });
+
+            var resolvedProductId = original.EntityId;
+            if (!resolvedProductId.HasValue && !string.IsNullOrWhiteSpace(original.CorrelationId))
+            {
+                resolvedProductId = await _db.Products.AsNoTracking()
+                    .Where(p => p.Code == original.CorrelationId)
+                    .Select(p => (int?)p.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+            if (!resolvedProductId.HasValue)
+            {
+                resolvedProductId = await _db.InventoryStocks.AsNoTracking()
+                    .Where(s => s.WarehouseId == warehouseId)
+                    .Select(s => (int?)s.ProductId)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    ?? await _db.Products.AsNoTracking().Select(p => (int?)p.Id).FirstOrDefaultAsync(cancellationToken);
+            }
+            if (!resolvedProductId.HasValue)
+                return BadRequest(new { message = "Không xác định được sản phẩm cần điều chỉnh tồn kho." });
+
+            var userIdStr = User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("Id");
+            int? userId = int.TryParse(userIdStr, out var parsedUserId) ? parsedUserId : null;
+            var proposalCode = original.NewValues ?? $"ADJ-{original.Timestamp:yyyyMMdd}-{original.Id:D3}";
+
+            var execResult = await ExecuteProposalAdjustmentCoreAsync(
+                original.Id,
+                proposalCode,
+                original.Action,
+                request?.Note?.Trim() ?? original.Reason ?? original.Action,
+                original.CorrelationId,
+                warehouseId,
+                resolvedProductId.Value,
+                request?.LocationId,
+                request?.LotNumber,
+                deltaQuantity,
+                userId ?? original.UserId,
+                cancellationToken);
+
+            if (!execResult.Success)
+                return BadRequest(new { message = execResult.ErrorMessage });
+
+            return Ok(new
+            {
+                id = original.Id,
+                proposalAuditId = original.Id,
+                proposalCode,
+                warehouseId,
+                productId = resolvedProductId.Value,
+                locationId = execResult.LocationId,
+                deltaQuantity,
+                resultingQuantity = execResult.ResultingQuantity,
+                ledgerTransactionId = execResult.LedgerTransactionId,
+                referenceCode = $"ADJ-PROP-{original.Id}",
+                afterState = "Approved",
+                status = "Đã phê duyệt & Ghi sổ",
+                approvedAtUtc = DateTime.UtcNow
+            });
+        }
+
+        private async Task<(bool Success, string? ErrorMessage, int? LocationId, decimal ResultingQuantity, int? LedgerTransactionId)> ExecuteProposalAdjustmentCoreAsync(
+            long proposalAuditId,
+            string proposalCode,
+            string actionCode,
+            string reasonNote,
+            string? correlationProductCode,
+            int warehouseId,
+            int productId,
+            int? requestedLocationId,
+            string? lotNumber,
+            decimal deltaQuantity,
+            int? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            var isRelational = _db!.Database.IsRelational();
+            await using var tx = isRelational && _db.Database.CurrentTransaction == null
+                ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                : null;
+
+            try
+            {
+                int? resolvedLotId = null;
+                if (!string.IsNullOrWhiteSpace(lotNumber))
+                {
+                    var normalizedLot = lotNumber.Trim();
+                    resolvedLotId = await _db.InventoryLots.AsNoTracking()
+                        .Where(l => l.ProductId == productId && l.LotNumber == normalizedLot)
+                        .Select(l => (int?)l.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+
+                var stockQuery = _db.InventoryStocks
+                    .Where(s => s.WarehouseId == warehouseId &&
+                                s.ProductId == productId &&
+                                s.Status == InventoryStatus.Available &&
+                                s.SerialId == null);
+
+                if (requestedLocationId.HasValue)
+                    stockQuery = stockQuery.Where(s => s.LocationId == requestedLocationId.Value);
+                if (resolvedLotId.HasValue)
+                    stockQuery = stockQuery.Where(s => s.LotId == resolvedLotId.Value);
+
+                var stock = await stockQuery
+                    .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+                    .ThenBy(s => s.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (stock == null)
+                {
+                    var fallbackLocationId = requestedLocationId ?? await _db.WarehouseLocations.AsNoTracking()
+                        .Where(l => l.WarehouseId == warehouseId && l.IsActive && !l.IsBlocked)
+                        .OrderBy(l => l.LocationType == WarehouseLocationType.Storage ? 0 : 1)
+                        .ThenBy(l => l.Id)
+                        .Select(l => (int?)l.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (deltaQuantity < 0m)
+                    {
+                        if (tx != null) await tx.RollbackAsync(cancellationToken);
+                        return (false, "Không tìm thấy tồn kho khả dụng để thực hiện điều chỉnh giảm.", fallbackLocationId, 0m, null);
+                    }
+
+                    stock = new InventoryStock
+                    {
+                        WarehouseId = warehouseId,
+                        ProductId = productId,
+                        LocationId = fallbackLocationId,
+                        LotId = resolvedLotId,
+                        Status = InventoryStatus.Available,
+                        Quantity = 0m,
+                        ReservedQuantity = 0m,
+                        LastUpdated = DateTime.UtcNow
+                    };
+                    _db.InventoryStocks.Add(stock);
+                }
+
+                var newQty = stock.Quantity + deltaQuantity;
+                if (newQty < stock.ReservedQuantity || newQty < 0m)
+                {
+                    if (tx != null) await tx.RollbackAsync(cancellationToken);
+                    return (
+                        false,
+                        $"Không thể điều chỉnh tồn kho xuống dưới mức đang giữ chỗ hoặc âm (Tồn hiện tại: {stock.Quantity}, Đang giữ: {stock.ReservedQuantity}, Lượng điều chỉnh: {deltaQuantity}).",
+                        stock.LocationId,
+                        stock.Quantity,
+                        null);
+                }
+
+                var now = DateTime.UtcNow;
+                stock.Quantity = newQty;
+                stock.LastUpdated = now;
+
+                var referenceId = (int)(proposalAuditId % int.MaxValue);
+                var referenceCode = $"ADJ-PROP-{proposalAuditId}";
+                var ledgerTx = new InventoryTransaction
+                {
+                    ProductId = productId,
+                    WarehouseId = warehouseId,
+                    LocationId = stock.LocationId,
+                    LotId = stock.LotId,
+                    SerialId = stock.SerialId,
+                    InventoryStatus = stock.Status,
+                    TransactionType = deltaQuantity > 0m ? TransactionType.AdjustmentIncrease : TransactionType.AdjustmentDecrease,
+                    Quantity = Math.Abs(deltaQuantity),
+                    ReferenceId = referenceId,
+                    ReferenceType = "StocktakeAdjustment",
+                    TransactionDate = now,
+                    CreatedBy = actorUserId ?? 1,
+                    Note = $"{referenceCode}: {reasonNote}"
+                };
+                _db.InventoryTransactions.Add(ledgerTx);
+
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    UserId = actorUserId,
+                    EntityName = "StocktakeAdjustmentProposal",
+                    EntityId = referenceId,
+                    WarehouseId = warehouseId,
+                    Action = actionCode,
+                    OldValues = deltaQuantity.ToString(CultureInfo.InvariantCulture),
+                    NewValues = proposalCode,
+                    Reason = reasonNote,
+                    CorrelationId = correlationProductCode,
+                    Result = "Approved",
+                    Timestamp = now
+                });
+
+                await _db.SaveChangesAsync(cancellationToken);
+                if (tx != null) await tx.CommitAsync(cancellationToken);
+
+                return (true, null, stock.LocationId, newQty, ledgerTx.Id);
+            }
+            catch
+            {
+                if (tx != null) await tx.RollbackAsync(CancellationToken.None);
+                throw;
+            }
         }
 
         [HttpGet("{id}")]
