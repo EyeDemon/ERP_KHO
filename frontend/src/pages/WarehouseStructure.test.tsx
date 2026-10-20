@@ -32,7 +32,7 @@ describe('Cấu trúc vị trí kho mock-only', () => {
     expect(view.queryByText('Lưu vị trí')).toBeNull();
   });
 
-  it('filters local mock data without requiring a WH-02 API', () => {
+  it('filters local mock data without requiring an external API', () => {
     const view = render(<WarehouseStructure />);
 
     fireEvent.change(view.getByLabelText('Trạng thái vị trí'), { target: { value: 'blocked' } });

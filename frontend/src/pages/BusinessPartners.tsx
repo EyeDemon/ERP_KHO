@@ -89,17 +89,17 @@ const BusinessPartners = () => {
     {message && <p role="status" className="ui-success-text">{message}</p>}
 
     {!showForm && <>
-      <UiCard title="Tổng quan Hồ sơ Nhà cung cấp & Khách hàng (MD-04..MD-06)">
+      <UiCard title="Tổng quan Hồ sơ Nhà cung cấp & Khách hàng">
         <UiMetricGrid>
           <UiMetric value={items.length} label="Tổng đối tác trên trang" />
-          <UiMetric value={activeSuppliersCount} label="NCC đang hoạt động (MD-04)" />
-          <UiMetric value={activeCustomersCount} label="KH đang hoạt động (MD-05)" />
+          <UiMetric value={activeSuppliersCount} label="NCC đang hoạt động" />
+          <UiMetric value={activeCustomersCount} label="KH đang hoạt động" />
           <UiMetric value={dualRolePartnersCount} label="Đối tác kiêm nhiệm (NCC & KH)" />
           <UiMetric value={addressDeclaredCount} label="Đã chuẩn hóa địa chỉ giao nhận" />
           <UiMetric value={missingContactInfoCount} label="Thiếu thông tin liên hệ" />
         </UiMetricGrid>
       </UiCard>
-      <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết Thời gian Phục vụ Đối tác (MD-06, MD-09)">
+      <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết Thời gian Phục vụ Đối tác">
         <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           <div className="ui-subcard">
             <strong>Hồ sơ cam kết Nhà cung cấp</strong><br />
@@ -126,7 +126,7 @@ const BusinessPartners = () => {
             <UiBadge tone="success">Đã đồng bộ cam kết dịch vụ (98.5% đúng hạn)</UiBadge>
           )}
           <button type="button" disabled={loading || governanceBusy} onClick={() => void calculate3PlBilling()}>
-            Đối soát Hợp đồng 3PL, Tồn Ký gửi Đa Chủ sở hữu &amp; Tính phí Kho (AX-05, AX-21, AX-22)
+            Đối soát Hợp đồng 3PL, Tồn Ký gửi Đa Chủ sở hữu &amp; Tính phí Kho
           </button>
           {billingStatementResult && (
             <UiBadge tone="success">{billingStatementResult}</UiBadge>

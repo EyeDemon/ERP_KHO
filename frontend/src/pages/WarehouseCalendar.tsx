@@ -192,7 +192,7 @@ const WarehouseCalendar = () => {
         windowDateOrRange: exceptionForm.windowDateOrRange.trim(),
         reason: exceptionForm.reason.trim(),
       });
-      setSuccess('Đã ghi nhận ngoại lệ lịch vận hành (WH-07).');
+      setSuccess('Đã ghi nhận ngoại lệ lịch vận hành.');
       setExceptionForm({ exceptionType: 'HOLIDAY_CLOSURE', windowDateOrRange: '', reason: '' });
       await loadCalendar(warehouseId);
     } catch (failure) {
@@ -260,7 +260,7 @@ const WarehouseCalendar = () => {
   return (
     <UiPage>
       <UiPageHeader eyebrow="Kho & Vị trí" title="Lịch vận hành & Ca kho"
-        description="Cấu hình múi giờ, lịch tuần, giờ cắt đơn, năng lực theo ca và ngoại lệ lịch nghỉ lễ / bảo trì / ghi đè khẩn cấp (WH-07)." />
+        description="Cấu hình múi giờ, lịch tuần, giờ cắt đơn, năng lực theo ca và ngoại lệ lịch nghỉ lễ / bảo trì / ghi đè khẩn cấp." />
       {success && <p role="status" className="ui-success-text">{success}</p>}
       {error && <p role="alert">{error} <button type="button" onClick={() => void loadCalendar(warehouseId)}>Tải lại</button></p>}
 
@@ -347,10 +347,10 @@ const WarehouseCalendar = () => {
             </form>
           </UiCard>}
 
-          <UiCard title="Lịch nghỉ lễ, Bảo trì & Ghi đè khẩn cấp (WH-07)">
+          <UiCard title="Lịch nghỉ lễ, Bảo trì & Ghi đè khẩn cấp">
             <div className="ui-inline-wrap">
               <button type="button" disabled={saving || governanceBusy} onClick={() => void verifyShiftCoverage()}>
-                Kiểm định Độ phủ Ca trực & Cửa sổ Cắt đơn (WH-05, WH-07)
+                Kiểm định Độ phủ Ca trực & Cửa sổ Cắt đơn
               </button>
               {shiftVerification && (
                 <UiBadge tone="success">
@@ -358,7 +358,7 @@ const WarehouseCalendar = () => {
                 </UiBadge>
               )}
               <button type="button" disabled={saving || governanceBusy} onClick={() => void optimizeLaborInterleaving()}>
-                Tối ưu Đan xen Nhiệm vụ, Định biên Nhân lực & An toàn Công thái học (AX-02, AX-14)
+                Tối ưu Đan xen Nhiệm vụ, Định biên Nhân lực & An toàn Công thái học
               </button>
               {laborOptimization && (
                 <UiBadge tone="success">
@@ -405,13 +405,13 @@ const WarehouseCalendar = () => {
                 </label>
                 <div className="ui-inline-actions">
                   <button type="submit" disabled={saving || !exceptionForm.windowDateOrRange.trim() || !exceptionForm.reason.trim()}>
-                    {saving ? 'Đang lưu...' : 'Ghi nhận ngoại lệ WH-07'}
+                    {saving ? 'Đang lưu...' : 'Ghi nhận ngoại lệ lịch vận hành'}
                   </button>
                 </div>
               </form>
             )}
             <UiTableScroll>
-              <table aria-label="Danh sách ngoại lệ lịch vận hành WH-07" className="ui-table-compact">
+              <table aria-label="Danh sách ngoại lệ lịch vận hành" className="ui-table-compact">
                 <thead>
                   <tr>
                     <th>Loại ngoại lệ</th>

@@ -240,7 +240,7 @@ const Units = () => {
         <UiMetric value={filtered.length} label="Kết quả hiện tại" />
       </UiMetricGrid>
 
-      <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi (MD-02)">
+      <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi">
         <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           <div className="ui-subcard">
             <strong>Tỷ lệ đơn vị tính kích hoạt</strong><br />
@@ -257,7 +257,7 @@ const Units = () => {
         </div>
         <div className="ui-inline-wrap">
           <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyUomIntegrity()}>
-            Kiểm định Hệ số Quy đổi & Bất biến ĐVT Cơ sở (MD-03)
+            Kiểm định Hệ số Quy đổi & Bất biến ĐVT Cơ sở
           </button>
           {uomIntegrity && (
             <UiBadge tone="success">
@@ -265,7 +265,7 @@ const Units = () => {
             </UiBadge>
           )}
           <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyCatchWeightColdChain()}>
-            Kiểm định Tồn kho Hai ĐVT (Trọng lượng biến thiên), Chuỗi lạnh &amp; Hàng nguy hiểm (AX-07, AX-18..20)
+            Kiểm định Tồn kho Hai ĐVT (Trọng lượng biến thiên), Chuỗi lạnh &amp; Hàng nguy hiểm
           </button>
           {catchWeightColdChainResult && (
             <UiBadge tone="success">{catchWeightColdChainResult}</UiBadge>

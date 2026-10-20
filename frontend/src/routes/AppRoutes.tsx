@@ -1,13 +1,11 @@
 import { Navigate, Routes, Route } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import MainLayout from '../layouts/MainLayout';
-import BlueprintLayout from '../layouts/BlueprintLayout';
 import Dashboard from '../pages/Dashboard';
 import NotFound from '../pages/NotFound';
 import Login from '../pages/Login';
 import Products from '../pages/Products';
 import Warehouses from '../pages/Warehouses';
-import WarehouseStructure from '../pages/WarehouseStructure';
 import WarehouseLocations from '../pages/WarehouseLocations';
 import WarehouseMap from '../pages/WarehouseMap';
 import WarehouseCalendar from '../pages/WarehouseCalendar';
@@ -36,16 +34,8 @@ import BusinessPartners from '../pages/BusinessPartners';
 import PartnerDebts from '../pages/PartnerDebts';
 import PutawayTasks from '../pages/PutawayTasks';
 import Permissions from '../pages/Permissions';
-import SystemBlueprint from '../pages/SystemBlueprint';
-import ModuleBlueprint from '../pages/ModuleBlueprint';
-import MockScenarioLab from '../pages/MockScenarioLab';
-import MockDataLab from '../pages/MockDataLab';
-import MockGlobalSearch from '../pages/MockGlobalSearch';
-import CapabilityPreview from '../pages/CapabilityPreview';
-import SystemCoverage from '../pages/SystemCoverage';
-import { MockDemoProvider } from '../context/MockDemoContext';
 import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
-import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import { UiCard, UiPage } from '../ui/ProductionUi';
 
 const AccessDenied = () => (
@@ -70,7 +60,7 @@ const PermissionRoute = ({ permission, children }: { permission: string | string
 
 const StocktakeRoute = ({ children }: { children: ReactNode }) => {
   usePermissionSet();
-  return (isBlueprintDemoRuntime() || canViewStocktakes()) ? children : <Navigate to="/" replace />;
+  return (isReadOnlyDemoRuntime() || canViewStocktakes()) ? children : <Navigate to="/" replace />;
 };
 const ApprovalRoute = () => {
   usePermissionSet();
@@ -82,22 +72,11 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/login" element={<Login />} />
 
-      {/* Hệ thống thiết kế / Mô phỏng độc lập (Tách biệt hoàn toàn khỏi Hệ thống thật) */}
-      <Route path="/system-blueprint" element={<MockDemoProvider><BlueprintLayout /></MockDemoProvider>}>
-        <Route index element={<SystemBlueprint />} />
-        <Route path="scenarios" element={<MockScenarioLab />} />
-        <Route path="mock-data" element={<MockDataLab />} />
-        <Route path="search" element={<MockGlobalSearch />} />
-        <Route path="coverage" element={<SystemCoverage />} />
-        <Route path="warehouse-structure/WH-02/workbench" element={<WarehouseStructure />} />
-        <Route path=":moduleKey/:capabilityId" element={<CapabilityPreview />} />
-        <Route path=":moduleKey" element={<ModuleBlueprint />} />
-      </Route>
-
       {/* Hệ thống vận hành thật (Production ERP WMS) */}
       <Route path="/" element={<MainLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
+        <Route path="categories" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
         <Route path="warehouse-structure" element={<PermissionRoute permission="location.read"><WarehouseLocations /></PermissionRoute>} />
         <Route path="warehouse-locations" element={<Navigate to="/warehouse-structure" replace />} />

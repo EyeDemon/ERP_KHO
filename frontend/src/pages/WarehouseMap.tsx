@@ -276,7 +276,7 @@ const WarehouseMap = () => {
         <UiMetric value={criticalCount} label="Điểm cần chú ý" />
       </UiMetricGrid>
 
-      <UiCard title="Tổng quan Mật độ Sơ đồ Không gian Kho (WH-03)">
+      <UiCard title="Tổng quan Mật độ Sơ đồ Không gian Kho">
         <div className="warehouse-map-layout-form">
           <div>
             <strong>Độ phủ tọa độ sơ đồ không gian</strong><br />
@@ -293,7 +293,7 @@ const WarehouseMap = () => {
         </div>
       </UiCard>
 
-      <UiCard title="Năng suất Tác vụ Kho, Bản đồ Nhiệt & Điểm chuẩn Xuất BI (RP-07, RP-10)">
+      <UiCard title="Năng suất Tác vụ Kho, Bản đồ Nhiệt & Điểm chuẩn Xuất BI">
         <div className="ui-inline-wrap">
           <UiBadge tone="success">{`Cất hàng hoàn tất: ${biSnapshot?.completedPutawaysCount ?? 0}`}</UiBadge>
           <UiBadge tone="success">{`Lấy hàng hoàn tất: ${biSnapshot?.completedPicksCount ?? 0}`}</UiBadge>
@@ -306,7 +306,7 @@ const WarehouseMap = () => {
         </div>
         <div className="ui-inline-actions" style={{ marginTop: 8 }}>
           <button type="button" disabled={loading || saving || biSyncBusy} onClick={() => void syncBiSnapshot()}>
-            Đồng bộ Ảnh chụp Bản đồ Nhiệt &amp; Chuẩn dữ liệu BI (WH-04, RP-07, RP-10)
+            Đồng bộ Ảnh chụp Bản đồ Nhiệt &amp; Chuẩn dữ liệu BI
           </button>
           {biSyncResult && (
             <UiBadge tone="success">

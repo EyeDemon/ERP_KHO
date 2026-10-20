@@ -433,8 +433,8 @@ describe('InventoryTraceability',()=>{
     fireEvent.change(view.getByLabelText('Mã lô'),{target:{value:'LOT-A'}});
     fireEvent.click(view.getByRole('button',{name:'Truy vết'}));
     expect(await view.findByRole('table',{name:'Chứng từ liên quan cùng lô hoặc sê-ri'})).toBeTruthy();
-    expect(view.getByText('Shipment #99')).toBeTruthy();
-    expect(view.getByText('GoodsReceipt #21')).toBeTruthy();
+    expect(view.getByText('Mã tham chiếu #99')).toBeTruthy();
+    expect(view.getByText('Mã tham chiếu #21')).toBeTruthy();
     expect(view.getByText(/chưa chứng minh quan hệ giao nhận/)).toBeTruthy();
     expect(apiClient.get).toHaveBeenCalledWith(
       '/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'

@@ -1,9 +1,9 @@
-export const isBlueprintDemoRuntime = (hostname?: string): boolean => {
+export const isReadOnlyDemoRuntime = (hostname?: string): boolean => {
   const value = hostname ?? (typeof window !== 'undefined' ? window.location.hostname : '');
-  return value.startsWith('erp-wms-blueprint-demo') && value.endsWith('.vercel.app');
+  return value.startsWith('erp-wms-') && value.includes('-demo') && value.endsWith('.vercel.app');
 };
 
-export const blueprintDemoReadPermissions = [
+export const readOnlyDemoPermissions = [
   'product.read',
   'product_category.read',
   'warehouse.read',

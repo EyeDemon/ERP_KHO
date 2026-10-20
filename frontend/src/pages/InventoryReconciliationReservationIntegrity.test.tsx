@@ -3,17 +3,17 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import InventoryReconciliation from './InventoryReconciliation';
 import apiClient from '../services/apiClient';
-import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 
 vi.mock('../services/apiClient', () => ({ default: { get: vi.fn() } }));
 vi.mock('../services/runtimeMode', () => ({
-  isBlueprintDemoRuntime: vi.fn(() => false),
+  isReadOnlyDemoRuntime: vi.fn(() => false),
 }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 it('warns about invalid reserved buckets without certifying a ledger match', async () => {
-  vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
+  vi.mocked(isReadOnlyDemoRuntime).mockReturnValue(false);
   const statuses = ['Available', 'QcHold', 'Quarantine', 'Damaged',
     'Rejected', 'Blocked', 'Expired', 'RecallBlocked'];
   const evidence = {
@@ -63,7 +63,7 @@ it('warns about invalid reserved buckets without certifying a ledger match', asy
 });
 
 it('does not show Match for a compensating negative physical bucket', async () => {
-  vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
+  vi.mocked(isReadOnlyDemoRuntime).mockReturnValue(false);
   vi.mocked(apiClient.get).mockImplementation((url: string) => {
     if (url.endsWith('/warehouses'))
       return Promise.resolve({ data: [{ id: 1, code: 'HCM', name: 'Kho HCM' }] });

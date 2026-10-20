@@ -6,7 +6,7 @@ import { demoReconciliationRows } from '../mocks/inventoryReconciliationDemo';
 import { productionNavigation } from '../config/productionNavigation';
 import apiClient from '../services/apiClient';
 import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
-import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import './Dashboard.css';
 
@@ -219,7 +219,7 @@ const entityNameLabel = (entityName: string) => ({
 }[entityName] || entityName);
 
 const Dashboard = () => {
-  const demoRuntime = isBlueprintDemoRuntime();
+  const demoRuntime = isReadOnlyDemoRuntime();
   const [liveSummary, setLiveSummary] = useState<OperationalDashboardSummary | null>(null);
   const [liveTasks, setLiveTasks] = useState<WarehouseTaskItem[]>([]);
   const [liveExceptions, setLiveExceptions] = useState<OperationalExceptionItem[]>([]);
@@ -351,7 +351,7 @@ const Dashboard = () => {
       {liveError && <p role="alert">{liveError}</p>}
 
       {!demoRuntime && (
-        <UiCard title="Tìm kiếm toàn doanh nghiệp (OV-07)">
+        <UiCard title="Tìm kiếm toàn doanh nghiệp">
           <form onSubmit={handleGlobalSearch} className="ui-inline-actions">
             <input
               aria-label="Tìm kiếm toàn doanh nghiệp"
@@ -450,7 +450,7 @@ const Dashboard = () => {
       </div>
 
       {!demoRuntime && (
-        <UiCard title="Trung tâm Điều hành Kho phân tán & Bộ máy Hàng đợi Nhiệm vụ (OV-05, OV-06)">
+        <UiCard title="Trung tâm Điều hành Kho phân tán & Bộ máy Hàng đợi Nhiệm vụ">
           <div className="ui-inline-wrap">
             <UiBadge tone="success">{`Kho ổn định: ${controlTower?.healthyWarehousesCount ?? 0}/${controlTower?.totalWarehouses ?? (liveSummary?.warehouseCount ?? 0)}`}</UiBadge>
             <UiBadge tone={(controlTower?.attentionWarehousesCount ?? 0) > 0 ? 'warning' : 'neutral'}>
@@ -465,7 +465,7 @@ const Dashboard = () => {
               { taskType: 'DOCK_YARD', openCount: 0, route: '/dock-yard' },
             ]).map((queue) => (
               <UiBadge key={queue.taskType} tone={queue.openCount > 0 ? 'warning' : 'neutral'}>
-                {`Hàng đợi ${taskTypeLabel(queue.taskType)} (OV-06): ${queue.openCount}`}
+                {`Hàng đợi ${taskTypeLabel(queue.taskType)}: ${queue.openCount}`}
               </UiBadge>
             ))}
           </div>
@@ -508,7 +508,7 @@ const Dashboard = () => {
 
       {!demoRuntime && (
         <div className="dashboard-grid">
-          <UiCard title={`Hàng đợi tác vụ kho đang mở (OV-02) • ${filteredTasks.length}`}>
+          <UiCard title={`Hàng đợi tác vụ kho đang mở • ${filteredTasks.length}`}>
             <div className="ui-inline-actions">
               <label>
                 Loại tác vụ:{' '}
@@ -559,12 +559,12 @@ const Dashboard = () => {
             )}
           </UiCard>
 
-          <UiCard title={`Trung tâm ngoại lệ vận hành (OV-04) • ${liveExceptions.length}`}>
+          <UiCard title={`Trung tâm ngoại lệ vận hành • ${liveExceptions.length}`}>
             {liveExceptions.length === 0 ? (
               <p className="ui-muted-text">Không có ngoại lệ vận hành mở trong phạm vi kho được phép.</p>
             ) : (
               <UiTableScroll>
-                <table className="ui-table-compact" aria-label="Trung tâm ngoại lệ vận hành">
+                <table className="ui-table-compact" aria-label="Trung tâm ngoại lệ vận hành" style={{ width: '100%' }}>
                   <thead>
                     <tr>
                       <th>Phân loại</th>
@@ -586,9 +586,9 @@ const Dashboard = () => {
                             {severityLabel(ex.severity)}
                           </UiBadge>
                         </td>
-                        <td>{ex.summary}</td>
+                        <td style={{ whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 160 }}>{ex.summary}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>
-                          <div className="ui-inline-actions">
+                          <div className="ui-inline-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
                             <Link to={ex.route} style={{ whiteSpace: 'nowrap' }}>Xử lý →</Link>
                             {acknowledgedCodes.includes(ex.code) ? (
                               <UiBadge tone="success">Đã tiếp nhận</UiBadge>

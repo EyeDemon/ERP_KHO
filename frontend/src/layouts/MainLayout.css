@@ -67,7 +67,7 @@
 }
 
 .sidebar-back-link,
-.blueprint-entry-link {
+.demo-entry-link {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -81,12 +81,12 @@
 }
 
 .sidebar-back-link:hover,
-.blueprint-entry-link:hover {
+.demo-entry-link:hover {
   background: #1E293B;
   color: #FFFFFF;
 }
 
-.blueprint-entry-link {
+.demo-entry-link {
   color: #A7F3D0;
   margin-bottom: 8px;
 }
@@ -226,7 +226,7 @@
 }
 
 .runtime-badge,
-.blueprint-badge {
+.demo-badge {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -243,7 +243,7 @@
   border: 1px solid #FDE68A;
 }
 
-.blueprint-badge {
+.demo-badge {
   color: #4338CA;
   background: #EEF2FF;
   border: 1px solid #C7D2FE;
@@ -480,7 +480,7 @@
   }
 
   .runtime-badge,
-  .blueprint-badge {
+  .demo-badge {
     font-size: 10px;
   }
 

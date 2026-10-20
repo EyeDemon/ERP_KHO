@@ -55,7 +55,7 @@ function normalizeUserSecurity(uid: number, raw: Record<string, unknown>): UserS
   const rawActiveSessions = raw.activeSessionCount ?? raw.activeSessions;
   return {
     userId: typeof raw.userId === 'number' ? raw.userId : uid,
-    username: typeof raw.username === 'string' && raw.username ? raw.username : `User #${uid}`,
+    username: typeof raw.username === 'string' && raw.username ? raw.username : `Người dùng #${uid}`,
     roleName: typeof raw.roleName === 'string' && raw.roleName ? raw.roleName : 'User',
     isActive: Boolean(raw.isActive ?? true),
     isTemporarilyLocked: Boolean(raw.isTemporarilyLocked ?? raw.isLocked ?? false),
@@ -84,8 +84,8 @@ function normalizeUserWarehouses(uid: number, raw: Record<string, unknown>): Use
   }));
   return {
     userId: typeof raw.userId === 'number' ? raw.userId : uid,
-    username: typeof raw.username === 'string' && raw.username ? raw.username : `User #${uid}`,
-    fullName: typeof raw.fullName === 'string' && raw.fullName ? raw.fullName : `User #${uid}`,
+    username: typeof raw.username === 'string' && raw.username ? raw.username : `Người dùng #${uid}`,
+    fullName: typeof raw.fullName === 'string' && raw.fullName ? raw.fullName : (typeof raw.username === 'string' && raw.username ? raw.username : `Người dùng #${uid}`),
     roleName: typeof raw.roleName === 'string' && raw.roleName ? raw.roleName : 'User',
     isActive: Boolean(raw.isActive ?? true),
     rowVersion: typeof raw.rowVersion === 'string' ? raw.rowVersion : null,
@@ -109,14 +109,14 @@ export default function Permissions() {
   const inFlight = useRef(false);
   const requestVersion = useRef(0);
 
-  // AD-01 / AD-06: User Security & Session Governance State
+  // User Security & Session Governance State
   const [targetUserIdInput, setTargetUserIdInput] = useState('');
   const [userSecurity, setUserSecurity] = useState<UserSecurityStatus | null>(null);
   const [securityReason, setSecurityReason] = useState('');
   const [tempPassword, setTempPassword] = useState('');
   const [securityBusy, setSecurityBusy] = useState(false);
 
-  // AD-03: User Warehouse Access Scope State
+  // User Warehouse Access Scope State
   const [whUserIdInput, setWhUserIdInput] = useState('');
   const [userWarehouses, setUserWarehouses] = useState<UserWarehouseAccessListDto | null>(null);
   const [grantWarehouseIdInput, setGrantWarehouseIdInput] = useState('');
@@ -376,34 +376,34 @@ export default function Permissions() {
 
     {(catalog.length > 0 || roles.length > 0) && (
       <>
-        <UiCard title="Tổng quan Tài khoản, Vai trò & Phân quyền Kho (AD-01)">
+        <UiCard title="Tổng quan Tài khoản, Vai trò & Phân quyền Kho">
           <div className="ui-inline-wrap">
             <UiBadge tone="success">{`Danh mục quyền hệ thống: ${catalog.length}`}</UiBadge>
             <UiBadge>{`Vai trò nghiệp vụ: ${roles.length}`}</UiBadge>
             <UiBadge tone="warning">{`Tổng lượt cấp quyền: ${roles.reduce((sum, role) => sum + role.permissions.length, 0)}`}</UiBadge>
-            <UiBadge>{`Phạm vi kho đang tra cứu (AD-03): ${userWarehouses ? userWarehouses.warehouses.length : 0}`}</UiBadge>
+            <UiBadge>{`Phạm vi kho đang tra cứu: ${userWarehouses ? userWarehouses.warehouses.length : 0}`}</UiBadge>
           </div>
         </UiCard>
 
-        <UiCard title="Cấu hình Quản trị Doanh nghiệp Mở rộng: Cờ chức năng, Chuỗi số Chứng từ, SSO, Giữ pháp lý & Bảo vệ Dữ liệu (AD-05, AD-07..AD-14)">
+        <UiCard title="Cấu hình Quản trị Doanh nghiệp Mở rộng: Cờ chức năng, Chuỗi số Chứng từ, SSO, Giữ pháp lý & Bảo vệ Dữ liệu">
           <div className="ui-inline-wrap">
-            <UiBadge tone="success">Cờ chức năng (AD-05): Phân tách nhiệm vụ • Phân bổ theo hạn dùng • Bảo vệ sổ cái bất biến</UiBadge>
-            <UiBadge tone="success">Cảnh báo vận hành (AD-07): Đang bật</UiBadge>
-            <UiBadge>Liên kết định danh một cửa (AD-08): Sẵn sàng xác thực tập trung</UiBadge>
-            <UiBadge>Chuỗi đánh số chứng từ (AD-09): PO/ASN/IMP/PUT/EXP/PCK/SHP/TRF/STK</UiBadge>
-            <UiBadge>Chính sách luồng duyệt (AD-10): v2026.10</UiBadge>
-            <UiBadge>Hồ sơ đính kèm (AD-11): Liên kết kiểm toán bất biến</UiBadge>
-            <UiBadge>Đa ngôn ngữ & chuẩn lưu trữ (AD-12): vi-VN / UTC + Đơn vị cơ sở</UiBadge>
-            <UiBadge tone="warning">Giữ pháp lý & truy xuất chứng cứ (AD-13): Đang bật lưu trữ bất biến</UiBadge>
-            <UiBadge tone="success">Bảo vệ dữ liệu cá nhân (AD-14): Ẩn thông tin nhạy cảm & bảo toàn nhật ký</UiBadge>
+            <UiBadge tone="success">Cờ chức năng: Phân tách nhiệm vụ • Phân bổ theo hạn dùng • Bảo vệ sổ cái bất biến</UiBadge>
+            <UiBadge tone="success">Cảnh báo vận hành: Đang bật</UiBadge>
+            <UiBadge>Liên kết định danh một cửa: Sẵn sàng xác thực tập trung</UiBadge>
+            <UiBadge>Chuỗi đánh số chứng từ: PO/ASN/IMP/PUT/EXP/PCK/SHP/TRF/STK</UiBadge>
+            <UiBadge>Chính sách luồng duyệt: v2026.10</UiBadge>
+            <UiBadge>Hồ sơ đính kèm: Liên kết kiểm toán bất biến</UiBadge>
+            <UiBadge>Đa ngôn ngữ & chuẩn lưu trữ: vi-VN / UTC + Đơn vị cơ sở</UiBadge>
+            <UiBadge tone="warning">Giữ pháp lý & truy xuất chứng cứ: Đang bật lưu trữ bất biến</UiBadge>
+            <UiBadge tone="success">Bảo vệ dữ liệu cá nhân: Ẩn thông tin nhạy cảm & bảo toàn nhật ký</UiBadge>
           </div>
           <div className="ui-inline-actions">
             <button type="button" disabled={evidenceBusy} onClick={() => void exportEvidenceBundle()}>
-              Kết xuất Gói Bằng chứng Kiểm toán & Giữ pháp lý (RP-08, AD-13)
+              Kết xuất Gói Bằng chứng Kiểm toán & Giữ pháp lý
             </button>
             {(canReadUserWarehouse || canAssign) && (
               <button type="button" disabled={sodAuditBusy} onClick={() => void verifySodIsolation()}>
-                Kiểm toán Cô lập Phạm vi Kho & Phân tách Nhiệm vụ SoD (AD-03, AD-05)
+                Kiểm toán Cô lập Phạm vi Kho & Phân tách Nhiệm vụ SoD
               </button>
             )}
             {evidenceBundle && (
@@ -779,7 +779,7 @@ export default function Permissions() {
           <UiToolbarField label="Tìm kiếm quyền">
             <input
               aria-label="Tìm kiếm quyền"
-              placeholder="Nhập tên quyền hoặc mã quyền..."
+              placeholder="Tìm tên hoặc mã quyền..." style={{ minWidth: 260 }}
               value={permissionSearch}
               onChange={e => setPermissionSearch(e.target.value)}
             />

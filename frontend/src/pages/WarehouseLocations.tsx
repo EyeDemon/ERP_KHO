@@ -509,7 +509,7 @@ const WarehouseLocations = () => {
                 .finally(() => setTopologyAuditBusy(false));
             }}
           >
-            Kiểm định Cấu trúc Zone/Bin & Giới hạn Sức chứa (WH-02, WH-03)
+            Kiểm định Cấu trúc Zone/Bin & Giới hạn Sức chứa
           </button>
           {topologyAuditResult && (
             <UiBadge tone="success">
@@ -535,7 +535,7 @@ const WarehouseLocations = () => {
                 });
             }}
           >
-            Kiểm định 9 Vị trí Ảo (WH-02, WH-04)
+            Kiểm định 9 Vị trí Ảo
           </button>
           {virtualVerification && (
             <UiBadge tone="success">

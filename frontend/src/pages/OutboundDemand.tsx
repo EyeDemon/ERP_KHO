@@ -284,7 +284,7 @@ export default function OutboundDemand(){
     {canCreate&&!masterReady&&<p className="ui-muted-text">Tạo Đơn bán hàng trên UI cần thêm partner.read, product.read và warehouse.read để chọn dữ liệu danh mục.</p>}
 
     <div className="ui-stack">
-      <UiCard title="Tổng quan Tỷ lệ Đáp ứng Đơn hàng & Đơn nợ hàng — OUT-01 / OUT-09">
+      <UiCard title="Tổng quan Tỷ lệ Đáp ứng Đơn hàng & Đơn nợ hàng">
         <div className="ui-inline-wrap">
           <span>Tổng cầu: <strong>{totalOrderedQty}</strong></span>
           <span>Đã giữ / Phân bổ: <strong>{totalReservedQty} / {totalAllocatedQty}</strong></span>
@@ -292,7 +292,7 @@ export default function OutboundDemand(){
           <span>Đơn nợ hàng: <strong>{totalBackorderQty}</strong> (Còn mở: {openBackorderRemaining})</span>
           <span>Tỷ lệ đáp ứng (%): <strong>{fulfillmentRatePct}%</strong></span>
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void triggerExpediteBackorder()}>
-            Kích hoạt Ưu tiên Cấp phát Đơn tồn thiếu Backorder (OUT-09)
+            Kích hoạt Ưu tiên Cấp phát Đơn tồn thiếu Backorder
           </button>
           {expediteResult&&(
             <UiBadge tone="success">
@@ -300,7 +300,7 @@ export default function OutboundDemand(){
             </UiBadge>
           )}
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void evaluateAtpRouting()}>
-            Tính toán Cam kết ATP/CTP, Định tuyến Điểm hoàn tất & Công bằng Phân bổ (AX-23, AX-26, AX-39, AX-40)
+            Tính toán Cam kết ATP/CTP, Định tuyến Điểm hoàn tất & Công bằng Phân bổ
           </button>
           {atpRoutingResult&&(
             <UiBadge tone="success">

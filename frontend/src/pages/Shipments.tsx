@@ -196,7 +196,7 @@ export default function Shipments(){
           <span>Ngoại lệ / Hoàn kho: <strong>{exceptionOrReturnCount}</strong></span>
         </div>
       </UiCard>
-      <UiCard title="Lập kế hoạch Xếp tải Xe (AX-12) & Tích hợp Đơn vị Vận chuyển / TMS (IG-06)">
+      <UiCard title="Lập kế hoạch Xếp tải Xe & Tích hợp Đơn vị Vận chuyển / TMS">
         <div className="ui-inline-wrap">
           <span>Chờ tập kết / xếp xe: <strong>{stagingOrLoadingCount}</strong></span>
           <span>Hãng vận chuyển: <strong>{carrierAssignedCount}</strong></span>
@@ -237,7 +237,7 @@ export default function Shipments(){
                 .finally(()=>setTmsBusy(false));
             }}
           >
-            Đồng bộ Manifest & Ghép tải TMS (IG-06, AX-12)
+            Đồng bộ Manifest & Ghép tải TMS
           </button>
           {tmsManifestResult&&(
             <UiBadge tone="success">

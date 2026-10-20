@@ -132,7 +132,7 @@ public sealed class Wave7FullChaosLifecycleSqlTests
 
             // =========================================================================
             // STEP 1: Create WH1 & WH2 via WarehouseService (verifying RECEIVING, LEGACY,
-            //         DAMAGED system locations + W7-02 guard) & WarehouseCalendar WH-07
+            //         DAMAGED system locations + W7-02 guard) & WarehouseCalendar exceptions
             // =========================================================================
             await using (var whDb = CreateContext())
             {

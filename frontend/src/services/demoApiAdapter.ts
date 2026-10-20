@@ -83,7 +83,7 @@ const paged = <T,>(items: T[], page: number, pageSize: number) => {
 
 const findNumericId = (path: string) => Number(path.match(/\/(\d+)(?:\/|$)/)?.[1] ?? 0);
 
-export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfig) => {
+export const createReadOnlyDemoApiAdapter = (request: InternalAxiosRequestConfig) => {
   return async (config: InternalAxiosRequestConfig = request) => {
     const method = (config.method ?? 'get').toLowerCase();
     const path = normalizePath(config.url);
@@ -310,13 +310,13 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     }
 
     if (method !== 'get') {
-      return fail(config, 405, 'Vercel Blueprint demo là môi trường chỉ đọc. Thao tác ghi đã bị chặn.');
+      return fail(config, 405, 'Vercel Demo là môi trường chỉ đọc. Thao tác ghi đã bị chặn.');
     }
 
     if (path === '/api/auth/me') {
       return ok(config, {
         userId: 1,
-        username: 'Blueprint Demo',
+        username: 'Demo Viewer',
         role: 'Viewer',
         permissions: ['product.read', 'product_category.read', 'warehouse.read', 'location.read', 'dock.read', 'dock_appointment.read', 'yard.read', 'uom.read', 'partner.read', 'purchase_order.read', 'asn.read', 'receipt.read', 'export_receipt.read', 'allocation.read', 'picking.read', 'packing.read', 'handling_unit.read', 'shipment.read', 'sales_order.read', 'backorder.read', 'inventory.read', 'inventory_availability.read', 'inventory_ledger.read', 'inventory_traceability.read', 'inventory_lock.read', 'receiving_discrepancy.read', 'reason_code.read', 'putaway.read', 'permission.read', 'role.read'],
       });
@@ -544,7 +544,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       return ok(config, demoWarehouses.map(item => ({ id: item.id, code: item.code, name: item.name })));
     }
     if (path === '/api/inventory/traceability-warehouses') {
-      // Blueprint only: read-only example data. Real mode uses the protected
+      // Demo only: read-only example data. Real mode uses the protected
       // inventory_traceability.read API + current user's warehouse membership.
       return ok(config, demoWarehouses.map(item => ({ id: item.id, code: item.code, name: item.name })));
     }
@@ -697,7 +697,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
     }
     if (path === '/api/reports/inventory-in-out-stock') return ok(config, demoInOut);
     if (path === '/api/reports/inventory/export' || path === '/api/reports/inventory-in-out-stock/export') {
-      return ok(config, new Blob(['Blueprint demo export - no production data'], { type: 'text/plain' }));
+      return ok(config, new Blob(['Read-only demo export - no production data'], { type: 'text/plain' }));
     }
 
     if (path === '/api/purchase-orders') {
@@ -1133,7 +1133,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
           action: 'Permission.CatalogView',
           entityName: 'RolePermission',
           entityId: 1,
-          newValues: 'Blueprint read-only audit',
+          newValues: 'Demo read-only audit',
           timestamp: '2026-10-17T08:00:00Z',
         },
       ]);
@@ -1151,7 +1151,7 @@ export const createBlueprintDemoApiAdapter = (request: InternalAxiosRequestConfi
       return ok(config, [
         {
           sessionId: '00000000-0000-0000-0000-000000000001',
-          deviceInfo: 'Blueprint Demo Browser Session',
+          deviceInfo: 'Demo Browser Session',
           ipAddress: '127.0.0.1',
           isCurrent: true,
           createdAtUtc: '2026-10-17T08:00:00Z',

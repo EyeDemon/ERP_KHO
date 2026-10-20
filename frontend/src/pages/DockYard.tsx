@@ -680,7 +680,7 @@ const DockYard = () => {
 
           <UiCard title="Giám sát Thời gian lưu bãi & Cam kết Phương tiện">
             <UiTableScroll>
-              <table className="ui-table-compact" style={{ tableLayout: 'fixed', width: '100%' }} aria-label="Bảng giám sát thời gian lưu bãi phương tiện DY-04">
+              <table className="ui-table-compact" style={{ tableLayout: 'fixed', width: '100%' }} aria-label="Bảng giám sát thời gian lưu bãi phương tiện">
                 <thead>
                   <tr>
                     <th style={{ width: '26%' }}>Lịch hẹn</th>

@@ -483,7 +483,7 @@ const ImportReceipts = () => {
           }}
         />
 
-        <UiCard title="Tổng quan Luồng Tiếp nhận Hàng đến — IN-04..IN-07">
+        <UiCard title="Tổng quan Luồng Tiếp nhận Hàng đến">
           <div className="ui-inline-wrap">
             <UiBadge>{`Tổng số phiếu nhập: ${receipts.length}`}</UiBadge>
             <UiBadge tone="warning">{`Đang soạn / Nhận tại cửa: ${receipts.filter(r => r.status === 'Draft' || r.status === 'Received' || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
@@ -493,7 +493,7 @@ const ImportReceipts = () => {
           </div>
         </UiCard>
 
-        <UiCard title="Mở Bàn làm việc Kiểm định Chất lượng — QR-01">
+        <UiCard title="Mở Bàn làm việc Kiểm định Chất lượng">
           <div className="ui-inline-wrap">
             <UiBadge tone="warning">{`Đang kiểm định QC / Xử lý chênh lệch: ${receipts.filter(r => r.requiresQc || r.status === 'QcPending' || r.status === 'QcCompleted' || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
             <UiBadge tone="success">{`Hoàn tất QC & đã ghi sổ tồn kho: ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
@@ -529,7 +529,7 @@ const ImportReceipts = () => {
                   .finally(() => setGovernanceBusy(false));
               }}
             >
-              Khởi tạo Hồ sơ Kiểm định RMA / Hàng hoàn trả (QR-04)
+              Khởi tạo Hồ sơ Kiểm định RMA / Hàng hoàn trả
             </button>
             <button
               type="button"
@@ -551,7 +551,7 @@ const ImportReceipts = () => {
                       setError('Phản hồi thực thi phân luồng tân trang & xuất trả RTV không hợp lệ từ máy chủ.');
                       return;
                     }
-                    setSuccessMsg(`Đã thực thi phân luồng Reverse Logistics (${code}): Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV (AX-13).`);
+                    setSuccessMsg(`Đã thực thi phân luồng Reverse Logistics (${code}): Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV.`);
                   })
                   .catch((err) => {
                     setError(permissionError(err, 'Không thể thực thi phân luồng tân trang (Refurbish) & xuất trả RTV.'));
@@ -559,7 +559,7 @@ const ImportReceipts = () => {
                   .finally(() => setGovernanceBusy(false));
               }}
             >
-              Thực thi Phân luồng Tân trang (Refurbish) & Xuất trả Nhà cung cấp RTV (AX-13)
+              Thực thi Phân luồng Tân trang (Refurbish) & Xuất trả Nhà cung cấp RTV
             </button>
           </div>
         </UiCard>

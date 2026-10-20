@@ -3,19 +3,19 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryReconciliation from './InventoryReconciliation';
 import apiClient from '../services/apiClient';
-import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 
 vi.mock('../services/apiClient', () => ({
   default: { get: vi.fn() },
 }));
 
 vi.mock('../services/runtimeMode', () => ({
-  isBlueprintDemoRuntime: vi.fn(() => false),
+  isReadOnlyDemoRuntime: vi.fn(() => false),
 }));
 
 describe('InventoryReconciliation', () => {
   beforeEach(() => {
-    vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
+    vi.mocked(isReadOnlyDemoRuntime).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -23,8 +23,8 @@ describe('InventoryReconciliation', () => {
     vi.clearAllMocks();
   });
 
-  it('uses read-only demo data on the Vercel blueprint runtime without calling APIs', async () => {
-    vi.mocked(isBlueprintDemoRuntime).mockReturnValue(true);
+  it('uses read-only demo data on the Vercel demo runtime without calling APIs', async () => {
+    vi.mocked(isReadOnlyDemoRuntime).mockReturnValue(true);
     const view = render(<InventoryReconciliation />);
 
     expect(await view.findByText('SKU-1001')).toBeTruthy();
@@ -34,7 +34,7 @@ describe('InventoryReconciliation', () => {
     expect(view.getAllByText('Lệch').length).toBeGreaterThan(0);
     expect(view.getAllByRole('note').some(note =>
       note.textContent?.includes('không phải kết quả từ SQL Server thật')
-      && note.textContent?.includes('INV-11')
+      && note.textContent?.includes('Work Center Inventory Control')
     )).toBe(true);
     expect(apiClient.get).not.toHaveBeenCalled();
   });
@@ -1102,8 +1102,8 @@ describe('InventoryReconciliation', () => {
     expect(view.getByText('Tổng Ledger các trạng thái (tham khảo)')).toBeTruthy();
   });
 
-  it('does not call real investigation API on blueprint demo',async()=>{
-    vi.mocked(isBlueprintDemoRuntime).mockReturnValue(true);
+  it('does not call real investigation API on read-only demo',async()=>{
+    vi.mocked(isReadOnlyDemoRuntime).mockReturnValue(true);
     const view=render(<InventoryReconciliation />);
     await view.findByText('SKU-1001');
     const buttons=view.getAllByRole('button',{name:/Xem bằng chứng/});

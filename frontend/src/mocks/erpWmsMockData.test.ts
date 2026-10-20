@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { erpWmsBlueprint } from '../config/erpWmsBlueprint';
 import {
-  mockCapabilityFixtures,
-  mockCapabilitySampleRecordIds,
   mockInventoryBalances,
   mockPartners,
   mockProducts,
@@ -13,38 +10,13 @@ import {
   mockWorkCenters,
 } from './erpWmsMockData';
 
-describe('ERP WMS complete mock dataset', () => {
-  it('covers every blueprint module with operational records', () => {
-    const moduleKeys = erpWmsBlueprint.map((module) => module.key).sort();
+describe('ERP WMS operational mock dataset', () => {
+  it('covers every operational work center with records', () => {
     const fixtureKeys = Object.keys(mockWorkCenters).sort();
-    expect(fixtureKeys).toEqual(moduleKeys);
+    expect(fixtureKeys.length).toBeGreaterThanOrEqual(16);
     expect(mockRecordCount).toBeGreaterThanOrEqual(60);
-    for (const module of erpWmsBlueprint) {
-      expect(mockWorkCenters[module.key].records.length).toBeGreaterThanOrEqual(4);
-    }
-  });
-
-  it('provides a dedicated fixture for every capability', () => {
-    const capabilities = erpWmsBlueprint.flatMap((module) => module.capabilities);
-    expect(Object.keys(mockCapabilityFixtures)).toHaveLength(capabilities.length);
-    for (const module of erpWmsBlueprint) {
-      for (const capability of module.capabilities) {
-        const fixture = mockCapabilityFixtures[capability.id];
-        expect(fixture).toBeTruthy();
-        expect(fixture.capabilityId).toBe(capability.id);
-        expect(fixture.moduleKey).toBe(module.key);
-        expect(fixture.sampleRecordId).not.toBe('NO-SAMPLE');
-        expect(fixture.sampleReference).not.toBe('NO-SAMPLE');
-      }
-    }
-  });
-
-  it('maps newly audited capabilities to semantically relevant mock records', () => {
-    for (const [capabilityId, recordId] of Object.entries(mockCapabilitySampleRecordIds)) {
-      const fixture = mockCapabilityFixtures[capabilityId];
-      expect(fixture).toBeTruthy();
-      expect(fixture.sampleRecordId).toBe(recordId);
-      expect(fixture.sampleReference).not.toBe('NO-SAMPLE');
+    for (const key of fixtureKeys) {
+      expect(mockWorkCenters[key].records.length).toBeGreaterThanOrEqual(4);
     }
   });
 

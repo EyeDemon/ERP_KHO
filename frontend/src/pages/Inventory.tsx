@@ -247,7 +247,7 @@ const Inventory = () => {
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [expiryError, setExpiryError] = useState('');
 
-  // Analytics Summary State (RP-03, RP-05, RP-09)
+  // Analytics Summary State
   const [analyticsFilter, setAnalyticsFilter] = useState({
     warehouseId: '',
     days: '30'

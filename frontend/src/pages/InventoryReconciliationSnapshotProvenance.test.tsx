@@ -3,17 +3,17 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import InventoryReconciliation from './InventoryReconciliation';
 import apiClient from '../services/apiClient';
-import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 
 vi.mock('../services/apiClient', () => ({ default: { get: vi.fn() } }));
 vi.mock('../services/runtimeMode', () => ({
-  isBlueprintDemoRuntime: vi.fn(() => false),
+  isReadOnlyDemoRuntime: vi.fn(() => false),
 }));
 
 const statuses = ['Available', 'QcHold', 'Quarantine', 'Damaged',
   'Rejected', 'Blocked', 'Expired', 'RecallBlocked'];
 
-describe('INV-11 anchored snapshot provenance', () => {
+describe('InventoryReconciliation anchored snapshot provenance', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -22,7 +22,7 @@ describe('INV-11 anchored snapshot provenance', () => {
   it.each(['ledger', 'bucket', 'other-status-bucket', 'aggregate-change'] as const)(
     'renders indeterminate comparison for stale %s anchor and rejects forged Match',
     async drift => {
-      vi.mocked(isBlueprintDemoRuntime).mockReturnValue(false);
+      vi.mocked(isReadOnlyDemoRuntime).mockReturnValue(false);
       let forged = false;
       const evidence = {
         warehouseId: 1, warehouseName: 'Kho HCM',

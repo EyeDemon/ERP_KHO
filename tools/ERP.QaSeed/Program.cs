@@ -606,6 +606,69 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     await context.SaveChangesAsync();
 
+    var allExistingProductsWithDetails = await context.Products.IgnoreQueryFilters()
+        .Include(p => p.Barcodes)
+        .Include(p => p.Uoms)
+        .Include(p => p.QcPolicies)
+        .OrderBy(p => p.Id)
+        .ToListAsync();
+    var palletUnit = allUnits.FirstOrDefault(u => u.Code == "PALLET");
+    if (palletUnit is null)
+    {
+        palletUnit = new Unit { Code = "PALLET", Name = "Pallet", DecimalPlaces = 0, IsActive = true };
+        context.Units.Add(palletUnit);
+        await context.SaveChangesAsync();
+    }
+    foreach (var p in allExistingProductsWithDetails)
+    {
+        if (palletUnit.Id != p.UnitId && !p.Uoms.Any(u => u.UnitId == palletUnit.Id))
+        {
+            context.ProductUoms.Add(new ProductUom
+            {
+                ProductId = p.Id,
+                UnitId = palletUnit.Id,
+                ConversionFactor = 20m,
+                Version = 1,
+                EffectiveFromUtc = DateTime.UtcNow.AddDays(-60),
+                IsActive = true
+            });
+        }
+        if (!p.QcPolicies.Any())
+        {
+            context.QcPolicies.Add(new QcPolicy
+            {
+                ProductId = p.Id,
+                SupplierId = supplier.Id,
+                Version = 1,
+                RequiresQc = p.Id == lotProduct.Id,
+                IsActive = true,
+                EffectiveFromUtc = DateTime.UtcNow.AddDays(-60),
+                Rule = p.Id == lotProduct.Id
+                    ? "Kiểm định bắt buộc nhiệt độ bảo quản, tem lô và ngoại quan (AQL 2.5)"
+                    : "Kiểm tra xác suất ngoại quan và niêm phong kiện hàng khi tiếp nhận"
+            });
+        }
+        if (!await context.ReceivingTolerancePolicies.IgnoreQueryFilters().AnyAsync(t => t.ProductId == p.Id))
+        {
+            context.ReceivingTolerancePolicies.Add(new ReceivingTolerancePolicy
+            {
+                ProductId = p.Id,
+                SupplierId = supplier.Id,
+                WarehouseId = primaryWarehouse.Id,
+                Version = 1,
+                EffectiveFromUtc = DateTime.UtcNow.AddDays(-60),
+                AbsoluteQuantityTolerance = 5m,
+                PercentageTolerance = 2m,
+                OverageAllowed = true,
+                ShortageAllowed = true,
+                ValueTolerance = 5_000_000m,
+                RequiresApprovalOutsideTolerance = true,
+                ApproverTarget = "Quản lý Kho",
+                IsActive = true
+            });
+        }
+    }
+    await context.SaveChangesAsync();
     // 4. Idempotent PutawayTask ("PUT-QA-001") backed by ImportReceipt ("IR-QA-002") in Open status
     var putawayReceipt = await context.ImportReceipts.IgnoreQueryFilters()
         .Include(r => r.Details)
@@ -2953,6 +3016,15 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
 
     supplier.PayableBalance = apInvoice.RemainingAmount;
+    supplier.CreditLimit = 100_000_000m;
+    supplier.PaymentTermDays = 30;
+    customer.CreditLimit = 80_000_000m;
+    customer.PaymentTermDays = 30;
+    foreach (var bp in allPartners.Where(x => x.IsActive && x.CreditLimit <= 0m))
+    {
+        bp.CreditLimit = bp.IsCustomer ? 80_000_000m : 100_000_000m;
+        if (bp.PaymentTermDays <= 0) bp.PaymentTermDays = 30;
+    }
     customer.ReceivableBalance = arInvoice.RemainingAmount;
 
     // 7. Idempotent Inventory Reconciliation pass — ensure 100% Match across all (WarehouseId, ProductId, Status) pairs

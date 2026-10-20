@@ -170,7 +170,7 @@ export default function PackingSessions(){
     />
 
     <div className="ui-stack">
-      <UiCard title="Danh mục Loại Bao bì Chuẩn (MD-08) & Gợi ý Tối ưu Đóng thùng Cartonization (AX-11)">
+      <UiCard title="Danh mục Loại Bao bì Chuẩn & Gợi ý Tối ưu Đóng thùng Cartonization">
         <div className="ui-inline-wrap">
           <span><strong>CARTON-S</strong> (CARTON): tối đa 15 kg / 0.04 m³</span>
           <span><strong>CARTON-L</strong> (CARTON): tối đa 30 kg / 0.12 m³</span>
@@ -179,9 +179,9 @@ export default function PackingSessions(){
           <span>Chính sách Cartonization: <UiBadge tone="success">Đề xuất & Xác nhận bởi Nhân viên</UiBadge></span>
         </div>
         <div className="ui-inline-wrap">
-          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC (MD-08, AX-11)</button>
+          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC</button>
           {packagingVerificationResult&&<span><strong>{packagingVerificationResult}</strong></span>}
-          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS (AX-09, AX-10)</button>
+          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS</button>
           {kittingVasResult&&<UiBadge tone="success">{kittingVasResult}</UiBadge>}
         </div>
       </UiCard>
@@ -343,7 +343,7 @@ export default function PackingSessions(){
         </div>
       </UiCard>}
 
-      {labelPreviewHu&&<UiCard title={`Nhãn Logistics / Barcode / SSCC — ${labelPreviewHu.huCode} (HU-03, HU-04)`}>
+      {labelPreviewHu&&<UiCard title={`Nhãn Logistics / Barcode / SSCC — ${labelPreviewHu.huCode}`}>
         <div className="ui-stack-sm">
           <div className="ui-inline-wrap">
             <span><strong>HU Code:</strong> {labelPreviewHu.huCode}</span>
@@ -366,7 +366,7 @@ export default function PackingSessions(){
         </div>
       </UiCard>}
 
-      <UiCard title="Danh mục Đơn vị xử lý (HU Registry) & Trung tâm Nhãn Barcode/SSCC (HU-01..HU-04)">
+      <UiCard title="Danh mục Đơn vị xử lý (HU Registry) & Trung tâm Nhãn Barcode/SSCC">
         <p className="ui-muted-text">Tra cứu toàn bộ Pallet / Thùng / Khay theo kho, trạng thái phân cấp và in nhãn mã vạch / SSCC.</p>
         {huRegistry.length===0?<p className="ui-muted-text">Chưa có dữ liệu danh mục Handling Unit độc lập hoặc đang hiển thị theo Packing Session phía trên.</p>:<UiTableScroll>
           <table aria-label="Danh mục Đơn vị xử lý HU Registry" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>

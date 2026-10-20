@@ -102,7 +102,7 @@ export default function PutawayTasks(){
      }}
    />
 
-   <UiCard title="Tổng quan Tiến độ Cất hàng & Ngoại lệ Putaway (Putaway Execution & SLA Summary — IN-08)">
+   <UiCard title="Tổng quan Tiến độ Cất hàng & Ngoại lệ Putaway">
      <div
        style={{
          display: 'grid',
@@ -139,7 +139,7 @@ export default function PutawayTasks(){
      </div>
    </UiCard>
 
-   <UiCard title="Bộ máy Quy tắc Đề xuất Vị trí Cất hàng (Putaway Rule Engine — IN-09)">
+   <UiCard title="Bộ máy Quy tắc Đề xuất Vị trí Cất hàng">
      <div className="ui-stack" style={{ gap: 10 }}>
        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
          <span style={{ fontWeight: 600 }}>Tiêu chí xếp hạng (5 mức):</span>
@@ -154,7 +154,7 @@ export default function PutawayTasks(){
          ))}
        </div>
        <div className="ui-inline-wrap" style={{ marginTop: 4 }}>
-         <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin (IN-09)</button>
+         <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin</button>
          {slottingEvaluationResult&&<span><strong>{slottingEvaluationResult}</strong></span>}
        </div>
      </div>

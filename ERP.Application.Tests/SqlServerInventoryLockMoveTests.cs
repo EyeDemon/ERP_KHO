@@ -1400,7 +1400,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 await service.ChangeAsync(new()
                 {
                     InventoryStockId = fixture.SourceStockId, Quantity = 3m,
-                    ToStatus = "QC_HOLD", Reason = "INV-11 kiểm tra dòng trạng thái"
+                    ToStatus = "QC_HOLD", Reason = "Kiểm tra đối chiếu dòng trạng thái tồn kho"
                 });
             }
 

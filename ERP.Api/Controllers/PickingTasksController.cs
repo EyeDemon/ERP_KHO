@@ -130,18 +130,18 @@ public sealed class PickingTasksController(
             shortPickExceptionTasksCount,
             supportedMobileCapabilities = new[]
             {
-                "MO-01:MyTasks",
-                "MO-02:ReceiveScan",
-                "MO-03:PutawayScan",
-                "MO-04:PickScan",
-                "MO-05:PackScan",
-                "MO-06:CountScan",
-                "MO-07:TransferScan",
-                "MO-08:ReplenishScan",
-                "MO-09:ReturnScan",
-                "MO-10:OfflineSyncQueue",
-                "MO-11:SkuBarcodeLookup",
-                "MO-12:MobileExceptionTriage"
+                "MyTasks",
+                "ReceiveScan",
+                "PutawayScan",
+                "PickScan",
+                "PackScan",
+                "CountScan",
+                "TransferScan",
+                "ReplenishScan",
+                "ReturnScan",
+                "OfflineSyncQueue",
+                "SkuBarcodeLookup",
+                "MobileExceptionTriage"
             },
             offlineSyncPolicy = "DEFERRED_LOW_RISK_QUEUE_WITH_IDEMPOTENCY_KEY"
         });

@@ -116,7 +116,7 @@ const inventoryStatusLabel=(value:string)=>({
   blocked:'Bị chặn',
   expired:'Hết hạn',
   recallblocked:'Khóa thu hồi',
-}[value.replace(/[_\s-]/g,'').toLowerCase()]??value);
+}[value.replace(/[_\s-]/g,'').toLowerCase()]??value); const locationCodeLabel=(value?:string|null)=>value?({RECEIVING:'TIEP-NHAN (Nhận hàng)',STAGING:'TAP-KET (Tập kết xuất)',PACKING:'DONG-GOI (Đóng gói)',SHIPPING:'XUAT-HANG (Xuất hàng)',QUARANTINE:'CACH-LY (Cách ly)',QC_HOLD:'CHO-QC (Chờ QC)'}[value.trim().toUpperCase()]??value):'—';
 
 const tone=(x:Event):'neutral'|'success'|'warning'|'danger'=>
   x.transactionType==='Reversal'?'warning':x.isReversed?'neutral':'success';
@@ -454,7 +454,7 @@ export default function InventoryTraceability(){
           <tbody>{result.currentBuckets.length===0?<tr><td colSpan={6} className="ui-empty-cell">Không còn nhóm tồn kho hiện tại khớp điều kiện.</td></tr>:
             result.currentBuckets.map(x=><tr key={x.inventoryStockId}>
               <td><strong style={{whiteSpace:'nowrap'}}>{x.productCode}</strong><br/><small>{x.productName}</small></td>
-              <td>{x.warehouseName}<br/><small style={{whiteSpace:'nowrap'}}>{x.locationCode??'—'}</small></td>
+              <td>{x.warehouseName}<br/><small style={{whiteSpace:'nowrap'}}>{locationCodeLabel(x.locationCode)}</small></td>
               <td style={{whiteSpace:'nowrap'}}><UiBadge>{inventoryStatusLabel(x.inventoryStatus)}</UiBadge></td>
               <td>{x.lotNumber??'—'} / {x.serialNumber??'—'}{x.expiryDate&&<><br/><small>HSD {new Date(x.expiryDate).toLocaleDateString('vi-VN')}</small></>}</td>
               <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.onHandQuantity}</td>
@@ -489,7 +489,7 @@ export default function InventoryTraceability(){
               <tr><td colSpan={5} className="ui-empty-cell">Chưa có chứng từ có giao dịch sổ cái khớp lô hoặc sê-ri trong phạm vi được phép.</td></tr>:
               result.relatedDocuments.map(doc=>
                 <tr key={doc.warehouseId+'-'+doc.referenceType+'-'+doc.referenceId}>
-                  <td><strong>{referenceTypeLabel(doc.referenceType)}</strong><br/><small>{doc.referenceType} #{doc.referenceId}</small></td>
+                  <td><strong>{referenceTypeLabel(doc.referenceType)}</strong><br/><small>Mã tham chiếu #{doc.referenceId}</small></td>
                   <td>{doc.warehouseName}</td>
                   <td>{doc.eventCount}</td>
                   <td>{new Date(doc.firstTransactionDate).toLocaleString('vi-VN')}</td>
@@ -571,7 +571,7 @@ export default function InventoryTraceability(){
                   <td><strong>{link.shipmentCode}</strong><small> #{link.shipmentId}</small></td>
                   <td>{link.packingSessionCode}<br/><small>#{link.packingSessionId}</small></td>
                   <td>{link.pickingTaskCode}<br/><small>Dòng #{link.pickingTaskLineId}</small></td>
-                  <td>#{link.allocationId}<br/><small>{link.sourceLocationCode}</small></td>
+                  <td>#{link.allocationId}<br/><small>{locationCodeLabel(link.sourceLocationCode)}</small></td>
                   <td>{link.pickedQuantity}</td>
                 </tr>)}
             </tbody>
@@ -647,7 +647,7 @@ export default function InventoryTraceability(){
               <td>{new Date(x.transactionDate).toLocaleString('vi-VN')}</td>
               <td><UiBadge tone={tone(x)}>{transactionTypeLabel(x.transactionType)}</UiBadge><br/><small>#{x.transactionId}{x.isReversed?' • đã đảo':''}{x.reversalOfTransactionId?(' • đảo #'+x.reversalOfTransactionId):''}</small></td>
               <td>{x.productCode}<br/><small>{x.warehouseName}</small></td>
-              <td>{x.fromLocationCode&&x.toLocationCode?(x.fromLocationCode+' → '+x.toLocationCode):(x.locationCode??'—')}<br/><small>{x.fromInventoryStatus&&x.toInventoryStatus?(inventoryStatusLabel(x.fromInventoryStatus)+' → '+inventoryStatusLabel(x.toInventoryStatus)):inventoryStatusLabel(x.inventoryStatus)}</small></td>
+              <td>{x.fromLocationCode&&x.toLocationCode?(locationCodeLabel(x.fromLocationCode)+' → '+locationCodeLabel(x.toLocationCode)):locationCodeLabel(x.locationCode)}<br/><small>{x.fromInventoryStatus&&x.toInventoryStatus?(inventoryStatusLabel(x.fromInventoryStatus)+' → '+inventoryStatusLabel(x.toInventoryStatus)):inventoryStatusLabel(x.inventoryStatus)}</small></td>
               <td>{x.lotNumber??'—'} / {x.serialNumber??'—'}</td>
               <td>{x.quantity}</td>
               <td>{x.referenceType?(referenceTypeLabel(x.referenceType)+' #'+(x.referenceId??'—')):'—'}</td>

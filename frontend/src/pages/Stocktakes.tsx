@@ -109,7 +109,7 @@ const Stocktakes = () => {
         productCode: 'SKU-CYCLE-01',
         deltaQuantity: -1,
         reasonCode: 'COUNT_VARIANCE',
-        note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng SoD (CT-07)'
+        note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng SoD'
       });
       if (res?.data?.status) {
         setProposalStatus(res.data.status);

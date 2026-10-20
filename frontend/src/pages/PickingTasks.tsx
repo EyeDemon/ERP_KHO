@@ -185,7 +185,7 @@ export default function PickingTasks(){
     <UiPageHeader
       eyebrow="Outbound"
       title="Picking"
-      description="Scan-first Picking từ Allocation theo vị trí và điều phối theo đợt (Wave / Batch Picking — OUT-04). Xác nhận Picking không trừ OnHand; tồn chỉ giảm tại dispatch/consume."
+      description="Scan-first Picking từ Allocation theo vị trí và điều phối theo đợt. Xác nhận Picking không trừ OnHand; tồn chỉ giảm tại dispatch/consume."
     />
     {error&&<div role="alert">{error}</div>}
 
@@ -201,12 +201,12 @@ export default function PickingTasks(){
     />
 
     <div className="ui-stack">
-      <UiCard title="Trạm Điều hành Quét Mã Vạch Di Động & Đồng bộ Ngoại tuyến (Mobile Scan-First Execution — MO-01..MO-12)">
+      <UiCard title="Trạm Điều hành Quét Mã Vạch Di Động & Đồng bộ Ngoại tuyến">
         <div className="ui-inline-wrap">
-          <span>Tác vụ sẵn sàng quét RF/Mobile (MO-01..MO-09): <strong>{mobileReadyTasksCount}</strong></span>
-          <span>Ngoại lệ chờ xử lý trên Mobile (MO-12): <strong>{shortPickExceptionTasksCount}</strong></span>
-          <span>Tra cứu nhanh Barcode SKU (MO-11): <strong>Sẵn sàng</strong></span>
-          <span>Hàng đợi đồng bộ ngoại tuyến (MO-10): <UiBadge tone="success">Đồng bộ Idempotency an toàn</UiBadge></span>
+          <span>Tác vụ sẵn sàng quét RF/Mobile: <strong>{mobileReadyTasksCount}</strong></span>
+          <span>Ngoại lệ chờ xử lý trên Mobile: <strong>{shortPickExceptionTasksCount}</strong></span>
+          <span>Tra cứu nhanh Barcode SKU: <strong>Sẵn sàng</strong></span>
+          <span>Hàng đợi đồng bộ ngoại tuyến: <UiBadge tone="success">Đồng bộ Idempotency an toàn</UiBadge></span>
         </div>
         <div className="ui-inline-wrap">
           <input
@@ -215,9 +215,9 @@ export default function PickingTasks(){
             onChange={e=>setMobileScanInput(e.target.value)}
             placeholder="Quét mã phiếu, SKU hoặc vị trí..."
           />
-          <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void verifyMobileScan()}>Kiểm tra mã quét RF (MO-11)</button>
+          <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void verifyMobileScan()}>Kiểm tra mã quét RF</button>
           <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void syncAutomationTelemetry()}>
-            Đồng bộ Điều phối WCS/WES Robot, Cảm biến RFID/IoT & Hướng dẫn Voice/Pick-to-Light (AX-06, AX-15..17)
+            Đồng bộ Điều phối WCS/WES Robot, Cảm biến RFID/IoT & Hướng dẫn Voice/Pick-to-Light
           </button>
           {mobileScanResult&&<span><strong>{mobileScanResult}</strong></span>}
           {automationTelemetry&&(
@@ -228,7 +228,7 @@ export default function PickingTasks(){
         </div>
       </UiCard>
 
-      <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking — OUT-04)">
+      <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking)">
         {waves.length===0?<p className="ui-muted-text">Chưa có đợt lấy hàng (Wave/Batch) đang hoạt động.</p>:<UiTableScroll>
           <table aria-label="Tổng hợp đợt lấy hàng Wave Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>

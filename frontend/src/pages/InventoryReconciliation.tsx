@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import apiClient from '../services/apiClient';
-import { isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import { demoReconciliationRows, demoReconciliationWarehouses } from '../mocks/inventoryReconciliationDemo';
 import {
   UiBadge,
@@ -235,7 +235,7 @@ const isValidReconciliationPage = (
 };
 
 export default function InventoryReconciliation() {
-  const demoRuntime = isBlueprintDemoRuntime();
+  const demoRuntime = isReadOnlyDemoRuntime();
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [warehouseError, setWarehouseError] = useState('');
   const [filterError, setFilterError] = useState('');
@@ -664,7 +664,7 @@ export default function InventoryReconciliation() {
         <p role="note" className="ui-muted-text">
           Đây là bộ dữ liệu đối chiếu mô phỏng riêng của giao diện Real trên Vercel,
           không phải kết quả từ SQL Server thật. Số liệu này không cùng snapshot với
-          Work Center Inventory Control hoặc kịch bản INV-11 trong System Blueprint.
+          Work Center Inventory Control trong môi trường mô phỏng.
         </p>
       )}
 
@@ -678,7 +678,7 @@ export default function InventoryReconciliation() {
           label="Lệch 8 trạng thái trang hiện tại" />}
       </UiMetricGrid>
 
-      <UiCard title="Tổng quan Đối soát Sổ cái — Số dư — Giữ hàng (Ledger vs Balance Reconciliation — RP-09)">
+      <UiCard title="Tổng quan Đối soát Sổ cái — Số dư — Giữ hàng">
         <div className="ui-form-grid">
           <div>
             <strong>Tỷ lệ khớp số dư trang hiện tại</strong><br />
@@ -695,18 +695,18 @@ export default function InventoryReconciliation() {
         </div>
       </UiCard>
 
-      <UiCard title="Trung tâm Đối chiếu Tích hợp (IG-01..IG-10) & Khả năng Phục hồi Vận hành Kho (OP-01..OP-11)">
+      <UiCard title="Trung tâm Đối chiếu Tích hợp & Khả năng Phục hồi Vận hành Kho">
         <div className="ui-form-grid">
           <div>
-            <strong>Đồng bộ MDM / PO / SO & Hộp thư Inbox/Outbox (IG-01..IG-06)</strong><br />
+            <strong>Đồng bộ MDM / PO / SO & Hộp thư Inbox/Outbox</strong><br />
             MDM: Đã đồng bộ • PO/SO: Đang hoạt động • Outbox: Giao dịch nguyên tử • Inbox: Chống trùng lặp • Webhook TMS: Lọc trùng sự kiện
           </div>
           <div>
-            <strong>Hàng đợi Lỗi DLQ & Ranh giới Khóa sổ Tài chính (IG-07..IG-10)</strong><br />
+            <strong>Hàng đợi Lỗi DLQ & Ranh giới Khóa sổ Tài chính</strong><br />
             DLQ lỗi: 0 • Thao tác lô: Bắt buộc xem trước & ghi nhật ký • Khóa sổ: Mốc sổ cái bất biến • Đối soát: {mismatchCount === 0 && indeterminateCount === 0 ? 'Khớp toàn bộ' : 'Phát hiện lệch'}
           </div>
           <div>
-            <strong>Checklist Mở/Đóng Kho, Sao lưu & Sửa lệch Kiểm soát (OP-01..OP-11)</strong><br />
+            <strong>Checklist Mở/Đóng Kho, Sao lưu & Sửa lệch Kiểm soát</strong><br />
             Mở/Đóng kho: {mismatchCount === 0 ? 'Sẵn sàng' : 'Chặn do lệch số dư'} • Diễn tập Sao lưu/Khôi phục: Đạt 14/14 bài kiểm tra • Sửa sai: Chỉ qua giao dịch đảo có kiểm soát
           </div>
         </div>
@@ -738,7 +738,7 @@ export default function InventoryReconciliation() {
                 });
             }}
           >
-            Chạy Kiểm định Sẵn sàng Mở/Đóng Kho & Đồng bộ Outbox (OP-02, IG-10)
+            Chạy Kiểm định Sẵn sàng Mở/Đóng Kho & Đồng bộ Outbox
           </button>
           {siteReadinessVerdict && (
             <UiBadge tone={siteReadinessVerdict.readinessVerdict === 'APPROVED_FOR_OPEN_CLOSE' ? 'success' : 'danger'}>

@@ -465,7 +465,7 @@ const ExportReceipts = () => {
           </div>
         )}
 
-        <UiCard title="Tổng quan Luồng Phiếu xuất Kho — OUT-01">
+        <UiCard title="Tổng quan Luồng Phiếu xuất Kho">
           <div className="ui-inline-wrap">
             <UiBadge>{`Tổng phiếu xuất: ${receipts.length}`}</UiBadge>
             <UiBadge tone="warning">{`Đang soạn: ${receipts.filter(r => r.status === 'Draft').length}`}</UiBadge>
@@ -500,7 +500,7 @@ const ExportReceipts = () => {
                 }
               }}
             >
-              Kiểm tra Khóa sổ Xuất kho & Chống Trừ Tồn Kép (OUT-08)
+              Kiểm tra Khóa sổ Xuất kho & Chống Trừ Tồn Kép
             </button>
           </div>
           {cutoffVerification && (

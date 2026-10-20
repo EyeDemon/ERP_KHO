@@ -36,7 +36,7 @@ import {
   setCurrentPermissions,
   usePermissionSet,
 } from '../services/authorization';
-import { blueprintDemoReadPermissions, isBlueprintDemoRuntime } from '../services/runtimeMode';
+import { readOnlyDemoPermissions, isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import {
   productionNavigation,
   productionSections,
@@ -82,7 +82,7 @@ const productionIcons: Record<string, LucideIcon> = {
 const MainLayout = () => {
   usePermissionSet();
   const { pathname } = useLocation();
-  const demoRuntime = isBlueprintDemoRuntime();
+  const demoRuntime = isReadOnlyDemoRuntime();
   const pageMeta = resolveProductionPage(pathname);
   const mainRef = useRef<HTMLElement>(null);
   const previousPathRef = useRef(pathname);
@@ -94,7 +94,7 @@ const MainLayout = () => {
     const revision = beginPermissionRefresh();
 
     if (demoRuntime) {
-      setCurrentPermissions([...blueprintDemoReadPermissions], revision);
+      setCurrentPermissions([...readOnlyDemoPermissions], revision);
       setIdentityState('ready');
       return () => { active = false; };
     }

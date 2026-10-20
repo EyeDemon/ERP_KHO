@@ -186,17 +186,17 @@ const WarehouseStructure = () => {
         <UiPageHeader
           eyebrow="Kho & Vị trí"
           title="Cấu trúc vị trí kho"
-          description="Mock tương tác Warehouse → Zone → Aisle → Rack → Level → Bin / Location để kiểm tra IA, trạng thái và quy tắc WH-02 trước khi triển khai production."
+          description="Mô hình tương tác Warehouse → Zone → Aisle → Rack → Level → Bin / Location để kiểm tra cấu trúc thông tin, trạng thái và quy tắc vị trí kho trước khi triển khai."
         />
 
         {error && <p role="alert">{error}</p>}
 
-        <UiCard title="Phạm vi Blueprint WH-02">
+        <UiCard title="Phạm vi mô phỏng cấu trúc vị trí">
           <p className="ui-muted-text">
-            Đây là frontend mock-only. Production backend, database, migration và API mutation cho WH-02 chưa được triển khai trong branch Blueprint.
+            Đây là frontend mock-only. Production backend, database, migration và API mutation cho cấu trúc vị trí mở rộng được kiểm soát riêng.
           </p>
           <p className="ui-muted-text">
-            Mã vị trí được minh họa là ổn định; vị trí ngừng hoạt động hoặc bị khóa vẫn giữ để truy vết lịch sử. Capacity/weight/volume thuộc WH-03.
+            Mã vị trí được minh họa là ổn định; vị trí ngừng hoạt động hoặc bị khóa vẫn giữ để truy vết lịch sử. Sức chứa trọng lượng/thể tích được quản lý theo hồ sơ vị trí.
           </p>
         </UiCard>
 
@@ -250,7 +250,7 @@ const WarehouseStructure = () => {
               <UiMetric value={inactiveCount} label="Ngừng hoạt động" />
             </UiMetricGrid>
 
-            <UiCard title="Tổng quan Cấu trúc Phân cấp Kho & Định danh Vị trí (WH-02 / WH-03)">
+            <UiCard title="Tổng quan Cấu trúc Phân cấp Kho & Định danh Vị trí">
               <div className="ui-inline-wrap">
                 <UiBadge tone="success">{`Vị trí cho phép lấy hàng: ${allLocations.filter(l => l.isActive && !l.isBlocked && l.isPickable).length}`}</UiBadge>
                 <UiBadge tone="success">{`Vị trí cho phép nhận hàng: ${allLocations.filter(l => l.isActive && !l.isBlocked && l.isReceivable).length}`}</UiBadge>
@@ -259,7 +259,7 @@ const WarehouseStructure = () => {
               </div>
               <div className="ui-inline-actions" style={{ marginTop: 8 }}>
                 <button type="button" onClick={() => void verifyVirtualLocations()}>
-                  Kiểm định Hệ thống Kho chuẩn &amp; 9 Vị trí Ảo Bắt buộc (WH-01, WH-02)
+                  Kiểm định Hệ thống Kho chuẩn &amp; 9 Vị trí Ảo Bắt buộc
                 </button>
                 {virtualVerification && (
                   <UiBadge tone="success">

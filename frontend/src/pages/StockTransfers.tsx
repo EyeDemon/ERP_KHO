@@ -521,7 +521,7 @@ export default function StockTransfers() {
           </div>
         )}
 
-        <UiCard title="Tổng quan Chu trình Điều chuyển Nội bộ & SLA Vận chuyển (Transfer Pipeline — TR-01..TR-04)">
+        <UiCard title="Tổng quan Chu trình Điều chuyển Nội bộ & SLA Vận chuyển">
           <div className="ui-inline-wrap">
             <UiBadge>{`Tổng phiếu trên trang: ${items.length}`}</UiBadge>
             <UiBadge>{`Phiếu nháp: ${draftCount}`}</UiBadge>
@@ -559,7 +559,7 @@ export default function StockTransfers() {
                 }
               }}
             >
-              Xác minh Niêm phong HU & Đối chiếu Hàng đang Đi đường (TR-02, HU-03)
+              Xác minh Niêm phong HU & Đối chiếu Hàng đang Đi đường
             </button>
             <button
               type="button"
@@ -593,7 +593,7 @@ export default function StockTransfers() {
                 }
               }}
             >
-              Mô phỏng Tái cân bằng Tồn kho Mạng lưới & Bổ sung Liên kho (AX-24, AX-25, AX-31, AX-33)
+              Mô phỏng Tái cân bằng Tồn kho Mạng lưới & Bổ sung Liên kho
             </button>
             {networkRebalancing && (
               <UiBadge tone="success">

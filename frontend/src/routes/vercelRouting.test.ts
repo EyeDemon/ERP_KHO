@@ -7,7 +7,7 @@ const vercelRoutes: {
 } = routingConfig;
 
 describe('Vercel SPA entrypoint', () => {
-  it('keeps / on the real operations dashboard instead of redirecting to System Blueprint', () => {
+  it('keeps / on the real operations dashboard', () => {
     expect(vercelRoutes.redirects?.some((route) => route.source === '/')).not.toBe(true);
     expect(vercelRoutes.rewrites).toContainEqual({
       source: '/(.*)',
