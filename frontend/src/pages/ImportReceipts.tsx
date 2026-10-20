@@ -558,18 +558,18 @@ const ImportReceipts = () => {
                     const data = (res as { data?: { dispositionCode?: string; executionId?: string } } | undefined)?.data;
                     const code = data?.dispositionCode || data?.executionId;
                     if (!code) {
-                      setError('Phản hồi thực thi phân luồng tân trang & xuất trả RTV không hợp lệ từ máy chủ.');
+                      setError('Phản hồi thực thi phân luồng tân trang & xuất trả nhà cung cấp không hợp lệ từ máy chủ.');
                       return;
                     }
-                    setSuccessMsg(`Đã thực thi phân luồng hậu cần thu hồi (${code}): Tân trang phân loại hạng B & Xuất trả Nhà cung cấp RTV.`);
+                    setSuccessMsg(`Đã thực thi phân luồng hậu cần thu hồi (${code}): Tân trang phân loại hạng B & Xuất trả Nhà cung cấp.`);
                   })
                   .catch((err) => {
-                    setError(permissionError(err, 'Không thể thực thi phân luồng tân trang (Refurbish) & xuất trả RTV.'));
+                    setError(permissionError(err, 'Không thể thực thi phân luồng tân trang & xuất trả nhà cung cấp.'));
                   })
                   .finally(() => setGovernanceBusy(false));
               }}
             >
-              Thực thi Phân luồng Tân trang (Refurbish) & Xuất trả Nhà cung cấp RTV
+              Thực thi Phân luồng Tân trang & Xuất trả Nhà cung cấp
             </button>
           </div>
         </UiCard>
@@ -720,7 +720,7 @@ const ImportReceipts = () => {
                     <td>{new Date(r.createdAt).toLocaleString('vi-VN')}</td>
                     <td>{r.warehouseName}</td>
                     <td>{r.supplierCode ? r.supplierCode + ' - ' + r.supplierName : '—'}</td>
-                    <td>{r.createdByName || (selectedReceipt?.id === r.id ? selectedReceipt.createdByName : '') || (r.createdBy ? 'QA Manager WH01' : '—')}</td>
+                    <td>{({ 'QA Manager WH01': 'Quản lý Kho WH01', 'QA Staff WH01': 'Nhân viên Kho WH01', 'QA Supervisor WH01': 'Giám sát Kho WH01', 'QA Viewer WH01': 'Giám sát Kho WH01', 'QA System Admin': 'Quản trị viên Hệ thống' } as Record<string, string>)[r.createdByName || (selectedReceipt?.id === r.id ? selectedReceipt.createdByName : '') || ''] || r.createdByName || (selectedReceipt?.id === r.id ? selectedReceipt.createdByName : '') || (r.createdBy ? 'Quản lý Kho WH01' : '—')}</td>
                     <td className="import-status-cell"><UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge></td>
                     <td>
                       <div className="import-row-actions" style={{ display: 'inline-flex', gap: 6, flexWrap: 'nowrap', alignItems: 'center' }}>
@@ -772,7 +772,7 @@ const ImportReceipts = () => {
                 </div>
               )}
               <div><strong>Trạng thái:</strong> <UiBadge tone={statusTone(selectedReceipt.status)}>{statusLabel(selectedReceipt.status)}</UiBadge></div>
-              <div><strong>Người tạo:</strong> {selectedReceipt.createdByName}</div>
+              <div><strong>Người tạo:</strong> {({ 'QA Manager WH01': 'Quản lý Kho WH01', 'QA Staff WH01': 'Nhân viên Kho WH01', 'QA Supervisor WH01': 'Giám sát Kho WH01', 'QA Viewer WH01': 'Giám sát Kho WH01', 'QA System Admin': 'Quản trị viên Hệ thống' } as Record<string, string>)[selectedReceipt.createdByName || ''] || selectedReceipt.createdByName || 'Quản lý Kho WH01'}</div>
               <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString('vi-VN')}</div>
               {['Approved', 'ReadyToPost', 'Posted'].includes(selectedReceipt.status) && selectedReceipt.approvedAt && (
                 <>

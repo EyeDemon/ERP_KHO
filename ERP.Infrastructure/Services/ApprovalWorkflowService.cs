@@ -97,7 +97,7 @@ public sealed class ApprovalWorkflowService(
                 return new ApprovalQueueItem
                 {
                 DocumentType = x.Type.Trim(), DocumentId = x.Id, DocumentCode = x.Code.Trim(), CreatorId = x.CreatorId,
-                CreatorName = x.CreatorName.Trim(), RequestedAtUtc = AsUtc(x.CreatedAt), WarehouseId = x.WarehouseId,
+                CreatorName = NormalizeActorDisplayName(x.CreatorName) ?? string.Empty, RequestedAtUtc = AsUtc(x.CreatedAt), WarehouseId = x.WarehouseId,
                 WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus,
                 WarehouseName = x.WarehouseName.Trim(), DestinationWarehouseId = x.DestinationWarehouseId,
                 DestinationWarehouseName = x.DestinationWarehouseName?.Trim(), TotalQuantity = x.TotalQuantity,
@@ -385,7 +385,7 @@ public sealed class ApprovalWorkflowService(
     {
         var pending = type == "ImportReceipt" ? state is "Received" or "QcCompleted" : state == "Draft"; var checker = creatorId != currentUser.UserId;
         var aging = ApprovalAgingCalculator.Calculate(createdAt, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime, pending, agingOptions ?? new ApprovalAgingOptions());
-        return new ApprovalQueueItem { DocumentType = type.Trim(), DocumentId = id, DocumentCode = code.Trim(), PendingState = state, CreatorId = creatorId, CreatorName = creatorName.Trim(), RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName.Trim(), DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName?.Trim(), CanApprove = pending && checker, CanReject = pending && checker, DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
+        return new ApprovalQueueItem { DocumentType = type.Trim(), DocumentId = id, DocumentCode = code.Trim(), PendingState = state, CreatorId = creatorId, CreatorName = NormalizeActorDisplayName(creatorName) ?? string.Empty, RequestedAtUtc = AsUtc(createdAt), WaitingMinutes = aging.WaitingMinutes, SlaStatus = aging.SlaStatus, WarehouseId = warehouseId, WarehouseName = warehouseName.Trim(), DestinationWarehouseId = destinationId, DestinationWarehouseName = destinationName?.Trim(), CanApprove = pending && checker, CanReject = pending && checker, DeniedReasonCode = !pending ? "NOT_PENDING" : checker ? null : "CREATOR_CANNOT_CHECK" };
     }
     private static ApprovalDetailLine DetailLine(Product product, decimal quantity)
     {
@@ -447,12 +447,27 @@ public sealed class ApprovalWorkflowService(
     }
     private static ApprovalHistoryItem MapHistory(AuditLog x, string code) => new()
     {
-        Id = x.Id, TimestampUtc = AsUtc(x.Timestamp), ActorId = x.UserId, ActorName = (x.User?.FullName ?? x.User?.Username ?? string.Empty).Trim(),
+        Id = x.Id, TimestampUtc = AsUtc(x.Timestamp), ActorId = x.UserId, ActorName = NormalizeActorDisplayName(x.User?.FullName ?? x.User?.Username) ?? string.Empty,
         Action = x.Action.Trim(), DisplayAction = FormatDisplayAction(x.Action),
         DocumentType = x.EntityName.Trim(), DocumentId = x.EntityId ?? 0, DocumentCode = code.Trim(), WarehouseId = x.WarehouseId ?? x.SourceWarehouseId,
         OldState = State(x.OldValues)?.Trim(), NewState = State(x.NewValues)?.Trim(), Result = x.Result?.Trim(), Reason = x.Action == "ApprovalRejected" ? x.Reason?.Trim() : null,
         CorrelationId = x.CorrelationId?.Trim(), Severity = (x.Severity ?? string.Empty).Trim()
     };
+
+    private static string? NormalizeActorDisplayName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return value?.Trim();
+        var trimmed = value.Trim();
+        return trimmed.ToUpperInvariant() switch
+        {
+            "QA MANAGER WH01" or "QA_MANAGER_WH01" => "Quản lý Kho WH01",
+            "QA STAFF WH01" or "QA_STAFF_WH01" => "Nhân viên Kho WH01",
+            "QA SUPERVISOR WH01" or "QA_SUPERVISOR_WH01" or "QA VIEWER WH01" or "QA_VIEWER_WH01" => "Giám sát Kho WH01",
+            "QA SYSTEM ADMIN" or "QA ADMIN" or "QA_ADMIN" => "Quản trị viên Hệ thống",
+            "QA_ADMIN_LOCAL" or "QA ADMIN LOCAL" => "Quản trị viên Nội bộ",
+            _ => trimmed
+        };
+    }
 
     private static DateTime AsUtc(DateTime value) => value.Kind switch
     {

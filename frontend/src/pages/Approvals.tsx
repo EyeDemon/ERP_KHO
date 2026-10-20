@@ -443,7 +443,7 @@ export default function Approvals() {
         </UiCard>
 
         <UiToolbar>
-          <UiToolbarField label="Loại chứng từ">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, width: '100%' }}><UiToolbarField label="Loại chứng từ">
             <select
               aria-label="Loại chứng từ"
               value={type}
@@ -539,7 +539,7 @@ export default function Approvals() {
               }}
             />
           </UiToolbarField>
-        </UiToolbar>
+          </div></UiToolbar>
 
         <UiCard title="Chứng từ cần xử lý">
           {loading && data.items.length === 0 ? (

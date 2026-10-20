@@ -84,7 +84,7 @@ namespace ERP.Infrastructure.Repositories
                 query = query.Where(i => i.Status == status.Value);
             }
 
-            return await query.OrderByDescending(i => i.CreatedAt).ToListAsync();
+            return await query.Include(i => i.CreatedByUser).Include(i => i.ApprovedByUser).OrderByDescending(i => i.CreatedAt).ToListAsync();
         }
 
         public async Task<bool> ExistsByCodeAsync(string code, int? excludeId = null)

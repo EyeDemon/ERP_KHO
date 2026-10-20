@@ -476,6 +476,21 @@ namespace ERP.Application.Services
             return (subTotal, taxAmount);
         }
 
+        private static string? NormalizeActorDisplayName(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value?.Trim();
+            var trimmed = value.Trim();
+            return trimmed.ToUpperInvariant() switch
+            {
+                "QA MANAGER WH01" or "QA_MANAGER_WH01" => "Quản lý Kho WH01",
+                "QA STAFF WH01" or "QA_STAFF_WH01" => "Nhân viên Kho WH01",
+                "QA SUPERVISOR WH01" or "QA_SUPERVISOR_WH01" or "QA VIEWER WH01" or "QA_VIEWER_WH01" => "Giám sát Kho WH01",
+                "QA SYSTEM ADMIN" or "QA ADMIN" or "QA_ADMIN" => "Quản trị viên Hệ thống",
+                "QA_ADMIN_LOCAL" or "QA ADMIN LOCAL" => "Quản trị viên Nội bộ",
+                _ => trimmed
+            };
+        }
+
         private static string NormalizeUomValue(string? value)
         {
             if (string.IsNullOrWhiteSpace(value)) return "THÙNG";
@@ -530,14 +545,14 @@ namespace ERP.Application.Services
                 Status = receipt.Status.ToString(),
                 Note = viewer ? null : receipt.Note?.Trim(),
                 CreatedBy = receipt.CreatedBy,
-                CreatedByName = (receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username)?.Trim(),
+                CreatedByName = NormalizeActorDisplayName(receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username),
                 ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = (receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username)?.Trim(),
+                ApprovedByName = NormalizeActorDisplayName(receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username),
                 CreatedAt = receipt.CreatedAt,
                 ApprovedAt = receipt.ApprovedAt,
                 DispatchMode = receipt.DispatchMode?.ToString(),
                 DispatchedBy = receipt.DispatchedBy,
-                DispatchedByName = (receipt.DispatchedByUser?.FullName ?? receipt.DispatchedByUser?.Username)?.Trim(),
+                DispatchedByName = NormalizeActorDisplayName(receipt.DispatchedByUser?.FullName ?? receipt.DispatchedByUser?.Username),
                 DispatchedAt = receipt.DispatchedAt,
                 CustomerId = receipt.CustomerId,
                 CustomerCode = (!string.IsNullOrWhiteSpace(receipt.CustomerCodeSnapshot) ? receipt.CustomerCodeSnapshot : receipt.Customer?.Code)?.Trim(),

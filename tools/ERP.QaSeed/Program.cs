@@ -230,6 +230,32 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     await context.SaveChangesAsync();
 
+    var allDbUsers = await context.Users.IgnoreQueryFilters().Where(u => u.TenantId == 1).ToListAsync();
+    foreach (var dbUser in allDbUsers)
+    {
+        dbUser.FullName = (dbUser.Username?.Trim().ToLowerInvariant(), dbUser.FullName?.Trim()) switch
+        {
+            ("qa_admin_local", _) => "Quản trị viên Nội bộ",
+            ("qa_manager_wh01" or "qa_manager" or "qa_manager_browser", _) => "Quản lý Kho WH01",
+            ("qa_staff_wh01" or "qa_warehousestaff", _) => "Nhân viên Kho WH01",
+            ("qa_viewer_wh01" or "qa_viewer" or "qa_viewer_browser", _) => "Giám sát Kho WH01",
+            ("qa_admin" or "qa_admin_browser", _) => "Quản trị viên Hệ thống",
+            (_, "QA Manager WH01" or "QA Manager") => "Quản lý Kho WH01",
+            (_, "QA Staff WH01" or "QA WarehouseStaff") => "Nhân viên Kho WH01",
+            (_, "QA Viewer WH01" or "QA Supervisor WH01" or "QA Viewer") => "Giám sát Kho WH01",
+            (_, "QA System Admin" or "QA Admin" or "QA Admin Tenant 202") => "Quản trị viên Hệ thống",
+            _ => string.IsNullOrWhiteSpace(dbUser.FullName) ? "Quản lý Kho WH01" : dbUser.FullName
+        };
+    }
+    await context.SaveChangesAsync();
+    await context.Database.ExecuteSqlRawAsync(@"
+        UPDATE dbo.Users SET FullName = N'Quản lý Kho WH01' WHERE FullName IN (N'QA Manager WH01', N'QA Manager') OR Username IN ('qa_manager_wh01', 'qa_manager', 'qa_manager_browser');
+        UPDATE dbo.Users SET FullName = N'Nhân viên Kho WH01' WHERE FullName IN (N'QA Staff WH01', N'QA WarehouseStaff') OR Username IN ('qa_staff_wh01', 'qa_warehousestaff');
+        UPDATE dbo.Users SET FullName = N'Giám sát Kho WH01' WHERE FullName IN (N'QA Viewer WH01', N'QA Supervisor WH01', N'QA Viewer') OR Username IN ('qa_viewer_wh01', 'qa_viewer', 'qa_viewer_browser');
+        UPDATE dbo.Users SET FullName = N'Quản trị viên Hệ thống' WHERE FullName IN (N'QA System Admin', N'QA Admin', N'QA Admin Tenant 202') OR Username IN ('qa_admin', 'qa_admin_browser');
+        UPDATE dbo.Users SET FullName = N'Quản trị viên Nội bộ' WHERE Username = 'qa_admin_local';
+    ");
+
     var admin = users["qa_admin_local"];
     if (!await context.UserWarehouses.IgnoreQueryFilters().AnyAsync(access => access.UserId == qaAdmin.Id && access.WarehouseId == primaryWarehouse.Id))
     {
@@ -1969,8 +1995,14 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         }
     }
 
-    foreach (var r in await context.ImportReceipts.IgnoreQueryFilters().Include(x => x.Details).ToListAsync())
+    var validUserIds = allDbUsers.Select(u => u.Id).ToHashSet();
+    var defaultManagerId = users.TryGetValue("qa_manager_wh01", out var defaultMgr) ? defaultMgr.Id : qaAdmin.Id;
+    foreach (var r in await context.ImportReceipts.IgnoreQueryFilters().Where(x => x.TenantId == 1).Include(x => x.Details).ToListAsync())
     {
+        if (r.CreatedBy <= 0 || !validUserIds.Contains(r.CreatedBy))
+        {
+            r.CreatedBy = defaultManagerId;
+        }
         foreach (var d in r.Details)
         {
             d.OperationUnitId = unit.Id;

@@ -537,6 +537,21 @@ namespace ERP.Application.Services
             !string.IsNullOrWhiteSpace(note) &&
             note.TrimStart().StartsWith("[BLIND]", StringComparison.OrdinalIgnoreCase);
 
+        private static string? NormalizeActorDisplayName(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value?.Trim();
+            var trimmed = value.Trim();
+            return trimmed.ToUpperInvariant() switch
+            {
+                "QA MANAGER WH01" or "QA_MANAGER_WH01" => "Quản lý Kho WH01",
+                "QA STAFF WH01" or "QA_STAFF_WH01" => "Nhân viên Kho WH01",
+                "QA SUPERVISOR WH01" or "QA_SUPERVISOR_WH01" or "QA VIEWER WH01" or "QA_VIEWER_WH01" => "Giám sát Kho WH01",
+                "QA SYSTEM ADMIN" or "QA ADMIN" or "QA_ADMIN" => "Quản trị viên Hệ thống",
+                "QA_ADMIN_LOCAL" or "QA ADMIN LOCAL" => "Quản trị viên Nội bộ",
+                _ => trimmed
+            };
+        }
+
         public static DTOs.StocktakeResponseDto MapToDto(Stocktake stocktake)
         {
             var maskBlindSnapshot = stocktake.Status == ReceiptStatus.Draft && IsBlindStocktake(stocktake.Note);
@@ -549,9 +564,9 @@ namespace ERP.Application.Services
                 Status = stocktake.Status,
                 Note = stocktake.Note?.Trim(),
                 CreatedBy = stocktake.CreatedBy,
-                CreatedByName = (stocktake.CreatedByUser?.FullName ?? string.Empty).Trim(),
+                CreatedByName = NormalizeActorDisplayName(stocktake.CreatedByUser?.FullName ?? stocktake.CreatedByUser?.Username) ?? string.Empty,
                 ApprovedBy = stocktake.ApprovedBy,
-                ApprovedByName = stocktake.ApprovedByUser?.FullName?.Trim(),
+                ApprovedByName = NormalizeActorDisplayName(stocktake.ApprovedByUser?.FullName ?? stocktake.ApprovedByUser?.Username),
                 CreatedAt = stocktake.CreatedAt,
                 ApprovedAt = stocktake.ApprovedAt,
                 DetailCount = stocktake.Details.Count,

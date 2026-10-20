@@ -16,6 +16,21 @@ namespace ERP.Infrastructure.Queries
         private readonly ErpKhoDbContext _context;
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
 
+        private static string? NormalizeActorDisplayName(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value?.Trim();
+            var trimmed = value.Trim();
+            return trimmed.ToUpperInvariant() switch
+            {
+                "QA MANAGER WH01" or "QA_MANAGER_WH01" => "Quản lý Kho WH01",
+                "QA STAFF WH01" or "QA_STAFF_WH01" => "Nhân viên Kho WH01",
+                "QA SUPERVISOR WH01" or "QA_SUPERVISOR_WH01" or "QA VIEWER WH01" or "QA_VIEWER_WH01" => "Giám sát Kho WH01",
+                "QA SYSTEM ADMIN" or "QA ADMIN" or "QA_ADMIN" => "Quản trị viên Hệ thống",
+                "QA_ADMIN_LOCAL" or "QA ADMIN LOCAL" => "Quản trị viên Nội bộ",
+                _ => trimmed
+            };
+        }
+
         internal InventoryTransactionQueryService(ErpKhoDbContext context)
         {
             _context = context;
@@ -160,7 +175,7 @@ namespace ERP.Infrastructure.Queries
                 item.LotNumber = item.LotNumber?.Trim();
                 item.SerialNumber = item.SerialNumber?.Trim();
                 item.ReferenceType = item.ReferenceType?.Trim();
-                item.CreatedByName = (item.CreatedByName ?? string.Empty).Trim();
+                item.CreatedByName = NormalizeActorDisplayName(item.CreatedByName) ?? string.Empty;
                 item.Note = item.Note?.Trim();
             }
 

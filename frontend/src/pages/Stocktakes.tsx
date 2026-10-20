@@ -109,17 +109,17 @@ const Stocktakes = () => {
         productCode: 'SKU-CYCLE-01',
         deltaQuantity: -1,
         reasonCode: 'COUNT_VARIANCE',
-        note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng SoD'
+        note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng phê duyệt độc lập'
       });
       if (res?.data?.status) {
         setProposalStatus(res.data.status);
       } else {
         setProposalStatus('');
-        setError('Không thể tạo đề xuất điều chỉnh qua cổng SoD: dữ liệu phản hồi không hợp lệ.');
+        setError('Không thể tạo đề xuất điều chỉnh qua cổng phê duyệt độc lập: dữ liệu phản hồi không hợp lệ.');
       }
     } catch (err: any) {
       setProposalStatus('');
-      setError(err?.response?.data?.message || 'Không thể tạo đề xuất điều chỉnh qua cổng SoD.');
+      setError(err?.response?.data?.message || 'Không thể tạo đề xuất điều chỉnh qua cổng phê duyệt độc lập.');
     } finally {
       setProposalBusy(false);
     }
@@ -453,7 +453,7 @@ const Stocktakes = () => {
                   Tạo nhanh Đề xuất Điều chỉnh qua Cổng Phê duyệt Độc lập
                 </button>
                 {proposalStatus && (
-                  <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', fontWeight: 600 }}>{proposalStatus === 'PENDING_SOD_APPROVAL' ? 'Trạng thái: Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm' : proposalStatus}</div>
+                  <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', fontWeight: 600 }}>{proposalStatus === 'PENDING_SOD_APPROVAL' ? 'Trạng thái: Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm' : proposalStatus.replace(/Chờ phê duyệt tách biệt nhiệm vụ\s*\(SoD\)/gi, 'Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm').replace(/\s*\(SoD\)/gi, '')}</div>
                 )}
               </div>
             </UiCard>

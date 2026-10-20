@@ -125,7 +125,7 @@ namespace ERP.Api.Controllers
                                      approvedProposalCodes.Contains(codeKey);
                     var normalizedStatus = isApproved
                         ? "Đã phê duyệt & Ghi sổ"
-                        : "Chờ phê duyệt tách biệt nhiệm vụ (SoD)";
+                        : "Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm";
                     var normalizedReasonCode = a.Action.EndsWith(":APPROVED", StringComparison.OrdinalIgnoreCase)
                         ? a.Action[..^9]
                         : a.Action;
@@ -144,7 +144,7 @@ namespace ERP.Api.Controllers
                         status = normalizedStatus,
                         statusLabel = isApproved
                             ? "Đã phê duyệt & Ghi sổ"
-                            : "Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm",
+                            : "Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm",
                         createdAtUtc = a.Timestamp
                     });
                 }
@@ -405,8 +405,8 @@ namespace ERP.Api.Controllers
                 productCode,
                 deltaQuantity,
                 reasonCode,
-                status = "Chờ phê duyệt tách biệt nhiệm vụ (SoD)",
-                statusLabel = "Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm",
+                status = "Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm",
+                statusLabel = "Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm",
                 createdAtUtc = now
             });
         }

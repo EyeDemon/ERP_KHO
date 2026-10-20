@@ -2955,9 +2955,9 @@ namespace ERP.Api.Tests
             var propOk = propRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(propOk.Value))
             {
-                doc.RootElement.GetProperty("status").GetString().Should().Be("Chờ phê duyệt tách biệt nhiệm vụ (SoD)");
+                doc.RootElement.GetProperty("status").GetString().Should().Be("Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
                 doc.RootElement.GetProperty("statusLabel").GetString().Should().Be(
-                    "Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
+                    "Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
             }
 
             var importService = new Mock<IImportReceiptService>();
@@ -2986,6 +2986,285 @@ namespace ERP.Api.Tests
             }
 
             db.AuditLogs.Should().NotBeEmpty();
+            db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave35_UserDisplayNames_AreLocalizedToVietnamese_AcrossStocktakeLedgerApprovalImportAndExportServices()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var roleManager = new ERP.Domain.Entities.Role { Id = 1, RoleName = "Manager" };
+            var roleStaff = new ERP.Domain.Entities.Role { Id = 2, RoleName = "WarehouseStaff" };
+            db.Roles.AddRange(roleManager, roleStaff);
+            db.RolePermissions.AddRange(
+                new ERP.Domain.Entities.RolePermission
+                {
+                    RoleId = 1,
+                    Permission = new ERP.Domain.Entities.Permission("receipt.read", "Đọc phiếu nhập") { Id = 1 }
+                },
+                new ERP.Domain.Entities.RolePermission
+                {
+                    RoleId = 1,
+                    Permission = new ERP.Domain.Entities.Permission("export_receipt.read", "Đọc phiếu xuất") { Id = 2 }
+                }
+            );
+
+            var uManager = new ERP.Domain.Entities.User
+            {
+                Id = 10,
+                Username = "qa_manager_wh01",
+                FullName = "QA Manager WH01",
+                Email = "mgr@test.local",
+                PasswordHash = "h",
+                RoleId = 1,
+                Role = roleManager,
+                IsActive = true
+            };
+            var uStaff = new ERP.Domain.Entities.User
+            {
+                Id = 11,
+                Username = "qa_staff_wh01",
+                FullName = "QA Staff WH01",
+                Email = "staff@test.local",
+                PasswordHash = "h",
+                RoleId = 2,
+                Role = roleStaff,
+                IsActive = true
+            };
+            var uSupervisor = new ERP.Domain.Entities.User
+            {
+                Id = 12,
+                Username = "qa_supervisor_wh01",
+                FullName = "QA Supervisor WH01",
+                Email = "sup@test.local",
+                PasswordHash = "h",
+                RoleId = 1,
+                Role = roleManager,
+                IsActive = true
+            };
+            var uAdmin = new ERP.Domain.Entities.User
+            {
+                Id = 13,
+                Username = "qa_admin",
+                FullName = "QA System Admin",
+                Email = "admin@test.local",
+                PasswordHash = "h",
+                RoleId = 1,
+                Role = roleManager,
+                IsActive = true
+            };
+            db.Users.AddRange(uManager, uStaff, uSupervisor, uAdmin);
+
+            var wh = new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true };
+            var unit = new ERP.Domain.Entities.Unit { Id = 1, Code = "THÙNG", Name = "THÙNG", IsActive = true };
+            var prod = new ERP.Domain.Entities.Product { Id = 101, Code = "SKU-W35-01", Name = "Sản phẩm chuẩn hóa W35", UnitId = 1, Unit = unit, IsActive = true };
+            db.Warehouses.Add(wh);
+            db.Units.Add(unit);
+            db.Products.Add(prod);
+
+            var st = new ERP.Domain.Entities.Stocktake
+            {
+                Id = 1,
+                Code = "ST-W35-01",
+                WarehouseId = 1,
+                Warehouse = wh,
+                Status = ERP.Domain.Enums.ReceiptStatus.Draft,
+                CreatedBy = 11,
+                CreatedByUser = uStaff,
+                ApprovedBy = 10,
+                ApprovedByUser = uManager,
+                CreatedAt = DateTime.UtcNow.AddHours(-2)
+            };
+            db.Stocktakes.Add(st);
+
+            db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+            {
+                Id = 1,
+                WarehouseId = 1,
+                Warehouse = wh,
+                ProductId = 101,
+                Product = prod,
+                TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 25m,
+                ReferenceId = 1,
+                ReferenceType = "ImportReceipt",
+                TransactionDate = DateTime.UtcNow.AddHours(-1),
+                CreatedBy = 12,
+                CreatedByUser = uSupervisor
+            });
+
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                Id = 1,
+                UserId = 13,
+                User = uAdmin,
+                WarehouseId = 1,
+                EntityName = "Stocktake",
+                EntityId = 1,
+                Action = "Stocktake.Created",
+                Result = "Success",
+                Timestamp = DateTime.UtcNow.AddMinutes(-30)
+            });
+
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+            var stQuerySvc = new ERP.Infrastructure.Queries.StocktakeQueryService(db, warehouseAuth.Object);
+            var stList = (await stQuerySvc.GetStocktakesAsync()).ToList();
+            stList.Should().ContainSingle();
+            stList[0].CreatedByName.Should().Be("Nhân viên Kho WH01");
+            stList[0].ApprovedByName.Should().Be("Quản lý Kho WH01");
+
+            var stById = await stQuerySvc.GetStocktakeByIdAsync(1);
+            stById.CreatedByName.Should().Be("Nhân viên Kho WH01");
+            stById.ApprovedByName.Should().Be("Quản lý Kho WH01");
+
+            var stMapped = ERP.Application.Services.StocktakeService.MapToDto(st);
+            stMapped.CreatedByName.Should().Be("Nhân viên Kho WH01");
+            stMapped.ApprovedByName.Should().Be("Quản lý Kho WH01");
+
+            var txQuerySvc = new ERP.Infrastructure.Queries.InventoryTransactionQueryService(db, warehouseAuth.Object);
+            var txPage = await txQuerySvc.GetHistoryAsync(null, null, null, 1, null, null, null, null, 1, 20);
+            txPage.Items.Should().ContainSingle();
+            txPage.Items[0].CreatedByName.Should().Be("Giám sát Kho WH01");
+
+            var currentUser = new Mock<ICurrentUser>();
+            currentUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+            currentUser.SetupGet(x => x.UserId).Returns(10);
+            currentUser.SetupGet(x => x.Role).Returns("Manager");
+            var reqMeta = new Mock<IRequestMetadata>();
+
+            var approvalSvc = new ERP.Infrastructure.Services.ApprovalWorkflowService(
+                db,
+                currentUser.Object,
+                warehouseAuth.Object,
+                reqMeta.Object);
+
+            var queuePage = await approvalSvc.GetQueueAsync(new ApprovalQueueQuery { WarehouseId = 1, PageIndex = 1, PageSize = 20 });
+            queuePage.Items.Should().ContainSingle();
+            queuePage.Items[0].CreatorName.Should().Be("Nhân viên Kho WH01");
+
+            var historyPage = await approvalSvc.GetHistoryAsync(new ApprovalHistoryQuery { WarehouseId = 1, PageIndex = 1, PageSize = 20 });
+            historyPage.Items.Should().ContainSingle();
+            historyPage.Items[0].ActorName.Should().Be("Quản trị viên Hệ thống");
+
+            ReportsController.NormalizeActorDisplayName("QA Manager WH01").Should().Be("Quản lý Kho WH01");
+            ReportsController.NormalizeActorDisplayName("qa_staff_wh01").Should().Be("Nhân viên Kho WH01");
+            ReportsController.NormalizeActorDisplayName("QA Supervisor WH01").Should().Be("Giám sát Kho WH01");
+            ReportsController.NormalizeActorDisplayName("QA System Admin").Should().Be("Quản trị viên Hệ thống");
+
+            var importRepo = new ERP.Infrastructure.Repositories.ImportReceiptRepository(db, warehouseAuth.Object);
+            db.ImportReceipts.Add(new ERP.Domain.Entities.ImportReceipt
+            {
+                Id = 1,
+                Code = "IR-W35-01",
+                WarehouseId = 1,
+                Warehouse = wh,
+                Status = ERP.Domain.Enums.ReceiptStatus.Posted,
+                CreatedBy = 11,
+                CreatedByUser = uStaff,
+                ApprovedBy = 10,
+                ApprovedByUser = uManager,
+                CreatedAt = DateTime.UtcNow.AddHours(-3)
+            });
+            var exportRepo = new ERP.Infrastructure.Repositories.ExportReceiptRepository(db, warehouseAuth.Object);
+            db.ExportReceipts.Add(new ERP.Domain.Entities.ExportReceipt
+            {
+                Id = 1,
+                Code = "ER-W35-01",
+                WarehouseId = 1,
+                Warehouse = wh,
+                Status = ERP.Domain.Enums.ReceiptStatus.Dispatched,
+                CreatedBy = 11,
+                CreatedByUser = uStaff,
+                ApprovedBy = 10,
+                ApprovedByUser = uManager,
+                DispatchedBy = 12,
+                DispatchedByUser = uSupervisor,
+                CreatedAt = DateTime.UtcNow.AddHours(-3)
+            });
+            await db.SaveChangesAsync();
+
+            var importSvc = new ERP.Application.Services.ImportReceiptService(
+                importRepo,
+                new Mock<ERP.Domain.Interfaces.IInventoryStockRepository>().Object,
+                new Mock<ERP.Domain.Interfaces.IInventoryTransactionRepository>().Object,
+                new Mock<ERP.Domain.Interfaces.IWarehouseRepository>().Object,
+                new Mock<ERP.Domain.Interfaces.IProductRepository>().Object,
+                new Mock<ERP.Domain.Interfaces.IUnitOfWork>().Object,
+                new Mock<ERP.Domain.Interfaces.IAuditLogRepository>().Object,
+                warehouseAuth.Object,
+                currentUser.Object,
+                new Mock<ERP.Domain.Interfaces.IUserRepository>().Object);
+            var irList = (await importSvc.GetAllAsync()).ToList();
+            irList.Should().ContainSingle();
+            irList[0].CreatedByName.Should().Be("Nhân viên Kho WH01");
+            irList[0].ApprovedByName.Should().Be("Quản lý Kho WH01");
+
+            var exportSvc = new ERP.Application.Services.ExportReceiptService(
+                exportRepo,
+                new Mock<ERP.Domain.Interfaces.IInventoryStockRepository>().Object,
+                new Mock<ERP.Domain.Interfaces.IInventoryTransactionRepository>().Object,
+                new Mock<ERP.Domain.Interfaces.IUnitOfWork>().Object,
+                new Mock<ERP.Domain.Interfaces.IAuditLogRepository>().Object,
+                warehouseAuth.Object,
+                currentUser.Object,
+                new Mock<IStockReservationService>().Object);
+            var erDto = await exportSvc.GetByIdAsync(1);
+            erDto.CreatedByName.Should().Be("Nhân viên Kho WH01");
+            erDto.ApprovedByName.Should().Be("Quản lý Kho WH01");
+            erDto.DispatchedByName.Should().Be("Giám sát Kho WH01");
+        }
+
+        [Fact]
+        public async Task Wave35_StocktakeAdjustmentProposal_UsesPureVietnameseSodStatus_WithoutEnglishAbbreviation()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true });
+            db.Products.Add(new ERP.Domain.Entities.Product { Id = 101, Code = "SKU-W35-02", Name = "Sản phẩm kiểm kê W35", UnitId = 1, IsActive = true });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var controller = new StocktakesController(
+                new Mock<IStocktakeService>().Object,
+                new Mock<IStocktakeQueryService>().Object,
+                db,
+                warehouseAuth.Object);
+
+            var createRes = await controller.CreateAdjustmentProposal(
+                new StocktakesController.CreateAdjustmentProposalRequest(WarehouseId: 1, ProductCode: "SKU-W35-02", DeltaQuantity: -2m),
+                default);
+            var createOk = createRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(createOk.Value))
+            {
+                doc.RootElement.GetProperty("status").GetString().Should().Be("Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
+            }
+
+            var listRes = await controller.GetReasonCodesAndAdjustments(1, default);
+            var listOk = listRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(listOk.Value))
+            {
+                var firstProposal = doc.RootElement.GetProperty("recentProposals")[0];
+                firstProposal.GetProperty("status").GetString().Should().Be("Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
+                firstProposal.GetProperty("statusLabel").GetString().Should().Be("Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
+            }
+
             db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
         }
     }

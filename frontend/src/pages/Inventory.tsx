@@ -564,9 +564,9 @@ const Inventory = () => {
                 <th>Tên SP</th>
                 <th>ĐVT</th>
                 <th>Kho</th>
-                <th className="inventory-numeric">Tồn thực tế</th>
-                <th className="inventory-numeric">Đã giữ</th>
-                <th className="inventory-numeric">Khả dụng</th>
+                <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn thực tế</th>
+                <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đã giữ</th>
+                <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Khả dụng</th>
                 <th>Cập nhật lần cuối</th>
               </tr>
             </thead>
@@ -580,9 +580,9 @@ const Inventory = () => {
                     <td>{item.productName}</td>
                     <td>{formatUnitName(item.unitName)}</td>
                     <td>{item.warehouseName}</td>
-                    <td className="inventory-numeric">{item.onHandQuantity}</td>
-                    <td className="inventory-numeric">{item.reservedQuantity}</td>
-                    <td className="inventory-numeric inventory-available">{item.availableQuantity}</td>
+                    <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.onHandQuantity}</td>
+                    <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.reservedQuantity}</td>
+                    <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.availableQuantity}</td>
                     <td>{new Date(item.lastUpdated).toLocaleString('vi-VN')}</td>
                   </tr>
                 ))
@@ -659,7 +659,7 @@ const Inventory = () => {
                   <th>Sản phẩm</th>
                   <th>Trạng thái</th>
                   <th>Lô / Sê-ri</th>
-                  <th className="inventory-numeric">SL</th>
+                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL</th>
                   <th>Tham chiếu</th>
                   <th>Ghi chú</th>
                 </tr>
@@ -684,7 +684,7 @@ const Inventory = () => {
                             : item.inventoryStatus ? inventoryStatusLabel(item.inventoryStatus) : '—'}
                         </td>
                         <td>{item.lotNumber || '—'}{item.serialNumber ? ` / ${item.serialNumber}` : ''}</td>
-                        <td className={'inventory-numeric ' + quantityClass}>
+                        <td className={'inventory-numeric ' + quantityClass} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                           {item.quantity} {formatUnitName(item.unitName)}
                         </td>
                         <td>{item.referenceType ? '[' + referenceTypeLabel(item.referenceType) + '] #' + item.referenceId : '—'}</td>
@@ -757,10 +757,10 @@ const Inventory = () => {
                     <th>Tên SP</th>
                     <th>ĐVT</th>
                     <th>Kho</th>
-                    <th className="inventory-numeric">Tồn đầu kỳ</th>
-                    <th className="inventory-numeric">Nhập trong kỳ</th>
-                    <th className="inventory-numeric">Xuất trong kỳ</th>
-                    <th className="inventory-numeric">Tồn cuối kỳ</th>
+                    <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn đầu kỳ</th>
+                    <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Nhập trong kỳ</th>
+                    <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Xuất trong kỳ</th>
+                    <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn cuối kỳ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -773,10 +773,10 @@ const Inventory = () => {
                         <td>{item.productName}</td>
                         <td>{formatUnitName(item.unitName)}</td>
                         <td>{item.warehouseName}</td>
-                        <td className="inventory-numeric">{item.openingQuantity}</td>
-                        <td className="inventory-numeric">{item.inQuantity}</td>
-                        <td className="inventory-numeric">{item.outQuantity}</td>
-                        <td className="inventory-numeric inventory-available">{item.closingQuantity}</td>
+                        <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.openingQuantity}</td>
+                        <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.inQuantity}</td>
+                        <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.outQuantity}</td>
+                        <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.closingQuantity}</td>
                       </tr>
                     ))
                   )}
@@ -868,9 +868,9 @@ const Inventory = () => {
                   <th>Ngày SX</th>
                   <th>Hạn sử dụng</th>
                   <th>Tình trạng HSD</th>
-                  <th className="inventory-numeric">Tuổi tồn (ngày)</th>
-                  <th className="inventory-numeric">Tồn thực tế</th>
-                  <th className="inventory-numeric">Khả dụng</th>
+                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tuổi tồn (ngày)</th>
+                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn thực tế</th>
+                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Khả dụng</th>
                 </tr>
               </thead>
               <tbody>
@@ -886,9 +886,9 @@ const Inventory = () => {
                       <td>{row.manufactureDate ? new Date(row.manufactureDate).toLocaleDateString('vi-VN') : '—'}</td>
                       <td>{row.expiryDate ? new Date(row.expiryDate).toLocaleDateString('vi-VN') : '—'}</td>
                       <td>{expiryBadge(row.expiryStatus, row.daysToExpiry)}</td>
-                      <td className="inventory-numeric">{row.ageDays}</td>
-                      <td className="inventory-numeric">{row.quantity} {formatUnitName(row.unitName)}</td>
-                      <td className="inventory-numeric inventory-available">{row.availableQuantity} {formatUnitName(row.unitName)}</td>
+                      <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.ageDays}</td>
+                      <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.quantity} {formatUnitName(row.unitName)}</td>
+                      <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.availableQuantity} {formatUnitName(row.unitName)}</td>
                     </tr>
                   ))
                 )}
@@ -1028,42 +1028,42 @@ const Inventory = () => {
 
             <UiCard title="Hoạch định & Tối ưu hóa Kho nâng cao: Phân loại ABC/XYZ, Tồn an toàn, Cam kết Giao hàng & Cân bằng Mạng lưới">
               <div className="ui-stack-sm">
-                <div className="ui-grid-2">
+                <div className="ui-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, width: '100%' }}>
                   <div>
-                    <strong>Phân nhóm ABC/XYZ & Điểm đặt hàng lại:</strong>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Phân nhóm ABC/XYZ & Điểm đặt hàng lại:</strong><div className="ui-stack-xs" style={{ marginTop: 6 }}><div>• Nhóm <strong>A (Luân chuyển cao)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'FAST_MOVING').length} mặt hàng</div><div>• Nhóm <strong>B (Luân chuyển vừa)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'NORMAL_MOVING' || x.velocityClass === 'NORMAL').length} mặt hàng</div><div>• Nhóm <strong>C / Z (Chậm & Tồn đọng)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass !== 'FAST_MOVING' && x.velocityClass !== 'NORMAL_MOVING' && x.velocityClass !== 'NORMAL').length} mặt hàng</div><div>• Đề xuất bổ sung Tồn an toàn (&lt; 50): <strong>{analyticsReport.turnoverAndDaysOnHand.filter(x => x.onHandQuantity < 50).length} mặt hàng</strong> cần tạo đơn mua / điều chuyển</div></div></div>
                     <div className="ui-stack-xs">
                       <div>
-                        • Nhóm <strong>A (Luân chuyển cao)</strong>:{' '}
-                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'FAST_MOVING').length} mặt hàng
+
+
                       </div>
                       <div>
-                        • Nhóm <strong>B (Luân chuyển vừa)</strong>:{' '}
-                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'NORMAL_MOVING' || x.velocityClass === 'NORMAL').length} mặt hàng
+
+
                       </div>
                       <div>
-                        • Nhóm <strong>C / Z (Chậm & Tồn đọng)</strong>:{' '}
-                        {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass !== 'FAST_MOVING' && x.velocityClass !== 'NORMAL_MOVING' && x.velocityClass !== 'NORMAL').length} mặt hàng
+
+
                       </div>
                       <div>
-                        • Đề xuất bổ sung Tồn an toàn (&lt; 50):{' '}
-                        <strong>{analyticsReport.turnoverAndDaysOnHand.filter(x => x.onHandQuantity < 50).length} mặt hàng</strong> cần tạo đơn mua / điều chuyển
+
+
                       </div>
                     </div>
                   </div>
                   <div>
-                    <strong>Cam kết Giao hàng, Cân bằng Mạng lưới & Quản trị Quyết định:</strong>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Cam kết Giao hàng, Cân bằng Mạng lưới & Quản trị Quyết định:</strong><div className="ui-stack-xs" style={{ marginTop: 6 }}><div>• Tổng lượng <strong>tồn khả dụng cam kết ngay</strong>: <strong>{analyticsReport.turnoverAndDaysOnHand.reduce((sum, x) => sum + x.onHandQuantity, 0)}</strong> đvt (Thời gian xử lý chuẩn: 24h)</div><div>• Số kho đang hoạt động trong mạng lưới cân bằng tồn: <strong>{warehouses.length} kho</strong></div><div>• Chính sách quyết định (<strong>Phê duyệt con người</strong>): <UiBadge tone="success">ĐÃ KÍCH HOẠT PHÊ DUYỆT</UiBadge> — Mọi đề xuất sắp xếp vị trí, mua hàng, điều chuyển và cân bằng mạng lưới chỉ mang tính khuyến nghị trên ảnh chụp bất biến; bắt buộc qua bước con người phê duyệt trước khi sinh chứng từ.</div></div></div>
                     <div className="ui-stack-xs">
                       <div>
-                        • Tổng lượng <strong>tồn khả dụng cam kết ngay</strong>:{' '}
-                        <strong>{analyticsReport.turnoverAndDaysOnHand.reduce((sum, x) => sum + x.onHandQuantity, 0)}</strong> đvt (Thời gian xử lý chuẩn: 24h)
+
+
                       </div>
                       <div>
-                        • Số kho đang hoạt động trong mạng lưới cân bằng tồn:{' '}
-                        <strong>{warehouses.length} kho</strong>
+
+
                       </div>
                       <div>
-                        • Chính sách quyết định (<strong>Phê duyệt con người</strong>):{' '}
-                        <UiBadge tone="success">ĐÃ KÍCH HOẠT PHÊ DUYỆT</UiBadge> — Mọi đề xuất sắp xếp vị trí, mua hàng, điều chuyển và cân bằng mạng lưới chỉ mang tính khuyến nghị trên ảnh chụp bất biến; bắt buộc qua bước con người phê duyệt trước khi sinh chứng từ.
+
+
                       </div>
                     </div>
                   </div>
@@ -1153,7 +1153,7 @@ const Inventory = () => {
                   </div>
                   {whatIfResult && (
                     <div role="status" aria-label="Kết quả mô phỏng kịch bản giả định What-If" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
-                      • Kết quả kịch bản <strong>{whatIfResult.demandMultiplier.toFixed(1)}x</strong>: Tồn khả dụng hiện tại (<strong>{whatIfResult.totalAvailable}</strong> đvt) + Lượng đang nhập PO (<strong>{whatIfResult.incomingPoQty ?? whatIfResult.incomingPurchaseOrderQty ?? Math.max(0, Number((whatIfResult.projectedNetBalance + whatIfResult.simulatedDemand - whatIfResult.totalAvailable).toFixed(2)))}</strong> đvt) - Cầu kịch bản (<strong>{whatIfResult.simulatedDemand}</strong> đvt) = Tồn dự kiến cuối kỳ: <strong>{whatIfResult.projectedNetBalance}</strong> đvt (
+                      Kết quả kịch bản <strong>{whatIfResult.demandMultiplier.toFixed(1)}x</strong>: Tồn khả dụng hiện tại (<strong>{whatIfResult.totalAvailable}</strong> đvt) + Lượng đang nhập PO (<strong>{whatIfResult.incomingPoQty ?? whatIfResult.incomingPurchaseOrderQty ?? Math.max(0, Number((whatIfResult.projectedNetBalance + whatIfResult.simulatedDemand - whatIfResult.totalAvailable).toFixed(2)))}</strong> đvt) - Cầu kịch bản (<strong>{whatIfResult.simulatedDemand}</strong> đvt) = Tồn dự kiến cuối kỳ: <strong>{whatIfResult.projectedNetBalance}</strong> đvt (
 
 
 

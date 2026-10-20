@@ -180,7 +180,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
         </button>
         {invariantVerification&&(
           <span>
-            Mã kiểm định: <strong>{invariantVerification.verificationId}</strong> • Cân bằng 5 nhóm tồn: <strong>{invariantVerification.fiveBucketEquationStatus}</strong> • Kiểm soát thanh hủy: <strong>{invariantVerification.scrapApprovalGuard}</strong>
+            Mã kiểm định: <strong>{invariantVerification.verificationId}</strong> • Cân bằng 5 nhóm tồn: <strong>{invariantVerification.fiveBucketEquationStatus === 'BALANCED_EXACT' ? 'Cân bằng tuyệt đối' : invariantVerification.fiveBucketEquationStatus}</strong> • Kiểm soát thanh hủy: <strong>{invariantVerification.scrapApprovalGuard === 'SOD_ENFORCED' ? 'Bắt buộc phê duyệt độc lập' : invariantVerification.scrapApprovalGuard}</strong>
           </span>
         )}
       </div>
@@ -216,7 +216,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
         <table className="ui-table-compact" aria-label="Nhóm tồn kho">
           <thead><tr>
             <th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Hạn dùng</th><th>Sê-ri</th>
-            <th>Điều kiện sử dụng</th><th className="inventory-numeric">Tồn thực tế</th><th className="inventory-numeric">Đã giữ</th><th className="inventory-numeric">Khả dụng</th>
+            <th>Điều kiện sử dụng</th><th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn thực tế</th><th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đã giữ</th><th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Khả dụng</th>
             {canChange&&<th>Thao tác</th>}
           </tr></thead>
           <tbody>
@@ -233,9 +233,9 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
                     Lấy:{bucket.isPickable?'✓':'—'} • Giao:{bucket.isShippable?'✓':'—'}
                   </small>
                 </td>
-                <td className="inventory-numeric">{bucket.onHandQuantity}</td>
-                <td className="inventory-numeric">{bucket.reservedQuantity}</td>
-                <td className="inventory-numeric inventory-available">{bucket.availableQuantity}</td>
+                <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucket.onHandQuantity}</td>
+                <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucket.reservedQuantity}</td>
+                <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucket.availableQuantity}</td>
                 {canChange&&<td>
                   <div className="ui-inline-actions">
                     <button type="button" disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startChange(bucket)}>Đổi trạng thái</button>

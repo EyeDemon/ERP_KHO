@@ -236,6 +236,21 @@ namespace ERP.Application.Services
             }
         }
 
+        private static string? NormalizeActorDisplayName(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value?.Trim();
+            var trimmed = value.Trim();
+            return trimmed.ToUpperInvariant() switch
+            {
+                "QA MANAGER WH01" or "QA_MANAGER_WH01" => "Quản lý Kho WH01",
+                "QA STAFF WH01" or "QA_STAFF_WH01" => "Nhân viên Kho WH01",
+                "QA SUPERVISOR WH01" or "QA_SUPERVISOR_WH01" or "QA VIEWER WH01" or "QA_VIEWER_WH01" => "Giám sát Kho WH01",
+                "QA SYSTEM ADMIN" or "QA ADMIN" or "QA_ADMIN" => "Quản trị viên Hệ thống",
+                "QA_ADMIN_LOCAL" or "QA ADMIN LOCAL" => "Quản trị viên Nội bộ",
+                _ => trimmed
+            };
+        }
+
         private static string NormalizeUomCode(string? code, string? fallback)
         {
             var raw = !string.IsNullOrWhiteSpace(code) ? code.Trim() : (fallback?.Trim() ?? string.Empty);
@@ -342,9 +357,9 @@ namespace ERP.Application.Services
                 Status = receipt.Status.ToString(),
                 Note = receipt.Note?.Trim(),
                 CreatedBy = receipt.CreatedBy,
-                CreatedByName = (receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username)?.Trim(),
+                CreatedByName = NormalizeActorDisplayName(receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username),
                 ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = (receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username)?.Trim(),
+                ApprovedByName = NormalizeActorDisplayName(receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username),
                 CreatedAt = receipt.CreatedAt,
                 ApprovedAt = receipt.ApprovedAt,
                 SupplierId = receipt.SupplierId,
