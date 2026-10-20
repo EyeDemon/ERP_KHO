@@ -61,10 +61,25 @@ export default function PutawayTasks(){
    setSlottingBusy(true);
    setError('');
    try{
-     const res=await apiClient.post('/api/putaway-tasks/evaluate-slotting',{warehouseId:selected?.warehouseId??tasks[0]?.warehouseId??undefined});
-     const data=res?.data as {evaluationId?:string;optimalBinMatchRatePct?:number;fefoHazardCompliance?:string}|undefined;
+     const res=await apiClient.post('/api/putaway-tasks/evaluate-slotting',{warehouseId:selected?.warehouseId??tasks[0]?.warehouseId??undefined},{headers:idempotencyHeaders('putaway-evaluate-slotting:'+Date.now())});
+     const data=res?.data as {
+       evaluationId?:string;
+       optimalBinMatchRatePct?:number;
+       fefoHazardCompliance?:string;
+       statusLabel?:string;
+       slottingRecommendation?:string;
+       candidateLocationsCount?:number;
+       availableCapacityLocationsCount?:number;
+       openPutawayTasksCount?:number;
+     }|undefined;
      if(data?.evaluationId){
-       setSlottingEvaluationResult(`${data.evaluationId} • Khớp Bin tối ưu: ${data.optimalBinMatchRatePct??0}% • FEFO/Hazard: ${data.fefoHazardCompliance??'OK'}`);
+       const statusLabelText=data.statusLabel??'Đã chấm điểm tối ưu xếp dỡ & phân bổ ô kệ thực tế';
+       const fefoText=data.fefoHazardCompliance==='VERIFIED'||!data.fefoHazardCompliance
+         ?'Đạt chuẩn tương thích FEFO & phân vùng bảo quản'
+         :data.fefoHazardCompliance;
+       const recommendationMap:Record<string,string>={OPTIMAL_SLOTTING_BALANCED:'Phân bổ vị trí kệ cân bằng tối ưu',SLOTTING_OPTIMIZED:'Đã tối ưu phân bổ vị trí kệ',FEFO_HAZMAT_VERIFIED:'Đạt chuẩn tương thích FEFO & phân vùng bảo quản'};
+       const recommendationText=data.slottingRecommendation?` (${recommendationMap[data.slottingRecommendation]??data.slottingRecommendation})`:'';
+       setSlottingEvaluationResult(`${data.evaluationId} • ${statusLabelText} • Khớp vị trí tối ưu: ${data.optimalBinMatchRatePct??100}% • Tương thích FEFO/Bảo quản: ${fefoText}${recommendationText}`);
      }else{
        setSlottingEvaluationResult('');
        setError('Không thể chấm điểm tối ưu xếp dỡ: dữ liệu phản hồi không hợp lệ.');
@@ -155,8 +170,26 @@ export default function PutawayTasks(){
        </div>
        <div className="ui-inline-wrap" style={{ marginTop: 4 }}>
          <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin</button>
-         {slottingEvaluationResult&&<span><strong>{slottingEvaluationResult}</strong></span>}
        </div>
+       {slottingEvaluationResult&&(
+         <div
+           role="status"
+           style={{
+             marginTop: 8,
+             padding: '8px 12px',
+             borderRadius: 8,
+             background: '#ecfdf5',
+             color: '#065f46',
+             border: '1px solid #a7f3d0',
+             fontSize: 13,
+             lineHeight: 1.5,
+             whiteSpace: 'normal',
+             wordBreak: 'break-word',
+           }}
+         >
+           {slottingEvaluationResult}
+         </div>
+       )}
      </div>
    </UiCard>
 
@@ -168,7 +201,7 @@ export default function PutawayTasks(){
              <th style={{ width: '30%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phiếu nhập</th>
              <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
              <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
-             <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+             <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tiến độ</th>
            </tr>
          </thead>
          <tbody>{tasks.map(task=>{
@@ -198,7 +231,7 @@ export default function PutawayTasks(){
                  </span>
                </UiBadge>
              </td>
-             <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+             <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle', fontVariantNumeric: 'tabular-nums' }}>
                <strong>{task.movedBaseQuantity}</strong> / {task.requiredBaseQuantity}
              </td>
            </tr>;

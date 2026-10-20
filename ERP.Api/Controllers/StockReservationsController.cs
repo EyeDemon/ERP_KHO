@@ -143,7 +143,9 @@ public class StockReservationsController(
         }
 
         var now = DateTime.UtcNow;
+        var activeReservationsCount = 0;
         var expiredCandidateCount = 0;
+        var expiringWithin24hCount = 0;
         if (db != null)
         {
             var query = db.StockReservations.AsNoTracking();
@@ -151,8 +153,15 @@ public class StockReservationsController(
                 query = query.Where(r => r.WarehouseId == warehouseId.Value);
             else if (accessibleIds != null)
                 query = query.Where(r => accessibleIds.Contains(r.WarehouseId));
+
+            activeReservationsCount = await query.CountAsync(
+                r => r.Status == StockReservationStatus.Active,
+                cancellationToken);
             expiredCandidateCount = await query.CountAsync(
                 r => r.Status == StockReservationStatus.Active && r.SourceType == "Manual" && r.ExpiresAt <= now,
+                cancellationToken);
+            expiringWithin24hCount = await query.CountAsync(
+                r => r.Status == StockReservationStatus.Active && r.ExpiresAt > now && r.ExpiresAt <= now.AddHours(24),
                 cancellationToken);
         }
 
@@ -169,7 +178,8 @@ public class StockReservationsController(
                 Action = "StockReservation.SweepExpiredPreview",
                 EntityName = "StockReservationSweep",
                 NewValues = sweepId,
-                Result = "COMMITMENT_TTL_VERIFIED",
+                Reason = $"Rà soát giữ hàng quá hạn ({sweepId})",
+                Result = "Success",
                 Timestamp = now
             });
             await db.SaveChangesAsync(cancellationToken);
@@ -179,8 +189,11 @@ public class StockReservationsController(
         {
             sweepId,
             warehouseId,
+            activeReservationsCount,
             expiredCandidateCount,
-            status = "COMMITMENT_TTL_VERIFIED",
+            expiringWithin24hCount,
+            status = "Đã rà soát giữ hàng quá hạn & cam kết tồn kho",
+            statusLabel = "Đã rà soát giữ hàng quá hạn & cam kết tồn kho",
             ledgerMutated = false,
             checkedAtUtc = now
         });

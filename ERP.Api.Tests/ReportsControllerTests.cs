@@ -1656,5 +1656,427 @@ namespace ERP.Api.Tests
 
             db.AuditLogs.Should().OnlyContain(a => a.Result != null && a.Result.Length <= 32);
         }
+
+        [Fact]
+        public async Task Wave31_OperationalDashboard_DeduplicatesConsecutiveLogins_AndPrioritizesWarehouseActivities()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true });
+
+            var baseTime = DateTime.UtcNow;
+            // Seed 6 consecutive login events at latest timestamps
+            for (var i = 1; i <= 6; i++)
+            {
+                db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    Id = i,
+                    Action = "Auth.Login",
+                    EntityName = "UserSession",
+                    EntityId = i,
+                    Result = "Success",
+                    Timestamp = baseTime.AddSeconds(i)
+                });
+            }
+
+            // Seed 4 real warehouse operational events slightly earlier
+            db.AuditLogs.AddRange(
+                new ERP.Domain.Entities.AuditLog
+                {
+                    Id = 101,
+                    WarehouseId = 1,
+                    Action = "Putaway.Move",
+                    EntityName = "PutawayTask",
+                    EntityId = 501,
+                    NewValues = "PUT-QA-501",
+                    Result = "Success",
+                    Timestamp = baseTime.AddMinutes(-1)
+                },
+                new ERP.Domain.Entities.AuditLog
+                {
+                    Id = 102,
+                    WarehouseId = 1,
+                    Action = "Picking.Pick",
+                    EntityName = "PickingTask",
+                    EntityId = 601,
+                    NewValues = "PCK-QA-601",
+                    Result = "Success",
+                    Timestamp = baseTime.AddMinutes(-2)
+                },
+                new ERP.Domain.Entities.AuditLog
+                {
+                    Id = 103,
+                    WarehouseId = 1,
+                    Action = "Packing.ExecuteKittingVas",
+                    EntityName = "KittingVas",
+                    EntityId = 701,
+                    NewValues = "KIT-VAS-20261020-1800",
+                    Result = "Success",
+                    Timestamp = baseTime.AddMinutes(-3)
+                },
+                new ERP.Domain.Entities.AuditLog
+                {
+                    Id = 104,
+                    WarehouseId = 1,
+                    Action = "Shipment.SyncTmsManifest",
+                    EntityName = "TmsManifest",
+                    EntityId = 801,
+                    NewValues = "TMS-MNF-20261020-1800",
+                    Result = "Success",
+                    Timestamp = baseTime.AddMinutes(-4)
+                }
+            );
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+
+            var reportService = new Mock<IReportService>();
+            var controller = new ReportsController(reportService.Object, db, warehouseAuth.Object);
+
+            var result = await controller.GetOperationalDashboard(db, warehouseAuth.Object, default);
+            var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+            using var doc = System.Text.Json.JsonSerializer.SerializeToDocument(ok.Value);
+            var recentActivities = doc.RootElement.GetProperty("recentActivities");
+
+            // 1 deduplicated login + 4 warehouse activities = 5 items total
+            recentActivities.GetArrayLength().Should().Be(5);
+            var loginRowsCount = 0;
+            for (var i = 0; i < recentActivities.GetArrayLength(); i++)
+            {
+                var rawEntity = recentActivities[i].GetProperty("RawEntityName").GetString();
+                if (rawEntity == "UserSession")
+                    loginRowsCount++;
+            }
+            loginRowsCount.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task Wave31_PutawayAndPickingOrchestration_ComputesRealSlottingCutoffFefoAndExpiredSweep_WithVietnameseLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true });
+            db.WarehouseCalendarDays.Add(new ERP.Domain.Entities.WarehouseCalendarDay
+            {
+                Id = 1,
+                WarehouseId = 1,
+                DayOfWeek = (int)DayOfWeek.Monday,
+                IsOpen = true,
+                OutboundCutoffLocal = new TimeSpan(19, 30, 0)
+            });
+            db.WarehouseLocations.AddRange(
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 10,
+                    WarehouseId = 1,
+                    Code = "A-01-01",
+                    Name = "Kệ lưu trữ A01",
+                    StorageClass = "AMBIENT",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                    MaxWeightKg = 500m,
+                    IsActive = true,
+                    IsBlocked = false
+                },
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 11,
+                    WarehouseId = 1,
+                    Code = "C-01-01",
+                    Name = "Kệ lạnh C01",
+                    StorageClass = "COLD",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                    MaxWeightKg = 300m,
+                    IsActive = true,
+                    IsBlocked = false
+                }
+            );
+            db.PutawayTasks.Add(new ERP.Domain.Entities.PutawayTask
+            {
+                Id = 1,
+                ReceiptId = 1,
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.PutawayTaskStatus.Open
+            });
+            db.PickingTasks.Add(new ERP.Domain.Entities.PickingTask
+            {
+                Id = 1,
+                TaskCode = "PCK-QA-01",
+                WarehouseId = 1,
+                SourceType = "SalesOrder",
+                SourceId = 1,
+                SourceCode = "SO-01",
+                Status = ERP.Domain.Enums.PickingTaskStatus.InProgress
+            });
+            db.ExportReceipts.Add(new ERP.Domain.Entities.ExportReceipt
+            {
+                Id = 1,
+                Code = "EXP-QA-01",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Approved,
+                CreatedBy = 1
+            });
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 1,
+                WarehouseId = 1,
+                ProductId = 101,
+                LocationId = 10,
+                Quantity = 50m,
+                ReservedQuantity = 10m,
+                Status = ERP.Domain.Enums.InventoryStatus.Available
+            });
+            db.StockReservations.AddRange(
+                new ERP.Domain.Entities.StockReservation
+                {
+                    Id = 1,
+                    ReservationCode = "RSV-EXP-01",
+                    WarehouseId = 1,
+                    ProductId = 101,
+                    SourceType = "Manual",
+                    Status = ERP.Domain.Enums.StockReservationStatus.Active,
+                    Quantity = 5m,
+                    ExpiresAt = DateTime.UtcNow.AddHours(-2)
+                },
+                new ERP.Domain.Entities.StockReservation
+                {
+                    Id = 2,
+                    ReservationCode = "RSV-SOON-02",
+                    WarehouseId = 1,
+                    ProductId = 101,
+                    SourceType = "SalesOrder",
+                    Status = ERP.Domain.Enums.StockReservationStatus.Active,
+                    Quantity = 10m,
+                    ExpiresAt = DateTime.UtcNow.AddHours(6)
+                }
+            );
+            db.StockAllocations.Add(new ERP.Domain.Entities.StockAllocation
+            {
+                Id = 1,
+                AllocationCode = "ALC-QA-01",
+                WarehouseId = 1,
+                ProductId = 101,
+                LocationId = 10,
+                Status = ERP.Domain.Enums.StockAllocationStatus.Active,
+                Quantity = 10m
+            });
+            db.InventoryLots.Add(new ERP.Domain.Entities.InventoryLot
+            {
+                Id = 1,
+                ProductId = 101,
+                LotNumber = "LOT-SOON-01",
+                ExpiryDate = DateTime.UtcNow.AddDays(15)
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var putawayService = new Mock<IPutawayService>();
+            var putawayController = new PutawayTasksController(putawayService.Object, db, warehouseAuth.Object);
+
+            var policyRes = await putawayController.RuleEnginePolicy(1, default);
+            var policyOk = policyRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(policyOk.Value))
+            {
+                doc.RootElement.GetProperty("openPutawayTasksCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("activeStorageLocationsCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã tải bộ quy tắc đề xuất vị trí cất hàng thực tế");
+            }
+
+            var slotRes = await putawayController.EvaluateSlotting(new PutawayTasksController.EvaluatePutawaySlottingRequest(1), default);
+            var slotOk = slotRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(slotOk.Value))
+            {
+                doc.RootElement.GetProperty("openPutawayTasksCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("candidateLocationsCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("availableCapacityLocationsCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("occupiedLocationsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("fefoHazardCompliance").GetString().Should().Be("Đạt chuẩn tương thích FEFO & phân vùng bảo quản");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã chấm điểm tối ưu xếp dỡ & phân bổ ô kệ thực tế");
+            }
+
+            var pickingService = new Mock<IPickingService>();
+            var pickingController = new PickingTasksController(pickingService.Object, db, warehouseAuth.Object);
+
+            var syncRes = await pickingController.SyncAutomationTelemetry(new PickingTasksController.SyncAutomationTelemetryRequest(1), default);
+            var syncOk = syncRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(syncOk.Value))
+            {
+                doc.RootElement.GetProperty("activePickingTasksCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("outboundCutoffLocal").GetString().Should().Be("19:30");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã đồng bộ thiết bị kho & kiểm tra tuân thủ FEFO");
+            }
+
+            var cutoffRes = await pickingController.VerifyDispatchCutoff(new PickingTasksController.VerifyPickingDispatchCutoffRequest(1), default);
+            var cutoffOk = cutoffRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(cutoffOk.Value))
+            {
+                doc.RootElement.GetProperty("checkedExportReceiptsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("openPickingTasksCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("outboundCutoffLocal").GetString().Should().Be("19:30");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất");
+            }
+
+            var sweepRes = await pickingController.SweepExpiredPreview(new PickingTasksController.SweepPickingExpiredReservationsRequest(1), default);
+            var sweepOk = sweepRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(sweepOk.Value))
+            {
+                doc.RootElement.GetProperty("activeReservationsCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("expiredCandidateCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("expiringWithin24hCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã rà soát giữ hàng quá hạn & cam kết tồn kho");
+            }
+
+            var fefoRes = await pickingController.VerifyFefoCompliance(new PickingTasksController.VerifyPickingFefoComplianceRequest(1), default);
+            var fefoOk = fefoRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(fefoOk.Value))
+            {
+                doc.RootElement.GetProperty("activeAllocationsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("binLockConflictCount").GetInt32().Should().Be(0);
+                doc.RootElement.GetProperty("expiringLotsWithin30DaysCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Tuân thủ nghiêm ngặt chuẩn FEFO/FIFO (0 xung đột khóa kệ)");
+            }
+
+            db.AuditLogs.Should().OnlyContain(a => a.Result != null && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave31_PackingAndShipmentOrchestration_ComputesRealHuWeightVolumeAndTmsManifest_WithVietnameseLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 101,
+                Code = "SKU-PACK-01",
+                Name = "Sản phẩm đóng gói",
+                UnitId = 1,
+                UnitWeightKg = 2.5m,
+                UnitVolumeM3 = 0.012m,
+                IsActive = true
+            });
+            db.PackingSessions.Add(new ERP.Domain.Entities.PackingSession
+            {
+                Id = 1,
+                SessionCode = "PCK-SES-01",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.PackingSessionStatus.Packed
+            });
+            db.HandlingUnits.AddRange(
+                new ERP.Domain.Entities.HandlingUnit
+                {
+                    Id = 1,
+                    HuCode = "HU-QA-01",
+                    PackingSessionId = 1,
+                    WarehouseId = 1,
+                    Status = ERP.Domain.Enums.HandlingUnitStatus.Staged,
+                    GrossWeightKg = 14.5m,
+                    VolumeM3 = 0.045m
+                },
+                new ERP.Domain.Entities.HandlingUnit
+                {
+                    Id = 2,
+                    HuCode = "HU-QA-02",
+                    PackingSessionId = 1,
+                    WarehouseId = 1,
+                    Status = ERP.Domain.Enums.HandlingUnitStatus.Loaded,
+                    GrossWeightKg = 20.5m,
+                    VolumeM3 = 0.075m
+                }
+            );
+            db.Shipments.Add(new ERP.Domain.Entities.Shipment
+            {
+                Id = 1,
+                ShipmentCode = "SHP-QA-01",
+                PackingSessionId = 1,
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ShipmentStatus.Staging,
+                VehiclePlate = "51C-888.99",
+                SealNumber = "SEAL-01"
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var packingService = new Mock<IPackingService>();
+            var packingController = new PackingSessionsController(packingService.Object, db, warehouseAuth.Object);
+
+            var verifyRes = await packingController.VerifyPackagingProfile(new PackingSessionsController.VerifyPackagingProfileRequest(101, "CARTON-L", 1), default);
+            var verifyOk = verifyRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(verifyOk.Value))
+            {
+                doc.RootElement.GetProperty("activePackingSessionsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("handlingUnitsCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("totalGrossWeightKg").GetDecimal().Should().Be(35.0m);
+                doc.RootElement.GetProperty("totalVolumeM3").GetDecimal().Should().Be(0.12m);
+                doc.RootElement.GetProperty("dimensionConfiguredProductsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã kiểm tra quy cách đóng gói & tải trọng kiện hàng thực tế");
+            }
+
+            var vasRes = await packingController.ExecuteKittingVas(new PackingSessionsController.ExecuteKittingVasRequest(1, "KIT-QA-01", null), default);
+            var vasOk = vasRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(vasOk.Value))
+            {
+                doc.RootElement.GetProperty("activeSessionsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("handlingUnitsCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("status").GetString().Should().Be("Đã hoàn tất gia công đóng gói & dán nhãn kiện hàng");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã hoàn tất gia công đóng gói & dán nhãn kiện hàng");
+            }
+
+            var shipmentService = new Mock<IShipmentService>();
+            shipmentService.Setup(x => x.ListAsync(1, null, default)).ReturnsAsync(new List<ShipmentListDto>
+            {
+                new()
+                {
+                    Id = 1,
+                    ShipmentCode = "SHP-QA-01",
+                    WarehouseId = 1,
+                    WarehouseName = "Kho Chính TP.HCM",
+                    Status = "Staging",
+                    VehiclePlate = "51C-888.99",
+                    SealNumber = "SEAL-01"
+                }
+            });
+            var shipmentController = new ShipmentsController(shipmentService.Object, db, warehouseAuth.Object);
+
+            var tmsPlanRes = await shipmentController.LoadPlanningAndTms(1, default);
+            var tmsPlanOk = tmsPlanRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(tmsPlanOk.Value))
+            {
+                doc.RootElement.GetProperty("totalShipments").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("stagingOrLoadingCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("tmsIntegrationMode").GetString().Should().Be("Đồng bộ tự động trạng thái vận đơn & biên bản giao hàng (POD) chống trùng lặp");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã tải tổng quan ghép tải & điều phối vận chuyển");
+            }
+
+            var syncTmsRes = await shipmentController.SyncTmsManifest(new SyncTmsManifestRequest(1, "VTP-EXPRESS"), default);
+            var syncTmsOk = syncTmsRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(syncTmsOk.Value))
+            {
+                doc.RootElement.GetProperty("syncedShipmentCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("stagedOrLoadedCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("totalHandlingUnitsCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("totalGrossWeightKg").GetDecimal().Should().Be(35.0m);
+                doc.RootElement.GetProperty("totalVolumeM3").GetDecimal().Should().Be(0.12m);
+                doc.RootElement.GetProperty("ediStatus").GetString().Should().Be("Đã đồng bộ bảng kê vận tải & ghép tải thành công");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã đồng bộ bảng kê vận tải & ghép tải thành công");
+            }
+
+            db.AuditLogs.Should().OnlyContain(a => a.Result != null && a.Result.Length <= 32);
+        }
     }
 }

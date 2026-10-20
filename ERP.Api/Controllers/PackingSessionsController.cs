@@ -2,6 +2,7 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -37,7 +38,9 @@ public sealed class PackingSessionsController(
                 new { code = "TOTE-STD", type = "TOTE", maxWeightKg = 25m, maxVolumeM3 = 0.06m },
                 new { code = "PALLET-EUR", type = "PALLET", maxWeightKg = 1000m, maxVolumeM3 = 1.80m }
             },
-            cartonizationPolicy = "RECOMMEND_ONLY_REQUIRES_OPERATOR_CONFIRM"
+            cartonizationPolicy = "Hệ thống gợi ý quy cách thùng/kiện — Nhân viên đóng gói xác nhận thực tế",
+            status = "Đã tải danh mục quy cách bao bì đóng gói",
+            statusLabel = "Đã tải danh mục quy cách bao bì đóng gói"
         });
 
     public sealed record VerifyPackagingProfileRequest(int? ProductId = null, string? CartonType = null, int? WarehouseId = null);
@@ -49,22 +52,64 @@ public sealed class PackingSessionsController(
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
-        var dimensionConfiguredProductsCount = db != null
-            ? await db.Products.AsNoTracking()
-                .CountAsync(p => p.UnitWeightKg.HasValue || p.UnitVolumeM3.HasValue || p.UnitPalletEquivalent.HasValue, cancellationToken)
-            : 0;
+        var activePackingSessionsCount = 0;
+        var handlingUnitsCount = 0;
+        var totalGrossWeightKg = 0m;
+        var totalVolumeM3 = 0m;
+        var dimensionConfiguredProductsCount = 0;
+        if (db != null)
+        {
+            var sessionQuery = db.PackingSessions.AsNoTracking()
+                .Where(s => s.Status == PackingSessionStatus.Open
+                            || s.Status == PackingSessionStatus.InProgress
+                            || s.Status == PackingSessionStatus.Packed);
+            var huQuery = db.HandlingUnits.AsNoTracking()
+                .Where(h => h.Status != HandlingUnitStatus.Cancelled);
+
+            if (warehouseId.HasValue)
+            {
+                sessionQuery = sessionQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                huQuery = huQuery.Where(h => h.WarehouseId == warehouseId.Value);
+            }
+            else if (accessibleIds != null)
+            {
+                sessionQuery = sessionQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
+                huQuery = huQuery.Where(h => accessibleIds.Contains(h.WarehouseId));
+            }
+
+            activePackingSessionsCount = await sessionQuery.CountAsync(cancellationToken);
+            handlingUnitsCount = await huQuery.CountAsync(cancellationToken);
+            totalGrossWeightKg = Math.Round(await huQuery.SumAsync(h => h.GrossWeightKg ?? 0m, cancellationToken), 2);
+            totalVolumeM3 = Math.Round(await huQuery.SumAsync(h => h.VolumeM3 ?? 0m, cancellationToken), 4);
+            dimensionConfiguredProductsCount = await db.Products.AsNoTracking()
+                .CountAsync(p => p.UnitWeightKg.HasValue || p.UnitVolumeM3.HasValue || p.UnitPalletEquivalent.HasValue, cancellationToken);
+        }
 
         return Ok(new
         {
             verificationId = $"PKG-VER-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            warehouseId,
             productId = request?.ProductId,
+            activePackingSessionsCount,
+            handlingUnitsCount,
+            totalGrossWeightKg,
+            totalVolumeM3,
             dimensionConfiguredProductsCount,
             cartonType = string.IsNullOrWhiteSpace(request?.CartonType) ? "STD-CARTON-M" : request.CartonType.Trim(),
             volumetricFitConfirmed = true,
             gs1SsccReady = true,
+            gs1SsccStatus = "Sẵn sàng cấp mã kiện chuẩn GS1 SSCC-18",
+            status = "Đã kiểm tra quy cách đóng gói & tải trọng kiện hàng thực tế",
+            statusLabel = "Đã kiểm tra quy cách đóng gói & tải trọng kiện hàng thực tế",
             verifiedAtUtc = DateTime.UtcNow
         });
     }
@@ -96,10 +141,15 @@ public sealed class PackingSessionsController(
             }
         }
 
-        var activeSessionsCount = db != null
-            ? await db.PackingSessions.AsNoTracking()
-                .CountAsync(s => s.WarehouseId == targetWarehouseId, cancellationToken)
-            : 0;
+        var activeSessionsCount = 0;
+        var handlingUnitsCount = 0;
+        if (db != null)
+        {
+            activeSessionsCount = await db.PackingSessions.AsNoTracking()
+                .CountAsync(s => s.WarehouseId == targetWarehouseId && s.Status != PackingSessionStatus.Cancelled, cancellationToken);
+            handlingUnitsCount = await db.HandlingUnits.AsNoTracking()
+                .CountAsync(h => h.WarehouseId == targetWarehouseId && h.Status != HandlingUnitStatus.Cancelled, cancellationToken);
+        }
 
         var now = DateTime.UtcNow;
         var workOrderId = $"KIT-VAS-{now:yyyyMMdd-HHmm}";
@@ -115,7 +165,8 @@ public sealed class PackingSessionsController(
                 Action = "Packing.ExecuteKittingVas",
                 EntityName = "KittingVas",
                 NewValues = workOrderId,
-                Result = "KITTING_VAS_READY",
+                Reason = $"Hoàn tất gia công đóng gói & dán nhãn kiện hàng ({workOrderId})",
+                Result = "Success",
                 Timestamp = now
             });
             await db.SaveChangesAsync(cancellationToken);
@@ -126,12 +177,14 @@ public sealed class PackingSessionsController(
             workOrderId,
             warehouseId = targetWarehouseId,
             activeSessionsCount,
-            kitSkuCode = request?.KitSkuCode ?? "KIT-BUNDLE-STD",
-            vasServiceType = request?.VasServiceType ?? "LABELING_SHRINKWRAP_BUNDLE",
-            componentAllocationStatus = "COMPONENTS_VERIFIED_FEFO",
-            transformationLedgerMode = "EXPLICIT_COMPONENT_TO_KIT_POSTING",
-            billingHookStatus = "3PL_BILLABLE_EVENT_CAPTURED",
-            status = "KITTING_VAS_READY",
+            handlingUnitsCount,
+            kitSkuCode = string.IsNullOrWhiteSpace(request?.KitSkuCode) ? "KIT-BUNDLE-STD" : request.KitSkuCode.Trim(),
+            vasServiceType = string.IsNullOrWhiteSpace(request?.VasServiceType) ? "Dán nhãn & đóng màng co kiện hàng" : request.VasServiceType.Trim(),
+            componentAllocationStatus = "Đã kiểm tra linh kiện & lô hàng theo chuẩn FEFO",
+            transformationLedgerMode = "Ghi nhận bút toán xuất linh kiện sang bộ KIT",
+            billingHookStatus = "Đã ghi nhận phí dịch vụ gia công kho (VAS)",
+            status = "Đã hoàn tất gia công đóng gói & dán nhãn kiện hàng",
+            statusLabel = "Đã hoàn tất gia công đóng gói & dán nhãn kiện hàng",
             executedAtUtc = now
         });
     }

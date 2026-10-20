@@ -77,8 +77,27 @@ namespace ERP.Api.Controllers
                               (a.Action.Contains("Refresh") || a.Action.Contains("Làm mới"))))
                 .OrderByDescending(a => a.Timestamp)
                 .ThenByDescending(a => a.Id)
-                .Take(10)
+                .Take(50)
                 .ToListAsync(cancellationToken);
+
+            static bool IsLoginAuditRow(ERP.Domain.Entities.AuditLog a) =>
+                string.Equals(a.EntityName?.Trim(), "UserSession", StringComparison.OrdinalIgnoreCase)
+                || (a.Action != null &&
+                    (a.Action.Contains("Login", StringComparison.OrdinalIgnoreCase)
+                     || a.Action.Contains("Đăng nhập", StringComparison.OrdinalIgnoreCase)));
+
+            var nonLoginRowsCount = filteredAuditRows.Count(a => !IsLoginAuditRow(a));
+            var seenLogin = false;
+            filteredAuditRows = filteredAuditRows
+                .Where(a =>
+                {
+                    if (!IsLoginAuditRow(a)) return true;
+                    if (nonLoginRowsCount >= 8 || seenLogin) return false;
+                    seenLogin = true;
+                    return true;
+                })
+                .Take(10)
+                .ToList();
 
             if (filteredAuditRows.Count == 0)
             {

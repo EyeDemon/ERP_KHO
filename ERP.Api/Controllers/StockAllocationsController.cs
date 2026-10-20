@@ -127,25 +127,43 @@ public sealed class StockAllocationsController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
+        var now = DateTime.UtcNow;
+        var activeAllocationsCount = 0;
         var binLockConflictCount = 0;
+        var expiringLotsWithin30DaysCount = 0;
+        var expiredLotsCount = 0;
         if (db != null)
         {
-            var query = db.StockAllocations.AsNoTracking()
-                .Where(a => (a.Status == StockAllocationStatus.Active || a.Status == StockAllocationStatus.Picking)
-                            && a.Location.IsBlocked);
+            var allocQuery = db.StockAllocations.AsNoTracking()
+                .Where(a => a.Status == StockAllocationStatus.Active || a.Status == StockAllocationStatus.Picking);
             if (warehouseId.HasValue)
-                query = query.Where(a => a.WarehouseId == warehouseId.Value);
+                allocQuery = allocQuery.Where(a => a.WarehouseId == warehouseId.Value);
             else if (accessibleIds != null)
-                query = query.Where(a => accessibleIds.Contains(a.WarehouseId));
-            binLockConflictCount = await query.CountAsync(cancellationToken);
+                allocQuery = allocQuery.Where(a => accessibleIds.Contains(a.WarehouseId));
+
+            activeAllocationsCount = await allocQuery.CountAsync(cancellationToken);
+            binLockConflictCount = await allocQuery.Where(a => a.Location.IsBlocked).CountAsync(cancellationToken);
+            expiringLotsWithin30DaysCount = await db.InventoryLots.AsNoTracking()
+                .CountAsync(l => l.ExpiryDate.HasValue && l.ExpiryDate.Value >= now && l.ExpiryDate.Value <= now.AddDays(30), cancellationToken);
+            expiredLotsCount = await db.InventoryLots.AsNoTracking()
+                .CountAsync(l => l.ExpiryDate.HasValue && l.ExpiryDate.Value < now, cancellationToken);
         }
+
+        var complianceText = binLockConflictCount == 0
+            ? "Tuân thủ nghiêm ngặt chuẩn FEFO/FIFO (0 xung đột khóa kệ)"
+            : $"Phát hiện {binLockConflictCount} phân bổ nằm tại vị trí đang bị khóa";
 
         return Ok(new
         {
             verificationId = $"ALC-FEFO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             warehouseId,
-            fefoComplianceStatus = binLockConflictCount == 0 ? "STRICT_FEFO_FIFO_ALIGNED" : "CONFLICT_DETECTED",
+            activeAllocationsCount,
             binLockConflictCount,
+            expiringLotsWithin30DaysCount,
+            expiredLotsCount,
+            fefoComplianceStatus = complianceText,
+            status = complianceText,
+            statusLabel = complianceText,
             verifiedAtUtc = DateTime.UtcNow
         });
     }

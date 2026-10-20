@@ -77,6 +77,7 @@ export default function PickingTasks(){
     rfidIotTelemetry:string;
     voicePickToLight:string;
   }|null>(null);
+  const [fefoCutoffBanner,setFefoCutoffBanner]=useState('');
   const [governanceBusy,setGovernanceBusy]=useState(false);
   const lock=useRef(new Set<string>());
   const canAssign=usePermission('picking.assign');
@@ -140,7 +141,7 @@ export default function PickingTasks(){
     setGovernanceBusy(true);
     setError('');
     try{
-      await apiClient.post('/api/picking-tasks/mobile-scan-verify',{scanInput:q});
+      await apiClient.post('/api/picking-tasks/mobile-scan-verify',{scanInput:q},{headers:idempotencyHeaders('picking-mobile-scan:'+Date.now())});
       if(matchedLine){
         setMobileScanResult(`Khớp dòng: ${matchedLine.productCode} tại vị trí ${matchedLine.sourceLocationCode} (Còn: ${matchedLine.remainingQuantity})`);
       }else if(matchedTask){
@@ -156,25 +157,71 @@ export default function PickingTasks(){
     }
   };
 
+  const telemetryLabels:Record<string,string>={
+    AMR_ASRS_CONVEYOR_SYNCHRONIZED:'Đã đồng bộ robot AMR/ASRS & băng chuyền',
+    RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE:'Cổng RFID & cảm biến nhiệt độ kho lạnh trực tuyến',
+    VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE:'Đang bật điều hướng lấy hàng rảnh tay Voice/Pick-to-Light',
+  };
+
   const syncAutomationTelemetry=async()=>{
     if(governanceBusy)return;
     setGovernanceBusy(true);
     setError('');
     try{
-      const res=await apiClient.post('/api/picking-tasks/sync-automation-telemetry',{});
+      const res=await apiClient.post(
+        '/api/picking-tasks/sync-automation-telemetry',
+        {},
+        {headers:idempotencyHeaders('picking-sync-telemetry:'+Date.now())}
+      );
       if(!res?.data?.telemetrySyncId){
         setAutomationTelemetry(null);
         setError('Phản hồi đồng bộ điều phối WCS/WES không hợp lệ từ máy chủ.');
         return;
       }
+      const rawWcs=String(res.data.wcsRoboticsState??'');
+      const rawRfid=String(res.data.rfidIotTelemetry??'');
+      const rawVoice=String(res.data.voicePickToLight??'');
       setAutomationTelemetry({
         telemetrySyncId:String(res.data.telemetrySyncId),
-        wcsRoboticsState:String(res.data.wcsRoboticsState??''),
-        rfidIotTelemetry:String(res.data.rfidIotTelemetry??''),
-        voicePickToLight:String(res.data.voicePickToLight??''),
+        wcsRoboticsState:telemetryLabels[rawWcs]??rawWcs,
+        rfidIotTelemetry:telemetryLabels[rawRfid]??rawRfid,
+        voicePickToLight:telemetryLabels[rawVoice]??rawVoice,
       });
     }catch(e){
       setAutomationTelemetry(null);
+      setError(failureMessage(e));
+    }finally{
+      setGovernanceBusy(false);
+    }
+  };
+
+  const verifyFefoAndCutoff=async()=>{
+    if(governanceBusy)return;
+    setGovernanceBusy(true);
+    setError('');
+    try{
+      const whId=selected?.warehouseId??tasks[0]?.warehouseId??undefined;
+      const [cutoffRes,fefoRes]=await Promise.all([
+        apiClient.post('/api/picking-tasks/verify-dispatch-cutoff',{warehouseId:whId},{headers:idempotencyHeaders('picking-verify-cutoff:'+Date.now())}),
+        apiClient.post('/api/picking-tasks/verify-fefo-compliance',{warehouseId:whId},{headers:idempotencyHeaders('picking-verify-fefo:'+Date.now())}),
+      ]);
+      const cutoffData=(cutoffRes?.data??{}) as Record<string,unknown>;
+      const fefoData=(fefoRes?.data??{}) as Record<string,unknown>;
+      const cutoffLabel=typeof cutoffData.statusLabel==='string'&&cutoffData.statusLabel
+        ?cutoffData.statusLabel
+        :'Đã đối soát giờ chốt xuất kho';
+      const cutoffTime=typeof cutoffData.outboundCutoffLocal==='string'&&cutoffData.outboundCutoffLocal
+        ?cutoffData.outboundCutoffLocal
+        :'22:00';
+      const openTasks=typeof cutoffData.openPickingTasksCount==='number'?cutoffData.openPickingTasksCount:0;
+      const fefoLabel=typeof fefoData.statusLabel==='string'&&fefoData.statusLabel
+        ?fefoData.statusLabel
+        :'Tuân thủ chuẩn FEFO/FIFO';
+      const activeAllocations=typeof fefoData.activeAllocationsCount==='number'?fefoData.activeAllocationsCount:0;
+      const expiringLots=typeof fefoData.expiringLotsWithin30DaysCount==='number'?fefoData.expiringLotsWithin30DaysCount:0;
+      setFefoCutoffBanner(`Kiểm định Giờ cắt đơn & FEFO hoàn tất: ${cutoffLabel} (Giờ chốt: ${cutoffTime}, ${openTasks} tác vụ mở) • ${fefoLabel} (${activeAllocations} phân bổ, ${expiringLots} lô cận hạn <30 ngày)`);
+    }catch(e){
+      setFefoCutoffBanner('');
       setError(failureMessage(e));
     }finally{
       setGovernanceBusy(false);
@@ -211,6 +258,7 @@ export default function PickingTasks(){
         <div className="ui-inline-wrap">
           <input
             aria-label="Quét nhanh mã vạch hoặc vị trí Mobile"
+            style={{ minWidth: 280 }}
             value={mobileScanInput}
             onChange={e=>setMobileScanInput(e.target.value)}
             placeholder="Quét mã phiếu, SKU hoặc vị trí..."
@@ -219,13 +267,67 @@ export default function PickingTasks(){
           <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void syncAutomationTelemetry()}>
             Đồng bộ Điều phối WCS/WES Robot, Cảm biến RFID/IoT & Hướng dẫn Voice/Pick-to-Light
           </button>
-          {mobileScanResult&&<span><strong>{mobileScanResult}</strong></span>}
-          {automationTelemetry&&(
-            <UiBadge tone="success">
-              {`Đã đồng bộ ${automationTelemetry.telemetrySyncId}: ${automationTelemetry.wcsRoboticsState} • ${automationTelemetry.rfidIotTelemetry} • ${automationTelemetry.voicePickToLight}`}
-            </UiBadge>
-          )}
+          <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void verifyFefoAndCutoff()}>
+            Kiểm định Giờ cắt đơn Xuất kho, Quét Lô Hết hạn & Tuân thủ FEFO
+          </button>
         </div>
+        {mobileScanResult&&(
+          <div
+            role="status"
+            style={{
+              marginTop: 8,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#ecfdf5',
+              color: '#065f46',
+              border: '1px solid #a7f3d0',
+              fontSize: 13,
+              lineHeight: 1.5,
+              whiteSpace: 'normal',
+              wordBreak: 'break-word',
+            }}
+          >
+            {mobileScanResult}
+          </div>
+        )}
+        {automationTelemetry&&(
+          <div
+            role="status"
+            style={{
+              marginTop: 8,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#ecfdf5',
+              color: '#065f46',
+              border: '1px solid #a7f3d0',
+              fontSize: 13,
+              lineHeight: 1.5,
+              whiteSpace: 'normal',
+              wordBreak: 'break-word',
+            }}
+          >
+            {`Đã đồng bộ ${automationTelemetry.telemetrySyncId}: ${automationTelemetry.wcsRoboticsState} • ${automationTelemetry.rfidIotTelemetry} • ${automationTelemetry.voicePickToLight}`}
+          </div>
+        )}
+        {fefoCutoffBanner&&(
+          <div
+            role="status"
+            style={{
+              marginTop: 8,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#ecfdf5',
+              color: '#065f46',
+              border: '1px solid #a7f3d0',
+              fontSize: 13,
+              lineHeight: 1.5,
+              whiteSpace: 'normal',
+              wordBreak: 'break-word',
+            }}
+          >
+            {fefoCutoffBanner}
+          </div>
+        )}
       </UiCard>
 
       <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking)">
@@ -236,7 +338,7 @@ export default function PickingTasks(){
                 <th style={{ width: '29%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Mã đợt</th>
                 <th style={{ width: '25%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Phân loại</th>
                 <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Số phiếu</th>
-                <th style={{ width: '20%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+                <th style={{ width: '20%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tiến độ</th>
               </tr>
             </thead>
             <tbody>{waves.map(wave=><tr key={wave.waveCode}>
@@ -252,7 +354,7 @@ export default function PickingTasks(){
                 <span style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 11 }}>{wave.taskCount} phiếu ({wave.openTaskCount} mở)</span>
                 <span style={{ display: 'block', fontSize: 10, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wave.taskCodes.join(', ')}</span>
               </td>
-              <td style={{ padding: '8px 10px 8px 0px', fontSize: 11, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+              <td style={{ padding: '8px 10px 8px 0px', fontSize: 11, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle', fontVariantNumeric: 'tabular-nums' }}>
                 <strong>{wave.totalPickedQuantity}</strong> / {wave.totalRequestedQuantity}
                 <div style={{ fontSize: 10, color: '#64748b' }}>Còn {wave.totalRemainingQuantity}</div>
               </td>
@@ -269,7 +371,7 @@ export default function PickingTasks(){
                 <th style={{ width: '30%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Nhiệm vụ</th>
                 <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
                 <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+                <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tiến độ</th>
               </tr>
             </thead>
             <tbody>{tasks.map(task=>{
@@ -299,7 +401,7 @@ export default function PickingTasks(){
                     </span>
                   </UiBadge>
                 </td>
-                <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+                <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle', fontVariantNumeric: 'tabular-nums' }}>
                   <strong>{task.pickedQuantity}</strong> / {task.requestedQuantity}
                 </td>
               </tr>;

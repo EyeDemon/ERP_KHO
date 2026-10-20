@@ -116,7 +116,11 @@ export default function Shipments(){
     manifestId:string;
     carrierCode:string;
     syncedShipmentCount:number;
+    totalHandlingUnitsCount:number;
+    totalGrossWeightKg:number;
+    totalVolumeM3:number;
     ediStatus:string;
+    statusLabel?:string;
   }|null>(null);
   const [tmsBusy,setTmsBusy]=useState(false);
   const lock=useRef(new Set<string>());
@@ -212,22 +216,32 @@ export default function Shipments(){
               setTmsBusy(true);
               setError('');
               void apiClient
-                .post<Record<string,unknown>>('/api/shipments/sync-tms-manifest',{
-                  warehouseId:rows[0]?.warehouseId??undefined,
-                  carrierCode:rows[0]?.carrierName??'VTP-EXPRESS',
-                })
+                .post<Record<string,unknown>>(
+                  '/api/shipments/sync-tms-manifest',
+                  {
+                    warehouseId:rows[0]?.warehouseId??undefined,
+                    carrierCode:rows[0]?.carrierName??'VTP-EXPRESS',
+                  },
+                  {headers:idempotencyHeaders('shipment-sync-tms:'+Date.now())}
+                )
                 .then(res=>{
                   const data=res?.data??{};
-                  if(typeof data.manifestId==='string'&&data.manifestId){
+                  const manifestCode=typeof data.manifestCode==='string'&&data.manifestCode?data.manifestCode:(typeof data.manifestId==='string'?data.manifestId:'');
+                  if(manifestCode){
+                    const carrier=typeof data.carrierIntegration==='string'&&data.carrierIntegration?data.carrierIntegration:(typeof data.carrierCode==='string'&&data.carrierCode?data.carrierCode:'VTP-EXPRESS');
                     setTmsManifestResult({
-                      manifestId:data.manifestId,
-                      carrierCode:typeof data.carrierCode==='string'&&data.carrierCode?data.carrierCode:'VTP-EXPRESS',
+                      manifestId:manifestCode,
+                      carrierCode:carrier,
                       syncedShipmentCount:typeof data.syncedShipmentCount==='number'?data.syncedShipmentCount:0,
+                      totalHandlingUnitsCount:typeof data.totalHandlingUnitsCount==='number'?data.totalHandlingUnitsCount:0,
+                      totalGrossWeightKg:typeof data.totalGrossWeightKg==='number'?data.totalGrossWeightKg:0,
+                      totalVolumeM3:typeof data.totalVolumeM3==='number'?data.totalVolumeM3:0,
                       ediStatus:typeof data.ediStatus==='string'&&data.ediStatus?data.ediStatus:'SYNCED',
+                      statusLabel:typeof data.statusLabel==='string'&&data.statusLabel?data.statusLabel:undefined,
                     });
                   }else{
                     setTmsManifestResult(null);
-                    setError('Không thể đồng bộ Manifest TMS: dữ liệu phản hồi không hợp lệ.');
+                    setError('Không thể đồng bộ Bảng kê Vận tải TMS: dữ liệu phản hồi không hợp lệ.');
                   }
                 })
                 .catch(e=>{
@@ -237,25 +251,39 @@ export default function Shipments(){
                 .finally(()=>setTmsBusy(false));
             }}
           >
-            Đồng bộ Manifest & Ghép tải TMS
+            Đồng bộ Bảng kê Vận tải & Ghép tải TMS
           </button>
-          {tmsManifestResult&&(
-            <UiBadge tone="success">
-              {`Manifest: ${tmsManifestResult.manifestId} • Carrier: ${tmsManifestResult.carrierCode} • Shipments: ${tmsManifestResult.syncedShipmentCount} • EDI: ${tmsManifestResult.ediStatus}`}
-            </UiBadge>
-          )}
         </div>
+        {tmsManifestResult&&(
+          <div
+            role="status"
+            style={{
+              marginTop: 8,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#ecfdf5',
+              color: '#065f46',
+              border: '1px solid #a7f3d0',
+              fontSize: 13,
+              lineHeight: 1.5,
+              whiteSpace: 'normal',
+              wordBreak: 'break-word',
+            }}
+          >
+            {`Bảng kê vận tải: ${tmsManifestResult.manifestId} • Đơn vị vận chuyển: ${tmsManifestResult.carrierCode} • Số chuyến đồng bộ: ${tmsManifestResult.syncedShipmentCount} (${tmsManifestResult.totalHandlingUnitsCount??0} kiện HU • ${tmsManifestResult.totalGrossWeightKg??0} kg • ${tmsManifestResult.totalVolumeM3??0} m³) • Trạng thái: ${tmsManifestResult.statusLabel||(tmsManifestResult.ediStatus==='ACK_200_SYNCED'||tmsManifestResult.ediStatus==='SYNCED'?'Đã đồng bộ bảng kê vận tải & ghép tải thành công':tmsManifestResult.ediStatus)}`}
+          </div>
+        )}
       </UiCard>
       <UiCard title="Danh sách chuyến giao hàng">
         {rows.length===0?<p>Chưa có Shipment. Shipment được tạo khi Packing đạt PACKED.</p>:<UiTableScroll>
           <table aria-label="Danh sách Shipment">
-            <thead><tr><th>Mã chuyến</th><th>Đơn nguồn</th><th>Kho</th><th>Trạng thái</th><th>Số kiện</th><th>Cửa kho / Xe</th></tr></thead>
+            <thead><tr><th>Mã chuyến</th><th>Đơn nguồn</th><th>Kho</th><th>Trạng thái</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Số kiện</th><th>Cửa kho / Xe</th></tr></thead>
             <tbody>{rows.map(item=><tr key={item.id}>
               <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void detail(item.id)}>{item.shipmentCode}</button></td>
               <td style={{whiteSpace:'nowrap'}}>{item.sourceCode??item.packingSessionCode}</td>
               <td>{item.warehouseName}</td>
               <td><UiBadge tone={tone(item.status)}>{statusLabels[item.status]??item.status}</UiBadge></td>
-              <td>{item.loadedHandlingUnitCount}/{item.handlingUnitCount}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{item.loadedHandlingUnitCount}/{item.handlingUnitCount}</td>
               <td>{item.dockCode??'—'} {item.vehiclePlate?'• '+item.vehiclePlate:''}</td>
             </tr>)}</tbody>
           </table>
@@ -276,12 +304,12 @@ export default function Shipments(){
 
         <UiTableScroll>
           <table aria-label="Handling Unit của Shipment">
-            <thead><tr><th>#</th><th>Mã kiện</th><th>Loại</th><th>Số lượng</th><th>Trạng thái</th></tr></thead>
+            <thead><tr><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>#</th><th>Mã kiện</th><th>Loại</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Số lượng</th><th>Trạng thái</th></tr></thead>
             <tbody>{(selected.handlingUnits??[]).map(hu=><tr key={hu.id}>
-              <td>{hu.sequence}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{hu.sequence}</td>
               <td><strong style={{whiteSpace:'nowrap'}}>{hu.huCode}</strong><div className="ui-muted-text" style={{whiteSpace:'nowrap'}}>{hu.barcode}</div></td>
               <td>{huTypeLabels[hu.type]??hu.type}</td>
-              <td>{hu.contentQuantity}</td>
+              <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{hu.contentQuantity}</td>
               <td><UiBadge tone={tone(hu.status)}>{huLabels[hu.status]??hu.status}</UiBadge></td>
             </tr>)}</tbody>
           </table>

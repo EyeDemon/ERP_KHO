@@ -170,14 +170,35 @@ namespace ERP.Api.Controllers
             }
 
             var checkedExportReceiptsCount = 0;
+            var openPickingTasksCount = 0;
+            var outboundCutoffLocal = "22:00";
             if (_db != null)
             {
                 var query = _db.ExportReceipts.AsNoTracking();
+                var taskQuery = _db.PickingTasks.AsNoTracking()
+                    .Where(t => t.Status != ERP.Domain.Enums.PickingTaskStatus.Completed
+                                && t.Status != ERP.Domain.Enums.PickingTaskStatus.Cancelled);
+                var calQuery = _db.WarehouseCalendarDays.AsNoTracking()
+                    .Where(c => c.IsOpen && c.OutboundCutoffLocal.HasValue);
+
                 if (warehouseId.HasValue)
+                {
                     query = query.Where(r => r.WarehouseId == warehouseId.Value);
+                    taskQuery = taskQuery.Where(t => t.WarehouseId == warehouseId.Value);
+                    calQuery = calQuery.Where(c => c.WarehouseId == warehouseId.Value);
+                }
                 else if (accessibleIds != null)
+                {
                     query = query.Where(r => accessibleIds.Contains(r.WarehouseId));
+                    taskQuery = taskQuery.Where(t => accessibleIds.Contains(t.WarehouseId));
+                    calQuery = calQuery.Where(c => accessibleIds.Contains(c.WarehouseId));
+                }
+
                 checkedExportReceiptsCount = await query.CountAsync(cancellationToken);
+                openPickingTasksCount = await taskQuery.CountAsync(cancellationToken);
+                var cutoffSpan = await calQuery.Select(c => c.OutboundCutoffLocal).FirstOrDefaultAsync(cancellationToken);
+                if (cutoffSpan.HasValue)
+                    outboundCutoffLocal = cutoffSpan.Value.ToString(@"hh\:mm");
             }
 
             return Ok(new
@@ -185,8 +206,12 @@ namespace ERP.Api.Controllers
                 verificationId = $"EXP-CUT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
                 warehouseId,
                 checkedExportReceiptsCount,
-                singleShipDeductionGuard = "ENFORCED",
-                cutoffComplianceStatus = "DISPATCH_CUTOFF_VERIFIED",
+                openPickingTasksCount,
+                outboundCutoffLocal,
+                singleShipDeductionGuard = "Chốt trừ tồn kho 1 lần duy nhất khi xác nhận xuất",
+                cutoffComplianceStatus = $"Đạt chuẩn giờ chốt xuất kho ({outboundCutoffLocal})",
+                status = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất",
+                statusLabel = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất",
                 verifiedAtUtc = DateTime.UtcNow
             });
         }

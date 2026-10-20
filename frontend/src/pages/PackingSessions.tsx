@@ -115,10 +115,26 @@ export default function PackingSessions(){
     setGovernanceBusy(true);
     setError('');
     try{
-      const res=await apiClient.post('/api/packing-sessions/verify-packaging-profile',{cartonType:huType||'STD-CARTON-M'});
-      const data=res?.data as {verificationId?:string;cartonType?:string;gs1SsccReady?:boolean}|undefined;
-      if(data?.verificationId){
-        setPackagingVerificationResult(`${data.verificationId} • ${data.cartonType??'STD-CARTON-M'} • GS1/SSCC Ready: ${data.gs1SsccReady!==false?'YES':'NO'}`);
+      const res=await apiClient.post('/api/packing-sessions/verify-packaging-profile',{cartonType:huType||'STD-CARTON-M'},{headers:idempotencyHeaders('packing-verify-profile:'+Date.now())});
+      const data=res?.data as {
+        verificationId?:string;
+        verificationCode?:string;
+        cartonType?:string;
+        packageType?:string;
+        gs1SsccReady?:boolean;
+        statusLabel?:string;
+        handlingUnitsCount?:number;
+        totalGrossWeightKg?:number;
+        totalVolumeM3?:number;
+      }|undefined;
+      const verificationCode=data?.verificationCode||data?.verificationId;
+      if(verificationCode){
+        const packageTypeMap:Record<string,string>={Carton:'Thùng carton (Carton)',Tote:'Khay nhựa (Tote)',Pallet:'Pallet tiêu chuẩn (Pallet)',Container:'Thùng hàng lớn (Container)',Custom:'Tùy chỉnh (Custom)','STD-CARTON-M':'Thùng carton tiêu chuẩn (STD-CARTON-M)'};
+        const rawPkg=data?.packageType||data?.cartonType||'STD-CARTON-M';
+        const packageType=packageTypeMap[rawPkg]??rawPkg;
+        const gs1Label=data?.gs1SsccReady!==false?'Đạt chuẩn':'Chưa đạt';
+        const statusLabel=data?.statusLabel||'Đã kiểm tra quy cách đóng gói thực tế';
+        setPackagingVerificationResult(`${verificationCode} • Loại bao bì: ${packageType} • Chuẩn mã GS1/SSCC: ${gs1Label} (${data?.handlingUnitsCount??0} kiện HU • ${data?.totalGrossWeightKg??0} kg • ${data?.totalVolumeM3??0} m³) • ${statusLabel}`);
       }else{
         setPackagingVerificationResult('');
         setError('Không thể kiểm tra quy cách thùng: dữ liệu phản hồi không hợp lệ.');
@@ -135,10 +151,30 @@ export default function PackingSessions(){
     setGovernanceBusy(true);
     setError('');
     try{
-      const res=await apiClient.post('/api/packing-sessions/execute-kitting-vas',{warehouseId:selected?.warehouseId??sessions[0]?.warehouseId??undefined,kitSkuCode:'KIT-BUNDLE-STD',vasServiceType:'LABELING_SHRINKWRAP_BUNDLE'});
-      const data=res?.data as {workOrderId?:string;status?:string;vasServiceType?:string}|undefined;
-      if(data?.workOrderId){
-        setKittingVasResult(`${data.workOrderId} • ${data.status??'KITTING_VAS_READY'} (${data.vasServiceType??'LABELING_SHRINKWRAP_BUNDLE'})`);
+      const res=await apiClient.post(
+        '/api/packing-sessions/execute-kitting-vas',
+        {warehouseId:selected?.warehouseId??sessions[0]?.warehouseId??undefined,kitSkuCode:'KIT-BUNDLE-STD',vasServiceType:'LABELING_SHRINKWRAP_BUNDLE'},
+        {headers:idempotencyHeaders('packing-kitting-vas:'+Date.now())}
+      );
+      const data=res?.data as {
+        workOrderId?:string;
+        vasExecutionCode?:string;
+        status?:string;
+        statusLabel?:string;
+        vasServiceType?:string;
+        serviceScopeLabel?:string;
+        activePackingSessionsCount?:number;
+        handlingUnitsCount?:number;
+      }|undefined;
+      const vasCode=data?.vasExecutionCode||data?.workOrderId;
+      if(vasCode){
+        const vasLabel=data?.statusLabel||(!data?.status||data.status==='KITTING_VAS_READY'
+          ?'Đã hoàn tất kiểm tra đóng bộ (Kitting) & dịch vụ gia tăng (VAS)'
+          :data.status);
+        const scopeLabel=data?.serviceScopeLabel||(!data?.vasServiceType||data.vasServiceType==='LABELING_SHRINKWRAP_BUNDLE'
+          ?'Dán nhãn phụ, bọc màng co & đóng bộ sản phẩm'
+          :data.vasServiceType);
+        setKittingVasResult(`${vasCode} • ${vasLabel} — ${scopeLabel} (${data?.activePackingSessionsCount??0} phiên • ${data?.handlingUnitsCount??0} kiện HU)`);
       }else{
         setKittingVasResult('');
         setError('Không thể thực thi Kitting/VAS: dữ liệu phản hồi không hợp lệ.');
@@ -172,18 +208,54 @@ export default function PackingSessions(){
     <div className="ui-stack">
       <UiCard title="Danh mục Loại Bao bì Chuẩn & Gợi ý Tối ưu Đóng thùng Cartonization">
         <div className="ui-inline-wrap">
-          <span><strong>CARTON-S</strong> (CARTON): tối đa 15 kg / 0.04 m³</span>
-          <span><strong>CARTON-L</strong> (CARTON): tối đa 30 kg / 0.12 m³</span>
-          <span><strong>TOTE-STD</strong> (TOTE): tối đa 25 kg / 0.06 m³</span>
-          <span><strong>PALLET-EUR</strong> (PALLET): tối đa 1000 kg / 1.80 m³</span>
+          <span><strong>CARTON-S</strong> (Thùng carton): tối đa 15 kg / 0.04 m³</span>
+          <span><strong>CARTON-L</strong> (Thùng carton): tối đa 30 kg / 0.12 m³</span>
+          <span><strong>TOTE-STD</strong> (Khay nhựa): tối đa 25 kg / 0.06 m³</span>
+          <span><strong>PALLET-EUR</strong> (Pallet gỗ/nhựa): tối đa 1000 kg / 1.80 m³</span>
           <span>Chính sách Cartonization: <UiBadge tone="success">Đề xuất & Xác nhận bởi Nhân viên</UiBadge></span>
         </div>
         <div className="ui-inline-wrap">
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC</button>
-          {packagingVerificationResult&&<span><strong>{packagingVerificationResult}</strong></span>}
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS</button>
-          {kittingVasResult&&<UiBadge tone="success">{kittingVasResult}</UiBadge>}
         </div>
+        {packagingVerificationResult&&(
+          <div
+            role="status"
+            style={{
+              marginTop: 8,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#ecfdf5',
+              color: '#065f46',
+              border: '1px solid #a7f3d0',
+              fontSize: 13,
+              lineHeight: 1.5,
+              whiteSpace: 'normal',
+              wordBreak: 'break-word',
+            }}
+          >
+            {packagingVerificationResult}
+          </div>
+        )}
+        {kittingVasResult&&(
+          <div
+            role="status"
+            style={{
+              marginTop: 8,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#ecfdf5',
+              color: '#065f46',
+              border: '1px solid #a7f3d0',
+              fontSize: 13,
+              lineHeight: 1.5,
+              whiteSpace: 'normal',
+              wordBreak: 'break-word',
+            }}
+          >
+            {kittingVasResult}
+          </div>
+        )}
       </UiCard>
 
       <UiCard title="Danh sách phiên đóng gói">
@@ -194,7 +266,7 @@ export default function PackingSessions(){
                 <th style={{ width: '30%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Mã phiên</th>
                 <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
                 <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right' }}>Tiến độ</th>
+                <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tiến độ</th>
               </tr>
             </thead>
             <tbody>{sessions.map(item=><tr key={item.id}>
@@ -221,7 +293,7 @@ export default function PackingSessions(){
                   </span>
                 </UiBadge>
               </td>
-              <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
+              <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle', fontVariantNumeric: 'tabular-nums' }}>
                 <strong>{item.packedQuantity}</strong> / {item.requiredQuantity}
                 <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{item.handlingUnitCount} kiện</div>
               </td>

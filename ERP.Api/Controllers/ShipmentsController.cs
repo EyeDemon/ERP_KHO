@@ -2,6 +2,7 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -55,7 +56,9 @@ public sealed class ShipmentsController(
             stagingOrLoadingCount = list.Count(x => x.Status is "Ready" or "Staging" or "Loading" or "Loaded"),
             carrierAssignedCount = list.Count(x => !string.IsNullOrWhiteSpace(x.VehiclePlate) || x.DockAppointmentId.HasValue),
             sealVerifiedCount = list.Count(x => !string.IsNullOrWhiteSpace(x.SealNumber)),
-            tmsIntegrationMode = "IDEMPOTENT_CARRIER_WEBHOOK_AND_POD_SYNC",
+            tmsIntegrationMode = "Đồng bộ tự động trạng thái vận đơn & biên bản giao hàng (POD) chống trùng lặp",
+            status = "Đã tải tổng quan ghép tải & điều phối vận chuyển",
+            statusLabel = "Đã tải tổng quan ghép tải & điều phối vận chuyển"
         });
     }
 
@@ -88,18 +91,43 @@ public sealed class ShipmentsController(
         }
 
         int syncedShipmentCount;
+        var stagedOrLoadedCount = 0;
+        var totalHandlingUnitsCount = 0;
+        var totalGrossWeightKg = 0m;
+        var totalVolumeM3 = 0m;
         if (db != null)
         {
             var query = db.Shipments.AsNoTracking();
+            var huQuery = db.HandlingUnits.AsNoTracking()
+                .Where(h => h.Status != HandlingUnitStatus.Cancelled);
             if (warehouseId.HasValue)
+            {
                 query = query.Where(s => s.WarehouseId == warehouseId.Value);
+                huQuery = huQuery.Where(h => h.WarehouseId == warehouseId.Value);
+            }
             else if (accessibleIds != null)
+            {
                 query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+                huQuery = huQuery.Where(h => accessibleIds.Contains(h.WarehouseId));
+            }
             syncedShipmentCount = await query.CountAsync(cancellationToken);
+            stagedOrLoadedCount = await query.CountAsync(
+                s => s.Status == ShipmentStatus.Ready
+                     || s.Status == ShipmentStatus.Staging
+                     || s.Status == ShipmentStatus.Loading
+                     || s.Status == ShipmentStatus.Loaded
+                     || s.Status == ShipmentStatus.Dispatched
+                     || s.Status == ShipmentStatus.InTransit,
+                cancellationToken);
+            totalHandlingUnitsCount = await huQuery.CountAsync(cancellationToken);
+            totalGrossWeightKg = Math.Round(await huQuery.SumAsync(h => h.GrossWeightKg ?? 0m, cancellationToken), 2);
+            totalVolumeM3 = Math.Round(await huQuery.SumAsync(h => h.VolumeM3 ?? 0m, cancellationToken), 4);
         }
         else
         {
-            syncedShipmentCount = (await service.ListAsync(warehouseId, null, cancellationToken)).Count;
+            var list = await service.ListAsync(warehouseId, null, cancellationToken);
+            syncedShipmentCount = list.Count;
+            stagedOrLoadedCount = list.Count(x => x.Status is "Ready" or "Staging" or "Loading" or "Loaded" or "Dispatched" or "InTransit");
         }
 
         var now = DateTime.UtcNow;
@@ -116,7 +144,8 @@ public sealed class ShipmentsController(
                 Action = "Shipment.SyncTmsManifest",
                 EntityName = "TmsManifest",
                 NewValues = manifestId,
-                Result = "ACK_200_SYNCED",
+                Reason = $"Đồng bộ bảng kê vận tải & ghép tải ({manifestId})",
+                Result = "Success",
                 Timestamp = now
             });
             await db.SaveChangesAsync(cancellationToken);
@@ -128,7 +157,13 @@ public sealed class ShipmentsController(
             warehouseId = targetWarehouseId,
             carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "VTP-EXPRESS" : request.CarrierCode.Trim(),
             syncedShipmentCount,
-            ediStatus = "ACK_200_SYNCED",
+            stagedOrLoadedCount,
+            totalHandlingUnitsCount,
+            totalGrossWeightKg,
+            totalVolumeM3,
+            ediStatus = "Đã đồng bộ bảng kê vận tải & ghép tải thành công",
+            status = "Đã đồng bộ bảng kê vận tải & ghép tải thành công",
+            statusLabel = "Đã đồng bộ bảng kê vận tải & ghép tải thành công",
             syncedAtUtc = now,
         });
     }

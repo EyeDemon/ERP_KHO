@@ -51,7 +51,7 @@ export function InboundPlanningToolbar({
       </select>
     </UiToolbarField>
     <UiToolbarField label="Tìm trong danh sách">
-      <input className="inbound-planning-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder={placeholder}/>
+      <input className="inbound-planning-search" style={{ minWidth: 320 }} value={search} onChange={event=>setSearch(event.target.value)} placeholder={placeholder}/>
     </UiToolbarField>
   </UiToolbar>;
 }
