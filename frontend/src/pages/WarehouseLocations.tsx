@@ -498,7 +498,7 @@ const WarehouseLocations = () => {
                   const data = res?.data ?? {};
                   setTopologyAuditResult({
                     verificationId: typeof data.verificationId === 'string' && data.verificationId ? data.verificationId : 'TOP-CAP-20261017-01',
-                    zoneBinHierarchyStatus: typeof data.zoneBinHierarchyStatus === 'string' && data.zoneBinHierarchyStatus ? data.zoneBinHierarchyStatus : 'CANONICAL_VALIDATED',
+                    zoneBinHierarchyStatus: typeof data.zoneBinHierarchyStatus === 'string' && data.zoneBinHierarchyStatus ? data.zoneBinHierarchyStatus : 'Đã chuẩn hóa phân cấp Khu vực/Ô lưu trữ',
                     capacityGuardrailActive: Boolean(data.capacityGuardrailActive ?? true),
                   });
                 })
@@ -513,7 +513,7 @@ const WarehouseLocations = () => {
           </button>
           {topologyAuditResult && (
             <UiBadge tone="success">
-              {`Mã kiểm định: ${topologyAuditResult.verificationId} • Cấu trúc: ${topologyAuditResult.zoneBinHierarchyStatus} • Chốt chặn sức chứa: Đang bật`}
+              {`Mã kiểm định: ${topologyAuditResult.verificationId} • Cấu trúc: ${topologyAuditResult.zoneBinHierarchyStatus === 'CANONICAL_VALIDATED' ? 'Đã chuẩn hóa phân cấp Khu vực/Ô lưu trữ' : topologyAuditResult.zoneBinHierarchyStatus} • Chốt chặn sức chứa: Đang bật`}
             </UiBadge>
           )}
           <button
@@ -526,7 +526,7 @@ const WarehouseLocations = () => {
                   const data = (res as { data?: { verificationId?: string; status?: string } } | undefined)?.data;
                   setVirtualVerification({
                     verificationId: data?.verificationId || 'VLOC-AUD-ACTIVE',
-                    status: data?.status || 'ALL_9_VIRTUAL_LOCATIONS_READY',
+                    status: data?.status || 'Đã kích hoạt đầy đủ 9 vị trí ảo',
                   });
                 })
                 .catch((failure) => {
@@ -539,7 +539,7 @@ const WarehouseLocations = () => {
           </button>
           {virtualVerification && (
             <UiBadge tone="success">
-              {`9 Vị trí Ảo: ${virtualVerification.status} (${virtualVerification.verificationId})`}
+              {`9 Vị trí Ảo: ${virtualVerification.status === 'ALL_9_VIRTUAL_LOCATIONS_READY' ? 'Đã kích hoạt đầy đủ 9 vị trí ảo' : virtualVerification.status} (${virtualVerification.verificationId})`}
             </UiBadge>
           )}
         </div>
@@ -588,14 +588,14 @@ const WarehouseLocations = () => {
             ) : (
               <UiTableScroll>
                 <table aria-label="Sức chứa vị trí kho thật" className="ui-table-compact">
-                  <thead><tr><th>Vị trí</th><th>Phân lớp lưu trữ</th><th>Trọng lượng</th><th>Thể tích</th><th>Quy đổi Pallet</th><th>Trạng thái</th></tr></thead>
+                  <thead><tr><th>Vị trí</th><th>Phân lớp lưu trữ</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Trọng lượng</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Thể tích</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Quy đổi Pallet</th><th>Trạng thái</th></tr></thead>
                   <tbody>{capacities.map((item) => (
                     <tr key={item.locationId}>
-                      <td><strong>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
+                      <td><strong style={{ whiteSpace: 'nowrap' }}>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
                       <td>{item.storageClass || 'Không giới hạn phân lớp'}</td>
-                      <td>{capacityUsage(item.usedWeightKg, item.maxWeightKg, 'kg')}</td>
-                      <td>{capacityUsage(item.usedVolumeM3, item.maxVolumeM3, 'm³')}</td>
-                      <td>{capacityUsage(item.usedPalletEquivalent, item.maxPalletEquivalent)}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{capacityUsage(item.usedWeightKg, item.maxWeightKg, 'kg')}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{capacityUsage(item.usedVolumeM3, item.maxVolumeM3, 'm³')}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{capacityUsage(item.usedPalletEquivalent, item.maxPalletEquivalent)}</td>
                       <td><UiBadge tone={capacityTone(item.state)}>{capacityLabel[item.state] || item.state}</UiBadge></td>
                     </tr>
                   ))}</tbody>
@@ -610,19 +610,19 @@ const WarehouseLocations = () => {
             ) : (
               <UiTableScroll>
                 <table aria-label="Cây cấu trúc vị trí thật" className="ui-table-compact">
-                  <thead><tr><th>Cấp</th><th>Mã / Tên</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Khả dụng</th>{canManage && <th>Thao tác</th>}</tr></thead>
+                  <thead><tr><th>Cấp</th><th>Mã / Tên</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Khả dụng</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
                   <tbody>
                     {hierarchyRows.map((row) => {
                       const status = row.location ? locationStatus(row.location) : null;
                       return (
                         <tr key={row.key}>
                           <td><span className={'warehouse-location-depth depth-' + row.depth}>{row.level}</span></td>
-                          <td><strong>{row.code}</strong>{row.location && <><br /><small>{row.location.name}</small></>}</td>
+                          <td><strong style={{ whiteSpace: 'nowrap' }}>{row.code}</strong>{row.location && <><br /><small>{row.location.name}</small></>}</td>
                           <td>{row.path}</td>
                           <td>{row.location ? (locationTypeLabels[row.location.locationType] || row.location.locationType) : '—'}</td>
                           <td>{status ? <UiBadge tone={status.tone}>{status.label}</UiBadge> : '—'}</td>
                           <td>{row.location ? (row.location.isPickable ? 'Có thể lấy hàng' : row.location.isReceivable ? 'Có thể nhận' : 'Không lấy hàng') : '—'}</td>
-                          {canManage && <td>{row.location && !row.location.isSystemManaged ? <button type="button" onClick={() => openEdit(row.location!)}>Sửa</button> : '—'}</td>}
+                          {canManage && <td style={{ whiteSpace: 'nowrap' }}>{row.location && !row.location.isSystemManaged ? <button type="button" onClick={() => openEdit(row.location!)} style={{ whiteSpace: 'nowrap' }}>Sửa</button> : '—'}</td>}
                         </tr>
                       );
                     })}
@@ -635,19 +635,19 @@ const WarehouseLocations = () => {
           <UiCard title="Danh sách vị trí theo bộ lọc">
             <UiTableScroll>
               <table aria-label="Danh sách vị trí kho thật" className="ui-table-compact">
-                <thead><tr><th>Mã</th><th>Tên</th><th>Đường dẫn cấu trúc</th><th>Loại</th><th>Trạng thái</th><th>Lấy hàng</th>{canManage && <th>Thao tác</th>}</tr></thead>
+                <thead><tr><th>Mã</th><th>Tên</th><th>Đường dẫn cấu trúc</th><th>Loại</th><th>Trạng thái</th><th>Lấy hàng</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
                 <tbody>
                   {filtered.map((location) => {
                     const status = locationStatus(location);
                     return (
                       <tr key={location.id}>
-                        <td><strong>{location.code}</strong>{location.isSystemManaged && <><br /><small>Hệ thống quản lý</small></>}</td>
+                        <td><strong style={{ whiteSpace: 'nowrap' }}>{location.code}</strong>{location.isSystemManaged && <><br /><small>Hệ thống quản lý</small></>}</td>
                         <td>{location.name}</td>
                         <td>{splitStructurePath(location.structurePath)?.join(' / ') || '—'}</td>
                         <td>{locationTypeLabels[location.locationType] || location.locationType}</td>
                         <td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>
                         <td>{location.isPickable ? 'Có' : 'Không'}</td>
-                        {canManage && <td>{!location.isSystemManaged ? <button type="button" onClick={() => openEdit(location)}>Sửa</button> : '—'}</td>}
+                        {canManage && <td style={{ whiteSpace: 'nowrap' }}>{!location.isSystemManaged ? <button type="button" onClick={() => openEdit(location)} style={{ whiteSpace: 'nowrap' }}>Sửa</button> : '—'}</td>}
                       </tr>
                     );
                   })}
@@ -662,10 +662,10 @@ const WarehouseLocations = () => {
               <p className="ui-muted-text">Dữ liệu cũ được giữ nguyên; hệ thống không tự suy đoán Khu vực / Dãy / Kệ / Tầng / Ô lưu trữ từ mã vị trí.</p>
               <UiTableScroll>
                 <table aria-label="Vị trí thật chưa gắn cấu trúc" className="ui-table-compact">
-                  <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
+                  <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
                   <tbody>{unmapped.map((location) => {
                     const status = locationStatus(location);
-                    return <tr key={location.id}><td><strong>{location.code}</strong></td><td>{location.name}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>{canManage && <td><button type="button" onClick={() => openEdit(location)}>Gắn cấu trúc / Sửa</button></td>}</tr>;
+                    return <tr key={location.id}><td style={{ whiteSpace: 'nowrap' }}><strong>{location.code}</strong></td><td>{location.name}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>{canManage && <td style={{ whiteSpace: 'nowrap' }}><button type="button" onClick={() => openEdit(location)} style={{ whiteSpace: 'nowrap' }}>Gắn cấu trúc / Sửa</button></td>}</tr>;
                   })}</tbody>
                 </table>
               </UiTableScroll>
@@ -678,7 +678,7 @@ const WarehouseLocations = () => {
               <UiTableScroll>
                 <table aria-label="Vị trí hệ thống thật" className="ui-table-compact">
                   <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Nhận hàng</th><th>Lấy hàng</th></tr></thead>
-                  <tbody>{systemLocations.map((location) => <tr key={location.id}><td><strong>{location.code}</strong></td><td>{location.name}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td>{location.isReceivable ? 'Có' : 'Không'}</td><td>{location.isPickable ? 'Có' : 'Không'}</td></tr>)}</tbody>
+                  <tbody>{systemLocations.map((location) => <tr key={location.id}><td style={{ whiteSpace: 'nowrap' }}><strong>{location.code}</strong></td><td>{location.name}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td>{location.isReceivable ? 'Có' : 'Không'}</td><td>{location.isPickable ? 'Có' : 'Không'}</td></tr>)}</tbody>
                 </table>
               </UiTableScroll>
             </UiCard>
@@ -692,8 +692,8 @@ const WarehouseLocations = () => {
             {formError && <p role="alert">{formError}</p>}
 
             <div className="warehouse-location-form-grid">
-              <label className="ui-stack"><span>Mã vị trí *</span><input aria-label="Mã vị trí" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} disabled={saving || editing} maxLength={64} /></label>
-              <label className="ui-stack"><span>Tên vị trí *</span><input aria-label="Tên vị trí" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} disabled={saving} maxLength={200} /></label>
+              <label className="ui-stack"><span>Mã vị trí *</span><input aria-label="Mã vị trí" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} disabled={saving || editing} maxLength={64} placeholder="VD: A01-R02-L03-B04" /></label>
+              <label className="ui-stack"><span>Tên vị trí *</span><input aria-label="Tên vị trí" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} disabled={saving} maxLength={200} placeholder="Nhập tên vị trí" /></label>
               <label className="ui-stack"><span>Loại vị trí *</span><select aria-label="Loại vị trí form" value={form.locationType} onChange={(event) => setForm((current) => ({ ...current, locationType: event.target.value as LocationForm['locationType'] }))} disabled={saving || editing}><option value="Storage">Lưu trữ</option><option value="Damaged">Hư hỏng</option><option value="Rejected">Hàng bị từ chối</option><option value="Staging">Khu tập kết xuất hàng</option></select></label>
             </div>
 

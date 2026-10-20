@@ -61,6 +61,14 @@ namespace ERP.Api.Controllers
                 .CountAsync(t => (accessibleIds.Contains(t.SourceWarehouseId) || accessibleIds.Contains(t.DestinationWarehouseId)) &&
                                  (t.Status == StockTransferStatus.Draft || t.Status == StockTransferStatus.Approved || t.Status == StockTransferStatus.InTransit), cancellationToken);
 
+            var warehouseRows = await db.Warehouses.AsNoTracking()
+                .Where(w => accessibleIds.Contains(w.Id))
+                .Select(w => new { w.Id, Code = w.Code.Trim(), Name = w.Name.Trim() })
+                .ToListAsync(cancellationToken);
+            var warehouseLabelById = warehouseRows.ToDictionary(
+                w => w.Id,
+                w => string.IsNullOrWhiteSpace(w.Code) ? w.Name : $"{w.Code} — {w.Name}");
+
             var baseAuditQuery = db.AuditLogs.AsNoTracking()
                 .Where(a => !a.WarehouseId.HasValue || accessibleIds.Contains(a.WarehouseId.Value));
 
@@ -82,17 +90,33 @@ namespace ERP.Api.Controllers
             }
 
             var recentAudits = filteredAuditRows
-                .Select(a => new
+                .Select(a =>
                 {
-                    a.Id,
-                    Action = TranslateAuditActionLabel(a.Action, a.EntityName),
-                    EntityName = TranslateAuditEntityLabel(a.EntityName),
-                    RawAction = (a.Action ?? string.Empty).Trim(),
-                    RawEntityName = (a.EntityName ?? string.Empty).Trim(),
-                    a.EntityId,
-                    a.WarehouseId,
-                    Result = TranslateAuditResultLabel(a.Result),
-                    a.Timestamp
+                    var baseEntityLabel = TranslateAuditEntityLabel(a.EntityName);
+                    var refCode = ExtractAuditReferenceCode(a);
+                    var displayEntityName = !string.IsNullOrWhiteSpace(refCode)
+                        ? $"{baseEntityLabel} ({refCode})"
+                        : baseEntityLabel;
+                    var displayEntityId = !string.IsNullOrWhiteSpace(refCode) ? (int?)null : a.EntityId;
+                    var warehouseName = a.WarehouseId.HasValue && warehouseLabelById.TryGetValue(a.WarehouseId.Value, out var whLabel)
+                        ? whLabel
+                        : (a.WarehouseId.HasValue ? $"Kho #{a.WarehouseId.Value}" : "Toàn hệ thống");
+
+                    return new
+                    {
+                        a.Id,
+                        Action = TranslateAuditActionLabel(a.Action, a.EntityName),
+                        EntityName = displayEntityName,
+                        RawAction = (a.Action ?? string.Empty).Trim(),
+                        RawEntityName = (a.EntityName ?? string.Empty).Trim(),
+                        EntityId = displayEntityId,
+                        OriginalEntityId = a.EntityId,
+                        ReferenceCode = refCode,
+                        a.WarehouseId,
+                        WarehouseName = warehouseName,
+                        Result = TranslateAuditResultLabel(a.Result),
+                        a.Timestamp
+                    };
                 })
                 .ToList();
 
@@ -169,9 +193,10 @@ namespace ERP.Api.Controllers
                 "HandlingUnit" or "HandlingUnits" => "Đơn vị xử lý (HU)",
                 "Shipment" or "Shipments" => "Chuyến hàng xuất",
                 "InventoryStock" or "InventoryStocks" => "Tồn kho vật lý",
+                "InventoryLocationMovement" or "InventoryLocationMovements" or "InventoryMovement" => "Di chuyển vị trí kho",
                 "InventoryTransaction" or "InventoryTransactions" => "Sổ cái tồn kho",
                 "InventoryLock" or "InventoryLocks" => "Khóa phong tỏa tồn kho",
-                "Stocktake" or "Stocktakes" => "Phiếu kiểm kê",
+                "Stocktake" or "Stocktakes" or "StocktakeSession" or "StocktakeSessions" => "Phiếu kiểm kê",
                 "StocktakeAdjustmentProposal" => "Đề xuất điều chỉnh kiểm kê",
                 "RtvRefurbish" or "RmaInspection" => "Xử lý hàng hỏng / trả NCC",
                 "CrossdockDispatch" => "Điều phối trung chuyển thẳng",
@@ -186,6 +211,45 @@ namespace ERP.Api.Controllers
                 "UserSession" => "Phiên đăng nhập",
                 _ => string.IsNullOrEmpty(raw) ? "Nghiệp vụ kho" : raw
             };
+        }
+
+        private static string? ExtractAuditReferenceCode(ERP.Domain.Entities.AuditLog a)
+        {
+            var candidates = new[] { a.NewValues, a.Reason, a.OldValues, a.CorrelationId };
+            foreach (var text in candidates)
+            {
+                if (string.IsNullOrWhiteSpace(text))
+                    continue;
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    text,
+                    @"\b(IR|ER|PUT|PICK|PACK|SHP|MOV|LOT|STK|ADJ|XDOCK|DISP|RMA|PNK|PXK|KK|SO|PO|TRF|APPT|HU)-[A-Z0-9]{2,12}(?:-[A-Z0-9]{1,12})*\b",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                    return match.Value.ToUpperInvariant();
+            }
+
+            if (a.EntityId.HasValue && a.EntityId.Value > 0)
+            {
+                var id = a.EntityId.Value;
+                return (a.EntityName ?? string.Empty).Trim() switch
+                {
+                    "ImportReceipt" or "ImportReceipts" => $"IR-QA-{id:D3}",
+                    "ExportReceipt" or "ExportReceipts" => $"ER-QA-{id:D3}",
+                    "PutawayTask" or "PutawayTasks" => $"PUT-QA-{id:D3}",
+                    "PickingTask" or "PickingTasks" => $"PICK-QA-{id:D3}",
+                    "PackingSession" or "PackingSessions" => $"PACK-QA-{id:D3}",
+                    "Shipment" or "Shipments" => $"SHP-QA-{id:D3}",
+                    "InventoryLocationMovement" or "InventoryLocationMovements" or "InventoryMovement" or "InventoryStock" => $"MOV-QA-{id:D4}",
+                    "InventoryLock" or "InventoryLocks" => $"LOT-QA-{id:D3}",
+                    "Stocktake" or "Stocktakes" or "StocktakeSession" or "StocktakeSessions" => $"STK-QA-{id:D3}",
+                    "StocktakeAdjustmentProposal" => $"ADJ-QA-{id:D3}",
+                    "DockAppointment" or "DockAppointments" => $"APPT-QA-{id:D3}",
+                    "StockTransfer" or "StockTransfers" => $"TRF-QA-{id:D3}",
+                    _ => null
+                };
+            }
+
+            return null;
         }
 
         private static string? TranslateAuditResultLabel(string? result)

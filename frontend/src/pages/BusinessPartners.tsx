@@ -100,7 +100,7 @@ const BusinessPartners = () => {
         </UiMetricGrid>
       </UiCard>
       <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết Thời gian Phục vụ Đối tác">
-        <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
           <div className="ui-subcard">
             <strong>Hồ sơ cam kết Nhà cung cấp</strong><br />
             {activeSuppliersCount} hồ sơ • Cam kết thời gian tiếp nhận chuẩn: 24h

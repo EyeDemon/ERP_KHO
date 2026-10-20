@@ -309,17 +309,31 @@ const WarehouseCalendar = () => {
           <UiCard title="Ca làm việc & Năng lực xử lý">
             <div className="ui-inline-actions">{canManage && <button type="button" className="ui-primary-button" onClick={() => openShift()} disabled={!calendar.isConfigured}>Thêm ca</button>}</div>
             <UiTableScroll>
-              <table aria-label="Ca làm việc và capacity" className="ui-table-compact">
-                <thead><tr><th>Ca</th><th>Khung giờ</th><th>Nhân sự</th><th>Pallet nhập/giờ</th><th>Đơn xuất/giờ</th><th>Cửa nhận/xuất</th><th>Giờ công</th><th>Sức chứa tập kết</th><th>Trạm đóng gói</th><th>Thiết bị</th><th>Trạng thái</th>{canManage && <th>Thao tác</th>}</tr></thead>
+              <table aria-label="Ca làm việc và capacity" className="ui-table-compact" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <colgroup>
+                  <col style={{ width: canManage ? '17%' : '19%' }} />
+                  <col style={{ width: canManage ? '10%' : '12%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '8.5%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '6.5%' }} />
+                  <col style={{ width: '8.5%' }} />
+                  <col style={{ width: '7.5%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '7%' }} />
+                  {canManage && <col style={{ width: '6%' }} />}
+                </colgroup>
+                <thead><tr><th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Ca</th><th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Khung giờ</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Nhân sự</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Pallet nhập/giờ</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Đơn xuất/giờ</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Cửa nhận/xuất</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Giờ công</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Sức chứa tập kết</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Trạm đóng gói</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Thiết bị</th><th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Thao tác</th>}</tr></thead>
                 <tbody>
                   {calendar.shifts.map(shift => <tr key={shift.id}>
-                    <td><strong>{shift.code}</strong><br /><small>{shift.name}</small></td>
+                    <td><strong style={{ whiteSpace: 'nowrap' }}>{shift.code}</strong><br /><small>{shift.name}</small></td>
                     <td>{shift.startTimeLocal}–{shift.endTimeLocal}{shift.overnight ? ' • +1 ngày' : ''}<br /><small>Nghỉ {shift.breakMinutes} phút</small></td>
-                    <td>{shift.plannedHeadcount}</td><td>{shift.inboundPalletsPerHour ?? '—'}</td><td>{shift.outboundOrdersPerHour ?? '—'}</td>
-                    <td>{shift.dockSlots ?? '—'}</td><td>{shift.laborHours ?? '—'}</td><td>{shift.stagingCapacity ?? '—'}</td>
-                    <td>{shift.packingStations ?? '—'}</td><td>{shift.equipmentAvailable ?? '—'}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shift.plannedHeadcount}</td><td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shift.inboundPalletsPerHour ?? '—'}</td><td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shift.outboundOrdersPerHour ?? '—'}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shift.dockSlots ?? '—'}</td><td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shift.laborHours ?? '—'}</td><td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shift.stagingCapacity ?? '—'}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shift.packingStations ?? '—'}</td><td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shift.equipmentAvailable ?? '—'}</td>
                     <td><UiBadge tone={shift.isActive ? 'success' : 'neutral'}>{shift.isActive ? 'Hoạt động' : 'Ngừng'}</UiBadge></td>
-                    {canManage && <td><button type="button" onClick={() => openShift(shift)}>Sửa</button></td>}
+                    {canManage && <td style={{ whiteSpace: 'nowrap' }}><button type="button" onClick={() => openShift(shift)} style={{ whiteSpace: 'nowrap' }}>Sửa</button></td>}
                   </tr>)}
                   {calendar.shifts.length === 0 && <tr><td className="ui-empty-cell" colSpan={canManage ? 12 : 11}>Chưa có ca làm việc.</td></tr>}
                 </tbody>
@@ -328,9 +342,9 @@ const WarehouseCalendar = () => {
           </UiCard>
 
           {shiftForm && canManage && <UiCard title={shiftForm.id ? 'Sửa ca ' + shiftForm.code : 'Thêm ca làm việc'}>
-            <form className="ui-form-grid" onSubmit={saveShift}>
-              <label className="ui-stack"><span>Mã ca *</span><input aria-label="Mã ca" value={shiftForm.code} disabled={saving || Boolean(shiftForm.id)} onChange={event => setShiftForm(current => current && ({ ...current, code: event.target.value.toUpperCase() }))} required /></label>
-              <label className="ui-stack"><span>Tên ca *</span><input aria-label="Tên ca" value={shiftForm.name} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, name: event.target.value }))} required /></label>
+            <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }} onSubmit={saveShift}>
+              <label className="ui-stack"><span>Mã ca *</span><input aria-label="Mã ca" placeholder="VD: SHIFT-1" value={shiftForm.code} disabled={saving || Boolean(shiftForm.id)} onChange={event => setShiftForm(current => current && ({ ...current, code: event.target.value.toUpperCase() }))} required /></label>
+              <label className="ui-stack"><span>Tên ca *</span><input aria-label="Tên ca" placeholder="VD: Ca sáng" value={shiftForm.name} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, name: event.target.value }))} required /></label>
               <label className="ui-stack"><span>Bắt đầu *</span><input aria-label="Giờ bắt đầu ca" type="time" value={shiftForm.startTimeLocal} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, startTimeLocal: event.target.value }))} required /></label>
               <label className="ui-stack"><span>Kết thúc *</span><input aria-label="Giờ kết thúc ca" type="time" value={shiftForm.endTimeLocal} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, endTimeLocal: event.target.value }))} required /></label>
               <label className="ui-stack"><span>Nghỉ (phút)</span><input aria-label="Phút nghỉ ca" type="number" min="0" value={shiftForm.breakMinutes} disabled={saving} onChange={event => setShiftForm(current => current && ({ ...current, breakMinutes: event.target.value }))} /></label>
@@ -354,7 +368,7 @@ const WarehouseCalendar = () => {
               </button>
               {shiftVerification && (
                 <UiBadge tone="success">
-                  {`Đã kiểm định ${shiftVerification.verificationId} • ${shiftVerification.shiftCoverageStatus}`}
+                  {`Đã kiểm định ${shiftVerification.verificationId} • ${({ '24_7_CUTOFF_ALIGNED': 'Đã đồng bộ độ phủ ca trực & cửa sổ cắt đơn', SHIFT_COVERAGE_VALIDATED: 'Độ phủ ca trực đạt chuẩn' } as Record<string, string>)[shiftVerification.shiftCoverageStatus] || shiftVerification.shiftCoverageStatus}`}
                 </UiBadge>
               )}
               <button type="button" disabled={saving || governanceBusy} onClick={() => void optimizeLaborInterleaving()}>
@@ -362,12 +376,12 @@ const WarehouseCalendar = () => {
               </button>
               {laborOptimization && (
                 <UiBadge tone="success">
-                  {`Đã tối ưu ${laborOptimization.optimizationId} • ${laborOptimization.interleavingMode} • ${laborOptimization.ergonomicSafetyStatus}`}
+                  {`Đã tối ưu ${laborOptimization.optimizationId} • ${({ DUAL_COMMAND_INTERLEAVED: 'Đan xen chu kỳ kép Cất/Lấy hàng' } as Record<string, string>)[laborOptimization.interleavingMode] || laborOptimization.interleavingMode} • ${({ OSHA_ERGONOMIC_COMPLIANT: 'Đạt chuẩn an toàn công thái học', ERGONOMIC_SAFE: 'An toàn công thái học' } as Record<string, string>)[laborOptimization.ergonomicSafetyStatus] || laborOptimization.ergonomicSafetyStatus}`}
                 </UiBadge>
               )}
             </div>
             {canManage && (
-              <form className="ui-form-grid" onSubmit={saveException}>
+              <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }} onSubmit={saveException}>
                 <label className="ui-stack">
                   <span>Loại ngoại lệ *</span>
                   <select
@@ -387,7 +401,7 @@ const WarehouseCalendar = () => {
                     aria-label="Khung giờ ngoại lệ lịch kho"
                     value={exceptionForm.windowDateOrRange}
                     disabled={saving}
-                    placeholder="VD: 2026-04-30 .. 2026-05-01 hoặc 2026-10-20 00:00–04:00"
+                    placeholder="VD: 2026-04-30 .. 2026-05-01"
                     onChange={event => setExceptionForm(current => ({ ...current, windowDateOrRange: event.target.value }))}
                     required
                   />
@@ -398,7 +412,7 @@ const WarehouseCalendar = () => {
                     aria-label="Lý do ngoại lệ lịch kho"
                     value={exceptionForm.reason}
                     disabled={saving}
-                    placeholder="Nhập lý do nghỉ lễ, bảo trì hệ thống hoặc mở kho khẩn cấp..."
+                    placeholder="VD: Nghỉ lễ hoặc bảo trì định kỳ"
                     onChange={event => setExceptionForm(current => ({ ...current, reason: event.target.value }))}
                     required
                   />

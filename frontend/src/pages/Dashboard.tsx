@@ -15,7 +15,7 @@ type RecentActivity = {
   action: string;
   entityName: string;
   entityId: number;
-  warehouseId?: number | null;
+  warehouseId?: number | null; warehouseName?: string | null; referenceCode?: string | null;
   result?: string | null;
   timestamp: string;
 };
@@ -636,8 +636,8 @@ const Dashboard = () => {
                     <tr key={item.id}>
                       <td>{new Date(item.timestamp).toLocaleString('vi-VN')}</td>
                       <td><UiBadge>{actionLabel(item.action)}</UiBadge></td>
-                      <td>{entityNameLabel(item.entityName)}{item.entityId ? ` #${item.entityId}` : ''}</td>
-                      <td>{item.warehouseId ? `Kho #${item.warehouseId}` : 'Toàn hệ thống'}</td>
+                      <td>{entityNameLabel(item.entityName)}{item.referenceCode && !item.entityName.includes(`(${item.referenceCode})`) ? ` (${item.referenceCode})` : item.entityId ? ` #${item.entityId}` : ''}</td>
+                      <td>{item.warehouseName || (item.warehouseId ? `Kho #${item.warehouseId}` : 'Toàn hệ thống')}</td>
                       <td>
                         <UiBadge tone={item.result === 'Success' || !item.result ? 'success' : 'warning'}>
                           {item.result === 'Success' || !item.result ? 'Thành công' : item.result}

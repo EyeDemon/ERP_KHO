@@ -277,7 +277,7 @@ const WarehouseMap = () => {
       </UiMetricGrid>
 
       <UiCard title="Tổng quan Mật độ Sơ đồ Không gian Kho">
-        <div className="warehouse-map-layout-form">
+        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
           <div>
             <strong>Độ phủ tọa độ sơ đồ không gian</strong><br />
             {items.length > 0 ? Math.round((mappedItems.length / items.length) * 100) : 0}% ({mappedItems.length}/{items.length} vị trí)
@@ -310,7 +310,7 @@ const WarehouseMap = () => {
           </button>
           {biSyncResult && (
             <UiBadge tone="success">
-              {biSyncResult.snapshotId} • {biSyncResult.status}
+              {biSyncResult.snapshotId} • {({ BI_SNAPSHOT_SYNCED: 'Đã đồng bộ chuẩn dữ liệu BI', READY_FOR_BI_EXPORT: 'Sẵn sàng xuất dữ liệu BI', SYNCED: 'Đã đồng bộ' } as Record<string, string>)[biSyncResult.status] || biSyncResult.status}
             </UiBadge>
           )}
         </div>
@@ -385,17 +385,17 @@ const WarehouseMap = () => {
           <UiCard title="Chi tiết Bản đồ Nhiệt Vận hành">
             <UiTableScroll>
               <table aria-label="Chi tiết heatmap kho thật" className="ui-table-compact">
-                <thead><tr><th>Vị trí</th><th>Phân lớp lưu trữ</th><th>Mức sử dụng</th><th>Sức chứa</th><th>Dịch chuyển 60p</th><th>Cất hàng mở</th><th>Hoạt động</th>{canManage && <th>Bố trí</th>}</tr></thead>
+                <thead><tr><th>Vị trí</th><th>Phân lớp lưu trữ</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Mức sử dụng</th><th>Sức chứa</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Dịch chuyển 60p</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Cất hàng mở</th><th>Hoạt động</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Bố trí</th>}</tr></thead>
                 <tbody>{items.map(item => (
                   <tr key={item.locationId}>
-                    <td><strong>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
+                    <td><strong style={{ whiteSpace: 'nowrap' }}>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
                     <td>{item.storageClass || '—'}</td>
-                    <td>{item.utilizationPercent != null ? item.utilizationPercent + '%' : 'Chưa có'}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.utilizationPercent != null ? item.utilizationPercent + '%' : 'Chưa có'}</td>
                     <td><UiBadge tone={capacityTone(item)}>{stateLabel[item.capacityState] || item.capacityState}</UiBadge></td>
-                    <td>{item.recentMovementCount}</td>
-                    <td>{item.activePutawayCount}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.recentMovementCount}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.activePutawayCount}</td>
                     <td>{activityLabel[item.activityLevel] || item.activityLevel}</td>
-                    {canManage && <td><button type="button" onClick={() => openLayout(item)} disabled={!item.rowVersion}>{mapped(item) ? 'Sửa bố trí' : 'Bố trí'}</button></td>}
+                    {canManage && <td style={{ whiteSpace: 'nowrap' }}><button type="button" onClick={() => openLayout(item)} disabled={!item.rowVersion} style={{ whiteSpace: 'nowrap' }}>{mapped(item) ? 'Sửa bố trí' : 'Bố trí'}</button></td>}
                   </tr>
                 ))}</tbody>
               </table>
@@ -407,11 +407,11 @@ const WarehouseMap = () => {
               <p className="ui-muted-text">Hệ thống không tự suy đoán tọa độ từ đường dẫn cấu trúc. Quản lý kho phải bố trí bằng tọa độ phần trăm.</p>
               <UiTableScroll>
                 <table aria-label="Location chưa bố trí bản đồ" className="ui-table-compact">
-                  <thead><tr><th>Mã</th><th>Tên</th><th>Đường dẫn cấu trúc</th><th>Phân lớp lưu trữ</th>{canManage && <th>Thao tác</th>}</tr></thead>
+                  <thead><tr><th>Mã</th><th>Tên</th><th>Đường dẫn cấu trúc</th><th>Phân lớp lưu trữ</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
                   <tbody>{unmappedItems.map(item => (
                     <tr key={item.locationId}>
-                      <td><strong>{item.code}</strong></td><td>{item.name}</td><td>{item.structurePath?.split('/').join(' / ') || '—'}</td><td>{item.storageClass || '—'}</td>
-                      {canManage && <td><button type="button" onClick={() => openLayout(item)} disabled={!item.rowVersion}>Bố trí</button></td>}
+                      <td style={{ whiteSpace: 'nowrap' }}><strong>{item.code}</strong></td><td>{item.name}</td><td>{item.structurePath?.split('/').join(' / ') || '—'}</td><td>{item.storageClass || '—'}</td>
+                      {canManage && <td style={{ whiteSpace: 'nowrap' }}><button type="button" onClick={() => openLayout(item)} disabled={!item.rowVersion} style={{ whiteSpace: 'nowrap' }}>Bố trí</button></td>}
                     </tr>
                   ))}</tbody>
                 </table>
@@ -422,7 +422,7 @@ const WarehouseMap = () => {
           {layout && canManage && (
             <UiCard title={'Bố trí bản đồ • ' + layout.code}>
               <p className="ui-muted-text">Tọa độ dùng phần trăm khung bản đồ 0–100. X + Rộng và Y + Cao không được vượt 100.</p>
-              <div className="warehouse-map-layout-form">
+              <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, maxWidth: '100%' }}>
                 <label className="ui-stack"><span>X (%)</span><input aria-label="Map X" type="number" min="0" max="100" step="0.01" value={layout.x} onChange={event => setLayout(current => current && ({ ...current, x: event.target.value }))} /></label>
                 <label className="ui-stack"><span>Y (%)</span><input aria-label="Map Y" type="number" min="0" max="100" step="0.01" value={layout.y} onChange={event => setLayout(current => current && ({ ...current, y: event.target.value }))} /></label>
                 <label className="ui-stack"><span>Rộng (%)</span><input aria-label="Map Width" type="number" min="0.01" max="100" step="0.01" value={layout.width} onChange={event => setLayout(current => current && ({ ...current, width: event.target.value }))} /></label>

@@ -30,6 +30,7 @@ type WarehouseForm = {
   isActive: boolean;
 };
 
+const viNetworkTerm = (val: string) => ({ HUB_AND_SPOKE: 'Mô hình Trung tâm – Vệ tinh', OPTIMAL_MHE_BALANCED: 'Đã cân bằng tải & thiết bị MHE tối ưu', CAPACITY_WITHIN_THRESHOLD: 'Sức chứa trong ngưỡng an toàn', MHE_FLEET_READY: 'Đội xe nâng/MHE sẵn sàng 100%', READY: 'Sẵn sàng' }[val] || val);
 const PAGE_SIZE = 10;
 
 const messageOf = (failure: unknown, fallback: string) => {
@@ -236,7 +237,7 @@ const Warehouses = () => {
       </UiMetricGrid>
 
       <UiCard title="Tổng quan Mạng lưới Kho & Trạng thái Vận hành">
-        <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
           <div className="ui-subcard">
             <strong>Tỷ lệ kho đang vận hành</strong><br />
             {activeCount}/{warehouses.length} kho hoạt động ({warehouses.length > 0 ? Math.round((activeCount / warehouses.length) * 100) : 0}%)
@@ -256,7 +257,7 @@ const Warehouses = () => {
           </button>
           {networkMheEval && (
             <UiBadge tone="success">
-              {`Đã đánh giá ${networkMheEval.evaluationId}: ${networkMheEval.networkTopologyMode} • ${networkMheEval.capacityForecastStatus} • ${networkMheEval.mheFleetReadiness}`}
+              {`Đã đánh giá ${networkMheEval.evaluationId}: ${viNetworkTerm(networkMheEval.networkTopologyMode)} • ${viNetworkTerm(networkMheEval.capacityForecastStatus)} • ${viNetworkTerm(networkMheEval.mheFleetReadiness)}`}
             </UiBadge>
           )}
         </div>
@@ -300,7 +301,7 @@ const Warehouses = () => {
                     <td>{warehouse.address || '—'}</td>
                     <td><UiBadge tone={warehouse.isActive ? 'success' : 'neutral'}>{warehouse.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
                     {canManage && <td style={{ whiteSpace: 'nowrap' }}>
-                      <div className="ui-inline-actions">
+                      <div className="ui-inline-actions" style={{ display: 'inline-flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
                         <button type="button" aria-label={`Sửa kho ${warehouse.code}`} onClick={() => openEdit(warehouse)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>
                         <button type="button" aria-label={`Xóa kho ${warehouse.code}`} onClick={() => void remove(warehouse)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>
                       </div>
@@ -332,7 +333,7 @@ const Warehouses = () => {
 
       {showForm && canManage && (
         <UiCard title={editing ? `Sửa kho ${form.code}` : 'Thêm kho'}>
-          <form className="ui-form-grid" onSubmit={save}>
+          <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }} onSubmit={save}>
             {formError && <p role="alert">{formError}</p>}
 
             <label className="ui-stack">
@@ -342,7 +343,7 @@ const Warehouses = () => {
                 value={form.code}
                 onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
                 disabled={saving || editing}
-                maxLength={50}
+                maxLength={50} placeholder="VD: WH-HCM" style={{ height: 38, boxSizing: 'border-box' }}
                 required
               />
             </label>
@@ -354,7 +355,7 @@ const Warehouses = () => {
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                 disabled={saving}
-                maxLength={200}
+                maxLength={200} placeholder="Nhập tên kho" style={{ height: 38, boxSizing: 'border-box' }}
                 required
               />
             </label>
@@ -366,7 +367,7 @@ const Warehouses = () => {
                 value={form.address}
                 onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
                 disabled={saving}
-                rows={3}
+                rows={1} placeholder="Nhập địa chỉ kho" style={{ height: 38, minHeight: 38, boxSizing: 'border-box' }}
               />
             </label>
 

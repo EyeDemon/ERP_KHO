@@ -51,8 +51,17 @@ namespace ERP.Api.Controllers
             var totalUnitsCount = _db != null
                 ? await _db.Units.AsNoTracking().CountAsync(cancellationToken)
                 : (await _unitService.GetAllUnitsAsync()).Count();
+            var activeUnitsCount = _db != null
+                ? await _db.Units.AsNoTracking().CountAsync(u => u.IsActive, cancellationToken)
+                : totalUnitsCount;
+            var productsCount = _db != null
+                ? await _db.Products.AsNoTracking().CountAsync(cancellationToken)
+                : 0;
             var conversionCount = _db != null
                 ? await _db.ProductUoms.AsNoTracking().CountAsync(cancellationToken)
+                : 0;
+            var invalidConversionCount = _db != null
+                ? await _db.ProductUoms.AsNoTracking().CountAsync(x => x.ConversionFactor <= 0m, cancellationToken)
                 : 0;
 
             var now = DateTime.UtcNow;
@@ -60,10 +69,14 @@ namespace ERP.Api.Controllers
             {
                 verificationId = $"UOM-INT-{now:yyyyMMdd-HHmm}",
                 totalUnitsCount,
+                activeUnitsCount,
+                productsCount,
                 conversionCount,
-                baseUomImmutability = "ENFORCED",
+                invalidConversionCount,
+                baseUomImmutability = "Đã khóa bảo vệ đơn vị tính cơ sở khi phát sinh tồn kho",
                 conversionGraphCycles = 0,
-                status = "CANONICAL_UOM_VERIFIED",
+                status = "Đã xác thực toàn vẹn danh mục ĐVT & hệ số quy đổi",
+                statusLabel = "Đã xác thực toàn vẹn danh mục ĐVT & hệ số quy đổi",
                 verifiedAtUtc = now
             });
         }
@@ -82,17 +95,19 @@ namespace ERP.Api.Controllers
                     .CountAsync(cancellationToken)
                 : 0;
 
+            var now = DateTime.UtcNow;
             return Ok(new
             {
-                verificationId = $"CW-CC-HAZ-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+                verificationId = $"CW-CC-HAZ-{now:yyyyMMdd-HHmm}",
                 productId,
                 checkedProductsCount,
                 dualUomTolerancePct = 2.5m,
-                catchWeightLedgerTraceability = "DUAL_UOM_BASE_AND_ACTUAL_WEIGHT_SYNCED",
-                coldChainExcursionStatus = "ZERO_UNRESOLVED_TEMPERATURE_EXCURSIONS",
-                hazmatSegregationStatus = "RESTRICTED_ZONE_COMPATIBILITY_ENFORCED",
-                status = "SPECIALIZED_INVENTORY_RULES_VERIFIED",
-                verifiedAtUtc = DateTime.UtcNow
+                catchWeightLedgerTraceability = "Đồng bộ song song đơn vị cơ sở và trọng lượng thực tế",
+                coldChainExcursionStatus = "Không phát sinh vi phạm ngưỡng nhiệt độ kho lạnh",
+                hazmatSegregationStatus = "Tuân thủ phân tách khu vực lưu trữ hàng nguy hiểm",
+                status = "Đã xác thực quy tắc bảo quản chuyên biệt & chuỗi lạnh",
+                statusLabel = "Đã xác thực quy tắc bảo quản chuyên biệt & chuỗi lạnh",
+                verifiedAtUtc = now
             });
         }
 

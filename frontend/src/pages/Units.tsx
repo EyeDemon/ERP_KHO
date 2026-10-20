@@ -209,7 +209,7 @@ const Units = () => {
       const res = await apiClient.post('/api/Units/verify-catch-weight-coldchain', {});
       const data = res?.data as { verificationId?: string; status?: string } | undefined;
       if (data?.verificationId && data?.status) {
-        setCatchWeightColdChainResult(`${data.verificationId} • ${data.status}`);
+        setCatchWeightColdChainResult(`${data.verificationId} • ${({ CATCH_WEIGHT_COLDCHAIN_VALIDATED: 'Đã chuẩn hóa tồn kho hai ĐVT, chuỗi lạnh & hàng nguy hiểm', DUAL_UOM_COLDCHAIN_READY: 'Sẵn sàng tồn kho hai ĐVT & chuỗi lạnh' } as Record<string, string>)[data.status] || data.status}`);
       } else {
         setCatchWeightColdChainResult('');
         setError('Phản hồi kiểm định trọng lượng biến thiên và chuỗi lạnh không hợp lệ từ máy chủ.');
@@ -241,7 +241,7 @@ const Units = () => {
       </UiMetricGrid>
 
       <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi">
-        <div className="ui-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
           <div className="ui-subcard">
             <strong>Tỷ lệ đơn vị tính kích hoạt</strong><br />
             {activeCount}/{units.length} ĐVT hoạt động ({units.length > 0 ? Math.round((activeCount / units.length) * 100) : 0}%)
@@ -261,7 +261,7 @@ const Units = () => {
           </button>
           {uomIntegrity && (
             <UiBadge tone="success">
-              {`Đã kiểm định ${uomIntegrity.verificationId} • ${uomIntegrity.status}`}
+              {`Đã kiểm định ${uomIntegrity.verificationId} • ${({ UOM_HIERARCHY_VALIDATED: 'Đã chuẩn hóa hệ số quy đổi & bất biến ĐVT cơ sở', BASE_UOM_IMMUTABLE: 'ĐVT cơ sở bất biến hợp lệ' } as Record<string, string>)[uomIntegrity.status] || uomIntegrity.status}`}
             </UiBadge>
           )}
           <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyCatchWeightColdChain()}>
@@ -309,7 +309,7 @@ const Units = () => {
                     <td>{unit.name}</td>
                     <td><UiBadge tone={unit.isActive ? 'success' : 'neutral'}>{unit.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
                     {canManage && <td style={{ whiteSpace: 'nowrap' }}>
-                      <div className="ui-inline-actions">
+                      <div className="ui-inline-actions" style={{ display: 'inline-flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
                         <button type="button" aria-label={`Sửa đơn vị ${unit.code}`} onClick={() => openEdit(unit)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>
                         <button type="button" aria-label={`Xóa đơn vị ${unit.code}`} onClick={() => void remove(unit)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>
                       </div>
@@ -341,7 +341,7 @@ const Units = () => {
 
       {showForm && canManage && (
         <UiCard title={editing ? `Sửa đơn vị ${form.code}` : 'Thêm đơn vị tính'}>
-          <form className="ui-form-grid" onSubmit={save}>
+          <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }} onSubmit={save}>
             {formError && <p role="alert">{formError}</p>}
 
             <label className="ui-stack">
@@ -351,7 +351,7 @@ const Units = () => {
                 value={form.code}
                 onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
                 disabled={saving || editing}
-                maxLength={50}
+                maxLength={50} placeholder="VD: THUNG" style={{ height: 38, boxSizing: 'border-box' }}
                 required
               />
             </label>
@@ -363,7 +363,7 @@ const Units = () => {
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                 disabled={saving}
-                maxLength={200}
+                maxLength={200} placeholder="Nhập tên đơn vị tính" style={{ height: 38, boxSizing: 'border-box' }}
                 required
               />
             </label>

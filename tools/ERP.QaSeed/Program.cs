@@ -425,6 +425,65 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         storageBin2.IsPickable = true;
     }
 
+    var extraStructuredBins = new (string Code, string Name, string StructurePath, WarehouseLocationType LocType, bool Pickable, bool Receivable, decimal MaxKg, decimal MaxVol, decimal MaxPallet, decimal MapX, decimal MapY, decimal MapW, decimal MapH)[]
+    {
+        ("BIN-A01-03", "Kệ lưu trữ hàng nhanh A01-03", "ZONE-A/AISLE-01/RACK-02/SHELF-01/BIN-03", WarehouseLocationType.Storage, true, false, 1500m, 15m, 10m, 68m, 44m, 26m, 24m),
+        ("RCV-01", "Cửa tiếp nhận tiêu chuẩn RCV-01", "ZONE-IN/AISLE-01/RACK-01/SHELF-01/BIN-RCV01", WarehouseLocationType.Receiving, false, true, 2500m, 25m, 16m, 6m, 10m, 26m, 22m),
+        ("STG-OUT-01", "Khu tập kết xuất hàng STG-OUT-01", "ZONE-OUT/AISLE-01/RACK-01/SHELF-01/BIN-STG01", WarehouseLocationType.Staging, false, false, 2500m, 25m, 16m, 37m, 10m, 26m, 22m),
+        ("DMG-01", "Kệ biệt trữ hàng lỗi DMG-01", "ZONE-QC/AISLE-01/RACK-01/SHELF-01/BIN-DMG01", WarehouseLocationType.Damaged, false, false, 1000m, 10m, 6m, 68m, 10m, 26m, 22m)
+    };
+    foreach (var spec in extraStructuredBins)
+    {
+        var existingLoc = await context.WarehouseLocations.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == spec.Code);
+        if (existingLoc is null)
+        {
+            context.WarehouseLocations.Add(new WarehouseLocation
+            {
+                WarehouseId = primaryWarehouse.Id,
+                Code = spec.Code,
+                Name = spec.Name,
+                StructurePath = spec.StructurePath,
+                StorageClass = "AMBIENT",
+                MaxWeightKg = spec.MaxKg,
+                MaxVolumeM3 = spec.MaxVol,
+                MaxPalletEquivalent = spec.MaxPallet,
+                LocationType = spec.LocType,
+                IsActive = true,
+                IsBlocked = false,
+                IsPickable = spec.Pickable,
+                IsReceivable = spec.Receivable,
+                IsSystemManaged = false,
+                MapX = spec.MapX,
+                MapY = spec.MapY,
+                MapWidth = spec.MapW,
+                MapHeight = spec.MapH,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = qaAdmin.Id
+            });
+        }
+        else
+        {
+            existingLoc.Name = spec.Name;
+            existingLoc.StructurePath ??= spec.StructurePath;
+            existingLoc.StorageClass = "AMBIENT";
+            existingLoc.MaxWeightKg = spec.MaxKg;
+            existingLoc.MaxVolumeM3 = spec.MaxVol;
+            existingLoc.MaxPalletEquivalent = spec.MaxPallet;
+            existingLoc.LocationType = spec.LocType;
+            existingLoc.IsActive = true;
+            existingLoc.IsBlocked = false;
+            existingLoc.IsPickable = spec.Pickable;
+            existingLoc.IsReceivable = spec.Receivable;
+            existingLoc.IsSystemManaged = false;
+            existingLoc.MapX = spec.MapX;
+            existingLoc.MapY = spec.MapY;
+            existingLoc.MapWidth = spec.MapW;
+            existingLoc.MapHeight = spec.MapH;
+        }
+    }
+    await context.SaveChangesAsync();
+
     var primaryNonSystemLocations = await context.WarehouseLocations.IgnoreQueryFilters()
         .Where(l => l.WarehouseId == primaryWarehouse.Id && !l.IsSystemManaged)
         .ToListAsync();
@@ -442,6 +501,235 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         }
     }
     await context.SaveChangesAsync();
+
+    foreach (var loc in primaryNonSystemLocations.OrderBy(x => x.Id))
+    {
+        if (loc.Code == "BIN-A01-01")
+        {
+            loc.MapX = 6m;
+            loc.MapY = 44m;
+            loc.MapWidth = 26m;
+            loc.MapHeight = 24m;
+        }
+        else if (loc.Code == "BIN-A01-02")
+        {
+            loc.MapX = 37m;
+            loc.MapY = 44m;
+            loc.MapWidth = 26m;
+            loc.MapHeight = 24m;
+        }
+        else if (loc.Code is not ("BIN-A01-03" or "RCV-01" or "STG-OUT-01" or "DMG-01"))
+        {
+            loc.MapX ??= 68m;
+            loc.MapY ??= 72m;
+            loc.MapWidth ??= 26m;
+            loc.MapHeight ??= 20m;
+            if (loc.Code == "BIN-DMG-01")
+            {
+                loc.Name = "Kệ biệt trữ hàng lỗi DMG-01";
+            }
+        }
+    }
+
+    var damagedLocation = await context.WarehouseLocations.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == "DAMAGED");
+    if (damagedLocation is null)
+    {
+        context.WarehouseLocations.Add(new WarehouseLocation
+        {
+            WarehouseId = primaryWarehouse.Id,
+            Code = "DAMAGED",
+            Name = "Khu vực biệt trữ hàng hỏng",
+            LocationType = WarehouseLocationType.Damaged,
+            IsActive = true,
+            IsBlocked = false,
+            IsPickable = false,
+            IsReceivable = false,
+            IsSystemManaged = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = qaAdmin.Id
+        });
+    }
+    else
+    {
+        damagedLocation.Name = "Khu vực biệt trữ hàng hỏng";
+        damagedLocation.IsActive = true;
+        damagedLocation.IsSystemManaged = true;
+    }
+
+    var legacyLocation = await context.WarehouseLocations.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == "LEGACY");
+    if (legacyLocation is null)
+    {
+        context.WarehouseLocations.Add(new WarehouseLocation
+        {
+            WarehouseId = primaryWarehouse.Id,
+            Code = "LEGACY",
+            Name = "Vị trí chuyển đổi dữ liệu lịch sử",
+            LocationType = WarehouseLocationType.Legacy,
+            IsActive = true,
+            IsBlocked = false,
+            IsPickable = false,
+            IsReceivable = false,
+            IsSystemManaged = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = qaAdmin.Id
+        });
+    }
+    else
+    {
+        legacyLocation.Name = "Vị trí chuyển đổi dữ liệu lịch sử";
+        legacyLocation.IsActive = true;
+        legacyLocation.IsSystemManaged = true;
+    }
+    await context.SaveChangesAsync();
+
+    foreach (var targetWh in new[] { primaryWarehouse, wh02 })
+    {
+        var cal = await context.WarehouseCalendars.IgnoreQueryFilters()
+            .Include(c => c.Days)
+            .Include(c => c.Shifts)
+            .FirstOrDefaultAsync(c => c.WarehouseId == targetWh.Id);
+        if (cal is null)
+        {
+            cal = new WarehouseCalendar
+            {
+                WarehouseId = targetWh.Id,
+                TimeZoneId = "Asia/Ho_Chi_Minh",
+                CreatedAtUtc = DateTime.UtcNow,
+                UpdatedAtUtc = DateTime.UtcNow,
+                UpdatedBy = qaAdmin.Id
+            };
+            for (var d = 0; d < 7; d++)
+            {
+                cal.Days.Add(new WarehouseCalendarDay
+                {
+                    DayOfWeek = d,
+                    IsOpen = true,
+                    OpensAtLocal = new TimeSpan(6, 0, 0),
+                    ClosesAtLocal = new TimeSpan(23, 59, 0),
+                    InboundCutoffLocal = new TimeSpan(21, 0, 0),
+                    OutboundCutoffLocal = new TimeSpan(22, 0, 0)
+                });
+            }
+            context.WarehouseCalendars.Add(cal);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            cal.TimeZoneId = "Asia/Ho_Chi_Minh";
+            for (var d = 0; d < 7; d++)
+            {
+                var dayRow = cal.Days.FirstOrDefault(x => x.DayOfWeek == d);
+                if (dayRow is null)
+                {
+                    cal.Days.Add(new WarehouseCalendarDay
+                    {
+                        DayOfWeek = d,
+                        IsOpen = true,
+                        OpensAtLocal = new TimeSpan(6, 0, 0),
+                        ClosesAtLocal = new TimeSpan(23, 59, 0),
+                        InboundCutoffLocal = new TimeSpan(21, 0, 0),
+                        OutboundCutoffLocal = new TimeSpan(22, 0, 0)
+                    });
+                }
+                else
+                {
+                    dayRow.IsOpen = true;
+                    dayRow.OpensAtLocal = new TimeSpan(6, 0, 0);
+                    dayRow.ClosesAtLocal = new TimeSpan(23, 59, 0);
+                    dayRow.InboundCutoffLocal = new TimeSpan(21, 0, 0);
+                    dayRow.OutboundCutoffLocal = new TimeSpan(22, 0, 0);
+                }
+            }
+            await context.SaveChangesAsync();
+        }
+
+        var morningShift = cal.Shifts.FirstOrDefault(s => s.Code == "CA-SANG");
+        if (morningShift is null)
+        {
+            context.WarehouseShifts.Add(new WarehouseShift
+            {
+                WarehouseId = targetWh.Id,
+                Code = "CA-SANG",
+                Name = "Ca Sáng — Tiếp nhận & Cất hàng",
+                StartTimeLocal = new TimeSpan(6, 0, 0),
+                EndTimeLocal = new TimeSpan(14, 30, 0),
+                BreakMinutes = 45,
+                PlannedHeadcount = 18,
+                InboundPalletsPerHour = 35m,
+                OutboundOrdersPerHour = 40m,
+                DockSlots = 4,
+                LaborHours = 135m,
+                StagingCapacity = 120m,
+                PackingStations = 6,
+                EquipmentAvailable = 8,
+                IsActive = true,
+                CreatedAtUtc = DateTime.UtcNow,
+                UpdatedAtUtc = DateTime.UtcNow,
+                UpdatedBy = qaAdmin.Id
+            });
+        }
+        else
+        {
+            morningShift.Name = "Ca Sáng — Tiếp nhận & Cất hàng";
+            morningShift.StartTimeLocal = new TimeSpan(6, 0, 0);
+            morningShift.EndTimeLocal = new TimeSpan(14, 30, 0);
+            morningShift.BreakMinutes = 45;
+            morningShift.PlannedHeadcount = 18;
+            morningShift.InboundPalletsPerHour = 35m;
+            morningShift.OutboundOrdersPerHour = 40m;
+            morningShift.DockSlots = 4;
+            morningShift.LaborHours = 135m;
+            morningShift.StagingCapacity = 120m;
+            morningShift.PackingStations = 6;
+            morningShift.EquipmentAvailable = 8;
+            morningShift.IsActive = true;
+        }
+
+        var afternoonShift = cal.Shifts.FirstOrDefault(s => s.Code == "CA-CHIEU");
+        if (afternoonShift is null)
+        {
+            context.WarehouseShifts.Add(new WarehouseShift
+            {
+                WarehouseId = targetWh.Id,
+                Code = "CA-CHIEU",
+                Name = "Ca Chiều — Lấy hàng, Đóng gói & Xuất giao",
+                StartTimeLocal = new TimeSpan(14, 0, 0),
+                EndTimeLocal = new TimeSpan(22, 30, 0),
+                BreakMinutes = 45,
+                PlannedHeadcount = 22,
+                InboundPalletsPerHour = 25m,
+                OutboundOrdersPerHour = 55m,
+                DockSlots = 4,
+                LaborHours = 165m,
+                StagingCapacity = 150m,
+                PackingStations = 8,
+                EquipmentAvailable = 10,
+                IsActive = true,
+                CreatedAtUtc = DateTime.UtcNow,
+                UpdatedAtUtc = DateTime.UtcNow,
+                UpdatedBy = qaAdmin.Id
+            });
+        }
+        else
+        {
+            afternoonShift.Name = "Ca Chiều — Lấy hàng, Đóng gói & Xuất giao";
+            afternoonShift.StartTimeLocal = new TimeSpan(14, 0, 0);
+            afternoonShift.EndTimeLocal = new TimeSpan(22, 30, 0);
+            afternoonShift.BreakMinutes = 45;
+            afternoonShift.PlannedHeadcount = 22;
+            afternoonShift.InboundPalletsPerHour = 25m;
+            afternoonShift.OutboundOrdersPerHour = 55m;
+            afternoonShift.DockSlots = 4;
+            afternoonShift.LaborHours = 165m;
+            afternoonShift.StagingCapacity = 150m;
+            afternoonShift.PackingStations = 8;
+            afternoonShift.EquipmentAvailable = 10;
+            afternoonShift.IsActive = true;
+        }
+        await context.SaveChangesAsync();
+    }
 
     // 3. Resolve Unit, Category, Barcode and Product for QA operational tasks
     var allUnits = await context.Units.IgnoreQueryFilters().OrderBy(u => u.Id).ToListAsync();
@@ -3149,6 +3437,35 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     await context.Database.ExecuteSqlRawAsync(
         "DELETE FROM AuditLogs WHERE IpAddress = '10.0.10.25' OR (EntityName = 'UserSession' AND (Action LIKE '%Refresh%' OR Action LIKE N'%Làm mới%')) OR EntityName = 'LocalQaOperationalSeed' OR Action LIKE 'QA.%';");
 
+    context.AuditLogs.Add(new AuditLog
+    {
+        UserId = qaAdmin.Id,
+        WarehouseId = primaryWarehouse.Id,
+        EntityName = "WarehouseCalendarException",
+        EntityId = primaryWarehouse.Id,
+        Action = "EMERGENCY_OPEN_OVERRIDE",
+        OldValues = $"{DateTime.UtcNow.Date.AddDays(3):yyyy-MM-dd} 22:00..23:59",
+        NewValues = $"{DateTime.UtcNow.Date.AddDays(3):yyyy-MM-dd} 22:00..23:59",
+        Reason = "Mở kho khẩn cấp ngoài giờ phục vụ tiếp nhận lô hàng ưu tiên PO-QA-001",
+        Result = "Success",
+        Timestamp = DateTime.UtcNow.AddDays(-2),
+        IpAddress = "10.0.10.25"
+    });
+    context.AuditLogs.Add(new AuditLog
+    {
+        UserId = qaAdmin.Id,
+        WarehouseId = primaryWarehouse.Id,
+        EntityName = "WarehouseCalendarException",
+        EntityId = primaryWarehouse.Id,
+        Action = "MAINTENANCE_WINDOW",
+        OldValues = $"{DateTime.UtcNow.Date.AddDays(7):yyyy-MM-dd} 02:00..04:00",
+        NewValues = $"{DateTime.UtcNow.Date.AddDays(7):yyyy-MM-dd} 02:00..04:00",
+        Reason = "Bảo trì định kỳ hệ thống băng chuyền & cân điện tử khu tiếp nhận DOCK-01",
+        Result = "Success",
+        Timestamp = DateTime.UtcNow.AddDays(-3),
+        IpAddress = "10.0.10.25"
+    });
+
     var operationalAudits = new (string Action, string EntityName, int EntityId, string Reason, int MinutesAgo)[]
     {
         ("Ghi sổ phiếu nhập kho", "ImportReceipt", irQa001.Id, "Ghi sổ phiếu nhập IR-QA-001 (65 thùng cảm biến LOT-QA-002) tại khu tiếp nhận TIEP-NHAN", 8),
@@ -3156,7 +3473,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         ("Hoàn tất lấy hàng theo đơn", "PickingTask", pickingTask.Id, "Hoàn tất lấy hàng PICK-QA-003 theo chiến lược FEFO lô LOT-QA-002 tại kệ BIN-A01-01", 6),
         ("Đóng gói đơn vị xử lý (HU)", "PackingSession", packingSession.Id, "Đóng gói hoàn tất kiện hàng HU-QA-002 (BC-HU-QA-002) thuộc phiên PACK-QA-002", 5),
         ("Xuất giao chuyến hàng", "Shipment", shipment.Id, "Xuất giao chuyến hàng SHP-QA-002 (xe 51D-668.88, niêm phong SEAL-QA-002) theo phiếu ER-QA-001", 4),
-        ("Di chuyển vị trí nội bộ", "InventoryLocationMovement", 9001, "Điều chuyển nội bộ 10 thùng linh kiện từ TIEP-NHAN sang kệ lưu trữ BIN-A01-01", 3),
+        ("Di chuyển vị trí nội bộ", "InventoryLocationMovement", 9001, "Điều chuyển nội bộ MOV-QA-9001 (10 thùng linh kiện) từ TIEP-NHAN sang kệ lưu trữ BIN-A01-01", 3),
         ("Phong tỏa lô hàng chờ QC", "InventoryLock", activeQcLock.Id, "Phong tỏa lô LOT-QA-002 tại kệ BIN-A01-01 chờ kiểm định chất lượng định kỳ", 2),
         ("Phê duyệt điều chỉnh kiểm kê", "Stocktake", 1, "Phê duyệt biên bản kiểm kê định kỳ STK-QA-001 tại Kho Chính TP.HCM", 1)
     };

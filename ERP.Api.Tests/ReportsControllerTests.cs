@@ -1250,5 +1250,176 @@ namespace ERP.Api.Tests
                 doc.RootElement.GetProperty("priorityLabel").GetString().Should().Be("Ưu tiên cao");
             }
         }
+
+        [Fact]
+        public async Task Wave29_OperationalDashboard_EnrichesWarehouseNameAndReferenceCodes_AndNullsEntityIdForFormattedSubtitle()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Chính TP.HCM", IsActive = true });
+            var now = DateTime.UtcNow;
+
+            db.AuditLogs.AddRange(
+                new ERP.Domain.Entities.AuditLog
+                {
+                    WarehouseId = 1,
+                    EntityName = "ImportReceipt",
+                    EntityId = 1,
+                    Action = "ImportReceipt.Posted",
+                    Reason = "IR-QA-001 — Ghi sổ phiếu nhập kho lô hàng QA",
+                    Result = "Success",
+                    Timestamp = now.AddMinutes(-1)
+                },
+                new ERP.Domain.Entities.AuditLog
+                {
+                    WarehouseId = 1,
+                    EntityName = "StocktakeSession",
+                    EntityId = 1,
+                    Action = "Stocktake.Approve",
+                    Reason = "Phê duyệt phiên kiểm kê định kỳ",
+                    Result = "Success",
+                    Timestamp = now.AddMinutes(-2)
+                }
+            );
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+
+            var controller = new ReportsController(_mockService.Object, db, warehouseAuth.Object);
+            var response = await controller.GetOperationalDashboard(db, warehouseAuth.Object);
+            var ok = response.Should().BeOfType<OkObjectResult>().Subject;
+
+            using var doc = System.Text.Json.JsonSerializer.SerializeToDocument(ok.Value);
+            var activities = doc.RootElement.GetProperty("recentActivities");
+            activities.GetArrayLength().Should().Be(2);
+
+            var first = activities[0];
+            first.GetProperty("WarehouseName").GetString().Should().Be("WH01 — Kho Chính TP.HCM");
+            first.GetProperty("ReferenceCode").GetString().Should().Be("IR-QA-001");
+            first.GetProperty("EntityName").GetString().Should().Be("Phiếu nhập kho (IR-QA-001)");
+            first.GetProperty("EntityId").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+            first.GetProperty("OriginalEntityId").GetInt32().Should().Be(1);
+
+            var second = activities[1];
+            second.GetProperty("WarehouseName").GetString().Should().Be("WH01 — Kho Chính TP.HCM");
+            second.GetProperty("ReferenceCode").GetString().Should().Be("STK-QA-001");
+            second.GetProperty("EntityName").GetString().Should().Be("Phiếu kiểm kê (STK-QA-001)");
+            second.GetProperty("EntityId").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+        }
+
+        [Fact]
+        public async Task Wave29_MasterDataVerificationEndpoints_ReturnRealDatabaseMetrics_AndVietnameseStatusLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Chính TP.HCM", IsActive = true });
+            db.WarehouseLocations.AddRange(
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 1,
+                    WarehouseId = 1,
+                    Code = "RECEIVING",
+                    Name = "Khu tiếp nhận",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Receiving,
+                    IsActive = true,
+                    IsBlocked = false,
+                    MaxWeightKg = 2000m,
+                    MaxVolumeM3 = 15m,
+                    MaxPalletEquivalent = 10m
+                },
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 2,
+                    WarehouseId = 1,
+                    Code = "A-01-01-01-01",
+                    Name = "Kệ lưu trữ A01",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                    IsActive = true,
+                    IsBlocked = false,
+                    MaxWeightKg = 1000m,
+                    MaxVolumeM3 = 5m,
+                    MaxPalletEquivalent = 4m
+                }
+            );
+            db.WarehouseShifts.Add(new ERP.Domain.Entities.WarehouseShift
+            {
+                Id = 1,
+                WarehouseId = 1,
+                Code = "SHIFT-MORNING",
+                Name = "Ca sáng",
+                PlannedHeadcount = 18,
+                InboundPalletsPerHour = 45m,
+                OutboundOrdersPerHour = 120m,
+                DockSlots = 6,
+                IsActive = true
+            });
+            db.Units.Add(new ERP.Domain.Entities.Unit { Id = 1, Code = "PCS", Name = "Cái", IsActive = true });
+            db.Products.Add(new ERP.Domain.Entities.Product { Id = 10, Code = "SKU-01", Name = "Sản phẩm 01", UnitId = 1, IsActive = true });
+            db.ProductUoms.Add(new ERP.Domain.Entities.ProductUom
+            {
+                Id = 1,
+                ProductId = 10,
+                UnitId = 1,
+                ConversionFactor = 24m
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var whService = new Mock<IWarehouseService>();
+            var whController = new WarehousesController(whService.Object, db, warehouseAuth.Object);
+
+            var topRes = await whController.VerifyTopologyCapacity(new VerifyTopologyCapacityRequest(1), default);
+            var topOk = topRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(topOk.Value))
+            {
+                doc.RootElement.GetProperty("activeBinCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("storageBinCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("totalMaxWeightKg").GetDecimal().Should().Be(3000m);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã xác thực cấu trúc 5 cấp & sức chứa vị trí");
+            }
+
+            var vlocRes = await whController.VerifyVirtualLocations(new VerifyVirtualLocationsRequest(1), default);
+            var vlocOk = vlocRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(vlocOk.Value))
+            {
+                doc.RootElement.GetProperty("configuredVirtualBins").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("receivingLocationsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã xác thực đầy đủ các vị trí chức năng & khu vực xử lý");
+            }
+
+            var calService = new Mock<IWarehouseCalendarService>();
+            var calController = new WarehouseCalendarsController(calService.Object, db, warehouseAuth.Object);
+            var shiftRes = await calController.VerifyShiftCoverage(1, default);
+            var shiftOk = shiftRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(shiftOk.Value))
+            {
+                doc.RootElement.GetProperty("configuredShiftsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("totalPlannedHeadcount").GetInt32().Should().Be(18);
+                doc.RootElement.GetProperty("totalDockSlots").GetInt32().Should().Be(6);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã xác thực độ phủ ca làm việc & khung giờ chốt chuyến");
+            }
+
+            var unitService = new Mock<IUnitService>();
+            var unitController = new UnitsController(unitService.Object, db);
+            var uomRes = await unitController.VerifyUomIntegrity(default);
+            var uomOk = uomRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(uomOk.Value))
+            {
+                doc.RootElement.GetProperty("activeUnitsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("productsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("conversionCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã xác thực toàn vẹn danh mục ĐVT & hệ số quy đổi");
+            }
+        }
     }
 }
