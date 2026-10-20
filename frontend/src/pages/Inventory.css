@@ -6,18 +6,18 @@
   border-bottom: 1px solid var(--ui-border);
 }
 
-.inventory-page .inventory-tab {
+.inventory-page .inventory-tab { background: #ffffff; color: #1e293b; border-color: #cbd5e1; font-weight: 500;
   min-height: 40px;
 }
 
-.inventory-page .inventory-tab[aria-selected="true"] {
-  background: var(--ui-primary);
-  border-color: var(--ui-primary);
-  color: var(--ui-primary-foreground);
+.inventory-page .inventory-tab[aria-selected="true"], .inventory-page .inventory-tab[aria-selected="true"]:hover:not(:disabled), .inventory-page .inventory-tab[aria-selected="true"]:active:not(:disabled), .inventory-page .inventory-tab[aria-selected="true"]:focus {
+  background: #0f172a; background-color: #0f172a; font-weight: 600;
+  border-color: #0f172a;
+  color: #ffffff;
 }
 
 .inventory-page .inventory-toolbar-actions {
-  margin-left: auto;
+  margin-left: 0;
   display: flex;
   align-items: flex-end;
   gap: var(--ui-space-2);
@@ -64,7 +64,7 @@
     grid-template-columns: 1fr;
   }
 
-  .inventory-page .inventory-tab {
+  .inventory-page .inventory-tab { background: #ffffff; color: #1e293b; border-color: #cbd5e1; font-weight: 500;
     width: 100%;
   }
 

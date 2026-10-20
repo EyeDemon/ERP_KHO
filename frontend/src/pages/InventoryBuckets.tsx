@@ -179,9 +179,9 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
           Kiểm định Bất biến 5 Nhóm Tồn kho & Quy tắc Chuyển trạng thái
         </button>
         {invariantVerification&&(
-          <span>
+          <div role="status" style={{ marginTop: 8, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
             Mã kiểm định: <strong>{invariantVerification.verificationId}</strong> • Cân bằng 5 nhóm tồn: <strong>{invariantVerification.fiveBucketEquationStatus === 'BALANCED_EXACT' ? 'Cân bằng tuyệt đối' : invariantVerification.fiveBucketEquationStatus}</strong> • Kiểm soát thanh hủy: <strong>{invariantVerification.scrapApprovalGuard === 'SOD_ENFORCED' ? 'Bắt buộc phê duyệt độc lập' : invariantVerification.scrapApprovalGuard}</strong>
-          </span>
+          </div>
         )}
       </div>
       <form onSubmit={e=>{e.preventDefault();void load()}}>

@@ -1193,7 +1193,7 @@ const Inventory = () => {
             type="button"
             role="tab"
             className="inventory-tab"
-            aria-selected={activeTab === 'stock'}
+            aria-selected={activeTab === 'stock'} style={activeTab === 'stock' ? { background: '#0f172a', backgroundColor: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600 } : { background: '#ffffff', backgroundColor: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500 }}
             aria-controls="inventory-stock-panel"
             onClick={() => setActiveTab('stock')}
           >
@@ -1203,7 +1203,7 @@ const Inventory = () => {
             type="button"
             role="tab"
             className="inventory-tab"
-            aria-selected={activeTab === 'buckets'}
+            aria-selected={activeTab === 'buckets'} style={activeTab === 'buckets' ? { background: '#0f172a', backgroundColor: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600 } : { background: '#ffffff', backgroundColor: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500 }}
             aria-controls="inventory-buckets-panel"
             onClick={() => setActiveTab('buckets')}
           >
@@ -1213,7 +1213,7 @@ const Inventory = () => {
             type="button"
             role="tab"
             className="inventory-tab"
-            aria-selected={activeTab === 'history'}
+            aria-selected={activeTab === 'history'} style={activeTab === 'history' ? { background: '#0f172a', backgroundColor: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600 } : { background: '#ffffff', backgroundColor: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500 }}
             aria-controls="inventory-history-panel"
             onClick={() => setActiveTab('history')}
           >
@@ -1223,7 +1223,7 @@ const Inventory = () => {
             type="button"
             role="tab"
             className="inventory-tab"
-            aria-selected={activeTab === 'inout'}
+            aria-selected={activeTab === 'inout'} style={activeTab === 'inout' ? { background: '#0f172a', backgroundColor: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600 } : { background: '#ffffff', backgroundColor: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500 }}
             aria-controls="inventory-inout-panel"
             onClick={() => setActiveTab('inout')}
           >
@@ -1233,7 +1233,7 @@ const Inventory = () => {
             type="button"
             role="tab"
             className="inventory-tab"
-            aria-selected={activeTab === 'expiry'}
+            aria-selected={activeTab === 'expiry'} style={activeTab === 'expiry' ? { background: '#0f172a', backgroundColor: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600 } : { background: '#ffffff', backgroundColor: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500 }}
             aria-controls="inventory-expiry-panel"
             onClick={() => setActiveTab('expiry')}
           >
@@ -1243,7 +1243,7 @@ const Inventory = () => {
             type="button"
             role="tab"
             className="inventory-tab"
-            aria-selected={activeTab === 'analytics'}
+            aria-selected={activeTab === 'analytics'} style={activeTab === 'analytics' ? { background: '#0f172a', backgroundColor: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600 } : { background: '#ffffff', backgroundColor: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500 }}
             aria-controls="inventory-analytics-panel"
             onClick={() => setActiveTab('analytics')}
           >

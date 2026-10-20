@@ -169,12 +169,18 @@ namespace ERP.Infrastructure.Queries
                 var rawUnit = (item.UnitName ?? string.Empty).Trim();
                 item.UnitName = string.IsNullOrWhiteSpace(rawUnit) ||
                                 string.Equals(rawUnit, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(rawUnit, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                                string.Equals(rawUnit, "QA-PCS", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(rawUnit, "QA-BOX", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(rawUnit, "QA_BOX", StringComparison.OrdinalIgnoreCase)
                     ? "THÙNG"
                     : rawUnit;
                 item.LotNumber = item.LotNumber?.Trim();
                 item.SerialNumber = item.SerialNumber?.Trim();
                 item.ReferenceType = item.ReferenceType?.Trim();
+                item.TransactionType = (item.TransactionType ?? string.Empty).Trim();
+                item.InventoryStatus = (item.InventoryStatus ?? string.Empty).Trim();
+                item.FromInventoryStatus = item.FromInventoryStatus?.Trim();
+                item.ToInventoryStatus = item.ToInventoryStatus?.Trim();
                 item.CreatedByName = NormalizeActorDisplayName(item.CreatedByName) ?? string.Empty;
                 item.Note = item.Note?.Trim();
             }

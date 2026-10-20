@@ -215,12 +215,12 @@
     color var(--ui-motion-fast) ease;
 }
 
-.production-ui button:hover:not(:disabled) {
+.production-ui button:hover:not(:disabled):not([aria-selected="true"]) {
   background: var(--ui-surface-muted);
   border-color: #94A3B8;
 }
 
-.production-ui button:active:not(:disabled) {
+.production-ui button:active:not(:disabled):not([aria-selected="true"]) {
   background: #E8EBEE;
 }
 

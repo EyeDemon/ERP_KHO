@@ -1331,13 +1331,14 @@ namespace ERP.Api.Controllers
                         productId = p.ProductId,
                         productCode = (p.ProductCode ?? string.Empty).Trim(),
                         productName = (p.ProductName ?? string.Empty).Trim(),
-                        unitName = NormalizeUom(p.UnitName, "ĐVT"),
+                        unitName = NormalizeUom(p.UnitName, "THÙNG"),
                         currentOnHand = p.CurrentOnHand,
                         periodInQuantity = periodIn,
                         issuedLastPeriod = issued,
                         turnoverRatio = ratio,
                         daysOnHand,
-                        movementClass
+                        movementClass,
+                        movementClassLabel = movementClass == "FAST_MOVING" ? "Luân chuyển nhanh" : movementClass == "NORMAL" ? "Luân chuyển bình thường" : movementClass == "SLOW_MOVING" ? "Luân chuyển chậm" : "Chưa phát sinh xuất"
                     };
                 })
                 .OrderByDescending(x => x.turnoverRatio)
@@ -1468,7 +1469,8 @@ namespace ERP.Api.Controllers
                         ProductCode = (r.ProductCode ?? string.Empty).Trim(),
                         ProductName = (r.ProductName ?? string.Empty).Trim(),
                         UnitName = NormalizeUom(r.UnitName),
-                        r.Status,
+                        Status = (r.Status ?? string.Empty).Trim(),
+                        StatusLabel = TranslateInventoryStatusLabel(r.Status),
                         r.LotId,
                         LotNumber = r.LotNumber != null ? r.LotNumber.Trim() : null,
                         r.ManufactureDate,
@@ -1478,7 +1480,9 @@ namespace ERP.Api.Controllers
                         r.AvailableQuantity,
                         DaysToExpiry = daysToExpiry,
                         AgeDays = ageDays,
-                        ExpiryStatus = expiryStatus
+                        ExpiryStatus = expiryStatus,
+                        ExpiryStatusLabel = expiryStatus == "EXPIRED" ? "Đã hết hạn" : expiryStatus == "NEAR_EXPIRY" ? "Cận hạn sử dụng" : expiryStatus == "GOOD" ? "Còn hạn tốt" : "Không quản lý hạn",
+                        AgingBucket = ageDays <= 30 ? "0-30 ngày" : ageDays <= 90 ? "31-90 ngày" : "Trên 90 ngày"
                     };
                 })
                 .OrderBy(r => r.ExpiryStatus == "EXPIRED" ? 0 : r.ExpiryStatus == "NEAR_EXPIRY" ? 1 : r.ExpiryStatus == "GOOD" ? 2 : 3)
@@ -1723,7 +1727,7 @@ namespace ERP.Api.Controllers
                         ProductId = g.Key.ProductId,
                         ProductCode = (prod?.Code ?? string.Empty).Trim(),
                         ProductName = (prod?.Name ?? string.Empty).Trim(),
-                        UnitName = NormalizeUom(prod?.UnitName, string.Empty),
+                        UnitName = NormalizeUom(prod?.UnitName, "THÙNG"),
                         WarehouseId = g.Key.WarehouseId,
                         WarehouseName = (whName ?? string.Empty).Trim(),
                         OpeningQuantity = decimal.Round(opening, 4),
@@ -1760,10 +1764,23 @@ namespace ERP.Api.Controllers
             };
         }
 
+        private static string TranslateInventoryStatusLabel(string? status) =>
+            (status ?? string.Empty).Trim().ToUpperInvariant() switch
+            {
+                "AVAILABLE" => "Khả dụng",
+                "QUARANTINE" => "Biệt trữ kiểm định",
+                "DAMAGED" => "Hư hỏng",
+                "REJECTED" => "Từ chối",
+                "EXPIRED" => "Đã hết hạn",
+                "QCHOLD" or "QC_HOLD" => "Tạm giữ QC",
+                "RECALLBLOCKED" or "RECALL_BLOCKED" => "Phong tỏa thu hồi",
+                _ => (status ?? string.Empty).Trim()
+            };
+
         private static string NormalizeUom(string? uom, string fallback = "THÙNG")
         {
             var t = uom?.Trim() ?? string.Empty;
-            return string.IsNullOrEmpty(t) || string.Equals(t, "QA_UNIT", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+            return string.IsNullOrEmpty(t) || string.Equals(t, "QA_UNIT", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "QA-PCS", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "QA-BOX", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "QA_BOX", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "ĐVT", StringComparison.OrdinalIgnoreCase)
                 ? fallback
                 : t;
         }

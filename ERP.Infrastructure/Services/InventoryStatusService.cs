@@ -86,7 +86,7 @@ public sealed class InventoryStatusService(
                 WarehouseName = x.Warehouse.Name.Trim(),
                 LocationId = x.LocationId ?? 0,
                 LocationCode = x.Location == null ? string.Empty : x.Location.Code.Trim(),
-                Status = x.StatusDefinition.Code.Trim(),
+                Status = x.StatusDefinition != null ? x.StatusDefinition.Code.Trim() : x.Status.ToString().Trim(),
                 IsReservable = x.StatusDefinition.IsReservable &&
                                (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
                 IsAllocatable = x.StatusDefinition.IsAllocatable &&

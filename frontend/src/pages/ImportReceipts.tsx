@@ -471,7 +471,7 @@ const ImportReceipts = () => {
         />
 
         {error && <p role="alert">{error}</p>}
-        {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
+        {successMsg && !successMsg.includes('RMA') && !successMsg.includes('hậu cần thu hồi') && <div role="status" className="ui-success-text" style={{ marginTop: 8, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500 }}>{successMsg}</div>}
 
         <MobileBarcodeScannerBar
           warehouseId={warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined)}
@@ -506,6 +506,7 @@ const ImportReceipts = () => {
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hoàn tất QC & đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hàng khách trả lại / RMA (Khả dụng / Biệt trữ / Hư hỏng)</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}</strong></div>
             </div>
+            {successMsg && (successMsg.includes('RMA') || successMsg.includes('hậu cần thu hồi')) && <div role="status" className="ui-success-text" style={{ order: 99, flexBasis: '100%', width: '100%', marginTop: 12, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500, whiteSpace: 'normal', wordBreak: 'break-word' }}>{successMsg}</div>}
 
 
             <button

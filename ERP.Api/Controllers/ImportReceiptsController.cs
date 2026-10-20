@@ -163,12 +163,12 @@ namespace ERP.Api.Controllers
                     || x.Status.StartsWith("Discrepancy", StringComparison.OrdinalIgnoreCase)),
                 qcWorkCenterModes = new[]
                 {
-                    "Kiểm định chất lượng đầu vào (Inbound QC)",
-                    "Kiểm định hàng trả về (RMA Inspection)",
-                    "Rà soát hàng biệt trữ & hư hỏng (Quarantine Review)"
+                    "Kiểm định chất lượng đầu vào",
+                    "Kiểm định hàng trả về",
+                    "Rà soát hàng biệt trữ & hư hỏng"
                 },
-                status = "Đã tải tổng quan trạm kiểm định QC & tiếp nhận hàng trả RMA",
-                statusLabel = "Đã tải tổng quan trạm kiểm định QC & tiếp nhận hàng trả RMA"
+                status = "Đã tải tổng quan trạm kiểm định chất lượng & tiếp nhận hàng trả về",
+                statusLabel = "Đã tải tổng quan trạm kiểm định chất lượng & tiếp nhận hàng trả về"
             });
         }
 
@@ -277,10 +277,11 @@ namespace ERP.Api.Controllers
                 pendingQcOrRmaReceiptsCount,
                 openStocktakesCount,
                 activeCountFreezeLocksCount,
-                targetBucket = "Khu vực biệt trữ chờ kiểm định (Quarantine)",
-                nextStep = "Chuyển trạm kiểm định chất lượng đầu vào (Inbound QC)",
-                status = "Đã khởi tạo phiếu kiểm định hàng trả về (RMA) & định tuyến biệt trữ",
-                statusLabel = "Đã khởi tạo phiếu kiểm định hàng trả về (RMA) & định tuyến biệt trữ",
+                targetBucket = "Khu vực biệt trữ chờ kiểm định",
+                nextStep = "Chuyển trạm kiểm định chất lượng đầu vào",
+                dispositionSummary = $"Đã tiếp nhận kiểm định hàng trả về ({pendingQcOrRmaReceiptsCount} phiếu chờ kiểm định, {quarantineBucketCount} vị trí biệt trữ)",
+                status = "Đã khởi tạo phiếu kiểm định hàng trả về & định tuyến biệt trữ",
+                statusLabel = "Đã khởi tạo phiếu kiểm định hàng trả về & định tuyến biệt trữ",
                 queuedAtUtc = now
             });
         }
@@ -539,13 +540,20 @@ namespace ERP.Api.Controllers
                 await _db.SaveChangesAsync(cancellationToken);
             }
 
+            var vietnameseDispositionType = (rawAction.StartsWith("RTV", StringComparison.Ordinal) && !rawAction.Contains("REFURBISH", StringComparison.Ordinal))
+                ? "Hoàn trả nhà cung cấp & giảm trừ tồn kho"
+                : (rawAction.StartsWith("SCRAP", StringComparison.Ordinal)
+                    ? "Hủy bỏ hàng lỗi & xuất toán tồn kho"
+                    : "Tân trang hàng trả về & chuyển về tồn khả dụng");
+
             return Ok(new
             {
                 dispositionCode,
                 warehouseId,
                 nonAvailableBucketsCount,
-                dispositionType = string.IsNullOrWhiteSpace(request?.DispositionType) ? rawAction : request.DispositionType,
-                actionType = rawAction,
+                dispositionType = vietnameseDispositionType,
+                actionType = vietnameseDispositionType,
+                dispositionSummary = $"{vietnameseDispositionType} ({nonAvailableBucketsCount} vị trí biệt trữ và hư hỏng đã rà soát)",
                 status = "Đã thực thi & Ghi sổ kiểm toán",
                 statusLabel = "Đã thực thi & Ghi sổ kiểm toán",
                 ledgerUpdated,
