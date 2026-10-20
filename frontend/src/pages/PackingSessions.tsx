@@ -28,10 +28,10 @@ type PackingSession = {
 };
 
 const stateLabels:Record<string,string>={
-  Open:'Mở',InProgress:'Đang đóng gói',Packed:'Đã PACKED',Closed:'Đã đóng',Exception:'Ngoại lệ',Cancelled:'Đã hủy',
+  Open:'Mở',InProgress:'Đang đóng gói',Packed:'Đã đóng gói',Closed:'Đã đóng',Exception:'Ngoại lệ',Cancelled:'Đã hủy',
 };
 const huStateLabels:Record<string,string>={
-  Open:'Mở',InUse:'Đang dùng',Closed:'Đã đóng',Staged:'Đã staging',Loaded:'Đã load',Shipped:'Đã ship',Cancelled:'Đã hủy',
+  Open:'Mở',InUse:'Đang dùng',Closed:'Đã đóng',Staged:'Đã tập kết',Loaded:'Đã xếp xe',Shipped:'Đã xuất giao',Cancelled:'Đã hủy',
 };
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   ['Packed','Closed','Shipped'].includes(status)?'success':status==='Cancelled'||status==='Exception'?'danger':status==='InProgress'||status==='InUse'?'warning':'neutral';
@@ -107,7 +107,7 @@ export default function PackingSessions(){
     }finally{lock.current.delete(key);setBusy('')}
   };
 
-  if(loading&&sessions.length===0)return <p role="status">Đang tải Packing session...</p>;
+  if(loading&&sessions.length===0)return <p role="status">Đang tải phiên đóng gói...</p>;
   const activeHus=(selected?.handlingUnits??[]).filter(x=>!['Cancelled','Staged','Loaded','Shipped'].includes(x.status));
   const packableHus=activeHus.filter(x=>['Open','InUse'].includes(x.status));
   const verifyPackagingProfile=async()=>{
@@ -189,9 +189,9 @@ export default function PackingSessions(){
 
   return <UiPage>
     <UiPageHeader
-      eyebrow="Outbound"
-      title="Packing & Handling Unit"
-      description="Đóng gói lượng đã Picking vào carton/tote/HU. Packing bảo toàn quantity và không trừ OnHand; shipment dispatch mới là boundary xuất kho."
+      eyebrow="XUẤT KHO"
+      title="Đóng gói & Đơn vị xử lý (HU)"
+      description="Đóng gói hàng đã lấy vào thùng carton, khay hoặc pallet (HU). Bước đóng gói bảo toàn số lượng và không trừ tồn kho; tồn kho chỉ trừ một lần khi xuất bến."
     />
     {error&&<div role="alert">{error}</div>}
 
@@ -206,13 +206,13 @@ export default function PackingSessions(){
     />
 
     <div className="ui-stack">
-      <UiCard title="Danh mục Loại Bao bì Chuẩn & Gợi ý Tối ưu Đóng thùng Cartonization">
+      <UiCard title="Danh mục Loại Bao bì Chuẩn & Gợi ý Tối ưu Đóng thùng">
         <div className="ui-inline-wrap">
           <span><strong>CARTON-S</strong> (Thùng carton): tối đa 15 kg / 0.04 m³</span>
           <span><strong>CARTON-L</strong> (Thùng carton): tối đa 30 kg / 0.12 m³</span>
           <span><strong>TOTE-STD</strong> (Khay nhựa): tối đa 25 kg / 0.06 m³</span>
           <span><strong>PALLET-EUR</strong> (Pallet gỗ/nhựa): tối đa 1000 kg / 1.80 m³</span>
-          <span>Chính sách Cartonization: <UiBadge tone="success">Đề xuất & Xác nhận bởi Nhân viên</UiBadge></span>
+          <span>Chính sách tối ưu đóng thùng: <UiBadge tone="success">Đề xuất & Xác nhận bởi Nhân viên</UiBadge></span>
         </div>
         <div className="ui-inline-wrap">
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC</button>
@@ -438,7 +438,7 @@ export default function PackingSessions(){
         </div>
       </UiCard>}
 
-      <UiCard title="Danh mục Đơn vị xử lý (HU Registry) & Trung tâm Nhãn Barcode/SSCC">
+      <UiCard title="Danh mục Đơn vị xử lý (HU) & Trung tâm Nhãn Mã vạch / SSCC">
         <p className="ui-muted-text">Tra cứu toàn bộ Pallet / Thùng / Khay theo kho, trạng thái phân cấp và in nhãn mã vạch / SSCC.</p>
         {huRegistry.length===0?<p className="ui-muted-text">Chưa có dữ liệu danh mục Handling Unit độc lập hoặc đang hiển thị theo Packing Session phía trên.</p>:<UiTableScroll>
           <table aria-label="Danh mục Đơn vị xử lý HU Registry" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
@@ -454,7 +454,7 @@ export default function PackingSessions(){
               {huRegistry.map(item=><tr key={item.id}>
                 <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                   <strong style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 11 }}>{item.huCode}</strong>
-                  <span style={{ display: 'block', fontSize: 10.5, color: '#64748b' }}>{item.type}{item.parentHandlingUnitCode?` • ${item.parentHandlingUnitCode}`:''}</span>
+                  <span style={{ display: 'block', fontSize: 10.5, color: '#64748b' }}>{({Carton:'Thùng carton',Tote:'Khay nhựa',Pallet:'Pallet',Container:'Thùng lớn',Custom:'Tùy chỉnh'} as Record<string,string>)[item.type]??item.type}{item.parentHandlingUnitCode?` • ${item.parentHandlingUnitCode}`:''}</span>
                 </td>
                 <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
                   <code style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 10.5 }}>{item.barcode}</code>

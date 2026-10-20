@@ -447,8 +447,12 @@ namespace ERP.Api.Tests
             var reconController = new InventoryReconciliationController(reconQuery.Object, db);
             var glRes = await reconController.VerifySiteReadiness(null, null);
             var glOk = glRes.Should().BeOfType<OkObjectResult>().Subject;
-            System.Text.Json.JsonSerializer.Serialize(glOk.Value)
-                .Should().Contain("GL-JRN-").And.Contain("OUTBOX_IDEMPOTENT_SYNCED").And.Contain("SUBLEDGER_TO_GL_BALANCED");
+            using (var glDoc = System.Text.Json.JsonSerializer.SerializeToDocument(glOk.Value))
+            {
+                glDoc.RootElement.GetProperty("journalBatchId").GetString().Should().StartWith("GL-JRN-");
+                glDoc.RootElement.GetProperty("outboxSyncStatus").GetString().Should().Contain("Đã đồng bộ Outbox chống trùng lặp giao dịch");
+                glDoc.RootElement.GetProperty("glReconciliationStatus").GetString().Should().Contain("Cân bằng 100% giữa Sổ cái Kho & Tồn vật lý");
+            }
 
             var stocktakeController = new StocktakesController(
                 new Mock<IStocktakeService>().Object,
@@ -2077,6 +2081,329 @@ namespace ERP.Api.Tests
             }
 
             db.AuditLogs.Should().OnlyContain(a => a.Result != null && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave32_ProductAutoAuditGovernance_And_InventoryBucketLockVerifications_ReturnRealDatabaseMetrics_AndVietnameseLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 10,
+                WarehouseId = 1,
+                Code = "A-01-01",
+                Name = "Kệ lưu trữ A01",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true
+            });
+            db.Products.AddRange(
+                new ERP.Domain.Entities.Product
+                {
+                    Id = 101,
+                    Code = "SKU-W32-01",
+                    Name = "Sản phẩm chuẩn hóa 01",
+                    UnitId = 1,
+                    UnitWeightKg = 1.5m,
+                    UnitVolumeM3 = 0.01m,
+                    ExpiryControl = true,
+                    IsActive = true
+                },
+                new ERP.Domain.Entities.Product
+                {
+                    Id = 102,
+                    Code = "SKU-W32-02",
+                    Name = "Sản phẩm chuẩn hóa 02",
+                    UnitId = 1,
+                    IsActive = true
+                }
+            );
+            db.ProductBarcodes.Add(new ERP.Domain.Entities.ProductBarcode
+            {
+                Id = 1,
+                ProductId = 101,
+                Value = "8938505974192"
+            });
+            db.QcPolicies.Add(new ERP.Domain.Entities.QcPolicy
+            {
+                Id = 1,
+                ProductId = 101,
+                RequiresQc = true,
+                IsActive = true,
+                EffectiveFromUtc = DateTime.UtcNow.AddDays(-5),
+                Rule = "100% QC"
+            });
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 1,
+                WarehouseId = 1,
+                ProductId = 101,
+                LocationId = 10,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 100m,
+                ReservedQuantity = 20m
+            });
+            db.InventoryLocks.AddRange(
+                new ERP.Domain.Entities.InventoryLock
+                {
+                    Id = 1,
+                    WarehouseId = 1,
+                    ProductId = 101,
+                    LockType = ERP.Domain.Enums.InventoryLockType.CountFreeze,
+                    Status = ERP.Domain.Enums.InventoryLockStatus.Active,
+                    Reason = "Khóa kiểm kê định kỳ",
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.InventoryLock
+                {
+                    Id = 2,
+                    WarehouseId = 1,
+                    ProductId = 102,
+                    LockType = ERP.Domain.Enums.InventoryLockType.ManualOperationalLock,
+                    Status = ERP.Domain.Enums.InventoryLockStatus.Active,
+                    Reason = "Khóa vận hành kiểm tra kệ",
+                    CreatedBy = 1
+                }
+            );
+            await db.SaveChangesAsync();
+
+            var productService = new Mock<IProductService>();
+            var productsController = new ProductsController(productService.Object, db);
+            var govRes = await productsController.AutoAuditGovernance(default);
+            var govOk = govRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(govOk.Value))
+            {
+                doc.RootElement.GetProperty("totalSkuCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("activeSkuCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("barcodeConfiguredCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("uomConfiguredCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("dimensionConfiguredCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("expiryControlledCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("qcAndTolerancePolicyCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã hoàn tất kiểm toán tự động chuẩn dữ liệu nền SKU");
+            }
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var invStatusService = new Mock<IInventoryStatusService>();
+            var invStatusController = new InventoryStatusController(invStatusService.Object, db, warehouseAuth.Object);
+
+            var bckRes = await invStatusController.VerifyBucketInvariants(new InventoryStatusController.VerifyBucketInvariantsRequest(1), default);
+            var bckOk = bckRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(bckOk.Value))
+            {
+                doc.RootElement.GetProperty("totalBucketsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("violationCount").GetInt32().Should().Be(0);
+                doc.RootElement.GetProperty("nonPickableHoldViolationCount").GetInt32().Should().Be(0);
+                doc.RootElement.GetProperty("fiveBucketEquationStatus").GetString().Should().Be("Cân bằng chính xác tuyệt đối (0 <= Đã giữ <= Tồn vật lý)");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã xác thực bất biến 5 trạng thái tồn kho & phân vùng biệt trữ");
+            }
+
+            var lckRes = await invStatusController.VerifyLockPrecedence(new InventoryStatusController.VerifyLockPrecedenceRequest(1), default);
+            var lckOk = lckRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(lckOk.Value))
+            {
+                doc.RootElement.GetProperty("activeLocksCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("countFreezeLocksCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("manualLocksCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("leakCount").GetInt32().Should().Be(0);
+                doc.RootElement.GetProperty("overlappingHoldPrecedence").GetString().Should().Be("Thu hồi (Recall) > Phong tỏa QC > Đóng băng Kiểm kê > Khóa Vận hành");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã xác thực thứ tự ưu tiên khóa tồn kho (0 rò rỉ xuất hàng)");
+            }
+
+            db.AuditLogs.Should().OnlyContain(a => a.Result != null && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave32_ReconciliationSiteReadiness_And_ReportsBiGlComplianceEndpoints_ReturnRealDatabaseMetrics_AndVietnameseLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true });
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 1,
+                WarehouseId = 1,
+                ProductId = 101,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 80m,
+                ReservedQuantity = 10m
+            });
+            db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+            {
+                Id = 1,
+                WarehouseId = 1,
+                ProductId = 101,
+                TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                Quantity = 80m,
+                ReferenceType = "ImportReceipt",
+                ReferenceId = 1,
+                CreatedBy = 1,
+                TransactionDate = DateTime.UtcNow.AddHours(-1)
+            });
+            db.Shipments.Add(new ERP.Domain.Entities.Shipment
+            {
+                Id = 1,
+                ShipmentCode = "SHP-W32-01",
+                PackingSessionId = 1,
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ShipmentStatus.Dispatched
+            });
+            db.PartnerDebtInvoices.AddRange(
+                new ERP.Domain.Entities.PartnerDebtInvoice
+                {
+                    Id = 1,
+                    Code = "INV-AP-01",
+                    PartnerId = 1,
+                    DebtType = ERP.Domain.Enums.PartnerDebtType.AP,
+                    SourceType = "ImportReceipt",
+                    SourceId = 1,
+                    SourceCode = "IR-QA-001",
+                    TotalAmount = 5000000m,
+                    RemainingAmount = 3000000m,
+                    Status = ERP.Domain.Enums.PartnerDebtInvoiceStatus.PartiallyPaid,
+                    IssuedAtUtc = DateTime.UtcNow.AddDays(-3)
+                },
+                new ERP.Domain.Entities.PartnerDebtInvoice
+                {
+                    Id = 2,
+                    Code = "INV-AR-01",
+                    PartnerId = 2,
+                    DebtType = ERP.Domain.Enums.PartnerDebtType.AR,
+                    SourceType = "ExportReceipt",
+                    SourceId = 1,
+                    SourceCode = "ER-QA-001",
+                    TotalAmount = 8000000m,
+                    RemainingAmount = 4500000m,
+                    Status = ERP.Domain.Enums.PartnerDebtInvoiceStatus.Open,
+                    IssuedAtUtc = DateTime.UtcNow.AddDays(-2)
+                }
+            );
+            db.IdempotencyRecords.Add(new ERP.Domain.Entities.IdempotencyRecord
+            {
+                Id = 1,
+                UserId = 1,
+                CommandScope = "ImportReceipt.Post",
+                KeyHash = "HASH-W32-01",
+                RequestFingerprint = "FP-W32-01",
+                Status = ERP.Domain.Entities.IdempotencyStatus.Completed,
+                CreatedAtUtc = DateTime.UtcNow.AddMinutes(-30),
+                ExpiresAtUtc = DateTime.UtcNow.AddHours(24)
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var reconQuery = new Mock<IInventoryReconciliationQueryService>();
+            reconQuery.Setup(x => x.GetReconciliationsAsync(1, null, null, 1, int.MaxValue))
+                .ReturnsAsync(new ERP.Application.Common.PagedResult<InventoryReconciliationDto>
+                {
+                    Items = new List<InventoryReconciliationDto>
+                    {
+                        new()
+                        {
+                            WarehouseId = 1,
+                            ProductId = 101,
+                            CurrentQuantity = 80m,
+                            ExpectedQuantity = 80m,
+                            Difference = 0m,
+                            Status = "Match"
+                        }
+                    },
+                    TotalRecords = 1,
+                    PageIndex = 1,
+                    PageSize = 100
+                });
+
+            var reconController = new InventoryReconciliationController(reconQuery.Object, db, warehouseAuth.Object);
+            var siteRes = await reconController.VerifySiteReadiness(1, new InventoryReconciliationController.VerifySiteReadinessRequest(1), default);
+            var siteOk = siteRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(siteOk.Value))
+            {
+                doc.RootElement.GetProperty("checkedRows").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("matchedCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("mismatchCount").GetInt32().Should().Be(0);
+                doc.RootElement.GetProperty("totalTransactionsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("idempotencyRecordsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("glReconciliationStatus").GetString().Should().Be("Cân bằng 100% giữa Sổ cái Kho & Tồn vật lý");
+                doc.RootElement.GetProperty("readinessVerdict").GetString().Should().Be("Đủ điều kiện mở/đóng kỳ vận hành kho");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã đối soát sổ cái bất biến & xác nhận sẵn sàng vận hành kho");
+            }
+
+            var reportsController = new ReportsController(_mockService.Object, db, warehouseAuth.Object);
+
+            var biRes = await reportsController.SyncBiSnapshot(new ReportsController.SyncBiSnapshotRequest(1), warehouseAuth.Object, default);
+            var biOk = biRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(biOk.Value))
+            {
+                doc.RootElement.GetProperty("totalTransactionsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("activeSkuBucketsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("totalShipmentsCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã đồng bộ ảnh chụp dữ liệu phân tích BI & KPI vận hành kho");
+            }
+
+            var glRes = await reportsController.ExportGlJournal(new ReportsController.ExportGlJournalRequest(1), warehouseAuth.Object, default);
+            var glOk = glRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(glOk.Value))
+            {
+                doc.RootElement.GetProperty("inventoryLedgerEntriesCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("openDebtInvoicesCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("totalPayableBalance").GetDecimal().Should().Be(3000000m);
+                doc.RootElement.GetProperty("totalReceivableBalance").GetDecimal().Should().Be(4500000m);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã kết xuất bảng kê bút toán sổ cái kho & công nợ AP/AR");
+            }
+
+            var compRes = await reportsController.ComplianceEvidenceBundle(new ReportsController.ComplianceEvidenceBundleRequest(1), warehouseAuth.Object, default);
+            var compOk = compRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(compOk.Value))
+            {
+                doc.RootElement.GetProperty("immutableAuditLogCount").GetInt32().Should().BeGreaterThanOrEqualTo(3);
+                doc.RootElement.GetProperty("idempotencyRecordCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("immutableLedgerCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("sodStatus").GetString().Should().Be("Đã xác thực phân tách nhiệm vụ Maker-Checker & nhật ký bất biến");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã đóng gói hồ sơ bằng chứng kiểm toán & tuân thủ vận hành");
+            }
+
+            db.AuditLogs.Should().OnlyContain(a => a.Result != null && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave32_SalesOrders_EvaluateAtpRouting_PrioritizesQaHcmWhenZeroStock()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.AddRange(
+                new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH-EMPTY", Name = "Kho Phụ", IsActive = true },
+                new ERP.Domain.Entities.Warehouse { Id = 2, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true }
+            );
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1, 2 });
+
+            var soService = new Mock<ISalesOrderBackorderService>();
+            soService.Setup(x => x.ListSalesOrdersAsync(null, null, default)).ReturnsAsync(new List<SalesOrderListDto>());
+
+            var controller = new SalesOrdersController(soService.Object, db, warehouseAuth.Object);
+            var res = await controller.EvaluateAtpRouting(new EvaluateAtpRoutingRequest(null), default);
+            var ok = res.Should().BeOfType<OkObjectResult>().Subject;
+            using var doc = System.Text.Json.JsonSerializer.SerializeToDocument(ok.Value);
+            doc.RootElement.GetProperty("optimalWarehouseNode").GetString().Should().Be("QA-HCM — Kho Chính TP.HCM");
         }
     }
 }

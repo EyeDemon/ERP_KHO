@@ -649,7 +649,7 @@ export default function InventoryReconciliation() {
   return (
     <UiPage>
       <UiPageHeader
-        eyebrow="Inventory Control"
+        eyebrow="Kiểm soát tồn kho"
         title="Đối chiếu tồn kho & ledger"
         description="Đối chiếu số dư tồn kho thực tế với sổ cái bất biến (Ledger) để phát hiện chênh lệch. Trạm kiểm soát này chỉ đọc; mọi điều chỉnh phải thực hiện qua giao dịch đảo có phê duyệt."
       />
@@ -741,9 +741,9 @@ export default function InventoryReconciliation() {
             Chạy Kiểm định Sẵn sàng Mở/Đóng Kho & Đồng bộ Outbox
           </button>
           {siteReadinessVerdict && (
-            <UiBadge tone={siteReadinessVerdict.readinessVerdict === 'APPROVED_FOR_OPEN_CLOSE' ? 'success' : 'danger'}>
+            <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
               {`Kết luận: ${siteReadinessVerdict.readinessVerdict === 'APPROVED_FOR_OPEN_CLOSE' ? 'Đủ điều kiện Mở/Đóng kho' : siteReadinessVerdict.readinessVerdict === 'BLOCKED_BY_MISMATCH' ? 'Tạm chặn do lệch số dư' : siteReadinessVerdict.readinessVerdict} • Đã kiểm tra: ${siteReadinessVerdict.checkedRows} dòng • Outbox: Đã đồng bộ`}
-            </UiBadge>
+            </div>
           )}
         </div>
       </UiCard>

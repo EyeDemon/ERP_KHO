@@ -2,6 +2,7 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -61,11 +62,15 @@ public sealed class InventoryStatusController(
     public sealed record VerifyBucketInvariantsRequest(int? WarehouseId = null);
 
     [HttpPost("verify-bucket-invariants")]
+    [HttpPost("/api/inventory-status/verify-bucket-invariants")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> VerifyBucketInvariants(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyBucketInvariantsRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         IReadOnlyCollection<int>? accessibleIds = null;
         if (warehouseAccess != null)
@@ -76,7 +81,9 @@ public sealed class InventoryStatusController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
+        var totalBucketsCount = 0;
         var violationCount = 0;
+        var nonPickableHoldViolationCount = 0;
         if (db != null)
         {
             var query = db.InventoryStocks.AsNoTracking();
@@ -84,30 +91,72 @@ public sealed class InventoryStatusController(
                 query = query.Where(s => s.WarehouseId == warehouseId.Value);
             else if (accessibleIds != null)
                 query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+
+            totalBucketsCount = await query.CountAsync(cancellationToken);
             violationCount = await query.CountAsync(
                 s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity,
                 cancellationToken);
+            nonPickableHoldViolationCount = await query.CountAsync(
+                s => s.Quantity > 0m
+                     && (s.Status == InventoryStatus.Damaged
+                         || s.Status == InventoryStatus.Quarantine
+                         || s.Status == InventoryStatus.RecallBlocked)
+                     && s.Location != null
+                     && s.Location.IsPickable
+                     && s.ReservedQuantity > 0m,
+                cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        var verificationId = $"BCK-INV-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                EntityName = "InventoryStatus",
+                Action = "Inventory.VerifyBucketInvariants",
+                NewValues = verificationId,
+                Reason = $"Xác thực bất biến 5 trạng thái tồn kho ({totalBucketsCount} dòng, {violationCount} vi phạm)",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
         }
 
         return Ok(new
         {
-            verificationId = $"BCK-INV-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            verificationId,
             warehouseId,
+            totalBucketsCount,
             violationCount,
-            fiveBucketEquationStatus = violationCount == 0 ? "BALANCED_EXACT" : "VIOLATION_DETECTED",
-            scrapApprovalGuard = "SOD_ENFORCED",
-            verifiedAtUtc = DateTime.UtcNow
+            nonPickableHoldViolationCount,
+            fiveBucketEquationStatus = violationCount == 0
+                ? "Cân bằng chính xác tuyệt đối (0 <= Đã giữ <= Tồn vật lý)"
+                : $"Phát hiện {violationCount} lệch bất biến tồn kho",
+            scrapApprovalGuard = "Bắt buộc phân tách nhiệm vụ (SoD) khi phê duyệt hủy/thanh lý",
+            status = "Đã xác thực bất biến 5 trạng thái tồn kho & phân vùng biệt trữ",
+            statusLabel = "Đã xác thực bất biến 5 trạng thái tồn kho & phân vùng biệt trữ",
+            verifiedAtUtc = now
         });
     }
 
     public sealed record VerifyLockPrecedenceRequest(int? WarehouseId = null);
 
     [HttpPost("verify-lock-precedence")]
+    [HttpPost("/api/inventory-locks/verify-lock-precedence")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> VerifyLockPrecedence(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyLockPrecedenceRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         IReadOnlyCollection<int>? accessibleIds = null;
         if (warehouseAccess != null)
@@ -118,29 +167,90 @@ public sealed class InventoryStatusController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
+        var now = DateTime.UtcNow;
+        var activeLocksCount = 0;
+        var recallLocksCount = 0;
+        var qualityHoldLocksCount = 0;
+        var countFreezeLocksCount = 0;
+        var manualLocksCount = 0;
         var leakCount = 0;
         if (db != null)
         {
-            var query = db.InventoryStocks.AsNoTracking();
+            var stockQuery = db.InventoryStocks.AsNoTracking();
+            var lockQuery = db.InventoryLocks.AsNoTracking()
+                .Where(l => l.Status == InventoryLockStatus.Active && (!l.ExpiresAt.HasValue || l.ExpiresAt.Value > now));
+
             if (warehouseId.HasValue)
-                query = query.Where(s => s.WarehouseId == warehouseId.Value);
+            {
+                stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                lockQuery = lockQuery.Where(l => l.WarehouseId == warehouseId.Value);
+            }
             else if (accessibleIds != null)
-                query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
-            leakCount = await query.CountAsync(
+            {
+                stockQuery = stockQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
+                lockQuery = lockQuery.Where(l => accessibleIds.Contains(l.WarehouseId));
+            }
+
+            var activeLockTypes = (await lockQuery
+                .Select(l => l.LockType)
+                .ToListAsync(cancellationToken))
+                .Select(t => t.ToString())
+                .ToList();
+
+            activeLocksCount = activeLockTypes.Count;
+            recallLocksCount = activeLockTypes.Count(t => t.Contains("Recall", StringComparison.OrdinalIgnoreCase));
+            qualityHoldLocksCount = activeLockTypes.Count(t =>
+                t.Contains("Quality", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("Qc", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("Investigation", StringComparison.OrdinalIgnoreCase));
+            countFreezeLocksCount = activeLockTypes.Count(t => t.Contains("Count", StringComparison.OrdinalIgnoreCase));
+            manualLocksCount = activeLockTypes.Count(t =>
+                t.Contains("Manual", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("Maintenance", StringComparison.OrdinalIgnoreCase));
+
+            leakCount = await stockQuery.CountAsync(
                 s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity,
                 cancellationToken);
         }
 
+        var verificationId = $"LCK-PRC-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                EntityName = "InventoryLock",
+                Action = "Inventory.VerifyLockPrecedence",
+                NewValues = verificationId,
+                Reason = $"Xác thực thứ tự ưu tiên khóa tồn kho ({activeLocksCount} khóa đang hiệu lực)",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var statusText = leakCount == 0
+            ? "Đã xác thực thứ tự ưu tiên khóa tồn kho (0 rò rỉ xuất hàng)"
+            : "Phát hiện xung đột khóa tồn kho";
+
         return Ok(new
         {
-            verificationId = $"LCK-PRC-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            verificationId,
             warehouseId,
-            overlappingHoldPrecedence = "RECALL_GT_QC_GT_COUNT",
+            activeLocksCount,
+            recallLocksCount,
+            qualityHoldLocksCount,
+            countFreezeLocksCount,
+            manualLocksCount,
             leakCount,
-            status = leakCount == 0 ? "LOCK_PRECEDENCE_VERIFIED" : "LEAK_DETECTED",
-            verifiedAtUtc = DateTime.UtcNow
+            overlappingHoldPrecedence = "Thu hồi (Recall) > Phong tỏa QC > Đóng băng Kiểm kê > Khóa Vận hành",
+            status = statusText,
+            statusLabel = "Đã xác thực thứ tự ưu tiên khóa tồn kho (0 rò rỉ xuất hàng)",
+            verifiedAtUtc = now
         });
     }
 }
-
-

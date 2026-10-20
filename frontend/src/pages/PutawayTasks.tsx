@@ -117,7 +117,7 @@ export default function PutawayTasks(){
      }}
    />
 
-   <UiCard title="Tổng quan Tiến độ Cất hàng & Ngoại lệ Putaway">
+   <UiCard title="Tổng quan Tiến độ Cất hàng & Ngoại lệ">
      <div
        style={{
          display: 'grid',

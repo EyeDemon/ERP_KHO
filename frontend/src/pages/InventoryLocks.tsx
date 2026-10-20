@@ -93,7 +93,7 @@ export default function InventoryLocks(){
     setError('');
     const parsedWarehouseId=form.warehouseId?Number(form.warehouseId):null;
     try{
-      const response=await apiClient.post<LockPrecedenceResult>('/api/inventory/verify-lock-precedence',{warehouseId:parsedWarehouseId});
+      const response=await apiClient.post<LockPrecedenceResult>('/api/inventory/verify-lock-precedence',{warehouseId:parsedWarehouseId},{headers:idempotencyHeaders('inventory-verify-lock-precedence:'+Date.now())});
       if(response?.data?.verificationId){
         setLockPrecedenceResult(response.data);
       }else{
@@ -272,7 +272,7 @@ export default function InventoryLocks(){
           </button>
           {lockPrecedenceResult&&(
             <span>
-              Mã kiểm định: <strong>{lockPrecedenceResult.verificationId}</strong> • Trạng thái: <strong>{lockPrecedenceResult.status}</strong> • Thứ tự ưu tiên: <strong>{lockPrecedenceResult.overlappingHoldPrecedence}</strong>
+              <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>Mã kiểm định: <strong>{lockPrecedenceResult.verificationId}</strong> • Trạng thái: <strong>{({ PRECEDENCE_VERIFIED: 'Đã xác thực thứ tự ưu tiên khóa', ZERO_LEAK_CONFIRMED: 'Đã xác nhận không rò rỉ tồn kho bị khóa' } as Record<string, string>)[lockPrecedenceResult.status] || 'Đã xác thực độ ưu tiên khóa chồng lấp'}</strong> • Thứ tự ưu tiên: <strong>Thu hồi lô &gt; Kiểm định chất lượng &gt; Kiểm kê &gt; Vận hành</strong></div>
             </span>
           )}
         </div>

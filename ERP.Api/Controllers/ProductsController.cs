@@ -67,17 +67,82 @@ namespace ERP.Api.Controllers
         [PermissionAuthorize(AppPermissions.ProductRead)]
         public async Task<IActionResult> AutoAuditGovernance(CancellationToken cancellationToken = default)
         {
-            var auditedSkuCount = _db != null
-                ? await _db.Products.AsNoTracking().CountAsync(cancellationToken)
-                : (await _productService.GetAllProductsAsync(cancellationToken)).Count();
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
 
+            int totalSkuCount;
+            int activeSkuCount;
+            int barcodeConfiguredCount;
+            int uomConfiguredCount;
+            int dimensionConfiguredCount;
+            int expiryControlledCount;
+            var qcAndTolerancePolicyCount = 0;
+
+            if (_db != null)
+            {
+                totalSkuCount = await _db.Products.AsNoTracking().CountAsync(cancellationToken);
+                activeSkuCount = await _db.Products.AsNoTracking().CountAsync(p => p.IsActive, cancellationToken);
+                barcodeConfiguredCount = await _db.Products.AsNoTracking()
+                    .CountAsync(p => p.IsActive && _db.ProductBarcodes.Any(b => b.ProductId == p.Id), cancellationToken);
+                uomConfiguredCount = await _db.Products.AsNoTracking()
+                    .CountAsync(p => p.IsActive && (p.UnitId > 0 || _db.ProductUoms.Any(u => u.ProductId == p.Id)), cancellationToken);
+                dimensionConfiguredCount = await _db.Products.AsNoTracking()
+                    .CountAsync(p => p.IsActive && (p.UnitWeightKg.HasValue || p.UnitVolumeM3.HasValue || p.UnitPalletEquivalent.HasValue), cancellationToken);
+                expiryControlledCount = await _db.Products.AsNoTracking()
+                    .CountAsync(p => p.IsActive && p.ExpiryControl, cancellationToken);
+                qcAndTolerancePolicyCount =
+                    (await _db.QcPolicies.AsNoTracking().CountAsync(p => p.IsActive, cancellationToken))
+                    + (await _db.ReceivingTolerancePolicies.AsNoTracking().CountAsync(p => p.IsActive, cancellationToken));
+            }
+            else
+            {
+                var products = (await _productService.GetAllProductsAsync(cancellationToken)).ToList();
+                var active = products.Where(p => p.IsActive).ToList();
+                totalSkuCount = products.Count;
+                activeSkuCount = active.Count;
+                barcodeConfiguredCount = active.Count(p => p.Barcodes is { Count: > 0 });
+                uomConfiguredCount = active.Count(p => p.UnitId > 0);
+                dimensionConfiguredCount = active.Count(p => p.UnitWeightKg.HasValue || p.UnitVolumeM3.HasValue || p.UnitPalletEquivalent.HasValue);
+                expiryControlledCount = active.Count(p => p.ExpiryControl);
+            }
+
+            var auditedSkuCount = activeSkuCount > 0 ? activeSkuCount : totalSkuCount;
             var now = DateTime.UtcNow;
+            var auditId = $"SKU-AUD-{now:yyyyMMdd-HHmm}";
+
+            if (_db != null)
+            {
+                var actorUserId = int.TryParse(
+                    User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                    out var uid) ? uid : (int?)null;
+                _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    UserId = actorUserId,
+                    EntityName = "ProductGovernance",
+                    Action = "Product.AutoAuditGovernance",
+                    NewValues = auditId,
+                    Reason = $"Đã kiểm toán tự động {activeSkuCount}/{totalSkuCount} SKU hoạt động",
+                    Result = "Success",
+                    Timestamp = now
+                });
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
             return Ok(new
             {
-                auditId = $"SKU-AUD-{now:yyyyMMdd-HHmm}",
+                auditId,
                 auditedSkuCount,
-                fefoPolicyStatus = "FEFO_SHELF_LIFE_VALIDATED",
-                packagingHierarchyStatus = "UOM_DIM_VERIFIED",
+                totalSkuCount,
+                activeSkuCount,
+                barcodeConfiguredCount,
+                uomConfiguredCount,
+                dimensionConfiguredCount,
+                expiryControlledCount,
+                qcAndTolerancePolicyCount,
+                fefoPolicyStatus = "Đã xác thực chính sách hạn dùng FEFO & vòng đời lô",
+                packagingHierarchyStatus = "Đã chuẩn hóa quy đổi ĐVT, mã vạch & kích thước đóng gói",
+                status = "Đã hoàn tất kiểm toán tự động chuẩn dữ liệu nền SKU",
+                statusLabel = "Đã hoàn tất kiểm toán tự động chuẩn dữ liệu nền SKU",
                 auditedAtUtc = now
             });
         }

@@ -194,10 +194,10 @@ export default function Shipments(){
     <div className="ui-stack">
       <UiCard title="Giám sát Chu trình Xuất giao & Cam kết Giao hàng">
         <div className="ui-inline-wrap">
-          <span>Chờ xuất bến: <strong>{preDispatchCount}</strong></span>
-          <span>Đang vận chuyển: <strong>{inTransitCount}</strong></span>
-          <span>Đã giao hoàn tất: <strong>{deliveredOrCompletedCount}</strong></span>
-          <span>Ngoại lệ / Hoàn kho: <strong>{exceptionOrReturnCount}</strong></span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, width: '100%' }}><div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Chờ xuất bến</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{preDispatchCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Đang vận chuyển</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{inTransitCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Đã giao hoàn tất</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{deliveredOrCompletedCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ngoại lệ / Hoàn kho</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{exceptionOrReturnCount}</strong></div></div>
         </div>
       </UiCard>
       <UiCard title="Lập kế hoạch Xếp tải Xe & Tích hợp Đơn vị Vận chuyển / TMS">

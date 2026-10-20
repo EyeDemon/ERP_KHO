@@ -178,13 +178,19 @@ public sealed class SalesOrdersController(
             totalAtpQuantity = stockByWh.Sum(x => x.AtpQty);
 
             var topWarehouseId = warehouseId
-                ?? stockByWh.OrderByDescending(x => x.AtpQty).Select(x => (int?)x.WarehouseId).FirstOrDefault();
+                ?? stockByWh
+                    .Where(x => x.AtpQty > 0m)
+                    .OrderByDescending(x => x.AtpQty)
+                    .Select(x => (int?)x.WarehouseId)
+                    .FirstOrDefault();
 
             var whQuery = db.Warehouses.AsNoTracking().Where(w => w.IsActive);
+            if (!warehouseId.HasValue && accessibleIds != null)
+                whQuery = whQuery.Where(w => accessibleIds.Contains(w.Id));
             if (topWarehouseId.HasValue)
                 whQuery = whQuery.OrderByDescending(w => w.Id == topWarehouseId.Value).ThenBy(w => w.Id);
             else
-                whQuery = whQuery.OrderBy(w => w.Id);
+                whQuery = whQuery.OrderByDescending(w => w.Code == "QA-HCM" || w.Code == "WH01").ThenBy(w => w.Id);
 
             var topWh = await whQuery
                 .Select(w => new { w.Code, w.Name })

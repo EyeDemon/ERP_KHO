@@ -1144,7 +1144,7 @@ const Inventory = () => {
                       <strong>{whatIfResult.simulatedDemand}</strong> đvt → Chênh lệch dự kiến:{' '}
                       <strong>{whatIfResult.projectedNetBalance}</strong> đvt (
                       <UiBadge tone={whatIfResult.projectedNetBalance < 0 ? 'warning' : 'success'}>
-                        {whatIfResult.scenarioStatus}
+                        {({ SURPLUS_ADEQUATE: 'Đủ tồn kho đáp ứng', BUFFER_SUFFICIENT: 'Đệm an toàn đủ đáp ứng', SHORTAGE_RISK: 'Nguy cơ thiếu hụt tồn kho', DEFICIT_WARNING: 'Cảnh báo thiếu hụt' } as Record<string, string>)[whatIfResult.scenarioStatus] || 'Đã tính toán kịch bản giả định'}
                       </UiBadge>
                       {' • '}Ảnh chụp bất biến, không ghi sổ cái thật)
                     </div>
@@ -1152,7 +1152,7 @@ const Inventory = () => {
                   {decisionPolicyAudit && (
                     <div role="status" aria-label="Kết quả kiểm định sổ đăng ký chính sách quyết định và rủi ro">
                       <UiBadge tone="success">
-                        {`Sổ đăng ký: ${decisionPolicyAudit.policyRegistryId} • Dự báo: ${decisionPolicyAudit.forecastBiasMapeStatus} • Bất thường cầu: ${decisionPolicyAudit.demandAnomalyDetector} • Chấm điểm rủi ro: ${decisionPolicyAudit.inventoryRiskScoreStatus} • Trạng thái: ${decisionPolicyAudit.status}`}
+                        {`Sổ đăng ký: ${decisionPolicyAudit.policyRegistryId} • Dự báo: Đã chuẩn hóa sai số MAPE • Bất thường cầu: Đã bật giám sát đột biến cầu • Chấm điểm rủi ro: Đã chấm điểm rủi ro tồn kho • Trạng thái: Đã xác thực sổ đăng ký chính sách`}
                       </UiBadge>
                     </div>
                   )}

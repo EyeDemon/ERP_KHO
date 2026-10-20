@@ -28,7 +28,7 @@ type WaveGroup = {
 };
 
 const states:Record<string,string>={
-  Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang Picking',ShortPick:'Thiếu hàng',
+  Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang lấy hàng',ShortPick:'Thiếu hàng',
   Resolved:'Đã xử lý thiếu',Completed:'Hoàn tất',Cancelled:'Đã hủy',
 };
 const lineStates:Record<string,string>={
@@ -37,7 +37,7 @@ const lineStates:Record<string,string>={
 const pickingTypeLabels:Record<string,string>={
   Standard:'Tiêu chuẩn',STANDARD:'Tiêu chuẩn',Single:'Đơn lẻ',SINGLE:'Đơn lẻ',
   SingleOrder:'Đơn lẻ',SINGLEORDER:'Đơn lẻ',SINGLE_ORDER:'Đơn lẻ',
-  Wave:'Theo đợt (Wave)',WAVE:'Theo đợt (Wave)',Batch:'Theo lô (Batch)',BATCH:'Theo lô (Batch)',
+  Wave:'Theo đợt',WAVE:'Theo đợt',Batch:'Theo lô',BATCH:'Theo lô',
 };
 const sourceTypeLabels:Record<string,string>={
   ExportReceipt:'Phiếu xuất kho',SalesOrder:'Đơn bán hàng',StockTransfer:'Phiếu điều chuyển',
@@ -128,7 +128,7 @@ export default function PickingTasks(){
     }finally{lock.current.delete(key);setBusy('')}
   };
 
-  if(loading&&tasks.length===0)return <p role="status">Đang tải nhiệm vụ Picking...</p>;
+  if(loading&&tasks.length===0)return <p role="status">Đang tải nhiệm vụ lấy hàng...</p>;
 
   const mobileReadyTasksCount=tasks.filter(x=>['Open','Assigned','InProgress'].includes(x.status)).length;
   const shortPickExceptionTasksCount=tasks.filter(x=>x.status==='ShortPick').length;
@@ -230,9 +230,9 @@ export default function PickingTasks(){
 
   return <UiPage>
     <UiPageHeader
-      eyebrow="Outbound"
-      title="Picking"
-      description="Scan-first Picking từ Allocation theo vị trí và điều phối theo đợt. Xác nhận Picking không trừ OnHand; tồn chỉ giảm tại dispatch/consume."
+      eyebrow="XUẤT KHO"
+      title="Thực thi Lấy hàng theo Đơn"
+      description="Ưu tiên quét mã vạch khi lấy hàng theo phân bổ vị trí và điều phối theo đợt. Xác nhận lấy hàng không trừ tồn kho vật lý; tồn kho chỉ giảm khi xuất bến giao hàng."
     />
     {error&&<div role="alert">{error}</div>}
 
@@ -253,7 +253,7 @@ export default function PickingTasks(){
           <span>Tác vụ sẵn sàng quét RF/Mobile: <strong>{mobileReadyTasksCount}</strong></span>
           <span>Ngoại lệ chờ xử lý trên Mobile: <strong>{shortPickExceptionTasksCount}</strong></span>
           <span>Tra cứu nhanh Barcode SKU: <strong>Sẵn sàng</strong></span>
-          <span>Hàng đợi đồng bộ ngoại tuyến: <UiBadge tone="success">Đồng bộ Idempotency an toàn</UiBadge></span>
+          <span>Hàng đợi đồng bộ ngoại tuyến: <UiBadge tone="success">Đồng bộ chống trùng lặp an toàn</UiBadge></span>
         </div>
         <div className="ui-inline-wrap">
           <input
@@ -330,7 +330,7 @@ export default function PickingTasks(){
         )}
       </UiCard>
 
-      <UiCard title="Tổng hợp Đợt lấy hàng (Wave / Batch Picking)">
+      <UiCard title="Tổng hợp Đợt lấy hàng theo Đợt / Đơn">
         {waves.length===0?<p className="ui-muted-text">Chưa có đợt lấy hàng (Wave/Batch) đang hoạt động.</p>:<UiTableScroll>
           <table aria-label="Tổng hợp đợt lấy hàng Wave Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>
@@ -348,7 +348,7 @@ export default function PickingTasks(){
               </td>
               <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
                 <UiBadge>{pickingTypeLabels[wave.pickingType]??wave.pickingType}</UiBadge>
-                <span style={{ display: 'block', fontSize: 10.5, color: '#475569', marginTop: 2 }}>Ưu tiên P{wave.priority}</span>
+                <span style={{ display: 'block', fontSize: 10.5, color: '#475569', marginTop: 2 }}>Ưu tiên mức {wave.priority}</span>
               </td>
               <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
                 <span style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 11 }}>{wave.taskCount} phiếu ({wave.openTaskCount} mở)</span>
@@ -363,7 +363,7 @@ export default function PickingTasks(){
         </UiTableScroll>}
       </UiCard>
 
-      <UiCard title="Danh sách nhiệm vụ Picking">
+      <UiCard title="Danh sách nhiệm vụ lấy hàng">
         {tasks.length===0?<p>Chưa có nhiệm vụ Picking phù hợp.</p>:<UiTableScroll>
           <table aria-label="Danh sách nhiệm vụ Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>

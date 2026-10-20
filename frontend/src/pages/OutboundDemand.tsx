@@ -296,11 +296,11 @@ export default function OutboundDemand(){
     <div className="ui-stack">
       <UiCard title="Tổng quan Tỷ lệ Đáp ứng Đơn hàng & Đơn nợ hàng">
         <div className="ui-inline-wrap">
-          <span>Tổng cầu: <strong>{totalOrderedQty}</strong></span>
-          <span>Đã giữ / Phân bổ: <strong>{totalReservedQty} / {totalAllocatedQty}</strong></span>
-          <span>Đã giao: <strong>{totalShippedQty}</strong></span>
-          <span>Đơn nợ hàng: <strong>{totalBackorderQty}</strong> (Còn mở: {openBackorderRemaining})</span>
-          <span>Tỷ lệ đáp ứng (%): <strong>{fulfillmentRatePct}%</strong></span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, width: '100%' }}><div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tổng cầu</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalOrderedQty}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Đã giữ / Phân bổ</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalReservedQty} / {totalAllocatedQty}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Đã giao</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalShippedQty}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Đơn nợ hàng (Còn mở)</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalBackorderQty} ({openBackorderRemaining})</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tỷ lệ đáp ứng (%)</span><strong style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{fulfillmentRatePct}%</strong></div></div>
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void triggerExpediteBackorder()}>
             Kích hoạt Ưu tiên Cấp phát Đơn nợ hàng
           </button>
