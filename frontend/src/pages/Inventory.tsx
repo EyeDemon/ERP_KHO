@@ -260,7 +260,7 @@ const Inventory = () => {
     demandMultiplier: number;
     totalAvailable: number;
     simulatedDemand: number;
-    projectedNetBalance: number;
+    projectedNetBalance: number; incomingPoQty?: number; incomingPurchaseOrderQty?: number;
     scenarioStatus: string;
     immutableSnapshotGuarantee: boolean;
   } | null>(null);
@@ -946,29 +946,43 @@ const Inventory = () => {
             <div className="ui-grid-2">
               <UiCard title={`Hiệu suất Nhập / Xuất (${analyticsReport.windowDays} ngày qua)`}>
                 <div className="ui-stack-xs">
-                  <div><strong>Phiếu nhập hoàn tất:</strong> {analyticsReport.inboundOutboundSla.completedReceiptsCount} phiếu</div>
-                  <div><strong>Thời gian xử lý Nhập kho TB:</strong> {analyticsReport.inboundOutboundSla.avgInboundLeadTimeHours} giờ</div>
-                  <div><strong>Tồn đọng chờ cất hàng:</strong> {analyticsReport.inboundOutboundSla.openPutawayBacklogCount} nhiệm vụ</div>
-                  <hr />
-                  <div><strong>Phiếu xuất đã giao:</strong> {analyticsReport.inboundOutboundSla.dispatchedExportsCount} phiếu</div>
-                  <div><strong>Thời gian xử lý Xuất kho TB:</strong> {analyticsReport.inboundOutboundSla.avgOutboundLeadTimeHours} giờ</div>
-                  <div><strong>Tồn đọng chờ lấy hàng:</strong> {analyticsReport.inboundOutboundSla.openPickingBacklogCount} nhiệm vụ</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, width: '100%' }}>
+                    <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Phiếu nhập hoàn tất</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.inboundOutboundSla.completedReceiptsCount} phiếu</strong></div>
+                    <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Thời gian xử lý Nhập kho TB</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.inboundOutboundSla.avgInboundLeadTimeHours} giờ</strong></div>
+                    <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tồn đọng chờ cất hàng</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.inboundOutboundSla.openPutawayBacklogCount} nhiệm vụ</strong></div>
+                    <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Phiếu xuất đã giao</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.inboundOutboundSla.dispatchedExportsCount} phiếu</strong></div>
+                    <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Thời gian xử lý Xuất kho TB</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.inboundOutboundSla.avgOutboundLeadTimeHours} giờ</strong></div>
+                    <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tồn đọng chờ lấy hàng</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.inboundOutboundSla.openPickingBacklogCount} nhiệm vụ</strong></div>
+                  </div>
+
+
+
+
+
+
                 </div>
               </UiCard>
 
               <UiCard title={`Độ chính xác Kiểm kê & Chênh lệch (${analyticsReport.windowDays} ngày qua)`}>
                 <div className="ui-stack-xs">
-                  <div><strong>Số đợt kiểm kê đã duyệt:</strong> {analyticsReport.stocktakeAccuracy.approvedStocktakesCount} đợt</div>
-                  <div><strong>Tổng số dòng kiểm đếm:</strong> {analyticsReport.stocktakeAccuracy.totalLinesCounted} dòng</div>
-                  <div><strong>Dòng khớp tuyệt đối:</strong> {analyticsReport.stocktakeAccuracy.exactMatchLinesCount} dòng</div>
-                  <div><strong>Dòng có lệch kiểm kê:</strong> {analyticsReport.stocktakeAccuracy.varianceLinesCount} dòng</div>
+
+
+
+
                   <div>
-                    <strong>Tỷ lệ chính xác kiểm kê:</strong>{' '}
-                    <UiBadge tone={analyticsReport.stocktakeAccuracy.accuracyRatePercent >= 98 ? 'success' : 'warning'}>
-                      {analyticsReport.stocktakeAccuracy.accuracyRatePercent}%
-                    </UiBadge>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, width: '100%' }}>
+                      <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Số đợt kiểm kê đã duyệt</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.stocktakeAccuracy.approvedStocktakesCount} đợt</strong></div>
+                      <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tổng số dòng kiểm đếm</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.stocktakeAccuracy.totalLinesCounted} dòng</strong></div>
+                      <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Dòng khớp tuyệt đối</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.stocktakeAccuracy.exactMatchLinesCount} dòng</strong></div>
+                      <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Dòng có lệch kiểm kê</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.stocktakeAccuracy.varianceLinesCount} dòng</strong></div>
+                      <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tỷ lệ chính xác kiểm kê</div><div style={{ marginTop: 2 }}><UiBadge tone={analyticsReport.stocktakeAccuracy.accuracyRatePercent >= 98 ? 'success' : 'warning'}>{analyticsReport.stocktakeAccuracy.accuracyRatePercent}%</UiBadge></div></div>
+                      <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tổng trị tuyệt đối lệch SL</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{analyticsReport.stocktakeAccuracy.totalAbsoluteVarianceQty}</strong></div>
+                    </div>
+
+
+
                   </div>
-                  <div><strong>Tổng trị tuyệt đối lệch SL:</strong> {analyticsReport.stocktakeAccuracy.totalAbsoluteVarianceQty}</div>
+
                 </div>
               </UiCard>
             </div>
@@ -981,11 +995,11 @@ const Inventory = () => {
                       <th>Mã SP</th>
                       <th>Tên SP</th>
                       <th>ĐVT</th>
-                      <th className="inventory-numeric">Tồn hiện tại</th>
-                      <th className="inventory-numeric">Nhập trong kỳ</th>
-                      <th className="inventory-numeric">Xuất trong kỳ</th>
-                      <th className="inventory-numeric">Hệ số vòng quay</th>
-                      <th className="inventory-numeric">Số ngày tồn</th>
+                      <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn hiện tại</th>
+                      <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Nhập trong kỳ</th>
+                      <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Xuất trong kỳ</th>
+                      <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Hệ số vòng quay</th>
+                      <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số ngày tồn</th>
                       <th>Phân nhóm tốc độ</th>
                     </tr>
                   </thead>
@@ -998,11 +1012,11 @@ const Inventory = () => {
                           <td><strong>{item.productCode}</strong></td>
                           <td>{item.productName}</td>
                           <td>{formatUnitName(item.unitName)}</td>
-                          <td className="inventory-numeric">{item.onHandQuantity}</td>
-                          <td className="inventory-numeric">{item.periodInQuantity}</td>
-                          <td className="inventory-numeric">{item.periodOutQuantity}</td>
-                          <td className="inventory-numeric"><strong>{item.turnoverRate}</strong></td>
-                          <td className="inventory-numeric">{item.daysOnHand !== null && item.daysOnHand !== undefined ? `${item.daysOnHand} ngày` : '∞'}</td>
+                          <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.onHandQuantity}</td>
+                          <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.periodInQuantity}</td>
+                          <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.periodOutQuantity}</td>
+                          <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><strong>{item.turnoverRate}</strong></td>
+                          <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.daysOnHand !== null && item.daysOnHand !== undefined ? `${item.daysOnHand} ngày` : '∞'}</td>
                           <td>{velocityBadge(item.velocityClass)}</td>
                         </tr>
                       ))
@@ -1138,11 +1152,11 @@ const Inventory = () => {
                     </button>
                   </div>
                   {whatIfResult && (
-                    <div role="status" aria-label="Kết quả mô phỏng kịch bản giả định What-If">
-                      • Kết quả kịch bản <strong>{whatIfResult.demandMultiplier.toFixed(1)}x</strong>: Tồn khả dụng hiện tại{' '}
-                      <strong>{whatIfResult.totalAvailable}</strong> đvt so với Cầu kịch bản{' '}
-                      <strong>{whatIfResult.simulatedDemand}</strong> đvt → Chênh lệch dự kiến:{' '}
-                      <strong>{whatIfResult.projectedNetBalance}</strong> đvt (
+                    <div role="status" aria-label="Kết quả mô phỏng kịch bản giả định What-If" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
+                      • Kết quả kịch bản <strong>{whatIfResult.demandMultiplier.toFixed(1)}x</strong>: Tồn khả dụng hiện tại (<strong>{whatIfResult.totalAvailable}</strong> đvt) + Lượng đang nhập PO (<strong>{whatIfResult.incomingPoQty ?? whatIfResult.incomingPurchaseOrderQty ?? Math.max(0, Number((whatIfResult.projectedNetBalance + whatIfResult.simulatedDemand - whatIfResult.totalAvailable).toFixed(2)))}</strong> đvt) - Cầu kịch bản (<strong>{whatIfResult.simulatedDemand}</strong> đvt) = Tồn dự kiến cuối kỳ: <strong>{whatIfResult.projectedNetBalance}</strong> đvt (
+
+
+
                       <span style={{ fontWeight: 700, color: whatIfResult.projectedNetBalance < 0 ? '#b45309' : '#065f46' }}>
                         {({ SURPLUS_ADEQUATE: 'Đủ tồn kho đáp ứng', BUFFER_SUFFICIENT: 'Đệm an toàn đủ đáp ứng', SHORTAGE_RISK: 'Nguy cơ thiếu hụt tồn kho', DEFICIT_WARNING: 'Cảnh báo thiếu hụt' } as Record<string, string>)[whatIfResult.scenarioStatus] || 'Đã tính toán kịch bản giả định'}
                       </span>

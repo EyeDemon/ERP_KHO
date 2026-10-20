@@ -261,9 +261,11 @@ public sealed class InventoryControlController(
 
         return Ok(new
         {
+            currentAvailableStock = totalAtp,
             totalAvailableQty = totalAtp,
             totalOpenDemandQty,
             incomingPoQty,
+            incomingPurchaseOrderQty = incomingPoQty,
             activeReservationsCount,
             abcClassificationSummary = new
             {
@@ -389,6 +391,9 @@ public sealed class InventoryControlController(
         var scenarioStatus = projectedEndingStock < 0m
             ? "Cảnh báo thiếu hụt tồn kho"
             : "Đủ tồn kho đáp ứng";
+        var formulaSummary = string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"Tồn khả dụng ({totalAvailableQty:0.##}) + Đang nhập PO ({incomingPoQty:0.##}) - Cầu kịch bản ({simulatedDemand:0.##}) = Dự kiến cuối kỳ ({projectedNetBalance:0.##})");
 
         var now = DateTime.UtcNow;
         var simulationId = $"SIM-WIF-{now:yyyyMMdd-HHmm}";
@@ -404,7 +409,7 @@ public sealed class InventoryControlController(
                 EntityName = "InventoryControl",
                 Action = "WhatIfSimulation",
                 NewValues = simulationId,
-                Reason = $"Mô phỏng tồn kho What-If (Khả dụng: {totalAvailableQty}, Cầu mở: {totalOpenDemandQty}, PO đang về: {incomingPoQty}, Dư dự kiến: {projectedEndingStock})",
+                Reason = $"Mô phỏng tồn kho What-If: {formulaSummary}",
                 Result = "Success",
                 Timestamp = now
             });
@@ -420,12 +425,15 @@ public sealed class InventoryControlController(
             leadTimeDelayDays,
             totalAvailable = totalAvailableQty,
             totalAvailableQty,
+            currentAvailableStock = totalAvailableQty,
             totalOpenDemandQty,
             incomingPoQty,
+            incomingPurchaseOrderQty = incomingPoQty,
             activeReservedQty,
             simulatedDemand,
             projectedNetBalance,
             projectedEndingStock,
+            formulaSummary,
             scenarioStatus,
             status = scenarioStatus,
             statusLabel = scenarioStatus,

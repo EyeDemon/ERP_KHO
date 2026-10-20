@@ -140,7 +140,9 @@ namespace ERP.Api.Controllers
                 qcOrApprovalPendingCount = items.Count(x =>
                     x.Status is "QcPending" or "QcCompleted" or "ReadyToPost" or "4" or "5"),
                 postedCount = items.Count(x => x.Status is "Posted" or "Approved" or "1"),
-                cancelledCount = items.Count(x => x.Status is "Cancelled" or "2")
+                cancelledCount = items.Count(x => x.Status is "Cancelled" or "2"),
+                status = "Đã tải tổng quan luồng phiếu nhập kho",
+                statusLabel = "Đã tải tổng quan luồng phiếu nhập kho"
             });
         }
 

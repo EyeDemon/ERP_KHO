@@ -434,18 +434,18 @@ const Stocktakes = () => {
             {error && <p role="alert">{error} <button type="button" onClick={() => void fetchStocktakes()}>Thử lại</button></p>}
 
             <UiCard title="Danh mục Mã lý do Chuẩn & Chính sách Điều chỉnh Tồn kho có Phê duyệt Độc lập">
-              <div className="stocktake-detail-meta">
+              <div className="stocktake-detail-meta" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, width: '100%' }}>
                 <div>
-                  <strong>Mã lý do chuẩn hóa toàn hệ thống:</strong><br />
-                  Chênh lệch kiểm đếm • Hư hỏng vật lý • Thất lạc / Sai vị trí • Thiếu từ nhà cung cấp • Hủy hết hạn • Cô lập thu hồi
+                  <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Mã lý do chuẩn hóa toàn hệ thống:</strong><br />Chênh lệch kiểm đếm • Hư hỏng vật lý • Thất lạc / Sai vị trí • Thiếu từ nhà cung cấp • Hủy hết hạn • Cô lập thu hồi</div>
+
                 </div>
                 <div>
-                  <strong>Loại bút toán điều chỉnh sổ cái:</strong><br />
-                  Điều chỉnh tăng &amp; Điều chỉnh giảm
+                  <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Loại bút toán điều chỉnh sổ cái:</strong><br />Điều chỉnh tăng &amp; Điều chỉnh giảm</div>
+
                 </div>
                 <div>
-                  <strong>Kiểm soát phân tách nhiệm vụ:</strong><br />
-                  Người tạo phiếu kiểm kê không được tự phê duyệt điều chỉnh tồn kho (Ngưỡng cảnh báo lệch chuẩn: ±2.0%)
+                  <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Kiểm soát phân tách nhiệm vụ:</strong><br />Người tạo phiếu kiểm kê không được tự phê duyệt điều chỉnh tồn kho (Ngưỡng cảnh báo lệch chuẩn: ±2.0%)</div>
+
                 </div>
               </div>
               <div className="ui-inline-actions" style={{ marginTop: 8 }}>
@@ -463,7 +463,7 @@ const Stocktakes = () => {
                 <input
                   aria-label="Tìm phiếu kiểm kê"
                   type="text"
-                  placeholder="Tìm mã phiếu hoặc tên kho..."
+                  placeholder="Tìm mã phiếu hoặc tên kho..." style={{ minWidth: 280 }}
                   value={searchTerm}
                   onChange={handleSearchChange}
                 />
@@ -491,7 +491,7 @@ const Stocktakes = () => {
                         <th>Kho</th>
                         <th>Ngày tạo</th>
                         <th>Trạng thái</th>
-                        <th className="ui-cell-numeric">SL SP</th>
+                        <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL SP</th>
                         <th>Ghi chú</th>
                         <th>Hành động</th>
                       </tr>
@@ -503,7 +503,7 @@ const Stocktakes = () => {
                           <td>{s.warehouseName}</td>
                           <td>{new Date(s.createdAt).toLocaleString('vi-VN')}</td>
                           <td><UiBadge tone={statusTone(s.status)}>{getStatusText(s.status)}</UiBadge></td>
-                          <td className="ui-cell-numeric">{s.detailCount}</td>
+                          <td className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.detailCount}</td>
                           <td className="stocktake-note" title={s.note || ''}>{s.note || '—'}</td>
                           <td><button type="button" onClick={() => void loadDetail(s.id)}>Xem chi tiết</button></td>
                         </tr>
@@ -625,7 +625,7 @@ const Stocktakes = () => {
                   </button>
                 )}
               </div>
-              <div className="stocktake-detail-meta">
+              <div className="stocktake-detail-meta" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, width: '100%' }}>
                 <div><strong>Kho:</strong> {currentDetail.warehouseName}</div>
                 <div>
                   <strong>Trạng thái:</strong> <UiBadge tone={statusTone(currentDetail.status)}>{getStatusText(currentDetail.status)}</UiBadge>
@@ -653,9 +653,9 @@ const Stocktakes = () => {
                       <th>Mã SP</th>
                       <th>Tên sản phẩm</th>
                       <th>Đơn vị</th>
-                      <th className="ui-cell-numeric">Tồn hệ thống</th>
-                      <th className="ui-cell-numeric">Thực đếm</th>
-                      <th className="ui-cell-numeric">Chênh lệch</th>
+                      <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn hệ thống</th>
+                      <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thực đếm</th>
+                      <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Chênh lệch</th>
                       <th>Ghi chú</th>
                       {currentDetail.status === 0 && <th>Hành động</th>}
                     </tr>
@@ -669,8 +669,8 @@ const Stocktakes = () => {
                           <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong>{row.locationCode && <><br /><small style={{ whiteSpace: 'nowrap' }}>{row.locationCode}</small></>}</td>
                           <td>{row.productName}</td>
                           <td>{row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName}</td>
-                          <td className="ui-cell-numeric">{isBlindDraft ? <span className="ui-muted-text">Ẩn (Kiểm kê mù)</span> : row.systemQuantity}</td>
-                          <td className="ui-cell-numeric">
+                          <td className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{isBlindDraft ? <span className="ui-muted-text">Ẩn (Kiểm kê mù)</span> : row.systemQuantity}</td>
+                          <td className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                             {isEditing ? (
                               <input
                                 className="stocktake-editor"
@@ -686,7 +686,7 @@ const Stocktakes = () => {
                               row.actualQuantity !== undefined && row.actualQuantity !== null ? row.actualQuantity : '—'
                             )}
                           </td>
-                          <td className="ui-cell-numeric">
+                          <td className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                             {isBlindDraft
                               ? <span className="stocktake-variance neutral">Ẩn khi đếm mù</span>
                               : (isEditing ? renderVariance(row.systemQuantity, editActualQuantity) : renderVariance(row.systemQuantity, row.actualQuantity))}

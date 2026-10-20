@@ -135,6 +135,8 @@ public sealed class ApprovalsController(
             warningCount = allItems.Count(x => x.SlaStatus == "Warning"),
             overdueCount = allItems.Count(x => x.SlaStatus == "Overdue"),
             maxWaitingMinutes = allItems.Any() ? allItems.Max(x => x.WaitingMinutes ?? 0) : 0,
+            status = "Đã tải tổng quan SLA hàng đợi phê duyệt",
+            statusLabel = "Đã tải tổng quan SLA hàng đợi phê duyệt"
         });
     }
 

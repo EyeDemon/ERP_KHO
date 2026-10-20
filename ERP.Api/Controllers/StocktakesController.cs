@@ -95,7 +95,8 @@ namespace ERP.Api.Controllers
 
                 var approvedProposalEntityIds = logs
                     .Where(a => string.Equals(a.Result, "Approved", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(a.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase))
+                                string.Equals(a.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase) ||
+                                a.Action.EndsWith(":APPROVED", StringComparison.OrdinalIgnoreCase))
                     .Select(a => a.EntityId)
                     .Where(id => id.HasValue)
                     .Select(id => id!.Value)
@@ -103,7 +104,8 @@ namespace ERP.Api.Controllers
 
                 var approvedProposalCodes = logs
                     .Where(a => (string.Equals(a.Result, "Approved", StringComparison.OrdinalIgnoreCase) ||
-                                 string.Equals(a.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase)) &&
+                                 string.Equals(a.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase) ||
+                                 a.Action.EndsWith(":APPROVED", StringComparison.OrdinalIgnoreCase)) &&
                                 !string.IsNullOrWhiteSpace(a.NewValues))
                     .Select(a => a.NewValues!)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -118,11 +120,15 @@ namespace ERP.Api.Controllers
                     decimal.TryParse(a.OldValues, NumberStyles.Any, CultureInfo.InvariantCulture, out var deltaQty);
                     var isApproved = string.Equals(a.Result, "Approved", StringComparison.OrdinalIgnoreCase) ||
                                      string.Equals(a.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase) ||
+                                     a.Action.EndsWith(":APPROVED", StringComparison.OrdinalIgnoreCase) ||
                                      approvedProposalEntityIds.Contains((int)(a.Id % int.MaxValue)) ||
                                      approvedProposalCodes.Contains(codeKey);
                     var normalizedStatus = isApproved
                         ? "Đã phê duyệt & Ghi sổ"
-                        : (string.IsNullOrWhiteSpace(a.Result) ? "PENDING_SOD_APPROVAL" : a.Result);
+                        : "Chờ phê duyệt tách biệt nhiệm vụ (SoD)";
+                    var normalizedReasonCode = a.Action.EndsWith(":APPROVED", StringComparison.OrdinalIgnoreCase)
+                        ? a.Action[..^9]
+                        : a.Action;
                     recentProposals.Add(new
                     {
                         id = a.Id,
@@ -133,9 +139,12 @@ namespace ERP.Api.Controllers
                             ? a.CorrelationId
                             : (a.EntityId.HasValue ? $"SKU-{a.EntityId.Value}" : "SKU-CYCLE-01"),
                         deltaQuantity = deltaQty,
-                        reasonCode = a.Action,
+                        reasonCode = normalizedReasonCode,
                         note = a.Reason,
                         status = normalizedStatus,
+                        statusLabel = isApproved
+                            ? "Đã phê duyệt & Ghi sổ"
+                            : "Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm",
                         createdAtUtc = a.Timestamp
                     });
                 }
@@ -338,7 +347,7 @@ namespace ERP.Api.Controllers
                     NewValues = proposalCode,
                     Reason = request?.Note?.Trim() ?? reasonCode,
                     CorrelationId = string.IsNullOrWhiteSpace(productCode) ? null : productCode,
-                    Result = "PENDING_SOD_APPROVAL",
+                    Result = "Success",
                     Timestamp = now
                 };
                 _db.AuditLogs.Add(log);
@@ -378,8 +387,9 @@ namespace ERP.Api.Controllers
                         ledgerTransactionId = execResult.LedgerTransactionId,
                         referenceCode = $"ADJ-PROP-{log.Id}",
                         reasonCode,
-                        afterState = "Approved",
+                        afterState = "Đã phê duyệt",
                         status = "Đã phê duyệt & Ghi sổ",
+                        statusLabel = "Đã phê duyệt & Ghi sổ",
                         createdAtUtc = now
                     });
                 }
@@ -395,7 +405,8 @@ namespace ERP.Api.Controllers
                 productCode,
                 deltaQuantity,
                 reasonCode,
-                status = "PENDING_SOD_APPROVAL",
+                status = "Chờ phê duyệt tách biệt nhiệm vụ (SoD)",
+                statusLabel = "Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm",
                 createdAtUtc = now
             });
         }
@@ -428,9 +439,10 @@ namespace ERP.Api.Controllers
             var refEntityId = (int)(proposalAuditId % int.MaxValue);
             var alreadyApproved = string.Equals(original.Result, "Approved", StringComparison.OrdinalIgnoreCase) ||
                                   string.Equals(original.Result, "Đã phê duyệt & Ghi sổ", StringComparison.OrdinalIgnoreCase) ||
+                                  original.Action.EndsWith(":APPROVED", StringComparison.OrdinalIgnoreCase) ||
                                   await _db.AuditLogs.AsNoTracking().AnyAsync(
                                       a => a.EntityName == "StocktakeAdjustmentProposal" &&
-                                           (a.Result == "Approved" || a.Result == "Đã phê duyệt & Ghi sổ") &&
+                                           (a.Result == "Approved" || a.Result == "Đã phê duyệt & Ghi sổ" || a.Action.EndsWith(":APPROVED")) &&
                                            (a.EntityId == refEntityId || (original.NewValues != null && a.NewValues == original.NewValues)),
                                       cancellationToken);
             if (alreadyApproved)
@@ -494,8 +506,9 @@ namespace ERP.Api.Controllers
                 resultingQuantity = execResult.ResultingQuantity,
                 ledgerTransactionId = execResult.LedgerTransactionId,
                 referenceCode = $"ADJ-PROP-{original.Id}",
-                afterState = "Approved",
+                afterState = "Đã phê duyệt",
                 status = "Đã phê duyệt & Ghi sổ",
+                statusLabel = "Đã phê duyệt & Ghi sổ",
                 approvedAtUtc = DateTime.UtcNow
             });
         }
@@ -618,12 +631,12 @@ namespace ERP.Api.Controllers
                     EntityName = "StocktakeAdjustmentProposal",
                     EntityId = referenceId,
                     WarehouseId = warehouseId,
-                    Action = actionCode,
+                    Action = $"{actionCode}:APPROVED",
                     OldValues = deltaQuantity.ToString(CultureInfo.InvariantCulture),
                     NewValues = proposalCode,
                     Reason = reasonNote,
                     CorrelationId = correlationProductCode,
-                    Result = "Approved",
+                    Result = "Success",
                     Timestamp = now
                 });
 

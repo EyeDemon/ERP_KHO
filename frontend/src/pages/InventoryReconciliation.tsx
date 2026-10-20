@@ -783,9 +783,9 @@ export default function InventoryReconciliation() {
                 <tr>
                   <th>Kho</th>
                   <th>Sản phẩm</th>
-                  <th>Tồn hiện tại</th>
-                  <th>Sổ cái kỳ vọng</th>
-                  <th>Chênh lệch</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn hiện tại</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Sổ cái kỳ vọng</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Chênh lệch</th>
                   <th>Trạng thái khả dụng</th>
                   <th>Đối chiếu 8 trạng thái</th>
                   <th>Thành phần biến động</th>
@@ -810,9 +810,9 @@ export default function InventoryReconciliation() {
                         <strong style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>{row.productCode}</strong>
                         <span className="reconciliation-product-name">{row.productName}</span>
                       </td>
-                      <td>{numberFormat.format(row.currentQuantity)}</td>
-                      <td>{row.expectedQuantity == null ? 'Chưa xác định' : numberFormat.format(row.expectedQuantity)}</td>
-                      <td className={indeterminate ? undefined : row.difference === 0 ? 'reconciliation-difference-zero' : 'reconciliation-difference-alert'}>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{numberFormat.format(row.currentQuantity)}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.expectedQuantity == null ? 'Chưa xác định' : numberFormat.format(row.expectedQuantity)}</td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} className={indeterminate ? undefined : row.difference === 0 ? 'reconciliation-difference-zero' : 'reconciliation-difference-alert'}>
                         {row.difference == null ? 'Chưa xác định' : numberFormat.format(row.difference)}
                       </td>
                       <td><UiBadge tone={indeterminate ? 'warning' : matches ? 'success' : 'danger'}>{indeterminate ? 'Chưa xác định' : matches ? 'Khớp' : 'Lệch'}</UiBadge></td>

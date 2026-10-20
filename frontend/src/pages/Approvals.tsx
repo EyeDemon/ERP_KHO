@@ -424,16 +424,20 @@ export default function Approvals() {
 
         <UiCard title="Tóm tắt Cam kết Thời gian Phê duyệt (SLA)">
           <div className="ui-inline-wrap">
-            <span>Đúng hạn: <strong>{normalCount}</strong></span>
-            <span>Sắp quá hạn: <strong>{warningCount}</strong></span>
-            <span>Quá hạn: <strong>{overdueCount}</strong></span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, width: '100%', marginBottom: 8 }}>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đúng hạn</div><strong style={{ fontSize: 16, color: '#065f46' }}>{normalCount}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Sắp quá hạn</div><strong style={{ fontSize: 16, color: '#b45309' }}>{warningCount}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Quá hạn</div><strong style={{ fontSize: 16, color: '#b91c1c' }}>{overdueCount}</strong></div>
+            </div>
+
+
             <button type="button" onClick={() => void triggerEscalateOverdue()}>
               Leo thang Nhắc duyệt Hồ sơ Quá hạn SLA
             </button>
             {escalationResult && (
-              <UiBadge tone="warning">
-                {`Đã leo thang ${escalationResult.escalationBatchId} • ${escalationResult.escalatedStatus}`}
-              </UiBadge>
+              <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', fontWeight: 600 }}>{`Đã leo thang lô nhắc duyệt ${escalationResult.escalationBatchId} • Trạng thái: Đã chuyển cấp quản lý xử lý hồ sơ quá hạn SLA`}</div>
+
+
             )}
           </div>
         </UiCard>
@@ -552,7 +556,7 @@ export default function Approvals() {
                     <th>Kho</th>
                     <th>Người tạo</th>
                     <th>Thời gian gửi</th>
-                    <th>Đã chờ</th>
+                    <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đã chờ</th>
                     <th>Mức SLA</th>
                     <th>Hành động</th>
                   </tr>
@@ -565,7 +569,7 @@ export default function Approvals() {
                       <td>{item.warehouseName}{item.destinationWarehouseName && ` → ${item.destinationWarehouseName}`}</td>
                       <td>{item.creatorName}</td>
                       <td title={`UTC: ${item.requestedAtUtc}`}>{new Date(item.requestedAtUtc).toLocaleString('vi-VN')}</td>
-                      <td className="approval-duration">{waitingText(item.waitingMinutes)}</td>
+                      <td className="approval-duration" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{waitingText(item.waitingMinutes)}</td>
                       <td>
                         {item.slaStatus && (
                           <span className={`approval-sla approval-sla-${item.slaStatus.toLowerCase()}`}>
@@ -682,7 +686,7 @@ export default function Approvals() {
                           <tr>
                             <th>Sản phẩm</th>
                             <th>Đơn vị</th>
-                            <th>Số lượng</th>
+                            <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -690,7 +694,7 @@ export default function Approvals() {
                             <tr key={line.productCode}>
                               <td style={{ whiteSpace: 'nowrap' }}>{line.productCode} · {line.productName}</td>
                               <td>{line.unitName === 'QA_UNIT' || line.unitName === 'QA-PCS' ? 'THÙNG' : line.unitName}</td>
-                              <td className="approval-duration">{line.quantity}</td>
+                              <td className="approval-duration" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.quantity}</td>
                             </tr>
                           ))}
                         </tbody>

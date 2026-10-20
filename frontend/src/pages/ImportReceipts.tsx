@@ -485,19 +485,29 @@ const ImportReceipts = () => {
 
         <UiCard title="Tổng quan Luồng Tiếp nhận Hàng đến">
           <div className="ui-inline-wrap">
-            <UiBadge>{`Tổng số phiếu nhập: ${receipts.length}`}</UiBadge>
-            <UiBadge tone="warning">{`Đang soạn / Nhận tại cửa: ${receipts.filter(r => r.status === 'Draft' || r.status === 'Received' || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
-            <UiBadge tone="warning">{`Đang chờ QC / Chờ duyệt: ${receipts.filter(r => r.status === 'QcPending' || r.status === 'QcCompleted' || r.status === 'ReadyToPost').length}`}</UiBadge>
-            <UiBadge tone="success">{`Đã ghi sổ tồn kho: ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
-            <UiBadge tone="danger">{`Phiếu đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`}</UiBadge>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, width: '100%' }}>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tổng số phiếu nhập</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang soạn / Nhận tại cửa</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'Draft' || r.status === 'Received' || r.status.startsWith('Discrepancy')).length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang chờ QC / Chờ duyệt</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'QcPending' || r.status === 'QcCompleted' || r.status === 'ReadyToPost').length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Phiếu đã hủy</div><strong style={{ fontSize: 15, color: '#b91c1c' }}>{receipts.filter(r => r.status === 'Cancelled').length}</strong></div>
+            </div>
+
+
+
+
           </div>
         </UiCard>
 
         <UiCard title="Mở Bàn làm việc Kiểm định Chất lượng">
           <div className="ui-inline-wrap">
-            <UiBadge tone="warning">{`Đang kiểm định QC / Xử lý chênh lệch: ${receipts.filter(r => r.requiresQc || r.status === 'QcPending' || r.status === 'QcCompleted' || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
-            <UiBadge tone="success">{`Hoàn tất QC & đã ghi sổ tồn kho: ${receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}`}</UiBadge>
-            <UiBadge>{`Hàng khách trả lại / RMA (Khả dụng / Biệt trữ / Hư hỏng): ${receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}`}</UiBadge>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, width: '100%', marginBottom: 8 }}>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang kiểm định QC / Xử lý chênh lệch</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.requiresQc || r.status === 'QcPending' || r.status === 'QcCompleted' || r.status.startsWith('Discrepancy')).length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hoàn tất QC & đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hàng khách trả lại / RMA (Khả dụng / Biệt trữ / Hư hỏng)</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}</strong></div>
+            </div>
+
+
             <button
               type="button"
               disabled={governanceBusy}
@@ -521,7 +531,7 @@ const ImportReceipts = () => {
                       setError('Phản hồi khởi tạo hồ sơ kiểm định RMA không hợp lệ từ máy chủ.');
                       return;
                     }
-                    setSuccessMsg(`Đã khởi tạo hồ sơ kiểm định RMA (${code}): Phân luồng QUARANTINE → INBOUND_QC_INSPECTION.`);
+                    setSuccessMsg(`Đã khởi tạo hồ sơ kiểm định RMA (${code}): Phân luồng khu vực cách ly sang bàn kiểm định chất lượng đầu vào.`);
                   })
                   .catch((err) => {
                     setError(permissionError(err, 'Không thể khởi tạo hồ sơ kiểm định RMA / hàng hoàn trả.'));
@@ -551,7 +561,7 @@ const ImportReceipts = () => {
                       setError('Phản hồi thực thi phân luồng tân trang & xuất trả RTV không hợp lệ từ máy chủ.');
                       return;
                     }
-                    setSuccessMsg(`Đã thực thi phân luồng Reverse Logistics (${code}): Tân trang (Refurbish → Grade B) & Xuất trả Nhà cung cấp RTV.`);
+                    setSuccessMsg(`Đã thực thi phân luồng hậu cần thu hồi (${code}): Tân trang phân loại hạng B & Xuất trả Nhà cung cấp RTV.`);
                   })
                   .catch((err) => {
                     setError(permissionError(err, 'Không thể thực thi phân luồng tân trang (Refurbish) & xuất trả RTV.'));
@@ -779,9 +789,9 @@ const ImportReceipts = () => {
                   <tr>
                     <th>Mã SP</th>
                     <th>Tên SP</th>
-                    <th className="import-numeric">Dự kiến</th>
-                    <th className="import-numeric">Nhận / Chấp nhận</th>
-                    <th className="import-numeric">Đơn vị cơ sở</th>
+                    <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Dự kiến</th>
+                    <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Nhận / Chấp nhận</th>
+                    <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn vị cơ sở</th>
                     <th>Ghi chú</th>
                   </tr>
                 </thead>
@@ -793,8 +803,8 @@ const ImportReceipts = () => {
                     <tr key={d.id}>
                       <td style={{ whiteSpace: 'nowrap' }}><strong>{d.productCode}</strong></td>
                       <td>{d.productName}<br /><small>Kiểm tra chất lượng: {d.requiresQc ? 'Bắt buộc · ' + statusLabel(d.qcState) + ' · chính sách ' + (d.qcPolicyId ?? '—') + ' phiên bản ' + (d.qcPolicyVersion ?? '—') : 'Không yêu cầu'}</small></td>
-                      <td className="import-numeric">{d.expectedQuantity} {opUnit}</td>
-                      <td className="import-numeric">
+                      <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.expectedQuantity} {opUnit}</td>
+                      <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                         {selectedReceipt.status === 'Draft' && (canReceive || canObserve) ? (
                           <div className="import-quantity-editor">
                             <label>Số lượng nhận <input aria-label={'Số lượng nhận ' + d.productCode} type="number" min="0" step="any" value={receiveLines[d.id]?.receivedQuantity ?? d.expectedQuantity} onChange={e => setReceiveLines(x => ({ ...x, [d.id]: { ...(x[d.id] || { receivedQuantity: d.expectedQuantity, acceptedQuantity: d.expectedQuantity, damagedQuantity: 0, rejectedQuantity: 0 }), receivedQuantity: Number(e.target.value) } }))} /></label>
@@ -822,7 +832,7 @@ const ImportReceipts = () => {
                           <>{d.receivedQuantity} / {d.acceptedQuantity} {opUnit}<br /><small>Hư hỏng: {d.damagedQuantity}; Từ chối: {d.rejectedQuantity}</small></>
                         )}
                       </td>
-                      <td className="import-numeric">× {d.conversionFactor} (v{d.conversionVersion})<br />{selectedReceipt.status === 'Draft' ? roundQty4((receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor) : d.baseAcceptedQuantity || d.baseExpectedQuantity} {baseUnit}</td>
+                      <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>× {d.conversionFactor} (v{d.conversionVersion})<br />{selectedReceipt.status === 'Draft' ? roundQty4((receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor) : d.baseAcceptedQuantity || d.baseExpectedQuantity} {baseUnit}</td>
                       <td>{d.note}</td>
                     </tr>
                     );

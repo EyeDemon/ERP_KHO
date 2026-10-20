@@ -55,7 +55,9 @@ namespace ERP.Api.Controllers
                 draftCount = items.Count(x => string.Equals(x.Status, "Draft", StringComparison.OrdinalIgnoreCase)),
                 approvedReadyCount = items.Count(x => string.Equals(x.Status, "Approved", StringComparison.OrdinalIgnoreCase)),
                 dispatchedCount = items.Count(x => x.Status is "Dispatched" or "Completed"),
-                cancelledCount = items.Count(x => string.Equals(x.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                cancelledCount = items.Count(x => string.Equals(x.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)),
+                status = "Đã tải tổng quan luồng phiếu xuất kho",
+                statusLabel = "Đã tải tổng quan luồng phiếu xuất kho"
             });
         }
 
@@ -159,6 +161,9 @@ namespace ERP.Api.Controllers
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyDispatchCutoffRequest? request = null,
             CancellationToken cancellationToken = default)
         {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+
             var warehouseId = request?.WarehouseId;
             IReadOnlyCollection<int>? accessibleIds = null;
             if (_warehouseAccess != null)
@@ -201,9 +206,30 @@ namespace ERP.Api.Controllers
                     outboundCutoffLocal = cutoffSpan.Value.ToString(@"hh\:mm");
             }
 
+            var now = DateTime.UtcNow;
+            var verificationId = $"EXP-CUT-{now:yyyyMMdd-HHmm}";
+            if (_db != null)
+            {
+                var actorUserId = int.TryParse(
+                    User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("Id"),
+                    out var uid) ? uid : (int?)null;
+                _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    UserId = actorUserId,
+                    WarehouseId = warehouseId,
+                    EntityName = "ExportReceipt",
+                    Action = "ExportReceipt.VerifyDispatchCutoff",
+                    NewValues = verificationId,
+                    Reason = $"Đối soát giờ chốt xuất kho ({outboundCutoffLocal}, {checkedExportReceiptsCount} phiếu xuất, {openPickingTasksCount} tác vụ lấy hàng mở)",
+                    Result = "Success",
+                    Timestamp = now
+                });
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
             return Ok(new
             {
-                verificationId = $"EXP-CUT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+                verificationId,
                 warehouseId,
                 checkedExportReceiptsCount,
                 openPickingTasksCount,
@@ -212,7 +238,7 @@ namespace ERP.Api.Controllers
                 cutoffComplianceStatus = $"Đạt chuẩn giờ chốt xuất kho ({outboundCutoffLocal})",
                 status = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất",
                 statusLabel = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất",
-                verifiedAtUtc = DateTime.UtcNow
+                verifiedAtUtc = now
             });
         }
     }
