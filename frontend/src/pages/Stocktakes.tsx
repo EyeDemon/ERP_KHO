@@ -453,7 +453,7 @@ const Stocktakes = () => {
                   Tạo nhanh Đề xuất Điều chỉnh qua Cổng Phê duyệt Độc lập
                 </button>
                 {proposalStatus && (
-                  <UiBadge tone="warning">{proposalStatus}</UiBadge>
+                  <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', fontWeight: 600 }}>{proposalStatus === 'PENDING_SOD_APPROVAL' ? 'Trạng thái: Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm' : proposalStatus}</div>
                 )}
               </div>
             </UiCard>

@@ -124,11 +124,20 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         await context.SaveChangesAsync();
     }
 
-    var wh01 = await context.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(warehouse => warehouse.Code == "WH01") ?? primaryWarehouse;
-    if (wh01.Name is "QA Kho TP.HCM" or "Local QA Warehouse")
+    if (!await context.Warehouses.IgnoreQueryFilters().AnyAsync(w => w.Id != primaryWarehouse.Id && w.Code == "WH01"))
     {
-        wh01.Name = "Kho Chính TP.HCM";
+        primaryWarehouse.Code = "WH01";
     }
+    primaryWarehouse.Name = "Kho Chính TP.HCM";
+    primaryWarehouse.Address = "Quận 7, TP.HCM";
+    primaryWarehouse.IsActive = true;
+    await context.SaveChangesAsync();
+
+    var wh01 = await context.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(warehouse => warehouse.Code == "WH01") ?? primaryWarehouse;
+    wh01.Name = "Kho Chính TP.HCM";
+    wh01.Address = "Quận 7, TP.HCM";
+    wh01.IsActive = true;
+
     var wh02 = await context.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(warehouse => warehouse.Code == "WH02" || warehouse.Code == "QA-HN");
     if (wh02 is null)
     {
@@ -142,10 +151,15 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         context.Warehouses.Add(wh02);
         await context.SaveChangesAsync();
     }
-    else if (wh02.Name is "Kho QA ngoài phạm vi" or "QA Kho Hà Nội")
+    else
     {
+        if (!await context.Warehouses.IgnoreQueryFilters().AnyAsync(w => w.Id != wh02.Id && w.Code == "WH02"))
+        {
+            wh02.Code = "WH02";
+        }
         wh02.Name = "Kho Chi Nhánh Hà Nội";
         wh02.Address = "Quận Cầu Giấy, Hà Nội";
+        wh02.IsActive = true;
         await context.SaveChangesAsync();
     }
 

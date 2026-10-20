@@ -650,14 +650,14 @@ export default function InventoryReconciliation() {
     <UiPage>
       <UiPageHeader
         eyebrow="Kiểm soát tồn kho"
-        title="Đối chiếu tồn kho & ledger"
-        description="Đối chiếu số dư tồn kho thực tế với sổ cái bất biến (Ledger) để phát hiện chênh lệch. Trạm kiểm soát này chỉ đọc; mọi điều chỉnh phải thực hiện qua giao dịch đảo có phê duyệt."
+        title="Đối chiếu Tồn kho & Sổ cái"
+        description="Đối chiếu số dư tồn kho thực tế với sổ cái bất biến để phát hiện chênh lệch. Trạm kiểm soát này chỉ đọc; mọi điều chỉnh phải thực hiện qua giao dịch đảo có phê duyệt."
       />
       <p role="note" className="ui-muted-text">
-        Danh sách hiển thị riêng số liệu AVAILABLE và kết luận đối chiếu cả 8 trạng thái.
-        Tồn hiện tại không phải cùng snapshot với Ledger, nên kết quả chỉ dùng điều tra.
-        Chưa bao phủ toàn bộ Owner, Handling Unit, Reserved, Allocated hay quy trình khôi phục số dư có phê duyệt.
-        Kết quả này chỉ để phát hiện sai lệch, không tự động sửa Ledger hoặc Balance.
+        Danh sách hiển thị riêng số liệu tồn khả dụng và kết luận đối chiếu trên cả 8 trạng thái tồn kho.
+        Số dư hiện tại và sổ cái bất biến được tổng hợp độc lập để phục vụ điều tra đối soát;
+        hệ thống chỉ cảnh báo chênh lệch và không tự động sửa sổ cái hay số dư
+        khi chưa qua giao dịch đảo có phê duyệt.
       </p>
 
       {demoRuntime && (
@@ -679,38 +679,38 @@ export default function InventoryReconciliation() {
       </UiMetricGrid>
 
       <UiCard title="Tổng quan Đối soát Sổ cái — Số dư — Giữ hàng">
-        <div className="ui-form-grid">
+        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, width: '100%' }}>
           <div>
-            <strong>Tỷ lệ khớp số dư trang hiện tại</strong><br />
-            {currentRows.filter(row => row.status === 'Match').length}/{currentRows.length} dòng khớp ({currentRows.length > 0 ? Math.round((currentRows.filter(row => row.status === 'Match').length / currentRows.length) * 100) : 0}%)
+            <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tỷ lệ khớp số dư trang hiện tại</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{currentRows.filter(row => row.status === 'Match').length}/{currentRows.length} dòng khớp ({currentRows.length > 0 ? Math.round((currentRows.filter(row => row.status === 'Match').length / currentRows.length) * 100) : 0}%)</strong></div>
+
           </div>
           <div>
-            <strong>Tổng số dư hiện tại vs Tổng kỳ vọng</strong><br />
-            Số dư: {numberFormat.format(currentRows.reduce((sum, row) => sum + row.currentQuantity, 0))} • Kỳ vọng: {numberFormat.format(currentRows.reduce((sum, row) => sum + (row.expectedQuantity ?? 0), 0))}
+            <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tổng số dư hiện tại &amp; Tổng kỳ vọng</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>Số dư: {numberFormat.format(currentRows.reduce((sum, row) => sum + row.currentQuantity, 0))} • Kỳ vọng: {numberFormat.format(currentRows.reduce((sum, row) => sum + (row.expectedQuantity ?? 0), 0))}</strong></div>
+
           </div>
           <div>
-            <strong>Bucket cảnh báo giữ chỗ / âm / ngoài phạm vi</strong><br />
-            {numberFormat.format(currentRows.reduce((sum, row) => sum + (row.invalidReservationBucketCount ?? 0) + (row.negativePhysicalBucketCount ?? 0) + (row.unclassifiedStockBucketCount ?? 0), 0))} bucket cần kiểm tra
+            <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Nhóm tồn kho cảnh báo giữ chỗ / âm / ngoài phạm vi</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{numberFormat.format(currentRows.reduce((sum, row) => sum + (row.invalidReservationBucketCount ?? 0) + (row.negativePhysicalBucketCount ?? 0) + (row.unclassifiedStockBucketCount ?? 0), 0))} nhóm tồn cần kiểm tra</strong></div>
+
           </div>
         </div>
       </UiCard>
 
       <UiCard title="Trung tâm Đối chiếu Tích hợp & Khả năng Phục hồi Vận hành Kho">
-        <div className="ui-form-grid">
+        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, width: '100%' }}>
           <div>
-            <strong>Đồng bộ MDM / PO / SO & Hộp thư Inbox/Outbox</strong><br />
-            MDM: Đã đồng bộ • PO/SO: Đang hoạt động • Outbox: Giao dịch nguyên tử • Inbox: Chống trùng lặp • Webhook TMS: Lọc trùng sự kiện
+            <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><strong style={{ fontSize: 13, color: '#0f172a' }}>Đồng bộ Dữ liệu nền / Đơn mua / Đơn bán &amp; Hộp thư Tích hợp</strong><span style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.45 }}>Dữ liệu nền: Đã đồng bộ • Đơn mua/Đơn bán: Đang hoạt động • Hộp thư đi: Giao dịch nguyên tử • Hộp thư đến: Chống trùng lặp • Sự kiện vận tải: Lọc trùng sự kiện</span></div>
+
           </div>
           <div>
-            <strong>Hàng đợi Lỗi DLQ & Ranh giới Khóa sổ Tài chính</strong><br />
-            DLQ lỗi: 0 • Thao tác lô: Bắt buộc xem trước & ghi nhật ký • Khóa sổ: Mốc sổ cái bất biến • Đối soát: {mismatchCount === 0 && indeterminateCount === 0 ? 'Khớp toàn bộ' : 'Phát hiện lệch'}
+            <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><strong style={{ fontSize: 13, color: '#0f172a' }}>Hàng đợi Lỗi &amp; Ranh giới Khóa sổ Tài chính</strong><span style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.45 }}>Hàng đợi lỗi: 0 • Thao tác lô: Bắt buộc xem trước &amp; ghi nhật ký • Khóa sổ: Mốc sổ cái bất biến • Đối soát: {mismatchCount === 0 && indeterminateCount === 0 ? 'Khớp toàn bộ' : 'Phát hiện lệch'}</span></div>
+
           </div>
           <div>
-            <strong>Checklist Mở/Đóng Kho, Sao lưu & Sửa lệch Kiểm soát</strong><br />
-            Mở/Đóng kho: {mismatchCount === 0 ? 'Sẵn sàng' : 'Chặn do lệch số dư'} • Diễn tập Sao lưu/Khôi phục: Đạt 14/14 bài kiểm tra • Sửa sai: Chỉ qua giao dịch đảo có kiểm soát
+            <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><strong style={{ fontSize: 13, color: '#0f172a' }}>Danh mục Kiểm tra Mở/Đóng Kho, Sao lưu &amp; Sửa lệch Kiểm soát</strong><span style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.45 }}>Mở/Đóng kho: {mismatchCount === 0 ? 'Sẵn sàng' : 'Chặn do lệch số dư'} • Diễn tập Sao lưu/Khôi phục: Đạt 14/14 bài kiểm tra • Sửa sai: Chỉ qua giao dịch đảo có kiểm soát</span></div>
+
           </div>
         </div>
-        <div className="ui-inline-actions">
+        <div className="ui-inline-actions" style={{ marginTop: 12 }}>
           <button
             type="button"
             disabled={loading}
@@ -738,11 +738,11 @@ export default function InventoryReconciliation() {
                 });
             }}
           >
-            Chạy Kiểm định Sẵn sàng Mở/Đóng Kho & Đồng bộ Outbox
+            Chạy Kiểm định Sẵn sàng Mở/Đóng Kho & Đồng bộ Tích hợp
           </button>
           {siteReadinessVerdict && (
             <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
-              {`Kết luận: ${siteReadinessVerdict.readinessVerdict === 'APPROVED_FOR_OPEN_CLOSE' ? 'Đủ điều kiện Mở/Đóng kho' : siteReadinessVerdict.readinessVerdict === 'BLOCKED_BY_MISMATCH' ? 'Tạm chặn do lệch số dư' : siteReadinessVerdict.readinessVerdict} • Đã kiểm tra: ${siteReadinessVerdict.checkedRows} dòng • Outbox: Đã đồng bộ`}
+              {`Kết luận: ${siteReadinessVerdict.readinessVerdict === 'APPROVED_FOR_OPEN_CLOSE' ? 'Đủ điều kiện Mở/Đóng kho' : siteReadinessVerdict.readinessVerdict === 'BLOCKED_BY_MISMATCH' ? 'Tạm chặn do lệch số dư' : siteReadinessVerdict.readinessVerdict} • Đã kiểm tra: ${siteReadinessVerdict.checkedRows} dòng • Hộp thư tích hợp: Đã đồng bộ`}
             </div>
           )}
         </div>
@@ -784,7 +784,7 @@ export default function InventoryReconciliation() {
                   <th>Kho</th>
                   <th>Sản phẩm</th>
                   <th>Tồn hiện tại</th>
-                  <th>Ledger kỳ vọng</th>
+                  <th>Sổ cái kỳ vọng</th>
                   <th>Chênh lệch</th>
                   <th>Trạng thái khả dụng</th>
                   <th>Đối chiếu 8 trạng thái</th>
@@ -825,7 +825,7 @@ export default function InventoryReconciliation() {
                                 : row.allStatusStatus === 'Match' ? 'Khớp tất cả' : 'Lệch theo trạng thái'}
                             </UiBadge>
                             <span>Tồn: {numberFormat.format(row.allStatusCurrentQuantity ?? 0)}</span>
-                            <span>Ledger: {row.allStatusExpectedQuantity == null ? 'Chưa xác định'
+                            <span>Sổ cái: {row.allStatusExpectedQuantity == null ? 'Chưa xác định'
                               : numberFormat.format(row.allStatusExpectedQuantity)}</span>
                             <span>Chênh lệch tổng: {row.allStatusDifference == null ? 'Chưa xác định'
                               : numberFormat.format(row.allStatusDifference)}</span>

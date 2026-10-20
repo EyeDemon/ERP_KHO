@@ -186,7 +186,7 @@ const WarehouseStructure = () => {
         <UiPageHeader
           eyebrow="Kho & Vị trí"
           title="Cấu trúc vị trí kho"
-          description="Mô hình tương tác Warehouse → Zone → Aisle → Rack → Level → Bin / Location để kiểm tra cấu trúc thông tin, trạng thái và quy tắc vị trí kho trước khi triển khai."
+          description="Mô hình tương tác Kho → Khu vực → Lối đi → Dãy kệ → Tầng → Ô vị trí để kiểm tra cấu trúc thông tin, trạng thái và quy tắc vị trí kho trước khi triển khai."
         />
 
         {error && <p role="alert">{error}</p>}

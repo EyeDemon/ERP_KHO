@@ -148,36 +148,71 @@ public sealed class InventoryControlController(
     }
 
     [HttpGet("advanced-planning-suite")]
+    [HttpGet("/api/inventory-control/advanced-planning-suite")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> AdvancedPlanningSuite(
-        [FromServices] ErpKhoDbContext db,
-        [FromServices] IWarehouseAuthorizationService warehouseAuth,
+        [FromServices] ErpKhoDbContext? dbSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
-        if (warehouseId.HasValue)
-            await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-        var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        var effectiveDb = dbSvc ?? db;
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (effectiveAuth != null)
+        {
+            if (warehouseId.HasValue)
+                await effectiveAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
         var scopedWarehouseIds = warehouseId.HasValue
             ? new[] { warehouseId.Value }
-            : accessibleIds.ToArray();
+            : (accessibleIds?.ToArray() ?? Array.Empty<int>());
 
-        var stocks = await db.InventoryStocks.AsNoTracking()
-            .Where(s => scopedWarehouseIds.Contains(s.WarehouseId))
+        var stockQuery = effectiveDb.InventoryStocks.AsNoTracking();
+        var soLineQuery = effectiveDb.SalesOrderLines.AsNoTracking()
+            .Where(l => l.SalesOrder.Status != SalesOrderStatus.Cancelled && l.SalesOrder.Status != SalesOrderStatus.Draft);
+        var poLineQuery = effectiveDb.PurchaseOrderLines.AsNoTracking()
+            .Where(l => l.PurchaseOrder.Status == PurchaseOrderStatus.Open || l.PurchaseOrder.Status == PurchaseOrderStatus.PartiallyReceived);
+        var reservationQuery = effectiveDb.StockReservations.AsNoTracking()
+            .Where(r => r.Status == StockReservationStatus.Active);
+
+        if (warehouseId.HasValue || accessibleIds != null)
+        {
+            stockQuery = stockQuery.Where(s => scopedWarehouseIds.Contains(s.WarehouseId));
+            soLineQuery = soLineQuery.Where(l => scopedWarehouseIds.Contains(l.SalesOrder.WarehouseId));
+            poLineQuery = poLineQuery.Where(l => scopedWarehouseIds.Contains(l.PurchaseOrder.WarehouseId));
+            reservationQuery = reservationQuery.Where(r => scopedWarehouseIds.Contains(r.WarehouseId));
+        }
+
+        var stocks = await stockQuery
             .Select(s => new
             {
                 s.WarehouseId,
-                WarehouseName = s.Warehouse.Name,
+                WarehouseName = s.Warehouse != null ? s.Warehouse.Name : string.Empty,
                 s.ProductId,
-                ProductCode = s.Product.Code,
-                ProductName = s.Product.Name,
+                ProductCode = s.Product != null ? s.Product.Code : string.Empty,
+                ProductName = s.Product != null ? s.Product.Name : string.Empty,
                 s.Status,
                 s.Quantity,
                 s.ReservedQuantity,
                 AvailableQty = s.Status == InventoryStatus.Available ? (s.Quantity - s.ReservedQuantity) : 0m
             })
             .ToListAsync(cancellationToken);
+
+        var totalOpenDemandQty = (await soLineQuery
+            .Select(l => new { l.OrderedQuantity, l.CancelledQuantity })
+            .ToListAsync(cancellationToken))
+            .Sum(l => Math.Max(0m, l.OrderedQuantity - l.CancelledQuantity));
+
+        var incomingPoQty = (await poLineQuery
+            .Select(l => new { l.BaseOrderedQuantity, l.OrderedQuantity })
+            .ToListAsync(cancellationToken))
+            .Sum(l => l.BaseOrderedQuantity > 0m ? l.BaseOrderedQuantity : l.OrderedQuantity);
+
+        var activeReservationsCount = await reservationQuery.CountAsync(cancellationToken);
 
         var bySku = stocks
             .GroupBy(s => new { s.ProductId, s.ProductCode, s.ProductName })
@@ -210,7 +245,7 @@ public sealed class InventoryControlController(
                 availableQty = x.AvailableQty,
                 safetyStockTarget = 50m,
                 recommendedReorderQty = Math.Max(0m, 100m - x.AvailableQty),
-                actionRecommendation = x.AvailableQty <= 0m ? "EXPEDITE_PO" : "STANDARD_REPLENISH"
+                actionRecommendation = x.AvailableQty <= 0m ? "Đôn đốc đơn mua khẩn (PO)" : "Đặt hàng bổ sung định kỳ"
             })
             .ToList();
 
@@ -226,6 +261,10 @@ public sealed class InventoryControlController(
 
         return Ok(new
         {
+            totalAvailableQty = totalAtp,
+            totalOpenDemandQty,
+            incomingPoQty,
+            activeReservationsCount,
             abcClassificationSummary = new
             {
                 classA_HighVolumeCount = classACount,
@@ -237,7 +276,7 @@ public sealed class InventoryControlController(
             atpCtpSummary = new
             {
                 availableToPromiseQty = totalAtp,
-                capableToPromiseQty = totalAtp + qcPendingQty,
+                capableToPromiseQty = totalAtp + qcPendingQty + incomingPoQty,
                 defaultPromiseLeadTimeHours = 24
             },
             networkBalancingSummary = new
@@ -248,65 +287,166 @@ public sealed class InventoryControlController(
             },
             decisionPolicyRegistry = new
             {
-                policyVersion = "AX-2026.10-HUMAN-IN-THE-LOOP",
+                policyVersion = "AX-2026.10 — Duyệt có kiểm soát (Human-in-the-loop)",
                 humanApprovalRequiredAtBoundary = true,
                 autonomousLedgerMutationAllowed = false
-            }
+            },
+            status = "Đã tải bộ công cụ hoạch định tồn kho nâng cao & dự báo nhu cầu",
+            statusLabel = "Đã tải bộ công cụ hoạch định tồn kho nâng cao & dự báo nhu cầu"
         });
     }
 
     public sealed record WhatIfSimulationRequest(
         int? WarehouseId = null,
         decimal DemandMultiplier = 1.5m,
-        int HorizonDays = 14);
+        int HorizonDays = 14,
+        decimal? DemandShockPct = null,
+        int? LeadTimeDelayDays = null);
 
     [HttpPost("what-if-simulation")]
+    [HttpPost("/api/inventory-control/what-if-simulation")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> RunWhatIfSimulation(
-        [FromServices] ErpKhoDbContext db,
-        [FromServices] IWarehouseAuthorizationService warehouseAuth,
+        [FromServices] ErpKhoDbContext? dbSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] WhatIfSimulationRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var effectiveDb = dbSvc ?? db;
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+
         var req = request ?? new WhatIfSimulationRequest();
-        var clampedMultiplier = Math.Clamp(req.DemandMultiplier, 0.5m, 5.0m);
+        var clampedMultiplier = req.DemandShockPct.HasValue
+            ? Math.Clamp(1m + (req.DemandShockPct.Value / 100m), 0.1m, 5.0m)
+            : Math.Clamp(req.DemandMultiplier, 0.5m, 5.0m);
         var horizonDays = Math.Clamp(req.HorizonDays, 1, 90);
-        if (req.WarehouseId.HasValue)
-            await warehouseAuth.EnsureWarehouseAccessAsync(req.WarehouseId.Value, cancellationToken);
-        var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        var leadTimeDelayDays = Math.Clamp(req.LeadTimeDelayDays ?? 0, 0, 60);
+
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (effectiveAuth != null)
+        {
+            if (req.WarehouseId.HasValue)
+                await effectiveAuth.EnsureWarehouseAccessAsync(req.WarehouseId.Value, cancellationToken);
+            accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
 
         var scopedWarehouseIds = req.WarehouseId.HasValue
             ? new[] { req.WarehouseId.Value }
-            : accessibleIds.ToArray();
+            : (accessibleIds?.ToArray() ?? Array.Empty<int>());
 
-        var totalAvailable = await db.InventoryStocks.AsNoTracking()
-            .Where(s => scopedWarehouseIds.Contains(s.WarehouseId) && s.Status == InventoryStatus.Available)
-            .SumAsync(s => (decimal?)(s.Quantity - s.ReservedQuantity), cancellationToken) ?? 0m;
+        var totalAvailableQty = 0m;
+        var totalOpenDemandQty = 0m;
+        var incomingPoQty = 0m;
+        var activeReservedQty = 0m;
 
-        var simulatedDemand = Math.Round(totalAvailable * clampedMultiplier, 2);
-        var projectedNetBalance = totalAvailable - simulatedDemand;
+        if (effectiveDb != null)
+        {
+            var stockQuery = effectiveDb.InventoryStocks.AsNoTracking()
+                .Where(s => s.Status == InventoryStatus.Available);
+            var soLineQuery = effectiveDb.SalesOrderLines.AsNoTracking()
+                .Where(l => l.SalesOrder.Status != SalesOrderStatus.Cancelled && l.SalesOrder.Status != SalesOrderStatus.Draft);
+            var poLineQuery = effectiveDb.PurchaseOrderLines.AsNoTracking()
+                .Where(l => l.PurchaseOrder.Status == PurchaseOrderStatus.Open || l.PurchaseOrder.Status == PurchaseOrderStatus.PartiallyReceived);
+            var reservationQuery = effectiveDb.StockReservations.AsNoTracking()
+                .Where(r => r.Status == StockReservationStatus.Active);
+
+            if (req.WarehouseId.HasValue || accessibleIds != null)
+            {
+                stockQuery = stockQuery.Where(s => scopedWarehouseIds.Contains(s.WarehouseId));
+                soLineQuery = soLineQuery.Where(l => scopedWarehouseIds.Contains(l.SalesOrder.WarehouseId));
+                poLineQuery = poLineQuery.Where(l => scopedWarehouseIds.Contains(l.PurchaseOrder.WarehouseId));
+                reservationQuery = reservationQuery.Where(r => scopedWarehouseIds.Contains(r.WarehouseId));
+            }
+
+            totalAvailableQty = (await stockQuery
+                .Select(s => new { s.Quantity, s.ReservedQuantity })
+                .ToListAsync(cancellationToken))
+                .Sum(s => s.Quantity - s.ReservedQuantity);
+
+            totalOpenDemandQty = (await soLineQuery
+                .Select(l => new { l.OrderedQuantity, l.CancelledQuantity })
+                .ToListAsync(cancellationToken))
+                .Sum(l => Math.Max(0m, l.OrderedQuantity - l.CancelledQuantity));
+
+            incomingPoQty = (await poLineQuery
+                .Select(l => new { l.BaseOrderedQuantity, l.OrderedQuantity })
+                .ToListAsync(cancellationToken))
+                .Sum(l => l.BaseOrderedQuantity > 0m ? l.BaseOrderedQuantity : l.OrderedQuantity);
+
+            activeReservedQty = (await reservationQuery
+                .Select(r => new { r.Quantity, r.ConsumedQuantity, r.ReleasedQuantity })
+                .ToListAsync(cancellationToken))
+                .Sum(r => Math.Max(0m, r.Quantity - r.ConsumedQuantity - r.ReleasedQuantity));
+        }
+
+        var baseDemand = totalOpenDemandQty > 0m ? totalOpenDemandQty : totalAvailableQty;
+        var simulatedDemand = Math.Round(baseDemand * clampedMultiplier, 2);
+        var projectedEndingStock = Math.Round(totalAvailableQty + incomingPoQty - simulatedDemand - (leadTimeDelayDays * 2m), 2);
+        var projectedNetBalance = projectedEndingStock;
+        var scenarioStatus = projectedEndingStock < 0m
+            ? "Cảnh báo thiếu hụt tồn kho"
+            : "Đủ tồn kho đáp ứng";
+
+        var now = DateTime.UtcNow;
+        var simulationId = $"SIM-WIF-{now:yyyyMMdd-HHmm}";
+        if (effectiveDb != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            effectiveDb.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = req.WarehouseId,
+                EntityName = "InventoryControl",
+                Action = "WhatIfSimulation",
+                NewValues = simulationId,
+                Reason = $"Mô phỏng tồn kho What-If (Khả dụng: {totalAvailableQty}, Cầu mở: {totalOpenDemandQty}, PO đang về: {incomingPoQty}, Dư dự kiến: {projectedEndingStock})",
+                Result = "Success",
+                Timestamp = now
+            });
+            await effectiveDb.SaveChangesAsync(cancellationToken);
+        }
 
         return Ok(new
         {
+            simulationId,
             warehouseId = req.WarehouseId,
             demandMultiplier = clampedMultiplier,
             horizonDays,
-            totalAvailable,
+            leadTimeDelayDays,
+            totalAvailable = totalAvailableQty,
+            totalAvailableQty,
+            totalOpenDemandQty,
+            incomingPoQty,
+            activeReservedQty,
             simulatedDemand,
             projectedNetBalance,
-            scenarioStatus = projectedNetBalance < 0m ? "PROJECTED_SHORTAGE" : "PROJECTED_SUFFICIENT",
-            immutableSnapshotGuarantee = true
+            projectedEndingStock,
+            scenarioStatus,
+            status = scenarioStatus,
+            statusLabel = scenarioStatus,
+            immutableSnapshotGuarantee = true,
+            simulatedAtUtc = now
         });
     }
 
     public sealed record EvaluateDecisionPolicyRequest(int? WarehouseId = null);
 
     [HttpPost("evaluate-decision-policy-governance")]
+    [HttpPost("audit-decision-policies")]
+    [HttpPost("/api/inventory-control/audit-decision-policies")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> EvaluateDecisionPolicyGovernance(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateDecisionPolicyRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
         var warehouseId = request?.WarehouseId;
         IReadOnlyCollection<int>? accessibleIds = null;
         if (warehouseAccess != null)
@@ -318,27 +458,77 @@ public sealed class InventoryControlController(
         }
 
         var evaluatedStockBucketsCount = 0;
+        var trackedSkuCount = 0;
+        var activeLocationsCount = 0;
+        var activeReservationsCount = 0;
+        var activeLocksCount = 0;
         if (db != null)
         {
-            var query = db.InventoryStocks.AsNoTracking();
+            var stockQuery = db.InventoryStocks.AsNoTracking();
+            var locQuery = db.WarehouseLocations.AsNoTracking().Where(l => l.IsActive && !l.IsBlocked);
+            var resQuery = db.StockReservations.AsNoTracking().Where(r => r.Status == StockReservationStatus.Active);
+            var lockQuery = db.InventoryLocks.AsNoTracking().Where(l => l.Status == InventoryLockStatus.Active);
+
             if (warehouseId.HasValue)
-                query = query.Where(s => s.WarehouseId == warehouseId.Value);
+            {
+                stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                locQuery = locQuery.Where(l => l.WarehouseId == warehouseId.Value);
+                resQuery = resQuery.Where(r => r.WarehouseId == warehouseId.Value);
+                lockQuery = lockQuery.Where(l => l.WarehouseId == warehouseId.Value);
+            }
             else if (accessibleIds != null)
-                query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
-            evaluatedStockBucketsCount = await query.CountAsync(cancellationToken);
+            {
+                stockQuery = stockQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
+                locQuery = locQuery.Where(l => accessibleIds.Contains(l.WarehouseId));
+                resQuery = resQuery.Where(r => accessibleIds.Contains(r.WarehouseId));
+                lockQuery = lockQuery.Where(l => accessibleIds.Contains(l.WarehouseId));
+            }
+
+            evaluatedStockBucketsCount = await stockQuery.CountAsync(cancellationToken);
+            trackedSkuCount = await db.Products.AsNoTracking()
+                .CountAsync(p => p.IsActive && (p.TrackingType != ProductTrackingType.None || p.ExpiryControl), cancellationToken);
+            activeLocationsCount = await locQuery.CountAsync(cancellationToken);
+            activeReservationsCount = await resQuery.CountAsync(cancellationToken);
+            activeLocksCount = await lockQuery.CountAsync(cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        var policyRegistryId = $"DEC-POL-{now:yyyyMMdd-HHmm}";
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                EntityName = "InventoryControl",
+                Action = "AuditDecisionPolicies",
+                NewValues = policyRegistryId,
+                Reason = $"Kiểm định khung chính sách quyết định tồn kho ({evaluatedStockBucketsCount} rổ tồn, {trackedSkuCount} SKU quản lý lô/sê-ri/hạn dùng)",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
         }
 
         return Ok(new
         {
-            policyRegistryId = $"DEC-POL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
+            policyRegistryId,
             warehouseId,
             evaluatedStockBucketsCount,
-            forecastBiasMapeStatus = "MAPE_WITHIN_TOLERANCE_BAND",
-            demandAnomalyDetector = "SPIKE_AND_DROP_GUARD_ACTIVE",
-            inventoryRiskScoreStatus = "EXPLAINABLE_RISK_SCORING_READY",
-            humanInTheLoopBoundary = "APPROVAL_REQUIRED_BEFORE_LEDGER_MUTATION",
-            status = "DECISION_POLICY_GOVERNANCE_VERIFIED",
-            evaluatedAtUtc = DateTime.UtcNow
+            trackedSkuCount,
+            activeLocationsCount,
+            activeReservationsCount,
+            activeLocksCount,
+            forecastBiasMapeStatus = "Sai số dự báo (MAPE) nằm trong ngưỡng cho phép",
+            demandAnomalyDetector = "Đã kích hoạt bộ lọc biến động cầu bất thường",
+            inventoryRiskScoreStatus = "Đã chấm điểm rủi ro thiếu hụt tồn kho có giải trình",
+            humanInTheLoopBoundary = "Bắt buộc phê duyệt con người trước khi ghi sổ cái",
+            status = "Đã xác thực khung quản trị chính sách quyết định tồn kho",
+            statusLabel = "Đã xác thực khung quản trị chính sách quyết định tồn kho",
+            evaluatedAtUtc = now
         });
     }
 }

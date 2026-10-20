@@ -96,6 +96,10 @@ public sealed class ApprovalsController(
             await db.SaveChangesAsync(cancellationToken);
         }
 
+        var statusText = overdueCount > 0
+            ? "Đã kích hoạt chuyển cấp phê duyệt các hồ sơ quá hạn SLA"
+            : "Không có hồ sơ phê duyệt quá hạn SLA cần chuyển cấp";
+
         return Ok(new
         {
             escalationBatchId,
@@ -103,7 +107,9 @@ public sealed class ApprovalsController(
             overdueCount,
             newlyEscalatedCount,
             recentAuditCount,
-            escalatedStatus = "ESCALATED_TO_SUPERVISOR",
+            escalatedStatus = "Đã chuyển cấp quản lý phê duyệt khẩn",
+            status = statusText,
+            statusLabel = statusText,
             targetSlaMinutes = 30,
             escalatedAtUtc = now
         });

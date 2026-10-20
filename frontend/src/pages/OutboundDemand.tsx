@@ -286,7 +286,7 @@ export default function OutboundDemand(){
     <UiPageHeader
       eyebrow="Xuất kho"
       title="Quản lý Đơn bán hàng & Đơn nợ hàng"
-      description="Theo dõi toàn trình từ Đặt hàng → Giữ hàng → Phân bổ → Lấy hàng → Giao hàng → Đơn nợ hàng (Backorder). Phát hành đơn chỉ tạo cam kết giữ chỗ; tồn kho thực tế chỉ giảm khi Xuất bến giao hàng."
+      description="Theo dõi toàn trình từ Đặt hàng → Giữ hàng → Phân bổ → Lấy hàng → Giao hàng → Đơn nợ hàng. Phát hành đơn chỉ tạo cam kết giữ chỗ; tồn kho thực tế chỉ giảm khi Xuất bến giao hàng."
       actions={canCreate&&masterReady&&!showCreate?<button type="button" onClick={()=>setShowCreate(true)}>Tạo Đơn bán hàng</button>:undefined}
     />
     {error&&<div role="alert">{error}</div>}

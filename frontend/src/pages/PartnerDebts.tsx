@@ -242,7 +242,7 @@ export default function PartnerDebts() {
       <UiPageHeader
         eyebrow="Tài chính & Đối tác"
         title="Công nợ Phải trả (AP) & Phải thu (AR)"
-        description="Quản lý hóa đơn công nợ nhà cung cấp (AP từ Phiếu nhập đã chốt), công nợ khách hàng (AR từ Shipment/Phiếu xuất đã giao) và sổ phụ bất biến (PartnerDebtLedger)."
+        description="Quản lý hóa đơn công nợ nhà cung cấp (từ Phiếu nhập đã chốt), công nợ khách hàng (từ Vận đơn/Phiếu xuất đã giao) và sổ phụ công nợ bất biến."
       />
 
       {error && <p role="alert">{error}</p>}

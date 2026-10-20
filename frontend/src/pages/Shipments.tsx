@@ -202,10 +202,10 @@ export default function Shipments(){
       </UiCard>
       <UiCard title="Lập kế hoạch Xếp tải Xe & Tích hợp Đơn vị Vận chuyển / TMS">
         <div className="ui-inline-wrap">
-          <span>Chờ tập kết / xếp xe: <strong>{stagingOrLoadingCount}</strong></span>
-          <span>Hãng vận chuyển: <strong>{carrierAssignedCount}</strong></span>
-          <span>Đã niêm phong chì: <strong>{sealVerifiedCount}</strong></span>
-          <span>Đồng bộ sự kiện TMS / POD: <strong>Đồng bộ Webhook &amp; biên bản giao hàng (POD) chống trùng lặp</strong></span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, width: '100%' }}><div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Chờ tập kết / xếp xe</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{stagingOrLoadingCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Hãng vận chuyển</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{carrierAssignedCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Đã niêm phong chì</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{sealVerifiedCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Đồng bộ sự kiện vận tải / biên bản giao</span><strong style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a', lineHeight: 1.35 }}>Đồng bộ sự kiện &amp; biên bản giao hàng chống trùng lặp</strong></div></div>
         </div>
         <div className="ui-inline-actions">
           <button

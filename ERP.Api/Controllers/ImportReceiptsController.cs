@@ -159,7 +159,14 @@ namespace ERP.Api.Controllers
                 rmaEligibleReceiptsCount = items.Count(x =>
                     (!string.IsNullOrWhiteSpace(x.Note) && (x.Note.Contains("RMA", StringComparison.OrdinalIgnoreCase) || x.Note.Contains("RETURN", StringComparison.OrdinalIgnoreCase) || x.Note.Contains("trả", StringComparison.OrdinalIgnoreCase)))
                     || x.Status.StartsWith("Discrepancy", StringComparison.OrdinalIgnoreCase)),
-                qcWorkCenterModes = new[] { "INBOUND_RECEIVING_QC", "RETURN_RMA_INSPECTION", "DAMAGE_QUARANTINE_REVIEW" }
+                qcWorkCenterModes = new[]
+                {
+                    "Kiểm định chất lượng đầu vào (Inbound QC)",
+                    "Kiểm định hàng trả về (RMA Inspection)",
+                    "Rà soát hàng biệt trữ & hư hỏng (Quarantine Review)"
+                },
+                status = "Đã tải tổng quan trạm kiểm định QC & tiếp nhận hàng trả RMA",
+                statusLabel = "Đã tải tổng quan trạm kiểm định QC & tiếp nhận hàng trả RMA"
             });
         }
 
@@ -191,15 +198,42 @@ namespace ERP.Api.Controllers
             }
 
             var quarantineBucketCount = 0;
+            var pendingQcOrRmaReceiptsCount = 0;
+            var openStocktakesCount = 0;
+            var activeCountFreezeLocksCount = 0;
             if (_db != null)
             {
                 var query = _db.InventoryStocks.AsNoTracking()
                     .Where(s => s.Status == ERP.Domain.Enums.InventoryStatus.Quarantine);
+                var receiptQuery = _db.ImportReceipts.AsNoTracking()
+                    .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Posted &&
+                                r.Status != ERP.Domain.Enums.ReceiptStatus.Approved &&
+                                r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled);
+                var stocktakeQuery = _db.Stocktakes.AsNoTracking()
+                    .Where(s => s.Status == ERP.Domain.Enums.ReceiptStatus.Draft);
+                var lockQuery = _db.InventoryLocks.AsNoTracking()
+                    .Where(l => l.Status == ERP.Domain.Enums.InventoryLockStatus.Active &&
+                                l.LockType == ERP.Domain.Enums.InventoryLockType.CountFreeze);
+
                 if (warehouseId.HasValue)
+                {
                     query = query.Where(s => s.WarehouseId == warehouseId.Value);
+                    receiptQuery = receiptQuery.Where(r => r.WarehouseId == warehouseId.Value);
+                    stocktakeQuery = stocktakeQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                    lockQuery = lockQuery.Where(l => l.WarehouseId == warehouseId.Value);
+                }
                 else if (accessibleIds != null)
+                {
                     query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
+                    receiptQuery = receiptQuery.Where(r => accessibleIds.Contains(r.WarehouseId));
+                    stocktakeQuery = stocktakeQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
+                    lockQuery = lockQuery.Where(l => accessibleIds.Contains(l.WarehouseId));
+                }
+
                 quarantineBucketCount = await query.CountAsync(cancellationToken);
+                pendingQcOrRmaReceiptsCount = await receiptQuery.CountAsync(cancellationToken);
+                openStocktakesCount = await stocktakeQuery.CountAsync(cancellationToken);
+                activeCountFreezeLocksCount = await lockQuery.CountAsync(cancellationToken);
             }
 
             var now = DateTime.UtcNow;
@@ -219,9 +253,12 @@ namespace ERP.Api.Controllers
                     WarehouseId = warehouseId,
                     Action = "ImportReceipt.RmaIntakeCheck",
                     EntityName = "RmaInspection",
+                    OldValues = "QUARANTINE",
                     NewValues = rmaInspectionCode,
-                    Reason = request?.ReasonCode,
-                    Result = "QUARANTINE",
+                    Reason = string.IsNullOrWhiteSpace(request?.ReasonCode)
+                        ? $"Tiếp nhận kiểm định RMA ({pendingQcOrRmaReceiptsCount} phiếu chờ QC/RMA, {quarantineBucketCount} vị trí biệt trữ)"
+                        : request.ReasonCode.Trim(),
+                    Result = "Success",
                     Timestamp = now
                 });
                 await _db.SaveChangesAsync(cancellationToken);
@@ -235,8 +272,13 @@ namespace ERP.Api.Controllers
                 returnReference = request?.ReturnReference ?? string.Empty,
                 reasonCode = request?.ReasonCode ?? string.Empty,
                 quarantineBucketCount,
-                targetBucket = "QUARANTINE",
-                nextStep = "INBOUND_QC_INSPECTION",
+                pendingQcOrRmaReceiptsCount,
+                openStocktakesCount,
+                activeCountFreezeLocksCount,
+                targetBucket = "Khu vực biệt trữ chờ kiểm định (Quarantine)",
+                nextStep = "Chuyển trạm kiểm định chất lượng đầu vào (Inbound QC)",
+                status = "Đã khởi tạo phiếu kiểm định hàng trả về (RMA) & định tuyến biệt trữ",
+                statusLabel = "Đã khởi tạo phiếu kiểm định hàng trả về (RMA) & định tuyến biệt trữ",
                 queuedAtUtc = now
             });
         }
@@ -488,7 +530,8 @@ namespace ERP.Api.Controllers
                     Action = "ImportReceipt.ExecuteRtvRefurbish",
                     EntityName = "RtvRefurbish",
                     NewValues = dispositionCode,
-                    Result = "Đã thực thi & Ghi sổ kiểm toán",
+                    Reason = $"Thực thi xử lý hàng biệt trữ ({rawAction})",
+                    Result = "Success",
                     Timestamp = now
                 });
                 await _db.SaveChangesAsync(cancellationToken);
@@ -502,6 +545,7 @@ namespace ERP.Api.Controllers
                 dispositionType = string.IsNullOrWhiteSpace(request?.DispositionType) ? rawAction : request.DispositionType,
                 actionType = rawAction,
                 status = "Đã thực thi & Ghi sổ kiểm toán",
+                statusLabel = "Đã thực thi & Ghi sổ kiểm toán",
                 ledgerUpdated,
                 ledgerTransactionId,
                 resultingStockQuantity,

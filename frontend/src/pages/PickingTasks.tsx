@@ -250,10 +250,10 @@ export default function PickingTasks(){
     <div className="ui-stack">
       <UiCard title="Trạm Điều hành Quét Mã Vạch Di Động & Đồng bộ Ngoại tuyến">
         <div className="ui-inline-wrap">
-          <span>Tác vụ sẵn sàng quét RF/Mobile: <strong>{mobileReadyTasksCount}</strong></span>
-          <span>Ngoại lệ chờ xử lý trên Mobile: <strong>{shortPickExceptionTasksCount}</strong></span>
-          <span>Tra cứu nhanh Barcode SKU: <strong>Sẵn sàng</strong></span>
-          <span>Hàng đợi đồng bộ ngoại tuyến: <UiBadge tone="success">Đồng bộ chống trùng lặp an toàn</UiBadge></span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, width: '100%' }}><div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tác vụ sẵn sàng quét RF/Mobile</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{mobileReadyTasksCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ngoại lệ chờ xử lý trên Mobile</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{shortPickExceptionTasksCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tra cứu nhanh mã vạch sản phẩm</span><strong style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>Sẵn sàng</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Hàng đợi đồng bộ ngoại tuyến</span><div><UiBadge tone="success">Đồng bộ chống trùng lặp an toàn</UiBadge></div></div></div>
         </div>
         <div className="ui-inline-wrap">
           <input

@@ -992,6 +992,13 @@ namespace ERP.Api.Controllers
             });
             await db.SaveChangesAsync(cancellationToken);
 
+            var acknowledgedExceptionsCount = await db.AuditLogs.AsNoTracking()
+                .CountAsync(
+                    a => a.EntityName == "OperationalException" &&
+                         (a.Action == "ACKNOWLEDGE" || a.Action == "Exception.Acknowledged") &&
+                         a.WarehouseId == effectiveWarehouseId,
+                    cancellationToken);
+
             return Ok(new
             {
                 acknowledged = true,
@@ -999,6 +1006,9 @@ namespace ERP.Api.Controllers
                 exceptionType = normalizedType,
                 warehouseId = effectiveWarehouseId,
                 userId,
+                acknowledgedExceptionsCount,
+                status = "Đã tiếp nhận và phân công xử lý ngoại lệ vận hành",
+                statusLabel = "Đã tiếp nhận và phân công xử lý ngoại lệ vận hành",
                 acknowledgedAtUtc = now
             });
         }
