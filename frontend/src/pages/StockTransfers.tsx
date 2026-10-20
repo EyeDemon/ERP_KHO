@@ -78,6 +78,19 @@ const statusLabel: Record<string, string> = {
   Cancelled: 'Đã hủy',
   Returned: 'Đã hoàn trả',
 };
+const transferSignalLabels: Record<string, string> = {
+  SEAL_INTACT_VERIFIED: 'Đã xác minh niêm phong nguyên vẹn & khớp số dư đi đường',
+  UNSEALED_HU_DETECTED: 'Phát hiện kiện hàng đang vận chuyển chưa niêm phong',
+  'TRF-IN-TRANSIT': 'Lô điều chuyển đang vận chuyển',
+  NETWORK_REBALANCING_SIMULATED: 'Đã mô phỏng tái cân bằng mạng lưới kho',
+  SURPLUS_TO_SHORTAGE_LANES_MAPPED: 'Đã ánh xạ luồng điều chuyển từ kho dư sang kho thiếu',
+  BALANCED_ACROSS_NODES: 'Đã cân bằng tồn kho giữa các điểm kho',
+  RESPECTS_RESERVATION_AND_TRANSFER_SEMANTICS: 'Tuân thủ cam kết giữ hàng & nguyên tắc điều chuyển',
+  AUTO_SUGGESTED_TRANSFERS_READY: 'Đề xuất bổ sung liên kho tự động sẵn sàng',
+  ZERO_SILENT_STOCKOUT_CONFLICTS: 'Không phát sinh xung đột thiếu hụt tồn kho',
+  ZERO_CRITICAL_SHORTAGES: 'Không có điểm kho thiếu hụt nghiêm trọng',
+};
+const translateTransferSignal = (value?: string | null) => value ? (transferSignalLabels[value] ?? value) : '';
 const normalizeStatus = (status: string | number) =>
   typeof status === 'number' ? statusNames[status] : status;
 const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
@@ -526,7 +539,7 @@ export default function StockTransfers() {
             <UiBadge>{`Tổng phiếu trên trang: ${items.length}`}</UiBadge>
             <UiBadge>{`Phiếu nháp: ${draftCount}`}</UiBadge>
             <UiBadge tone="warning">{`Chờ xuất kho (Đã duyệt): ${approvedCount}`}</UiBadge>
-            <UiBadge tone="warning">{`Đang vận chuyển (In-Transit): ${inTransitCount}`}</UiBadge>
+            <UiBadge tone="warning">{`Đang vận chuyển: ${inTransitCount}`}</UiBadge>
             <UiBadge tone="success">{`Đã nhận / Hoàn tất: ${completedCount}`}</UiBadge>
             <UiBadge tone={closedExceptionCount > 0 ? 'danger' : 'neutral'}>{`Đã hủy / Hoàn trả: ${closedExceptionCount}`}</UiBadge>
             <button
@@ -535,7 +548,7 @@ export default function StockTransfers() {
               onClick={async () => {
                 if (governanceBusy) return;
                 setGovernanceBusy(true);
-                const defaultCode = items[0]?.code || 'TRF-IN-TRANSIT';
+                const defaultCode = items.find(x => normalizeStatus(x.status) === 'InTransit')?.code || items[0]?.code || 'TRF-IN-TRANSIT';
                 setError('');
                 try {
                   const res = await apiClient.post('/api/handling-units/verify-intransit-seal', {
@@ -544,8 +557,8 @@ export default function StockTransfers() {
                   if (res?.data?.sealVerificationId && res?.data?.sealStatus) {
                     setSealVerification({
                       sealVerificationId: String(res.data.sealVerificationId),
-                      sealStatus: String(res.data.sealStatus),
-                      transferCode: String(res.data.transferCode || defaultCode),
+                      sealStatus: translateTransferSignal(String(res.data.sealStatus)),
+                      transferCode: translateTransferSignal(String(res.data.transferCode || defaultCode)),
                     });
                   } else {
                     setSealVerification(null);
@@ -576,10 +589,10 @@ export default function StockTransfers() {
                   if (res?.data?.simulationId && res?.data?.status) {
                     setNetworkRebalancing({
                       simulationId: String(res.data.simulationId),
-                      networkSurplusShortageStatus: String(res.data.networkSurplusShortageStatus || ''),
-                      interWarehouseReplenishment: String(res.data.interWarehouseReplenishment || ''),
-                      replenishmentExceptionTriage: String(res.data.replenishmentExceptionTriage || ''),
-                      status: String(res.data.status),
+                      networkSurplusShortageStatus: translateTransferSignal(String(res.data.networkSurplusShortageStatus || '')),
+                      interWarehouseReplenishment: translateTransferSignal(String(res.data.interWarehouseReplenishment || '')),
+                      replenishmentExceptionTriage: translateTransferSignal(String(res.data.replenishmentExceptionTriage || '')),
+                      status: translateTransferSignal(String(res.data.status)),
                     });
                   } else {
                     setNetworkRebalancing(null);
@@ -595,16 +608,44 @@ export default function StockTransfers() {
             >
               Mô phỏng Tái cân bằng Tồn kho Mạng lưới & Bổ sung Liên kho
             </button>
-            {networkRebalancing && (
-              <UiBadge tone="success">
-                {`${networkRebalancing.simulationId} • ${networkRebalancing.status} (${networkRebalancing.networkSurplusShortageStatus} / ${networkRebalancing.replenishmentExceptionTriage})`}
-              </UiBadge>
-            )}
           </div>
+          {networkRebalancing && (
+            <div
+              role="status"
+              style={{
+                marginTop: 8,
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: '#ecfdf5',
+                color: '#065f46',
+                border: '1px solid #a7f3d0',
+                fontSize: 13,
+                lineHeight: 1.5,
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+              }}
+            >
+              {`${networkRebalancing.simulationId} • ${networkRebalancing.status} (${networkRebalancing.networkSurplusShortageStatus} / ${networkRebalancing.replenishmentExceptionTriage})`}
+            </div>
+          )}
           {sealVerification && (
-            <div role="status" style={{ marginTop: 8 }}>
+            <div
+              role="status"
+              style={{
+                marginTop: 8,
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: '#ecfdf5',
+                color: '#065f46',
+                border: '1px solid #a7f3d0',
+                fontSize: 13,
+                lineHeight: 1.5,
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+              }}
+            >
               Mã niêm phong: <strong>{sealVerification.sealVerificationId}</strong> ({sealVerification.transferCode}) — Trạng thái:{' '}
-              <UiBadge tone="success">{sealVerification.sealStatus}</UiBadge>
+              <strong>{sealVerification.sealStatus}</strong>
             </div>
           )}
         </UiCard>
@@ -656,16 +697,16 @@ export default function StockTransfers() {
           </UiToolbarField>
           <button type="button" onClick={applyFilters}>Lọc</button>
           <button type="button" onClick={toggleInTransit}>
-            {showInTransit ? 'Ẩn tồn đang vận chuyển' : 'Tồn đang vận chuyển (In-Transit)'}
+            {showInTransit ? 'Ẩn tồn đang vận chuyển' : 'Tồn đang vận chuyển'}
           </button>
         </UiToolbar>
 
         {showInTransit && (
-          <UiCard title="Tồn kho đang vận chuyển giữa các kho (In-Transit)">
+          <UiCard title="Tồn kho đang vận chuyển giữa các kho">
             {inTransitLoading ? (
               <p role="status">Đang tải tồn đang vận chuyển...</p>
             ) : inTransitItems.length === 0 ? (
-              <UiEmptyState title="Không có hàng hóa nào đang vận chuyển (In-Transit)." />
+              <UiEmptyState title="Không có hàng hóa nào đang vận chuyển." />
             ) : (
               <UiTableScroll>
                 <table aria-label="Tồn kho đang vận chuyển">
@@ -675,10 +716,10 @@ export default function StockTransfers() {
                       <th>Kho nguồn → Kho đích</th>
                       <th>Sản phẩm</th>
                       <th>ĐVT</th>
-                      <th className="ui-number">SL đã xuất</th>
-                      <th className="ui-number">SL đang vận chuyển</th>
+                      <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL đã xuất</th>
+                      <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL đang vận chuyển</th>
                       <th>Thời điểm xuất</th>
-                      <th className="ui-number">Thời gian vận chuyển</th>
+                      <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thời gian vận chuyển</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -692,12 +733,12 @@ export default function StockTransfers() {
                         <td>{row.sourceWarehouseName} → {row.destinationWarehouseName}</td>
                         <td><strong style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong> — {row.productName}</td>
                         <td>{row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName}</td>
-                        <td className="ui-number">{row.dispatchedQuantity}</td>
-                        <td className="ui-number">
+                        <td className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.dispatchedQuantity}</td>
+                        <td className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                           <UiBadge tone="warning">{row.inTransitQuantity}</UiBadge>
                         </td>
                         <td>{row.dispatchedAt ? new Date(row.dispatchedAt).toLocaleString('vi-VN') : '—'}</td>
-                        <td className="ui-number">{row.hoursInTransit}h</td>
+                        <td className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.hoursInTransit}h</td>
                       </tr>
                     ))}
                   </tbody>

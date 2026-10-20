@@ -37,6 +37,16 @@ const orderLabels:Record<string,string>={
 const backorderLabels:Record<string,string>={
   Open:'Mở',PartiallyAllocated:'Khôi phục một phần',Allocated:'Đã khôi phục',Fulfilled:'Đã giao',Cancelled:'Đã hủy',
 };
+const outboundSignalLabels:Record<string,string>={
+  'SO-PRIORITY-QUEUE':'Hàng đợi ưu tiên cấp phát',
+  PROMISE_DATE_VERIFIED_READONLY:'Đã xác thực ngày giao cam kết',
+  OPTIMAL_WAREHOUSE_NODE_SELECTED:'Đã chọn điểm kho hoàn tất tối ưu',
+  PROPORTIONAL_SERVICE_TIER_FAIRNESS:'Phân bổ công bằng theo phân hạng dịch vụ',
+  TIER_1_VIP_AND_STANDARD_SLA_ACTIVE:'Đang áp dụng cam kết SLA khách hàng ưu tiên & tiêu chuẩn',
+  ATP_ROUTING_FAIRNESS_READY:'Đã hoàn tất tính toán ATP/CTP & định tuyến kho',
+  ALLOCATION_WAVE_QUEUED:'Đã xếp hàng đợt cấp phát ưu tiên',
+};
+const translateOutboundSignal=(value?:string|null)=>value?(outboundSignalLabels[value]??value):'';
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   ['Fulfilled'].includes(status)?'success':
   status==='Cancelled'?'danger':
@@ -216,11 +226,11 @@ export default function OutboundDemand(){
       const res=await apiClient.post('/api/sales-orders/expedite-backorder',{
         warehouseId:orders[0]?.warehouseId??undefined,
         orderNumber:backorders[0]?.orderCode??orders[0]?.orderCode??'SO-PRIORITY-QUEUE',
-      });
+      },{headers:idempotencyHeaders('so-expedite-backorder:'+Date.now())});
       if(res?.data?.expediteId){
         setExpediteResult({
           expediteId:String(res.data.expediteId),
-          orderNumber:String(res.data.orderNumber??backorders[0]?.orderCode??orders[0]?.orderCode??'SO-PRIORITY-QUEUE'),
+          orderNumber:translateOutboundSignal(String(res.data.orderNumber??backorders[0]?.orderCode??orders[0]?.orderCode??'SO-PRIORITY-QUEUE')),
           allocationWaveQueued:Boolean(res.data.allocationWaveQueued??true),
         });
       }else{
@@ -245,11 +255,11 @@ export default function OutboundDemand(){
       if(res?.data?.evaluationId&&res?.data?.status){
         setAtpRoutingResult({
           evaluationId:String(res.data.evaluationId),
-          atpCtpPromiseStatus:String(res.data.atpCtpPromiseStatus||''),
-          fulfillmentNodeRouting:String(res.data.fulfillmentNodeRouting||''),
-          allocationFairnessPolicy:String(res.data.allocationFairnessPolicy||''),
-          serviceSegmentation:String(res.data.serviceSegmentation||''),
-          status:String(res.data.status),
+          atpCtpPromiseStatus:translateOutboundSignal(String(res.data.atpCtpPromiseStatus||'')),
+          fulfillmentNodeRouting:translateOutboundSignal(String(res.data.fulfillmentNodeRouting||'')),
+          allocationFairnessPolicy:translateOutboundSignal(String(res.data.allocationFairnessPolicy||'')),
+          serviceSegmentation:translateOutboundSignal(String(res.data.serviceSegmentation||'')),
+          status:translateOutboundSignal(String(res.data.status)),
         });
       }else{
         setAtpRoutingResult(null);
@@ -292,22 +302,22 @@ export default function OutboundDemand(){
           <span>Đơn nợ hàng: <strong>{totalBackorderQty}</strong> (Còn mở: {openBackorderRemaining})</span>
           <span>Tỷ lệ đáp ứng (%): <strong>{fulfillmentRatePct}%</strong></span>
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void triggerExpediteBackorder()}>
-            Kích hoạt Ưu tiên Cấp phát Đơn tồn thiếu Backorder
+            Kích hoạt Ưu tiên Cấp phát Đơn nợ hàng
           </button>
-          {expediteResult&&(
-            <UiBadge tone="success">
-              {`Đã kích hoạt ${expediteResult.expediteId} • ${expediteResult.orderNumber} (Đã xếp hàng đợt cấp phát)`}
-            </UiBadge>
-          )}
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void evaluateAtpRouting()}>
             Tính toán Cam kết ATP/CTP, Định tuyến Điểm hoàn tất & Công bằng Phân bổ
           </button>
-          {atpRoutingResult&&(
-            <UiBadge tone="success">
-              {`${atpRoutingResult.evaluationId} • ${atpRoutingResult.status} (${atpRoutingResult.atpCtpPromiseStatus} / ${atpRoutingResult.fulfillmentNodeRouting} / ${atpRoutingResult.allocationFairnessPolicy})`}
-            </UiBadge>
-          )}
         </div>
+        {expediteResult&&(
+          <div role="status" style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:'#ecfdf5',color:'#065f46',border:'1px solid #a7f3d0',fontSize:13,lineHeight:1.5,whiteSpace:'normal',wordBreak:'break-word'}}>
+            {`Đã kích hoạt ${expediteResult.expediteId} • ${expediteResult.orderNumber} (Đã xếp hàng đợt cấp phát)`}
+          </div>
+        )}
+        {atpRoutingResult&&(
+          <div role="status" style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:'#ecfdf5',color:'#065f46',border:'1px solid #a7f3d0',fontSize:13,lineHeight:1.5,whiteSpace:'normal',wordBreak:'break-word'}}>
+            {`${atpRoutingResult.evaluationId} • ${atpRoutingResult.status} (${atpRoutingResult.atpCtpPromiseStatus} / ${atpRoutingResult.fulfillmentNodeRouting} / ${atpRoutingResult.allocationFairnessPolicy})`}
+          </div>
+        )}
       </UiCard>
       {showCreate&&canCreate&&masterReady&&<UiCard title="Tạo Đơn bán hàng mới">
         <form onSubmit={createOrder} className="ui-stack">
@@ -377,14 +387,14 @@ export default function OutboundDemand(){
       {canReadOrders&&<UiCard title="Danh sách Đơn bán hàng">
         {orders.length===0?<p>Chưa có đơn bán hàng nào.</p>:<UiTableScroll>
           <table aria-label="Danh sách Sales Order demand">
-            <thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Kho</th><th>Trạng thái</th><th>Đặt hàng</th><th>Đã giữ</th><th>Phân bổ</th><th>Đã lấy</th><th>Đã giao</th><th>Nợ hàng</th><th>Đã hủy</th><th>Còn mở</th></tr></thead>
+            <thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Kho</th><th>Trạng thái</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đặt hàng</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đã giữ</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Phân bổ</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đã lấy</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đã giao</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Nợ hàng</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đã hủy</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Còn mở</th></tr></thead>
             <tbody>{orders.map(order=><tr key={order.id}>
               <td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void detail(order.id)}>{order.orderCode}</button><div className="ui-muted-text" style={{whiteSpace:'nowrap'}}>{order.externalOrderId}</div></td>
               <td><span style={{whiteSpace:'nowrap'}}>{order.customerCode}</span> — {order.customerName}</td><td>{order.warehouseName}</td>
               <td><UiBadge tone={tone(order.status)}>{orderLabels[order.status]??order.status}</UiBadge></td>
-              <td>{order.orderedQuantity}</td><td>{order.reservedQuantity}</td><td>{order.allocatedQuantity}</td>
-              <td>{order.pickedQuantity}</td><td>{order.shippedQuantity}</td><td>{order.backorderQuantity}</td>
-              <td>{order.cancelledQuantity}</td><td><strong>{order.openQuantity}</strong></td>
+              <td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{order.orderedQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{order.reservedQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{order.allocatedQuantity}</td>
+              <td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{order.pickedQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{order.shippedQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{order.backorderQuantity}</td>
+              <td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{order.cancelledQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}><strong>{order.openQuantity}</strong></td>
             </tr>)}</tbody>
           </table>
         </UiTableScroll>}
@@ -417,13 +427,13 @@ export default function OutboundDemand(){
         </div>
         <UiTableScroll>
           <table aria-label="Dòng Sales Order">
-            <thead><tr><th>Sản phẩm</th><th>Đặt hàng</th><th>Đã giữ</th><th>Phân bổ</th><th>Đã lấy</th><th>Đã giao</th><th>Nợ hàng</th><th>Đã hủy</th><th>Còn mở</th><th>Đơn giá / Thuế</th></tr></thead>
+            <thead><tr><th>Sản phẩm</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đặt hàng</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đã giữ</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Phân bổ</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đã lấy</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đã giao</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Nợ hàng</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đã hủy</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Còn mở</th><th className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đơn giá / Thuế</th></tr></thead>
             <tbody>{(selected.lines??[]).map(line=><tr key={line.id}>
               <td><strong style={{whiteSpace:'nowrap'}}>{line.productCode}</strong> — {line.productName}<div className="ui-muted-text">{(line.uomCode==='QA_UNIT'||line.uomCode==='QA-PCS')?'THÙNG':line.uomCode}</div></td>
-              <td>{line.orderedQuantity}</td><td>{line.reservedQuantity}</td><td>{line.allocatedQuantity}</td>
-              <td>{line.pickedQuantity}</td><td>{line.shippedQuantity}</td><td>{line.backorderQuantity}</td>
-              <td>{line.cancelledQuantity}</td><td><strong>{line.openQuantity}</strong></td>
-              <td>{Number(line.unitPrice||0).toLocaleString('vi-VN')} ({Number(line.taxPercent||0)}%)</td>
+              <td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.orderedQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.reservedQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.allocatedQuantity}</td>
+              <td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.pickedQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.shippedQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.backorderQuantity}</td>
+              <td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.cancelledQuantity}</td><td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}><strong>{line.openQuantity}</strong></td>
+              <td className="ui-cell-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{Number(line.unitPrice||0).toLocaleString('vi-VN')} ({Number(line.taxPercent||0)}%)</td>
             </tr>)}</tbody>
           </table>
         </UiTableScroll>
@@ -437,12 +447,12 @@ export default function OutboundDemand(){
               <UiBadge tone={tone(item.status)}>{backorderLabels[item.status]??item.status}</UiBadge>
               <span style={{whiteSpace:'nowrap'}}>{item.orderCode} / {item.externalOrderId}</span>
               <span>Thiếu ban đầu <strong>{item.quantity}</strong></span>
-              <span>Đã recover {item.recoveredQuantity}</span>
+              <span>Đã khôi phục {item.recoveredQuantity}</span>
               <span>Đã hủy {item.cancelledQuantity}</span>
               <span>Còn <strong>{item.remainingQuantity}</strong></span>
             </div>
             {canManageBackorders&&['Open','PartiallyAllocated'].includes(item.status)&&item.remainingQuantity>0&&<div className="ui-inline-wrap">
-              <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng recover
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng khôi phục
                 <input aria-label={`Recover quantity ${item.backorderCode}`} type="number" min="0.0001" step="0.0001"
                   value={recoverQty[item.id]??''} onChange={e=>setRecoverQty(v=>({...v,[item.id]:e.target.value}))}
                   placeholder={String(item.remainingQuantity)}/>

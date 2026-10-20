@@ -41,6 +41,12 @@ const labels:Record<string,string>={
   Draft:'Nháp',Confirmed:'Đã xác nhận',InTransit:'Đang vận chuyển',Arrived:'Đã đến cổng',
   Receiving:'Đang tiếp nhận',Received:'Đã hoàn tất',Completed:'Đã hoàn tất',Cancelled:'Đã hủy',
 };
+const stagingSignalLabels:Record<string,string>={
+  STAGE_PRE_ALLOCATED:'Đã cấp phát trước bãi đệm tiếp nhận',
+  'STAGE-IN-01':'Làn đệm tiếp nhận 01 (STAGE-IN-01)',
+  'ASN-NEXT-ARRIVAL':'Lô ASN dự kiến tiếp theo',
+};
+const translateStagingSignal=(value?:string|null)=>value?(stagingSignalLabels[value]??value):'';
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Completed'||status==='Received'?'success':status==='Arrived'||status==='Receiving'?'warning':status==='Cancelled'?'danger':'neutral';
 const dateTime=(value?:string)=>value?new Date(value).toLocaleString('vi-VN'):'—';
@@ -91,7 +97,7 @@ export default function Asns(){
       if(res?.data?.stagingReservationId&&res?.data?.stagingLaneCode){
         setStagingReservation({
           stagingReservationId:String(res.data.stagingReservationId),
-          stagingLaneCode:String(res.data.stagingLaneCode),
+          stagingLaneCode:translateStagingSignal(String(res.data.stagingLaneCode)),
         });
       }else{
         setStagingReservation(null);
@@ -295,12 +301,12 @@ export default function Asns(){
         <button type="button" disabled={!!busy||creating||stagingBusy} onClick={()=>void preAllocateStaging()}>
           Cấp phát Trước Bãi đệm Tiếp nhận
         </button>
-        {stagingReservation&&(
-          <UiBadge tone="success">
-            {stagingReservation.stagingReservationId} • {stagingReservation.stagingLaneCode}
-          </UiBadge>
-        )}
       </div>
+      {stagingReservation&&(
+        <div role="status" style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:'#ecfdf5',color:'#065f46',border:'1px solid #a7f3d0',fontSize:13,lineHeight:1.5,whiteSpace:'normal',wordBreak:'break-word'}}>
+          {`Mã cấp phát: ${stagingReservation.stagingReservationId} • Vị trí đệm: ${stagingReservation.stagingLaneCode}`}
+        </div>
+      )}
     </UiCard>
 
     <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã ASN, đơn mua, nhà cung cấp, kho"/>
@@ -310,14 +316,14 @@ export default function Asns(){
         {filtered.length===0?<UiEmptyState title="Chưa có ASN phù hợp" detail="Thay đổi bộ lọc hoặc tạo ASN mới nếu bạn có quyền."/>:
           <UiTableScroll>
             <table className="inbound-planning-table ui-table-compact" aria-label="Danh sách ASN">
-              <thead><tr><th>Mã ASN</th><th>Đơn mua (PO)</th><th>Nhà cung cấp</th><th>Kho nhận</th><th>Dự kiến đến</th><th className="inbound-planning-numeric">SL dự kiến</th><th>Trạng thái</th></tr></thead>
+              <thead><tr><th>Mã ASN</th><th>Đơn mua (PO)</th><th>Nhà cung cấp</th><th>Kho nhận</th><th>Dự kiến đến</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>SL dự kiến</th><th>Trạng thái</th></tr></thead>
               <tbody>{filtered.map(item=><tr key={item.id}>
                 <td className="ui-cell-nowrap" style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong></button></td>
                 <td style={{whiteSpace:'nowrap'}}>{item.purchaseOrderCode||'Không gắn đơn mua'}</td>
                 <td><span style={{whiteSpace:'nowrap'}}>{item.supplierCode}</span><br/><small>{item.supplierName}</small></td>
                 <td>{item.warehouseName}</td>
                 <td>{dateTime(item.expectedArrivalAtUtc)}</td>
-                <td className="inbound-planning-numeric">{item.baseExpectedQuantity.toLocaleString('vi-VN')}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{item.baseExpectedQuantity.toLocaleString('vi-VN')}</td>
                 <td><UiBadge tone={tone(item.status)}>{labels[item.status]??item.status}</UiBadge></td>
               </tr>)}</tbody>
             </table>
@@ -347,16 +353,16 @@ export default function Asns(){
           </div>
           <UiTableScroll>
             <table className="ui-table-compact" aria-label={'Dòng ASN '+selected.code}>
-              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th>Đơn vị</th><th className="inbound-planning-numeric">SL dự kiến</th><th className="inbound-planning-numeric">SL cơ sở</th></tr></thead>
+              <thead><tr><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Dòng</th><th>Sản phẩm</th><th>Đơn vị</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>SL dự kiến</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>SL cơ sở</th></tr></thead>
               <tbody>{selected.lines.map(line=>{
                 const opUnit=normalizeUnitCode(line.operationUnitCode);
                 const baseUnit=normalizeUnitCode(line.baseUnitCode);
                 return <tr key={line.id}>
-                <td>{line.lineNo}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.lineNo}</td>
                 <td><strong style={{whiteSpace:'nowrap'}}>{line.productCode}</strong><br/><small>{line.productName}</small></td>
                 <td>{opUnit||'—'}</td>
-                <td className="inbound-planning-numeric">{line.expectedQuantity.toLocaleString('vi-VN')}</td>
-                <td className="inbound-planning-numeric">{line.baseExpectedQuantity.toLocaleString('vi-VN')}{(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')&&baseUnit===opUnit?'':' '+baseUnit}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.expectedQuantity.toLocaleString('vi-VN')}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.baseExpectedQuantity.toLocaleString('vi-VN')}{(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')&&baseUnit===opUnit?'':' '+baseUnit}</td>
               </tr>;
               })}</tbody>
             </table>

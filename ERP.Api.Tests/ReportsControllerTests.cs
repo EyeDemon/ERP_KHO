@@ -1421,5 +1421,240 @@ namespace ERP.Api.Tests
                 doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã xác thực toàn vẹn danh mục ĐVT & hệ số quy đổi");
             }
         }
+
+        [Fact]
+        public async Task Wave30_InboundProcurementAndAsnStagingEndpoints_ComputeRealDatabaseMetrics_AndReturnVietnameseLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 11,
+                WarehouseId = 1,
+                Code = "RCV-01",
+                Name = "Khu tiếp nhận cổng 1",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Receiving,
+                IsActive = true,
+                IsBlocked = false
+            });
+            db.Products.AddRange(
+                new ERP.Domain.Entities.Product { Id = 101, Code = "SKU-W30-01", Name = "Sản phẩm 01", UnitId = 1, IsActive = true },
+                new ERP.Domain.Entities.Product { Id = 102, Code = "SKU-W30-02", Name = "Sản phẩm 02", UnitId = 1, IsActive = true }
+            );
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 1,
+                    WarehouseId = 1,
+                    ProductId = 101,
+                    LocationId = 11,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 120m,
+                    ReservedQuantity = 20m
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 2,
+                    WarehouseId = 1,
+                    ProductId = 102,
+                    LocationId = 11,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 15m,
+                    ReservedQuantity = 5m
+                }
+            );
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var inboundService = new Mock<IInboundPlanningService>();
+            inboundService.Setup(x => x.ListPurchaseOrdersAsync(null, default)).ReturnsAsync(new List<PurchaseOrderListDto>
+            {
+                new()
+                {
+                    Id = 1,
+                    Code = "PO-QA-001",
+                    WarehouseId = 1,
+                    WarehouseCode = "QA-HCM",
+                    WarehouseName = "Kho Chính TP.HCM",
+                    Status = "Open",
+                    ExpectedDate = DateTime.UtcNow.AddDays(-2),
+                    BaseOrderedQuantity = 50m
+                },
+                new()
+                {
+                    Id = 2,
+                    Code = "PO-QA-002",
+                    WarehouseId = 1,
+                    WarehouseCode = "QA-HCM",
+                    WarehouseName = "Kho Chính TP.HCM",
+                    Status = "PartiallyReceived",
+                    ExpectedDate = DateTime.UtcNow.AddDays(3),
+                    BaseOrderedQuantity = 30m
+                }
+            });
+            inboundService.Setup(x => x.ListAsnsAsync(null, default)).ReturnsAsync(new List<AsnListDto>
+            {
+                new()
+                {
+                    Id = 10,
+                    Code = "ASN-QA-001",
+                    WarehouseId = 1,
+                    WarehouseCode = "QA-HCM",
+                    WarehouseName = "Kho Chính TP.HCM",
+                    Status = "InTransit",
+                    BaseExpectedQuantity = 50m
+                }
+            });
+
+            var poController = new PurchaseOrdersController(inboundService.Object, db, warehouseAuth.Object);
+
+            var expRes = await poController.ExpediteOverdue(new PurchaseOrdersController.ExpediteOverduePurchaseOrdersRequest(WarehouseId: 1), default);
+            var expOk = expRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(expOk.Value))
+            {
+                doc.RootElement.GetProperty("openPoCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("overdueCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("expeditedPoCodes")[0].GetString().Should().Be("PO-QA-001");
+                doc.RootElement.GetProperty("vendorNotificationStatus").GetString().Should().Be("Đã gửi thông báo đôn đốc nhà cung cấp");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã phát lệnh đôn đốc đơn mua quá hạn & ưu tiên tiếp nhận");
+            }
+
+            var recRes = await poController.GenerateProcurementRecommendations(new PurchaseOrdersController.GenerateProcurementRecommendationsRequest(WarehouseId: 1), default);
+            var recOk = recRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(recOk.Value))
+            {
+                doc.RootElement.GetProperty("evaluatedSkuCount").GetInt32().Should().Be(2);
+                doc.RootElement.GetProperty("totalAvailableQuantity").GetDecimal().Should().Be(110m);
+                doc.RootElement.GetProperty("recommendedOrderCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("status").GetString().Should().Be("Đã hoàn tất phân tích & đề xuất mua hàng bổ sung");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã hoàn tất phân tích & đề xuất mua hàng bổ sung");
+            }
+
+            var asnController = new AsnsController(inboundService.Object, db, warehouseAuth.Object);
+            var stgRes = await asnController.PreAllocateStaging(new AsnsController.PreAllocateAsnStagingRequest(WarehouseId: 1), default);
+            var stgOk = stgRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(stgOk.Value))
+            {
+                doc.RootElement.GetProperty("preAllocatedAsnCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("asnNumber").GetString().Should().Be("ASN-QA-001");
+                doc.RootElement.GetProperty("stagingLaneCode").GetString().Should().Be("RCV-01");
+                doc.RootElement.GetProperty("stagingLocationName").GetString().Should().Contain("RCV-01 — Khu tiếp nhận cổng 1");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã phân bổ trước khu vực tập kết hàng nhập");
+            }
+
+            db.AuditLogs.Should().OnlyContain(a => a.Result != null && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave30_OutboundAtpBackorderAndNetworkRebalancingEndpoints_ComputeRealDatabaseMetrics_AndReturnVietnameseLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.AddRange(
+                new ERP.Domain.Entities.Warehouse { Id = 1, Code = "QA-HCM", Name = "Kho Chính TP.HCM", IsActive = true },
+                new ERP.Domain.Entities.Warehouse { Id = 2, Code = "QA-HN", Name = "Kho Chi Nhánh Hà Nội", IsActive = true }
+            );
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 1,
+                    WarehouseId = 1,
+                    ProductId = 101,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 200m,
+                    ReservedQuantity = 40m
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 2,
+                    WarehouseId = 2,
+                    ProductId = 101,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 60m,
+                    ReservedQuantity = 10m
+                }
+            );
+            db.StockTransfers.Add(new ERP.Domain.Entities.StockTransfer
+            {
+                Id = 1,
+                Code = "TRF-QA-001",
+                SourceWarehouseId = 1,
+                DestinationWarehouseId = 2,
+                Status = ERP.Domain.Enums.StockTransferStatus.InTransit,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow.AddHours(-2)
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1, 2 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(It.IsAny<int>(), default)).Returns(Task.CompletedTask);
+
+            var soService = new Mock<ISalesOrderBackorderService>();
+            soService.Setup(x => x.ListSalesOrdersAsync(It.IsAny<int?>(), null, default)).ReturnsAsync(new List<SalesOrderListDto>
+            {
+                new()
+                {
+                    Id = 1,
+                    OrderCode = "SO-QA-001",
+                    WarehouseId = 1,
+                    WarehouseCode = "QA-HCM",
+                    WarehouseName = "Kho Chính TP.HCM",
+                    Status = "Released",
+                    OrderedQuantity = 100m,
+                    OpenQuantity = 80m,
+                    BackorderQuantity = 20m
+                }
+            });
+
+            var soController = new SalesOrdersController(soService.Object, db, warehouseAuth.Object);
+
+            var boRes = await soController.ExpediteBackorder(new ExpediteBackorderRequest(1, null), default);
+            var boOk = boRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(boOk.Value))
+            {
+                doc.RootElement.GetProperty("orderNumber").GetString().Should().Be("SO-QA-001");
+                doc.RootElement.GetProperty("backorderOrdersCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("totalBackorderQuantity").GetDecimal().Should().Be(20m);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã đưa đơn hàng thiếu tồn vào hàng đợi phân bổ ưu tiên");
+            }
+
+            var atpRes = await soController.EvaluateAtpRouting(new EvaluateAtpRoutingRequest(1), default);
+            var atpOk = atpRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(atpOk.Value))
+            {
+                doc.RootElement.GetProperty("evaluatedOrdersCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("totalAtpQuantity").GetDecimal().Should().Be(160m);
+                doc.RootElement.GetProperty("totalDemandQuantity").GetDecimal().Should().Be(80m);
+                doc.RootElement.GetProperty("optimalWarehouseNode").GetString().Should().Be("QA-HCM — Kho Chính TP.HCM");
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã hoàn tất đánh giá khả năng cung ứng (ATP) & định tuyến kho xuất");
+            }
+
+            var stService = new Mock<IStockTransferService>();
+            var stController = new StockTransfersController(stService.Object, db, warehouseAuth.Object);
+            var simRes = await stController.SimulateNetworkRebalancing(new StockTransfersController.SimulateNetworkRebalancingRequest(), default);
+            var simOk = simRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(simOk.Value))
+            {
+                doc.RootElement.GetProperty("inTransitTransfersCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("sourceWarehouseLabel").GetString().Should().Be("QA-HCM — Kho Chính TP.HCM");
+                doc.RootElement.GetProperty("destinationWarehouseLabel").GetString().Should().Be("QA-HN — Kho Chi Nhánh Hà Nội");
+                doc.RootElement.GetProperty("imbalanceSpreadQuantity").GetDecimal().Should().Be(110m);
+                doc.RootElement.GetProperty("recommendedTransferQuantity").GetDecimal().Should().Be(55m);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã hoàn tất mô phỏng tái cân bằng tồn kho toàn mạng lưới");
+            }
+
+            db.AuditLogs.Should().OnlyContain(a => a.Result != null && a.Result.Length <= 32);
+        }
     }
 }

@@ -1734,6 +1734,61 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         await context.SaveChangesAsync();
     }
 
+    var purchaseOrder2 = await context.PurchaseOrders.IgnoreQueryFilters()
+        .Include(p => p.Lines)
+        .FirstOrDefaultAsync(p => p.Code == "PO-QA-002" || p.ExternalPoId == "EXT-PO-QA-002");
+    if (purchaseOrder2 is null)
+    {
+        purchaseOrder2 = new PurchaseOrder
+        {
+            Code = "PO-QA-002",
+            ExternalPoId = "EXT-PO-QA-002",
+            SourceSystem = "MANUAL",
+            SupplierId = supplier.Id,
+            WarehouseId = primaryWarehouse.Id,
+            OrderDate = DateTime.UtcNow.Date.AddDays(-6),
+            ExpectedDate = DateTime.UtcNow.Date.AddDays(-1),
+            Currency = "VND",
+            Status = PurchaseOrderStatus.PartiallyReceived,
+            CreatedAtUtc = DateTime.UtcNow.AddDays(-6),
+            CreatedBy = qaAdmin.Id,
+            Lines =
+            [
+                new PurchaseOrderLine
+                {
+                    ExternalLineId = "EXT-PO-QA-002-L1",
+                    LineNo = 1,
+                    ProductId = lotProduct.Id,
+                    OrderedQuantity = 80m,
+                    UnitPrice = 420000m,
+                    TaxPercent = 10m,
+                    OperationUnitId = unit.Id,
+                    OperationUnitCodeSnapshot = unit.Code,
+                    OperationUnitDecimalPlaces = unit.DecimalPlaces,
+                    BaseUnitId = unit.Id,
+                    BaseUnitCodeSnapshot = unit.Code,
+                    BaseUnitDecimalPlaces = unit.DecimalPlaces,
+                    ConversionFactorSnapshot = 1m,
+                    ConversionVersionSnapshot = 1,
+                    BaseOrderedQuantity = 80m,
+                    AllowedOverReceiptPct = 5m,
+                    AllowedUnderReceiptPct = 5m
+                }
+            ]
+        };
+        context.PurchaseOrders.Add(purchaseOrder2);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        purchaseOrder2.Code = "PO-QA-002";
+        purchaseOrder2.SupplierId = supplier.Id;
+        purchaseOrder2.WarehouseId = primaryWarehouse.Id;
+        purchaseOrder2.ExpectedDate = DateTime.UtcNow.Date.AddDays(-1);
+        purchaseOrder2.Status = PurchaseOrderStatus.PartiallyReceived;
+        await context.SaveChangesAsync();
+    }
+
     var poLine = purchaseOrder.Lines.First();
     var asn = await context.Asns.IgnoreQueryFilters()
         .Include(a => a.Lines)
@@ -2146,6 +2201,48 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 Note = "Điều chuyển bổ sung tồn kho chi nhánh"
             });
         }
+        await context.SaveChangesAsync();
+    }
+
+    var stockTransfer2 = await context.StockTransfers.IgnoreQueryFilters()
+        .Include(t => t.Details)
+        .FirstOrDefaultAsync(t => t.Code == "STF-QA-002");
+    if (stockTransfer2 is null)
+    {
+        stockTransfer2 = new StockTransfer
+        {
+            Code = "STF-QA-002",
+            SourceWarehouseId = primaryWarehouse.Id,
+            DestinationWarehouseId = wh02.Id,
+            Status = StockTransferStatus.Approved,
+            Note = "Điều chuyển bổ sung cảm biến nhiệt độ QA-02 ra Kho Chi Nhánh Hà Nội",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ApprovedBy = qaAdmin.Id,
+            ApprovedAt = DateTime.UtcNow.AddMinutes(-45),
+            Details =
+            [
+                new StockTransferDetail
+                {
+                    ProductId = lotProduct.Id,
+                    RequestedQuantity = 10m,
+                    DispatchedQuantity = 0m,
+                    ReceivedQuantity = 0m,
+                    MissingQuantity = 0m,
+                    DamagedQuantity = 0m,
+                    Note = "Chờ xuất kho điều chuyển liên chi nhánh"
+                }
+            ]
+        };
+        context.StockTransfers.Add(stockTransfer2);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        stockTransfer2.Code = "STF-QA-002";
+        stockTransfer2.SourceWarehouseId = primaryWarehouse.Id;
+        stockTransfer2.DestinationWarehouseId = wh02.Id;
+        stockTransfer2.Note = "Điều chuyển bổ sung cảm biến nhiệt độ QA-02 ra Kho Chi Nhánh Hà Nội";
         await context.SaveChangesAsync();
     }
 
@@ -2821,6 +2918,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 hu2.WarehouseId = primaryWarehouse.Id;
                 hu2.ParentHandlingUnitId = null;
                 hu2.Status = HandlingUnitStatus.Shipped;
+                hu2.SealedAt ??= DateTime.UtcNow.AddHours(-13);
                 if (!hu2.Contents.Any(c => c.PickingTaskLineId == pickQa003Line.Id))
                 {
                     hu2.Contents.Add(new HandlingUnitContent

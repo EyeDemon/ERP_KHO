@@ -40,6 +40,14 @@ type LineForm={externalLineId:string;productId:number|'';operationUnitId:number|
 const labels:Record<string,string>={
   Draft:'Nháp',Open:'Đang mở',Approved:'Đã xác nhận',Confirmed:'Đã xác nhận',PartiallyReceived:'Nhận một phần',Received:'Đã nhận đủ',Closed:'Đã đóng',Cancelled:'Đã hủy',
 };
+const procurementSignalLabels:Record<string,string>={
+  DISPATCHED_TO_SUPPLIER:'Đã gửi thông báo đôn đốc nhà cung cấp & giữ cửa ưu tiên',
+  PROCUREMENT_INTELLIGENCE_READY:'Đề xuất mua hàng thông minh sẵn sàng',
+  REORDER_THRESHOLD_PROPOSALS_READY:'Đã lập đề xuất điểm đặt hàng lại',
+  P90_LEAD_TIME_CALIBRATED:'Đã hiệu chuẩn thời gian giao hàng P90',
+  EXPEDITE_AND_DEFER_BALANCED:'Đã cân bằng tín hiệu đôn đốc & giãn tiến độ',
+};
+const translateProcurementSignal=(value?:string|null)=>value?(procurementSignalLabels[value]??value):'';
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Received'||status==='Closed'?'success':status==='PartiallyReceived'?'warning':status==='Cancelled'?'danger':'neutral';
 const isoDay=(value?:string)=>value?new Date(value).toLocaleDateString('vi-VN'):'—';
@@ -67,7 +75,7 @@ export default function PurchaseOrders(){
   const [error,setError]=useState('');
   const [success,setSuccess]=useState('');
   const [creating,setCreating]=useState(false);
-  const [showCreateForm,setShowCreateForm]=useState(true);
+  const [showCreateForm,setShowCreateForm]=useState(false);
   const [busy,setBusy]=useState('');
   const [governanceBusy,setGovernanceBusy]=useState(false);
   const [expediteResult,setExpediteResult]=useState<{expediteId:string;vendorNotificationStatus:string}|null>(null);
@@ -86,11 +94,11 @@ export default function PurchaseOrders(){
     setGovernanceBusy(true);
     setError('');
     try{
-      const res=await apiClient.post('/api/purchase-orders/expedite-overdue',{supplierId:supplierId||undefined});
+      const res=await apiClient.post('/api/purchase-orders/expedite-overdue',{supplierId:supplierId||undefined},{headers:idempotencyHeaders('po-expedite-overdue:'+Date.now())});
       if(res?.data?.expediteId&&res?.data?.vendorNotificationStatus){
         setExpediteResult({
           expediteId:String(res.data.expediteId),
-          vendorNotificationStatus:String(res.data.vendorNotificationStatus),
+          vendorNotificationStatus:translateProcurementSignal(String(res.data.vendorNotificationStatus)),
         });
       }else{
         setExpediteResult(null);
@@ -111,14 +119,14 @@ export default function PurchaseOrders(){
     try{
       const res=await apiClient.post('/api/purchase-orders/generate-procurement-recommendations',{
         warehouseId:warehouseId||items[0]?.warehouseId||undefined,
-      });
+      },{headers:idempotencyHeaders('po-procurement-rec:'+Date.now())});
       if(res?.data?.recommendationId&&res?.data?.status){
         setProcurementRecResult({
           recommendationId:String(res.data.recommendationId),
-          procurementSuggestionStatus:String(res.data.procurementSuggestionStatus||''),
-          supplierLeadTimePercentile:String(res.data.supplierLeadTimePercentile||''),
-          expediteDeferSignal:String(res.data.expediteDeferSignal||''),
-          status:String(res.data.status),
+          procurementSuggestionStatus:translateProcurementSignal(String(res.data.procurementSuggestionStatus||'')),
+          supplierLeadTimePercentile:translateProcurementSignal(String(res.data.supplierLeadTimePercentile||'')),
+          expediteDeferSignal:translateProcurementSignal(String(res.data.expediteDeferSignal||'')),
+          status:translateProcurementSignal(String(res.data.status)),
         });
       }else{
         setProcurementRecResult(null);
@@ -312,20 +320,20 @@ export default function PurchaseOrders(){
         <button type="button" disabled={!!busy||creating||governanceBusy} onClick={()=>void expediteOverdue()}>
           Gửi Yêu cầu Đôn đốc NCC &amp; Giữ Cửa Tiếp nhận Ưu tiên
         </button>
-        {expediteResult&&(
-          <UiBadge tone="warning">
-            {expediteResult.expediteId} • {expediteResult.vendorNotificationStatus}
-          </UiBadge>
-        )}
         <button type="button" disabled={!!busy||creating||governanceBusy} onClick={()=>void generateProcurementRecommendations()}>
           Sinh Đề xuất Mua hàng, Phân tích Thời gian giao NCC &amp; Khuyến nghị Đôn đốc/Hoãn
         </button>
-        {procurementRecResult&&(
-          <UiBadge tone="success">
-            {`${procurementRecResult.recommendationId} • ${procurementRecResult.status} (${procurementRecResult.procurementSuggestionStatus} / ${procurementRecResult.supplierLeadTimePercentile} / ${procurementRecResult.expediteDeferSignal})`}
-          </UiBadge>
-        )}
       </div>
+      {expediteResult&&(
+        <div role="status" style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:'#ecfdf5',color:'#065f46',border:'1px solid #a7f3d0',fontSize:13,lineHeight:1.5,whiteSpace:'normal',wordBreak:'break-word'}}>
+          {`${expediteResult.expediteId} • ${expediteResult.vendorNotificationStatus}`}
+        </div>
+      )}
+      {procurementRecResult&&(
+        <div role="status" style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:'#ecfdf5',color:'#065f46',border:'1px solid #a7f3d0',fontSize:13,lineHeight:1.5,whiteSpace:'normal',wordBreak:'break-word'}}>
+          {`${procurementRecResult.recommendationId} • ${procurementRecResult.status} (${procurementRecResult.procurementSuggestionStatus} / ${procurementRecResult.supplierLeadTimePercentile} / ${procurementRecResult.expediteDeferSignal})`}
+        </div>
+      )}
     </UiCard>
 
     <InboundPlanningToolbar labels={labels} statusFilter={statusFilter} setStatusFilter={setStatusFilter} search={search} setSearch={setSearch} placeholder="Mã đơn mua, mã nguồn, nhà cung cấp, kho"/>
@@ -335,15 +343,15 @@ export default function PurchaseOrders(){
         {filtered.length===0?<UiEmptyState title="Chưa có đơn mua phù hợp" detail="Thay đổi bộ lọc hoặc tạo đơn mua mới nếu bạn có quyền."/>:
           <UiTableScroll>
             <table className="inbound-planning-table ui-table-compact" aria-label="Danh sách đơn mua">
-              <thead><tr><th>Mã đơn mua</th><th>Nhà cung cấp</th><th>Kho nhận</th><th>Trạng thái</th><th>Ngày dự kiến</th><th className="inbound-planning-numeric">SL đặt</th><th className="inbound-planning-numeric">Tổng tiền</th></tr></thead>
+              <thead><tr><th>Mã đơn mua</th><th>Nhà cung cấp</th><th>Kho nhận</th><th>Trạng thái</th><th>Ngày dự kiến</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>SL đặt</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Tổng tiền</th></tr></thead>
               <tbody>{filtered.map(item=><tr key={item.id}>
-                <td className="ui-cell-nowrap" style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong><br/><small style={{whiteSpace:'nowrap'}}>{item.externalPoId}</small></button></td>
+                <td className="ui-cell-nowrap" style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>void viewDetail(item.id)}><strong style={{whiteSpace:'nowrap'}}>{item.code}</strong></button><div className="ui-muted-text" style={{whiteSpace:'nowrap'}}>{item.externalPoId}</div></td>
                 <td><span style={{whiteSpace:'nowrap'}}>{item.supplierCode}</span><br/><small>{item.supplierName}</small></td>
                 <td>{item.warehouseName}</td>
                 <td><UiBadge tone={tone(item.status)}>{labels[item.status]??item.status}</UiBadge></td>
                 <td>{isoDay(item.expectedDate)}</td>
-                <td className="inbound-planning-numeric">{item.baseOrderedQuantity.toLocaleString('vi-VN')}</td>
-                <td className="inbound-planning-numeric">{Number(item.totalAmount||0).toLocaleString('vi-VN')}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{item.baseOrderedQuantity.toLocaleString('vi-VN')}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{Number(item.totalAmount||0).toLocaleString('vi-VN')}</td>
               </tr>)}</tbody>
             </table>
           </UiTableScroll>}
@@ -369,7 +377,7 @@ export default function PurchaseOrders(){
           </div>
           <UiTableScroll>
             <table className="ui-table-compact" aria-label={'Dòng đơn mua '+selected.code}>
-              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th>Đơn vị</th><th className="inbound-planning-numeric">SL đặt</th><th className="inbound-planning-numeric">SL cơ sở</th><th className="inbound-planning-numeric">Đơn giá / Thuế</th><th className="inbound-planning-numeric">Thành tiền</th><th>Dung sai</th></tr></thead>
+              <thead><tr><th>Dòng</th><th>Sản phẩm</th><th>Đơn vị</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>SL đặt</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>SL cơ sở</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Đơn giá / Thuế</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Thành tiền</th><th className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Dung sai</th></tr></thead>
               <tbody>{selected.lines.map(line=>{
                 const opUnit=normalizeUnitCode(line.operationUnitCode);
                 const baseUnit=normalizeUnitCode(line.baseUnitCode);
@@ -377,11 +385,11 @@ export default function PurchaseOrders(){
                 <td>{line.externalLineId}</td>
                 <td><strong style={{whiteSpace:'nowrap'}}>{line.productCode}</strong><br/><small>{line.productName}</small></td>
                 <td>{opUnit||'—'}</td>
-                <td className="inbound-planning-numeric">{line.orderedQuantity.toLocaleString('vi-VN')}</td>
-                <td className="inbound-planning-numeric">{line.baseOrderedQuantity.toLocaleString('vi-VN')}{(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')&&baseUnit===opUnit?'':' '+baseUnit}</td>
-                <td className="inbound-planning-numeric">{Number(line.unitPrice||0).toLocaleString('vi-VN')} ({Number(line.taxPercent||0)}%)</td>
-                <td className="inbound-planning-numeric">{Number(line.lineTotal ?? line.lineTotalAmount ?? 0).toLocaleString('vi-VN')}</td>
-                <td>+{line.allowedOverReceiptPct}% / -{line.allowedUnderReceiptPct}%</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.orderedQuantity.toLocaleString('vi-VN')}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{line.baseOrderedQuantity.toLocaleString('vi-VN')}{(line.baseUnitCode==='QA_UNIT'||line.baseUnitCode==='QA-PCS')&&baseUnit===opUnit?'':' '+baseUnit}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{Number(line.unitPrice||0).toLocaleString('vi-VN')} ({Number(line.taxPercent||0)}%)</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{Number(line.lineTotal ?? line.lineTotalAmount ?? 0).toLocaleString('vi-VN')}</td>
+                <td className="inbound-planning-numeric" style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>+{line.allowedOverReceiptPct}% / -{line.allowedUnderReceiptPct}%</td>
               </tr>;
               })}</tbody>
             </table>

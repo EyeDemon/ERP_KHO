@@ -6,7 +6,6 @@ import {
   UiCard,
   UiEmptyState,
   UiMetric,
-  UiMetricGrid,
   UiPage,
   UiPageHeader,
   UiTableScroll,
@@ -454,7 +453,7 @@ const WarehouseLocations = () => {
       {success && <p role="status" className="ui-success-text">{success}</p>}
       {error && <p role="alert">{error} <button type="button" onClick={() => void load()}>Thử lại</button></p>}
 
-      <UiMetricGrid>
+      <div className="ui-metric-grid" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
         <UiMetric value={locations.length} label="Tổng vị trí" />
         <UiMetric value={zoneCount} label="Khu vực đã cấu trúc" />
         <UiMetric value={mapped.length} label="Vị trí đã gắn cấu trúc" />
@@ -463,7 +462,7 @@ const WarehouseLocations = () => {
         <UiMetric value={inactiveCount} label="Ngừng hoạt động" />
         <UiMetric value={nearCapacityCount} label="Gần đầy" />
         <UiMetric value={capacityIssueCount} label="Sức chứa cần xử lý" />
-      </UiMetricGrid>
+      </div>
 
       <UiCard title="Tổng quan Phân bổ Vị trí & Sức chứa Ô lưu trữ">
         <div className="warehouse-location-capacity-grid">
@@ -511,11 +510,6 @@ const WarehouseLocations = () => {
           >
             Kiểm định Cấu trúc Zone/Bin & Giới hạn Sức chứa
           </button>
-          {topologyAuditResult && (
-            <UiBadge tone="success">
-              {`Mã kiểm định: ${topologyAuditResult.verificationId} • Cấu trúc: ${topologyAuditResult.zoneBinHierarchyStatus === 'CANONICAL_VALIDATED' ? 'Đã chuẩn hóa phân cấp Khu vực/Ô lưu trữ' : topologyAuditResult.zoneBinHierarchyStatus} • Chốt chặn sức chứa: Đang bật`}
-            </UiBadge>
-          )}
           <button
             type="button"
             onClick={() => {
@@ -537,12 +531,17 @@ const WarehouseLocations = () => {
           >
             Kiểm định 9 Vị trí Ảo
           </button>
-          {virtualVerification && (
-            <UiBadge tone="success">
-              {`9 Vị trí Ảo: ${virtualVerification.status === 'ALL_9_VIRTUAL_LOCATIONS_READY' ? 'Đã kích hoạt đầy đủ 9 vị trí ảo' : virtualVerification.status} (${virtualVerification.verificationId})`}
-            </UiBadge>
-          )}
         </div>
+        {topologyAuditResult && (
+          <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {`Mã kiểm định: ${topologyAuditResult.verificationId} • Cấu trúc: ${topologyAuditResult.zoneBinHierarchyStatus === 'CANONICAL_VALIDATED' ? 'Đã chuẩn hóa phân cấp Khu vực/Ô lưu trữ' : topologyAuditResult.zoneBinHierarchyStatus} • Chốt chặn sức chứa: Đang bật`}
+          </div>
+        )}
+        {virtualVerification && (
+          <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {`9 Vị trí Ảo: ${virtualVerification.status === 'ALL_9_VIRTUAL_LOCATIONS_READY' ? 'Đã kích hoạt đầy đủ 9 vị trí ảo' : virtualVerification.status} (${virtualVerification.verificationId})`}
+          </div>
+        )}
       </UiCard>
 
       <UiToolbar>

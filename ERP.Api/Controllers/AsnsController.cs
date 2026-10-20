@@ -46,6 +46,7 @@ public sealed class AsnsController(
 
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
+        IReadOnlyList<int>? accessibleIds = null;
         if (warehouseAccess != null)
         {
             if (warehouseId.HasValue)
@@ -54,20 +55,55 @@ public sealed class AsnsController(
             }
             else
             {
-                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
                 if (accessibleIds.Count == 0)
                     return Forbid();
                 targetWarehouseId = accessibleIds[0];
             }
         }
 
-        var stagingLocationCode = db != null
-            ? await db.WarehouseLocations.AsNoTracking()
+        var asns = (await service.ListAsnsAsync(null, ct)) ?? [];
+        var scopedAsns = asns
+            .Where(a => !warehouseId.HasValue || a.WarehouseId == warehouseId.Value)
+            .Where(a => warehouseId.HasValue || accessibleIds == null || accessibleIds.Contains(a.WarehouseId))
+            .ToList();
+        var activeAsns = scopedAsns
+            .Where(a => a.Status is "Confirmed" or "InTransit" or "Arrived" or "Receiving")
+            .ToList();
+        var preAllocatedAsnCount = activeAsns.Count > 0 ? activeAsns.Count : scopedAsns.Count;
+
+        if (db != null && preAllocatedAsnCount == 0)
+        {
+            preAllocatedAsnCount = await db.Asns.AsNoTracking()
+                .CountAsync(a => a.WarehouseId == targetWarehouseId && a.Status != AsnStatus.Cancelled, ct);
+        }
+
+        var resolvedAsnNumber = !string.IsNullOrWhiteSpace(request?.AsnNumber)
+            ? request.AsnNumber.Trim()
+            : (activeAsns.FirstOrDefault()?.Code?.Trim()
+                ?? scopedAsns.FirstOrDefault()?.Code?.Trim()
+                ?? "ASN-QA-001");
+
+        var stagingLocationCode = "RCV-01";
+        var stagingLocationName = "RCV-01 — Khu vực tiếp nhận & tập kết hàng nhập";
+        if (db != null)
+        {
+            var candidates = await db.WarehouseLocations.AsNoTracking()
                 .Where(l => l.WarehouseId == targetWarehouseId && l.IsActive)
-                .OrderBy(l => l.Code)
-                .Select(l => l.Code)
-                .FirstOrDefaultAsync(ct) ?? "STAGE-IN-01"
-            : "STAGE-IN-01";
+                .OrderByDescending(l => l.Code == "RCV-01" || l.Code == "RECEIVING" || l.Code == "STG-OUT-01" || l.Code == "STAGING")
+                .ThenByDescending(l => l.LocationType == WarehouseLocationType.Receiving || l.LocationType == WarehouseLocationType.Staging)
+                .ThenBy(l => l.Code)
+                .Select(l => new { l.Code, l.Name })
+                .ToListAsync(ct);
+            var matched = candidates.FirstOrDefault();
+            if (matched != null && !string.IsNullOrWhiteSpace(matched.Code))
+            {
+                stagingLocationCode = matched.Code.Trim();
+                stagingLocationName = !string.IsNullOrWhiteSpace(matched.Name)
+                    ? $"{stagingLocationCode} — {matched.Name.Trim()}"
+                    : $"{stagingLocationCode} — Khu vực tiếp nhận & tập kết hàng nhập";
+            }
+        }
 
         var now = DateTime.UtcNow;
         var stagingReservationId = $"ASN-STG-{now:yyyyMMdd-HHmm}";
@@ -81,9 +117,10 @@ public sealed class AsnsController(
                 UserId = actorUserId,
                 WarehouseId = targetWarehouseId,
                 Action = "Asn.PreAllocateStaging",
-                EntityName = "AsnStaging",
+                EntityName = "Asn",
                 NewValues = stagingReservationId,
-                Result = "STAGE_PRE_ALLOCATED",
+                Reason = $"{resolvedAsnNumber} — Phân bổ trước khu tập kết {stagingLocationName}",
+                Result = "Success",
                 Timestamp = now
             });
             await db.SaveChangesAsync(ct);
@@ -92,11 +129,16 @@ public sealed class AsnsController(
         return Ok(new
         {
             stagingReservationId,
-            warehouseId=targetWarehouseId,
-            asnNumber=string.IsNullOrWhiteSpace(request?.AsnNumber)?"ASN-NEXT-ARRIVAL":request.AsnNumber.Trim(),
-            stagingLaneCode=stagingLocationCode,
-            dockPreAssigned=true,
-            reservedAtUtc=now
+            warehouseId = targetWarehouseId,
+            asnNumber = resolvedAsnNumber,
+            preAllocatedAsnCount,
+            stagingLaneCode = stagingLocationCode,
+            stagingLocationName,
+            stagingStatus = "Đã phân bổ trước khu vực tiếp nhận & tập kết hàng nhập",
+            status = "Đã phân bổ trước khu vực tập kết hàng nhập",
+            statusLabel = "Đã phân bổ trước khu vực tập kết hàng nhập",
+            dockPreAssigned = true,
+            reservedAtUtc = now
         });
     }
 
