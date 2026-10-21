@@ -89,6 +89,122 @@ public sealed class PermissionsController(
         privacyDataSubjectGuard = "PII_MASKED_WITH_AUDIT_TRAIL_PRESERVATION"
     });
 
+    public sealed record VerifyTenantQuotasRequest(string? TenantCode = null, int? MaxWarehouses = null, int? MaxUsers = null, int? MaxSkus = null);
+
+    [HttpGet("tenants-summary"), PermissionAuthorize(AppPermissions.PermissionRead)]
+    public async Task<IActionResult> GetTenantsSummary(CancellationToken ct = default)
+    {
+        var activeWarehousesCount = await db.Warehouses.AsNoTracking().CountAsync(w => w.IsActive, ct);
+        var activeUsersCount = await db.Users.IgnoreQueryFilters().AsNoTracking().CountAsync(u => u.IsActive, ct);
+        var activeSkusCount = await db.Products.AsNoTracking().CountAsync(p => p.IsActive, ct);
+        var ledgerTransactionsCount = await db.InventoryTransactions.AsNoTracking().CountAsync(ct);
+
+        const int maxWarehouses = 20;
+        const int maxUsers = 100;
+        const int maxSkus = 10000;
+        const int maxMonthlyTransactions = 100000;
+        var withinQuotas = activeWarehousesCount <= maxWarehouses && activeUsersCount <= maxUsers && activeSkusCount <= maxSkus;
+
+        return Ok(new
+        {
+            tenantId = db.CurrentTenantId,
+            tenantCode = "TNT-ERP-KHO-VN",
+            tenantName = "Hệ thống Kho Vận Doanh Nghiệp (Tenant Chính)",
+            planCode = "ENTERPRISE_SAAS",
+            planName = "Gói Doanh nghiệp Mở rộng (Enterprise SaaS)",
+            isolationMode = "Cách ly đa khách hàng theo TenantId & Phân quyền Kho (Row-Level Isolation)",
+            activeWarehousesCount,
+            maxWarehouses,
+            activeUsersCount,
+            maxUsers,
+            activeSkusCount,
+            maxSkus,
+            ledgerTransactionsCount,
+            maxMonthlyTransactions,
+            withinQuotas,
+            quotaStatus = withinQuotas ? "TRONG_HAN_NGACH" : "VUOT_HAN_NGACH",
+            quotaStatusLabel = withinQuotas
+                ? "Đạt chuẩn hạn ngạch thuê bao — Toàn bộ tài nguyên trong ngưỡng an toàn"
+                : "Cảnh báo vượt ngưỡng hạn ngạch thuê bao",
+            quotas = new
+            {
+                activeWarehousesCount,
+                maxWarehouses,
+                activeUsersCount,
+                maxUsers,
+                activeSkusCount,
+                maxSkus,
+                ledgerTransactionsCount,
+                maxMonthlyTransactions
+            },
+            checkedAtUtc = DateTime.UtcNow
+        });
+    }
+
+    [HttpPost("tenants/verify-quotas")]
+    [IdempotentCommand("Permissions.VerifyTenantQuotas")]
+    [PermissionAuthorize(AppPermissions.PermissionRead)]
+    public async Task<IActionResult> VerifyTenantQuotas(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyTenantQuotasRequest? request = null,
+        CancellationToken ct = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var activeWarehousesCount = await db.Warehouses.AsNoTracking().CountAsync(w => w.IsActive, ct);
+        var activeUsersCount = await db.Users.IgnoreQueryFilters().AsNoTracking().CountAsync(u => u.IsActive, ct);
+        var activeSkusCount = await db.Products.AsNoTracking().CountAsync(p => p.IsActive, ct);
+        var ledgerTransactionsCount = await db.InventoryTransactions.AsNoTracking().CountAsync(ct);
+
+        var maxWarehouses = request?.MaxWarehouses is > 0 ? request.MaxWarehouses.Value : 20;
+        var maxUsers = request?.MaxUsers is > 0 ? request.MaxUsers.Value : 100;
+        var maxSkus = request?.MaxSkus is > 0 ? request.MaxSkus.Value : 10000;
+        const int maxMonthlyTransactions = 100000;
+        var withinQuotas = activeWarehousesCount <= maxWarehouses && activeUsersCount <= maxUsers && activeSkusCount <= maxSkus;
+
+        var now = DateTime.UtcNow;
+        var actorUserId = int.TryParse(
+            User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : (int?)null;
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorUserId,
+            EntityName = "TenantQuotaVerification",
+            EntityId = 1,
+            Action = "Permissions.VerifyTenantQuotas",
+            NewValues = $"WH={activeWarehousesCount}/{maxWarehouses}, Users={activeUsersCount}/{maxUsers}, SKUs={activeSkusCount}/{maxSkus}",
+            Reason = "Kiểm tra & xác nhận hạn ngạch thuê bao SaaS đa khách hàng",
+            Result = "Success",
+            Timestamp = now
+        });
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            tenantId = db.CurrentTenantId,
+            tenantCode = !string.IsNullOrWhiteSpace(request?.TenantCode) ? request.TenantCode.Trim() : "TNT-ERP-KHO-VN",
+            tenantName = "Hệ thống Kho Vận Doanh Nghiệp (Tenant Chính)",
+            planCode = "ENTERPRISE_SAAS",
+            planName = "Gói Doanh nghiệp Mở rộng (Enterprise SaaS)",
+            isolationMode = "Cách ly đa khách hàng theo TenantId & Phân quyền Kho (Row-Level Isolation)",
+            activeWarehousesCount,
+            maxWarehouses,
+            activeUsersCount,
+            maxUsers,
+            activeSkusCount,
+            maxSkus,
+            ledgerTransactionsCount,
+            maxMonthlyTransactions,
+            withinQuotas,
+            quotaStatus = withinQuotas ? "TRONG_HAN_NGACH" : "VUOT_HAN_NGACH",
+            quotaStatusLabel = withinQuotas
+                ? "Đạt chuẩn hạn ngạch thuê bao — Toàn bộ tài nguyên trong ngưỡng an toàn"
+                : "Cảnh báo vượt ngưỡng hạn ngạch thuê bao",
+            verifiedAtUtc = now
+        });
+    }
+
     [HttpGet("compliance-evidence-bundle"), PermissionAuthorize(AppPermissions.PermissionRead)]
     public IActionResult ComplianceEvidenceBundle() => Ok(new
     {

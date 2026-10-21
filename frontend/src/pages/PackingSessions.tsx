@@ -217,7 +217,7 @@ export default function PackingSessions(){
         </div>
         <div className="ui-inline-wrap">
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void verifyPackagingProfile()}>Kiểm tra Quy cách Thùng & Chuẩn mã GS1/SSCC</button>
-          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ Kitting/De-kitting & Dịch vụ Gia tăng VAS</button>
+          <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ / Tách bộ & Dịch vụ Gia tăng</button>
         </div>
         {packagingVerificationResult&&(
           <div
@@ -363,10 +363,10 @@ export default function PackingSessions(){
 
         <div className="ui-stack">
           {(selected.handlingUnits??[]).map(hu=><div className="ui-subcard" key={hu.id}>
-            <div className="ui-subcard-title">{hu.huCode} — {hu.type}</div>
+            <div className="ui-subcard-title">{hu.huCode} — {({Carton:'Thùng carton',Tote:'Khay nhựa',Pallet:'Pallet tiêu chuẩn',Container:'Thùng hàng lớn',Custom:'Tùy chỉnh'} as Record<string,string>)[hu.type]??hu.type}</div>
             <div className="ui-inline-wrap">
               <UiBadge tone={tone(hu.status)}>{huStateLabels[hu.status]??hu.status}</UiBadge>
-              <span>Barcode: <strong>{hu.barcode}</strong></span>
+              <span>Mã vạch: <strong>{hu.barcode}</strong></span>
               {hu.sscc&&<span>SSCC: <code>{hu.sscc}</code></span>}
               {hu.parentHandlingUnitCode&&<span>Trong HU: {hu.parentHandlingUnitCode}</span>}
               <span>Số lượng trong kiện: {roundQty4(hu.contents.reduce((sum,item)=>sum+item.quantity,0))}</span>
@@ -416,14 +416,14 @@ export default function PackingSessions(){
         </div>
       </UiCard>}
 
-      {labelPreviewHu&&<UiCard title={`Nhãn Logistics / Barcode / SSCC — ${labelPreviewHu.huCode}`}>
+      {labelPreviewHu&&<UiCard title={`Nhãn Đơn vị xử lý & Mã vạch SSCC — ${labelPreviewHu.huCode}`}>
         <div className="ui-stack-sm">
           <div className="ui-inline-wrap">
-            <span><strong>HU Code:</strong> {labelPreviewHu.huCode}</span>
-            <span><strong>Barcode:</strong> <code>{labelPreviewHu.barcode}</code></span>
+            <span><strong>Mã kiện:</strong> {labelPreviewHu.huCode}</span>
+            <span><strong>Mã vạch:</strong> <code>{labelPreviewHu.barcode}</code></span>
             <span><strong>SSCC:</strong> <code>{labelPreviewHu.sscc || labelPreviewHu.barcode || 'Chưa cấp SSCC'}</code></span>
-            <span><strong>Loại HU:</strong> {labelPreviewHu.type}</span>
-            <span><strong>Kho ID:</strong> #{labelPreviewHu.warehouseId}</span>
+            <span><strong>Loại kiện:</strong> {({Carton:'Thùng carton',Tote:'Khay nhựa',Pallet:'Pallet tiêu chuẩn',Container:'Thùng hàng lớn',Custom:'Tùy chỉnh'} as Record<string,string>)[labelPreviewHu.type] ?? labelPreviewHu.type}</span>
+            <span><strong>Kho:</strong> {labelPreviewHu.warehouseId === 1 ? 'WH01 — Kho Chính TP.HCM' : `WH0${labelPreviewHu.warehouseId} — ${selected?.warehouseName || sessions[0]?.warehouseName || 'Kho Chính TP.HCM'}`}</span>
             <UiBadge tone={tone(labelPreviewHu.status)}>{huStateLabels[labelPreviewHu.status]??labelPreviewHu.status}</UiBadge>
           </div>
           <div>
@@ -436,7 +436,7 @@ export default function PackingSessions(){
             </ul>}
           </div>
           <div className="ui-inline-wrap">
-            <button type="button" onClick={()=>window.print()}>In nhãn (Print)</button>
+            <button type="button" onClick={()=>window.print()}>In nhãn</button>
             <button type="button" className="ui-btn-secondary" onClick={()=>setLabelPreviewHu(null)}>Đóng xem trước</button>
           </div>
         </div>
@@ -473,7 +473,7 @@ export default function PackingSessions(){
             Xem & In Nhãn SSCC / GS1-128
           </button>
         </div>
-        {huRegistry.length===0?<p className="ui-muted-text">Chưa có dữ liệu danh mục Handling Unit độc lập hoặc đang hiển thị theo Packing Session phía trên.</p>:<UiTableScroll>
+        {huRegistry.length===0?<p className="ui-muted-text">Chưa có dữ liệu danh mục đơn vị xử lý độc lập hoặc đang hiển thị theo phiên đóng gói phía trên.</p>:<UiTableScroll>
           <table aria-label="Danh mục Đơn vị xử lý HU Registry" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>
               <tr>

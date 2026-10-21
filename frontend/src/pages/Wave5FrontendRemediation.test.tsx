@@ -270,7 +270,7 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
     const previewBtn = await screen.findByRole('button', { name: 'Xem / In nhãn kiện' });
     fireEvent.click(previewBtn);
 
-    const labelEl = await screen.findByText(/Nhãn Logistics \/ Barcode \/ SSCC — HU-0099/i);
+    const labelEl = await screen.findByText(/Nhãn (?:Logistics \/ Barcode \/ SSCC|Đơn vị xử lý & Mã vạch SSCC) — HU-0099/i);
     expect(labelEl).toBeTruthy();
     expect(screen.queryByText(/0038930000000000/i)).toBeNull();
   });

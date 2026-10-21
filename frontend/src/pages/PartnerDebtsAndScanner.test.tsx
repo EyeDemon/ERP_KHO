@@ -222,7 +222,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     const view = render(<MobileBarcodeScannerBar warehouseId={5} sampleCode="BIN-STAGE-01" onScan={onScan} />);
 
     const input = view.getByRole('searchbox', {
-      name: 'Quét mã vạch Mobile / RF (Camera hoặc súng quét)',
+      name: /Quét mã vạch (Thiết bị Cầm tay|Mobile \/ RF)/i,
     });
     expect(view.getByPlaceholderText('Nhập hoặc quét mã Bin, SKU, Lot, Serial, LPN...')).toBeTruthy();
 

@@ -3735,14 +3735,16 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 
     var operationalAudits = new (string Action, string EntityName, int EntityId, string Reason, int MinutesAgo)[]
     {
-        ("Ghi sổ phiếu nhập kho", "ImportReceipt", irQa001.Id, "Ghi sổ phiếu nhập IR-QA-001 (65 thùng cảm biến LOT-QA-002) tại khu tiếp nhận TIEP-NHAN", 8),
-        ("Hoàn tất cất hàng vào kệ", "PutawayTask", putawayTask.Id, "Hoàn tất tác vụ cất hàng PUT-QA-001 từ khu tiếp nhận vào kệ lưu trữ BIN-A01-01", 7),
-        ("Hoàn tất lấy hàng theo đơn", "PickingTask", pickingTask.Id, "Hoàn tất lấy hàng PICK-QA-003 theo chiến lược FEFO lô LOT-QA-002 tại kệ BIN-A01-01", 6),
-        ("Đóng gói đơn vị xử lý (HU)", "PackingSession", packingSession.Id, "Đóng gói hoàn tất kiện hàng HU-QA-002 (BC-HU-QA-002) thuộc phiên PACK-QA-002", 5),
-        ("Xuất giao chuyến hàng", "Shipment", shipment.Id, "Xuất giao chuyến hàng SHP-QA-002 (xe 51D-668.88, niêm phong SEAL-QA-002) theo phiếu ER-QA-001", 4),
-        ("Di chuyển vị trí nội bộ", "InventoryLocationMovement", 9001, "Điều chuyển nội bộ MOV-QA-9001 (10 thùng linh kiện) từ TIEP-NHAN sang kệ lưu trữ BIN-A01-01", 3),
-        ("Phong tỏa lô hàng chờ QC", "InventoryLock", activeQcLock.Id, "Phong tỏa lô LOT-QA-002 tại kệ BIN-A01-01 chờ kiểm định chất lượng định kỳ", 2),
-        ("Phê duyệt điều chỉnh kiểm kê", "Stocktake", 1, "Phê duyệt biên bản kiểm kê định kỳ STK-QA-001 tại Kho Chính TP.HCM", 1)
+        ("Ghi sổ phiếu nhập kho", "ImportReceipt", irQa001.Id, "Ghi sổ phiếu nhập IR-QA-001 (65 thùng cảm biến LOT-QA-002) tại khu tiếp nhận TIEP-NHAN", 10),
+        ("Hoàn tất cất hàng vào kệ", "PutawayTask", putawayTask.Id, "Hoàn tất tác vụ cất hàng PUT-QA-001 từ khu tiếp nhận vào kệ lưu trữ BIN-A01-01", 9),
+        ("Hoàn tất lấy hàng theo đơn", "PickingTask", pickingTask.Id, "Hoàn tất lấy hàng PICK-QA-003 theo chiến lược FEFO lô LOT-QA-002 tại kệ BIN-A01-01", 8),
+        ("Đóng gói đơn vị xử lý", "PackingSession", packingSession.Id, "Đóng gói hoàn tất kiện hàng HU-QA-002 (BC-HU-QA-002) thuộc phiên PACK-QA-002", 7),
+        ("Xuất giao chuyến hàng", "Shipment", shipment.Id, "Xuất giao chuyến hàng SHP-QA-002 (xe 51D-668.88, niêm phong SEAL-QA-002) theo phiếu ER-QA-001", 6),
+        ("Di chuyển vị trí nội bộ", "InventoryLocationMovement", 9001, "Điều chuyển nội bộ MOV-QA-9001 (10 thùng linh kiện) từ TIEP-NHAN sang kệ lưu trữ BIN-A01-01", 5),
+        ("Phong tỏa lô hàng chờ kiểm định", "InventoryLock", activeQcLock.Id, "Phong tỏa lô LOT-QA-002 tại kệ BIN-A01-01 chờ kiểm định chất lượng định kỳ", 4),
+        ("Phê duyệt điều chỉnh kiểm kê", "Stocktake", 1, "Phê duyệt biên bản kiểm kê định kỳ STK-QA-001 tại Kho Chính TP.HCM", 3),
+        ("Phát hành bảng kê phí dịch vụ 3PL", "ThreePlBillingStatement", dualPartner.Id, "Phát hành bảng kê phí dịch vụ lưu kho & tác nghiệp 3PL từ sổ cái thực tế cho đối tác DT-QA-01", 2),
+        ("Đồng bộ thông điệp tích hợp Outbox", "IntegrationOutboxBatch", irQa001.Id, "Chuyển phát thành công lô thông điệp tích hợp Outbox (IR-QA-001, ER-QA-001, SHP-QA-001, AP-IR-QA0001)", 1)
     };
 
     foreach (var op in operationalAudits)

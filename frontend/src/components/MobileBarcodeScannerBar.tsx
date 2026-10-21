@@ -84,7 +84,7 @@ const ENTITY_LABELS: Record<string, string> = {
 const SAMPLE_GS1_CODE = '(01)08938505000517(10)LOT-QA-002(17)271231(21)SER-QA-01';
 
 export function MobileBarcodeScannerBar({
-  label = 'Quét mã vạch Mobile / RF (Camera hoặc súng quét)',
+  label = 'Quét mã vạch Thiết bị Cầm tay (Camera hoặc Súng quét)',
   placeholder = 'Nhập hoặc quét mã Bin, SKU, Lot, Serial, LPN...',
   sampleCode = 'BIN-A01',
   warehouseId,
@@ -98,6 +98,7 @@ export function MobileBarcodeScannerBar({
   const [cameraNotice, setCameraNotice] = useState('');
   const [lastResolved, setLastResolved] = useState<ResolvedBarcodeResult | null>(null);
   const [parsedGs1, setParsedGs1] = useState<ParsedGs1Data | null>(null);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -143,6 +144,7 @@ export function MobileBarcodeScannerBar({
         }
       }
       await onScan(clean, resolved);
+      setWizardStep(prev => (gs1 ? 3 : prev === 1 ? 2 : 3));
       setInput('');
     } finally {
       setBusy(false);
@@ -153,6 +155,7 @@ export function MobileBarcodeScannerBar({
     setInput(SAMPLE_GS1_CODE);
     const decoded = parseGs1BarcodeClient(SAMPLE_GS1_CODE);
     setParsedGs1(decoded);
+    setWizardStep(2);
   };
 
   const toggleCamera = async () => {
@@ -214,7 +217,7 @@ export function MobileBarcodeScannerBar({
   return (
     <section
       className="ui-card"
-      aria-label="Trạm quét mã vạch nhanh Mobile RF"
+      aria-label="Trạm quét mã vạch thiết bị cầm tay"
       style={{
         padding: '14px 16px',
         marginBottom: 16,
@@ -225,6 +228,49 @@ export function MobileBarcodeScannerBar({
         background: '#f8fafc',
       }}
     >
+      <div
+        data-testid="rf-scan-wizard-steps"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 8,
+          padding: '6px 10px',
+          borderRadius: 8,
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          fontSize: 12,
+        }}
+      >
+        {([
+          { step: 1 as const, text: 'Bước 1: Quét Vị trí / Kệ nguồn' },
+          { step: 2 as const, text: 'Bước 2: Quét Mã vạch SP / GS1-128' },
+          { step: 3 as const, text: 'Bước 3: Quét Kệ đích & Xác nhận' },
+        ]).map((item, idx) => {
+          const isCurrent = wizardStep === item.step;
+          const isCompleted = wizardStep > item.step || (item.step === 2 && Boolean(parsedGs1));
+          return (
+            <div key={item.step} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span
+                onClick={() => setWizardStep(item.step)}
+                style={{
+                  cursor: 'pointer',
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  fontWeight: isCurrent || isCompleted ? 700 : 600,
+                  background: isCompleted ? '#ecfdf5' : isCurrent ? '#dbeafe' : '#f1f5f9',
+                  color: isCompleted ? '#065f46' : isCurrent ? '#1e3a8a' : '#475569',
+                  border: `1px solid ${isCompleted ? '#a7f3d0' : isCurrent ? '#93c5fd' : '#cbd5e1'}`,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {item.text}
+              </span>
+              {idx < 2 && <span style={{ color: '#64748b', fontWeight: 700 }}>→</span>}
+            </div>
+          );
+        })}
+      </div>
       <div
         className="ui-inline-wrap"
         style={{ alignItems: 'flex-end', gap: 8, width: '100%' }}
@@ -308,8 +354,8 @@ export function MobileBarcodeScannerBar({
         >
           <strong>Đã giải mã GS1-128:</strong>
           {parsedGs1.gtin && <UiBadge tone="success">{`Mã GTIN / SKU: ${parsedGs1.gtin.replace(/^0/, '')} (${parsedGs1.gtin})`}</UiBadge>}
-          {parsedGs1.lotNumber && <UiBadge tone="info">{`Số Lô (AI 10): ${parsedGs1.lotNumber}`}</UiBadge>}
-          {parsedGs1.expiryDisplay && <UiBadge tone="warning">{`Hạn dùng (AI 17): ${parsedGs1.expiryDisplay} (${parsedGs1.expiryDate})`}</UiBadge>}
+          {parsedGs1.lotNumber && <UiBadge tone="info">{`Số Lô: ${parsedGs1.lotNumber}`}</UiBadge>}
+          {parsedGs1.expiryDisplay && <UiBadge tone="warning">{`Hạn dùng: ${parsedGs1.expiryDisplay} (${parsedGs1.expiryDate})`}</UiBadge>}
           {(parsedGs1.serialNumber || parsedGs1.sscc) && (
             <UiBadge tone="neutral">{`Số Sê-ri / SSCC: ${parsedGs1.serialNumber || parsedGs1.sscc}`}</UiBadge>
           )}

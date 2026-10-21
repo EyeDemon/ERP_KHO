@@ -109,6 +109,287 @@ public sealed class BusinessPartnersController(
             verifiedAtUtc=DateTime.UtcNow
         });
     }
+    public sealed record Generate3PlStatementRequest(
+        int? PartnerId = null,
+        int? WarehouseId = null,
+        string? BillingPeriod = null,
+        decimal? StorageRatePerUnit = null,
+        decimal? InboundRatePerUnit = null,
+        decimal? OutboundRatePerUnit = null);
+
+    [HttpGet("3pl-billing-summary"), PermissionAuthorize(AppPermissions.PartnerRead)]
+    public async Task<IActionResult> Get3PlBillingSummary(
+        [FromQuery] int? partnerId = null,
+        [FromQuery] int? warehouseId = null,
+        [FromQuery] string? billingPeriod = null,
+        [FromQuery] decimal? storageRatePerUnit = null,
+        [FromQuery] decimal? inboundRatePerUnit = null,
+        [FromQuery] decimal? outboundRatePerUnit = null,
+        CancellationToken ct = default)
+    {
+        var summary = await Compute3PlBillingCoreAsync(
+            partnerId,
+            warehouseId,
+            billingPeriod,
+            storageRatePerUnit,
+            inboundRatePerUnit,
+            outboundRatePerUnit,
+            ct);
+
+        return Ok(new
+        {
+            summary.statementCode,
+            summary.partnerId,
+            summary.partnerCode,
+            summary.partnerName,
+            summary.warehouseId,
+            summary.activePartnersCount,
+            summary.billingPeriod,
+            summary.totalOnHandUnits,
+            summary.billableStorageUnits,
+            summary.inboundUnits,
+            summary.outboundUnits,
+            summary.storageRatePerUnit,
+            summary.inboundRatePerUnit,
+            summary.outboundRatePerUnit,
+            summary.storageFeeAmount,
+            summary.inboundHandlingFeeAmount,
+            summary.outboundHandlingFeeAmount,
+            summary.subTotalAmount,
+            summary.vatRatePercent,
+            summary.vatAmount,
+            summary.totalBillingAmount,
+            summary.currency,
+            summary.statementLines,
+            status = "SUMMARY_READY",
+            statusLabel = "Đã tổng hợp bảng tính phí dịch vụ kho 3PL từ sổ cái thực tế",
+            calculatedAtUtc = DateTime.UtcNow
+        });
+    }
+
+    [HttpPost("3pl-billing/generate-statement")]
+    [ERP.Api.Infrastructure.IdempotentCommand("BusinessPartner.Generate3PlStatement")]
+    [PermissionAuthorize(AppPermissions.PartnerRead)]
+    public async Task<IActionResult> Generate3PlStatement(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] Generate3PlStatementRequest? request = null,
+        CancellationToken ct = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var summary = await Compute3PlBillingCoreAsync(
+            request?.PartnerId,
+            request?.WarehouseId,
+            request?.BillingPeriod,
+            request?.StorageRatePerUnit,
+            request?.InboundRatePerUnit,
+            request?.OutboundRatePerUnit,
+            ct);
+
+        var now = DateTime.UtcNow;
+        if (db != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = summary.warehouseId,
+                EntityName = "ThreePlBillingStatement",
+                EntityId = summary.partnerId,
+                Action = "BusinessPartner.Generate3PlStatement",
+                NewValues = $"{summary.statementCode}: Total={summary.totalBillingAmount:0.##} VND",
+                Reason = "Phát hành bảng kê phí dịch vụ kho 3PL từ sổ cái thực tế",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        return Ok(new
+        {
+            summary.statementCode,
+            statementId = summary.statementCode,
+            summary.partnerId,
+            summary.partnerCode,
+            summary.partnerName,
+            summary.warehouseId,
+            summary.activePartnersCount,
+            summary.billingPeriod,
+            summary.totalOnHandUnits,
+            summary.billableStorageUnits,
+            summary.inboundUnits,
+            summary.outboundUnits,
+            summary.storageRatePerUnit,
+            summary.inboundRatePerUnit,
+            summary.outboundRatePerUnit,
+            summary.storageFeeAmount,
+            summary.inboundHandlingFeeAmount,
+            summary.outboundHandlingFeeAmount,
+            summary.subTotalAmount,
+            summary.vatRatePercent,
+            summary.vatAmount,
+            summary.totalBillingAmount,
+            summary.currency,
+            summary.statementLines,
+            status = "ISSUED",
+            statusLabel = "Đã phát hành bảng kê phí dịch vụ 3PL",
+            issuedAtUtc = now,
+            calculatedAtUtc = now
+        });
+    }
+
+    private sealed record ThreePlStatementLineDto(
+        string feeCode,
+        string feeName,
+        decimal quantity,
+        string unitName,
+        decimal unitRate,
+        decimal amount);
+
+    private sealed record ThreePlBillingComputationResult(
+        string statementCode,
+        int? partnerId,
+        string partnerCode,
+        string partnerName,
+        int? warehouseId,
+        int activePartnersCount,
+        string billingPeriod,
+        decimal totalOnHandUnits,
+        decimal billableStorageUnits,
+        decimal inboundUnits,
+        decimal outboundUnits,
+        decimal storageRatePerUnit,
+        decimal inboundRatePerUnit,
+        decimal outboundRatePerUnit,
+        decimal storageFeeAmount,
+        decimal inboundHandlingFeeAmount,
+        decimal outboundHandlingFeeAmount,
+        decimal subTotalAmount,
+        decimal vatRatePercent,
+        decimal vatAmount,
+        decimal totalBillingAmount,
+        string currency,
+        ThreePlStatementLineDto[] statementLines);
+
+    private async Task<ThreePlBillingComputationResult> Compute3PlBillingCoreAsync(
+        int? partnerId,
+        int? warehouseId,
+        string? billingPeriod,
+        decimal? storageRatePerUnit,
+        decimal? inboundRatePerUnit,
+        decimal? outboundRatePerUnit,
+        CancellationToken ct)
+    {
+        var activePartnersCount = 0;
+        int? resolvedPartnerId = partnerId;
+        var partnerCode = "BP-3PL-DEFAULT";
+        var partnerName = "Đối tác Chủ hàng 3PL Tiêu chuẩn";
+        var totalOnHandUnits = 0m;
+        var inboundUnits = 0m;
+        var outboundUnits = 0m;
+
+        if (db != null)
+        {
+            activePartnersCount = await db.BusinessPartners.AsNoTracking().CountAsync(x => x.IsActive, ct);
+            var partner = partnerId.HasValue
+                ? await db.BusinessPartners.AsNoTracking().FirstOrDefaultAsync(x => x.Id == partnerId.Value, ct)
+                : await db.BusinessPartners.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
+
+            if (partner != null)
+            {
+                resolvedPartnerId = partner.Id;
+                partnerCode = (partner.Code ?? string.Empty).Trim();
+                partnerName = (partner.Name ?? string.Empty).Trim();
+            }
+
+            var stockQuery = db.InventoryStocks.AsNoTracking();
+            if (warehouseId.HasValue)
+                stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
+            totalOnHandUnits = await stockQuery.SumAsync(s => (decimal?)s.Quantity, ct) ?? 0m;
+
+            var txQuery = db.InventoryTransactions.AsNoTracking();
+            if (warehouseId.HasValue)
+                txQuery = txQuery.Where(t => t.WarehouseId == warehouseId.Value);
+
+            inboundUnits = await txQuery
+                .Where(t => t.TransactionType == ERP.Domain.Enums.TransactionType.Import ||
+                            t.TransactionType == ERP.Domain.Enums.TransactionType.TransferIn)
+                .SumAsync(t => (decimal?)Math.Abs(t.Quantity), ct) ?? 0m;
+
+            outboundUnits = await txQuery
+                .Where(t => t.TransactionType == ERP.Domain.Enums.TransactionType.Export ||
+                            t.TransactionType == ERP.Domain.Enums.TransactionType.Ship ||
+                            t.TransactionType == ERP.Domain.Enums.TransactionType.AdjustmentIncrease)
+                .SumAsync(t => (decimal?)Math.Abs(t.Quantity), ct) ?? 0m;
+        }
+
+        var effectiveStorageRate = storageRatePerUnit is > 0m ? storageRatePerUnit.Value : 15000m;
+        var effectiveInboundRate = inboundRatePerUnit is > 0m ? inboundRatePerUnit.Value : 8000m;
+        var effectiveOutboundRate = outboundRatePerUnit is > 0m ? outboundRatePerUnit.Value : 9000m;
+
+        var billableStorageUnits = Math.Max(1m, totalOnHandUnits);
+        var storageFeeAmount = Math.Round(billableStorageUnits * effectiveStorageRate, 0);
+        var inboundHandlingFeeAmount = Math.Round(inboundUnits * effectiveInboundRate, 0);
+        var outboundHandlingFeeAmount = Math.Round(outboundUnits * effectiveOutboundRate, 0);
+        var subTotalAmount = storageFeeAmount + inboundHandlingFeeAmount + outboundHandlingFeeAmount;
+        var vatRatePercent = 10m;
+        var vatAmount = Math.Round(subTotalAmount * 0.10m, 0);
+        var totalBillingAmount = subTotalAmount + vatAmount;
+
+        var statementLines = new[]
+        {
+            new ThreePlStatementLineDto(
+                "3PL-STORAGE",
+                "Phí lưu kho tiêu chuẩn theo kỳ",
+                billableStorageUnits,
+                "THÙNG",
+                effectiveStorageRate,
+                storageFeeAmount),
+            new ThreePlStatementLineDto(
+                "3PL-INBOUND",
+                "Phí bốc xếp & tiếp nhận đầu vào",
+                inboundUnits,
+                "THÙNG",
+                effectiveInboundRate,
+                inboundHandlingFeeAmount),
+            new ThreePlStatementLineDto(
+                "3PL-OUTBOUND",
+                "Phí soạn hàng, đóng gói & xuất kho",
+                outboundUnits,
+                "THÙNG",
+                effectiveOutboundRate,
+                outboundHandlingFeeAmount)
+        };
+
+        return new ThreePlBillingComputationResult(
+            $"3PL-STMT-{DateTime.UtcNow:yyyyMMdd}-01",
+            resolvedPartnerId,
+            partnerCode,
+            partnerName,
+            warehouseId,
+            activePartnersCount,
+            !string.IsNullOrWhiteSpace(billingPeriod) ? billingPeriod.Trim() : DateTime.UtcNow.ToString("yyyy-MM"),
+            totalOnHandUnits,
+            billableStorageUnits,
+            inboundUnits,
+            outboundUnits,
+            effectiveStorageRate,
+            effectiveInboundRate,
+            effectiveOutboundRate,
+            storageFeeAmount,
+            inboundHandlingFeeAmount,
+            outboundHandlingFeeAmount,
+            subTotalAmount,
+            vatRatePercent,
+            vatAmount,
+            totalBillingAmount,
+            "VND",
+            statementLines);
+    }
+
     public sealed record Calculate3PlBillingRequest(int? PartnerId=null,string? BillingPeriod=null);
     [HttpPost("calculate-3pl-billing"),PermissionAuthorize(AppPermissions.PartnerRead)]
     public async Task<IActionResult> Calculate3PlBilling([FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] Calculate3PlBillingRequest? request=null, CancellationToken ct = default)

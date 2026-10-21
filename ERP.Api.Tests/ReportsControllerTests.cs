@@ -5069,6 +5069,326 @@ namespace ERP.Api.Tests
             db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
         }
 
+        [Fact]
+        public async Task Wave42_BusinessPartners_3PlBillingSummaryAndStatement_ComputesRealLedgerFeesAndVat()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.BusinessPartners.Add(new ERP.Domain.Entities.BusinessPartner
+            {
+                Id = 4201,
+                Code = "BP-3PL-W42",
+                Name = "Công ty Tiếp vận 3PL Quốc tế Wave 42",
+                IsSupplier = true,
+                IsCustomer = true,
+                IsActive = true
+            });
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4211,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    LocationId = 1,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 100m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4212,
+                    WarehouseId = 1,
+                    ProductId = 2,
+                    LocationId = 1,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 50m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                });
+            db.InventoryTransactions.AddRange(
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 4221,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 80m,
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 4222,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    TransactionType = ERP.Domain.Enums.TransactionType.TransferIn,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 20m,
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 4223,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 40m,
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 4224,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Ship,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 10m,
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = 1
+                });
+            await db.SaveChangesAsync();
+
+            var partnerService = new Mock<IBusinessPartnerService>();
+            var controller = new BusinessPartnersController(partnerService.Object, db);
+
+            var summaryRes = await controller.Get3PlBillingSummary(
+                partnerId: 4201,
+                warehouseId: 1,
+                billingPeriod: "2026-10",
+                ct: default);
+            var summaryOk = summaryRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(summaryOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("partnerCode").GetString().Should().Be("BP-3PL-W42");
+                root.GetProperty("totalOnHandUnits").GetDecimal().Should().Be(150m);
+                root.GetProperty("inboundUnits").GetDecimal().Should().Be(100m);
+                root.GetProperty("outboundUnits").GetDecimal().Should().Be(50m);
+                root.GetProperty("storageFeeAmount").GetDecimal().Should().Be(2250000m);
+                root.GetProperty("inboundHandlingFeeAmount").GetDecimal().Should().Be(800000m);
+                root.GetProperty("outboundHandlingFeeAmount").GetDecimal().Should().Be(450000m);
+                root.GetProperty("subTotalAmount").GetDecimal().Should().Be(3500000m);
+                root.GetProperty("vatRatePercent").GetDecimal().Should().Be(10m);
+                root.GetProperty("vatAmount").GetDecimal().Should().Be(350000m);
+                root.GetProperty("totalBillingAmount").GetDecimal().Should().Be(3850000m);
+                root.GetProperty("statementLines").GetArrayLength().Should().Be(3);
+            }
+
+            var genRes = await controller.Generate3PlStatement(
+                new BusinessPartnersController.Generate3PlStatementRequest(
+                    PartnerId: 4201,
+                    WarehouseId: 1,
+                    BillingPeriod: "2026-10"),
+                default);
+            var genOk = genRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(genOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("status").GetString().Should().Be("ISSUED");
+                root.GetProperty("statusLabel").GetString().Should().Be("Đã phát hành bảng kê phí dịch vụ 3PL");
+                root.GetProperty("totalBillingAmount").GetDecimal().Should().Be(3850000m);
+            }
+
+            db.AuditLogs.Should().ContainSingle(a =>
+                a.EntityName == "ThreePlBillingStatement" &&
+                a.Action == "BusinessPartner.Generate3PlStatement" &&
+                a.Result == "Success");
+        }
+
+        [Fact]
+        public async Task Wave42_PermissionsAndSecurity_SaaSQuotasAndRfc6238TotpMfa_GenerateAndVerify()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.AddRange(
+                new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho WH01", IsActive = true },
+                new ERP.Domain.Entities.Warehouse { Id = 2, Code = "WH02", Name = "Kho WH02", IsActive = true });
+            db.Users.Add(new ERP.Domain.Entities.User
+            {
+                Id = 4201,
+                Username = "admin_w42",
+                FullName = "Quản trị viên Wave 42",
+                PasswordHash = "hash",
+                IsActive = true
+            });
+            db.Units.Add(new ERP.Domain.Entities.Unit { Id = 1, Code = "THÙNG", Name = "THÙNG", IsActive = true });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 4201,
+                Code = "SKU-W42-01",
+                Name = "Sản phẩm Wave 42",
+                UnitId = 1,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            var permissionsController = new PermissionsController(db);
+            var tenantsSummaryRes = await permissionsController.GetTenantsSummary(default);
+            var tenantsSummaryOk = tenantsSummaryRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(tenantsSummaryOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("activeWarehousesCount").GetInt32().Should().Be(2);
+                root.GetProperty("activeUsersCount").GetInt32().Should().Be(1);
+                root.GetProperty("activeSkusCount").GetInt32().Should().Be(1);
+                root.GetProperty("withinQuotas").GetBoolean().Should().BeTrue();
+                root.GetProperty("quotaStatus").GetString().Should().Be("TRONG_HAN_NGACH");
+                root.GetProperty("planName").GetString().Should().Be("Gói Doanh nghiệp Mở rộng (Enterprise SaaS)");
+            }
+
+            var verifyQuotasRes = await permissionsController.VerifyTenantQuotas(
+                new PermissionsController.VerifyTenantQuotasRequest(TenantCode: "TNT-ERP-KHO-VN"),
+                default);
+            verifyQuotasRes.Should().BeOfType<OkObjectResult>();
+
+            var securityController = new AccountSecurityController(
+                new Mock<IAccountAdminService>().Object,
+                new Mock<IUserSessionService>().Object,
+                db);
+
+            var setupRes = await securityController.SetupTotp(4201, default);
+            var setupOk = setupRes.Should().BeOfType<OkObjectResult>().Subject;
+            string currentTotpCode;
+            string base32Secret;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(setupOk.Value))
+            {
+                var root = doc.RootElement;
+                base32Secret = root.GetProperty("base32Secret").GetString()!;
+                currentTotpCode = root.GetProperty("currentTotpCode").GetString()!;
+                base32Secret.Should().HaveLength(32);
+                currentTotpCode.Should().HaveLength(6);
+                root.GetProperty("otpauthUri").GetString().Should().StartWith("otpauth://totp/ERP_WMS:admin_w42?secret=");
+                root.GetProperty("statusLabel").GetString().Should().Be("Đã khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238");
+            }
+
+            var verifyRes = await securityController.VerifyTotp(
+                4201,
+                new AccountSecurityController.VerifyTotpRequest(Code: currentTotpCode, Base32Secret: base32Secret),
+                default);
+            var verifyOk = verifyRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(verifyOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("verified").GetBoolean().Should().BeTrue();
+                root.GetProperty("statusLabel").GetString().Should().Be("Xác thực mã TOTP 6 chữ số thành công");
+            }
+
+            db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave42_InventoryReconciliation_OutboxMessagesAndDispatch_ReturnsRealDocumentReferences()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.ImportReceipts.Add(new ERP.Domain.Entities.ImportReceipt
+            {
+                Id = 4201,
+                Code = "IR-QA-001",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Posted,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow
+            });
+            db.ExportReceipts.Add(new ERP.Domain.Entities.ExportReceipt
+            {
+                Id = 4202,
+                Code = "ER-QA-001",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Dispatched,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow
+            });
+            db.Shipments.Add(new ERP.Domain.Entities.Shipment
+            {
+                Id = 4203,
+                ShipmentCode = "SHP-QA-001",
+                WarehouseId = 1,
+                SourceType = "SalesOrder",
+                SourceId = 1,
+                SourceCode = "SO-QA-001",
+                Status = ERP.Domain.Enums.ShipmentStatus.Dispatched,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow
+            });
+            db.PartnerDebtInvoices.Add(new ERP.Domain.Entities.PartnerDebtInvoice
+            {
+                Id = 4204,
+                Code = "AP-IR-QA0001",
+                PartnerId = 1,
+                DebtType = ERP.Domain.Enums.PartnerDebtType.AP,
+                SourceType = "ImportReceipt",
+                SourceId = 4201,
+                SourceCode = "IR-QA-001",
+                TotalAmount = 5000000m,
+                PaidAmount = 0m,
+                RemainingAmount = 5000000m,
+                Status = ERP.Domain.Enums.PartnerDebtInvoiceStatus.Open,
+                CreatedBy = 1,
+                CreatedAtUtc = DateTime.UtcNow,
+                IssuedAtUtc = DateTime.UtcNow,
+                DueDateUtc = DateTime.UtcNow.AddDays(30)
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var controller = new InventoryReconciliationController(
+                new Mock<IInventoryReconciliationQueryService>().Object,
+                db,
+                warehouseAuth.Object);
+
+            var listRes = await controller.GetOutboxMessages(warehouseId: 1, cancellationToken: default);
+            var listOk = listRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(listOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("totalMessages").GetInt32().Should().Be(4);
+                root.GetProperty("pendingCount").GetInt32().Should().Be(0);
+                var messages = root.GetProperty("messages").EnumerateArray().ToList();
+                messages.Select(m => m.GetProperty("referenceCode").GetString()).Should().Contain(
+                [
+                    "IR-QA-001",
+                    "SHP-QA-001",
+                    "AP-IR-QA0001",
+                    "ER-QA-001"
+                ]);
+            }
+
+            var dispatchRes = await controller.DispatchPendingOutboxMessages(
+                warehouseId: 1,
+                request: new InventoryReconciliationController.DispatchOutboxRequest(WarehouseId: 1),
+                cancellationToken: default);
+            var dispatchOk = dispatchRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(dispatchOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("dispatchedCount").GetInt32().Should().Be(4);
+                root.GetProperty("pendingCount").GetInt32().Should().Be(0);
+                root.GetProperty("statusLabel").GetString().Should().Be("Đã chuyển phát thành công toàn bộ thông điệp tích hợp Outbox");
+            }
+
+            db.AuditLogs.Should().ContainSingle(a =>
+                a.EntityName == "IntegrationOutboxBatch" &&
+                a.Action == "InventoryReconciliation.DispatchOutbox" &&
+                a.Result == "Success");
+        }
+
         private static void KeepUnusedMarkerAssertion(ERP.Domain.Entities.PickingTask updatedTask, ERP.Infrastructure.Persistence.ErpKhoDbContext db)
         {
             updatedTask.AssignedUserId.Should().Be(99);

@@ -277,6 +277,157 @@ public sealed class AccountSecurityController(
         }
     }
 
+    public sealed record VerifyTotpRequest(string? Code = null, string? TotpCode = null, string? Base32Secret = null);
+
+    [HttpPost("totp/setup")]
+    [IdempotentCommand("AccountSecurity.TotpSetup")]
+    public async Task<IActionResult> SetupTotp(int userId, CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var user = db is not null
+            ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            : null;
+        var username = !string.IsNullOrWhiteSpace(user?.Username) ? user.Username.Trim() : $"user_{userId}";
+
+        var secretBytes = GetTotpSecretBytes(userId, username);
+        var base32Secret = EncodeBase32(secretBytes);
+        var otpauthUri = $"otpauth://totp/ERP_WMS:{username}?secret={base32Secret}&issuer=ERP_WMS&digits=6&period=30";
+        var timeStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        var currentTotpCode = ComputeTotpCode(secretBytes, timeStep);
+
+        var now = DateTime.UtcNow;
+        if (db is not null)
+        {
+            db.AuditLogs.Add(new AuditLog
+            {
+                UserId = ResolveActorUserId(),
+                EntityName = "UserTotpMfa",
+                EntityId = userId,
+                Action = "AccountSecurity.TotpSetup",
+                NewValues = $"{base32Secret[..8]}...",
+                Reason = "Khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new
+        {
+            userId,
+            username,
+            base32Secret,
+            otpauthUri,
+            currentTotpCode,
+            digits = 6,
+            periodSeconds = 30,
+            algorithm = "HMAC-SHA1 (RFC 6238)",
+            statusLabel = "Đã khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238"
+        });
+    }
+
+    [HttpPost("totp/verify")]
+    [IdempotentCommand("AccountSecurity.TotpVerify")]
+    public async Task<IActionResult> VerifyTotp(
+        int userId,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyTotpRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var user = db is not null
+            ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            : null;
+        var username = !string.IsNullOrWhiteSpace(user?.Username) ? user.Username.Trim() : $"user_{userId}";
+
+        var secretBytes = GetTotpSecretBytes(userId, username);
+        var candidateCode = (request?.Code ?? request?.TotpCode ?? string.Empty).Trim();
+        var timeStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        var isValid = candidateCode.Length == 6 &&
+            (string.Equals(candidateCode, ComputeTotpCode(secretBytes, timeStep), StringComparison.Ordinal) ||
+             string.Equals(candidateCode, ComputeTotpCode(secretBytes, timeStep - 1), StringComparison.Ordinal) ||
+             string.Equals(candidateCode, ComputeTotpCode(secretBytes, timeStep + 1), StringComparison.Ordinal));
+
+        var now = DateTime.UtcNow;
+        if (db is not null)
+        {
+            db.AuditLogs.Add(new AuditLog
+            {
+                UserId = ResolveActorUserId(),
+                EntityName = "UserTotpMfa",
+                EntityId = userId,
+                Action = "AccountSecurity.TotpVerify",
+                NewValues = isValid ? "VERIFIED" : "INVALID",
+                Reason = isValid
+                    ? "Xác thực mã TOTP 6 chữ số thành công"
+                    : "Mã TOTP không hợp lệ hoặc đã hết hạn",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new
+        {
+            verified = isValid,
+            userId,
+            username,
+            algorithm = "HMAC-SHA1 (RFC 6238)",
+            verifiedAtUtc = now,
+            statusLabel = isValid
+                ? "Xác thực mã TOTP 6 chữ số thành công"
+                : "Mã TOTP không hợp lệ hoặc đã hết hạn"
+        });
+    }
+
+    public static byte[] GetTotpSecretBytes(int userId, string username)
+    {
+        var raw = System.Text.Encoding.UTF8.GetBytes($"ERP_WMS_RFC6238_TOTP_SECRET:{userId}:{username.Trim().ToLowerInvariant()}");
+        var hash = System.Security.Cryptography.SHA256.HashData(raw);
+        return hash[..20];
+    }
+
+    public static string EncodeBase32(ReadOnlySpan<byte> data)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var output = new System.Text.StringBuilder((data.Length * 8 + 4) / 5);
+        int buffer = 0;
+        int bitsLeft = 0;
+        foreach (var b in data)
+        {
+            buffer = (buffer << 8) | b;
+            bitsLeft += 8;
+            while (bitsLeft >= 5)
+            {
+                output.Append(alphabet[(buffer >> (bitsLeft - 5)) & 0x1F]);
+                bitsLeft -= 5;
+            }
+        }
+        if (bitsLeft > 0)
+        {
+            output.Append(alphabet[(buffer << (5 - bitsLeft)) & 0x1F]);
+        }
+        return output.ToString();
+    }
+
+    public static string ComputeTotpCode(byte[] secretBytes, long timeStep)
+    {
+        Span<byte> counterBytes = stackalloc byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(counterBytes, timeStep);
+        var hmac = System.Security.Cryptography.HMACSHA1.HashData(secretBytes, counterBytes);
+        var offset = hmac[^1] & 0x0F;
+        var binaryCode =
+            ((hmac[offset] & 0x7F) << 24) |
+            ((hmac[offset + 1] & 0xFF) << 16) |
+            ((hmac[offset + 2] & 0xFF) << 8) |
+            (hmac[offset + 3] & 0xFF);
+        var otp = binaryCode % 1_000_000;
+        return otp.ToString("D6");
+    }
+
     private async Task EnsureRemainingActiveTenantAdminAsync(User targetUser, CancellationToken cancellationToken)
     {
         if (db is null)

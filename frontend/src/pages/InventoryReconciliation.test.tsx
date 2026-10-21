@@ -1204,4 +1204,17 @@ describe('InventoryReconciliation', () => {
     expect(view.getByText('Đổi trạng thái +0 / -4')).toBeTruthy();
   });
 
+  it('renders Integration Outbox monitoring card with all 4 standard event types', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({ data: url.endsWith('/warehouses')
+        ? [{ id: 1, code: 'W1', name: 'Kho thử' }]
+        : { items: [], totalRecords: 0, pageIndex: 1, pageSize: 20, totalPages: 0 } }));
+    const view = render(<InventoryReconciliation />);
+    expect(await view.findByText('Giám sát Hàng đợi Bản tin Tích hợp Bất đồng bộ (Integration Outbox)')).toBeTruthy();
+    expect(view.getByText('ERP_GL_JOURNAL_SYNC')).toBeTruthy();
+    expect(view.getByText('TMS_SHIPMENT_DISPATCH')).toBeTruthy();
+    expect(view.getByText('AP_AR_INVOICE_POST')).toBeTruthy();
+    expect(view.getByText('WMS_LEDGER_SNAPSHOT')).toBeTruthy();
+  });
+
 });
