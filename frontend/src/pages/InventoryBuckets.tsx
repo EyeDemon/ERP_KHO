@@ -20,9 +20,9 @@ type BucketInvariantsResult = {
 };
 
 const statusTone=(code:string):'neutral'|'success'|'warning'|'danger'=>
-  code==='AVAILABLE'?'success':
-  ['QC_HOLD','QUARANTINE'].includes(code)?'warning':
-  ['BLOCKED','DAMAGED','EXPIRED','RECALL_BLOCKED','REJECTED'].includes(code)?'danger':'neutral';
+  ['AVAILABLE','Available','Khả dụng'].includes(code)?'success':
+  ['QC_HOLD','QcHold','QUARANTINE','Quarantine','Cách ly','Tạm giữ QC','Tạm giữ chờ kiểm định','Chờ kiểm tra chất lượng'].includes(code)?'warning':
+  ['BLOCKED','Blocked','Bị chặn','DAMAGED','Damaged','Hư hỏng','EXPIRED','Expired','Đã hết hạn','Hết hạn','RECALL_BLOCKED','RecallBlocked','Phong tỏa thu hồi','Khóa thu hồi','REJECTED','Rejected','Từ chối'].includes(code)?'danger':'neutral';
 
 const inventoryStatusLabel=(code:string)=>({
   AVAILABLE:'Khả dụng',
@@ -32,7 +32,26 @@ const inventoryStatusLabel=(code:string)=>({
   DAMAGED:'Hư hỏng',
   REJECTED:'Từ chối',
   EXPIRED:'Hết hạn',
-  RECALL_BLOCKED:'Khóa thu hồi',
+  RECALL_BLOCKED:'Phong tỏa thu hồi',
+  Available:'Khả dụng',
+  'Khả dụng':'Khả dụng',
+  QcHold:'Tạm giữ chờ kiểm định',
+  'Tạm giữ QC':'Tạm giữ chờ kiểm định',
+  'Tạm giữ chờ kiểm định':'Tạm giữ chờ kiểm định',
+  Quarantine:'Cách ly',
+  'Cách ly':'Cách ly',
+  Blocked:'Bị chặn',
+  'Bị chặn':'Bị chặn',
+  Damaged:'Hư hỏng',
+  'Hư hỏng':'Hư hỏng',
+  Rejected:'Từ chối',
+  'Từ chối':'Từ chối',
+  Expired:'Đã hết hạn',
+  'Đã hết hạn':'Đã hết hạn',
+  'Hết hạn':'Đã hết hạn',
+  RecallBlocked:'Phong tỏa thu hồi',
+  'Phong tỏa thu hồi':'Phong tỏa thu hồi',
+  'Khóa thu hồi':'Phong tỏa thu hồi',
 }[code]??code);
 
 const messageOf=(e:unknown)=>{
@@ -180,7 +199,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
         </button>
         {invariantVerification&&(
           <div role="status" style={{ marginTop: 8, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
-            Mã kiểm định: <strong>{invariantVerification.verificationId}</strong> • Cân bằng 5 nhóm tồn: <strong>{invariantVerification.fiveBucketEquationStatus === 'BALANCED_EXACT' ? 'Cân bằng tuyệt đối' : invariantVerification.fiveBucketEquationStatus}</strong> • Kiểm soát thanh hủy: <strong>{invariantVerification.scrapApprovalGuard === 'SOD_ENFORCED' ? 'Bắt buộc phê duyệt độc lập' : invariantVerification.scrapApprovalGuard}</strong>
+            Mã kiểm định: <strong>{invariantVerification.verificationId}</strong> • Cân bằng 5 nhóm tồn: <strong>{invariantVerification.fiveBucketEquationStatus === 'BALANCED_EXACT' || invariantVerification.fiveBucketEquationStatus.includes('BALANCED') ? 'Cân bằng tuyệt đối' : invariantVerification.fiveBucketEquationStatus.replace(/\s*\(SoD\)/gi, '')}</strong> • Kiểm soát thanh hủy: <strong>{invariantVerification.scrapApprovalGuard === 'SOD_ENFORCED' || /SoD|SOD/i.test(invariantVerification.scrapApprovalGuard) ? 'Bắt buộc phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm khi hủy/thanh lý' : invariantVerification.scrapApprovalGuard}</strong>
           </div>
         )}
       </div>
@@ -217,7 +236,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
           <thead><tr>
             <th>Sản phẩm</th><th>Kho / Vị trí</th><th>Trạng thái</th><th>Lô / Hạn dùng</th><th>Sê-ri</th>
             <th>Điều kiện sử dụng</th><th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn thực tế</th><th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đã giữ</th><th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Khả dụng</th>
-            {canChange&&<th>Thao tác</th>}
+            {canChange&&<th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}
           </tr></thead>
           <tbody>
             {buckets.length===0?<tr><td colSpan={canChange?10:9} className="ui-empty-cell">Không có nhóm tồn kho phù hợp.</td></tr>:
@@ -236,10 +255,10 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
                 <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucket.onHandQuantity}</td>
                 <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucket.reservedQuantity}</td>
                 <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucket.availableQuantity}</td>
-                {canChange&&<td>
-                  <div className="ui-inline-actions">
-                    <button type="button" disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startChange(bucket)}>Đổi trạng thái</button>
-                    {bucket.status!=='AVAILABLE'&&<button type="button" disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startDisposition(bucket)}>Xử lý / Thanh hủy</button>}
+                {canChange&&<td style={{ whiteSpace: 'nowrap' }}>
+                  <div className="ui-inline-actions" style={{ display: 'inline-flex', gap: 6, flexWrap: 'nowrap', whiteSpace: 'nowrap', alignItems: 'center' }}>
+                    <button type="button" style={{ whiteSpace: 'nowrap' }} disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startChange(bucket)}>Đổi trạng thái</button>
+                    {!['AVAILABLE','Available','Khả dụng'].includes(bucket.status)&&<button type="button" style={{ whiteSpace: 'nowrap' }} disabled={bucket.onHandQuantity-bucket.reservedQuantity<=0} onClick={()=>startDisposition(bucket)}>Xử lý / Thanh hủy</button>}
                   </div>
                 </td>}
               </tr>)}

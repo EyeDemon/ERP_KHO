@@ -145,7 +145,19 @@ const referenceTypeLabel = (value?: string | null) => ({
   InventoryMove: 'Phiếu di chuyển',
   Return: 'Phiếu trả hàng',
   PickTask: 'Tác vụ lấy hàng',
-}[value ?? ''] ?? value ?? '');
+  QASeedReconcile: 'Đối soát sổ cái',
+  InternalMove: 'Di chuyển nội bộ',
+  StocktakeAdjustment: 'Điều chỉnh kiểm kê',
+  QualityDispositionRtv: 'Xuất trả NCC',
+  QualityDispositionScrap: 'Thanh hủy hàng lỗi',
+  Putaway: 'Cất hàng',
+  PutawayTask: 'Tác vụ cất hàng',
+  Picking: 'Lấy hàng',
+  Packing: 'Đóng gói',
+  StatusTransition: 'Chuyển trạng thái',
+  ReceivingDiscrepancy: 'Xử lý sai lệch nhận hàng',
+  QualityInspection: 'Kiểm định chất lượng',
+}[(value ?? '').replace(/^\[|\]$/g, '').trim()] ?? value ?? '');
 
 const transactionTypeLabel = (value: string) => ({
   Import: 'Nhập kho',
@@ -169,8 +181,36 @@ const inventoryStatusLabel = (value: string) => ({
   DAMAGED: 'Hư hỏng',
   REJECTED: 'Từ chối',
   EXPIRED: 'Hết hạn',
-  RECALL_BLOCKED: 'Khóa thu hồi',
+  RECALL_BLOCKED: 'Phong tỏa thu hồi',
+  Available: 'Khả dụng',
+  'Khả dụng': 'Khả dụng',
+  QcHold: 'Tạm giữ chờ kiểm định',
+  'Tạm giữ QC': 'Tạm giữ chờ kiểm định',
+  'Tạm giữ chờ kiểm định': 'Tạm giữ chờ kiểm định',
+  Quarantine: 'Cách ly',
+  'Cách ly': 'Cách ly',
+  Blocked: 'Bị chặn',
+  'Bị chặn': 'Bị chặn',
+  Damaged: 'Hư hỏng',
+  'Hư hỏng': 'Hư hỏng',
+  Rejected: 'Từ chối',
+  'Từ chối': 'Từ chối',
+  Expired: 'Đã hết hạn',
+  'Đã hết hạn': 'Đã hết hạn',
+  'Hết hạn': 'Đã hết hạn',
+  RecallBlocked: 'Phong tỏa thu hồi',
+  'Phong tỏa thu hồi': 'Phong tỏa thu hồi',
+  'Khóa thu hồi': 'Phong tỏa thu hồi',
 }[value] ?? value);
+
+const inventoryStatusTone = (value: string): 'neutral' | 'success' | 'warning' | 'danger' =>
+  ['AVAILABLE', 'Available', 'Khả dụng'].includes(value)
+    ? 'success'
+    : ['QC_HOLD', 'QcHold', 'QUARANTINE', 'Quarantine', 'Cách ly', 'Tạm giữ QC', 'Tạm giữ chờ kiểm định', 'Chờ kiểm tra chất lượng'].includes(value)
+      ? 'warning'
+      : ['BLOCKED', 'Blocked', 'Bị chặn', 'DAMAGED', 'Damaged', 'Hư hỏng', 'EXPIRED', 'Expired', 'Đã hết hạn', 'Hết hạn', 'RECALL_BLOCKED', 'RecallBlocked', 'Phong tỏa thu hồi', 'Khóa thu hồi', 'REJECTED', 'Rejected', 'Từ chối'].includes(value)
+        ? 'danger'
+        : 'neutral';
 
 const Inventory = () => {
   const [activeTab, setActiveTab] = useState<'stock' | 'buckets' | 'history' | 'inout' | 'expiry' | 'analytics'>('stock');
@@ -680,15 +720,15 @@ const Inventory = () => {
                         <td>{item.productCode} - {item.productName}</td>
                         <td>
                           {item.fromInventoryStatus && item.toInventoryStatus
-                            ? `${inventoryStatusLabel(item.fromInventoryStatus)} → ${inventoryStatusLabel(item.toInventoryStatus)}`
-                            : item.inventoryStatus ? inventoryStatusLabel(item.inventoryStatus) : '—'}
+                            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }}><UiBadge tone={inventoryStatusTone(item.fromInventoryStatus)}>{inventoryStatusLabel(item.fromInventoryStatus)}</UiBadge><span>→</span><UiBadge tone={inventoryStatusTone(item.toInventoryStatus)}>{inventoryStatusLabel(item.toInventoryStatus)}</UiBadge></span>
+                            : item.inventoryStatus ? <UiBadge tone={inventoryStatusTone(item.inventoryStatus)}>{inventoryStatusLabel(item.inventoryStatus)}</UiBadge> : '—'}
                         </td>
                         <td>{item.lotNumber || '—'}{item.serialNumber ? ` / ${item.serialNumber}` : ''}</td>
                         <td className={'inventory-numeric ' + quantityClass} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                           {item.quantity} {formatUnitName(item.unitName)}
                         </td>
                         <td>{item.referenceType ? '[' + referenceTypeLabel(item.referenceType) + '] #' + item.referenceId : '—'}</td>
-                        <td>{item.note}</td>
+                        <td>{(item.note || '').replace(/\(100%\s*Match\)/gi, '(Khớp 100%)') || '—'}</td>
                       </tr>
                     );
                   })
@@ -882,7 +922,7 @@ const Inventory = () => {
                       <td><strong>{row.warehouseName}</strong><br /><small>{row.locationCode}</small></td>
                       <td><strong>{row.productCode}</strong> — {row.productName}</td>
                       <td>{row.lotNumber || '—'}</td>
-                      <td>{inventoryStatusLabel(row.status)}</td>
+                      <td><UiBadge tone={inventoryStatusTone(row.status)}>{inventoryStatusLabel(row.status)}</UiBadge></td>
                       <td>{row.manufactureDate ? new Date(row.manufactureDate).toLocaleDateString('vi-VN') : '—'}</td>
                       <td>{row.expiryDate ? new Date(row.expiryDate).toLocaleDateString('vi-VN') : '—'}</td>
                       <td>{expiryBadge(row.expiryStatus, row.daysToExpiry)}</td>

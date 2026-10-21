@@ -1469,7 +1469,7 @@ namespace ERP.Api.Controllers
                         ProductCode = (r.ProductCode ?? string.Empty).Trim(),
                         ProductName = (r.ProductName ?? string.Empty).Trim(),
                         UnitName = NormalizeUom(r.UnitName),
-                        Status = (r.Status ?? string.Empty).Trim(),
+                        Status = TranslateInventoryStatusLabel(r.Status),
                         StatusLabel = TranslateInventoryStatusLabel(r.Status),
                         r.LotId,
                         LotNumber = r.LotNumber != null ? r.LotNumber.Trim() : null,
@@ -1764,18 +1764,25 @@ namespace ERP.Api.Controllers
             };
         }
 
-        private static string TranslateInventoryStatusLabel(string? status) =>
+        public static string TranslateInventoryStatusLabel(string? status) =>
             (status ?? string.Empty).Trim().ToUpperInvariant() switch
             {
                 "AVAILABLE" => "Khả dụng",
-                "QUARANTINE" => "Biệt trữ kiểm định",
+                "QUARANTINE" => "Cách ly",
                 "DAMAGED" => "Hư hỏng",
                 "REJECTED" => "Từ chối",
                 "EXPIRED" => "Đã hết hạn",
-                "QCHOLD" or "QC_HOLD" => "Tạm giữ QC",
+                "QCHOLD" or "QC_HOLD" => "Tạm giữ chờ kiểm định",
                 "RECALLBLOCKED" or "RECALL_BLOCKED" => "Phong tỏa thu hồi",
+                "BLOCKED" => "Phong tỏa",
                 _ => (status ?? string.Empty).Trim()
             };
+
+        public static string? TranslateReferenceTypeLabel(string? referenceType) =>
+            ERP.Infrastructure.Queries.InventoryTransactionQueryService.TranslateReferenceType(referenceType);
+
+        public static string? NormalizeTransactionNote(string? note) =>
+            note?.Trim().Replace("(100% Match)", "(Khớp 100%)", StringComparison.OrdinalIgnoreCase);
 
         private static string NormalizeUom(string? uom, string fallback = "THÙNG")
         {

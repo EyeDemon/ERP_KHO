@@ -138,7 +138,7 @@ public sealed class InventoryStatusController(
             fiveBucketEquationStatus = violationCount == 0
                 ? "Cân bằng chính xác tuyệt đối (0 <= Đã giữ <= Tồn vật lý)"
                 : $"Phát hiện {violationCount} lệch bất biến tồn kho",
-            scrapApprovalGuard = "Bắt buộc phân tách nhiệm vụ (SoD) khi phê duyệt hủy/thanh lý",
+            scrapApprovalGuard = "Bắt buộc phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm khi hủy/thanh lý",
             status = "Đã xác thực bất biến 5 trạng thái tồn kho & phân vùng biệt trữ",
             statusLabel = "Đã xác thực bất biến 5 trạng thái tồn kho & phân vùng biệt trữ",
             verifiedAtUtc = now
@@ -247,7 +247,7 @@ public sealed class InventoryStatusController(
             countFreezeLocksCount,
             manualLocksCount,
             leakCount,
-            overlappingHoldPrecedence = "Thu hồi (Recall) > Phong tỏa QC > Đóng băng Kiểm kê > Khóa Vận hành",
+            overlappingHoldPrecedence = "Thu hồi lô hàng > Kiểm định chất lượng > Đóng băng kiểm kê > Khóa vận hành",
             status = statusText,
             statusLabel = "Đã xác thực thứ tự ưu tiên khóa tồn kho (0 rò rỉ xuất hàng)",
             verifiedAtUtc = now

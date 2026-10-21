@@ -31,6 +31,54 @@ namespace ERP.Infrastructure.Queries
             };
         }
 
+        public static string? TranslateInventoryStatus(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status)) return status?.Trim();
+            var trimmed = status.Trim();
+            return trimmed.ToUpperInvariant() switch
+            {
+                "AVAILABLE" => "Khả dụng",
+                "QUARANTINE" => "Cách ly",
+                "DAMAGED" => "Hư hỏng",
+                "REJECTED" => "Từ chối",
+                "EXPIRED" => "Đã hết hạn",
+                "QCHOLD" or "QC_HOLD" => "Tạm giữ chờ kiểm định",
+                "RECALLBLOCKED" or "RECALL_BLOCKED" => "Phong tỏa thu hồi",
+                "BLOCKED" => "Phong tỏa",
+                _ => trimmed
+            };
+        }
+
+        public static string? TranslateReferenceType(string? referenceType)
+        {
+            if (string.IsNullOrWhiteSpace(referenceType)) return referenceType?.Trim();
+            var trimmed = referenceType.Trim();
+            return trimmed.ToUpperInvariant() switch
+            {
+                "INTERNALMOVE" or "INVENTORYMOVE" => "Di chuyển nội bộ",
+                "QASEEDRECONCILE" or "RECONCILIATION" => "Đối soát sổ cái",
+                "IMPORTRECEIPT" or "GOODSRECEIPT" or "RECEIPT" => "Phiếu nhập kho",
+                "EXPORTRECEIPT" => "Phiếu xuất kho",
+                "STOCKTRANSFER" => "Phiếu điều chuyển",
+                "STOCKTRANSFERDAMAGE" => "Hư hỏng điều chuyển",
+                "STOCKTAKE" or "STOCKTAKEADJUSTMENT" => "Phiếu kiểm kê",
+                "SHIPMENT" => "Chuyến giao hàng",
+                "INVENTORYREVERSAL" => "Phiếu đảo giao dịch",
+                "INVENTORYADJUSTMENT" => "Phiếu điều chỉnh",
+                "PUTAWAYTASK" => "Tác vụ cất hàng",
+                "PICKTASK" or "PICKINGTASK" => "Tác vụ lấy hàng",
+                "PACKINGTASK" or "PACKINGSESSION" => "Tác vụ đóng gói",
+                "INVENTORYSTATUSCHANGE" => "Đổi trạng thái tồn kho",
+                "QUALITYDISPOSITIONRELEASE" => "Giải tỏa kiểm định chất lượng",
+                "QUALITYDISPOSITIONSCRAP" => "Xuất hủy hàng lỗi",
+                "QUALITYDISPOSITIONRTV" => "Hoàn trả nhà cung cấp",
+                "RECALLCAMPAIGNBLOCK" => "Phong tỏa thu hồi lô hàng",
+                "RETURN" => "Phiếu trả hàng",
+                "DEBT_PAYMENT" or "DEBTPAYMENT" => "Thanh toán công nợ",
+                _ => trimmed
+            };
+        }
+
         internal InventoryTransactionQueryService(ErpKhoDbContext context)
         {
             _context = context;
@@ -176,13 +224,13 @@ namespace ERP.Infrastructure.Queries
                     : rawUnit;
                 item.LotNumber = item.LotNumber?.Trim();
                 item.SerialNumber = item.SerialNumber?.Trim();
-                item.ReferenceType = item.ReferenceType?.Trim();
+                item.ReferenceType = TranslateReferenceType(item.ReferenceType);
                 item.TransactionType = (item.TransactionType ?? string.Empty).Trim();
-                item.InventoryStatus = (item.InventoryStatus ?? string.Empty).Trim();
-                item.FromInventoryStatus = item.FromInventoryStatus?.Trim();
-                item.ToInventoryStatus = item.ToInventoryStatus?.Trim();
+                item.InventoryStatus = TranslateInventoryStatus(item.InventoryStatus) ?? string.Empty;
+                item.FromInventoryStatus = TranslateInventoryStatus(item.FromInventoryStatus);
+                item.ToInventoryStatus = TranslateInventoryStatus(item.ToInventoryStatus);
                 item.CreatedByName = NormalizeActorDisplayName(item.CreatedByName) ?? string.Empty;
-                item.Note = item.Note?.Trim();
+                item.Note = item.Note?.Trim().Replace("(100% Match)", "(Khớp 100%)", StringComparison.OrdinalIgnoreCase);
             }
 
             return new PagedResult<InventoryTransactionHistoryDto>
