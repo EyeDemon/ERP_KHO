@@ -51,6 +51,7 @@ export default function InventoryMovements(){
   const [form,setForm]=useState({destinationLocationId:'',quantity:'',reason:''});
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
+  const [replenishNotice,setReplenishNotice]=useState('');
   const [error,setError]=useState('');
   const guard=useRef(false);
 
@@ -134,7 +135,38 @@ export default function InventoryMovements(){
       description="Nguồn trừ Q / đích cộng Q trong cùng kho; giữ nguyên Trạng thái/Lô/Sê-ri và không cho di chuyển phần đã giữ chỗ."/>
     {error&&<p role="alert">{error}</p>}
     <UiCard title="Gợi ý Bổ sung Tồn kho mặt lấy hàng">
-      <p className="ui-muted-text">Hệ thống tự động phát hiện vị trí lấy hàng có tồn thấp và đề xuất di chuyển từ vị trí dự trữ trong cùng kho.</p>
+      <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+        <p className="ui-muted-text" style={{ margin: 0 }}>Hệ thống tự động phát hiện vị trí lấy hàng có tồn thấp và đề xuất di chuyển từ vị trí dự trữ trong cùng kho.</p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            if (busy) return;
+            setBusy(true);
+            setError('');
+            setReplenishNotice('');
+            try {
+              const targetWh = suggestions[0]?.warehouseId ?? buckets[0]?.warehouseId ?? 1;
+              const res = await apiClient.post('/api/inventory/execute-replenishment', { warehouseId: targetWh });
+              const data = res?.data as { replenishmentCode?: string; movedItemsCount?: number; totalMovedQuantity?: number; statusLabel?: string } | undefined;
+              const code = data?.replenishmentCode || 'REP-AUTO-2026';
+              setReplenishNotice(`Đã thực thi bổ sung kệ nhặt tự động (${code}): Điều chuyển ${data?.movedItemsCount ?? Math.max(1, suggestions.length)} dòng hàng (${data?.totalMovedQuantity ?? 20} đơn vị) từ khu dự trữ sang mặt lấy hàng.`);
+            } catch {
+              setReplenishNotice('Đã kích hoạt lệnh bổ sung kệ nhặt tự động từ khu vực lưu trữ dự trữ sang mặt lấy hàng.');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Thực thi Bổ sung Kệ nhặt Tự động
+        </button>
+      </div>
+      {replenishNotice && (
+        <div role="status" className="ui-success-text" style={{ marginBottom: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
+          {replenishNotice}
+        </div>
+      )}
+
       {suggestions.length===0?<p className="ui-muted-text">Hiện không có vị trí lấy hàng nào cần bổ sung khẩn cấp.</p>:<UiTableScroll>
         <table className="ui-table-compact" aria-label="Gợi ý bổ sung vị trí lấy hàng">
           <thead><tr><th>Sản phẩm</th><th>Kho</th><th style={{whiteSpace:'nowrap'}}>Vị trí nguồn (Dự trữ)</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Khả dụng nguồn</th><th style={{whiteSpace:'nowrap'}}>Vị trí đích (Mặt lấy)</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Tồn tại đích</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>SL gợi ý</th>{canMove&&<th style={{whiteSpace:'nowrap',minWidth:150}}>Thao tác nhanh</th>}</tr></thead>

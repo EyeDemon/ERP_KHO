@@ -1,3 +1,8 @@
+.app-shell:has(.ui-page-header) .topbar-page-meta,
+.app-shell:has(.stocktakes-page) .topbar-page-meta {
+  display: none;
+}
+
 .stocktakes-page {
   display: grid;
   gap: var(--ui-space-4);

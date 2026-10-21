@@ -149,7 +149,7 @@ export default function Categories() {
   return (
     <UiPage>
       <UiPageHeader
-        eyebrow="DANH MỤC MASTER DATA"
+        eyebrow="DỮ LIỆU NỀN"
         title="Nhóm danh mục sản phẩm"
         description="Phân loại chuẩn hóa nguyên vật liệu, bán thành phẩm, thành phẩm và vật tư đóng gói phục vụ định tuyến cất hàng & kiểm kê."
       />
@@ -195,7 +195,7 @@ export default function Categories() {
                 aria-label="Mô tả nhóm danh mục"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Mô tả tiêu chuẩn lưu kho, FEFO hoặc nhóm ngành hàng..."
+                placeholder="Mô tả tiêu chuẩn lưu kho..."
               />
             </UiToolbarField>
             <div style={{ display: 'flex', gap: 8, alignSelf: 'end' }}>

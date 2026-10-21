@@ -4714,5 +4714,366 @@ namespace ERP.Api.Tests
             updatedTask.Status.Should().Be(ERP.Domain.Enums.PickingTaskStatus.Assigned);
             db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
         }
+
+        [Fact]
+        public async Task Wave41_BarcodeLookup_ParsesGs1128CompositeString_AndResolvesGtinLotExpirySerialSscc()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Trung Tâm WH01", IsActive = true });
+            db.Units.Add(new ERP.Domain.Entities.Unit { Id = 1, Code = "THÙNG", Name = "THÙNG", IsActive = true });
+            var product = new ERP.Domain.Entities.Product
+            {
+                Id = 4101,
+                Code = "SKU-W41-GS1",
+                Name = "Sữa Tiệt Trùng Chuẩn GS1-128",
+                UnitId = 1,
+                TrackingType = ERP.Domain.Enums.ProductTrackingType.Lot,
+                ExpiryControl = true,
+                IsActive = true
+            };
+            db.Products.Add(product);
+            db.ProductBarcodes.Add(new ERP.Domain.Entities.ProductBarcode
+            {
+                Id = 4101,
+                ProductId = 4101,
+                Product = product,
+                Value = "8938505974192"
+            });
+            db.InventoryLots.Add(new ERP.Domain.Entities.InventoryLot
+            {
+                Id = 4110,
+                ProductId = 4101,
+                Product = product,
+                LotNumber = "LOTW4101",
+                ManufactureDate = new DateTime(2026, 1, 1),
+                ExpiryDate = new DateTime(2026, 12, 31)
+            });
+            db.InventorySerials.Add(new ERP.Domain.Entities.InventorySerial
+            {
+                Id = 4120,
+                ProductId = 4101,
+                Product = product,
+                SerialNumber = "SNW410099"
+            });
+            db.HandlingUnits.Add(new ERP.Domain.Entities.HandlingUnit
+            {
+                Id = 4130,
+                WarehouseId = 1,
+                HuCode = "HU-W41-01",
+                Barcode = "00389385059700000018",
+                Sscc = "389385059700000018",
+                Type = ERP.Domain.Enums.HandlingUnitType.Pallet,
+                Status = ERP.Domain.Enums.HandlingUnitStatus.Staged
+            });
+            await db.SaveChangesAsync();
+
+            var catalogService = new Mock<IProductCatalogService>();
+            var controller = new ProductBarcodeLookupController(catalogService.Object, db);
+
+            var gs1Scan = "(01)08938505974192(17)261231(10)LOTW4101(21)SNW410099(00)389385059700000018";
+            var res = await controller.Resolve(gs1Scan, warehouseId: 1, ct: default);
+            var ok = res.Should().BeOfType<OkObjectResult>().Subject;
+            var dto = ok.Value.Should().BeOfType<BarcodeResolutionDto>().Subject;
+
+            dto.IsGs1128.Should().BeTrue();
+            dto.IsGs1Composite.Should().BeTrue();
+            dto.ProductId.Should().Be(4101);
+            dto.ProductCode.Should().Be("SKU-W41-GS1");
+            dto.Gtin.Should().Be("08938505974192");
+            dto.NormalizedBarcode.Should().Be("8938505974192");
+            dto.LotNumber.Should().Be("LOTW4101");
+            dto.LotId.Should().Be(4110);
+            dto.ExpiryDate.Should().Be("2026-12-31");
+            dto.ExpiryDateDisplay.Should().Be("31/12/2026");
+            dto.SerialNumber.Should().Be("SNW410099");
+            dto.SerialId.Should().Be(4120);
+            dto.Sscc.Should().Be("389385059700000018");
+            dto.HandlingUnitId.Should().Be(4130);
+            dto.StatusLabel.Should().Be("Đã giải mã thành công chuỗi mã vạch chuẩn GS1-128");
+
+            var postRes = await controller.ParseGs1(new ProductBarcodeLookupController.ParseGs1Request(Barcode: gs1Scan, WarehouseId: 1), ct: default);
+            var postOk = postRes.Should().BeOfType<OkObjectResult>().Subject;
+            var postDto = postOk.Value.Should().BeOfType<BarcodeResolutionDto>().Subject;
+            postDto.IsGs1128.Should().BeTrue();
+            postDto.ProductId.Should().Be(4101);
+        }
+
+        [Fact]
+        public async Task Wave41_InventoryControl_ExecuteReplenishment_MovesStockBetweenReserveAndPickFace_AndWritesMoveTransaction()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Trung Tâm WH01", IsActive = true });
+            db.WarehouseLocations.AddRange(
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 101,
+                    WarehouseId = 1,
+                    Code = "RESERVE-B01",
+                    Name = "Kệ dự trữ tầng cao B01",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                    IsActive = true,
+                    IsBlocked = false,
+                    IsSystemManaged = false,
+                    IsPickable = false
+                },
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 102,
+                    WarehouseId = 1,
+                    Code = "PICK-A01",
+                    Name = "Kệ nhặt hàng tầng thấp A01",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                    IsActive = true,
+                    IsBlocked = false,
+                    IsSystemManaged = false,
+                    IsPickable = true
+                });
+            db.Units.Add(new ERP.Domain.Entities.Unit { Id = 1, Code = "THÙNG", Name = "THÙNG", IsActive = true });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 4102,
+                Code = "SKU-W41-REP",
+                Name = "Sản phẩm bổ sung kệ nhặt Wave 41",
+                UnitId = 1,
+                IsActive = true
+            });
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4151,
+                    WarehouseId = 1,
+                    ProductId = 4102,
+                    LocationId = 101,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 80m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4152,
+                    WarehouseId = 1,
+                    ProductId = 4102,
+                    LocationId = 102,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 5m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var controller = new InventoryControlController(
+                new Mock<IInventoryLockService>().Object,
+                new Mock<IInventoryMovementService>().Object,
+                db,
+                warehouseAuth.Object);
+
+            var execRes = await controller.ExecuteReplenishment(
+                new InventoryControlController.ExecuteReplenishmentRequest(
+                    WarehouseId: 1,
+                    ProductId: 4102,
+                    SourceLocationId: 101,
+                    TargetLocationId: 102,
+                    Quantity: 20m,
+                    Note: "Bổ sung 20 thùng từ kệ dự trữ xuống kệ nhặt hàng"),
+                db,
+                warehouseAuth.Object,
+                default);
+            var execOk = execRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(execOk.Value))
+            {
+                doc.RootElement.GetProperty("stockMutated").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("executed").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("movedQuantity").GetDecimal().Should().Be(20m);
+                doc.RootElement.GetProperty("sourceRemainingQuantity").GetDecimal().Should().Be(60m);
+                doc.RootElement.GetProperty("targetResultingQuantity").GetDecimal().Should().Be(25m);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã thực thi bổ sung tồn kho từ kệ dự trữ sang kệ nhặt");
+            }
+
+            (await db.InventoryStocks.SingleAsync(x => x.Id == 4151)).Quantity.Should().Be(60m);
+            (await db.InventoryStocks.SingleAsync(x => x.Id == 4152)).Quantity.Should().Be(25m);
+            (await db.InventoryTransactions.AnyAsync(t =>
+                t.WarehouseId == 1 &&
+                t.ProductId == 4102 &&
+                t.TransactionType == ERP.Domain.Enums.TransactionType.Move &&
+                t.ReferenceType == "Replenishment" &&
+                t.Quantity == 20m)).Should().BeTrue();
+            db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave41_PackingKittingVas_And_DockYardCrossDock_MutateRealInventoryStocksAndWriteLedgerTransactions_WhenExecuteStockMutationTrue()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Trung Tâm WH01", IsActive = true });
+            db.WarehouseLocations.AddRange(
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 201,
+                    WarehouseId = 1,
+                    Code = "RECEIVING",
+                    Name = "Vị trí nhận hàng",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Receiving,
+                    IsActive = true,
+                    IsReceivable = true,
+                    IsSystemManaged = true
+                },
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 202,
+                    WarehouseId = 1,
+                    Code = "STAGING",
+                    Name = "Vị trí tập kết trung chuyển",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Staging,
+                    IsActive = true,
+                    IsSystemManaged = true
+                },
+                new ERP.Domain.Entities.WarehouseLocation
+                {
+                    Id = 203,
+                    WarehouseId = 1,
+                    Code = "PACKING_STAGE",
+                    Name = "Vị trí tập kết đóng gói",
+                    LocationType = ERP.Domain.Enums.WarehouseLocationType.Staging,
+                    IsActive = true,
+                    IsSystemManaged = true
+                });
+            db.Units.Add(new ERP.Domain.Entities.Unit { Id = 1, Code = "THÙNG", Name = "THÙNG", IsActive = true });
+            db.Products.AddRange(
+                new ERP.Domain.Entities.Product { Id = 4111, Code = "SKU-COMP-41", Name = "Linh kiện thành phần Wave 41", UnitId = 1, IsActive = true },
+                new ERP.Domain.Entities.Product { Id = 4112, Code = "SKU-KIT-41", Name = "Bộ sản phẩm khuyến mãi KIT Wave 41", UnitId = 1, IsActive = true },
+                new ERP.Domain.Entities.Product { Id = 4113, Code = "SKU-XD-41", Name = "Hàng trung chuyển Cross-Dock Wave 41", UnitId = 1, IsActive = true });
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4161,
+                    WarehouseId = 1,
+                    ProductId = 4111,
+                    LocationId = 203,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 100m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4162,
+                    WarehouseId = 1,
+                    ProductId = 4112,
+                    LocationId = 203,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 10m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4163,
+                    WarehouseId = 1,
+                    ProductId = 4113,
+                    LocationId = 201,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 40m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var packingController = new PackingSessionsController(
+                new Mock<IPackingService>().Object,
+                db,
+                warehouseAuth.Object);
+
+            var kitRes = await packingController.ExecuteKittingVas(
+                new PackingSessionsController.ExecuteKittingVasRequest(
+                    WarehouseId: 1,
+                    KitSkuCode: "SKU-KIT-41",
+                    VasServiceType: "Đóng bộ khuyến mãi 2 trong 1",
+                    ComponentProductId: 4111,
+                    KitProductId: 4112,
+                    LocationId: 203,
+                    KitQuantity: 10m,
+                    ComponentRatio: 2m,
+                    ExecuteStockMutation: true),
+                default);
+            var kitOk = kitRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(kitOk.Value))
+            {
+                doc.RootElement.GetProperty("executedStockMutation").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("ledgerUpdated").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("componentConsumedQuantity").GetDecimal().Should().Be(20m);
+                doc.RootElement.GetProperty("kitProducedQuantity").GetDecimal().Should().Be(10m);
+                doc.RootElement.GetProperty("componentRemainingQuantity").GetDecimal().Should().Be(80m);
+                doc.RootElement.GetProperty("kitResultingQuantity").GetDecimal().Should().Be(20m);
+            }
+
+            (await db.InventoryStocks.SingleAsync(x => x.Id == 4161)).Quantity.Should().Be(80m);
+            (await db.InventoryStocks.SingleAsync(x => x.Id == 4162)).Quantity.Should().Be(20m);
+            (await db.InventoryTransactions.CountAsync(t => t.ReferenceType == "KittingVas")).Should().Be(2);
+
+            var dockService = new Mock<IDockYardService>();
+            var dockController = new DockYardController(
+                dockService.Object,
+                db,
+                warehouseAuth.Object);
+
+            var xdRes = await dockController.DispatchCrossdock(
+                new DispatchCrossdockRequest(
+                    WarehouseId: 1,
+                    DockDoorCode: "DOCK-XD-01",
+                    InboundAppointmentCode: "APPT-IN-W41",
+                    OutboundReferenceCode: "SO-OUT-W41",
+                    ProductId: 4113,
+                    SourceLocationId: 201,
+                    TargetLocationId: 202,
+                    Quantity: 15m,
+                    ExecuteStockMutation: true),
+                default);
+            var xdOk = xdRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(xdOk.Value))
+            {
+                doc.RootElement.GetProperty("executedStockMutation").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("ledgerUpdated").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("routedQuantity").GetDecimal().Should().Be(15m);
+                doc.RootElement.GetProperty("sourceRemainingQuantity").GetDecimal().Should().Be(25m);
+                doc.RootElement.GetProperty("targetResultingQuantity").GetDecimal().Should().Be(15m);
+                doc.RootElement.GetProperty("dispatchStatus").GetString().Should().Be("Đã phát lệnh điều phối trung chuyển thẳng");
+            }
+
+            (await db.InventoryStocks.SingleAsync(x => x.Id == 4163)).Quantity.Should().Be(25m);
+            (await db.InventoryStocks.SingleAsync(x => x.WarehouseId == 1 && x.ProductId == 4113 && x.LocationId == 202)).Quantity.Should().Be(15m);
+            (await db.InventoryTransactions.AnyAsync(t =>
+                t.ReferenceType == "CrossDock" &&
+                t.TransactionType == ERP.Domain.Enums.TransactionType.Move &&
+                t.Quantity == 15m)).Should().BeTrue();
+            db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
+        }
+
+        private static void KeepUnusedMarkerAssertion(ERP.Domain.Entities.PickingTask updatedTask, ERP.Infrastructure.Persistence.ErpKhoDbContext db)
+        {
+            updatedTask.AssignedUserId.Should().Be(99);
+            updatedTask.Status.Should().Be(ERP.Domain.Enums.PickingTaskStatus.Assigned);
+            db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
+        }
     }
 }

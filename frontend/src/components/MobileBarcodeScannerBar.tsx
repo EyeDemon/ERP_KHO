@@ -19,6 +19,49 @@ export interface ResolvedBarcodeResult {
   status?: string | null;
 }
 
+export interface ParsedGs1Data {
+  raw: string;
+  gtin?: string;
+  lotNumber?: string;
+  expiryDate?: string;
+  expiryDisplay?: string;
+  serialNumber?: string;
+  sscc?: string;
+}
+
+export function parseGs1BarcodeClient(rawInput: string): ParsedGs1Data | null {
+  const text = rawInput.trim();
+  if (!text) return null;
+  const hasGs1Markers = /\((00|01|10|17|21)\)/.test(text) || /^01\d{14}10/.test(text);
+  if (!hasGs1Markers) return null;
+
+  const gtinMatch = text.match(/\(01\)(\d{13,14})/) || text.match(/^01(\d{14})/);
+  const ssccMatch = text.match(/\(00\)(\d{18})/);
+  const lotMatch = text.match(/\(10\)([^(]+)/);
+  const expMatch = text.match(/\(17\)(\d{6})/);
+  const serMatch = text.match(/\(21\)([^(]+)/);
+
+  let expiryDate: string | undefined;
+  let expiryDisplay: string | undefined;
+  if (expMatch?.[1]) {
+    const yy = expMatch[1].slice(0, 2);
+    const mm = expMatch[1].slice(2, 4);
+    const dd = expMatch[1].slice(4, 6);
+    expiryDate = `20${yy}-${mm}-${dd}`;
+    expiryDisplay = `${dd}/${mm}/20${yy}`;
+  }
+
+  return {
+    raw: text,
+    gtin: gtinMatch?.[1],
+    sscc: ssccMatch?.[1],
+    lotNumber: lotMatch?.[1]?.trim(),
+    expiryDate,
+    expiryDisplay,
+    serialNumber: serMatch?.[1]?.trim(),
+  };
+}
+
 export interface MobileBarcodeScannerBarProps {
   label?: string;
   placeholder?: string;
@@ -38,6 +81,8 @@ const ENTITY_LABELS: Record<string, string> = {
   Unknown: 'Chưa nhận diện',
 };
 
+const SAMPLE_GS1_CODE = '(01)08938505000517(10)LOT-QA-002(17)271231(21)SER-QA-01';
+
 export function MobileBarcodeScannerBar({
   label = 'Quét mã vạch Mobile / RF (Camera hoặc súng quét)',
   placeholder = 'Nhập hoặc quét mã Bin, SKU, Lot, Serial, LPN...',
@@ -52,6 +97,7 @@ export function MobileBarcodeScannerBar({
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraNotice, setCameraNotice] = useState('');
   const [lastResolved, setLastResolved] = useState<ResolvedBarcodeResult | null>(null);
+  const [parsedGs1, setParsedGs1] = useState<ParsedGs1Data | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -75,6 +121,10 @@ export function MobileBarcodeScannerBar({
   }, []);
 
   const handleTrigger = async (rawCode: string) => {
+    const gs1 = parseGs1BarcodeClient(rawCode);
+    if (gs1) {
+      setParsedGs1(gs1);
+    }
     const clean = sanitizeScannerCode(rawCode);
     if (!clean || busy || disabled) return;
     setBusy(true);
@@ -97,6 +147,12 @@ export function MobileBarcodeScannerBar({
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleFillGs1Sample = () => {
+    setInput(SAMPLE_GS1_CODE);
+    const decoded = parseGs1BarcodeClient(SAMPLE_GS1_CODE);
+    setParsedGs1(decoded);
   };
 
   const toggleCamera = async () => {
@@ -182,7 +238,12 @@ export function MobileBarcodeScannerBar({
             disabled={disabled || busy}
             placeholder={placeholder}
             style={{ minHeight: 40, width: '100%', fontSize: 13, padding: '6px 10px' }}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {
+              const nextVal = e.target.value;
+              setInput(nextVal);
+              const decoded = parseGs1BarcodeClient(nextVal);
+              if (decoded) setParsedGs1(decoded);
+            }}
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 e.preventDefault();
@@ -212,6 +273,14 @@ export function MobileBarcodeScannerBar({
           >
             {cameraActive ? 'Tắt Camera' : 'Bật Camera Quét'}
           </button>
+          <button
+            type="button"
+            style={{ minHeight: 40, whiteSpace: 'nowrap' }}
+            disabled={disabled || busy}
+            onClick={handleFillGs1Sample}
+          >
+            Điền mẫu GS1-128
+          </button>
         </div>
         {lastResolved && (
           <UiBadge tone={lastResolved.entityType === 'Unknown' ? 'warning' : 'success'}>
@@ -219,6 +288,33 @@ export function MobileBarcodeScannerBar({
           </UiBadge>
         )}
       </div>
+
+      {parsedGs1 && (
+        <div
+          role="status"
+          data-testid="gs1-parsed-summary"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            alignItems: 'center',
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: '1px solid #a7f3d0',
+            background: '#ecfdf5',
+            color: '#065f46',
+            fontSize: 12.5,
+          }}
+        >
+          <strong>Đã giải mã GS1-128:</strong>
+          {parsedGs1.gtin && <UiBadge tone="success">{`Mã GTIN / SKU: ${parsedGs1.gtin.replace(/^0/, '')} (${parsedGs1.gtin})`}</UiBadge>}
+          {parsedGs1.lotNumber && <UiBadge tone="info">{`Số Lô (AI 10): ${parsedGs1.lotNumber}`}</UiBadge>}
+          {parsedGs1.expiryDisplay && <UiBadge tone="warning">{`Hạn dùng (AI 17): ${parsedGs1.expiryDisplay} (${parsedGs1.expiryDate})`}</UiBadge>}
+          {(parsedGs1.serialNumber || parsedGs1.sscc) && (
+            <UiBadge tone="neutral">{`Số Sê-ri / SSCC: ${parsedGs1.serialNumber || parsedGs1.sscc}`}</UiBadge>
+          )}
+        </div>
+      )}
 
       {cameraNotice && (
         <div

@@ -114,7 +114,19 @@ public sealed class PackingSessionsController(
         });
     }
 
-    public sealed record ExecuteKittingVasRequest(int? WarehouseId = null, string? KitSkuCode = null, string? VasServiceType = null);
+    public sealed record ExecuteKittingVasRequest(
+        int? WarehouseId = null,
+        string? KitSkuCode = null,
+        string? VasServiceType = null,
+        int? ComponentProductId = null,
+        string? ComponentProductCode = null,
+        int? KitProductId = null,
+        string? KitProductCode = null,
+        int? LocationId = null,
+        string? LocationCode = null,
+        decimal? KitQuantity = null,
+        decimal? ComponentRatio = null,
+        bool ExecuteStockMutation = false);
 
     [HttpPost("execute-kitting-vas"), IdempotentCommand("Packing.ExecuteKittingVas"), PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<IActionResult> ExecuteKittingVas(
@@ -153,6 +165,149 @@ public sealed class PackingSessionsController(
 
         var now = DateTime.UtcNow;
         var workOrderId = $"KIT-VAS-{now:yyyyMMdd-HHmm}";
+        var executedStockMutation = false;
+        var componentConsumedQuantity = 0m;
+        var kitProducedQuantity = 0m;
+        decimal? componentRemainingQuantity = null;
+        decimal? kitResultingQuantity = null;
+        int? componentTransactionId = null;
+        int? kitTransactionId = null;
+
+        if (db != null && (request?.ExecuteStockMutation == true || request?.ComponentProductId.HasValue == true || !string.IsNullOrWhiteSpace(request?.ComponentProductCode)))
+        {
+            var actorId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var parsedUid) ? parsedUid : 1;
+
+            var resolvedCompId = request?.ComponentProductId;
+            if (!resolvedCompId.HasValue && !string.IsNullOrWhiteSpace(request?.ComponentProductCode))
+            {
+                var compCode = request.ComponentProductCode.Trim();
+                resolvedCompId = await db.Products.AsNoTracking()
+                    .Where(p => p.Code == compCode)
+                    .Select(p => (int?)p.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            var resolvedKitId = request?.KitProductId;
+            var kitCodeLookup = !string.IsNullOrWhiteSpace(request?.KitProductCode) ? request.KitProductCode.Trim() : request?.KitSkuCode?.Trim();
+            if (!resolvedKitId.HasValue && !string.IsNullOrWhiteSpace(kitCodeLookup))
+            {
+                resolvedKitId = await db.Products.AsNoTracking()
+                    .Where(p => p.Code == kitCodeLookup)
+                    .Select(p => (int?)p.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            var resolvedLocId = request?.LocationId;
+            if (!resolvedLocId.HasValue && !string.IsNullOrWhiteSpace(request?.LocationCode))
+            {
+                var locCode = request.LocationCode.Trim();
+                resolvedLocId = await db.WarehouseLocations.AsNoTracking()
+                    .Where(l => l.WarehouseId == targetWarehouseId && l.Code == locCode)
+                    .Select(l => (int?)l.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            var kitQty = request?.KitQuantity > 0m ? request.KitQuantity.Value : 1m;
+            var ratio = request?.ComponentRatio > 0m ? request.ComponentRatio.Value : 1m;
+            var consumeQty = Math.Round(kitQty * ratio, 4);
+
+            var compStockQuery = db.InventoryStocks
+                .Where(s => s.WarehouseId == targetWarehouseId &&
+                            s.Status == InventoryStatus.Available &&
+                            s.Quantity - s.ReservedQuantity >= consumeQty);
+            if (resolvedCompId.HasValue)
+                compStockQuery = compStockQuery.Where(s => s.ProductId == resolvedCompId.Value);
+            if (resolvedLocId.HasValue)
+                compStockQuery = compStockQuery.Where(s => s.LocationId == resolvedLocId.Value);
+
+            var compStock = await compStockQuery
+                .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+                .ThenBy(s => s.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (compStock != null)
+            {
+                var targetKitProductId = resolvedKitId ?? compStock.ProductId;
+                var targetLocationId = resolvedLocId ?? compStock.LocationId;
+
+                compStock.Quantity -= consumeQty;
+                compStock.LastUpdated = now;
+                componentRemainingQuantity = compStock.Quantity;
+
+                var kitStock = await db.InventoryStocks
+                    .FirstOrDefaultAsync(s =>
+                        s.WarehouseId == targetWarehouseId &&
+                        s.ProductId == targetKitProductId &&
+                        s.LocationId == targetLocationId &&
+                        s.Status == InventoryStatus.Available,
+                        cancellationToken);
+
+                if (kitStock != null)
+                {
+                    kitStock.Quantity += kitQty;
+                    kitStock.LastUpdated = now;
+                    kitResultingQuantity = kitStock.Quantity;
+                }
+                else
+                {
+                    kitStock = new ERP.Domain.Entities.InventoryStock
+                    {
+                        WarehouseId = targetWarehouseId,
+                        ProductId = targetKitProductId,
+                        LocationId = targetLocationId,
+                        Status = InventoryStatus.Available,
+                        Quantity = kitQty,
+                        ReservedQuantity = 0m,
+                        LastUpdated = now
+                    };
+                    db.InventoryStocks.Add(kitStock);
+                    kitResultingQuantity = kitStock.Quantity;
+                }
+
+                var compTx = new ERP.Domain.Entities.InventoryTransaction
+                {
+                    ProductId = compStock.ProductId,
+                    WarehouseId = targetWarehouseId,
+                    LocationId = compStock.LocationId,
+                    LotId = compStock.LotId,
+                    SerialId = compStock.SerialId,
+                    InventoryStatus = InventoryStatus.Available,
+                    FromInventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.AdjustmentDecrease,
+                    Quantity = consumeQty,
+                    ReferenceId = compStock.Id,
+                    ReferenceType = "KittingVas",
+                    TransactionDate = now,
+                    CreatedBy = actorId,
+                    Note = $"{workOrderId}: Xuất linh kiện lắp ráp bộ KIT"
+                };
+                var kitTx = new ERP.Domain.Entities.InventoryTransaction
+                {
+                    ProductId = targetKitProductId,
+                    WarehouseId = targetWarehouseId,
+                    LocationId = targetLocationId,
+                    InventoryStatus = InventoryStatus.Available,
+                    ToInventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.AdjustmentIncrease,
+                    Quantity = kitQty,
+                    ReferenceId = compStock.Id,
+                    ReferenceType = "KittingVas",
+                    TransactionDate = now,
+                    CreatedBy = actorId,
+                    Note = $"{workOrderId}: Nhập thành phẩm bộ KIT sau lắp ráp"
+                };
+                db.InventoryTransactions.AddRange(compTx, kitTx);
+                await db.SaveChangesAsync(cancellationToken);
+
+                executedStockMutation = true;
+                componentConsumedQuantity = consumeQty;
+                kitProducedQuantity = kitQty;
+                componentTransactionId = compTx.Id;
+                kitTransactionId = kitTx.Id;
+            }
+        }
         if (db != null)
         {
             var actorUserId = int.TryParse(
@@ -185,6 +340,14 @@ public sealed class PackingSessionsController(
             billingHookStatus = "Đã ghi nhận phí dịch vụ gia công kho (VAS)",
             status = "Đã hoàn tất gia công đóng gói & dán nhãn kiện hàng",
             statusLabel = "Đã hoàn tất gia công đóng gói & dán nhãn kiện hàng",
+            executedStockMutation,
+            ledgerUpdated = executedStockMutation,
+            componentConsumedQuantity,
+            kitProducedQuantity,
+            componentRemainingQuantity,
+            kitResultingQuantity,
+            componentTransactionId,
+            kitTransactionId,
             executedAtUtc = now
         });
     }

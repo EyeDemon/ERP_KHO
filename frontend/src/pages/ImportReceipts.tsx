@@ -508,9 +508,9 @@ const ImportReceipts = () => {
         <UiCard title="Mở Bàn làm việc Kiểm định Chất lượng">
           <div className="ui-inline-wrap">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, width: '100%', marginBottom: 8 }}>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang kiểm định QC / Xử lý chênh lệch</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.requiresQc || r.status === 'QcPending' || r.status === 'QcCompleted' || r.status.startsWith('Discrepancy')).length}</strong></div>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hoàn tất QC & đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hàng khách trả lại / RMA (Khả dụng / Biệt trữ / Hư hỏng)</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang kiểm định chất lượng / Xử lý chênh lệch</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.requiresQc || r.status === 'QcPending' || r.status === 'QcCompleted' || r.status.startsWith('Discrepancy')).length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hoàn tất kiểm định & đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hàng khách trả lại (Khả dụng / Biệt trữ / Hư hỏng)</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}</strong></div>
             </div>
             {successMsg && (successMsg.includes('RMA') || successMsg.includes('hậu cần thu hồi')) && <div role="status" className="ui-success-text" style={{ order: 99, flexBasis: '100%', width: '100%', marginTop: 12, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500, whiteSpace: 'normal', wordBreak: 'break-word' }}>{successMsg}</div>}
 
@@ -733,15 +733,21 @@ const ImportReceipts = () => {
         <UiCard title="Cấu hình Thông số Thực thi RMA & Phân luồng Tân trang / Xuất trả NCC">
           <div className="import-form-grid">
             <label className="ui-stack">
-              <span>Sản phẩm kiểm định RMA / RTV</span>
+              <span>Sản phẩm kiểm định hoàn trả</span>
               <select aria-label="Sản phẩm kiểm định RMA" value={rmaProductId} onChange={e => setRmaProductId(e.target.value)}>
-                <option value="">-- Mặc định theo lô hoàn trả hiện hành --</option>
+                <option value="">-- Mặc định theo lô hoàn trả --</option>
                 {products.map(p => <option key={p.id} value={String(p.id)}>{p.code} - {p.name}</option>)}
               </select>
             </label>
             <label className="ui-stack">
               <span>Vị trí kệ cách ly / Tân trang</span>
-              <input aria-label="Vị trí cách ly RMA" value={rmaLocationCode} onChange={e => setRmaLocationCode(e.target.value)} placeholder="VD: QC-HOLD-01" />
+              <select aria-label="Vị trí cách ly RMA" value={rmaLocationCode} onChange={e => setRmaLocationCode(e.target.value)}>
+                <option value="QC-HOLD-01">QC-HOLD-01 — Khu vực tạm giữ chờ kiểm định</option>
+                <option value="QUARANTINE-01">QUARANTINE-01 — Khu vực cách ly hàng lỗi</option>
+                <option value="DAMAGED-01">DAMAGED-01 — Khu vực hàng hư hỏng</option>
+                <option value="RETURNS-STAGE-01">RETURNS-STAGE-01 — Khu vực tiếp nhận hàng trả</option>
+                <option value="BIN-A01-01">BIN-A01-01 — Kệ A01 Tầng 1</option>
+              </select>
             </label>
             <label className="ui-stack">
               <span>Số lượng kiểm định / Phân luồng</span>
@@ -750,9 +756,9 @@ const ImportReceipts = () => {
             <label className="ui-stack">
               <span>Phương án phân luồng hậu cần thu hồi</span>
               <select aria-label="Phương án phân luồng QC / RTV" value={rmaDispositionType} onChange={e => setRmaDispositionType(e.target.value)}>
-                <option value="REFURBISH_AND_RTV_SPLIT">Tân trang Hạng B & Xuất trả NCC (RTV)</option>
-                <option value="RETURN_TO_VENDOR_ONLY">Xuất trả toàn bộ cho Nhà cung cấp (RTV)</option>
-                <option value="QUARANTINE_SCRAP">Biệt trữ chờ hủy theo biên bản QC</option>
+                <option value="REFURBISH_AND_RTV_SPLIT">Tân trang & Xuất trả Nhà cung cấp</option>
+                <option value="RETURN_TO_VENDOR_ONLY">Xuất trả toàn bộ cho Nhà cung cấp</option>
+                <option value="QUARANTINE_SCRAP">Biệt trữ chờ hủy theo biên bản</option>
               </select>
             </label>
           </div>

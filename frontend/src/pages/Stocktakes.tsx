@@ -459,9 +459,9 @@ const Stocktakes = () => {
                 <label className="ui-stack">
                   <span>Sản phẩm điều chỉnh</span>
                   <select aria-label="Sản phẩm đề xuất điều chỉnh" value={proposalProductCode} onChange={e => setProposalProductCode(e.target.value)}>
-                    <option value="SKU-CYCLE-01">SKU-CYCLE-01 — Hàng kiểm kê định kỳ chuẩn</option>
+                    <option value="SKU-CYCLE-01">SKU-CYCLE-01 — Hàng kiểm kê chuẩn</option>
                     <option value="SKU-COLD-02">SKU-COLD-02 — Hàng bảo quản lạnh</option>
-                    <option value="SKU-PKG-03">SKU-PKG-03 — Vật tư đóng gói thùng carton</option>
+                    <option value="SKU-PKG-03">SKU-PKG-03 — Vật tư đóng gói</option>
                   </select>
                 </label>
                 <label className="ui-stack">
@@ -479,10 +479,12 @@ const Stocktakes = () => {
                 <label className="ui-stack">
                   <span>Mã lý do điều chỉnh</span>
                   <select aria-label="Mã lý do đề xuất điều chỉnh" value={proposalReasonCode} onChange={e => setProposalReasonCode(e.target.value)}>
-                    <option value="COUNT_VARIANCE">COUNT_VARIANCE — Chênh lệch kiểm đếm</option>
-                    <option value="PHYSICAL_DAMAGE">PHYSICAL_DAMAGE — Hư hỏng vật lý</option>
-                    <option value="MISPLACED_STOCK">MISPLACED_STOCK — Thất lạc / Sai vị trí</option>
-                    <option value="EXPIRED_WRITE_OFF">EXPIRED_WRITE_OFF — Hủy hàng hết hạn</option>
+                    <option value="COUNT_VARIANCE">Chênh lệch kiểm đếm</option>
+                    <option value="PHYSICAL_DAMAGE">Hư hỏng vật lý</option>
+                    <option value="MISPLACED_STOCK">Thất lạc / Sai vị trí</option>
+                    <option value="SUPPLIER_SHORTAGE">Thiếu từ nhà cung cấp</option>
+                    <option value="EXPIRED_WRITE_OFF">Hủy hết hạn</option>
+                    <option value="RECALL_QUARANTINE">Cô lập thu hồi</option>
                   </select>
                 </label>
               </div>

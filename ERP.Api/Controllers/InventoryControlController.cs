@@ -147,6 +147,319 @@ public sealed class InventoryControlController(
         return Ok(suggestions.Take(25).ToList());
     }
 
+    public sealed record ExecuteReplenishmentRequest(
+        int? WarehouseId = null,
+        int? ProductId = null,
+        string? ProductCode = null,
+        int? FromLocationId = null,
+        string? FromLocationCode = null,
+        int? ToLocationId = null,
+        string? ToLocationCode = null,
+        decimal Quantity = 10m,
+        bool ExecuteStockMutation = true,
+        string? LotNumber = null,
+        string? Note = null,
+        int? SourceLocationId = null,
+        string? SourceLocationCode = null,
+        int? TargetLocationId = null,
+        string? TargetLocationCode = null);
+
+    [HttpPost("execute-replenishment")]
+    [HttpPost("/api/inventory-control/execute-replenishment")]
+    [IdempotentCommand("Inventory.ExecuteReplenishment")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public async Task<IActionResult> ExecuteReplenishment(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteReplenishmentRequest? request = null,
+        [FromServices] ErpKhoDbContext? dbSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var effectiveDb = dbSvc ?? db;
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+
+        var warehouseId = request?.WarehouseId;
+        var targetWarehouseId = warehouseId ?? 1;
+        if (effectiveAuth != null)
+        {
+            if (warehouseId.HasValue)
+            {
+                await effectiveAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            }
+            else
+            {
+                var accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                if (accessibleIds.Count == 0)
+                    return Forbid();
+                targetWarehouseId = accessibleIds.First();
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        var replenishmentId = $"REPL-{now:yyyyMMdd-HHmm}";
+        var requestedFromCode = !string.IsNullOrWhiteSpace(request?.FromLocationCode)
+            ? request.FromLocationCode.Trim()
+            : (!string.IsNullOrWhiteSpace(request?.SourceLocationCode) ? request.SourceLocationCode.Trim() : "BIN-A01-02");
+        var requestedToCode = !string.IsNullOrWhiteSpace(request?.ToLocationCode)
+            ? request.ToLocationCode.Trim()
+            : (!string.IsNullOrWhiteSpace(request?.TargetLocationCode) ? request.TargetLocationCode.Trim() : "BIN-A01-01");
+        var requestedQty = request?.Quantity > 0m ? request.Quantity : 10m;
+        var shouldMutate = request?.ExecuteStockMutation ?? true;
+
+        int? resolvedProductId = request?.ProductId;
+        var resolvedProductCode = request?.ProductCode?.Trim() ?? string.Empty;
+        var resolvedProductName = "Sản phẩm bổ sung kệ nhặt";
+        int? resolvedFromLocationId = request?.FromLocationId ?? request?.SourceLocationId;
+        int? resolvedToLocationId = request?.ToLocationId ?? request?.TargetLocationId;
+        var resolvedFromCode = requestedFromCode;
+        var resolvedToCode = requestedToCode;
+        var movedQuantity = 0m;
+        decimal? sourceRemainingQuantity = null;
+        decimal? targetResultingQuantity = null;
+        var stockMutated = false;
+        int? ledgerTransactionId = null;
+
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : (int?)null;
+
+        if (effectiveDb != null)
+        {
+            if (!resolvedProductId.HasValue && !string.IsNullOrWhiteSpace(resolvedProductCode))
+            {
+                var prod = await effectiveDb.Products.AsNoTracking()
+                    .Where(p => p.Code == resolvedProductCode)
+                    .Select(p => new { p.Id, p.Code, p.Name })
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (prod != null)
+                {
+                    resolvedProductId = prod.Id;
+                    resolvedProductCode = prod.Code.Trim();
+                    resolvedProductName = prod.Name.Trim();
+                }
+            }
+            else if (resolvedProductId.HasValue)
+            {
+                var prod = await effectiveDb.Products.AsNoTracking()
+                    .Where(p => p.Id == resolvedProductId.Value)
+                    .Select(p => new { p.Id, p.Code, p.Name })
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (prod != null)
+                {
+                    resolvedProductCode = prod.Code.Trim();
+                    resolvedProductName = prod.Name.Trim();
+                }
+            }
+
+            if (!resolvedFromLocationId.HasValue)
+            {
+                var fromLoc = await effectiveDb.WarehouseLocations.AsNoTracking()
+                    .Where(l => l.WarehouseId == targetWarehouseId && l.Code == requestedFromCode)
+                    .Select(l => new { l.Id, l.Code })
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (fromLoc != null)
+                {
+                    resolvedFromLocationId = fromLoc.Id;
+                    resolvedFromCode = fromLoc.Code.Trim();
+                }
+            }
+
+            if (!resolvedToLocationId.HasValue)
+            {
+                var toLoc = await effectiveDb.WarehouseLocations.AsNoTracking()
+                    .Where(l => l.WarehouseId == targetWarehouseId && l.Code == requestedToCode)
+                    .Select(l => new { l.Id, l.Code })
+                    .FirstOrDefaultAsync(cancellationToken)
+                    ?? await effectiveDb.WarehouseLocations.AsNoTracking()
+                        .Where(l => l.WarehouseId == targetWarehouseId && l.IsActive && l.IsPickable && !l.IsSystemManaged && l.Id != resolvedFromLocationId)
+                        .OrderBy(l => l.Code)
+                        .Select(l => new { l.Id, l.Code })
+                        .FirstOrDefaultAsync(cancellationToken);
+                if (toLoc != null)
+                {
+                    resolvedToLocationId = toLoc.Id;
+                    resolvedToCode = toLoc.Code.Trim();
+                }
+            }
+
+            if (shouldMutate)
+            {
+                var isRelational = effectiveDb.Database.IsRelational();
+                await using var tx = isRelational && effectiveDb.Database.CurrentTransaction == null
+                    ? await effectiveDb.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken)
+                    : null;
+
+                try
+                {
+                    var stockQuery = effectiveDb.InventoryStocks
+                        .Include(s => s.Product)
+                        .Include(s => s.Location)
+                        .Where(s => s.WarehouseId == targetWarehouseId &&
+                                    s.Status == InventoryStatus.Available &&
+                                    s.Quantity - s.ReservedQuantity > 0);
+
+                    if (resolvedProductId.HasValue)
+                        stockQuery = stockQuery.Where(s => s.ProductId == resolvedProductId.Value);
+                    if (resolvedFromLocationId.HasValue)
+                        stockQuery = stockQuery.Where(s => s.LocationId == resolvedFromLocationId.Value);
+
+                    var sourceStock = await stockQuery
+                        .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+                        .ThenBy(s => s.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (sourceStock == null && resolvedFromLocationId.HasValue)
+                    {
+                        var fallbackQuery = effectiveDb.InventoryStocks
+                            .Include(s => s.Product)
+                            .Include(s => s.Location)
+                            .Where(s => s.WarehouseId == targetWarehouseId &&
+                                        s.Status == InventoryStatus.Available &&
+                                        s.Quantity - s.ReservedQuantity > 0 &&
+                                        s.LocationId != resolvedToLocationId);
+                        if (resolvedProductId.HasValue)
+                            fallbackQuery = fallbackQuery.Where(s => s.ProductId == resolvedProductId.Value);
+                        sourceStock = await fallbackQuery
+                            .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+                            .ThenBy(s => s.Id)
+                            .FirstOrDefaultAsync(cancellationToken);
+                    }
+
+                    if (sourceStock != null && resolvedToLocationId.HasValue && sourceStock.LocationId != resolvedToLocationId.Value)
+                    {
+                        var available = sourceStock.Quantity - sourceStock.ReservedQuantity;
+                        var moveQty = Math.Min(requestedQty, available);
+                        if (moveQty > 0m)
+                        {
+                            resolvedProductId = sourceStock.ProductId;
+                            if (sourceStock.Product != null)
+                            {
+                                resolvedProductCode = sourceStock.Product.Code.Trim();
+                                resolvedProductName = sourceStock.Product.Name.Trim();
+                            }
+                            resolvedFromLocationId = sourceStock.LocationId;
+                            if (sourceStock.Location != null)
+                                resolvedFromCode = sourceStock.Location.Code.Trim();
+
+                            sourceStock.Quantity -= moveQty;
+                            sourceStock.LastUpdated = now;
+                            sourceRemainingQuantity = sourceStock.Quantity;
+
+                            var targetStock = await effectiveDb.InventoryStocks
+                                .FirstOrDefaultAsync(s =>
+                                    s.WarehouseId == targetWarehouseId &&
+                                    s.ProductId == sourceStock.ProductId &&
+                                    s.LocationId == resolvedToLocationId.Value &&
+                                    s.LotId == sourceStock.LotId &&
+                                    s.SerialId == sourceStock.SerialId &&
+                                    s.Status == InventoryStatus.Available,
+                                    cancellationToken);
+
+                            if (targetStock != null)
+                            {
+                                targetStock.Quantity += moveQty;
+                                targetStock.LastUpdated = now;
+                                targetResultingQuantity = targetStock.Quantity;
+                            }
+                            else
+                            {
+                                targetStock = new ERP.Domain.Entities.InventoryStock
+                                {
+                                    WarehouseId = targetWarehouseId,
+                                    ProductId = sourceStock.ProductId,
+                                    LocationId = resolvedToLocationId.Value,
+                                    LotId = sourceStock.LotId,
+                                    SerialId = sourceStock.SerialId,
+                                    Status = InventoryStatus.Available,
+                                    Quantity = moveQty,
+                                    ReservedQuantity = 0m,
+                                    LastUpdated = now
+                                };
+                                effectiveDb.InventoryStocks.Add(targetStock);
+                                targetResultingQuantity = targetStock.Quantity;
+                            }
+
+                            var moveTx = new ERP.Domain.Entities.InventoryTransaction
+                            {
+                                ProductId = sourceStock.ProductId,
+                                WarehouseId = targetWarehouseId,
+                                LocationId = resolvedToLocationId.Value,
+                                FromLocationId = sourceStock.LocationId,
+                                ToLocationId = resolvedToLocationId.Value,
+                                LotId = sourceStock.LotId,
+                                SerialId = sourceStock.SerialId,
+                                InventoryStatus = InventoryStatus.Available,
+                                FromInventoryStatus = InventoryStatus.Available,
+                                ToInventoryStatus = InventoryStatus.Available,
+                                TransactionType = TransactionType.Move,
+                                Quantity = moveQty,
+                                ReferenceId = sourceStock.Id,
+                                ReferenceType = "Replenishment",
+                                TransactionDate = now,
+                                CreatedBy = actorUserId ?? 1,
+                                Note = $"{replenishmentId}: Bổ sung kệ nhặt từ {resolvedFromCode} sang {resolvedToCode}"
+                            };
+                            effectiveDb.InventoryTransactions.Add(moveTx);
+                            await effectiveDb.SaveChangesAsync(cancellationToken);
+
+                            movedQuantity = moveQty;
+                            stockMutated = true;
+                            ledgerTransactionId = moveTx.Id;
+                        }
+                    }
+
+                    if (tx != null) await tx.CommitAsync(cancellationToken);
+                }
+                catch
+                {
+                    if (tx != null) await tx.RollbackAsync(CancellationToken.None);
+                    throw;
+                }
+            }
+
+            effectiveDb.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = targetWarehouseId,
+                EntityName = "InventoryControl",
+                EntityId = resolvedProductId,
+                Action = "ExecuteReplenishment",
+                NewValues = $"{replenishmentId}|{resolvedFromCode}->{resolvedToCode}|{movedQuantity:0.##}",
+                Reason = !string.IsNullOrWhiteSpace(request?.Note)
+                    ? request.Note.Trim()
+                    : $"Bổ sung kệ nhặt từ {resolvedFromCode} sang {resolvedToCode} (SL: {movedQuantity:0.##})",
+                Result = "Success",
+                Timestamp = now
+            });
+            await effectiveDb.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new
+        {
+            replenishmentId,
+            warehouseId = targetWarehouseId,
+            productId = resolvedProductId,
+            productCode = string.IsNullOrWhiteSpace(resolvedProductCode) ? "SKU-REPL-AUTO" : resolvedProductCode,
+            productName = resolvedProductName,
+            fromLocationId = resolvedFromLocationId,
+            fromLocationCode = resolvedFromCode,
+            toLocationId = resolvedToLocationId,
+            toLocationCode = resolvedToCode,
+            movedQuantity,
+            sourceRemainingQuantity,
+            targetResultingQuantity,
+            stockMutated,
+            executed = stockMutated,
+            executedStockMutation = stockMutated,
+            ledgerTransactionId,
+            status = "Đã thực thi bổ sung tồn kho từ kệ dự trữ sang kệ nhặt",
+            statusLabel = "Đã thực thi bổ sung tồn kho từ kệ dự trữ sang kệ nhặt",
+            executedAtUtc = now
+        });
+    }
+
     [HttpGet("advanced-planning-suite")]
     [HttpGet("/api/inventory-control/advanced-planning-suite")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]

@@ -25,7 +25,21 @@ public sealed record YardDwellMonitorItemDto(
     int DwellMinutes,
     string SlaState);
 
-public sealed record DispatchCrossdockRequest(int? WarehouseId = null, string? DockDoorCode = null, string? InboundAppointmentCode = null, string? OutboundReferenceCode = null);
+public sealed record DispatchCrossdockRequest(
+    int? WarehouseId = null,
+    string? DockDoorCode = null,
+    string? InboundAppointmentCode = null,
+    string? OutboundReferenceCode = null,
+    int? ProductId = null,
+    string? ProductCode = null,
+    int? SourceLocationId = null,
+    string? SourceLocationCode = null,
+    int? TargetLocationId = null,
+    string? TargetLocationCode = null,
+    string? FromLocationCode = null,
+    string? ToLocationCode = null,
+    decimal? Quantity = null,
+    bool ExecuteStockMutation = false);
 
 [Authorize]
 [ApiController]
@@ -263,6 +277,140 @@ public sealed class DockYardController(
 
         var now = DateTime.UtcNow;
         var dispatchId = $"XDOCK-{now:yyyyMMdd-HHmm}";
+        var executedStockMutation = false;
+        var routedQuantity = 0m;
+        decimal? sourceRemainingQuantity = null;
+        decimal? targetResultingQuantity = null;
+        int? ledgerTransactionId = null;
+
+        if (db != null && (request?.ExecuteStockMutation == true || request?.ProductId.HasValue == true || !string.IsNullOrWhiteSpace(request?.ProductCode)))
+        {
+            var actorId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var parsedUid) ? parsedUid : 1;
+
+            var resolvedProdId = request?.ProductId;
+            if (!resolvedProdId.HasValue && !string.IsNullOrWhiteSpace(request?.ProductCode))
+            {
+                var pCode = request.ProductCode.Trim();
+                resolvedProdId = await db.Products.AsNoTracking()
+                    .Where(p => p.Code == pCode)
+                    .Select(p => (int?)p.Id)
+                    .FirstOrDefaultAsync(token);
+            }
+
+            var resolvedFromLocId = request?.SourceLocationId;
+            var fromCode = !string.IsNullOrWhiteSpace(request?.FromLocationCode)
+                ? request.FromLocationCode.Trim()
+                : (!string.IsNullOrWhiteSpace(request?.SourceLocationCode) ? request.SourceLocationCode.Trim() : "RECEIVING");
+            if (!resolvedFromLocId.HasValue)
+            {
+                resolvedFromLocId = await db.WarehouseLocations.AsNoTracking()
+                    .Where(l => l.WarehouseId == targetWarehouseId && l.Code == fromCode)
+                    .Select(l => (int?)l.Id)
+                    .FirstOrDefaultAsync(token);
+            }
+
+            var resolvedToLocId = request?.TargetLocationId;
+            var toCode = !string.IsNullOrWhiteSpace(request?.ToLocationCode)
+                ? request.ToLocationCode.Trim()
+                : (!string.IsNullOrWhiteSpace(request?.TargetLocationCode) ? request.TargetLocationCode.Trim() : "STAGING");
+            if (!resolvedToLocId.HasValue)
+            {
+                resolvedToLocId = await db.WarehouseLocations.AsNoTracking()
+                    .Where(l => l.WarehouseId == targetWarehouseId && (l.Code == toCode || l.Code == "SHIPPING_STAGE" || l.Code == "STAGING"))
+                    .OrderBy(l => l.Code == toCode ? 0 : 1)
+                    .Select(l => (int?)l.Id)
+                    .FirstOrDefaultAsync(token);
+            }
+
+            var reqQty = request?.Quantity > 0m ? request.Quantity.Value : 1m;
+            var stockQuery = db.InventoryStocks
+                .Where(s => s.WarehouseId == targetWarehouseId &&
+                            s.Status == ERP.Domain.Enums.InventoryStatus.Available &&
+                            s.Quantity - s.ReservedQuantity > 0);
+            if (resolvedProdId.HasValue)
+                stockQuery = stockQuery.Where(s => s.ProductId == resolvedProdId.Value);
+            if (resolvedFromLocId.HasValue)
+                stockQuery = stockQuery.Where(s => s.LocationId == resolvedFromLocId.Value);
+
+            var fromStock = await stockQuery
+                .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+                .ThenBy(s => s.Id)
+                .FirstOrDefaultAsync(token);
+
+            if (fromStock != null && resolvedToLocId.HasValue && fromStock.LocationId != resolvedToLocId.Value)
+            {
+                var moveQty = Math.Min(reqQty, fromStock.Quantity - fromStock.ReservedQuantity);
+                if (moveQty > 0m)
+                {
+                    fromStock.Quantity -= moveQty;
+                    fromStock.LastUpdated = now;
+                    sourceRemainingQuantity = fromStock.Quantity;
+
+                    var toStock = await db.InventoryStocks
+                        .FirstOrDefaultAsync(s =>
+                            s.WarehouseId == targetWarehouseId &&
+                            s.ProductId == fromStock.ProductId &&
+                            s.LocationId == resolvedToLocId.Value &&
+                            s.LotId == fromStock.LotId &&
+                            s.SerialId == fromStock.SerialId &&
+                            s.Status == ERP.Domain.Enums.InventoryStatus.Available,
+                            token);
+
+                    if (toStock != null)
+                    {
+                        toStock.Quantity += moveQty;
+                        toStock.LastUpdated = now;
+                        targetResultingQuantity = toStock.Quantity;
+                    }
+                    else
+                    {
+                        toStock = new ERP.Domain.Entities.InventoryStock
+                        {
+                            WarehouseId = targetWarehouseId,
+                            ProductId = fromStock.ProductId,
+                            LocationId = resolvedToLocId.Value,
+                            LotId = fromStock.LotId,
+                            SerialId = fromStock.SerialId,
+                            Status = ERP.Domain.Enums.InventoryStatus.Available,
+                            Quantity = moveQty,
+                            ReservedQuantity = 0m,
+                            LastUpdated = now
+                        };
+                        db.InventoryStocks.Add(toStock);
+                        targetResultingQuantity = toStock.Quantity;
+                    }
+
+                    var xdTx = new ERP.Domain.Entities.InventoryTransaction
+                    {
+                        ProductId = fromStock.ProductId,
+                        WarehouseId = targetWarehouseId,
+                        LocationId = resolvedToLocId.Value,
+                        FromLocationId = fromStock.LocationId,
+                        ToLocationId = resolvedToLocId.Value,
+                        LotId = fromStock.LotId,
+                        SerialId = fromStock.SerialId,
+                        InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                        FromInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                        ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                        TransactionType = ERP.Domain.Enums.TransactionType.Move,
+                        Quantity = moveQty,
+                        ReferenceId = fromStock.Id,
+                        ReferenceType = "CrossDock",
+                        TransactionDate = now,
+                        CreatedBy = actorId,
+                        Note = $"{dispatchId}: Trung chuyển thẳng Cross-Dock ({inboundAppointmentCode} -> {outboundReferenceCode})"
+                    };
+                    db.InventoryTransactions.Add(xdTx);
+                    await db.SaveChangesAsync(token);
+
+                    executedStockMutation = true;
+                    routedQuantity = moveQty;
+                    ledgerTransactionId = xdTx.Id;
+                }
+            }
+        }
         if (db != null)
         {
             var actorUserId = int.TryParse(
@@ -275,7 +423,8 @@ public sealed class DockYardController(
                 Action = "DockYard.DispatchCrossdock",
                 EntityName = "CrossdockDispatch",
                 NewValues = $"{dispatchId}|{inboundAppointmentCode}->{outboundReferenceCode}",
-                Result = "Đã phát lệnh điều phối trung chuyển thẳng",
+                Reason = $"Đã phát lệnh điều phối trung chuyển thẳng ({dispatchId}: {inboundAppointmentCode} -> {outboundReferenceCode})",
+                Result = "Success",
                 Timestamp = now
             });
             await db.SaveChangesAsync(token);
@@ -292,6 +441,14 @@ public sealed class DockYardController(
             dispatchStatus = "Đã phát lệnh điều phối trung chuyển thẳng",
             priorityLabel = "Ưu tiên cao",
             status = "Đã phát lệnh điều phối trung chuyển thẳng",
+            statusLabel = "Đã phát lệnh điều phối trung chuyển thẳng",
+            executedStockMutation,
+            ledgerUpdated = executedStockMutation,
+            routedQuantity,
+            movedQuantity = routedQuantity,
+            sourceRemainingQuantity,
+            targetResultingQuantity,
+            ledgerTransactionId,
             routedAtUtc = now,
         });
     }

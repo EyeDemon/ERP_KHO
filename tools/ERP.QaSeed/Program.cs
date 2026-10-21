@@ -1594,8 +1594,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 new HandlingUnit
                 {
                     HuCode = "HU-QA-001",
-                    Barcode = "HU-QA-001",
-                    Sscc = "003893000000000018",
+                    Barcode = "BC-HU-QA-001",
+                    Sscc = "008938505000000018",
                     WarehouseId = primaryWarehouse.Id,
                     Type = HandlingUnitType.Carton,
                     Status = HandlingUnitStatus.InUse,
@@ -1636,8 +1636,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             hu = new HandlingUnit
             {
                 HuCode = "HU-QA-001",
-                Barcode = "HU-QA-001",
-                Sscc = "003893000000000018",
+                Barcode = "BC-HU-QA-001",
+                Sscc = "008938505000000018",
                 WarehouseId = primaryWarehouse.Id,
                 PackingSessionId = packingSession.Id,
                 Type = HandlingUnitType.Carton,
@@ -1654,8 +1654,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         else
         {
             hu.HuCode = "HU-QA-001";
-            hu.Barcode = "HU-QA-001";
-            hu.Sscc = "003893000000000018";
+            hu.Barcode = "BC-HU-QA-001";
+            hu.Sscc = "008938505000000018";
             hu.Type = HandlingUnitType.Carton;
             hu.Status = HandlingUnitStatus.InUse;
             hu.GrossWeightKg = 8.4m;
@@ -3009,7 +3009,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                     {
                         HuCode = "HU-QA-002",
                         Barcode = "BC-HU-QA-002",
-                        Sscc = "003893000000000025",
+                        Sscc = "008938505000000025",
                         WarehouseId = primaryWarehouse.Id,
                         Type = HandlingUnitType.Carton,
                         Status = HandlingUnitStatus.Shipped,
@@ -3050,7 +3050,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
                 {
                     HuCode = "HU-QA-002",
                     Barcode = "BC-HU-QA-002",
-                    Sscc = "003893000000000025",
+                    Sscc = "008938505000000025",
                     WarehouseId = primaryWarehouse.Id,
                     PackingSessionId = packQa002.Id,
                     Type = HandlingUnitType.Carton,
@@ -3078,6 +3078,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             {
                 hu2.HuCode = "HU-QA-002";
                 hu2.Barcode = "BC-HU-QA-002";
+                hu2.Sscc = "008938505000000025";
                 hu2.WarehouseId = primaryWarehouse.Id;
                 hu2.ParentHandlingUnitId = null;
                 hu2.Status = HandlingUnitStatus.Shipped;

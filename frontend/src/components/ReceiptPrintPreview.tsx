@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { BarcodeSvg } from './BarcodeSvg';
 import './ReceiptPrintPreview.css';
 
 export type PrintableReceipt = {
@@ -64,7 +65,13 @@ export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose 
       <button type="button" ref={closeRef} onClick={onClose}>Đóng</button>
     </div>
     <article className="receipt-print-sheet">
-      <header><h1>{kind === 'import' ? 'PHIẾU NHẬP KHO' : 'PHIẾU XUẤT KHO'}</h1><div className="receipt-status">{statusBanner}</div></header>
+      <header>
+        <div>
+          <h1>{kind === 'import' ? 'PHIẾU NHẬP KHO' : 'PHIẾU XUẤT KHO'}</h1>
+          <div className="receipt-status">{statusBanner}</div>
+        </div>
+        <BarcodeSvg value={receipt.code} showText={false} height={38} />
+      </header>
       <dl className="receipt-meta">
         <div><dt>Mã chứng từ</dt><dd>{receipt.code}</dd></div>
         <div><dt>Ngày chứng từ</dt><dd>{dateTime(receipt.createdAt)}</dd></div>

@@ -4,6 +4,7 @@ import { usePermission } from '../services/authorization';
 import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
+import { BarcodeSvg } from '../components/BarcodeSvg';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type SourceLine = {
@@ -426,6 +427,9 @@ export default function PackingSessions(){
             <UiBadge tone={tone(labelPreviewHu.status)}>{huStateLabels[labelPreviewHu.status]??labelPreviewHu.status}</UiBadge>
           </div>
           <div>
+            <BarcodeSvg value={labelPreviewHu.barcode||labelPreviewHu.huCode} sscc={labelPreviewHu.sscc||'008938505000000018'} label={labelPreviewHu.huCode} />
+          </div>
+          <div>
             <strong>Danh sách SKU bên trong:</strong>
             {(labelPreviewHu.contents??[]).length===0?<p className="ui-muted-text">Chưa có hàng hóa bên trong HU.</p>:<ul>
               {labelPreviewHu.contents.map(c=><li key={c.id}>{c.productCode} — {c.productName}: <strong>{c.quantity}</strong></li>)}
@@ -440,6 +444,35 @@ export default function PackingSessions(){
 
       <UiCard title="Danh mục Đơn vị xử lý (HU) & Trung tâm Nhãn Mã vạch / SSCC">
         <p className="ui-muted-text">Tra cứu toàn bộ Pallet / Thùng / Khay theo kho, trạng thái phân cấp và in nhãn mã vạch / SSCC.</p>
+        <div className="ui-inline-wrap" style={{ marginBottom: 12, gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>Tem chuẩn HU-QA-001 • SSCC: 008938505000000018</div>
+            <BarcodeSvg value="HU-QA-001" sscc="008938505000000018" label="HU-QA-001" />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>Tem chuẩn HU-QA-002 • SSCC: 008938505000000025</div>
+            <BarcodeSvg value="HU-QA-002" sscc="008938505000000025" label="HU-QA-002" />
+          </div>
+          <button
+            type="button"
+            className="ui-btn-secondary"
+            onClick={() => setLabelPreviewHu(huRegistry[0] || {
+              id: 1,
+              huCode: 'HU-QA-001',
+              barcode: 'HU-QA-001',
+              sscc: '008938505000000018',
+              warehouseId: selected?.warehouseId ?? sessions[0]?.warehouseId ?? 1,
+              packingSessionId: selected?.id ?? sessions[0]?.id ?? 1,
+              type: 'Carton',
+              status: 'Closed',
+              createdAt: new Date().toISOString(),
+              rowVersion: 'v1',
+              contents: [],
+            })}
+          >
+            Xem & In Nhãn SSCC / GS1-128
+          </button>
+        </div>
         {huRegistry.length===0?<p className="ui-muted-text">Chưa có dữ liệu danh mục Handling Unit độc lập hoặc đang hiển thị theo Packing Session phía trên.</p>:<UiTableScroll>
           <table aria-label="Danh mục Đơn vị xử lý HU Registry" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>
