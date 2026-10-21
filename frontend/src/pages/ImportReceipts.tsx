@@ -494,7 +494,7 @@ const ImportReceipts = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, width: '100%' }}>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tổng số phiếu nhập</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.length}</strong></div>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang soạn / Nhận tại cửa</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'Draft' || r.status === 'Received' || r.status.startsWith('Discrepancy')).length}</strong></div>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang chờ QC / Chờ duyệt</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'QcPending' || r.status === 'QcCompleted' || r.status === 'ReadyToPost').length}</strong></div>
+              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang chờ Kiểm định / Chờ duyệt</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'QcPending' || r.status === 'QcCompleted' || r.status === 'ReadyToPost').length}</strong></div>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Phiếu đã hủy</div><strong style={{ fontSize: 15, color: '#b91c1c' }}>{receipts.filter(r => r.status === 'Cancelled').length}</strong></div>
             </div>
@@ -549,7 +549,7 @@ const ImportReceipts = () => {
                   .finally(() => setGovernanceBusy(false));
               }}
             >
-              Khởi tạo Hồ sơ Kiểm định RMA / Hàng hoàn trả
+              Khởi tạo Hồ sơ Kiểm định Hàng hoàn trả
             </button>
             <button
               type="button"
@@ -730,7 +730,7 @@ const ImportReceipts = () => {
           </UiCard>
         )}
 
-        <UiCard title="Cấu hình Thông số Thực thi RMA & Phân luồng Tân trang / Xuất trả NCC">
+        <UiCard title="Cấu hình Thông số Kiểm định Hàng hoàn trả & Phân luồng Tân trang / Xuất trả Nhà cung cấp">
           <div className="import-form-grid">
             <label className="ui-stack">
               <span>Sản phẩm kiểm định hoàn trả</span>

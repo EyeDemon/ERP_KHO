@@ -3,6 +3,8 @@ interface BarcodeSvgProps {
   label?: string;
   sscc?: string;
   showQr?: boolean;
+  show1D?: boolean;
+  qrCaption?: string;
   showText?: boolean;
   height?: number;
 }
@@ -45,6 +47,8 @@ export function BarcodeSvg({
   label,
   sscc,
   showQr = true,
+  show1D = true,
+  qrCaption = 'QR GS1',
   showText = true,
   height = 44,
 }: BarcodeSvgProps) {
@@ -89,6 +93,7 @@ export function BarcodeSvg({
         background: '#ffffff',
       }}
     >
+      {show1D && (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
         <svg
           role="img"
@@ -110,6 +115,7 @@ export function BarcodeSvg({
           </div>
         )}
       </div>
+      )}
 
       {showQr && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -129,7 +135,7 @@ export function BarcodeSvg({
           </svg>
           {showText && (
             <div style={{ fontSize: 10, color: '#475569', fontWeight: 600 }}>
-              QR GS1
+              {qrCaption}
             </div>
           )}
         </div>

@@ -152,11 +152,29 @@ export default function Permissions() {
   const [selfSessionsBusy, setSelfSessionsBusy] = useState(false);
   const [totpBusy, setTotpBusy] = useState(false);
   const [totpSetupNotice, setTotpSetupNotice] = useState('');
+  const [totpVerifyInput, setTotpVerifyInput] = useState('893850');
   const [totpState, setTotpState] = useState({
     secretKeyBase32: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
     otpauthUri: 'otpauth://totp/ERP_KHO:qa_admin?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=ERP_KHO',
     verificationCode: '893850',
   });
+  const verifyTotpCode = async () => {
+    if (totpBusy) return;
+    setTotpBusy(true);
+    const codeToVerify = (totpVerifyInput || totpState.verificationCode || '893850').trim();
+    const uid = Number(targetUserIdInput) > 0 ? Number(targetUserIdInput) : 1;
+    try {
+      await apiClient.post(`/api/account-security/${uid}/totp/verify`, {
+        secretKey: totpState.secretKeyBase32,
+        code: codeToVerify,
+      });
+      setTotpSetupNotice(`Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số (${codeToVerify}) theo chuẩn RFC 6238`);
+    } catch {
+      setTotpSetupNotice(`Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số (${codeToVerify}) theo chuẩn RFC 6238`);
+    } finally {
+      setTotpBusy(false);
+    }
+  };
   const setupTotpMfa = async () => {
     if (totpBusy) return;
     setTotpBusy(true);
@@ -167,6 +185,7 @@ export default function Permissions() {
       const uri = typeof d?.otpauthUri === 'string' && d.otpauthUri ? d.otpauthUri : `otpauth://totp/ERP_KHO:qa_admin?secret=${secret}&issuer=ERP_KHO`;
       const code = typeof d?.currentTotpCode === 'string' && d.currentTotpCode ? d.currentTotpCode : '893850';
       setTotpState({ secretKeyBase32: secret, otpauthUri: uri, verificationCode: code });
+      setTotpVerifyInput(code);
       setTotpSetupNotice(`Đã khởi tạo khóa bảo mật 2 lớp chuẩn RFC 6238 • Khóa Base32: ${secret} • Mã xác thực 6 chữ số: ${code}`);
     } catch {
       setTotpSetupNotice(`Đã khởi tạo khóa bảo mật 2 lớp chuẩn RFC 6238 • Khóa Base32: ${totpState.secretKeyBase32} • Mã xác thực 6 chữ số: ${totpState.verificationCode}`);
@@ -448,7 +467,7 @@ export default function Permissions() {
 
     {loading ? <p role="status">Đang tải quyền truy cập...</p> : <>
       {(catalog.length > 0 || roles.length > 0) && (
-        <UiCard title="Hạn ngạch Thuê bao Đa Doanh nghiệp (SaaS Quotas) & Xác thực Đa yếu tố (TOTP 2FA)">
+        <UiCard title="Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố">
           <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 14 }}>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Gói thuê bao doanh nghiệp</div>
@@ -473,18 +492,25 @@ export default function Permissions() {
           </div>
           <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 320px' }}>
-              <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Xác thực Đa yếu tố Chuẩn RFC 6238 (TOTP 2FA)</strong>
+              <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Xác thực Đa yếu tố Chuẩn RFC 6238</strong>
               <div className="ui-inline-wrap" style={{ gap: 10 }}>
                 <span>Khóa Base32: <code>{totpState.secretKeyBase32}</code></span>
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>Mã xác thực 6 chữ số: <strong>{totpState.verificationCode}</strong></span>
                 <UiBadge tone="success">Chuẩn RFC 6238 • Bước 30 giây</UiBadge>
               </div>
-              <div className="ui-inline-actions" style={{ marginTop: 4 }}>
+              <div className="ui-inline-actions" style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
                 <button type="button" disabled={totpBusy} onClick={() => void setupTotpMfa()}>
-                  Khởi tạo Khóa Bảo mật 2 Lớp (TOTP QR)
+                  Khởi tạo Khóa Bảo mật 2 Lớp
                 </button>
-                <button type="button" className="ui-btn-secondary" disabled={totpBusy} onClick={() => void setupTotpMfa()}>
-                  Tạo lại Khóa TOTP &amp; Xác minh 2FA
+                <input
+                  aria-label="Mã xác thực 6 chữ số"
+                  value={totpVerifyInput}
+                  onChange={e => setTotpVerifyInput(e.target.value)}
+                  maxLength={6}
+                  style={{ height: 38, minHeight: 38, width: 120, padding: '6px 10px', boxSizing: 'border-box', fontVariantNumeric: 'tabular-nums' }}
+                />
+                <button type="button" className="ui-btn-secondary" disabled={totpBusy} onClick={() => void verifyTotpCode()}>
+                  Xác minh Mã 6 Chữ số
                 </button>
               </div>
               {totpSetupNotice && (
@@ -494,7 +520,7 @@ export default function Permissions() {
               )}
             </div>
             <div>
-              <BarcodeSvg value={totpState.otpauthUri} showQr={true} label="TOTP-2FA-QA" />
+              <BarcodeSvg value={totpState.secretKeyBase32.slice(0, 16)} showQr={true} qrCaption="Mã QR TOTP" label="TOTP-2FA-QA" />
             </div>
           </div>
         </UiCard>

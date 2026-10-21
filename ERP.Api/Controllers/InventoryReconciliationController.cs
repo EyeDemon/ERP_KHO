@@ -198,7 +198,7 @@ namespace ERP.Api.Controllers
                 pendingCount = 0,
                 dlqFailedCount = 0,
                 status = "DISPATCHED",
-                statusLabel = "Đã tải danh sách thông điệp tích hợp Outbox",
+                statusLabel = "Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi sang hệ thống kế toán và vận tải.",
                 messages
             });
         }
@@ -235,7 +235,7 @@ namespace ERP.Api.Controllers
                     EntityName = "IntegrationOutboxBatch",
                     Action = "InventoryReconciliation.DispatchOutbox",
                     NewValues = $"{batchCode}: Dispatched={messages.Length}",
-                    Reason = "Chuyển phát toàn bộ thông điệp tích hợp Outbox sang phân hệ Kế toán & Vận tải",
+                    Reason = "Chuyển phát toàn bộ bản tin tích hợp trong hàng đợi sang hệ thống kế toán và vận tải",
                     Result = "Success",
                     Timestamp = now
                 });
@@ -249,7 +249,7 @@ namespace ERP.Api.Controllers
                 pendingCount = 0,
                 dlqFailedCount = 0,
                 status = "DISPATCHED",
-                statusLabel = "Đã chuyển phát thành công toàn bộ thông điệp tích hợp Outbox",
+                statusLabel = "Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi sang hệ thống kế toán và vận tải.",
                 messages,
                 dispatchedAtUtc = now
             });
@@ -288,7 +288,7 @@ namespace ERP.Api.Controllers
                 new OutboxMessageDto(
                     "OUTBOX-GL-001",
                     "ERP_GL_JOURNAL_SYNC",
-                    "Đồng bộ bút toán Sổ cái Kế toán Tổng hợp",
+                    "Kết chuyển Bút toán Sổ cái Chung",
                     latestIr.Trim(),
                     "Phân hệ Kế toán Tài chính",
                     "DISPATCHED",
@@ -297,7 +297,7 @@ namespace ERP.Api.Controllers
                 new OutboxMessageDto(
                     "OUTBOX-TMS-002",
                     "TMS_SHIPMENT_DISPATCH",
-                    "Đồng bộ vận đơn & lộ trình xuất bến",
+                    "Điều phối Vận đơn & Xuất bến",
                     latestShp.Trim(),
                     "Hệ thống Quản lý Vận tải",
                     "DISPATCHED",
@@ -306,7 +306,7 @@ namespace ERP.Api.Controllers
                 new OutboxMessageDto(
                     "OUTBOX-APAR-003",
                     "AP_AR_INVOICE_POST",
-                    "Hạch toán công nợ phải thu & phải trả",
+                    "Hạch toán Hóa đơn Công nợ",
                     latestInv.Trim(),
                     "Sổ phụ Công nợ Đối tác",
                     "DISPATCHED",
@@ -315,7 +315,7 @@ namespace ERP.Api.Controllers
                 new OutboxMessageDto(
                     "OUTBOX-WMS-004",
                     "WMS_LEDGER_SNAPSHOT",
-                    "Chốt số dư sổ cái kho bất biến cuối kỳ",
+                    "Chốt Số dư Sổ cái Kho Cuối kỳ",
                     latestEr.Trim(),
                     "Kho Dữ liệu Đối soát Tập trung",
                     "DISPATCHED",

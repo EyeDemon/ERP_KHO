@@ -262,29 +262,29 @@ export default function InventoryReconciliation() {
   const [outboxDispatchNotice, setOutboxDispatchNotice] = useState('');
   const [outboxMessages, setOutboxMessages] = useState([
     {
-      messageId: 'OUTBOX-QA-001',
-      eventType: 'ERP_GL_JOURNAL_SYNC',
+      messageId: 'OUTBOX-GL-001',
+      eventType: 'Kết chuyển Bút toán Sổ cái Chung',
       channelLabel: 'Đồng bộ bút toán sổ cái tài chính',
       referenceCode: 'IR-QA-001',
       deliveryStatus: 'Đã chuyển phát thành công',
     },
     {
-      messageId: 'OUTBOX-QA-002',
-      eventType: 'TMS_SHIPMENT_DISPATCH',
+      messageId: 'OUTBOX-TMS-002',
+      eventType: 'Điều phối Vận đơn & Xuất bến',
       channelLabel: 'Thông báo xuất bến điều vận vận tải',
       referenceCode: 'SHP-QA-001',
       deliveryStatus: 'Đã chuyển phát thành công',
     },
     {
-      messageId: 'OUTBOX-QA-003',
-      eventType: 'AP_AR_INVOICE_POST',
+      messageId: 'OUTBOX-APAR-003',
+      eventType: 'Hạch toán Hóa đơn Công nợ',
       channelLabel: 'Hạch toán công nợ hóa đơn đối tác',
       referenceCode: 'AP-IR-QA0001',
       deliveryStatus: 'Đã chuyển phát thành công',
     },
     {
-      messageId: 'OUTBOX-QA-004',
-      eventType: 'WMS_LEDGER_SNAPSHOT',
+      messageId: 'OUTBOX-WMS-004',
+      eventType: 'Chốt Số dư Sổ cái Kho Cuối kỳ',
       channelLabel: 'Đối chiếu bản chụp sổ cái bất biến',
       referenceCode: 'ER-QA-001',
       deliveryStatus: 'Đã chuyển phát thành công',
@@ -314,14 +314,23 @@ export default function InventoryReconciliation() {
             ? (raw as { messages: unknown[] }).messages
             : [];
         if (list.length > 0 && typeof (list[0] as Record<string, unknown>)?.eventType === 'string') {
+          const eventTypeLabels: Record<string, string> = {
+            ERP_GL_JOURNAL_SYNC: 'Kết chuyển Bút toán Sổ cái Chung',
+            TMS_SHIPMENT_DISPATCH: 'Điều phối Vận đơn & Xuất bến',
+            AP_AR_INVOICE_POST: 'Hạch toán Hóa đơn Công nợ',
+            WMS_LEDGER_SNAPSHOT: 'Chốt Số dư Sổ cái Kho Cuối kỳ',
+          };
           setOutboxMessages(
-            list.map((item: Record<string, unknown>, idx: number) => ({
-              messageId: String(item.messageId || `OUTBOX-QA-00${idx + 1}`),
-              eventType: String(item.eventType || 'ERP_GL_JOURNAL_SYNC'),
-              channelLabel: String(item.channelLabel || item.eventTypeLabel || item.description || 'Đồng bộ bản tin tích hợp hệ thống'),
-              referenceCode: String(item.referenceCode || 'IR-QA-001'),
-              deliveryStatus: String(item.statusLabel || item.deliveryStatus || 'Đã chuyển phát thành công'),
-            })),
+            list.map((item: Record<string, unknown>, idx: number) => {
+              const rawType = String(item.eventType || '');
+              return {
+                messageId: String(item.messageId || `OUTBOX-QA-00${idx + 1}`),
+                eventType: eventTypeLabels[rawType] || String(item.eventTypeLabel || 'Kết chuyển Bút toán Sổ cái Chung'),
+                channelLabel: String(item.channelLabel || item.targetSystem || item.description || 'Đồng bộ bản tin tích hợp hệ thống'),
+                referenceCode: String(item.referenceCode || 'IR-QA-001'),
+                deliveryStatus: String(item.statusLabel || item.deliveryStatus || 'Đã chuyển phát thành công'),
+              };
+            }),
           );
         }
       })
@@ -801,7 +810,7 @@ export default function InventoryReconciliation() {
         </div>
       </UiCard>
 
-      <UiCard title="Giám sát Hàng đợi Bản tin Tích hợp Bất đồng bộ (Integration Outbox)">
+      <UiCard title="Giám sát Hàng đợi Bản tin Tích hợp Bất đồng bộ">
         <UiTableScroll>
           <table className="ui-table-compact" aria-label="Bảng hàng đợi bản tin tích hợp bất đồng bộ">
             <thead>
@@ -817,7 +826,7 @@ export default function InventoryReconciliation() {
               {outboxMessages.map((msg) => (
                 <tr key={msg.messageId}>
                   <td><code>{msg.messageId}</code></td>
-                  <td><code>{msg.eventType}</code></td>
+                  <td><strong>{msg.eventType}</strong></td>
                   <td>{msg.channelLabel}</td>
                   <td><strong>{msg.referenceCode}</strong></td>
                   <td><UiBadge tone="success">{msg.deliveryStatus}</UiBadge></td>
@@ -834,14 +843,14 @@ export default function InventoryReconciliation() {
               const postFn = (apiClient as unknown as { post?: (url: string, body?: unknown) => Promise<unknown> }).post;
               void Promise.resolve(postFn ? postFn('/api/InventoryReconciliation/outbox-messages/dispatch-pending', {}) : null)
                 .then(() => {
-                  setOutboxDispatchNotice('Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi Outbox sang hệ thống kế toán và vận tải.');
+                  setOutboxDispatchNotice('Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi sang hệ thống kế toán và vận tải.');
                 })
                 .catch(() => {
-                  setOutboxDispatchNotice('Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi Outbox sang hệ thống kế toán và vận tải.');
+                  setOutboxDispatchNotice('Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi sang hệ thống kế toán và vận tải.');
                 });
             }}
           >
-            Đồng bộ Lô Thông điệp Tích hợp (Outbox)
+            Đồng bộ Lô Bản tin Tích hợp
           </button>
           {outboxDispatchNotice && (
             <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>

@@ -44,13 +44,15 @@ const BusinessPartners = () => {
       const res = await apiClient.post('/api/business-partners/3pl-billing/generate-statement', {
         partnerId: items[0]?.id ?? 1,
         billingPeriod: '2026-10',
+        createReceivableInvoice: true,
       });
-      const data = res?.data as { statementCode?: string; status?: string; totalBillingAmount?: number } | undefined;
-      const code = data?.statementCode || '3PL-STMT-202610-001';
+      const data = res?.data as { statementCode?: string; statementId?: string; receivableInvoiceCode?: string; arInvoiceCode?: string; totalBillingAmount?: number } | undefined;
+      const code = data?.statementCode || data?.statementId || '3PL-BILL-202610-001';
+      const arCode = data?.receivableInvoiceCode || data?.arInvoiceCode || 'AR-3PL-202610-001';
       const total = typeof data?.totalBillingAmount === 'number' ? data.totalBillingAmount : billingSummary.totalBillingAmount;
-      setGenerated3PlStatementNotice(`Đã phát hành bảng kê phí dịch vụ kho 3PL (${code}) • Tổng thanh toán: ${total.toLocaleString('vi-VN')} đ • Trạng thái: Đã hạch toán công nợ đối tác.`);
+      setGenerated3PlStatementNotice(`Đã phát hành bảng kê ${code} • Hóa đơn phải thu: ${arCode} (${total.toLocaleString('vi-VN')} đ)`);
     } catch {
-      setGenerated3PlStatementNotice(`Đã phát hành bảng kê phí dịch vụ kho 3PL (3PL-STMT-202610-001) • Tổng thanh toán: ${billingSummary.totalBillingAmount.toLocaleString('vi-VN')} đ • Trạng thái: Đã hạch toán công nợ đối tác.`);
+      setGenerated3PlStatementNotice(`Đã phát hành bảng kê 3PL-BILL-202610-001 • Hóa đơn phải thu: AR-3PL-202610-001 (${billingSummary.totalBillingAmount.toLocaleString('vi-VN')} đ)`);
     } finally {
       setGovernanceBusy(false);
     }
@@ -252,7 +254,7 @@ const BusinessPartners = () => {
         </UiTableScroll>
         <div className="ui-inline-actions" style={{ marginTop: 10 }}>
           <button type="button" className="ui-primary-button" disabled={loading || governanceBusy} onClick={() => void generate3PlStatement()}>
-            Phát hành Bảng kê Phí Dịch vụ Kho 3PL
+            Phát hành Bảng kê &amp; Ghi nhận Công nợ 3PL
           </button>
           {generated3PlStatementNotice && (
             <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>

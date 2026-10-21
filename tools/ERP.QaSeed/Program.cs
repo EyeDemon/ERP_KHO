@@ -3743,8 +3743,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         ("Di chuyển vị trí nội bộ", "InventoryLocationMovement", 9001, "Điều chuyển nội bộ MOV-QA-9001 (10 thùng linh kiện) từ TIEP-NHAN sang kệ lưu trữ BIN-A01-01", 5),
         ("Phong tỏa lô hàng chờ kiểm định", "InventoryLock", activeQcLock.Id, "Phong tỏa lô LOT-QA-002 tại kệ BIN-A01-01 chờ kiểm định chất lượng định kỳ", 4),
         ("Phê duyệt điều chỉnh kiểm kê", "Stocktake", 1, "Phê duyệt biên bản kiểm kê định kỳ STK-QA-001 tại Kho Chính TP.HCM", 3),
-        ("Phát hành bảng kê phí dịch vụ 3PL", "ThreePlBillingStatement", dualPartner.Id, "Phát hành bảng kê phí dịch vụ lưu kho & tác nghiệp 3PL từ sổ cái thực tế cho đối tác DT-QA-01", 2),
-        ("Đồng bộ thông điệp tích hợp Outbox", "IntegrationOutboxBatch", irQa001.Id, "Chuyển phát thành công lô thông điệp tích hợp Outbox (IR-QA-001, ER-QA-001, SHP-QA-001, AP-IR-QA0001)", 1)
+        ("Phát hành bảng kê phí dịch vụ 3PL", "ThreePlBillingStatement", dualPartner.Id, "Phát hành bảng kê phí dịch vụ lưu kho & hạch toán hóa đơn phải thu 3PL cho đối tác DT-QA-01", 2),
+        ("Đồng bộ bản tin tích hợp hệ thống", "IntegrationOutboxBatch", irQa001.Id, "Chuyển phát thành công lô bản tin tích hợp hệ thống (IR-QA-001, ER-QA-001, SHP-QA-001, AP-IR-QA0001)", 1)
     };
 
     foreach (var op in operationalAudits)

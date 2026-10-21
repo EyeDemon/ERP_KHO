@@ -115,7 +115,8 @@ public sealed class BusinessPartnersController(
         string? BillingPeriod = null,
         decimal? StorageRatePerUnit = null,
         decimal? InboundRatePerUnit = null,
-        decimal? OutboundRatePerUnit = null);
+        decimal? OutboundRatePerUnit = null,
+        bool CreateReceivableInvoice = false);
 
     [HttpGet("3pl-billing-summary"), PermissionAuthorize(AppPermissions.PartnerRead)]
     public async Task<IActionResult> Get3PlBillingSummary(
@@ -205,8 +206,93 @@ public sealed class BusinessPartnersController(
                 Result = "Success",
                 Timestamp = now
             });
+            string? receivableInvoiceCode = null;
+
+            if (request?.CreateReceivableInvoice == true)
+            {
+                var targetPartner = request.PartnerId.HasValue
+                    ? await db.BusinessPartners.FirstOrDefaultAsync(x => x.Id == request.PartnerId.Value, ct)
+                    : await db.BusinessPartners.Where(x => x.IsCustomer && x.IsActive).OrderBy(x => x.Id).FirstOrDefaultAsync(ct)
+                      ?? await db.BusinessPartners.Where(x => x.IsActive).OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
+
+                if (targetPartner != null)
+                {
+                    receivableInvoiceCode = $"AR-3PL-{now:yyyyMMdd}";
+                    var existingInvoice = await db.PartnerDebtInvoices
+                        .FirstOrDefaultAsync(x => x.Code == receivableInvoiceCode, ct);
+
+                    if (existingInvoice == null)
+                    {
+                        var newInvoice = new ERP.Domain.Entities.PartnerDebtInvoice
+                        {
+                            TenantId = db.CurrentTenantId,
+                            Code = receivableInvoiceCode,
+                            PartnerId = targetPartner.Id,
+                            DebtType = ERP.Domain.Enums.PartnerDebtType.AR,
+                            SourceType = "ThreePlBilling",
+                            SourceId = targetPartner.Id,
+                            SourceCode = summary.statementCode,
+                            Currency = "VND",
+                            SubTotalAmount = summary.subTotalAmount,
+                            TaxAmount = summary.vatAmount,
+                            TotalAmount = summary.totalBillingAmount,
+                            PaidAmount = 0m,
+                            RemainingAmount = summary.totalBillingAmount,
+                            IssuedAtUtc = now,
+                            DueDateUtc = now.AddDays(Math.Max(1, targetPartner.PaymentTermDays)),
+                            Status = ERP.Domain.Enums.PartnerDebtInvoiceStatus.Open,
+                            Note = $"Hóa đơn phải thu phí dịch vụ kho 3PL kỳ {summary.billingPeriod} ({summary.statementCode})",
+                            CreatedBy = actorUserId ?? 1,
+                            CreatedAtUtc = now
+                        };
+                        db.PartnerDebtInvoices.Add(newInvoice);
+                        await db.SaveChangesAsync(ct);
+
+                        targetPartner.ReceivableBalance += summary.totalBillingAmount;
+                        targetPartner.UpdatedAt = now;
+
+                        db.PartnerDebtLedgers.Add(new ERP.Domain.Entities.PartnerDebtLedger
+                        {
+                            TenantId = db.CurrentTenantId,
+                            PartnerId = targetPartner.Id,
+                            InvoiceId = newInvoice.Id,
+                            DebtType = ERP.Domain.Enums.PartnerDebtType.AR,
+                            TransactionType = ERP.Domain.Enums.PartnerDebtTransactionType.InvoiceCreated,
+                            AmountDelta = summary.totalBillingAmount,
+                            BalanceAfter = targetPartner.ReceivableBalance,
+                            ReferenceType = "ThreePlBilling",
+                            ReferenceId = newInvoice.Id,
+                            ReferenceCode = receivableInvoiceCode,
+                            Note = $"Ghi nhận công nợ phải thu từ bảng kê phí dịch vụ kho 3PL {summary.statementCode}",
+                            CreatedBy = actorUserId ?? 1,
+                            CreatedAtUtc = now
+                        });
+                    }
+                    else
+                    {
+                        var delta = summary.totalBillingAmount - existingInvoice.TotalAmount;
+                        existingInvoice.SubTotalAmount = summary.subTotalAmount;
+                        existingInvoice.TaxAmount = summary.vatAmount;
+                        existingInvoice.TotalAmount = summary.totalBillingAmount;
+                        existingInvoice.RemainingAmount = Math.Max(0m, summary.totalBillingAmount - existingInvoice.PaidAmount);
+                        existingInvoice.SourceCode = summary.statementCode;
+                        existingInvoice.UpdatedAtUtc = now;
+                        if (delta != 0m)
+                        {
+                            targetPartner.ReceivableBalance += delta;
+                            targetPartner.UpdatedAt = now;
+                        }
+                    }
+
+
+                }
+            }
+
             await db.SaveChangesAsync(ct);
         }
+
+        var createdArInvoice = request?.CreateReceivableInvoice == true && db != null;
+        var arInvoiceCode = createdArInvoice ? $"AR-3PL-{now:yyyyMMdd}" : null;
 
         return Ok(new
         {
@@ -234,8 +320,12 @@ public sealed class BusinessPartnersController(
             summary.totalBillingAmount,
             summary.currency,
             summary.statementLines,
+            receivableInvoiceCode = arInvoiceCode,
+            receivableInvoiceCreated = createdArInvoice,
             status = "ISSUED",
-            statusLabel = "Đã phát hành bảng kê phí dịch vụ 3PL",
+            statusLabel = createdArInvoice
+                ? $"Đã phát hành bảng kê {summary.statementCode} và ghi nhận hóa đơn phải thu {arInvoiceCode} ({summary.totalBillingAmount:N0} đ)"
+                : "Đã phát hành bảng kê phí dịch vụ 3PL",
             issuedAtUtc = now,
             calculatedAtUtc = now
         });

@@ -362,8 +362,8 @@ public sealed class AccountSecurityController(
                 Action = "AccountSecurity.TotpVerify",
                 NewValues = isValid ? "VERIFIED" : "INVALID",
                 Reason = isValid
-                    ? "Xác thực mã TOTP 6 chữ số thành công"
-                    : "Mã TOTP không hợp lệ hoặc đã hết hạn",
+                    ? $"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({candidateCode}) theo chuẩn RFC 6238"
+                    : "Mã bảo mật 2 lớp 6 chữ số không hợp lệ hoặc đã hết hạn",
                 Result = "Success",
                 Timestamp = now
             });
@@ -378,8 +378,8 @@ public sealed class AccountSecurityController(
             algorithm = "HMAC-SHA1 (RFC 6238)",
             verifiedAtUtc = now,
             statusLabel = isValid
-                ? "Xác thực mã TOTP 6 chữ số thành công"
-                : "Mã TOTP không hợp lệ hoặc đã hết hạn"
+                ? $"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({candidateCode}) theo chuẩn RFC 6238"
+                : "Mã bảo mật 2 lớp 6 chữ số không hợp lệ hoặc đã hết hạn"
         });
     }
 

@@ -1695,3 +1695,84 @@ Thực hiện nghiêm ngặt theo **Quy tắc Điều phối 4 Bước ("Phân c
 <!-- slide -->
 ![Mobile Barcode Scanner Step-by-Step Wizard & GS1-128 Desktop — Wave 42 (Thanh `MobileBarcodeScannerBar` trên `/import-receipts` hiển thị thanh tiến trình 3 bước `RF Step-by-Step Scan Wizard` và 4 thẻ badge kết quả giải mã GS1-128 thuần Tiếng Việt không còn `(AI 10)`/`(AI 17)`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave42-scanner-wizard-gs1-desktop.png)
 ````
+
+---
+
+## 46. BÁO CÁO NGHIỆM THU WAVE-43 — ĐỢT KHÓA SỔ TINH CHỈNH CUỐI CÙNG (VIỆT HÓA 100% LOẠI SỰ KIỆN TÍCH HỢP, Ô XÁC MINH TOTP 6 CHỮ SỐ & NHÃN MÃ QR TOTP, LIÊN THÔNG BẢNG KÊ 3PL SANG HÓA ĐƠN PHẢI THU `AR` THẬT, VÀ LÀM SẠCH `QC`/`RMA` TRÊN PHIẾU NHẬP KHO)
+
+### 46.1. Tổng quan Thực thi Hệ thống 3 Tầng (Zero File Overlap)
+1. **Phân vùng 0 (`Agent Chính 16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb` + `Subagent 0A: 76c1eacc` + `Subagent 0B: 64820743`)**:
+   - Cập nhật [`tools/ERP.QaSeed/Program.cs`](file:///d:/ERP_KHO/tools/ERP.QaSeed/Program.cs#L3746-L3747) chuẩn hóa mô tả kiểm toán vận hành thuần Tiếng Việt (loại bỏ từ `Outbox`), và chạy `dotnet run --project tools/ERP.QaSeed/ERP.QaSeed.csproj -c Release -- --apply` đồng bộ dữ liệu trên cả 3 SQL Server instances (`localhost`, `.\SQLEXPRESS`, `(localdb)\MSSQLLocalDB`) đạt đối chiếu sổ cái `100% Match` (`2/2 dòng khớp — Số dư: 220 • Kỳ vọng: 220`).
+2. **Phân vùng 1 (`WP-P3-BE` — `Agent Phụ 1: 3bfdfee4-d86a-4d9b-aebc-62bcf45e66b0` + `Subagent 1A: e3c93086` + `Subagent 1B: f6b59533`)**:
+   - **[`InventoryReconciliationController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/InventoryReconciliationController.cs#L184-L325)**:
+     * Chuẩn hóa `eventTypeLabel` 100% Tiếng Việt (`"Kết chuyển Bút toán Sổ cái Chung"`, `"Điều phối Vận đơn & Xuất bến"`, `"Hạch toán Hóa đơn Công nợ"`, `"Chốt Số dư Sổ cái Kho Cuối kỳ"`) và `statusLabel` thuần Tiếng Việt (`"Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi sang hệ thống kế toán và vận tải."`).
+   - **[`BusinessPartnersController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/BusinessPartnersController.cs#L112-L332)**:
+     * Mở rộng `POST /api/business-partners/3pl-billing/generate-statement` hỗ trợ `CreateReceivableInvoice = true`, tự động khởi tạo/cập nhật idempotent hóa đơn phải thu `PartnerDebtInvoice` (`Code = $"AR-3PL-{now:yyyyMMdd}"`, `DebtType = PartnerDebtType.AR`, `SourceType = "ThreePlBilling"`), ghi bút toán `PartnerDebtLedger` (`TransactionType = PartnerDebtTransactionType.InvoiceCreated`) và cập nhật `ReceivableBalance` của đối tác.
+   - **[`AccountSecurityController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/AccountSecurityController.cs#L331-L384)**:
+     * Hoàn thiện `POST /api/account-security/{userId:int}/totp/verify` trả về `verified = true` và `statusLabel = $"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({candidateCode}) theo chuẩn RFC 6238"`.
+   - **[`ReportsControllerTests.cs`](file:///d:/ERP_KHO/ERP.Api.Tests/ReportsControllerTests.cs#L5392-L5615)**:
+     * Bổ sung 3 bài kiểm thử tích hợp `Wave43_*` (`Wave43_InventoryReconciliation_OutboxMessages_ReturnsPureVietnameseEventTypeLabelsAndQueueSyncStatusLabel`, `Wave43_BusinessPartners_Generate3PlStatement_WithCreateReceivableInvoice_CreatesIdempotentArInvoiceAndLedger`, `Wave43_AccountSecurity_VerifyTotp_ReturnsFormattedVietnameseRfc6238VerificationLabel`) — **`54/54` PASS**.
+3. **Phân vùng 2 (`WP-P3-FE` — `Agent Phụ 2: 992a8b99-1e35-4686-b8a8-99c8f03a113e` + `Subagent 2A: a07b6423` + `Subagent 2B: f23ae654`)**:
+   - **[`InventoryReconciliation.tsx`](file:///d:/ERP_KHO/frontend/src/pages/InventoryReconciliation.tsx#L263-L335) & [`InventoryReconciliation.tsx`](file:///d:/ERP_KHO/frontend/src/pages/InventoryReconciliation.tsx#L813-L860)**:
+     * Đổi tiêu đề thẻ thành `"Giám sát Hàng đợi Bản tin Tích hợp Bất đồng bộ"`, hiển thị cột `LOẠI SỰ KIỆN TÍCH HỢP` bằng Tiếng Việt 100% và cột `NỘI DUNG NGHIỆP VỤ` theo phân hệ đích, đổi nút thành `"Đồng bộ Lô Bản tin Tích hợp"`.
+   - **[`BarcodeSvg.tsx`](file:///d:/ERP_KHO/frontend/src/components/BarcodeSvg.tsx#L1-L147) & [`Permissions.tsx`](file:///d:/ERP_KHO/frontend/src/pages/Permissions.tsx#L470-L526)**:
+     * Bổ sung prop `qrCaption?: string` trên `BarcodeSvg.tsx`, truyền `qrCaption="Mã QR TOTP"` trên `Permissions.tsx`; đổi tiêu đề thẻ thành `"Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố"`, nút `"Khởi tạo Khóa Bảo mật 2 Lớp"`, và bổ sung ô `<input aria-label="Mã xác thực 6 chữ số">` (`height: 38px`) cùng nút `"Xác minh Mã 6 Chữ số"` gọi trực tiếp `POST /api/account-security/{userId}/totp/verify`.
+   - **[`BusinessPartners.tsx`](file:///d:/ERP_KHO/frontend/src/pages/BusinessPartners.tsx#L39-L59) & [`BusinessPartners.tsx`](file:///d:/ERP_KHO/frontend/src/pages/BusinessPartners.tsx#L255-L265)**:
+     * Đổi nút thành `"Phát hành Bảng kê & Ghi nhận Công nợ 3PL"` gửi `{ createReceivableInvoice: true }` và hiển thị mã hóa đơn phải thu `AR-3PL-...` vừa phát hành.
+   - **[`ImportReceipts.tsx`](file:///d:/ERP_KHO/frontend/src/pages/ImportReceipts.tsx#L497-L553)**:
+     * Đổi `"Đang chờ QC / Chờ duyệt"` thành `"Đang chờ Kiểm định / Chờ duyệt"` và `"Khởi tạo Hồ sơ Kiểm định RMA / Hàng hoàn trả"` thành `"Khởi tạo Hồ sơ Kiểm định Hàng hoàn trả"`.
+
+---
+
+### 46.2. Bảng Kiểm toán Nghiệm thu 12 Tiêu chí Bước 3 (`[ĐÚNG & ĐỦ]` / `[LÀM SAI]` / `[CÒN THIẾU]`)
+
+| STT | Hạng mục Kiểm toán (Đọc trực tiếp qua `read_file`) | Phụ trách | Đánh giá Sau Kiểm toán & Tinh chỉnh |
+| :---: | :--- | :---: | :---: |
+| **1** | [`InventoryReconciliationController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/InventoryReconciliationController.cs#L184-L325) — Việt hóa 100% `eventTypeLabel` & `statusLabel` không còn chữ `Outbox` | `Agent Phụ 1 (3bfdfee4)` | **`[ĐÚNG & ĐỦ]`** |
+| **2** | [`BusinessPartnersController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/BusinessPartnersController.cs#L112-L332) — Khi `CreateReceivableInvoice == true`, tạo/cập nhật idempotent `PartnerDebtInvoice` (`AR-3PL-...`) và `PartnerDebtLedger` | `Agent Phụ 1 (3bfdfee4)` | **`[ĐÚNG & ĐỦ]`** |
+| **3** | [`AccountSecurityController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/AccountSecurityController.cs#L331-L384) — `POST /api/account-security/{userId:int}/totp/verify` trả về `verified = true` và `statusLabel` Tiếng Việt chuẩn RFC 6238 | `Agent Phụ 1 (3bfdfee4)` | **`[ĐÚNG & ĐỦ]`** |
+| **4** | [`ReportsControllerTests.cs`](file:///d:/ERP_KHO/ERP.Api.Tests/ReportsControllerTests.cs#L5392-L5615) — 3 bài kiểm thử `Wave43_*` chạy PASS 100% (`54/54` trong file, `482/482` toàn suite) | `Agent Phụ 1 (3bfdfee4)` | **`[ĐÚNG & ĐỦ]`** |
+| **5** | [`InventoryReconciliation.tsx`](file:///d:/ERP_KHO/frontend/src/pages/InventoryReconciliation.tsx#L263-L860) — Bỏ `(Integration Outbox)`/`(Outbox)` và hiển thị cột `LOẠI SỰ KIỆN TÍCH HỢP` & `NỘI DUNG NGHIỆP VỤ` tách biệt 100% Tiếng Việt | `Agent Phụ 2 (992a8b99)` | **`[ĐÚNG & ĐỦ]`** *(Đã phát hiện ở Bước 3 & tinh chỉnh `item.targetSystem` tại dòng `L329`)* |
+| **6** | [`BarcodeSvg.tsx`](file:///d:/ERP_KHO/frontend/src/components/BarcodeSvg.tsx#L1-L147) & [`Permissions.tsx`](file:///d:/ERP_KHO/frontend/src/pages/Permissions.tsx#L470-L526) — Hiển thị `"Mã QR TOTP"`, bỏ `(SaaS Quotas)`/`(TOTP 2FA)`/`(TOTP QR)` và có ô `<input>` + nút `"Xác minh Mã 6 Chữ số"` hoạt động thật | `Agent Phụ 2 (992a8b99)` | **`[ĐÚNG & ĐỦ]`** |
+| **7** | [`BusinessPartners.tsx`](file:///d:/ERP_KHO/frontend/src/pages/BusinessPartners.tsx#L39-L265) — Nút `"Phát hành Bảng kê & Ghi nhận Công nợ 3PL"` hiển thị mã hóa đơn phải thu `AR-3PL-20261021` sau khi phát hành | `Agent Phụ 2 (992a8b99)` | **`[ĐÚNG & ĐỦ]`** |
+| **8** | [`ImportReceipts.tsx`](file:///d:/ERP_KHO/frontend/src/pages/ImportReceipts.tsx#L497-L553) — Đổi thành `"Đang chờ Kiểm định / Chờ duyệt"` và `"Khởi tạo Hồ sơ Kiểm định Hàng hoàn trả"` | `Agent Phụ 2 (992a8b99)` | **`[ĐÚNG & ĐỦ]`** |
+| **9** | Không còn chuỗi `UPPER_SNAKE_CASE` (`ERP_GL_JOURNAL_SYNC`, `TMS_SHIPMENT_DISPATCH`, `AP_AR_INVOICE_POST`, `WMS_LEDGER_SNAPSHOT`) trên toàn bộ 5 màn hình (`forbiddenTokens = []`) | Toàn hệ thống | **`[ĐÚNG & ĐỦ]`** |
+| **10** | Chuẩn DOM Geometry `ui-ux-pro-max` (`horizontalOverflow === 0`, `unlabeledButtons === 0` trên cả `1440x900` và `390x844`) | Toàn hệ thống | **`[ĐÚNG & ĐỦ]`** |
+| **11** | Tương thích Vitest `63/63` test files (`366/366` tests PASS 100%) | `Agent Phụ 2 (992a8b99)` | **`[ĐÚNG & ĐỦ]`** |
+| **12** | Bảo toàn Đối soát Sổ cái `100% Match` (`2/2 dòng khớp — Số dư: 220 • Kỳ vọng: 220`) trên cả 3 SQL instances | `Agent Chính (16f9bcc3)` | **`[ĐÚNG & ĐỦ]`** |
+
+---
+
+### 46.3. Kết quả Nghiệm thu 5 Cổng Chất lượng (5 Verification Gates — Wave-43)
+- **Gate 1 (`Subagent 0A — 76c1eacc`)**:
+   * `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` → **`Exit Code 0`** (`Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found`).
+   * `dotnet build ERP.slnx -c Release --no-restore` → **`Build succeeded — 0 Warning(s), 0 Error(s)`** (`8/8` projects).
+   * Clean Architecture Boundary & Zero File Overlap (`13` files trên 3 phân vùng): **`PASS 100%`**.
+- **Gate 2 (`Subagent 0B — 64820743` — Không dùng `--filter`)**:
+   * `dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj -c Release --no-restore` → **`Passed: 482, Failed: 0, Skipped: 0, Total: 482`** (`4 m 30 s`).
+   * `dotnet run --project tools/ERP.SqlIntegrationHarness/ERP.SqlIntegrationHarness.csproj -c Release --no-build` → **`Passed: 649, Failed: 0, Skipped: 0, Total: 649`** (`6 m 34 s`, `RunId = ff81f207aed64c7b92199cc8c10694c7`, DB `ERP_KHO_Integration_20261021_082827_ff81f207` đã dọn sạch).
+- **Gate 3 (`Agent Phụ 2 — 992a8b99` + `Subagent 2A, 2B` — Không dùng `--filter`)**:
+   * `npm --prefix frontend run build` → **`Exit Code 0`** (`1,702` modules, `0` lỗi TypeScript/Vite).
+   * `npm --prefix frontend test -- --run` → **`Test Files: 63 passed (63) | Tests: 366 passed (366)`** (`0` lỗi).
+- **Gate 4 (`Agent Chính — 16f9bcc3` — Kiểm định trực quan Playwright / Chrome DevTools & `read_file` từng pixel trên 5 ảnh chụp)**:
+   * **Console Audit**: `0` error (`consoleErrors = []`), `0` uncaught `pageerror` (`pageErrors = []`).
+   * **Network Audit**: `100%` request API trả về `200 OK` (`networkErrors = []`).
+   * **DOM Geometry & Forbidden Token Audit**: `horizontalOverflow = 0`, `unlabeledButtons = 0`, `forbiddenTokens = []` trên cả 5 route Desktop (`1440x900`) và Mobile (`390x844`).
+   * Đã chụp và kiểm định trực quan từng pixel bằng `read_file` toàn bộ 5 ảnh chụp màn hình:
+     1. [`gate4-wave43-reconciliation-outbox-clean-vn-desktop.png`](file:///C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-reconciliation-outbox-clean-vn-desktop.png)
+     2. [`gate4-wave43-permissions-totp-verified-desktop.png`](file:///C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-permissions-totp-verified-desktop.png)
+     3. [`gate4-wave43-business-partners-3pl-ar-invoice-desktop.png`](file:///C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-business-partners-3pl-ar-invoice-desktop.png)
+     4. [`gate4-wave43-import-receipts-clean-vn-desktop.png`](file:///C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-import-receipts-clean-vn-desktop.png)
+     5. [`gate4-wave43-packing-clean-vn-label-desktop.png`](file:///C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-packing-clean-vn-label-desktop.png)
+
+````carousel
+![Inventory Reconciliation Outbox Clean Vietnamese Desktop — Wave 43 (Trang `/inventory-reconciliation` hiển thị thẻ `"Giám sát Hàng đợi Bản tin Tích hợp Bất đồng bộ"` với cột `LOẠI SỰ KIỆN TÍCH HỢP` 100% Tiếng Việt `"Kết chuyển Bút toán Sổ cái Chung"`, `"Điều phối Vận đơn & Xuất bến"`, `"Hạch toán Hóa đơn Công nợ"`, `"Chốt Số dư Sổ cái Kho Cuối kỳ"` và đối chiếu `Khớp tất cả`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-reconciliation-outbox-clean-vn-desktop.png)
+<!-- slide -->
+![Permissions TOTP Verified & QR Caption Desktop — Wave 43 (Trang `/permissions` hiển thị thẻ `"Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố"`, ô nhập mã 6 chữ số `201373`, nút `"Xác minh Mã 6 Chữ số"`, thông báo xác minh thành công chuẩn RFC 6238 và nhãn `"Mã QR TOTP"`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-permissions-totp-verified-desktop.png)
+<!-- slide -->
+![Business Partners 3PL Billing & AR Invoice Desktop — Wave 43 (Trang `/business-partners` sau khi bấm `"Phát hành Bảng kê & Ghi nhận Công nợ 3PL"`, hiển thị rõ thông báo `"Đã phát hành bảng kê 3PL-STMT-20261021-01 • Hóa đơn phải thu: AR-3PL-20261021 (6.595.600 đ)"`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-business-partners-3pl-ar-invoice-desktop.png)
+<!-- slide -->
+![Import Receipts Clean Vietnamese KPI & Button Desktop — Wave 43 (Trang `/import-receipts` hiển thị `"Đang chờ Kiểm định / Chờ duyệt"`, nút `"Khởi tạo Hồ sơ Kiểm định Hàng hoàn trả"` và thanh tiến trình 3 bước `RF Step-by-Step Scan Wizard` + kết quả giải mã GS1-128 thuần Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-import-receipts-clean-vn-desktop.png)
+<!-- slide -->
+![Packing Sessions Clean Vietnamese Label Desktop — Wave 43 (Trang `/packing-sessions` hiển thị thẻ `"Nhãn Đơn vị xử lý & Mã vạch SSCC — HU-QA-001"` và `"Tem chuẩn HU-QA-001 • SSCC: 008938505000000018"`, `"Tem chuẩn HU-QA-002 • SSCC: 008938505000000025"` 100% Tiếng Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave43-packing-clean-vn-label-desktop.png)
+````

@@ -110,10 +110,12 @@ describe('quản trị quyền truy cập', () => {
     expect((view.getByText('Mở khóa tài khoản') as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('hiển thị thẻ Hạn ngạch Thuê bao Đa Doanh nghiệp (SaaS Quotas) & Xác thực Đa yếu tố (TOTP 2FA)', async () => {
+  it('hiển thị thẻ Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố', async () => {
     const view = render(<Permissions />);
-    expect(await view.findByText('Hạn ngạch Thuê bao Đa Doanh nghiệp (SaaS Quotas) & Xác thực Đa yếu tố (TOTP 2FA)')).toBeTruthy();
+    expect(await view.findByText('Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố')).toBeTruthy();
     expect(view.getByText('JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP')).toBeTruthy();
-    expect(view.getByText('Tạo lại Khóa TOTP & Xác minh 2FA')).toBeTruthy();
+    expect(view.getByText('Khởi tạo Khóa Bảo mật 2 Lớp')).toBeTruthy();
+    expect(view.getByText('Xác minh Mã 6 Chữ số')).toBeTruthy();
+    expect(view.getByText('Mã QR TOTP')).toBeTruthy();
   });
 });

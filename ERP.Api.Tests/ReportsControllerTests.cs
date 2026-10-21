@@ -5281,7 +5281,7 @@ namespace ERP.Api.Tests
             {
                 var root = doc.RootElement;
                 root.GetProperty("verified").GetBoolean().Should().BeTrue();
-                root.GetProperty("statusLabel").GetString().Should().Be("Xác thực mã TOTP 6 chữ số thành công");
+                root.GetProperty("statusLabel").GetString().Should().Be($"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({currentTotpCode}) theo chuẩn RFC 6238");
             }
 
             db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
@@ -5380,13 +5380,237 @@ namespace ERP.Api.Tests
                 var root = doc.RootElement;
                 root.GetProperty("dispatchedCount").GetInt32().Should().Be(4);
                 root.GetProperty("pendingCount").GetInt32().Should().Be(0);
-                root.GetProperty("statusLabel").GetString().Should().Be("Đã chuyển phát thành công toàn bộ thông điệp tích hợp Outbox");
+                root.GetProperty("statusLabel").GetString().Should().Be("Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi sang hệ thống kế toán và vận tải.");
             }
 
             db.AuditLogs.Should().ContainSingle(a =>
                 a.EntityName == "IntegrationOutboxBatch" &&
                 a.Action == "InventoryReconciliation.DispatchOutbox" &&
                 a.Result == "Success");
+        }
+
+        [Fact]
+        public async Task Wave43_InventoryReconciliation_OutboxMessages_ReturnsPureVietnameseEventTypeLabelsAndQueueSyncStatusLabel()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.ImportReceipts.Add(new ERP.Domain.Entities.ImportReceipt
+            {
+                Id = 4301,
+                Code = "IR-QA-001",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Posted,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow
+            });
+            db.ExportReceipts.Add(new ERP.Domain.Entities.ExportReceipt
+            {
+                Id = 4302,
+                Code = "ER-QA-001",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Dispatched,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow
+            });
+            db.Shipments.Add(new ERP.Domain.Entities.Shipment
+            {
+                Id = 4303,
+                ShipmentCode = "SHP-QA-001",
+                WarehouseId = 1,
+                SourceType = "SalesOrder",
+                SourceId = 1,
+                SourceCode = "SO-QA-001",
+                Status = ERP.Domain.Enums.ShipmentStatus.Dispatched,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow
+            });
+            db.PartnerDebtInvoices.Add(new ERP.Domain.Entities.PartnerDebtInvoice
+            {
+                Id = 4304,
+                Code = "AP-IR-QA0001",
+                PartnerId = 1,
+                DebtType = ERP.Domain.Enums.PartnerDebtType.AP,
+                SourceType = "ImportReceipt",
+                SourceId = 4301,
+                SourceCode = "IR-QA-001",
+                TotalAmount = 5000000m,
+                PaidAmount = 0m,
+                RemainingAmount = 5000000m,
+                Status = ERP.Domain.Enums.PartnerDebtInvoiceStatus.Open,
+                CreatedBy = 1,
+                CreatedAtUtc = DateTime.UtcNow,
+                IssuedAtUtc = DateTime.UtcNow,
+                DueDateUtc = DateTime.UtcNow.AddDays(30)
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var controller = new InventoryReconciliationController(
+                new Mock<IInventoryReconciliationQueryService>().Object,
+                db,
+                warehouseAuth.Object);
+
+            var listRes = await controller.GetOutboxMessages(warehouseId: 1, cancellationToken: default);
+            var listOk = listRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(listOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("statusLabel").GetString().Should().Be("Đã đồng bộ toàn bộ 4/4 bản tin tích hợp trong hàng đợi sang hệ thống kế toán và vận tải.");
+                var messages = root.GetProperty("messages").EnumerateArray().ToList();
+                var byEventType = messages.ToDictionary(
+                    m => m.GetProperty("eventType").GetString()!,
+                    m => m.GetProperty("eventTypeLabel").GetString()!);
+
+                byEventType["ERP_GL_JOURNAL_SYNC"].Should().Be("Kết chuyển Bút toán Sổ cái Chung");
+                byEventType["TMS_SHIPMENT_DISPATCH"].Should().Be("Điều phối Vận đơn & Xuất bến");
+                byEventType["AP_AR_INVOICE_POST"].Should().Be("Hạch toán Hóa đơn Công nợ");
+                byEventType["WMS_LEDGER_SNAPSHOT"].Should().Be("Chốt Số dư Sổ cái Kho Cuối kỳ");
+            }
+        }
+
+        [Fact]
+        public async Task Wave43_BusinessPartners_Generate3PlStatement_WithCreateReceivableInvoice_CreatesIdempotentArInvoiceAndLedger()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.BusinessPartners.Add(new ERP.Domain.Entities.BusinessPartner
+            {
+                Id = 4301,
+                Code = "BP-3PL-W43",
+                Name = "Khách hàng 3PL Wave 43",
+                IsCustomer = true,
+                IsSupplier = false,
+                IsActive = true,
+                PaymentTermDays = 30,
+                ReceivableBalance = 0m
+            });
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 4311,
+                WarehouseId = 1,
+                ProductId = 1,
+                LocationId = 1,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 100m,
+                ReservedQuantity = 0m,
+                LastUpdated = DateTime.UtcNow
+            });
+            db.InventoryTransactions.AddRange(
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 4321,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 50m,
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 4322,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 20m,
+                    TransactionDate = DateTime.UtcNow,
+                    CreatedBy = 1
+                });
+            await db.SaveChangesAsync();
+
+            var controller = new BusinessPartnersController(new Mock<IBusinessPartnerService>().Object, db);
+            var req = new BusinessPartnersController.Generate3PlStatementRequest(
+                PartnerId: 4301,
+                WarehouseId: 1,
+                BillingPeriod: "2026-10",
+                CreateReceivableInvoice: true);
+
+            var firstRes = await controller.Generate3PlStatement(req, default);
+            var firstOk = firstRes.Should().BeOfType<OkObjectResult>().Subject;
+            var expectedInvoiceCode = $"AR-3PL-{DateTime.UtcNow:yyyyMMdd}";
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(firstOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("receivableInvoiceCreated").GetBoolean().Should().BeTrue();
+                root.GetProperty("receivableInvoiceCode").GetString().Should().Be(expectedInvoiceCode);
+                root.GetProperty("totalBillingAmount").GetDecimal().Should().Be(2288000m);
+                root.GetProperty("statusLabel").GetString().Should().Contain("Đã phát hành bảng kê").And.Contain(expectedInvoiceCode);
+            }
+
+            // Call a second time to verify idempotency (no duplicate invoice or double-counted ReceivableBalance)
+            var secondRes = await controller.Generate3PlStatement(req, default);
+            secondRes.Should().BeOfType<OkObjectResult>();
+
+            var invoices = await db.PartnerDebtInvoices.Where(x => x.Code == expectedInvoiceCode).ToListAsync();
+            invoices.Should().ContainSingle();
+            invoices[0].DebtType.Should().Be(ERP.Domain.Enums.PartnerDebtType.AR);
+            invoices[0].SourceType.Should().Be("ThreePlBilling");
+            invoices[0].TotalAmount.Should().Be(2288000m);
+            invoices[0].RemainingAmount.Should().Be(2288000m);
+            invoices[0].Status.Should().Be(ERP.Domain.Enums.PartnerDebtInvoiceStatus.Open);
+
+            var partner = await db.BusinessPartners.SingleAsync(x => x.Id == 4301);
+            partner.ReceivableBalance.Should().Be(2288000m);
+
+            var ledgers = await db.PartnerDebtLedgers.Where(x => x.ReferenceCode == expectedInvoiceCode).ToListAsync();
+            ledgers.Should().ContainSingle();
+            ledgers[0].AmountDelta.Should().Be(2288000m);
+            ledgers[0].BalanceAfter.Should().Be(2288000m);
+            db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
+        }
+
+        [Fact]
+        public async Task Wave43_AccountSecurity_VerifyTotp_ReturnsFormattedVietnameseRfc6238VerificationLabel()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Users.Add(new ERP.Domain.Entities.User
+            {
+                Id = 4301,
+                Username = "admin_w43",
+                FullName = "Quản trị viên Wave 43",
+                PasswordHash = "hash",
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            var securityController = new AccountSecurityController(
+                new Mock<IAccountAdminService>().Object,
+                new Mock<IUserSessionService>().Object,
+                db);
+
+            var setupRes = await securityController.SetupTotp(4301, default);
+            var setupOk = setupRes.Should().BeOfType<OkObjectResult>().Subject;
+            string currentTotpCode;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(setupOk.Value))
+            {
+                currentTotpCode = doc.RootElement.GetProperty("currentTotpCode").GetString()!;
+            }
+
+            var verifyRes = await securityController.VerifyTotp(
+                4301,
+                new AccountSecurityController.VerifyTotpRequest(Code: currentTotpCode),
+                default);
+            var verifyOk = verifyRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(verifyOk.Value))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("verified").GetBoolean().Should().BeTrue();
+                root.GetProperty("statusLabel").GetString().Should().Be($"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({currentTotpCode}) theo chuẩn RFC 6238");
+            }
         }
 
         private static void KeepUnusedMarkerAssertion(ERP.Domain.Entities.PickingTask updatedTask, ERP.Infrastructure.Persistence.ErpKhoDbContext db)
