@@ -2034,3 +2034,27 @@ Thực hiện nghiêm ngặt theo **Quy tắc Điều phối 4 Bước ("Phân c
 <!-- slide -->
 ![Import Receipts Pure Vietnamese Scanner Placeholder & Return Inspection Banner — Wave 46 (Trang `/import-receipts` hiển thị placeholder thuần Việt `Nhập hoặc quét mã kệ, mã SP, số lô, số sê-ri, mã kiện...` và thông báo `Đã khởi tạo hồ sơ kiểm định hàng hoàn trả (HS-KD-20261021-1719)`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave46-import-receipts-clean-vn-scanner-desktop.png)
 ````
+
+---
+
+## 50. BÁO CÁO NGHIỆM THU ĐỢT THỰC THI WAVE-47 (`OPTIONAL MICRO-POLISH & FINAL PRODUCTION RELEASE TAGGING — 1.517/1.517 TESTS PASS 100%`)
+
+### 50.1. Phân công Đa Tầng (`Dispatch-First Protocol` & `Zero File Overlap`)
+- **Phân vùng 2 (`Agent Phụ 2 — 992a8b99-1e35-4686-b8a8-99c8f03a113e`, `Subagent 2A — a07b6423`, `Subagent 2B — f23ae654`)**:
+  - [`Permissions.tsx`](file:///d:/ERP_KHO/frontend/src/pages/Permissions.tsx#L203-L219): Việt hóa 100% trạng thái gói cước VietQR từ `"ACTIVE"` sang **`"Đang hoạt động"`** cả ở dòng `"Trạng thái gói cước: Đang hoạt động (Đã kích hoạt tự động & mở khóa 100% hạn mức)"` lẫn chuỗi thông báo kết quả đối soát Webhook PayOS / SePay (`"chuyển sang trạng thái Đang hoạt động"`).
+  - [`PutawayTasks.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PutawayTasks.tsx#L213-L214): Tại cột **`LỘ TRÌNH`** của bảng `"Danh sách nhiệm vụ"`, chuyển đổi mã vị trí nguồn `"RECEIVING"` sang nhãn Tiếng Việt **`"Bãi tiếp nhận"`** (`Bãi tiếp nhận → BIN-A01-01`).
+  - [`Permissions.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/Permissions.test.tsx#L142-L145) & [`PutawayTasks.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PutawayTasks.test.tsx#L96-L103): Cập nhật bộ kiểm thử Vitest khẳng định hiển thị `"Trạng thái gói cước: Đang hoạt động"`, `"chuyển sang trạng thái Đang hoạt động"` (`not.toContain('ACTIVE')`) và `"Bãi tiếp nhận"` (`queryByText('RECEIVING') === null`).
+
+### 50.2. Kết quả Nghiệm thu Cổng Chất lượng (`Gate 1`, `Gate 2`, `Gate 3` — Tổng `1.517/1.517` Bài Kiểm thử PASS 100%)
+1. **Gate 1 (`Subagent 0A — 76c1eacc-074b-417e-80c4-267b20e13c95`, `task-2486`)**:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` → **`Exit Code 0`** (`Encoding check passed`).
+   - Clean Architecture Audit (`ERP.Domain`, `ERP.Application`) → **`PASS 100%`**.
+   - `dotnet build ERP.slnx -c Release --no-restore` → **`0 Warning(s), 0 Error(s)`** (`Exit Code 0`).
+2. **Gate 2 (`Subagent 0B — 64820743-4230-4e4e-b7a1-430d7a91a9b7`, `task-2502` & `task-2506`)**:
+   - `dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj -c Release --no-build` → **`492/492 PASS`** (`0 Failed, 0 Skipped`).
+   - `dotnet run --project tools/ERP.SqlIntegrationHarness/ERP.SqlIntegrationHarness.csproj -c Release --no-build` → **`651/651 PASS`** (`0 Failed, 0 Skipped`, TRX: `TestResults/SqlIntegration/d0f26727a6354158b581ff674a826231/application.trx`).
+3. **Gate 3 (`Subagent 2B — f23ae654`, `task-714`, `task-715`, `task-720`)**:
+   - `npm --prefix frontend run build` → **`Exit Code 0`** (`1702 modules transformed in 1.28s`).
+   - `npm --prefix frontend test -- --run` → **`64/64` test files, `374/374` tests PASS (`0 Failed`)**.
+4. **Tổng hợp toàn hệ thống (`Gate 2 + Gate 3`)**: **`492 + 651 + 374 = 1.517 / 1.517` bài kiểm thử PASS tuyệt đối (`100%`)**.
+

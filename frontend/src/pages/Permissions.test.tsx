@@ -139,7 +139,9 @@ describe('quản trị quyền truy cập', () => {
     const webhookBtn = view.getByTestId('btn-confirm-vietqr-webhook');
     expect(webhookBtn.textContent).toContain('Xác nhận Thanh toán Tự động (Webhook PayOS / SePay)');
     fireEvent.click(webhookBtn);
-    expect(await view.findByText(/Trạng thái gói cước: ACTIVE/)).toBeTruthy();
+    expect(await view.findByText(/Trạng thái gói cước: Đang hoạt động/)).toBeTruthy();
+    expect(view.getByText(/chuyển sang trạng thái Đang hoạt động/)).toBeTruthy();
+    expect(view.container.textContent).not.toContain('ACTIVE');
     expect(post).toHaveBeenCalledWith(
       '/api/permissions/saas/subscription-billing/webhook-vietqr',
       expect.objectContaining({

@@ -93,12 +93,13 @@ describe('Cất hàng',()=>{
    const v=render(<PutawayTasks/>);
    const btn=await v.findByText('PN-1');
    expect((btn as HTMLElement).style.whiteSpace).toBe('nowrap');
-   const fromSpan=v.getByText('RECEIVING');
+   const fromSpan=v.getByText('Bãi tiếp nhận');
    const toSpan=v.getByText('→ BIN-A01-01');
    expect(fromSpan.tagName).toBe('SPAN');
    expect(toSpan.tagName).toBe('SPAN');
    expect((fromSpan as HTMLElement).style.whiteSpace).toBe('nowrap');
    expect((toSpan as HTMLElement).style.whiteSpace).toBe('nowrap');
+   expect(v.queryByText('RECEIVING')).toBeNull();
    expect(v.container.textContent).not.toContain('->');
    fireEvent.click(btn);
    const destSelect=await v.findByLabelText('Vị trí đích SP1');

@@ -210,7 +210,8 @@ export default function PutawayTasks(){
            </tr>
          </thead>
          <tbody>{tasks.map(task=>{
-           const sourceLocationCode=task.items?.[0]?.sourceLocationCode||'RECEIVING';
+           const rawSourceLocationCode=task.items?.[0]?.sourceLocationCode||(task as { fromLocationCode?: string }).fromLocationCode||'RECEIVING';
+           const sourceLocationCode=rawSourceLocationCode.trim().toUpperCase()==='RECEIVING'?'Bãi tiếp nhận':rawSourceLocationCode;
            const targetLocationCode=(task as { toLocationCode?: string; recommendedLocationCode?: string }).toLocationCode||(task as { toLocationCode?: string; recommendedLocationCode?: string }).recommendedLocationCode||(task.items?.[0] as { confirmedLocationCode?: string; recommendedLocationCode?: string; toLocationCode?: string } | undefined)?.confirmedLocationCode||(task.items?.[0] as { confirmedLocationCode?: string; recommendedLocationCode?: string; toLocationCode?: string } | undefined)?.recommendedLocationCode||(task.items?.[0] as { confirmedLocationCode?: string; recommendedLocationCode?: string; toLocationCode?: string } | undefined)?.toLocationCode||'BIN-A01-01';
            return <tr key={task.id}>
              <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>

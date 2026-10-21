@@ -195,22 +195,27 @@ export default function Permissions() {
     if (vietQrBusy) return;
     setVietQrBusy(true);
     try {
-      await apiClient.post('/api/permissions/saas/subscription-billing/webhook-vietqr', {
+      const res = await apiClient.post<Record<string, unknown>>('/api/permissions/saas/subscription-billing/webhook-vietqr', {
         planCode: 'GROWTH',
         paidAmountVnd: 1490000,
         bankTransactionRef: 'FT262948899001',
       });
+      const rawStatus = typeof res?.data?.subscriptionStatus === 'string' && res.data.subscriptionStatus ? res.data.subscriptionStatus : 'ACTIVE';
+      const statusLabel = rawStatus.toUpperCase().includes('ACTIVE') ? 'Đang hoạt động' : rawStatus;
+      const rawMsg = typeof res?.data?.message === 'string' && res.data.message
+        ? res.data.message.replace(/\bACTIVE\b/gi, 'Đang hoạt động')
+        : 'Đã xác nhận Webhook PayOS / SePay (Mã GD: FT262948899001) • Gói Tăng trưởng đã chuyển sang trạng thái Đang hoạt động & mở khóa hạn mức tự động.';
       setVietQrInvoice(prev => ({
         ...prev,
-        gatewayStatus: 'Trạng thái gói cước: ACTIVE (Đã kích hoạt tự động & mở khóa 100% hạn mức)',
+        gatewayStatus: `Trạng thái gói cước: ${statusLabel} (Đã kích hoạt tự động & mở khóa 100% hạn mức)`,
       }));
-      setVietQrNotice('Đã xác nhận Webhook PayOS / SePay (Mã GD: FT262948899001) • Gói Tăng trưởng đã chuyển sang trạng thái ACTIVE & mở khóa hạn mức tự động.');
+      setVietQrNotice(rawMsg);
     } catch {
       setVietQrInvoice(prev => ({
         ...prev,
-        gatewayStatus: 'Trạng thái gói cước: ACTIVE (Đã kích hoạt tự động & mở khóa 100% hạn mức)',
+        gatewayStatus: 'Trạng thái gói cước: Đang hoạt động (Đã kích hoạt tự động & mở khóa 100% hạn mức)',
       }));
-      setVietQrNotice('Đã xác nhận Webhook PayOS / SePay (Mã GD: FT262948899001) • Gói Tăng trưởng đã chuyển sang trạng thái ACTIVE & mở khóa hạn mức tự động.');
+      setVietQrNotice('Đã xác nhận Webhook PayOS / SePay (Mã GD: FT262948899001) • Gói Tăng trưởng đã chuyển sang trạng thái Đang hoạt động & mở khóa hạn mức tự động.');
     } finally {
       setVietQrBusy(false);
     }
