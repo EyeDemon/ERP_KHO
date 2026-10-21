@@ -187,7 +187,7 @@ public sealed class InventoryControlController(
             reservationQuery = reservationQuery.Where(r => scopedWarehouseIds.Contains(r.WarehouseId));
         }
 
-        var stocks = await stockQuery
+        var rawStocks = await stockQuery
             .Select(s => new
             {
                 s.WarehouseId,
@@ -198,9 +198,27 @@ public sealed class InventoryControlController(
                 s.Status,
                 s.Quantity,
                 s.ReservedQuantity,
-                AvailableQty = s.Status == InventoryStatus.Available ? (s.Quantity - s.ReservedQuantity) : 0m
+                ExpiryDate = s.Lot != null ? s.Lot.ExpiryDate : (DateTime?)null
             })
             .ToListAsync(cancellationToken);
+
+        var todayUtc = DateTime.UtcNow.Date;
+        var stocks = rawStocks
+            .Select(s => new
+            {
+                s.WarehouseId,
+                s.WarehouseName,
+                s.ProductId,
+                s.ProductCode,
+                s.ProductName,
+                s.Status,
+                s.Quantity,
+                s.ReservedQuantity,
+                AvailableQty = s.Status == InventoryStatus.Available && (!s.ExpiryDate.HasValue || s.ExpiryDate.Value.Date >= todayUtc)
+                    ? Math.Max(0m, s.Quantity - s.ReservedQuantity)
+                    : 0m
+            })
+            .ToList();
 
         var totalOpenDemandQty = (await soLineQuery
             .Select(l => new { l.OrderedQuantity, l.CancelledQuantity })
@@ -263,6 +281,7 @@ public sealed class InventoryControlController(
         {
             currentAvailableStock = totalAtp,
             totalAvailableQty = totalAtp,
+            totalAtpQuantity = totalAtp,
             totalOpenDemandQty,
             incomingPoQty,
             incomingPurchaseOrderQty = incomingPoQty,
@@ -278,6 +297,7 @@ public sealed class InventoryControlController(
             atpCtpSummary = new
             {
                 availableToPromiseQty = totalAtp,
+                totalAtpQuantity = totalAtp,
                 capableToPromiseQty = totalAtp + qcPendingQty + incomingPoQty,
                 defaultPromiseLeadTimeHours = 24
             },
@@ -346,8 +366,10 @@ public sealed class InventoryControlController(
 
         if (effectiveDb != null)
         {
+            var todayUtc = DateTime.UtcNow.Date;
             var stockQuery = effectiveDb.InventoryStocks.AsNoTracking()
-                .Where(s => s.Status == InventoryStatus.Available);
+                .Where(s => s.Status == InventoryStatus.Available &&
+                            (s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value >= todayUtc));
             var soLineQuery = effectiveDb.SalesOrderLines.AsNoTracking()
                 .Where(l => l.SalesOrder.Status != SalesOrderStatus.Cancelled && l.SalesOrder.Status != SalesOrderStatus.Draft);
             var poLineQuery = effectiveDb.PurchaseOrderLines.AsNoTracking()
@@ -364,9 +386,10 @@ public sealed class InventoryControlController(
             }
 
             totalAvailableQty = (await stockQuery
-                .Select(s => new { s.Quantity, s.ReservedQuantity })
+                .Select(s => new { s.Quantity, s.ReservedQuantity, ExpiryDate = s.Lot != null ? s.Lot.ExpiryDate : (DateTime?)null })
                 .ToListAsync(cancellationToken))
-                .Sum(s => s.Quantity - s.ReservedQuantity);
+                .Where(s => !s.ExpiryDate.HasValue || s.ExpiryDate.Value.Date >= todayUtc)
+                .Sum(s => Math.Max(0m, s.Quantity - s.ReservedQuantity));
 
             totalOpenDemandQty = (await soLineQuery
                 .Select(l => new { l.OrderedQuantity, l.CancelledQuantity })
@@ -393,7 +416,7 @@ public sealed class InventoryControlController(
             : "Đủ tồn kho đáp ứng";
         var formulaSummary = string.Create(
             System.Globalization.CultureInfo.InvariantCulture,
-            $"Tồn khả dụng ({totalAvailableQty:0.##}) + Đang nhập PO ({incomingPoQty:0.##}) - Cầu kịch bản ({simulatedDemand:0.##}) = Dự kiến cuối kỳ ({projectedNetBalance:0.##})");
+            $"Tồn khả dụng ({totalAvailableQty:0.##} Thùng) + Đang nhập PO ({incomingPoQty:0.##} Thùng) - Cầu kịch bản ({simulatedDemand:0.##} Thùng) = Dự kiến cuối kỳ ({projectedNetBalance:0.##} Thùng)");
 
         var now = DateTime.UtcNow;
         var simulationId = $"SIM-WIF-{now:yyyyMMdd-HHmm}";
@@ -426,6 +449,7 @@ public sealed class InventoryControlController(
             totalAvailable = totalAvailableQty,
             totalAvailableQty,
             currentAvailableStock = totalAvailableQty,
+            totalAtpQuantity = totalAvailableQty,
             totalOpenDemandQty,
             incomingPoQty,
             incomingPurchaseOrderQty = incomingPoQty,

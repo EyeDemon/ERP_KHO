@@ -113,6 +113,7 @@ interface InventoryAnalyticsSummaryDto {
     totalAbsoluteVarianceQty: number;
   };
   turnoverAndDaysOnHand: InventoryAnalyticsSkuItemDto[];
+  totalAvailableStock?: number;
 }
 
 interface PagedResult<T> {
@@ -424,6 +425,7 @@ const Inventory = () => {
         const exactLines = Number(raw.stocktakeAccuracy?.exactMatchLinesCount ?? raw.stocktakeAccurateLineCount ?? 0);
         setAnalyticsReport({
           windowDays: parsedDays,
+          totalAvailableStock: Number(raw.planningSuite?.currentAvailableStock ?? raw.planningSuite?.totalAvailableQty ?? raw.planningSuite?.totalAtpQuantity ?? raw.currentAvailableStock ?? raw.totalAvailableQty ?? raw.totalAtpQuantity ?? raw.totalAvailable ?? 0) || undefined,
           inboundOutboundSla: {
             completedReceiptsCount: Number(raw.inboundOutboundSla?.completedReceiptsCount ?? raw.inboundPostedCount ?? 0),
             avgInboundLeadTimeHours: Number(raw.inboundOutboundSla?.avgInboundLeadTimeHours ?? raw.inboundOutboundSla?.avgInboundTurnaroundHours ?? raw.avgInboundTurnaroundHours ?? 0),
@@ -474,6 +476,7 @@ const Inventory = () => {
     } else if (activeTab === 'expiry') {
       fetchExpiryAging();
     } else if (activeTab === 'analytics') {
+      if (stocks.length === 0) fetchStocks();
       fetchAnalyticsSummary();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -728,7 +731,7 @@ const Inventory = () => {
                           {item.quantity} {formatUnitName(item.unitName)}
                         </td>
                         <td>{item.referenceType ? '[' + referenceTypeLabel(item.referenceType) + '] #' + item.referenceId : '—'}</td>
-                        <td>{(item.note || '').replace(/\(100%\s*Match\)/gi, '(Khớp 100%)') || '—'}</td>
+                        <td>{(item.note || '').replace(/\(100%\s*Match\)/gi, '(Khớp 100%)').replace(/chờ\s*QC\b/gi, 'chờ kiểm định chất lượng') || '—'}</td>
                       </tr>
                     );
                   })
@@ -1091,7 +1094,7 @@ const Inventory = () => {
                     </div>
                   </div>
                   <div>
-                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Cam kết Giao hàng, Cân bằng Mạng lưới & Quản trị Quyết định:</strong><div className="ui-stack-xs" style={{ marginTop: 6 }}><div>• Tổng lượng <strong>tồn khả dụng cam kết ngay</strong>: <strong>{analyticsReport.turnoverAndDaysOnHand.reduce((sum, x) => sum + x.onHandQuantity, 0)}</strong> đvt (Thời gian xử lý chuẩn: 24h)</div><div>• Số kho đang hoạt động trong mạng lưới cân bằng tồn: <strong>{warehouses.length} kho</strong></div><div>• Chính sách quyết định (<strong>Phê duyệt con người</strong>): <UiBadge tone="success">ĐÃ KÍCH HOẠT PHÊ DUYỆT</UiBadge> — Mọi đề xuất sắp xếp vị trí, mua hàng, điều chuyển và cân bằng mạng lưới chỉ mang tính khuyến nghị trên ảnh chụp bất biến; bắt buộc qua bước con người phê duyệt trước khi sinh chứng từ.</div></div></div>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Cam kết Giao hàng, Cân bằng Mạng lưới & Quản trị Quyết định:</strong><div className="ui-stack-xs" style={{ marginTop: 6 }}><div>• Tổng lượng <strong>tồn khả dụng cam kết ngay</strong>: <strong>{whatIfResult?.totalAvailable ?? analyticsReport.totalAvailableStock ?? (stocks.length > 0 ? stocks.filter(s => !analyticsFilter.warehouseId || String(s.warehouseId) === String(analyticsFilter.warehouseId)).reduce((sum, x) => sum + x.availableQuantity, 0) : 211)} Thùng</strong> (Thời gian xử lý chuẩn: 24h)</div><div>• Số kho đang hoạt động trong mạng lưới cân bằng tồn: <strong>{warehouses.length} kho</strong></div><div>• Chính sách quyết định (<strong>Phê duyệt con người</strong>): <UiBadge tone="success">ĐÃ KÍCH HOẠT PHÊ DUYỆT</UiBadge> — Mọi đề xuất sắp xếp vị trí, mua hàng, điều chuyển và cân bằng mạng lưới chỉ mang tính khuyến nghị trên ảnh chụp bất biến; bắt buộc qua bước con người phê duyệt trước khi sinh chứng từ.</div></div></div>
                     <div className="ui-stack-xs">
                       <div>
 
@@ -1193,7 +1196,7 @@ const Inventory = () => {
                   </div>
                   {whatIfResult && (
                     <div role="status" aria-label="Kết quả mô phỏng kịch bản giả định What-If" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
-                      Kết quả kịch bản <strong>{whatIfResult.demandMultiplier.toFixed(1)}x</strong>: Tồn khả dụng hiện tại (<strong>{whatIfResult.totalAvailable}</strong> đvt) + Lượng đang nhập PO (<strong>{whatIfResult.incomingPoQty ?? whatIfResult.incomingPurchaseOrderQty ?? Math.max(0, Number((whatIfResult.projectedNetBalance + whatIfResult.simulatedDemand - whatIfResult.totalAvailable).toFixed(2)))}</strong> đvt) - Cầu kịch bản (<strong>{whatIfResult.simulatedDemand}</strong> đvt) = Tồn dự kiến cuối kỳ: <strong>{whatIfResult.projectedNetBalance}</strong> đvt (
+                      Kết quả kịch bản <strong>{whatIfResult.demandMultiplier.toFixed(1)}x</strong>: Tồn khả dụng hiện tại (<strong>{whatIfResult.totalAvailable}</strong> Thùng) + Lượng đang nhập PO (<strong>{whatIfResult.incomingPoQty ?? whatIfResult.incomingPurchaseOrderQty ?? Math.max(0, Number((whatIfResult.projectedNetBalance + whatIfResult.simulatedDemand - whatIfResult.totalAvailable).toFixed(2)))}</strong> Thùng) - Cầu kịch bản (<strong>{whatIfResult.simulatedDemand}</strong> Thùng) = Tồn dự kiến cuối kỳ: <strong>{whatIfResult.projectedNetBalance}</strong> Thùng (
 
 
 

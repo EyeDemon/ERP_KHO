@@ -230,7 +230,7 @@ namespace ERP.Infrastructure.Queries
                 item.FromInventoryStatus = TranslateInventoryStatus(item.FromInventoryStatus);
                 item.ToInventoryStatus = TranslateInventoryStatus(item.ToInventoryStatus);
                 item.CreatedByName = NormalizeActorDisplayName(item.CreatedByName) ?? string.Empty;
-                item.Note = item.Note?.Trim().Replace("(100% Match)", "(Khớp 100%)", StringComparison.OrdinalIgnoreCase);
+                item.Note = item.Note?.Trim().Replace("(100% Match)", "(Khớp 100%)", StringComparison.OrdinalIgnoreCase).Replace("chờ QC", "chờ kiểm định chất lượng", StringComparison.OrdinalIgnoreCase);
             }
 
             return new PagedResult<InventoryTransactionHistoryDto>

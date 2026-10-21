@@ -2834,7 +2834,7 @@ namespace ERP.Api.Tests
                 doc.RootElement.GetProperty("simulatedDemand").GetDecimal().Should().Be(100m);
                 doc.RootElement.GetProperty("projectedEndingStock").GetDecimal().Should().Be(70m);
                 doc.RootElement.GetProperty("formulaSummary").GetString().Should().Be(
-                    "Tồn khả dụng (120) + Đang nhập PO (50) - Cầu kịch bản (100) = Dự kiến cuối kỳ (70)");
+                    "Tồn khả dụng (120 Thùng) + Đang nhập PO (50 Thùng) - Cầu kịch bản (100 Thùng) = Dự kiến cuối kỳ (70 Thùng)");
                 doc.RootElement.GetProperty("scenarioStatus").GetString().Should().Be("Đủ tồn kho đáp ứng");
                 doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đủ tồn kho đáp ứng");
             }
@@ -2849,7 +2849,7 @@ namespace ERP.Api.Tests
             {
                 doc.RootElement.GetProperty("projectedEndingStock").GetDecimal().Should().Be(-30m);
                 doc.RootElement.GetProperty("formulaSummary").GetString().Should().Be(
-                    "Tồn khả dụng (120) + Đang nhập PO (50) - Cầu kịch bản (200) = Dự kiến cuối kỳ (-30)");
+                    "Tồn khả dụng (120 Thùng) + Đang nhập PO (50 Thùng) - Cầu kịch bản (200 Thùng) = Dự kiến cuối kỳ (-30 Thùng)");
                 doc.RootElement.GetProperty("scenarioStatus").GetString().Should().Be("Cảnh báo thiếu hụt tồn kho");
                 doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Cảnh báo thiếu hụt tồn kho");
             }
@@ -4035,6 +4035,375 @@ namespace ERP.Api.Tests
             byCode["SKU-NORM-38"].GetProperty("movementClassLabel").GetString().Should().Be("Luân chuyển bình thường");
             byCode["SKU-SLOW-38"].GetProperty("movementClassLabel").GetString().Should().Be("Luân chuyển chậm");
             byCode["SKU-IDLE-38"].GetProperty("movementClassLabel").GetString().Should().Be("Chưa phát sinh xuất");
+        }
+
+        [Fact]
+        public async Task Wave39_AdvancedPlanningSuite_And_RunWhatIfSimulation_ExcludeExpiredLotsAndNonAvailableBuckets_MatchingExact211AvailableStock_WithThungUnitInFormulaSummary()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var today = DateTime.UtcNow.Date;
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse
+            {
+                Id = 1,
+                Code = "WH01",
+                Name = "Kho Trung Tâm WH01",
+                IsActive = true
+            });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 10,
+                WarehouseId = 1,
+                Code = "A-01-01",
+                Name = "Kệ A1",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true
+            });
+            db.Units.Add(new ERP.Domain.Entities.Unit
+            {
+                Id = 1,
+                Code = "THÙNG",
+                Name = "THÙNG",
+                IsActive = true
+            });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 390,
+                Code = "SKU-W39-01",
+                Name = "Sản phẩm hoạch định Wave 39",
+                UnitId = 1,
+                IsActive = true,
+                TrackingType = ERP.Domain.Enums.ProductTrackingType.Lot,
+                ExpiryControl = true
+            });
+
+            db.InventoryLots.AddRange(
+                new ERP.Domain.Entities.InventoryLot
+                {
+                    Id = 3901,
+                    ProductId = 390,
+                    LotNumber = "LOT-VALID-39A",
+                    ManufactureDate = today.AddDays(-30),
+                    ExpiryDate = today.AddDays(60)
+                },
+                new ERP.Domain.Entities.InventoryLot
+                {
+                    Id = 3902,
+                    ProductId = 390,
+                    LotNumber = "LOT-VALID-39B",
+                    ManufactureDate = today.AddDays(-20),
+                    ExpiryDate = today.AddDays(15)
+                },
+                new ERP.Domain.Entities.InventoryLot
+                {
+                    Id = 3903,
+                    ProductId = 390,
+                    LotNumber = "LOT-EXPIRED-39C",
+                    ManufactureDate = today.AddDays(-120),
+                    ExpiryDate = today.AddDays(-3)
+                });
+
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3911,
+                    WarehouseId = 1,
+                    ProductId = 390,
+                    LocationId = 10,
+                    LotId = 3901,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 125m,
+                    ReservedQuantity = 5m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3912,
+                    WarehouseId = 1,
+                    ProductId = 390,
+                    LocationId = 10,
+                    LotId = 3902,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 95m,
+                    ReservedQuantity = 4m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3913,
+                    WarehouseId = 1,
+                    ProductId = 390,
+                    LocationId = 10,
+                    LotId = 3903,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 60m,
+                    ReservedQuantity = 5m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3914,
+                    WarehouseId = 1,
+                    ProductId = 390,
+                    LocationId = 10,
+                    LotId = 3901,
+                    Status = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                    Quantity = 25m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3915,
+                    WarehouseId = 1,
+                    ProductId = 390,
+                    LocationId = 10,
+                    LotId = 3901,
+                    Status = ERP.Domain.Enums.InventoryStatus.Damaged,
+                    Quantity = 12m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3916,
+                    WarehouseId = 1,
+                    ProductId = 390,
+                    LocationId = 10,
+                    LotId = 3901,
+                    Status = ERP.Domain.Enums.InventoryStatus.QcHold,
+                    Quantity = 30m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3917,
+                    WarehouseId = 1,
+                    ProductId = 390,
+                    LocationId = 10,
+                    LotId = 3901,
+                    Status = ERP.Domain.Enums.InventoryStatus.RecallBlocked,
+                    Quantity = 50m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3918,
+                    WarehouseId = 1,
+                    ProductId = 390,
+                    LocationId = 10,
+                    LotId = 3903,
+                    Status = ERP.Domain.Enums.InventoryStatus.Expired,
+                    Quantity = 20m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                });
+
+            db.PurchaseOrders.Add(new ERP.Domain.Entities.PurchaseOrder
+            {
+                Id = 3901,
+                Code = "PO-W39-01",
+                WarehouseId = 1,
+                SupplierId = 1,
+                Status = ERP.Domain.Enums.PurchaseOrderStatus.Open,
+                OrderDate = DateTime.UtcNow.AddDays(-1),
+                CreatedBy = 1
+            });
+            db.PurchaseOrderLines.Add(new ERP.Domain.Entities.PurchaseOrderLine
+            {
+                Id = 3901,
+                PurchaseOrderId = 3901,
+                LineNo = 1,
+                ProductId = 390,
+                OrderedQuantity = 50m,
+                BaseOrderedQuantity = 50m,
+                OperationUnitId = 1,
+                BaseUnitId = 1
+            });
+            db.SalesOrders.Add(new ERP.Domain.Entities.SalesOrder
+            {
+                Id = 3901,
+                OrderCode = "SO-W39-01",
+                WarehouseId = 1,
+                CustomerId = 1,
+                Status = ERP.Domain.Enums.SalesOrderStatus.Released,
+                CreatedBy = 1
+            });
+            db.SalesOrderLines.Add(new ERP.Domain.Entities.SalesOrderLine
+            {
+                Id = 3901,
+                SalesOrderId = 3901,
+                ProductId = 390,
+                OrderedQuantity = 100m,
+                CancelledQuantity = 0m
+            });
+
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var controller = new InventoryControlController(
+                new Mock<IInventoryLockService>().Object,
+                new Mock<IInventoryMovementService>().Object,
+                db,
+                warehouseAuth.Object);
+
+            var planRes = await controller.AdvancedPlanningSuite(db, warehouseAuth.Object, 1, default);
+            var planOk = planRes.Should().BeOfType<OkObjectResult>().Subject;
+            decimal planAvailable;
+            using (var planDoc = System.Text.Json.JsonSerializer.SerializeToDocument(planOk.Value))
+            {
+                var root = planDoc.RootElement;
+                planAvailable = root.GetProperty("totalAvailableQty").GetDecimal();
+                planAvailable.Should().Be(211m);
+                root.GetProperty("currentAvailableStock").GetDecimal().Should().Be(211m);
+                root.GetProperty("totalAtpQuantity").GetDecimal().Should().Be(211m);
+                root.GetProperty("atpCtpSummary").GetProperty("availableToPromiseQty").GetDecimal().Should().Be(211m);
+            }
+
+            var simRes = await controller.RunWhatIfSimulation(
+                db,
+                warehouseAuth.Object,
+                new InventoryControlController.WhatIfSimulationRequest(1, 1.5m, 14, 50m, 0),
+                default);
+            var simOk = simRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var simDoc = System.Text.Json.JsonSerializer.SerializeToDocument(simOk.Value))
+            {
+                var root = simDoc.RootElement;
+                var simAvailable = root.GetProperty("totalAvailableQty").GetDecimal();
+                simAvailable.Should().Be(211m);
+                simAvailable.Should().Be(planAvailable);
+                root.GetProperty("currentAvailableStock").GetDecimal().Should().Be(211m);
+                root.GetProperty("totalAvailable").GetDecimal().Should().Be(211m);
+                root.GetProperty("totalAtpQuantity").GetDecimal().Should().Be(211m);
+                root.GetProperty("incomingPoQty").GetDecimal().Should().Be(50m);
+                root.GetProperty("simulatedDemand").GetDecimal().Should().Be(150m);
+                root.GetProperty("projectedEndingStock").GetDecimal().Should().Be(111m);
+
+                var formula = root.GetProperty("formulaSummary").GetString();
+                formula.Should().Contain("Thùng");
+                formula.Should().Be("Tồn khả dụng (211 Thùng) + Đang nhập PO (50 Thùng) - Cầu kịch bản (150 Thùng) = Dự kiến cuối kỳ (111 Thùng)");
+            }
+
+            var reportsController = new ReportsController(_mockService.Object, db, warehouseAuth.Object);
+            var analyticsRes = await reportsController.GetAnalyticsSummary(db, warehouseAuth.Object, 1, 30, default);
+            var analyticsOk = analyticsRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var analyticsDoc = System.Text.Json.JsonSerializer.SerializeToDocument(analyticsOk.Value))
+            {
+                analyticsDoc.RootElement.GetProperty("totalAvailableQty").GetDecimal().Should().Be(211m);
+                analyticsDoc.RootElement.GetProperty("currentAvailableStock").GetDecimal().Should().Be(211m);
+                analyticsDoc.RootElement.GetProperty("totalAtpQuantity").GetDecimal().Should().Be(211m);
+            }
+        }
+
+        [Fact]
+        public async Task Wave39_InventoryTransactionQueryService_And_ReportsController_NormalizeChoQcNote_ToVietnameseQualityInspectionLabel()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Users.Add(new ERP.Domain.Entities.User
+            {
+                Id = 3901,
+                Username = "qa_staff_wh01",
+                FullName = "QA Staff WH01",
+                PasswordHash = "x"
+            });
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse
+            {
+                Id = 1,
+                Code = "WH01",
+                Name = "Kho Trung Tâm WH01",
+                IsActive = true
+            });
+            db.Units.Add(new ERP.Domain.Entities.Unit
+            {
+                Id = 1,
+                Code = "QA_UNIT",
+                Name = "QA_UNIT",
+                IsActive = true
+            });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 391,
+                Code = "SKU-W39-02",
+                Name = "Sản phẩm sổ cái Wave 39",
+                UnitId = 1,
+                IsActive = true
+            });
+
+            db.InventoryTransactions.AddRange(
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 3921,
+                    WarehouseId = 1,
+                    ProductId = 391,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 75m,
+                    ReferenceId = 3901,
+                    ReferenceType = "ImportReceipt",
+                    TransactionDate = DateTime.UtcNow.AddHours(-1),
+                    CreatedBy = 3901,
+                    Note = "Nhập kho lô hàng tạm giữ chờ QC (100% Match) "
+                },
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 3922,
+                    WarehouseId = 1,
+                    ProductId = 391,
+                    TransactionType = ERP.Domain.Enums.TransactionType.StatusChange,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.QcHold,
+                    Quantity = 15m,
+                    ReferenceId = 3902,
+                    ReferenceType = "InventoryStatusChange",
+                    TransactionDate = DateTime.UtcNow.AddHours(-2),
+                    CreatedBy = 3901,
+                    Note = "Lô cận hạn đang cách ly chờ QC "
+                });
+
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var txQuery = new ERP.Infrastructure.Queries.InventoryTransactionQueryService(db, warehouseAuth.Object);
+            var txPage = await txQuery.GetHistoryAsync(null, null, null, 1, 391, null, null, null, 1, 10);
+            txPage.Items.Should().HaveCount(2);
+
+            txPage.Items[0].Note.Should().Be("Nhập kho lô hàng tạm giữ chờ kiểm định chất lượng (Khớp 100%)");
+            txPage.Items[0].Note.Should().NotContain("chờ QC").And.NotContain("100% Match");
+
+            txPage.Items[1].Note.Should().Be("Lô cận hạn đang cách ly chờ kiểm định chất lượng");
+            txPage.Items[1].Note.Should().NotContain("chờ QC");
+
+            ReportsController.NormalizeTransactionNote(" Lô hàng nhập chờ QC (100% Match) ")
+                .Should().Be("Lô hàng nhập chờ kiểm định chất lượng (Khớp 100%)");
+
+            var reportsController = new ReportsController(_mockService.Object, db, warehouseAuth.Object);
+            var inOutRes = await reportsController.GetInventoryInOutReport(
+                DateTime.UtcNow.AddDays(-7),
+                DateTime.UtcNow.AddDays(1),
+                1,
+                391);
+            var inOutOk = inOutRes.Should().BeOfType<OkObjectResult>().Subject;
+            var inOutList = inOutOk.Value.Should().BeAssignableTo<IEnumerable<InventoryInOutReportDto>>().Subject.ToList();
+            inOutList.Should().ContainSingle();
+            inOutList[0].UnitName.Should().Be("THÙNG");
+            inOutList[0].ImportQuantity.Should().Be(75m);
+            inOutList[0].ClosingQuantity.Should().Be(75m);
         }
     }
 }

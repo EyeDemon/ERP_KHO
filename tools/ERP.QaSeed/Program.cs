@@ -2321,6 +2321,87 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
 
     var qaManagerUser = users.TryGetValue("qa_manager_wh01", out var mgrUser) ? mgrUser : qaAdmin;
+    var approvedStocktake = await context.Stocktakes.IgnoreQueryFilters()
+        .Include(s => s.Details)
+        .FirstOrDefaultAsync(s => s.Code == "STK-QA-000");
+    if (approvedStocktake is null)
+    {
+        approvedStocktake = new Stocktake
+        {
+            Code = "STK-QA-000",
+            WarehouseId = primaryWarehouse.Id,
+            Status = ReceiptStatus.Approved,
+            Note = "Kiểm kê định kỳ đợt 1 đã phê duyệt tại kệ BIN-A01-01",
+            CreatedBy = qaManagerUser.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2).AddHours(-2),
+            ApprovedBy = qaAdmin.Id,
+            ApprovedAt = DateTime.UtcNow.AddDays(-2),
+            Details =
+            [
+                new StocktakeDetail
+                {
+                    ProductId = product.Id,
+                    LocationId = storageBin.Id,
+                    SystemQuantity = 25m,
+                    ActualQuantity = 25m,
+                    DifferenceQuantity = 0m,
+                    Note = "Khớp 100% tồn kho thực tế đợt 1 tại kệ BIN-A01-01"
+                },
+                new StocktakeDetail
+                {
+                    ProductId = lotProduct.Id,
+                    LocationId = storageBin.Id,
+                    SystemQuantity = 60m,
+                    ActualQuantity = 60m,
+                    DifferenceQuantity = 0m,
+                    Note = "Khớp 100% tồn kho lô cảm biến đợt 1 tại kệ BIN-A01-01"
+                }
+            ]
+        };
+        context.Stocktakes.Add(approvedStocktake);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        approvedStocktake.WarehouseId = primaryWarehouse.Id;
+        approvedStocktake.Status = ReceiptStatus.Approved;
+        approvedStocktake.CreatedBy = qaManagerUser.Id;
+        approvedStocktake.CreatedAt = DateTime.UtcNow.AddDays(-2).AddHours(-2);
+        approvedStocktake.ApprovedBy = qaAdmin.Id;
+        approvedStocktake.ApprovedAt = DateTime.UtcNow.AddDays(-2);
+        approvedStocktake.Note = "Kiểm kê định kỳ đợt 1 đã phê duyệt tại kệ BIN-A01-01";
+        if (!approvedStocktake.Details.Any())
+        {
+            approvedStocktake.Details.Add(new StocktakeDetail
+            {
+                ProductId = product.Id,
+                LocationId = storageBin.Id,
+                SystemQuantity = 25m,
+                ActualQuantity = 25m,
+                DifferenceQuantity = 0m,
+                Note = "Khớp 100% tồn kho thực tế đợt 1 tại kệ BIN-A01-01"
+            });
+            approvedStocktake.Details.Add(new StocktakeDetail
+            {
+                ProductId = lotProduct.Id,
+                LocationId = storageBin.Id,
+                SystemQuantity = 60m,
+                ActualQuantity = 60m,
+                DifferenceQuantity = 0m,
+                Note = "Khớp 100% tồn kho lô cảm biến đợt 1 tại kệ BIN-A01-01"
+            });
+        }
+        else
+        {
+            foreach (var d in approvedStocktake.Details)
+            {
+                d.DifferenceQuantity = 0m;
+                d.ActualQuantity = d.SystemQuantity;
+            }
+        }
+        await context.SaveChangesAsync();
+    }
+
     var stocktake = await context.Stocktakes.IgnoreQueryFilters()
         .Include(s => s.Details)
         .FirstOrDefaultAsync(s => s.Code == "STK-QA-001" || s.Code == "STK-QA-2026-01");
@@ -3312,6 +3393,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 10 thùng linh kiện QA-01 từ khu tiếp nhận RECEIVING vào kệ lưu trữ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9001; " +
         "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) từ khu tiếp nhận RECEIVING vào kệ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9002; " +
         "UPDATE InventoryTransactions SET Note = N'Tồn kho tại khu tiếp nhận RECEIVING cho nhiệm vụ cất hàng PUT-QA-001' WHERE Note = N'Tồn kho tại RECEIVING cho nhiệm vụ cất hàng PUT-QA-001'; " +
+        "UPDATE InventoryTransactions SET Note = REPLACE(Note, N'chờ QC', N'chờ kiểm định chất lượng') WHERE Note LIKE N'%chờ QC%'; " +
         "UPDATE InventoryTransactions SET Note = REPLACE(Note, N'(100% Match)', N'(Khớp 100%)') WHERE Note LIKE N'%(100% Match)%'; " +
         "UPDATE ImportReceipts SET ApprovedAt = DATEADD(MINUTE, 150, CreatedAt) WHERE Status IN (1, 2) AND (ApprovedAt IS NULL OR DATEDIFF(MINUTE, CreatedAt, ApprovedAt) < 30); " +
         "UPDATE ExportReceipts SET ApprovedAt = DATEADD(MINUTE, 60, CreatedAt), DispatchedAt = DATEADD(MINUTE, 90, CreatedAt) WHERE Status IN (1, 2, 4) AND (DispatchedAt IS NULL OR DATEDIFF(MINUTE, CreatedAt, DispatchedAt) < 30);");

@@ -1399,8 +1399,18 @@ namespace ERP.Api.Controllers
             var avgOutboundTurnaroundHours = effectiveOutboundSamples.Count > 0
                 ? Math.Round((decimal)effectiveOutboundSamples.Average(x => (x.EndAt - x.CreatedAt).TotalHours), 1)
                 : 0m;
+            var todayUtc = DateTime.UtcNow.Date;
+            var totalAvailableQty = (await db.InventoryStocks.AsNoTracking()
+                .Where(s => scopedIds.Contains(s.WarehouseId) && s.Status == InventoryStatus.Available)
+                .Select(s => new { s.Quantity, s.ReservedQuantity, ExpiryDate = s.Lot != null ? s.Lot.ExpiryDate : (DateTime?)null })
+                .ToListAsync(cancellationToken))
+                .Where(s => !s.ExpiryDate.HasValue || s.ExpiryDate.Value.Date >= todayUtc)
+                .Sum(s => Math.Max(0m, s.Quantity - s.ReservedQuantity));
             return Ok(new
             {
+                currentAvailableStock = totalAvailableQty,
+                totalAvailableQty,
+                totalAtpQuantity = totalAvailableQty,
                 inboundPostedCount,
                 putawayCompletedCount,
                 putawayOpenCount,
@@ -1852,7 +1862,7 @@ namespace ERP.Api.Controllers
             ERP.Infrastructure.Queries.InventoryTransactionQueryService.TranslateReferenceType(referenceType);
 
         public static string? NormalizeTransactionNote(string? note) =>
-            note?.Trim().Replace("(100% Match)", "(Khớp 100%)", StringComparison.OrdinalIgnoreCase);
+            note?.Trim().Replace("(100% Match)", "(Khớp 100%)", StringComparison.OrdinalIgnoreCase).Replace("chờ QC", "chờ kiểm định chất lượng", StringComparison.OrdinalIgnoreCase);
 
         private static string NormalizeUom(string? uom, string fallback = "THÙNG")
         {
