@@ -30,6 +30,14 @@ namespace ERP.Application.DTOs
         public string? MarketplaceOrderId { get; set; }
         public string? CarrierCode { get; set; }
         public string? TrackingNumber { get; set; }
+        public string? AwbLabelUrl { get; set; }
+        public int AwbPrintCount { get; set; }
+        public DateTime? AwbFirstPrintedAtUtc { get; set; }
+        public DateTime? MarketplaceShipByUtc { get; set; }
+        public string? EInvoiceStatus { get; set; }
+        public string? EInvoiceProvider { get; set; }
+        public string? EInvoiceNumber { get; set; }
+        public string? BuyerTaxCode { get; set; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public decimal? SubTotalAmount { get; set; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -79,6 +87,14 @@ namespace ERP.Application.DTOs
         public string? MarketplaceOrderId { get; set; }
         public string? CarrierCode { get; set; }
         public string? TrackingNumber { get; set; }
+        public string? AwbLabelUrl { get; set; }
+        public int AwbPrintCount { get; set; }
+        public DateTime? AwbFirstPrintedAtUtc { get; set; }
+        public DateTime? MarketplaceShipByUtc { get; set; }
+        public string? EInvoiceStatus { get; set; }
+        public string? EInvoiceProvider { get; set; }
+        public string? EInvoiceNumber { get; set; }
+        public string? BuyerTaxCode { get; set; }
         public List<CreateExportReceiptDetailDto> Details { get; set; } = new();
     }
 

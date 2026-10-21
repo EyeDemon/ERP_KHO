@@ -118,4 +118,22 @@ describe('quản trị quyền truy cập', () => {
     expect(view.getByText('Xác minh Mã 6 Chữ số')).toBeTruthy();
     expect(view.getByText('Mã QR TOTP')).toBeTruthy();
   });
+
+  it('hiển thị Quản trị Gói cước Thuê bao SaaS 3 Nấc Hạn mức & Thanh toán Tự động VietQR', async () => {
+    post.mockResolvedValue({ data: {} } as never);
+    const view = render(<Permissions />);
+    expect(await view.findByText('Quản trị Gói cước Thuê bao SaaS 3 Nấc Hạn mức & Thanh toán Tự động VietQR')).toBeTruthy();
+    expect(view.getByText('Gói Khởi đầu — 490.000 đ/tháng')).toBeTruthy();
+    expect(view.getByText('Gói Tăng trưởng — 1.490.000 đ/tháng')).toBeTruthy();
+    expect(view.getByText('Gói Doanh nghiệp — 3.490.000 đ/tháng')).toBeTruthy();
+    expect(view.getByText('14 ngày dùng thử miễn phí • 7 ngày ân hạn gia hạn')).toBeTruthy();
+    expect(view.getByText('Nấc 1 (80–100%): Cảnh báo sớm')).toBeTruthy();
+    expect(view.getByText('Nấc 2 (100–115%): Đệm vượt hạn mức 15%')).toBeTruthy();
+    expect(view.getByText('Nấc 3 (>115%): Chế độ Chỉ đọc (Bảo toàn 100% tra cứu & xuất Excel)')).toBeTruthy();
+    expect(view.getByText('PayOS / SePay')).toBeTruthy();
+    expect(view.getByText('Mã VietQR')).toBeTruthy();
+
+    fireEvent.click(view.getByRole('button', { name: 'Tạo Mã Thanh Toán Gia Hạn Tự Động VietQR' }));
+    expect(await view.findByText(/Đã khởi tạo mã thanh toán VietQR tự động/)).toBeTruthy();
+  });
 });

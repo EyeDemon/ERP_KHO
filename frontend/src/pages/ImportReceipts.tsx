@@ -477,7 +477,7 @@ const ImportReceipts = () => {
         />
 
         {error && <p role="alert">{error}</p>}
-        {successMsg && !successMsg.includes('RMA') && !successMsg.includes('hậu cần thu hồi') && <div role="status" className="ui-success-text" style={{ marginTop: 8, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500 }}>{successMsg}</div>}
+        {successMsg && !successMsg.includes('RMA') && !successMsg.includes('hàng hoàn trả') && !successMsg.includes('hậu cần thu hồi') && <div role="status" className="ui-success-text" style={{ marginTop: 8, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500 }}>{successMsg}</div>}
 
         <MobileBarcodeScannerBar
           warehouseId={warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined)}
@@ -512,7 +512,7 @@ const ImportReceipts = () => {
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hoàn tất kiểm định & đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hàng khách trả lại (Khả dụng / Biệt trữ / Hư hỏng)</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}</strong></div>
             </div>
-            {successMsg && (successMsg.includes('RMA') || successMsg.includes('hậu cần thu hồi')) && <div role="status" className="ui-success-text" style={{ order: 99, flexBasis: '100%', width: '100%', marginTop: 12, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500, whiteSpace: 'normal', wordBreak: 'break-word' }}>{successMsg}</div>}
+            {successMsg && (successMsg.includes('RMA') || successMsg.includes('hàng hoàn trả') || successMsg.includes('hậu cần thu hồi')) && <div role="status" className="ui-success-text" style={{ order: 99, flexBasis: '100%', width: '100%', marginTop: 12, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500, whiteSpace: 'normal', wordBreak: 'break-word' }}>{successMsg}</div>}
 
 
             <button
@@ -523,7 +523,7 @@ const ImportReceipts = () => {
                 setGovernanceBusy(true);
                 setError('');
                 setSuccessMsg('');
-                const refCode = 'RMA-' + new Date().toISOString().slice(0, 10);
+                const refCode = 'HS-KD-' + new Date().toISOString().slice(0, 10);
                 void apiClient
                   .post('/api/ImportReceipts/initiate-rma-inspection', {
                     warehouseId: warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined),
@@ -536,15 +536,16 @@ const ImportReceipts = () => {
                   })
                   .then((res) => {
                     const data = (res as { data?: { rmaInspectionCode?: string; rmaCode?: string } } | undefined)?.data;
-                    const code = data?.rmaInspectionCode || data?.rmaCode;
+                    const rawCode = data?.rmaInspectionCode || data?.rmaCode;
+                    const code = rawCode ? rawCode.replace(/^RMA-INSP/i, 'HS-KD').replace(/^RMA/i, 'HS-KD') : '';
                     if (!code) {
-                      setError('Phản hồi khởi tạo hồ sơ kiểm định RMA không hợp lệ từ máy chủ.');
+                      setError('Phản hồi khởi tạo hồ sơ kiểm định hàng hoàn trả không hợp lệ từ máy chủ.');
                       return;
                     }
-                    setSuccessMsg(`Đã khởi tạo hồ sơ kiểm định RMA (${code}): Phân luồng khu vực cách ly sang bàn kiểm định chất lượng đầu vào.`);
+                    setSuccessMsg(`Đã khởi tạo hồ sơ kiểm định hàng hoàn trả (${code}): Phân luồng khu vực cách ly sang bàn kiểm định chất lượng đầu vào.`);
                   })
                   .catch((err) => {
-                    setError(permissionError(err, 'Không thể khởi tạo hồ sơ kiểm định RMA / hàng hoàn trả.'));
+                    setError(permissionError(err, 'Không thể khởi tạo hồ sơ kiểm định hàng hoàn trả.'));
                   })
                   .finally(() => setGovernanceBusy(false));
               }}

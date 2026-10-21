@@ -166,11 +166,17 @@ describe('quyền độc lập trên phiếu nhập', () => {
       ],
     };
     get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [maskedReceipt] : maskedReceipt }) as never);
+    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { rmaInspectionCode: 'RMA-INSP-20261021' } } as never);
     const view = render(<ImportReceipts />);
     await view.findByText('QA_RECEIPT');
     fireEvent.click(view.getByText('Chi tiết'));
     expect(await view.findByText('SP-MASK-01')).toBeTruthy();
     expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(2);
+
+    fireEvent.click(view.getByRole('button', { name: 'Khởi tạo Hồ sơ Kiểm định Hàng hoàn trả' }));
+    const notice = await view.findByText(/Đã khởi tạo hồ sơ kiểm định hàng hoàn trả \(HS-KD-/);
+    expect(notice).toBeTruthy();
+    expect(notice.textContent).not.toContain('RMA');
   });
 });
 

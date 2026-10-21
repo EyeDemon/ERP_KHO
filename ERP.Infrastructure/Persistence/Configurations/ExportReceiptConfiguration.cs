@@ -21,6 +21,12 @@ public class ExportReceiptConfiguration : IEntityTypeConfiguration<ExportReceipt
         builder.Property(x => x.MarketplaceOrderId).HasMaxLength(64);
         builder.Property(x => x.CarrierCode).HasMaxLength(32);
         builder.Property(x => x.TrackingNumber).HasMaxLength(64);
+        builder.Property(x => x.AwbLabelUrl).HasMaxLength(500);
+        builder.Property(x => x.AwbPrintCount).HasDefaultValue(0);
+        builder.Property(x => x.EInvoiceStatus).HasMaxLength(32);
+        builder.Property(x => x.EInvoiceProvider).HasMaxLength(32);
+        builder.Property(x => x.EInvoiceNumber).HasMaxLength(64);
+        builder.Property(x => x.BuyerTaxCode).HasMaxLength(32);
         builder.HasOne(x => x.Customer).WithMany(x => x.ExportReceipts).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SalesOrder).WithMany().HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.NoAction);
         builder.HasOne(x => x.Shipment).WithMany().HasForeignKey(x => x.ShipmentId).OnDelete(DeleteBehavior.NoAction);

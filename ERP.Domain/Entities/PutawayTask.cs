@@ -7,6 +7,7 @@ public class PutawayTask : ITenantEntity
 {
     public int Id { get; set; }
     public int TenantId { get; set; } = 1;
+    public string TaskType { get; set; } = "PutawayTask";
     public int ReceiptId { get; set; }
     public int WarehouseId { get; set; }
     public PutawayTaskStatus Status { get; set; } = PutawayTaskStatus.Open;

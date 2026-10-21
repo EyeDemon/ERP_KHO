@@ -35,8 +35,8 @@ const PUTAWAY_RULE_LABELS: Record<string, string> = {
   '4_PROXIMITY_PICK_FACE': '4. Gần vị trí lấy hàng',
   '4_PICK_FACE_PROXIMITY': '4. Gần vị trí lấy hàng',
   '5_FEFO_LOT_CONSOLIDATION': '5. Gom lô FEFO',
-  ACTIVE_BIN_ONLY: 'Bin đang hoạt động',
-  UNBLOCKED_BIN_ONLY: 'Bin không bị khóa',
+  ACTIVE_BIN_ONLY: 'Kệ đang hoạt động',
+  UNBLOCKED_BIN_ONLY: 'Kệ không bị khóa',
   NO_STOCKTAKE_FREEZE: 'Không vướng khóa kiểm kê',
   NO_INVENTORY_LOCK: 'Không vướng khóa kiểm kê',
   CAPACITY_WEIGHT_VOLUME_PALLET_GUARD: 'Đảm bảo tải trọng / thể tích / số Pallet',
@@ -171,10 +171,10 @@ export default function PutawayTasks(){
          ))}
        </div>
        <div className="ui-inline-wrap" style={{ marginTop: 4 }}>
-         <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin</button>
+         <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ &amp; Khớp Vị trí Kệ</button>
        </div>
        <div data-testid="putaway-ledger-pair-panel" style={{ marginTop: 6, padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 13 }}>
-         <strong>Bút toán Sổ cái Đối ứng 2 Dòng:</strong> Chân nguồn <code>-Q (RECEIVING)</code> tại vị trí tiếp nhận • Chân đích <code>+Q (STORAGE / BIN-A01-01)</code> tại vị trí lưu trữ — Bảo toàn tổng tồn kho toàn kho (<code>Δ = 0</code>).
+         <strong>Bút toán Sổ cái Đối ứng 2 Dòng:</strong> Chân nguồn <code>-Q (Bãi tiếp nhận)</code> • Chân đích <code>+Q (Kệ lưu trữ BIN-A01-01)</code> — Bảo toàn tổng tồn kho toàn kho (<code>Δ = 0</code>).
        </div>
        {slottingEvaluationResult&&(
          <div
@@ -254,7 +254,7 @@ export default function PutawayTasks(){
        {selected.exceptionReason&&<p><strong>Lý do cần xử lý:</strong> {selected.exceptionReason}</p>}
 
        {canExecute&&['Assigned','InProgress'].includes(selected.status)&&<MobileBarcodeScannerBar
-         label="Quét nhanh kệ đích (Bin) hoặc mã sản phẩm (SKU)"
+         label="Quét nhanh vị trí kệ đích hoặc mã sản phẩm (SKU)"
          warehouseId={selected.warehouseId}
          disabled={!!busy}
          resolveViaApi={false}

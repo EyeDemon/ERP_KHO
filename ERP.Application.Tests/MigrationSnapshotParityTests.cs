@@ -1,4 +1,5 @@
 using System.Reflection;
+using ERP.Domain.Entities;
 using ERP.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,15 @@ public sealed class MigrationSnapshotParityTests
         "ExportReceipts",
         "IntegrationInboxMessages",
         "IntegrationOutboxMessages",
-        "ProductBundleComponents"
+        "ProductBundleComponents",
+        "MarketplaceShops",
+        "ChannelSkuMappings",
+        "HandoverManifests",
+        "HandoverManifestLines",
+        "SaasPlans",
+        "TenantSubscriptions",
+        "SaasBillingInvoices",
+        "ShipmentFinancialLedgers"
     ];
 
     [Fact]
@@ -54,6 +63,51 @@ public sealed class MigrationSnapshotParityTests
         operations.Should().BeEmpty(string.Join(
             Environment.NewLine,
             operations.Select(Describe)));
+    }
+
+    [Fact]
+    public void Wave45_MarketplaceShop_CalculateChannelPushQty_EnforcesSafetyStockAndLowStockCutOff()
+    {
+        var primaryShop = new MarketplaceShop
+        {
+            ChannelCode = "SHOPEE",
+            ReserveRatioPct = 90m,
+            SafetyBufferQty = 2m,
+            LowStockThreshold = 5m,
+            IsPrimaryShop = true
+        };
+        var secondaryShop = new MarketplaceShop
+        {
+            ChannelCode = "TIKTOK",
+            ReserveRatioPct = 80m,
+            SafetyBufferQty = 2m,
+            LowStockThreshold = 5m,
+            IsPrimaryShop = false
+        };
+
+        primaryShop.CalculateChannelPushQty(5m).Should().Be(2m); // floor((5 - 2) * 0.9) = 2
+        secondaryShop.CalculateChannelPushQty(5m).Should().Be(0m); // cut-off when ATP <= LowStockThreshold and not primary
+        secondaryShop.CalculateChannelPushQty(22m, 2m).Should().Be(8m); // floor(((22 - 2) * 0.8) / 2) = 8
+    }
+
+    [Fact]
+    public void Wave45_TenantSubscription_EvaluateQuotaTier_Enforces3TierQuotaPolicy()
+    {
+        var sub = new TenantSubscription
+        {
+            MonthlyOrderQuota = 100,
+            CurrentMonthOrderCount = 70
+        };
+        sub.EvaluateQuotaTier().Should().Be("NORMAL");
+
+        sub.CurrentMonthOrderCount = 85;
+        sub.EvaluateQuotaTier().Should().Be("WARNING_80_100");
+
+        sub.CurrentMonthOrderCount = 110;
+        sub.EvaluateQuotaTier().Should().Be("SOFT_BURST_100_115");
+
+        sub.CurrentMonthOrderCount = 116;
+        sub.EvaluateQuotaTier().Should().Be("READ_ONLY_OVER_115");
     }
 
     private static string Describe(object operation)

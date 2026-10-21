@@ -196,6 +196,194 @@ BEGIN
     );
     CREATE UNIQUE INDEX UX_ProductBundleComponents_TenantId_Parent_Component ON dbo.ProductBundleComponents(TenantId, ParentProductId, ComponentProductId);
 END;
+
+IF COL_LENGTH('dbo.ExportReceipts', 'AwbLabelUrl') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD AwbLabelUrl nvarchar(500) NULL;
+IF COL_LENGTH('dbo.ExportReceipts', 'AwbPrintCount') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD AwbPrintCount int NOT NULL CONSTRAINT DF_ExportReceipts_AwbPrintCount DEFAULT (0);
+IF COL_LENGTH('dbo.ExportReceipts', 'AwbFirstPrintedAtUtc') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD AwbFirstPrintedAtUtc datetime2 NULL;
+IF COL_LENGTH('dbo.ExportReceipts', 'MarketplaceShipByUtc') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD MarketplaceShipByUtc datetime2 NULL;
+IF COL_LENGTH('dbo.ExportReceipts', 'EInvoiceStatus') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD EInvoiceStatus nvarchar(32) NULL CONSTRAINT DF_ExportReceipts_EInvoiceStatus DEFAULT (N'PENDING');
+IF COL_LENGTH('dbo.ExportReceipts', 'EInvoiceProvider') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD EInvoiceProvider nvarchar(32) NULL;
+IF COL_LENGTH('dbo.ExportReceipts', 'EInvoiceNumber') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD EInvoiceNumber nvarchar(64) NULL;
+IF COL_LENGTH('dbo.ExportReceipts', 'BuyerTaxCode') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD BuyerTaxCode nvarchar(32) NULL;
+
+IF OBJECT_ID(N'dbo.MarketplaceShops', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.MarketplaceShops (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_MarketplaceShops PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_MarketplaceShops_TenantId DEFAULT(1),
+        ChannelCode nvarchar(32) NOT NULL,
+        ShopCode nvarchar(64) NOT NULL,
+        ShopName nvarchar(200) NOT NULL,
+        DefaultWarehouseId int NOT NULL,
+        ReserveRatioPct decimal(5,2) NOT NULL CONSTRAINT DF_MarketplaceShops_ReserveRatioPct DEFAULT(100),
+        SafetyBufferQty decimal(19,4) NOT NULL CONSTRAINT DF_MarketplaceShops_SafetyBufferQty DEFAULT(0),
+        LowStockThreshold decimal(19,4) NOT NULL CONSTRAINT DF_MarketplaceShops_LowStockThreshold DEFAULT(5),
+        IsPrimaryShop bit NOT NULL CONSTRAINT DF_MarketplaceShops_IsPrimaryShop DEFAULT(0),
+        EncryptedAccessToken nvarchar(500) NULL,
+        EncryptedRefreshToken nvarchar(500) NULL,
+        TokenExpiresAtUtc datetime2 NULL,
+        WebhookSecret nvarchar(128) NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_MarketplaceShops_IsActive DEFAULT(1),
+        CreatedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_MarketplaceShops_TenantId_ChannelCode_ShopCode ON dbo.MarketplaceShops(TenantId, ChannelCode, ShopCode);
+END;
+
+IF OBJECT_ID(N'dbo.ChannelSkuMappings', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ChannelSkuMappings (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_ChannelSkuMappings PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_ChannelSkuMappings_TenantId DEFAULT(1),
+        ShopId int NOT NULL,
+        ChannelItemId nvarchar(64) NOT NULL,
+        ChannelVariationId nvarchar(64) NULL,
+        ChannelSkuCode nvarchar(100) NOT NULL,
+        InternalProductId int NOT NULL,
+        ConversionFactor decimal(19,4) NOT NULL CONSTRAINT DF_ChannelSkuMappings_ConversionFactor DEFAULT(1),
+        LastPushedQty decimal(19,4) NOT NULL CONSTRAINT DF_ChannelSkuMappings_LastPushedQty DEFAULT(0),
+        LastPushedAtUtc datetime2 NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_ChannelSkuMappings_IsActive DEFAULT(1)
+    );
+    CREATE UNIQUE INDEX UX_ChannelSkuMappings_TenantId_ShopId_ChannelSkuCode ON dbo.ChannelSkuMappings(TenantId, ShopId, ChannelSkuCode);
+END;
+
+IF OBJECT_ID(N'dbo.HandoverManifests', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.HandoverManifests (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_HandoverManifests PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_HandoverManifests_TenantId DEFAULT(1),
+        ManifestCode nvarchar(64) NOT NULL,
+        WarehouseId int NOT NULL,
+        CarrierCode nvarchar(32) NOT NULL,
+        VehiclePlate nvarchar(32) NULL,
+        DriverName nvarchar(128) NULL,
+        DriverPhone nvarchar(32) NULL,
+        Status nvarchar(32) NOT NULL,
+        TotalPackages int NOT NULL CONSTRAINT DF_HandoverManifests_TotalPackages DEFAULT(0),
+        CreatedBy int NOT NULL,
+        CreatedAtUtc datetime2 NOT NULL,
+        SealedBy int NULL,
+        SealedAtUtc datetime2 NULL
+    );
+    CREATE UNIQUE INDEX UX_HandoverManifests_TenantId_ManifestCode ON dbo.HandoverManifests(TenantId, ManifestCode);
+END;
+
+IF OBJECT_ID(N'dbo.HandoverManifestLines', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.HandoverManifestLines (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_HandoverManifestLines PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_HandoverManifestLines_TenantId DEFAULT(1),
+        ManifestId int NOT NULL,
+        ExportReceiptId int NOT NULL,
+        TrackingNumber nvarchar(64) NOT NULL,
+        MarketplaceOrderId nvarchar(64) NULL,
+        ScannedBy int NOT NULL,
+        ScannedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_HandoverManifestLines_TenantId_TrackingNumber ON dbo.HandoverManifestLines(TenantId, TrackingNumber);
+END;
+
+IF OBJECT_ID(N'dbo.SaasPlans', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SaasPlans (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_SaasPlans PRIMARY KEY,
+        PlanCode nvarchar(32) NOT NULL,
+        PlanName nvarchar(128) NOT NULL,
+        MonthlyOrderQuota int NOT NULL,
+        MaxWarehouses int NOT NULL,
+        MaxUsers int NOT NULL,
+        MonthlyPriceVnd decimal(19,4) NOT NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_SaasPlans_IsActive DEFAULT(1)
+    );
+    CREATE UNIQUE INDEX UX_SaasPlans_PlanCode ON dbo.SaasPlans(PlanCode);
+END;
+
+IF OBJECT_ID(N'dbo.TenantSubscriptions', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.TenantSubscriptions (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_TenantSubscriptions PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_TenantSubscriptions_TenantId DEFAULT(1),
+        PlanCode nvarchar(32) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        MonthlyOrderQuota int NOT NULL,
+        CurrentMonthOrderCount int NOT NULL,
+        MaxWarehouses int NOT NULL,
+        MaxUsers int NOT NULL,
+        TrialEndsAtUtc datetime2 NULL,
+        CurrentPeriodStartUtc datetime2 NOT NULL,
+        CurrentPeriodEndUtc datetime2 NOT NULL,
+        UpdatedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_TenantSubscriptions_TenantId ON dbo.TenantSubscriptions(TenantId);
+END;
+
+IF OBJECT_ID(N'dbo.SaasBillingInvoices', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SaasBillingInvoices (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_SaasBillingInvoices PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_SaasBillingInvoices_TenantId DEFAULT(1),
+        InvoiceCode nvarchar(64) NOT NULL,
+        PlanCode nvarchar(32) NOT NULL,
+        AmountVnd decimal(19,4) NOT NULL,
+        PaymentProvider nvarchar(32) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        QrPayload nvarchar(500) NULL,
+        PaidAtUtc datetime2 NULL,
+        CreatedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_SaasBillingInvoices_TenantId_InvoiceCode ON dbo.SaasBillingInvoices(TenantId, InvoiceCode);
+END;
+
+IF OBJECT_ID(N'dbo.ShipmentFinancialLedgers', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ShipmentFinancialLedgers (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_ShipmentFinancialLedgers PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_ShipmentFinancialLedgers_TenantId DEFAULT(1),
+        ExportReceiptId int NULL,
+        ShipmentId int NULL,
+        CarrierCode nvarchar(32) NOT NULL,
+        TrackingNumber nvarchar(64) NOT NULL,
+        ExpectedCodAmount decimal(19,4) NOT NULL,
+        ActualCodCollected decimal(19,4) NOT NULL,
+        EstimatedShippingFee decimal(19,4) NOT NULL,
+        ActualShippingFee decimal(19,4) NOT NULL,
+        PlatformCommissionFee decimal(19,4) NOT NULL,
+        ReturnFee decimal(19,4) NOT NULL,
+        NetPayoutAmount decimal(19,4) NOT NULL,
+        FeeOverchargeVariance decimal(19,4) NOT NULL,
+        ReconciliationStatus nvarchar(32) NOT NULL,
+        SettledAtUtc datetime2 NULL,
+        CreatedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_ShipmentFinancialLedgers_TenantId_TrackingNumber ON dbo.ShipmentFinancialLedgers(TenantId, TrackingNumber);
+END;
+
+IF OBJECT_ID(N'dbo.PromotionGiftRules', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PromotionGiftRules (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_PromotionGiftRules PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_PromotionGiftRules_TenantId DEFAULT(1),
+        RuleCode nvarchar(64) NOT NULL,
+        RuleName nvarchar(128) NOT NULL,
+        MinOrderValueVnd decimal(19,4) NOT NULL,
+        TriggerProductId int NULL,
+        GiftProductId int NOT NULL,
+        GiftQuantity decimal(19,4) NOT NULL,
+        RemainingQuota int NOT NULL,
+        ValidFromUtc datetime2 NOT NULL,
+        ValidToUtc datetime2 NOT NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_PromotionGiftRules_IsActive DEFAULT(1)
+    );
+    CREATE UNIQUE INDEX UX_PromotionGiftRules_TenantId_RuleCode ON dbo.PromotionGiftRules(TenantId, RuleCode);
+END;
 ");
 }
 
@@ -3852,14 +4040,100 @@ WHERE BaseUomIdSnapshot <= 0 OR BaseUomCodeSnapshot IS NULL OR BaseUomCodeSnapsh
 UPDATE dbo.ExportReceipts
 SET MarketplaceOrderId = N'SHOPEE-VN-20261021-01',
     CarrierCode = N'VTP',
-    TrackingNumber = N'VTP8938505001'
+    TrackingNumber = N'VTP8938505001',
+    AwbLabelUrl = N'/api/v1/export-receipts/awb/VTP8938505001.pdf',
+    AwbPrintCount = 1,
+    AwbFirstPrintedAtUtc = DATEADD(HOUR, -14, SYSUTCDATETIME()),
+    MarketplaceShipByUtc = DATEADD(HOUR, 6, SYSUTCDATETIME()),
+    EInvoiceStatus = N'ISSUED',
+    EInvoiceProvider = N'MISA_MEINVOICE',
+    EInvoiceNumber = N'1C26TAA-000108',
+    BuyerTaxCode = N'0314567890'
 WHERE Code = 'ER-QA-001';
 
 UPDATE dbo.ExportReceipts
 SET MarketplaceOrderId = N'LAZADA-VN-20261021-02',
     CarrierCode = N'GHN',
-    TrackingNumber = N'GHN8938505002'
+    TrackingNumber = N'GHN8938505002',
+    AwbLabelUrl = N'/api/v1/export-receipts/awb/GHN8938505002.pdf',
+    AwbPrintCount = 0,
+    AwbFirstPrintedAtUtc = NULL,
+    MarketplaceShipByUtc = DATEADD(MINUTE, 85, SYSUTCDATETIME()),
+    EInvoiceStatus = N'DRAFT',
+    EInvoiceProvider = N'VIETTEL_SINVOICE',
+    EInvoiceNumber = NULL,
+    BuyerTaxCode = N'0108889992'
 WHERE Code = 'ER-QA-002';
+
+DELETE FROM dbo.ChannelSkuMappings WHERE TenantId = 1;
+DELETE FROM dbo.MarketplaceShops WHERE TenantId = 1;
+INSERT INTO dbo.MarketplaceShops (TenantId, ChannelCode, ShopCode, ShopName, DefaultWarehouseId, ReserveRatioPct, SafetyBufferQty, LowStockThreshold, IsPrimaryShop, TokenExpiresAtUtc, IsActive, CreatedAtUtc)
+VALUES
+(1, N'SHOPEE', N'SHP-VN-8801', N'Gian hàng Chính hãng Shopee Mall TP.HCM', {primaryWarehouse.Id}, 100, 2, 5, 1, DATEADD(DAY, 28, SYSUTCDATETIME()), 1, DATEADD(DAY, -30, SYSUTCDATETIME())),
+(1, N'TIKTOK', N'TTS-VN-9902', N'Gian hàng TikTok Shop Kho Chính WH01', {primaryWarehouse.Id}, 80, 2, 5, 0, DATEADD(DAY, 21, SYSUTCDATETIME()), 1, DATEADD(DAY, -25, SYSUTCDATETIME())),
+(1, N'LAZADA', N'LAZ-VN-7703', N'Gian hàng Lazada LazMall Đông Á', {primaryWarehouse.Id}, 60, 3, 5, 0, DATEADD(HOUR, 36, SYSUTCDATETIME()), 1, DATEADD(DAY, -20, SYSUTCDATETIME())),
+(1, N'SAPO', N'POS-HCM-1104', N'Cửa hàng Bán lẻ POS Quận 7', {primaryWarehouse.Id}, 100, 1, 5, 0, DATEADD(DAY, 60, SYSUTCDATETIME()), 1, DATEADD(DAY, -15, SYSUTCDATETIME()));
+
+DECLARE @shopeeShopId int = (SELECT TOP 1 Id FROM dbo.MarketplaceShops WHERE TenantId = 1 AND ShopCode = N'SHP-VN-8801');
+DECLARE @tiktokShopId int = (SELECT TOP 1 Id FROM dbo.MarketplaceShops WHERE TenantId = 1 AND ShopCode = N'TTS-VN-9902');
+DECLARE @lazadaShopId int = (SELECT TOP 1 Id FROM dbo.MarketplaceShops WHERE TenantId = 1 AND ShopCode = N'LAZ-VN-7703');
+
+INSERT INTO dbo.ChannelSkuMappings (TenantId, ShopId, ChannelItemId, ChannelSkuCode, InternalProductId, ConversionFactor, LastPushedQty, LastPushedAtUtc, IsActive)
+VALUES
+(1, @shopeeShopId, N'SHP-ITEM-1001', N'SHP-QA-PROD-01', {product.Id}, 1, 152, DATEADD(MINUTE, -5, SYSUTCDATETIME()), 1),
+(1, @shopeeShopId, N'SHP-ITEM-1002', N'SHP-QA-LOT-02', {lotProduct.Id}, 1, 55, DATEADD(MINUTE, -5, SYSUTCDATETIME()), 1),
+(1, @tiktokShopId, N'TTS-ITEM-2001', N'TTS-QA-PROD-01', {product.Id}, 1, 121, DATEADD(MINUTE, -5, SYSUTCDATETIME()), 1),
+(1, @lazadaShopId, N'LAZ-ITEM-3001', N'LAZ-QA-PROD-01', {product.Id}, 1, 90, DATEADD(MINUTE, -6, SYSUTCDATETIME()), 1);
+
+DELETE FROM dbo.HandoverManifestLines WHERE TenantId = 1;
+DELETE FROM dbo.HandoverManifests WHERE TenantId = 1;
+INSERT INTO dbo.HandoverManifests (TenantId, ManifestCode, WarehouseId, CarrierCode, DriverName, DriverPhone, VehiclePlate, Status, TotalPackages, CreatedBy, CreatedAtUtc, SealedBy, SealedAtUtc)
+VALUES
+(1, N'MAN-VTP-20261021-01', {primaryWarehouse.Id}, N'VTP', N'Nguyễn Văn Hùng', N'0909333444', N'51D-668.88', N'SEALED', 1, {qaAdmin.Id}, DATEADD(HOUR, -12, SYSUTCDATETIME()), {qaAdmin.Id}, DATEADD(HOUR, -11, SYSUTCDATETIME())),
+(1, N'MAN-GHN-20261021-02', {primaryWarehouse.Id}, N'GHN', N'Trần Minh Tuấn', N'0909555666', N'51C-889.12', N'OPEN', 1, {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), NULL, NULL);
+
+DECLARE @manVtpId int = (SELECT TOP 1 Id FROM dbo.HandoverManifests WHERE TenantId = 1 AND ManifestCode = N'MAN-VTP-20261021-01');
+DECLARE @manGhnId int = (SELECT TOP 1 Id FROM dbo.HandoverManifests WHERE TenantId = 1 AND ManifestCode = N'MAN-GHN-20261021-02');
+DECLARE @er01Id int = (SELECT TOP 1 Id FROM dbo.ExportReceipts WHERE Code = 'ER-QA-001');
+DECLARE @er02Id int = (SELECT TOP 1 Id FROM dbo.ExportReceipts WHERE Code = 'ER-QA-002');
+
+IF @manVtpId IS NOT NULL AND @er01Id IS NOT NULL
+    INSERT INTO dbo.HandoverManifestLines (TenantId, ManifestId, ExportReceiptId, TrackingNumber, MarketplaceOrderId, ScannedAtUtc, ScannedBy)
+    VALUES (1, @manVtpId, @er01Id, N'VTP8938505001', N'SHOPEE-VN-20261021-01', DATEADD(HOUR, -11, SYSUTCDATETIME()), {qaAdmin.Id});
+
+IF @manGhnId IS NOT NULL AND @er02Id IS NOT NULL
+    INSERT INTO dbo.HandoverManifestLines (TenantId, ManifestId, ExportReceiptId, TrackingNumber, MarketplaceOrderId, ScannedAtUtc, ScannedBy)
+    VALUES (1, @manGhnId, @er02Id, N'GHN8938505002', N'LAZADA-VN-20261021-02', DATEADD(HOUR, -1, SYSUTCDATETIME()), {qaAdmin.Id});
+
+DELETE FROM dbo.SaasPlans;
+INSERT INTO dbo.SaasPlans (PlanCode, PlanName, MonthlyPriceVnd, MonthlyOrderQuota, MaxWarehouses, MaxUsers, IsActive)
+VALUES
+(N'STARTER', N'Gói Khởi đầu — 490.000 đ/tháng', 490000, 1500, 1, 5, 1),
+(N'GROWTH', N'Gói Tăng trưởng — 1.490.000 đ/tháng', 1490000, 10000, 3, 20, 1),
+(N'PRO', N'Gói Doanh nghiệp — 3.490.000 đ/tháng', 3490000, 100000, 20, 100, 1);
+
+DELETE FROM dbo.TenantSubscriptions WHERE TenantId = 1;
+INSERT INTO dbo.TenantSubscriptions (TenantId, PlanCode, Status, MonthlyOrderQuota, CurrentMonthOrderCount, MaxWarehouses, MaxUsers, TrialEndsAtUtc, CurrentPeriodStartUtc, CurrentPeriodEndUtc, UpdatedAtUtc)
+VALUES
+(1, N'GROWTH', N'ACTIVE', 10000, 6420, 3, 20, NULL, DATEADD(DAY, -15, SYSUTCDATETIME()), DATEADD(DAY, 15, SYSUTCDATETIME()), SYSUTCDATETIME());
+
+DELETE FROM dbo.SaasBillingInvoices WHERE TenantId = 1;
+INSERT INTO dbo.SaasBillingInvoices (TenantId, InvoiceCode, PlanCode, AmountVnd, PaymentProvider, Status, QrPayload, PaidAtUtc, CreatedAtUtc)
+VALUES
+(1, N'INV-SAAS-202610-001', N'GROWTH', 1490000, N'VIETQR', N'PAID', N'00020101021238570010A00000072701270006970436011310293847560010208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026100016304A1B2', DATEADD(DAY, -15, SYSUTCDATETIME()), DATEADD(DAY, -15, SYSUTCDATETIME())),
+(1, N'INV-SAAS-202611-002', N'GROWTH', 1490000, N'VIETQR', N'UNPAID', N'00020101021238570010A00000072701270006970436011310293847560010208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026110026304C3D4', NULL, DATEADD(DAY, -1, SYSUTCDATETIME()));
+
+DELETE FROM dbo.ShipmentFinancialLedgers WHERE TenantId = 1;
+INSERT INTO dbo.ShipmentFinancialLedgers (TenantId, ShipmentId, ExportReceiptId, TrackingNumber, CarrierCode, ExpectedCodAmount, ActualCodCollected, EstimatedShippingFee, ActualShippingFee, PlatformCommissionFee, ReturnFee, NetPayoutAmount, FeeOverchargeVariance, ReconciliationStatus, CreatedAtUtc, SettledAtUtc)
+VALUES
+(1, {shipment.Id}, ISNULL(@er01Id, 1), N'VTP8938505001', N'VTP', 19800000, 19800000, 65000, 65000, 1188000, 0, 18547000, 0, N'MATCHED', DATEADD(DAY, -4, SYSUTCDATETIME()), DATEADD(DAY, -1, SYSUTCDATETIME())),
+(1, {shipment.Id}, ISNULL(@er02Id, 1), N'GHN8938505002', N'GHN', 8500000, 8500000, 42000, 78000, 510000, 0, 7912000, 36000, N'DISCREPANCY', DATEADD(DAY, -6, SYSUTCDATETIME()), NULL),
+(1, {shipment.Id}, ISNULL(@er01Id, 1), N'SPX8938505003', N'SPX', 6200000, 0, 35000, 35000, 372000, 0, 0, 0, N'PENDING', DATEADD(DAY, -9, SYSUTCDATETIME()), NULL);
+
+DELETE FROM dbo.PromotionGiftRules WHERE TenantId = 1;
+INSERT INTO dbo.PromotionGiftRules (TenantId, RuleCode, RuleName, MinOrderValueVnd, TriggerProductId, GiftProductId, GiftQuantity, RemainingQuota, ValidFromUtc, ValidToUtc, IsActive)
+VALUES
+(1, N'PROMO-10-10-GIFT', N'Tặng 1 Cảm biến QA-02 cho đơn hàng từ 5.000.000đ', 5000000, {product.Id}, {lotProduct.Id}, 1, 45, DATEADD(DAY, -10, SYSUTCDATETIME()), DATEADD(DAY, 20, SYSUTCDATETIME()), 1);
 
 DELETE FROM dbo.IntegrationOutboxMessages WHERE TenantId = 1 AND EventId IN (N'OUTBOX-GL-001', N'OUTBOX-TMS-002', N'OUTBOX-APAR-003', N'OUTBOX-WMS-004');
 INSERT INTO dbo.IntegrationOutboxMessages (TenantId, EventId, EventType, AggregateType, AggregateId, PayloadJson, Status, RetryCount, CreatedAt, PublishedAt)

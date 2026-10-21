@@ -123,6 +123,12 @@ describe('Cất hàng',()=>{
    expect(await v.findByRole('alert')).toBeTruthy();
    expect(v.getByRole('alert').textContent).toBe('Tồn kho khả dụng tại vị trí chọn không đủ để thực hiện thao tác. Vui lòng điều chỉnh số lượng hoặc chọn vị trí khác.');
    expect((v.getByLabelText('Số lượng cất SP1') as HTMLInputElement).value).toBe('6');
+   expect(v.getByText('Kệ đang hoạt động')).toBeTruthy();
+   expect(v.getByText('Kệ không bị khóa')).toBeTruthy();
+   expect(v.getByRole('button', { name: 'Chấm điểm Tối ưu Xếp dỡ & Khớp Vị trí Kệ' })).toBeTruthy();
+   expect(v.getByTestId('putaway-ledger-pair-panel').textContent).toContain(
+     'Chân nguồn -Q (Bãi tiếp nhận) • Chân đích +Q (Kệ lưu trữ BIN-A01-01)',
+   );
  });
 });
 

@@ -40,13 +40,16 @@ export const UiToolbarField = ({
 
 export const UiCard = ({
   title,
+  subtitle,
   children,
 }: {
   title?: string;
+  subtitle?: string;
   children: ReactNode;
 }) => (
   <section className="ui-card">
     {title && <h2 className="ui-card-title">{title}</h2>}
+    {subtitle && <p className="ui-muted-text" style={{ marginTop: -4, marginBottom: 10, fontSize: 13 }}>{subtitle}</p>}
     {children}
   </section>
 );
@@ -54,10 +57,16 @@ export const UiCard = ({
 export const UiBadge = ({
   children,
   tone = 'neutral',
+  title,
 }: {
   children: ReactNode;
   tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info';
-}) => <span className={'ui-badge ' + (tone === 'neutral' ? '' : tone)}>{children}</span>;
+  title?: string;
+}) => (
+  <span className={'ui-badge ' + (tone === 'neutral' ? '' : tone)} title={title}>
+    {children}
+  </span>
+);
 
 export const UiEmptyState = ({
   title,

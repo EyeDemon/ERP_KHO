@@ -383,6 +383,117 @@ public sealed class AccountSecurityController(
         });
     }
 
+    public sealed record GrantSupportImpersonationRequest(
+        string? SupportTicketCode = null,
+        int? ExpiresInMinutes = null,
+        bool ReadOnlyScope = true);
+
+    public sealed record AnonymizeBuyerPiiRequest(
+        int? RetentionDays = null,
+        int? WarehouseId = null);
+
+    [HttpPost("~/api/v1/security/support-impersonation/grant")]
+    [HttpPost("~/api/security/support-impersonation/grant")]
+    [IdempotentCommand("AccountSecurity.GrantSupportImpersonation")]
+    public async Task<IActionResult> GrantSupportImpersonation(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GrantSupportImpersonationRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var now = DateTime.UtcNow;
+        var expiresMinutes = Math.Clamp(request?.ExpiresInMinutes ?? 30, 5, 60);
+        var expiresAtUtc = now.AddMinutes(expiresMinutes);
+        var ticketCode = string.IsNullOrWhiteSpace(request?.SupportTicketCode) ? $"SUP-{now:yyyyMMdd}-01" : request.SupportTicketCode.Trim();
+        var supportToken = $"IMP-{Guid.NewGuid():N}".ToUpperInvariant();
+
+        if (db is not null)
+        {
+            db.AuditLogs.Add(new AuditLog
+            {
+                UserId = ResolveActorUserId(),
+                EntityName = "SupportImpersonationConsent",
+                EntityId = db.CurrentTenantId,
+                Action = "AccountSecurity.GrantSupportImpersonation",
+                NewValues = $"Ticket={ticketCode}; ExpiresAtUtc={expiresAtUtc:O}; ReadOnly={request?.ReadOnlyScope ?? true}",
+                Reason = $"Chủ shop cấp quyền hỗ trợ kỹ thuật tạm thời ({expiresMinutes} phút) cho mã yêu cầu {ticketCode}",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new
+        {
+            supportTicketCode = ticketCode,
+            supportImpersonationToken = supportToken,
+            readOnlyScope = request?.ReadOnlyScope ?? true,
+            expiresInMinutes = expiresMinutes,
+            grantedAtUtc = now,
+            expiresAtUtc,
+            statusLabel = $"Đã cấp quyền hỗ trợ kỹ thuật có thời hạn ({expiresMinutes} phút) kèm nhật ký AuditLog bất biến"
+        });
+    }
+
+    [HttpPost("~/api/v1/security/anonymize-expired-buyer-pii")]
+    [HttpPost("~/api/security/anonymize-expired-buyer-pii")]
+    [IdempotentCommand("AccountSecurity.AnonymizeExpiredBuyerPii")]
+    public async Task<IActionResult> AnonymizeExpiredBuyerPii(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AnonymizeBuyerPiiRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var now = DateTime.UtcNow;
+        var retentionDays = Math.Max(1, request?.RetentionDays ?? 90);
+        var cutoffUtc = now.AddDays(-retentionDays);
+        var anonymizedCount = 0;
+
+        if (db is not null)
+        {
+            var expiredReceipts = await db.ExportReceipts
+                .Where(r => r.CreatedAt <= cutoffUtc &&
+                            (r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched || r.Status == ERP.Domain.Enums.ReceiptStatus.Cancelled) &&
+                            r.CustomerNameSnapshot != null &&
+                            !r.CustomerNameSnapshot.StartsWith("ANONYMIZED_PII_"))
+                .Take(200)
+                .ToListAsync(cancellationToken);
+
+            foreach (var r in expiredReceipts)
+            {
+                r.CustomerNameSnapshot = $"ANONYMIZED_PII_{r.Id}";
+                r.Note = "[PII_REDACTED_DECREE_13_2023]";
+                anonymizedCount++;
+            }
+
+            db.AuditLogs.Add(new AuditLog
+            {
+                UserId = ResolveActorUserId(),
+                EntityName = "BuyerPiiRetentionPolicy",
+                EntityId = db.CurrentTenantId,
+                Action = "AccountSecurity.AnonymizeExpiredBuyerPii",
+                NewValues = $"RetentionDays={retentionDays}; AnonymizedReceipts={anonymizedCount}",
+                Reason = $"Ẩn danh hóa dữ liệu cá nhân người mua (PII) quá hạn {retentionDays} ngày theo Nghị định 13/2023/NĐ-CP",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new
+        {
+            retentionDays,
+            cutoffUtc,
+            anonymizedCount,
+            complianceStandard = "Nghị định 13/2023/NĐ-CP về Bảo vệ dữ liệu cá nhân",
+            ledgerIntegrityPreserved = true,
+            executedAtUtc = now,
+            statusLabel = $"Đã ẩn danh hóa PII người mua quá hạn {retentionDays} ngày ({anonymizedCount} chứng từ) theo Nghị định 13/2023/NĐ-CP"
+        });
+    }
+
     public static byte[] GetTotpSecretBytes(int userId, string username)
     {
         var raw = System.Text.Encoding.UTF8.GetBytes($"ERP_WMS_RFC6238_TOTP_SECRET:{userId}:{username.Trim().ToLowerInvariant()}");

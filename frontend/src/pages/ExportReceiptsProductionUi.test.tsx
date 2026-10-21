@@ -281,5 +281,50 @@ describe('ExportReceipts shared production UI', () => {
       ),
     ).toBeTruthy();
   });
+
+  it('renders thermal 100x150mm batch AWB print, SLA badges, carrier handover manifest, and MISA NĐ 70/2025 e-invoice actions', async () => {
+    localStorage.setItem('role', 'Manager');
+    setCurrentPermissions(['export_receipt.read', 'export_receipt.create', 'export_receipt.dispatch']);
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} } as never);
+
+    const view = render(<ExportReceipts />);
+    expect(
+      await view.findByText(
+        'In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm Theo Vị Trí Kệ & Biên Bản Bàn Giao Bưu Tá Điện Tử',
+      ),
+    ).toBeTruthy();
+    expect(view.getByText(/Đơn quá hạn bàn giao sàn:/)).toBeTruthy();
+    expect(view.getByText(/Đơn sắp trễ hạn \(< 2 giờ\):/)).toBeTruthy();
+    expect(view.getByText(/Đơn phải giao trong ngày:/)).toBeTruthy();
+    expect(view.getByText('[Kệ: BIN-A01-01 | SKU: QA-E2E-001 x 5]')).toBeTruthy();
+    expect(view.getByText('Số lần in: 1 (Bản gốc)')).toBeTruthy();
+    expect(view.getByText('Cảnh báo in lại')).toBeTruthy();
+    expect(view.getByText('Viettel SInvoice • Mẫu 1/001 • C26TAA')).toBeTruthy();
+
+    fireEvent.click(
+      view.getByRole('button', { name: 'In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm (Sắp xếp theo Kệ A→Z)' }),
+    );
+    expect(
+      await view.findByText(
+        'Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z): GHN84920188, VTP99201122.',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(view.getByRole('button', { name: 'Chốt Biên Bản Bàn Giao Bưu Tá Điện Tử' }));
+    expect(
+      await view.findByText(
+        'Đã chốt Biên bản Bàn giao Bưu tá Điện tử (2 vận đơn: GHN84920188, VTP99201122 • Đã chặn cứng 0 đơn hủy trên sàn).',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      view.getByRole('button', { name: 'Kết xuất Bảng kê Excel Chuẩn MISA & Hóa đơn Điện tử NĐ 70/2025' }),
+    );
+    expect(
+      await view.findByText(
+        'Đã kết xuất Bảng kê Excel chuẩn MISA & phát hành Hóa đơn điện tử NĐ 70/2025 (Viettel SInvoice • Mẫu 1/001 • C26TAA).',
+      ),
+    ).toBeTruthy();
+  });
 });
 

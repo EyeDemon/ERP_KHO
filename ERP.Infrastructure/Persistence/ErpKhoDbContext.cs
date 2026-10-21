@@ -166,6 +166,174 @@ BEGIN
         ALTER TABLE dbo.ExportReceipts ADD CarrierCode nvarchar(32) NULL;
     IF COL_LENGTH('dbo.ExportReceipts', 'TrackingNumber') IS NULL
         ALTER TABLE dbo.ExportReceipts ADD TrackingNumber nvarchar(64) NULL;
+    IF COL_LENGTH('dbo.ExportReceipts', 'AwbLabelUrl') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD AwbLabelUrl nvarchar(500) NULL;
+    IF COL_LENGTH('dbo.ExportReceipts', 'AwbPrintCount') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD AwbPrintCount int NOT NULL CONSTRAINT DF_ExportReceipts_AwbPrintCount DEFAULT(0);
+    IF COL_LENGTH('dbo.ExportReceipts', 'AwbFirstPrintedAtUtc') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD AwbFirstPrintedAtUtc datetime2 NULL;
+    IF COL_LENGTH('dbo.ExportReceipts', 'MarketplaceShipByUtc') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD MarketplaceShipByUtc datetime2 NULL;
+    IF COL_LENGTH('dbo.ExportReceipts', 'EInvoiceStatus') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD EInvoiceStatus nvarchar(32) NULL CONSTRAINT DF_ExportReceipts_EInvoiceStatus DEFAULT(N'PENDING');
+    IF COL_LENGTH('dbo.ExportReceipts', 'EInvoiceProvider') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD EInvoiceProvider nvarchar(32) NULL;
+    IF COL_LENGTH('dbo.ExportReceipts', 'EInvoiceNumber') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD EInvoiceNumber nvarchar(64) NULL;
+    IF COL_LENGTH('dbo.ExportReceipts', 'BuyerTaxCode') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD BuyerTaxCode nvarchar(32) NULL;
+END;
+
+IF OBJECT_ID(N'dbo.MarketplaceShops', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.MarketplaceShops (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_MarketplaceShops PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_MarketplaceShops_TenantId DEFAULT(1),
+        ChannelCode nvarchar(32) NOT NULL,
+        ShopCode nvarchar(64) NOT NULL,
+        ShopName nvarchar(200) NOT NULL,
+        DefaultWarehouseId int NOT NULL,
+        ReserveRatioPct decimal(5,2) NOT NULL CONSTRAINT DF_MarketplaceShops_ReserveRatioPct DEFAULT(100),
+        SafetyBufferQty decimal(19,4) NOT NULL CONSTRAINT DF_MarketplaceShops_SafetyBufferQty DEFAULT(0),
+        LowStockThreshold decimal(19,4) NOT NULL CONSTRAINT DF_MarketplaceShops_LowStockThreshold DEFAULT(5),
+        IsPrimaryShop bit NOT NULL CONSTRAINT DF_MarketplaceShops_IsPrimaryShop DEFAULT(0),
+        EncryptedAccessToken nvarchar(500) NULL,
+        EncryptedRefreshToken nvarchar(500) NULL,
+        TokenExpiresAtUtc datetime2 NULL,
+        WebhookSecret nvarchar(128) NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_MarketplaceShops_IsActive DEFAULT(1),
+        CreatedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_MarketplaceShops_TenantId_ChannelCode_ShopCode ON dbo.MarketplaceShops(TenantId, ChannelCode, ShopCode);
+END;
+
+IF OBJECT_ID(N'dbo.ChannelSkuMappings', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ChannelSkuMappings (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_ChannelSkuMappings PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_ChannelSkuMappings_TenantId DEFAULT(1),
+        ShopId int NOT NULL,
+        ChannelItemId nvarchar(64) NOT NULL,
+        ChannelVariationId nvarchar(64) NULL,
+        ChannelSkuCode nvarchar(100) NOT NULL,
+        InternalProductId int NOT NULL,
+        ConversionFactor decimal(19,4) NOT NULL CONSTRAINT DF_ChannelSkuMappings_ConversionFactor DEFAULT(1),
+        LastPushedQty decimal(19,4) NOT NULL CONSTRAINT DF_ChannelSkuMappings_LastPushedQty DEFAULT(0),
+        LastPushedAtUtc datetime2 NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_ChannelSkuMappings_IsActive DEFAULT(1)
+    );
+    CREATE UNIQUE INDEX UX_ChannelSkuMappings_TenantId_ShopId_ChannelSkuCode ON dbo.ChannelSkuMappings(TenantId, ShopId, ChannelSkuCode);
+END;
+
+IF OBJECT_ID(N'dbo.HandoverManifests', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.HandoverManifests (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_HandoverManifests PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_HandoverManifests_TenantId DEFAULT(1),
+        ManifestCode nvarchar(64) NOT NULL,
+        WarehouseId int NOT NULL,
+        CarrierCode nvarchar(32) NOT NULL,
+        VehiclePlate nvarchar(32) NULL,
+        DriverName nvarchar(128) NULL,
+        DriverPhone nvarchar(32) NULL,
+        Status nvarchar(32) NOT NULL,
+        TotalPackages int NOT NULL CONSTRAINT DF_HandoverManifests_TotalPackages DEFAULT(0),
+        CreatedBy int NOT NULL,
+        CreatedAtUtc datetime2 NOT NULL,
+        SealedBy int NULL,
+        SealedAtUtc datetime2 NULL
+    );
+    CREATE UNIQUE INDEX UX_HandoverManifests_TenantId_ManifestCode ON dbo.HandoverManifests(TenantId, ManifestCode);
+END;
+
+IF OBJECT_ID(N'dbo.HandoverManifestLines', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.HandoverManifestLines (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_HandoverManifestLines PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_HandoverManifestLines_TenantId DEFAULT(1),
+        ManifestId int NOT NULL,
+        ExportReceiptId int NOT NULL,
+        TrackingNumber nvarchar(64) NOT NULL,
+        MarketplaceOrderId nvarchar(64) NULL,
+        ScannedBy int NOT NULL,
+        ScannedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_HandoverManifestLines_TenantId_TrackingNumber ON dbo.HandoverManifestLines(TenantId, TrackingNumber);
+END;
+
+IF OBJECT_ID(N'dbo.SaasPlans', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SaasPlans (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_SaasPlans PRIMARY KEY,
+        PlanCode nvarchar(32) NOT NULL,
+        PlanName nvarchar(128) NOT NULL,
+        MonthlyOrderQuota int NOT NULL,
+        MaxWarehouses int NOT NULL,
+        MaxUsers int NOT NULL,
+        MonthlyPriceVnd decimal(19,4) NOT NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_SaasPlans_IsActive DEFAULT(1)
+    );
+    CREATE UNIQUE INDEX UX_SaasPlans_PlanCode ON dbo.SaasPlans(PlanCode);
+END;
+
+IF OBJECT_ID(N'dbo.TenantSubscriptions', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.TenantSubscriptions (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_TenantSubscriptions PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_TenantSubscriptions_TenantId DEFAULT(1),
+        PlanCode nvarchar(32) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        MonthlyOrderQuota int NOT NULL,
+        CurrentMonthOrderCount int NOT NULL,
+        MaxWarehouses int NOT NULL,
+        MaxUsers int NOT NULL,
+        TrialEndsAtUtc datetime2 NULL,
+        CurrentPeriodStartUtc datetime2 NOT NULL,
+        CurrentPeriodEndUtc datetime2 NOT NULL,
+        UpdatedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_TenantSubscriptions_TenantId ON dbo.TenantSubscriptions(TenantId);
+END;
+
+IF OBJECT_ID(N'dbo.SaasBillingInvoices', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SaasBillingInvoices (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_SaasBillingInvoices PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_SaasBillingInvoices_TenantId DEFAULT(1),
+        InvoiceCode nvarchar(64) NOT NULL,
+        PlanCode nvarchar(32) NOT NULL,
+        AmountVnd decimal(19,4) NOT NULL,
+        PaymentProvider nvarchar(32) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        QrPayload nvarchar(500) NULL,
+        PaidAtUtc datetime2 NULL,
+        CreatedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_SaasBillingInvoices_TenantId_InvoiceCode ON dbo.SaasBillingInvoices(TenantId, InvoiceCode);
+END;
+
+IF OBJECT_ID(N'dbo.ShipmentFinancialLedgers', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ShipmentFinancialLedgers (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_ShipmentFinancialLedgers PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_ShipmentFinancialLedgers_TenantId DEFAULT(1),
+        ExportReceiptId int NULL,
+        ShipmentId int NULL,
+        CarrierCode nvarchar(32) NOT NULL,
+        TrackingNumber nvarchar(64) NOT NULL,
+        ExpectedCodAmount decimal(19,4) NOT NULL,
+        ActualCodCollected decimal(19,4) NOT NULL,
+        EstimatedShippingFee decimal(19,4) NOT NULL,
+        ActualShippingFee decimal(19,4) NOT NULL,
+        PlatformCommissionFee decimal(19,4) NOT NULL,
+        ReturnFee decimal(19,4) NOT NULL,
+        NetPayoutAmount decimal(19,4) NOT NULL,
+        FeeOverchargeVariance decimal(19,4) NOT NULL,
+        ReconciliationStatus nvarchar(32) NOT NULL,
+        SettledAtUtc datetime2 NULL,
+        CreatedAtUtc datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_ShipmentFinancialLedgers_TenantId_TrackingNumber ON dbo.ShipmentFinancialLedgers(TenantId, TrackingNumber);
 END;
 
 IF OBJECT_ID(N'dbo.IntegrationOutboxMessages', N'U') IS NULL
@@ -424,6 +592,14 @@ WHERE TenantId = {tenantId}
     public DbSet<IntegrationOutboxMessage> IntegrationOutboxMessages => Set<IntegrationOutboxMessage>();
     public DbSet<IntegrationInboxMessage> IntegrationInboxMessages => Set<IntegrationInboxMessage>();
     public DbSet<ProductBundleComponent> ProductBundleComponents => Set<ProductBundleComponent>();
+    public DbSet<MarketplaceShop> MarketplaceShops => Set<MarketplaceShop>();
+    public DbSet<ChannelSkuMapping> ChannelSkuMappings => Set<ChannelSkuMapping>();
+    public DbSet<HandoverManifest> HandoverManifests => Set<HandoverManifest>();
+    public DbSet<HandoverManifestLine> HandoverManifestLines => Set<HandoverManifestLine>();
+    public DbSet<SaasPlan> SaasPlans => Set<SaasPlan>();
+    public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
+    public DbSet<SaasBillingInvoice> SaasBillingInvoices => Set<SaasBillingInvoice>();
+    public DbSet<ShipmentFinancialLedger> ShipmentFinancialLedgers => Set<ShipmentFinancialLedger>();
 
     public override int SaveChanges() => SaveChanges(acceptAllChangesOnSuccess: true);
 
