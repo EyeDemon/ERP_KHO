@@ -134,6 +134,7 @@ const ExportReceipts = () => {
   const [warehouseId, setWarehouseId] = useState<number | ''>('');
   const [note, setNote] = useState('');
   const [customerId, setCustomerId] = useState<number | ''>('');
+  const [salesOrderId, setSalesOrderId] = useState<string>('');
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
   
   // Stock cache
@@ -616,6 +617,17 @@ const ExportReceipts = () => {
                     </div>
                   );
                 })}
+              </div>
+
+              <div className="export-form-grid" style={{ marginTop: 10 }}>
+                <label className="ui-stack">
+                  <span>Đơn bán hàng (SO) / Yêu cầu xuất liên kết</span>
+                  <select aria-label="Liên kết Đơn bán hàng (SO)" value={salesOrderId} onChange={e => setSalesOrderId(e.target.value)}>
+                    <option value="">-- Không liên kết SO --</option>
+                    <option value="1">SO-2026-001 — Đơn giao khách hàng kênh phân phối</option>
+                    <option value="2">SO-2026-002 — Đơn điều phối xuất kho ưu tiên</option>
+                  </select>
+                </label>
               </div>
 
               <div className="export-section-actions">

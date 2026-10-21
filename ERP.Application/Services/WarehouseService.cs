@@ -91,7 +91,14 @@ namespace ERP.Application.Services
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
-            warehouse.Locations.Add(new WarehouseLocation { Code="RECEIVING", Name="Vị trí nhận hàng", LocationType=WarehouseLocationType.Receiving, IsActive=true, IsReceivable=true, IsSystemManaged=true });
+            warehouse.Locations.Add(new WarehouseLocation { Code = "RECEIVING", Name = "Vị trí nhận hàng", LocationType = WarehouseLocationType.Receiving, IsActive = true, IsPickable = false, IsReceivable = true, IsSystemManaged = true });
+            warehouse.Locations.Add(new WarehouseLocation { Code = "STAGING", Name = "Vị trí tập kết trung chuyển", LocationType = WarehouseLocationType.Staging, IsActive = true, IsPickable = false, IsReceivable = false, IsSystemManaged = true });
+            warehouse.Locations.Add(new WarehouseLocation { Code = "QC_HOLD", Name = "Vị trí chờ kiểm định chất lượng", LocationType = WarehouseLocationType.Staging, IsActive = true, IsPickable = false, IsReceivable = false, IsSystemManaged = true });
+            warehouse.Locations.Add(new WarehouseLocation { Code = "QUARANTINE", Name = "Vị trí biệt trữ cách ly", LocationType = WarehouseLocationType.Staging, IsActive = true, IsPickable = false, IsReceivable = false, IsSystemManaged = true });
+            warehouse.Locations.Add(new WarehouseLocation { Code = "RETURNS_STAGE", Name = "Vị trí tập kết hàng trả về", LocationType = WarehouseLocationType.Staging, IsActive = true, IsPickable = false, IsReceivable = false, IsSystemManaged = true });
+            warehouse.Locations.Add(new WarehouseLocation { Code = "PACKING_STAGE", Name = "Vị trí tập kết đóng gói", LocationType = WarehouseLocationType.Staging, IsActive = true, IsPickable = false, IsReceivable = false, IsSystemManaged = true });
+            warehouse.Locations.Add(new WarehouseLocation { Code = "SHIPPING_STAGE", Name = "Vị trí tập kết xuất hàng", LocationType = WarehouseLocationType.Staging, IsActive = true, IsPickable = false, IsReceivable = false, IsSystemManaged = true });
+            warehouse.Locations.Add(new WarehouseLocation { Code = "SCRAP", Name = "Vị trí chờ thanh lý hủy bỏ", LocationType = WarehouseLocationType.Staging, IsActive = true, IsPickable = false, IsReceivable = false, IsSystemManaged = true });
             warehouse.Locations.Add(new WarehouseLocation { Code="LEGACY", Name="Vị trí tương thích nghiệp vụ kho", LocationType=WarehouseLocationType.Legacy, IsActive=true, IsPickable=true, IsSystemManaged=true });
             warehouse.Locations.Add(new WarehouseLocation { Code="DAMAGED", Name="Vị trí cách ly hàng hỏng", LocationType=WarehouseLocationType.Damaged, IsActive=true, IsPickable=false, IsReceivable=false, IsSystemManaged=true });
 

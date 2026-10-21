@@ -176,7 +176,13 @@ namespace ERP.Api.Controllers
             string? ReturnReference = null,
             string? ReasonCode = null,
             int? WarehouseId = null,
-            string? RmaReferenceCode = null);
+            string? RmaReferenceCode = null,
+            int? ProductId = null,
+            string? ProductCode = null,
+            int? LocationId = null,
+            string? LocationCode = null,
+            string? LotNumber = null,
+            decimal? Quantity = null);
 
         [HttpPost("rma-intake-check")]
         [HttpPost("initiate-rma-inspection")]
@@ -294,7 +300,11 @@ namespace ERP.Api.Controllers
             string? LotNumber = null,
             bool ExecuteStockMutation = false,
             string? ActionType = null,
-            decimal Quantity = 1m);
+            decimal Quantity = 1m,
+            string? ProductCode = null,
+            string? LocationCode = null,
+            string? ReasonCode = null,
+            string? Note = null);
 
         [HttpPost("execute-rtv-refurbish")]
         [IdempotentCommand("ImportReceipt.ExecuteRtvRefurbish")]
@@ -334,7 +344,29 @@ namespace ERP.Api.Controllers
                 User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                 out var uid) ? uid : (int?)null;
 
-            if (_db != null && request?.ExecuteStockMutation == true && request.ProductId.HasValue && request.LocationId.HasValue)
+            var resolvedProductId = request?.ProductId;
+            var resolvedLocationId = request?.LocationId;
+            if (_db != null)
+            {
+                if (!resolvedProductId.HasValue && !string.IsNullOrWhiteSpace(request?.ProductCode))
+                {
+                    var code = request.ProductCode.Trim();
+                    resolvedProductId = await _db.Products.AsNoTracking()
+                        .Where(p => p.Code == code)
+                        .Select(p => (int?)p.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+                if (!resolvedLocationId.HasValue && !string.IsNullOrWhiteSpace(request?.LocationCode))
+                {
+                    var locCode = request.LocationCode.Trim();
+                    var locQuery = _db.WarehouseLocations.AsNoTracking().Where(l => l.Code == locCode);
+                    if (warehouseId.HasValue)
+                        locQuery = locQuery.Where(l => l.WarehouseId == warehouseId.Value);
+                    resolvedLocationId = await locQuery.Select(l => (int?)l.Id).FirstOrDefaultAsync(cancellationToken);
+                }
+            }
+
+            if (_db != null && (request?.ExecuteStockMutation == true || resolvedProductId.HasValue) && resolvedProductId.HasValue)
             {
                 var isRelational = _db.Database.IsRelational();
                 await using var tx = isRelational && _db.Database.CurrentTransaction == null
@@ -344,13 +376,13 @@ namespace ERP.Api.Controllers
                 try
                 {
                     var stockQuery = _db.InventoryStocks
-                        .Where(s => s.ProductId == request.ProductId.Value && s.LocationId == request.LocationId.Value);
+                        .Where(s => s.ProductId == resolvedProductId.Value && (!resolvedLocationId.HasValue || s.LocationId == resolvedLocationId.Value));
                     if (warehouseId.HasValue)
                         stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
                     else if (accessibleIds != null)
                         stockQuery = stockQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
 
-                    if (!string.IsNullOrWhiteSpace(request.LotNumber))
+                    if (!string.IsNullOrWhiteSpace(request?.LotNumber))
                     {
                         var normalizedLot = request.LotNumber.Trim();
                         stockQuery = stockQuery.Where(s => s.Lot != null && s.Lot.LotNumber == normalizedLot);
@@ -372,7 +404,7 @@ namespace ERP.Api.Controllers
 
                     if (isRtvOrScrap)
                     {
-                        var writeOffQty = request.Quantity > 0m ? request.Quantity : 1m;
+                        var writeOffQty = request?.Quantity > 0m ? request.Quantity : 1m;
                         var availableInBucket = stock.Quantity - stock.ReservedQuantity;
                         if (availableInBucket < writeOffQty)
                         {
@@ -417,7 +449,7 @@ namespace ERP.Api.Controllers
                     else
                     {
                         var fromStatus = stock.Status;
-                        var moveQty = request.Quantity > 0m && request.Quantity <= stock.Quantity
+                        var moveQty = request?.Quantity > 0m && request.Quantity <= stock.Quantity
                             ? request.Quantity
                             : stock.Quantity;
 
@@ -557,6 +589,8 @@ namespace ERP.Api.Controllers
                 status = "Đã thực thi & Ghi sổ kiểm toán",
                 statusLabel = "Đã thực thi & Ghi sổ kiểm toán",
                 ledgerUpdated,
+                executedStockMutation = ledgerUpdated,
+                mutatedQuantity = ledgerUpdated ? (request?.Quantity > 0m ? request.Quantity : 1m) : 0m,
                 ledgerTransactionId,
                 resultingStockQuantity,
                 resultingStatus,

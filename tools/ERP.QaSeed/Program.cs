@@ -571,56 +571,53 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         }
     }
 
-    var damagedLocation = await context.WarehouseLocations.IgnoreQueryFilters()
-        .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == "DAMAGED");
-    if (damagedLocation is null)
+    var systemVirtualLocationSpecs = new (string Code, string Name, WarehouseLocationType LocType, bool Receivable, bool Pickable)[]
     {
-        context.WarehouseLocations.Add(new WarehouseLocation
+        ("RECEIVING", "Vị trí nhận hàng", WarehouseLocationType.Receiving, true, false),
+        ("STAGING", "Khu vực tập kết xuất hàng", WarehouseLocationType.Staging, false, false),
+        ("QC_HOLD", "Khu vực tạm giữ chờ kiểm định chất lượng", WarehouseLocationType.Rejected, false, false),
+        ("QUARANTINE", "Khu vực cách ly hàng nghi ngờ", WarehouseLocationType.Rejected, false, false),
+        ("DAMAGED", "Khu vực biệt trữ hàng hỏng", WarehouseLocationType.Damaged, false, false),
+        ("RETURNS_STAGE", "Khu vực tiếp nhận hàng hoàn trả (RMA)", WarehouseLocationType.Receiving, true, false),
+        ("PACKING_STAGE", "Khu vực đóng gói đơn hàng", WarehouseLocationType.Staging, false, false),
+        ("SHIPPING_STAGE", "Khu vực tập kết chờ bốc xếp giao hàng", WarehouseLocationType.Staging, false, false),
+        ("SCRAP", "Khu vực chờ thanh hủy phế phẩm", WarehouseLocationType.Damaged, false, false),
+        ("LEGACY", "Vị trí chuyển đổi dữ liệu lịch sử", WarehouseLocationType.Legacy, false, false)
+    };
+    foreach (var targetWh in new[] { primaryWarehouse, wh02 })
+    {
+        foreach (var sysLoc in systemVirtualLocationSpecs)
         {
-            WarehouseId = primaryWarehouse.Id,
-            Code = "DAMAGED",
-            Name = "Khu vực biệt trữ hàng hỏng",
-            LocationType = WarehouseLocationType.Damaged,
-            IsActive = true,
-            IsBlocked = false,
-            IsPickable = false,
-            IsReceivable = false,
-            IsSystemManaged = true,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = qaAdmin.Id
-        });
-    }
-    else
-    {
-        damagedLocation.Name = "Khu vực biệt trữ hàng hỏng";
-        damagedLocation.IsActive = true;
-        damagedLocation.IsSystemManaged = true;
-    }
-
-    var legacyLocation = await context.WarehouseLocations.IgnoreQueryFilters()
-        .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == "LEGACY");
-    if (legacyLocation is null)
-    {
-        context.WarehouseLocations.Add(new WarehouseLocation
-        {
-            WarehouseId = primaryWarehouse.Id,
-            Code = "LEGACY",
-            Name = "Vị trí chuyển đổi dữ liệu lịch sử",
-            LocationType = WarehouseLocationType.Legacy,
-            IsActive = true,
-            IsBlocked = false,
-            IsPickable = false,
-            IsReceivable = false,
-            IsSystemManaged = true,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = qaAdmin.Id
-        });
-    }
-    else
-    {
-        legacyLocation.Name = "Vị trí chuyển đổi dữ liệu lịch sử";
-        legacyLocation.IsActive = true;
-        legacyLocation.IsSystemManaged = true;
+            var existingSysLoc = await context.WarehouseLocations.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(l => l.WarehouseId == targetWh.Id && l.Code == sysLoc.Code);
+            if (existingSysLoc is null)
+            {
+                context.WarehouseLocations.Add(new WarehouseLocation
+                {
+                    WarehouseId = targetWh.Id,
+                    Code = sysLoc.Code,
+                    Name = sysLoc.Name,
+                    LocationType = sysLoc.LocType,
+                    IsActive = true,
+                    IsBlocked = false,
+                    IsPickable = sysLoc.Pickable,
+                    IsReceivable = sysLoc.Receivable,
+                    IsSystemManaged = true,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = qaAdmin.Id
+                });
+            }
+            else
+            {
+                existingSysLoc.Name = sysLoc.Name;
+                existingSysLoc.LocationType = sysLoc.LocType;
+                existingSysLoc.IsActive = true;
+                existingSysLoc.IsBlocked = false;
+                existingSysLoc.IsPickable = sysLoc.Pickable;
+                existingSysLoc.IsReceivable = sysLoc.Receivable;
+                existingSysLoc.IsSystemManaged = true;
+            }
+        }
     }
     await context.SaveChangesAsync();
 
@@ -949,17 +946,26 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     foreach (var p in allExistingProductsWithDetails)
     {
-        if (palletUnit.Id != p.UnitId && !p.Uoms.Any(u => u.UnitId == palletUnit.Id))
+        if (palletUnit.Id != p.UnitId)
         {
-            context.ProductUoms.Add(new ProductUom
+            var existingPalletUom = p.Uoms.FirstOrDefault(u => u.UnitId == palletUnit.Id);
+            if (existingPalletUom is null)
             {
-                ProductId = p.Id,
-                UnitId = palletUnit.Id,
-                ConversionFactor = 20m,
-                Version = 1,
-                EffectiveFromUtc = DateTime.UtcNow.AddDays(-60),
-                IsActive = true
-            });
+                context.ProductUoms.Add(new ProductUom
+                {
+                    ProductId = p.Id,
+                    UnitId = palletUnit.Id,
+                    ConversionFactor = 20m,
+                    Version = 1,
+                    EffectiveFromUtc = DateTime.UtcNow.AddDays(-60),
+                    IsActive = true
+                });
+            }
+            else
+            {
+                existingPalletUom.ConversionFactor = 20m;
+                existingPalletUom.IsActive = true;
+            }
         }
         if (!p.QcPolicies.Any())
         {

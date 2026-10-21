@@ -166,7 +166,7 @@ public sealed class Wave7FullChaosLifecycleSqlTests
                 var wh1Locations = await whDb.WarehouseLocations.AsNoTracking()
                     .Where(x => x.WarehouseId == state.Wh1Id)
                     .ToListAsync();
-                wh1Locations.Select(x => x.Code).Should().BeEquivalentTo(["RECEIVING", "LEGACY", "DAMAGED"]);
+                wh1Locations.Select(x => x.Code).Should().BeEquivalentTo(["RECEIVING", "STAGING", "QC_HOLD", "QUARANTINE", "DAMAGED", "RETURNS_STAGE", "PACKING_STAGE", "SHIPPING_STAGE", "SCRAP", "LEGACY"]);
                 wh1Locations.Should().OnlyContain(x => x.IsSystemManaged);
 
                 var wh1Damaged = wh1Locations.Single(x => x.Code == "DAMAGED");
@@ -177,7 +177,7 @@ public sealed class Wave7FullChaosLifecycleSqlTests
                 var wh2Locations = await whDb.WarehouseLocations.AsNoTracking()
                     .Where(x => x.WarehouseId == state.Wh2Id)
                     .ToListAsync();
-                wh2Locations.Select(x => x.Code).Should().BeEquivalentTo(["RECEIVING", "LEGACY", "DAMAGED"]);
+                wh2Locations.Select(x => x.Code).Should().BeEquivalentTo(["RECEIVING", "STAGING", "QC_HOLD", "QUARANTINE", "DAMAGED", "RETURNS_STAGE", "PACKING_STAGE", "SHIPPING_STAGE", "SCRAP", "LEGACY"]);
                 state.Wh2DamagedLocationId = wh2Locations.Single(x => x.Code == "DAMAGED").Id;
                 state.Wh2LegacyLocationId = wh2Locations.Single(x => x.Code == "LEGACY").Id;
             }

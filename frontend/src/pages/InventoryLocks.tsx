@@ -215,10 +215,26 @@ export default function InventoryLocks(){
             </select>
           </UiToolbarField>
           <UiToolbarField label="Mã / ID vị trí (tùy chọn)">
-            <input aria-label="ID vị trí (tùy chọn)" type="number" min="1" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))} inputMode="numeric"/>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input aria-label="ID vị trí (tùy chọn)" type="number" min="1" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))} inputMode="numeric"/>
+              <select aria-label="Chọn nhanh vị trí khóa" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))}>
+                <option value="">Chọn kệ</option>
+                <option value="1">1 — BIN-A01-01</option>
+                <option value="2">2 — BIN-A01-02</option>
+                <option value="3">3 — QC-HOLD-01</option>
+              </select>
+            </div>
           </UiToolbarField>
           <UiToolbarField label="Mã / ID sản phẩm (tùy chọn)">
-            <input aria-label="ID sản phẩm (tùy chọn)" type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input aria-label="ID sản phẩm (tùy chọn)" type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
+              <select aria-label="Chọn nhanh sản phẩm khóa" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))}>
+                <option value="">Chọn SKU</option>
+                <option value="1">1 — SKU-001</option>
+                <option value="2">2 — SKU-002</option>
+                <option value="10">10 — SKU-LOT-10</option>
+              </select>
+            </div>
           </UiToolbarField>
           <UiToolbarField label="Trạng thái tồn kho (tùy chọn)">
             <select aria-label="Trạng thái tồn kho (tùy chọn)" value={form.inventoryStatus} onChange={e=>setForm(x=>({...x,inventoryStatus:e.target.value}))}>

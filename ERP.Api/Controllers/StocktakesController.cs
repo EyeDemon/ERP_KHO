@@ -265,12 +265,16 @@ namespace ERP.Api.Controllers
             string? LotNumber = null,
             bool ExecuteImmediately = false,
             decimal? QuantityDelta = null,
-            string? Sku = null);
+            string? Sku = null,
+            string? LocationCode = null);
 
         public sealed record ApproveAdjustmentProposalRequest(
             int? LocationId = null,
             string? LotNumber = null,
-            string? Note = null);
+            string? Note = null,
+            string? LocationCode = null,
+            decimal? DeltaQuantity = null,
+            decimal? QuantityDelta = null);
 
         [HttpPost("adjustment-proposals")]
         [IdempotentCommand("Stocktake.CreateAdjustmentProposal")]
@@ -364,7 +368,12 @@ namespace ERP.Api.Controllers
                         string.IsNullOrWhiteSpace(productCode) ? null : productCode,
                         resolvedWarehouseId.Value,
                         resolvedProductId.Value,
-                        request.LocationId,
+                        request.LocationId ?? (!string.IsNullOrWhiteSpace(request.LocationCode)
+                            ? await _db.WarehouseLocations.AsNoTracking()
+                                .Where(l => l.WarehouseId == resolvedWarehouseId.Value && l.Code == request.LocationCode.Trim())
+                                .Select(l => (int?)l.Id)
+                                .FirstOrDefaultAsync(cancellationToken)
+                            : null),
                         request.LotNumber,
                         deltaQuantity,
                         userId,
@@ -452,6 +461,8 @@ namespace ERP.Api.Controllers
 
             decimal.TryParse(original.OldValues, NumberStyles.Any, CultureInfo.InvariantCulture, out var deltaQuantity);
             if (deltaQuantity == 0m)
+                deltaQuantity = request?.DeltaQuantity ?? request?.QuantityDelta ?? 0m;
+            if (deltaQuantity == 0m)
                 return BadRequest(new { message = "Số lượng điều chỉnh bằng 0, không thể thực thi ghi sổ." });
 
             var resolvedProductId = original.EntityId;
@@ -485,7 +496,12 @@ namespace ERP.Api.Controllers
                 original.CorrelationId,
                 warehouseId,
                 resolvedProductId.Value,
-                request?.LocationId,
+                request?.LocationId ?? (!string.IsNullOrWhiteSpace(request?.LocationCode)
+                    ? await _db.WarehouseLocations.AsNoTracking()
+                        .Where(l => l.WarehouseId == warehouseId && l.Code == request.LocationCode.Trim())
+                        .Select(l => (int?)l.Id)
+                        .FirstOrDefaultAsync(cancellationToken)
+                    : null),
                 request?.LotNumber,
                 deltaQuantity,
                 userId ?? original.UserId,

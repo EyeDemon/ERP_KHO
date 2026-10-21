@@ -97,6 +97,10 @@ const Stocktakes = () => {
   const [rowSuccessId, setRowSuccessId] = useState<number | null>(null);
   const [proposalStatus, setProposalStatus] = useState<string>('');
   const [proposalBusy, setProposalBusy] = useState(false);
+  const [proposalProductCode, setProposalProductCode] = useState<string>('SKU-CYCLE-01');
+  const [proposalLocationCode, setProposalLocationCode] = useState<string>('BIN-A01-01');
+  const [proposalDeltaQty, setProposalDeltaQty] = useState<number>(-1);
+  const [proposalReasonCode, setProposalReasonCode] = useState<string>('COUNT_VARIANCE');
 
   const handleQuickAdjustmentProposal = async () => {
     if (proposalBusy) return;
@@ -106,9 +110,12 @@ const Stocktakes = () => {
     try {
       const res = await apiClient.post('/api/stocktakes/adjustment-proposals', {
         warehouseId: targetWh,
-        productCode: 'SKU-CYCLE-01',
-        deltaQuantity: -1,
-        reasonCode: 'COUNT_VARIANCE',
+        productCode: proposalProductCode || 'SKU-CYCLE-01',
+        locationCode: proposalLocationCode || 'BIN-A01-01',
+        deltaQuantity: Number(proposalDeltaQty) || -1,
+        reasonCode: proposalReasonCode || 'COUNT_VARIANCE',
+
+
         note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng phê duyệt độc lập'
       });
       if (res?.data?.status) {
@@ -447,6 +454,37 @@ const Stocktakes = () => {
                   <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Kiểm soát phân tách nhiệm vụ:</strong><br />Người tạo phiếu kiểm kê không được tự phê duyệt điều chỉnh tồn kho (Ngưỡng cảnh báo lệch chuẩn: ±2.0%)</div>
 
                 </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 10 }}>
+                <label className="ui-stack">
+                  <span>Sản phẩm điều chỉnh</span>
+                  <select aria-label="Sản phẩm đề xuất điều chỉnh" value={proposalProductCode} onChange={e => setProposalProductCode(e.target.value)}>
+                    <option value="SKU-CYCLE-01">SKU-CYCLE-01 — Hàng kiểm kê định kỳ chuẩn</option>
+                    <option value="SKU-COLD-02">SKU-COLD-02 — Hàng bảo quản lạnh</option>
+                    <option value="SKU-PKG-03">SKU-PKG-03 — Vật tư đóng gói thùng carton</option>
+                  </select>
+                </label>
+                <label className="ui-stack">
+                  <span>Vị trí kệ điều chỉnh</span>
+                  <select aria-label="Vị trí kệ đề xuất điều chỉnh" value={proposalLocationCode} onChange={e => setProposalLocationCode(e.target.value)}>
+                    <option value="BIN-A01-01">BIN-A01-01 — Kệ A01 Tầng 1</option>
+                    <option value="BIN-A01-02">BIN-A01-02 — Kệ A01 Tầng 2</option>
+                    <option value="BIN-B02-01">BIN-B02-01 — Kệ B02 Tầng 1</option>
+                  </select>
+                </label>
+                <label className="ui-stack">
+                  <span>Số lượng điều chỉnh (+/-)</span>
+                  <input aria-label="Số lượng đề xuất điều chỉnh" type="number" step="1" value={proposalDeltaQty} onChange={e => setProposalDeltaQty(Number(e.target.value))} />
+                </label>
+                <label className="ui-stack">
+                  <span>Mã lý do điều chỉnh</span>
+                  <select aria-label="Mã lý do đề xuất điều chỉnh" value={proposalReasonCode} onChange={e => setProposalReasonCode(e.target.value)}>
+                    <option value="COUNT_VARIANCE">COUNT_VARIANCE — Chênh lệch kiểm đếm</option>
+                    <option value="PHYSICAL_DAMAGE">PHYSICAL_DAMAGE — Hư hỏng vật lý</option>
+                    <option value="MISPLACED_STOCK">MISPLACED_STOCK — Thất lạc / Sai vị trí</option>
+                    <option value="EXPIRED_WRITE_OFF">EXPIRED_WRITE_OFF — Hủy hàng hết hạn</option>
+                  </select>
+                </label>
               </div>
               <div className="ui-inline-actions" style={{ marginTop: 8 }}>
                 <button type="button" disabled={proposalBusy} onClick={() => void handleQuickAdjustmentProposal()}>

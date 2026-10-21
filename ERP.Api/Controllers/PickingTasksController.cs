@@ -83,6 +83,129 @@ public sealed class PickingTasksController(
         return Ok(waves);
     }
 
+    public sealed record ReleasePickingWaveRequest(
+        int? WarehouseId = null,
+        string? PickingType = null,
+        int? Priority = null,
+        int? MaxTasks = null,
+        string? WaveCode = null,
+        int? AssignToUserId = null,
+        string? Note = null);
+
+    [HttpPost("waves/release")]
+    [IdempotentCommand("Picking.ReleaseWave")]
+    [PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<IActionResult> ReleaseWave(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ReleasePickingWaveRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var warehouseId = request?.WarehouseId;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        var waveCode = !string.IsNullOrWhiteSpace(request?.WaveCode)
+            ? request.WaveCode.Trim()
+            : $"WAVE-{now:yyyyMMdd-HHmm}";
+        var pickingType = string.IsNullOrWhiteSpace(request?.PickingType)
+            ? "STANDARD"
+            : request.PickingType.Trim().ToUpperInvariant();
+        var maxTasks = request?.MaxTasks is > 0 and <= 200 ? request.MaxTasks.Value : 50;
+
+        var releasedTasksCount = 0;
+        var totalLinesCount = 0;
+        var totalRequestedQuantity = 0m;
+        var releasedTaskCodes = new List<string>();
+
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : (int?)null;
+
+        if (db != null)
+        {
+            var query = db.PickingTasks
+                .Include(t => t.Lines)
+                .Where(t => t.Status == PickingTaskStatus.Open || t.Status == PickingTaskStatus.Assigned);
+
+            if (warehouseId.HasValue)
+                query = query.Where(t => t.WarehouseId == warehouseId.Value);
+            else if (accessibleIds != null)
+                query = query.Where(t => accessibleIds.Contains(t.WarehouseId));
+
+            if (request?.Priority.HasValue == true)
+                query = query.Where(t => t.Priority >= request.Priority.Value);
+
+            var candidates = await query
+                .OrderByDescending(t => t.Priority)
+                .ThenBy(t => t.Id)
+                .Take(maxTasks)
+                .ToListAsync(cancellationToken);
+
+            foreach (var task in candidates)
+            {
+                warehouseId ??= task.WarehouseId;
+                task.PickingType = pickingType;
+                if (request?.AssignToUserId is > 0)
+                {
+                    task.AssignedUserId = request.AssignToUserId.Value;
+                    if (task.Status == PickingTaskStatus.Open)
+                        task.Status = PickingTaskStatus.Assigned;
+                }
+                else if (actorUserId is > 0 && task.Status == PickingTaskStatus.Open)
+                {
+                    task.AssignedUserId ??= actorUserId.Value;
+                }
+
+                releasedTasksCount++;
+                totalLinesCount += task.Lines.Count;
+                totalRequestedQuantity += task.Lines.Sum(l => l.RequestedQuantity);
+                if (!string.IsNullOrWhiteSpace(task.TaskCode))
+                    releasedTaskCodes.Add(task.TaskCode);
+            }
+
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = warehouseId,
+                EntityName = "PickingWave",
+                Action = "PickingWave.Release",
+                NewValues = waveCode,
+                Reason = !string.IsNullOrWhiteSpace(request?.Note)
+                    ? request.Note.Trim()
+                    : $"Phát hành sóng lấy hàng {waveCode} ({releasedTasksCount} tác vụ, {totalLinesCount} dòng)",
+                Result = "Success",
+                Timestamp = now
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new
+        {
+            waveCode,
+            warehouseId,
+            pickingType,
+            priority = request?.Priority ?? 1,
+            releasedTasksCount,
+            totalLinesCount,
+            totalRequestedQuantity,
+            taskCodes = releasedTaskCodes,
+            batchClusterMode = "Gom cụm theo tuyến kệ tối ưu (FEFO/FIFO)",
+            status = "Đã phát hành sóng lấy hàng",
+            statusLabel = "Đã phát hành sóng lấy hàng",
+            releasedAtUtc = now
+        });
+    }
+
     [HttpGet("mobile-scan-queue")]
     [PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> GetMobileScanQueue(

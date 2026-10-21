@@ -212,7 +212,15 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
             </select>
           </UiToolbarField>
           <UiToolbarField label="ID sản phẩm">
-            <input aria-label="ID sản phẩm nhóm tồn" type="number" min="1" placeholder="Nhập ID sản phẩm..." value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}/>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input aria-label="ID sản phẩm nhóm tồn" type="number" min="1" placeholder="Nhập ID sản phẩm..." value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}/>
+              <select aria-label="Chọn nhanh sản phẩm nhóm tồn" value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}>
+                <option value="">Tất cả sản phẩm</option>
+                {Array.from(new Map(buckets.map(b=>[b.productId,{id:b.productId,code:b.productCode,name:b.productName}])).values()).map(p=>(
+                  <option key={p.id} value={String(p.id)}>{p.code} — {p.name}</option>
+                ))}
+              </select>
+            </div>
           </UiToolbarField>
           <UiToolbarField label="Trạng thái">
             <select aria-label="Lọc trạng thái tồn kho" value={filters.status} onChange={e=>setFilters(x=>({...x,status:e.target.value}))}>

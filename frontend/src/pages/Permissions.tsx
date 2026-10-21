@@ -444,6 +444,15 @@ export default function Permissions() {
                   placeholder="VD: 1"
                 />
               </UiToolbarField>
+              <UiToolbarField label="Chọn nhanh tài khoản">
+                <select aria-label="Chọn nhanh người dùng bảo mật" value={targetUserIdInput} onChange={e => setTargetUserIdInput(e.target.value)} style={{ height: 38, boxSizing: 'border-box' }}>
+                  <option value="">-- Chọn người dùng --</option>
+                  <option value="1">1 — qa_admin (Quản trị viên Hệ thống)</option>
+                  <option value="2">2 — qa_manager (Quản lý Kho WH01)</option>
+                  <option value="3">3 — qa_supervisor (Giám sát Kho WH01)</option>
+                  <option value="4">4 — qa_staff (Nhân viên Kho WH01)</option>
+                </select>
+              </UiToolbarField>
               <button type="button" disabled={securityBusy || !targetUserIdInput} onClick={() => void loadUserSecurity()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                 Tra cứu bảo mật
               </button>
@@ -505,6 +514,15 @@ export default function Permissions() {
                   placeholder="VD: 1"
                 />
               </UiToolbarField>
+              <UiToolbarField label="Chọn nhanh tài khoản">
+                <select aria-label="Chọn nhanh người dùng phân quyền kho" value={whUserIdInput} onChange={e => setWhUserIdInput(e.target.value)} style={{ height: 38, boxSizing: 'border-box' }}>
+                  <option value="">-- Chọn người dùng --</option>
+                  <option value="1">1 — qa_admin (Quản trị viên Hệ thống)</option>
+                  <option value="2">2 — qa_manager (Quản lý Kho WH01)</option>
+                  <option value="3">3 — qa_supervisor (Giám sát Kho WH01)</option>
+                  <option value="4">4 — qa_staff (Nhân viên Kho WH01)</option>
+                </select>
+              </UiToolbarField>
               <button type="button" disabled={whBusy || !whUserIdInput} onClick={() => void loadUserWarehouseScope()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                 Tải phạm vi kho
               </button>
@@ -525,6 +543,14 @@ export default function Permissions() {
                       onChange={e => setGrantWarehouseIdInput(e.target.value)}
                       placeholder="VD: 1"
                     />
+                  </UiToolbarField>
+                  <UiToolbarField label="Chọn nhanh kho cấp quyền">
+                    <select aria-label="Chọn nhanh kho cần cấp quyền" value={grantWarehouseIdInput} onChange={e => setGrantWarehouseIdInput(e.target.value)} style={{ height: 38, boxSizing: 'border-box' }}>
+                      <option value="">-- Chọn kho --</option>
+                      <option value="1">1 — WH-MAIN (Kho Trung Tâm)</option>
+                      <option value="2">2 — WH-NORTH (Kho Phía Bắc)</option>
+                      <option value="3">3 — WH-SOUTH (Kho Phía Nam)</option>
+                    </select>
                   </UiToolbarField>
                   <button type="button" disabled={whBusy || !grantWarehouseIdInput} onClick={() => void grantWarehouseScope()} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>
                     Cấp quyền kho

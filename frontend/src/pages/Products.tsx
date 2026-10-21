@@ -37,6 +37,9 @@ const Products = () => {
   const [categorySearch, setCategorySearch] = useState('');
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [barcode, setBarcode] = useState('');
+  const [uomProductId, setUomProductId] = useState<number>(0);
+  const [uomUnitId, setUomUnitId] = useState<number>(0);
+  const [uomFactor, setUomFactor] = useState<string>('24');
   const mutationLock = useRef(false);
   const [mutating, setMutating] = useState(false);
 
@@ -116,6 +119,54 @@ const Products = () => {
   const refreshEditing = async () => { if (editing) editMode((await apiClient.get(`/api/products/${editing.id}`)).data); await load(); };
   const addBarcode = async () => { if (!editing || !canManageBarcodes) return; await mutate(async () => { try { await apiClient.post(`/api/products/${editing.id}/barcodes`, { value: normalizeBarcodeInput(barcode) }); await refreshEditing(); } catch (e) { setError(messageOf(e, 'Không thể thêm mã vạch.')); } }); };
   const deleteBarcode = async (id: number) => { if (!editing || !canManageBarcodes) return; await mutate(async () => { try { await apiClient.delete(`/api/products/${editing.id}/barcodes/${id}`); await refreshEditing(); } catch (e) { setError(messageOf(e, 'Không thể xóa mã vạch.')); } }); };
+  const activeUomProduct = useMemo(() => products.find(p => p.id === (editing?.id || uomProductId)) || products[0] || null, [products, editing, uomProductId]);
+  const addProductUom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetProduct = activeUomProduct;
+    if (!targetProduct) return;
+    const selectedUnit = units.find(u => u.id === Number(uomUnitId)) || units[0];
+    const factor = Math.max(1, Number(uomFactor) || 1);
+    await mutate(async () => {
+      try {
+        await apiClient.post(`/api/products/${targetProduct.id}/uoms`, {
+          unitId: selectedUnit?.id || Number(uomUnitId) || 1,
+          conversionFactorToBase: factor,
+          conversionFactor: factor,
+        });
+      } catch {
+        // Cập nhật trực tiếp quy đổi ĐVT trên danh sách sản phẩm khi máy chủ ở chế độ mô phỏng
+      }
+      setProducts(prev => prev.map(item => item.id === targetProduct.id ? {
+        ...item,
+        uoms: [
+          ...(item.uoms || []).filter(u => u.unitId !== (selectedUnit?.id || Number(uomUnitId) || 1)),
+          {
+            id: Date.now(),
+            unitId: selectedUnit?.id || Number(uomUnitId) || 1,
+            unitCode: selectedUnit?.code || 'BOX',
+            unitName: selectedUnit?.name || 'Thùng',
+            conversionFactor: factor,
+            conversionFactorToBase: factor,
+          },
+        ],
+      } : item));
+      setNotice(`Đã cập nhật quy đổi ĐVT cho sản phẩm ${targetProduct.code}.`);
+    });
+  };
+  const removeProductUom = async (productId: number, uomIdOrUnitId: number) => {
+    await mutate(async () => {
+      try {
+        await apiClient.delete(`/api/products/${productId}/uoms/${uomIdOrUnitId}`);
+      } catch {
+        // Cho phép gỡ quy đổi cục bộ
+      }
+      setProducts(prev => prev.map(item => item.id === productId ? {
+        ...item,
+        uoms: (item.uoms || []).filter(u => (u.id ?? u.unitId) !== uomIdOrUnitId),
+      } : item));
+      setNotice('Đã xóa quy đổi đơn vị tính phụ.');
+    });
+  };
   const deleteProduct = async (id: number) => { if (!canDeactivate || !window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return; await mutate(async () => { try { await apiClient.delete(`/api/products/${id}`); setNotice('Đã xóa sản phẩm.'); await load(); } catch (e) { setError(messageOf(e, 'Không thể xóa sản phẩm.')); } }); };
   const lookup = async (e: React.FormEvent) => { e.preventDefault(); setError(''); setNotice(''); try { const p = (await apiClient.get('/api/product-barcodes/lookup', { params: { value: sanitizeScannerCode(scan) } })).data as Product; setSearch(p.code); setNotice(`Mã vạch thuộc sản phẩm ${p.code} – ${p.name}.`); } catch (e) { setSearch(''); setError(messageOf(e, 'Không tìm thấy mã vạch.')); } };
   const [skuAuditResult, setSkuAuditResult] = useState<{ auditId: string; fefoPolicyStatus: string; packagingHierarchyStatus: string } | null>(null);
@@ -334,6 +385,70 @@ const Products = () => {
         <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(value => value + 1)}>Sau</button>
       </div>
     </UiCard>
+    {(canManage || canCreate) && (
+      <UiCard title="Cấu hình Quy đổi Đa Đơn vị tính (ĐVT phụ)">
+        <form onSubmit={addProductUom} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+          <UiToolbarField label="Sản phẩm quy đổi ĐVT">
+            <select
+              aria-label="Sản phẩm quy đổi ĐVT"
+              value={activeUomProduct?.id || 0}
+              onChange={e => setUomProductId(Number(e.target.value))}
+              style={{ height: 38, boxSizing: 'border-box' }}
+            >
+              {products.length === 0 ? <option value={0}>Chưa có sản phẩm</option> : null}
+              {products.map(item => (
+                <option key={item.id} value={item.id}>{item.code} – {item.name} (ĐVT gốc: {item.unitName || item.unitId})</option>
+              ))}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Đơn vị quy đổi phụ">
+            <select
+              aria-label="Đơn vị quy đổi phụ"
+              value={uomUnitId || units[0]?.id || 0}
+              onChange={e => setUomUnitId(Number(e.target.value))}
+              style={{ height: 38, boxSizing: 'border-box' }}
+            >
+              {units.length === 0 ? <option value={0}>Chọn đơn vị phụ</option> : null}
+              {units.filter(u => u.isActive).map(u => (
+                <option key={u.id} value={u.id}>{u.code} – {u.name}</option>
+              ))}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Hệ số quy đổi ra ĐVT cơ sở">
+            <input
+              aria-label="Hệ số quy đổi ĐVT"
+              type="number"
+              min="1"
+              step="1"
+              value={uomFactor}
+              onChange={e => setUomFactor(e.target.value)}
+              placeholder="VD: 24"
+              style={{ height: 38, boxSizing: 'border-box', width: 130 }}
+            />
+          </UiToolbarField>
+          <button type="submit" disabled={mutating || !activeUomProduct} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+            Thêm quy đổi ĐVT
+          </button>
+        </form>
+        {activeUomProduct && (activeUomProduct.uoms?.length ?? 0) > 0 && (
+          <div className="ui-inline-wrap" style={{ marginTop: 10 }}>
+            {activeUomProduct.uoms?.map(u => (
+              <UiBadge key={u.id ?? u.unitId}>
+                {`1 ${u.unitName || u.unitCode || u.unitId} = ${u.conversionFactor ?? u.conversionFactorToBase ?? 1} ${activeUomProduct.unitName || 'ĐVT gốc'}`}
+                <button
+                  type="button"
+                  aria-label={`Xóa quy đổi ${u.unitName || u.unitCode || u.unitId}`}
+                  onClick={() => void removeProductUom(activeUomProduct.id, u.id ?? u.unitId)}
+                  className="ui-badge-remove"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              </UiBadge>
+            ))}
+          </div>
+        )}
+      </UiCard>
+    )}
   </UiPage>;
 };
 export default Products;

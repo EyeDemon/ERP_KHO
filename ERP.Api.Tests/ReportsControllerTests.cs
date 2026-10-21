@@ -4405,5 +4405,314 @@ namespace ERP.Api.Tests
             inOutList[0].ImportQuantity.Should().Be(75m);
             inOutList[0].ClosingQuantity.Should().Be(75m);
         }
+
+        [Fact]
+        public async Task Wave40_WarehouseService_SeedsAllTenSystemLocations_And_DeletesEmptyWarehouseCleanly()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(It.IsAny<int>(), default)).Returns(Task.CompletedTask);
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+
+            var repo = new ERP.Infrastructure.Repositories.WarehouseRepository(db);
+            var service = new ERP.Application.Services.WarehouseService(repo, warehouseAuth.Object);
+
+            var created = await service.CreateWarehouseAsync(new CreateWarehouseDto
+            {
+                Code = "WH-W40",
+                Name = "Kho Kiểm Thử Wave 40",
+                Address = "Khu Công Nghiệp Tân Bình"
+            }, "admin");
+
+            var locations = await db.WarehouseLocations
+                .Where(x => x.WarehouseId == created.Id)
+                .OrderBy(x => x.Code)
+                .ToListAsync();
+
+            var expectedCodes = new[]
+            {
+                "RECEIVING",
+                "STAGING",
+                "QC_HOLD",
+                "QUARANTINE",
+                "DAMAGED",
+                "RETURNS_STAGE",
+                "PACKING_STAGE",
+                "SHIPPING_STAGE",
+                "SCRAP",
+                "LEGACY"
+            };
+
+            locations.Select(x => x.Code).Should().BeEquivalentTo(expectedCodes);
+            locations.Should().OnlyContain(x => x.IsSystemManaged && x.IsActive);
+
+            locations.Count(x => x.LocationType == ERP.Domain.Enums.WarehouseLocationType.Receiving).Should().Be(1);
+            var damaged = locations.Single(x => x.Code == "DAMAGED");
+            damaged.LocationType.Should().Be(ERP.Domain.Enums.WarehouseLocationType.Damaged);
+            damaged.IsPickable.Should().BeFalse();
+            damaged.IsReceivable.Should().BeFalse();
+
+            await service.DeleteWarehouseAsync(created.Id);
+
+            (await db.Warehouses.AnyAsync(x => x.Id == created.Id)).Should().BeFalse();
+            (await db.WarehouseLocations.AnyAsync(x => x.WarehouseId == created.Id)).Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task Wave40_ProductsController_SupportsProductUomQcPolicyAndTolerancePolicyCrud()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Units.AddRange(
+                new ERP.Domain.Entities.Unit { Id = 1, Code = "CAI", Name = "Cái", IsActive = true },
+                new ERP.Domain.Entities.Unit { Id = 2, Code = "THUNG", Name = "Thùng", IsActive = true });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 4001,
+                Code = "SKU-W40-01",
+                Name = "Sản phẩm Cấu hình Wave 40",
+                UnitId = 1,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            var productService = new Mock<IProductService>();
+            var controller = new ProductsController(productService.Object, db);
+
+            var createUomRes = await controller.UpsertProductUom(
+                4001,
+                new ProductsController.UpsertProductUomRequest(
+                    UnitId: 2,
+                    ConversionFactor: 24m,
+                    IsPurchaseDefault: true,
+                    IsSalesDefault: false),
+                default);
+            createUomRes.Should().BeOfType<OkObjectResult>();
+
+            var listUomsRes = await controller.GetProductUoms(4001, default);
+            var listUomsOk = listUomsRes.Should().BeOfType<OkObjectResult>().Subject;
+            int createdUomId;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(listUomsOk.Value))
+            {
+                var uoms = doc.RootElement.EnumerateArray().ToList();
+                uoms.Should().ContainSingle();
+                uoms[0].GetProperty("conversionFactor").GetDecimal().Should().Be(24m);
+                createdUomId = uoms[0].GetProperty("id").GetInt32();
+            }
+
+            var createQcRes = await controller.UpsertQcPolicy(
+                new ProductsController.UpsertQcPolicyRequest(
+                    ProductId: 4001,
+                    Mode: "Full",
+                    SamplePercentage: 100m,
+                    RequireBeforePutaway: true),
+                default);
+            createQcRes.Should().BeOfType<OkObjectResult>();
+
+            var listQcRes = await controller.GetQcPolicies(4001, null, default);
+            var listQcOk = listQcRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(listQcOk.Value))
+            {
+                var policies = doc.RootElement.EnumerateArray().ToList();
+                policies.Should().ContainSingle();
+                policies[0].GetProperty("mode").GetString().Should().Be("Full");
+                policies[0].GetProperty("modeLabel").GetString().Should().Be("Kiểm định toàn phần (100%)");
+            }
+
+            var createTolRes = await controller.UpsertTolerancePolicy(
+                new ProductsController.UpsertTolerancePolicyRequest(
+                    ProductId: 4001,
+                    WarehouseId: 1,
+                    OverReceiptTolerancePercent: 2.5m,
+                    AbsoluteQuantityTolerance: 5m),
+                default);
+            createTolRes.Should().BeOfType<OkObjectResult>();
+
+            var listTolRes = await controller.GetTolerancePolicies(4001, null, default);
+            var listTolOk = listTolRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(listTolOk.Value))
+            {
+                var items = doc.RootElement.EnumerateArray().ToList();
+                items.Should().ContainSingle();
+                items[0].GetProperty("overReceiptTolerancePercent").GetDecimal().Should().Be(2.5m);
+                items[0].GetProperty("warehouseId").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+            }
+
+            var deleteUomRes = await controller.DeleteProductUom(4001, createdUomId, default);
+            deleteUomRes.Should().BeOfType<OkObjectResult>();
+            (await db.ProductUoms.Where(x => x.Id == createdUomId).AnyAsync()).Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task Wave40_OperationalEndpoints_StocktakeAdjustmentApprove_RtvRefurbishMutation_And_PickingWaveRelease_PersistRealStateAndLedger()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Trung Tâm WH01", IsActive = true });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 10,
+                WarehouseId = 1,
+                Code = "A-01-01",
+                Name = "Kệ lưu trữ A01",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true
+            });
+            db.Units.Add(new ERP.Domain.Entities.Unit { Id = 1, Code = "THÙNG", Name = "THÙNG", IsActive = true });
+            db.Products.Add(new ERP.Domain.Entities.Product { Id = 4010, Code = "SKU-W40-OP", Name = "Sản phẩm vận hành Wave 40", UnitId = 1, IsActive = true });
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4001,
+                    WarehouseId = 1,
+                    ProductId = 4010,
+                    LocationId = 10,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 50m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 4002,
+                    WarehouseId = 1,
+                    ProductId = 4010,
+                    LocationId = 10,
+                    Status = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                    Quantity = 10m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                });
+            db.PickingTasks.Add(new ERP.Domain.Entities.PickingTask
+            {
+                Id = 4050,
+                WarehouseId = 1,
+                TaskCode = "PICK-W40-01",
+                SourceType = "SalesOrder",
+                SourceId = 9001,
+                SourceCode = "SO-W40-01",
+                Status = ERP.Domain.Enums.PickingTaskStatus.Open,
+                Priority = 2,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow,
+                Lines =
+                [
+                    new ERP.Domain.Entities.PickingTaskLine
+                    {
+                        Id = 4051,
+                        PickingTaskId = 4050,
+                        ProductId = 4010,
+                        SourceLocationId = 10,
+                        RequestedQuantity = 5m,
+                        PickedQuantity = 0m,
+                        Status = ERP.Domain.Enums.PickingTaskLineStatus.Open
+                    }
+                ]
+            });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var stocktakesController = new StocktakesController(
+                new Mock<IStocktakeService>().Object,
+                new Mock<IStocktakeQueryService>().Object,
+                db,
+                warehouseAuth.Object);
+
+            var propRes = await stocktakesController.CreateAdjustmentProposal(
+                new StocktakesController.CreateAdjustmentProposalRequest(
+                    WarehouseId: 1,
+                    ProductCode: "SKU-W40-OP",
+                    DeltaQuantity: 5m,
+                    ReasonCode: "CYCLE_COUNT_GAIN",
+                    Note: "Kiểm kê phát hiện thừa 5 thùng",
+                    LocationCode: "A-01-01"),
+                default);
+            var propOk = propRes.Should().BeOfType<OkObjectResult>().Subject;
+            long proposalAuditId;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(propOk.Value))
+            {
+                proposalAuditId = doc.RootElement.GetProperty("proposalAuditId").GetInt64();
+                doc.RootElement.GetProperty("status").GetString().Should().Contain("Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
+            }
+
+            var approveRes = await stocktakesController.ApproveAdjustmentProposal(
+                proposalAuditId,
+                new StocktakesController.ApproveAdjustmentProposalRequest(
+                    LocationCode: "A-01-01",
+                    Note: "Duyệt ghi sổ điều chỉnh kiểm kê Wave 40"),
+                default);
+            var approveOk = approveRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(approveOk.Value))
+            {
+                doc.RootElement.GetProperty("resultingQuantity").GetDecimal().Should().Be(55m);
+                doc.RootElement.GetProperty("status").GetString().Should().Be("Đã phê duyệt & Ghi sổ");
+            }
+
+            (await db.InventoryStocks.SingleAsync(x => x.Id == 4001)).Quantity.Should().Be(55m);
+
+            var importController = new ImportReceiptsController(
+                new Mock<IImportReceiptService>().Object,
+                null,
+                db,
+                warehouseAuth.Object);
+
+            var rtvRes = await importController.ExecuteRtvRefurbish(
+                new ImportReceiptsController.ExecuteRtvRefurbishRequest(
+                    WarehouseId: 1,
+                    ActionType: "REFURBISH",
+                    Quantity: 4m,
+                    ProductCode: "SKU-W40-OP",
+                    LocationCode: "A-01-01"),
+                default);
+            var rtvOk = rtvRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(rtvOk.Value))
+            {
+                doc.RootElement.GetProperty("ledgerUpdated").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("executedStockMutation").GetBoolean().Should().BeTrue();
+                doc.RootElement.GetProperty("resultingStockQuantity").GetDecimal().Should().Be(59m);
+            }
+
+            (await db.InventoryStocks.SingleAsync(x => x.Id == 4001)).Quantity.Should().Be(59m);
+            (await db.InventoryStocks.SingleAsync(x => x.Id == 4002)).Quantity.Should().Be(6m);
+
+            var pickingController = new PickingTasksController(
+                new Mock<IPickingService>().Object,
+                db,
+                warehouseAuth.Object);
+
+            var waveRes = await pickingController.ReleaseWave(
+                new PickingTasksController.ReleasePickingWaveRequest(
+                    WarehouseId: 1,
+                    WaveCode: "WAVE-W40-01",
+                    AssignToUserId: 99,
+                    Note: "Phát hành sóng lấy hàng Wave 40"),
+                default);
+            var waveOk = waveRes.Should().BeOfType<OkObjectResult>().Subject;
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(waveOk.Value))
+            {
+                doc.RootElement.GetProperty("waveCode").GetString().Should().Be("WAVE-W40-01");
+                doc.RootElement.GetProperty("releasedTasksCount").GetInt32().Should().Be(1);
+                doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã phát hành sóng lấy hàng");
+            }
+
+            var updatedTask = await db.PickingTasks.SingleAsync(x => x.Id == 4050);
+            updatedTask.AssignedUserId.Should().Be(99);
+            updatedTask.Status.Should().Be(ERP.Domain.Enums.PickingTaskStatus.Assigned);
+            db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
+        }
     }
 }

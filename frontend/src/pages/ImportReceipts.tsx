@@ -140,6 +140,12 @@ const ImportReceipts = () => {
   const [warehouseId, setWarehouseId] = useState<number | ''>('');
   const [note, setNote] = useState('');
   const [supplierId, setSupplierId] = useState<number | ''>('');
+  const [purchaseOrderId, setPurchaseOrderId] = useState<string>('');
+  const [asnId, setAsnId] = useState<string>('');
+  const [rmaProductId, setRmaProductId] = useState<string>('');
+  const [rmaLocationCode, setRmaLocationCode] = useState<string>('QC-HOLD-01');
+  const [rmaQuantity, setRmaQuantity] = useState<number>(5);
+  const [rmaDispositionType, setRmaDispositionType] = useState<string>('REFURBISH_AND_RTV_SPLIT');
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
 
   const fetchData = useCallback(async () => {
@@ -524,6 +530,9 @@ const ImportReceipts = () => {
                     rmaReferenceCode: refCode,
                     returnReference: refCode,
                     reasonCode: 'CUSTOMER_RETURN',
+                    ...(rmaProductId ? { productId: Number(rmaProductId) } : {}),
+                    locationCode: rmaLocationCode || 'QC-HOLD-01',
+                    quantity: rmaQuantity,
                   })
                   .then((res) => {
                     const data = (res as { data?: { rmaInspectionCode?: string; rmaCode?: string } } | undefined)?.data;
@@ -553,7 +562,10 @@ const ImportReceipts = () => {
                 void apiClient
                   .post('/api/ImportReceipts/execute-rtv-refurbish', {
                     warehouseId: warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined),
-                    dispositionType: 'REFURBISH_AND_RTV_SPLIT',
+                    dispositionType: rmaDispositionType || 'REFURBISH_AND_RTV_SPLIT',
+                    ...(rmaProductId ? { productId: Number(rmaProductId) } : {}),
+                    locationCode: rmaLocationCode || 'QC-HOLD-01',
+                    quantity: rmaQuantity,
                   })
                   .then((res) => {
                     const data = (res as { data?: { dispositionCode?: string; executionId?: string } } | undefined)?.data;
@@ -693,12 +705,58 @@ const ImportReceipts = () => {
               </div>
 
               <div className="import-section-actions">
+              <div className="import-form-grid" style={{ width: '100%', marginBottom: 10 }}>
+                <label className="ui-stack">
+                  <span>Đơn mua hàng (PO) liên kết</span>
+                  <select aria-label="Liên kết Đơn mua hàng (PO)" value={purchaseOrderId} onChange={e => setPurchaseOrderId(e.target.value)}>
+                    <option value="">-- Không liên kết PO --</option>
+                    <option value="1">PO-2026-001 — Đơn mua hàng tiêu chuẩn NCC</option>
+                    <option value="2">PO-2026-002 — Đơn mua bổ sung tồn an toàn</option>
+                  </select>
+                </label>
+                <label className="ui-stack">
+                  <span>Thông báo giao hàng trước (ASN)</span>
+                  <select aria-label="Liên kết Thông báo giao hàng (ASN)" value={asnId} onChange={e => setAsnId(e.target.value)}>
+                    <option value="">-- Không liên kết ASN --</option>
+                    <option value="1">ASN-2026-001 — Lịch giao hàng Dock D1</option>
+                    <option value="2">ASN-2026-002 — Lịch giao hàng Dock D2</option>
+                  </select>
+                </label>
+              </div>
                 <button type="button" onClick={handleAddDetail}>+ Thêm dòng</button>
                 <button type="submit" disabled={creating}>{creating ? 'Đang lưu...' : 'Lưu Phiếu Nháp'}</button>
               </div>
             </form>}
           </UiCard>
         )}
+
+        <UiCard title="Cấu hình Thông số Thực thi RMA & Phân luồng Tân trang / Xuất trả NCC">
+          <div className="import-form-grid">
+            <label className="ui-stack">
+              <span>Sản phẩm kiểm định RMA / RTV</span>
+              <select aria-label="Sản phẩm kiểm định RMA" value={rmaProductId} onChange={e => setRmaProductId(e.target.value)}>
+                <option value="">-- Mặc định theo lô hoàn trả hiện hành --</option>
+                {products.map(p => <option key={p.id} value={String(p.id)}>{p.code} - {p.name}</option>)}
+              </select>
+            </label>
+            <label className="ui-stack">
+              <span>Vị trí kệ cách ly / Tân trang</span>
+              <input aria-label="Vị trí cách ly RMA" value={rmaLocationCode} onChange={e => setRmaLocationCode(e.target.value)} placeholder="VD: QC-HOLD-01" />
+            </label>
+            <label className="ui-stack">
+              <span>Số lượng kiểm định / Phân luồng</span>
+              <input type="number" min="1" step="1" aria-label="Số lượng xử lý RMA" value={rmaQuantity} onChange={e => setRmaQuantity(Math.max(1, Number(e.target.value) || 1))} />
+            </label>
+            <label className="ui-stack">
+              <span>Phương án phân luồng hậu cần thu hồi</span>
+              <select aria-label="Phương án phân luồng QC / RTV" value={rmaDispositionType} onChange={e => setRmaDispositionType(e.target.value)}>
+                <option value="REFURBISH_AND_RTV_SPLIT">Tân trang Hạng B & Xuất trả NCC (RTV)</option>
+                <option value="RETURN_TO_VENDOR_ONLY">Xuất trả toàn bộ cho Nhà cung cấp (RTV)</option>
+                <option value="QUARANTINE_SCRAP">Biệt trữ chờ hủy theo biên bản QC</option>
+              </select>
+            </label>
+          </div>
+        </UiCard>
 
         <UiCard title="Danh Sách Phiếu Nhập">
           <UiTableScroll>

@@ -5,6 +5,7 @@ import Dashboard from '../pages/Dashboard';
 import NotFound from '../pages/NotFound';
 import Login from '../pages/Login';
 import Products from '../pages/Products';
+import Categories from '../pages/Categories';
 import Warehouses from '../pages/Warehouses';
 import WarehouseLocations from '../pages/WarehouseLocations';
 import WarehouseMap from '../pages/WarehouseMap';
@@ -76,7 +77,7 @@ const AppRoutes = () => {
       <Route path="/" element={<MainLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
-        <Route path="categories" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
+        <Route path="categories" element={<PermissionRoute permission="product.read"><Categories /></PermissionRoute>} />
         <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
         <Route path="warehouse-structure" element={<PermissionRoute permission="location.read"><WarehouseLocations /></PermissionRoute>} />
         <Route path="warehouse-locations" element={<Navigate to="/warehouse-structure" replace />} />

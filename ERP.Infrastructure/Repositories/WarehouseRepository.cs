@@ -7,7 +7,19 @@ namespace ERP.Infrastructure.Repositories
 {
     public class WarehouseRepository : Repository<Warehouse>, IWarehouseRepository
     {
-        private static readonly string[] SystemLocationCodes = ["RECEIVING", "LEGACY", "DAMAGED"];
+        private static readonly string[] SystemLocationCodes =
+        [
+            "RECEIVING",
+            "STAGING",
+            "QC_HOLD",
+            "QUARANTINE",
+            "DAMAGED",
+            "RETURNS_STAGE",
+            "PACKING_STAGE",
+            "SHIPPING_STAGE",
+            "SCRAP",
+            "LEGACY"
+        ];
 
         public WarehouseRepository(ErpKhoDbContext context) : base(context)
         {
