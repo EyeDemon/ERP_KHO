@@ -125,6 +125,8 @@ describe('Cất hàng',()=>{
    expect((v.getByLabelText('Số lượng cất SP1') as HTMLInputElement).value).toBe('6');
    expect(v.getByText('Kệ đang hoạt động')).toBeTruthy();
    expect(v.getByText('Kệ không bị khóa')).toBeTruthy();
+   expect(v.getAllByPlaceholderText('Nhập hoặc quét mã kệ, mã SP, số lô, số sê-ri, mã kiện...').length).toBeGreaterThanOrEqual(1);
+   expect(v.queryByPlaceholderText(/Bin, SKU, Lot, Serial, LPN/)).toBeNull();
    expect(v.getByRole('button', { name: 'Chấm điểm Tối ưu Xếp dỡ & Khớp Vị trí Kệ' })).toBeTruthy();
    expect(v.getByTestId('putaway-ledger-pair-panel').textContent).toContain(
      'Chân nguồn -Q (Bãi tiếp nhận) • Chân đích +Q (Kệ lưu trữ BIN-A01-01)',

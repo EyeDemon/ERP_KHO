@@ -4,6 +4,7 @@ import { currentUserId, hasPermission, usePermissionSet } from '../services/auth
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { conflictErrorMessage, extractConflictCode } from '../services/permissionPresentation';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
+import { BarcodeSvg } from '../components/BarcodeSvg';
 import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import './ExportReceipts.css';
@@ -567,10 +568,11 @@ const ExportReceipts = () => {
                 onClick={() => {
                   setError('');
                   void Promise.resolve(
-                    apiClient.post('/api/ExportReceipts/batch-print-awb', {
+                    apiClient.post('/api/export-receipts/batch-print-awb', {
                       warehouseId: warehouseId !== '' ? Number(warehouseId) : null,
                       paperSize: '100x150mm',
                       sortBy: 'BIN_LOCATION_ASC',
+                      reprintReason: 'In gộp phiếu gửi hàng nhiệt 100x150mm tại bàn đóng gói',
                     }),
                   )
                     .then((res) => {
@@ -656,6 +658,9 @@ const ExportReceipts = () => {
                   </div>
                   <div style={{ fontSize: 12.5, color: '#475569' }}>Đơn sàn: <code>{lbl.marketplaceOrderId}</code> • Khổ nhiệt: 100x150mm</div>
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{lbl.pickSequenceFooter}</div>
+                  <div style={{ marginTop: 4 }}>
+                    <BarcodeSvg value={lbl.awbCode} qrCaption="Mã QR vận đơn" />
+                  </div>
                 </div>
               ))}
             </div>

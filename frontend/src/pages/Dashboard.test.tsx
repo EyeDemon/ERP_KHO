@@ -65,6 +65,8 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
     ).toBeTruthy();
 
     expect(view.getByText('148.500.000 đ')).toBeTruthy();
+    expect(view.getByText('Giá vốn hàng bán bình quân')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('(COGS)');
     expect(view.getByText('92.400.000 đ')).toBeTruthy();
     expect(view.getByText('41.250.000 đ • Biên lãi gộp 27,8%')).toBeTruthy();
     expect(view.getByText('36.800.000 đ • 3 cảnh báo lệch phí/chậm hoàn')).toBeTruthy();
@@ -81,6 +83,10 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
         'Đã đồng bộ tồn kho an toàn đa gian hàng (Shopee, TikTok Shop • Đệm an toàn chống bán lố 100%).',
       ),
     ).toBeTruthy();
+    expect(post).toHaveBeenCalledWith(
+      '/api/sales-orders/marketplace-shops/sync-inventory',
+      expect.objectContaining({ safetyBufferPercent: 5 }),
+    );
 
     fireEvent.click(view.getByRole('button', { name: 'Chạy Đối soát 3 Chiều Tiền Thu Hộ & Quyết toán Phí Sàn' }));
     expect(
@@ -88,5 +94,9 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
         'Đã chạy đối soát 3 chiều tiền thu hộ COD & quyết toán phí sàn: Khớp 98,4% vận đơn, phát hiện 3 cảnh báo lệch phí vận chuyển.',
       ),
     ).toBeTruthy();
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/reports/cod-reconciliation/verify',
+      expect.objectContaining({ reconcileMode: 'THREE_WAY_COD_AND_MARKETPLACE_FEE' }),
+    );
   });
 });

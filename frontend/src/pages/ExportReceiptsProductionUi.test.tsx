@@ -300,6 +300,9 @@ describe('ExportReceipts shared production UI', () => {
     expect(view.getByText('Số lần in: 1 (Bản gốc)')).toBeTruthy();
     expect(view.getByText('Cảnh báo in lại')).toBeTruthy();
     expect(view.getByText('Viettel SInvoice • Mẫu 1/001 • C26TAA')).toBeTruthy();
+    expect(view.getAllByTestId('barcode-1d-svg').length).toBeGreaterThanOrEqual(2);
+    expect(view.getAllByTestId('barcode-qr-svg').length).toBeGreaterThanOrEqual(2);
+    expect(view.getAllByText('Mã QR vận đơn').length).toBeGreaterThanOrEqual(2);
 
     fireEvent.click(
       view.getByRole('button', { name: 'In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm (Sắp xếp theo Kệ A→Z)' }),
@@ -309,6 +312,14 @@ describe('ExportReceipts shared production UI', () => {
         'Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z): GHN84920188, VTP99201122.',
       ),
     ).toBeTruthy();
+    expect(vi.mocked(apiClient.post)).toHaveBeenCalledWith(
+      '/api/export-receipts/batch-print-awb',
+      expect.objectContaining({
+        paperSize: '100x150mm',
+        sortBy: 'BIN_LOCATION_ASC',
+        reprintReason: 'In gộp phiếu gửi hàng nhiệt 100x150mm tại bàn đóng gói',
+      }),
+    );
 
     fireEvent.click(view.getByRole('button', { name: 'Chốt Biên Bản Bàn Giao Bưu Tá Điện Tử' }));
     expect(

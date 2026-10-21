@@ -42,6 +42,26 @@ namespace ERP.Api.Controllers
             return int.TryParse(userIdValue, out userId);
         }
 
+        private async Task<int?> ResolveValidAuditUserIdAsync(CancellationToken cancellationToken)
+        {
+            if (_db == null)
+            {
+                return null;
+            }
+
+            if (TryGetUserId(out var uid) &&
+                await _db.Users.AsNoTracking().AnyAsync(u => u.Id == uid, cancellationToken))
+            {
+                return uid;
+            }
+
+            return await _db.Users
+                .AsNoTracking()
+                .OrderBy(u => u.Id)
+                .Select(u => (int?)u.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         [HttpGet]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> GetAll()
@@ -271,6 +291,7 @@ namespace ERP.Api.Controllers
         public sealed record BatchPrintAwbRequest(
             int? WarehouseId = null,
             List<int>? ReceiptIds = null,
+            List<int>? ExportReceiptIds = null,
             bool EnforceReprintReason = false,
             string? ReprintReason = null);
 
@@ -350,9 +371,13 @@ namespace ERP.Api.Controllers
                 .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled &&
                             r.Status != ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback);
 
-            if (request?.ReceiptIds is { Count: > 0 })
+            var explicitReceiptIds = request?.ReceiptIds is { Count: > 0 }
+                ? request.ReceiptIds
+                : (request?.ExportReceiptIds is { Count: > 0 } ? request.ExportReceiptIds : null);
+
+            if (explicitReceiptIds is { Count: > 0 })
             {
-                query = query.Where(r => request.ReceiptIds.Contains(r.Id));
+                query = query.Where(r => explicitReceiptIds.Contains(r.Id));
             }
             else if (request?.WarehouseId.HasValue == true)
             {
@@ -363,6 +388,7 @@ namespace ERP.Api.Controllers
 
             var alreadyPrintedReceipts = receipts.Where(r => r.AwbPrintCount > 0).ToList();
             if (alreadyPrintedReceipts.Count > 0 &&
+                explicitReceiptIds is { Count: > 0 } &&
                 request?.EnforceReprintReason == true &&
                 string.IsNullOrWhiteSpace(request.ReprintReason))
             {
@@ -408,6 +434,7 @@ namespace ERP.Api.Controllers
             .ThenBy(x => x.Receipt.Id)
             .ToList();
 
+            var validAuditUserId = await ResolveValidAuditUserIdAsync(cancellationToken);
             var labels = new List<object>();
             var seq = 1;
             foreach (var item in enriched)
@@ -439,7 +466,7 @@ namespace ERP.Api.Controllers
 
                 _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                 {
-                    UserId = actorUserId,
+                    UserId = validAuditUserId,
                     WarehouseId = r.WarehouseId,
                     EntityName = "ExportReceipt",
                     EntityId = r.Id,
@@ -762,9 +789,10 @@ namespace ERP.Api.Controllers
                 : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
                     System.Text.Encoding.UTF8.GetBytes($"{manifest.ManifestCode}:{manifest.TotalPackages}:{now:O}")));
 
+            var validSealAuditUserId = await ResolveValidAuditUserIdAsync(cancellationToken);
             _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
-                UserId = actorUserId,
+                UserId = validSealAuditUserId,
                 WarehouseId = manifest.WarehouseId,
                 EntityName = "HandoverManifest",
                 EntityId = manifest.Id,
@@ -791,6 +819,133 @@ namespace ERP.Api.Controllers
                 manifest.SealedAtUtc,
                 digitalSignatureHash,
                 statusLabel = $"Đã niêm phong biên bản bàn giao {manifest.ManifestCode} ({manifest.TotalPackages} kiện)"
+            });
+        }
+
+        public sealed record ConfirmCarrierHandoverRequest(
+            int? WarehouseId = null,
+            string? CarrierCode = null,
+            List<string>? TrackingNumbers = null,
+            string? VehiclePlate = null,
+            string? DriverName = null,
+            string? DriverPhone = null);
+
+        [HttpPost("confirm-carrier-handover")]
+        [HttpPost("handover-manifests/confirm")]
+        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+        [IdempotentCommand("HandoverManifest.ConfirmCarrierHandover")]
+        public async Task<IActionResult> ConfirmCarrierHandover(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ConfirmCarrierHandoverRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+
+            var now = DateTime.UtcNow;
+            var actorUserId = TryGetUserId(out var uid) ? uid : 1;
+            var carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "GHN" : request.CarrierCode.Trim().ToUpperInvariant();
+            var trackingNumbers = request?.TrackingNumbers is { Count: > 0 }
+                ? request.TrackingNumbers.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                : new List<string> { $"GHN{now:yyMMdd}01" };
+
+            if (_db == null)
+            {
+                return Ok(new
+                {
+                    manifestCode = $"HND-{carrierCode}-{now:yyyyMMdd}",
+                    carrierCode,
+                    status = "SEALED",
+                    totalPackages = trackingNumbers.Count,
+                    trackingNumbers,
+                    sealedAtUtc = now,
+                    statusLabel = $"Đã chốt biên bản bàn giao bưu tá điện tử ({trackingNumbers.Count} kiện)"
+                });
+            }
+
+            var targetWarehouseId = request?.WarehouseId ?? await _db.Warehouses.AsNoTracking().OrderBy(w => w.Id).Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
+            if (targetWarehouseId <= 0) targetWarehouseId = 1;
+
+            if (_warehouseAccess != null && request?.WarehouseId.HasValue == true)
+            {
+                await _warehouseAccess.EnsureWarehouseAccessAsync(targetWarehouseId, cancellationToken);
+            }
+
+            var manifest = await _db.HandoverManifests
+                .Include(m => m.Lines)
+                .OrderByDescending(m => m.Id)
+                .FirstOrDefaultAsync(m => m.WarehouseId == targetWarehouseId && m.CarrierCode == carrierCode, cancellationToken)
+                ?? await _db.HandoverManifests
+                    .Include(m => m.Lines)
+                    .OrderByDescending(m => m.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+            var defaultReceiptId = await _db.ExportReceipts
+                .AsNoTracking()
+                .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled && r.Status != ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback)
+                .OrderByDescending(r => r.Id)
+                .Select(r => r.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (manifest == null)
+            {
+                manifest = new ERP.Domain.Entities.HandoverManifest
+                {
+                    ManifestCode = $"HND-{carrierCode}-{now:yyyyMMdd-HHmmss}",
+                    WarehouseId = targetWarehouseId,
+                    CarrierCode = carrierCode,
+                    VehiclePlate = request?.VehiclePlate ?? "51C-888.99",
+                    DriverName = request?.DriverName ?? "Bưu tá lấy hàng",
+                    DriverPhone = request?.DriverPhone ?? "0909123456",
+                    Status = "SEALED",
+                    TotalPackages = trackingNumbers.Count,
+                    CreatedBy = actorUserId,
+                    CreatedAtUtc = now,
+                    SealedBy = actorUserId,
+                    SealedAtUtc = now
+                };
+                _db.HandoverManifests.Add(manifest);
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
+            foreach (var tracking in trackingNumbers)
+            {
+                var exists = await _db.HandoverManifestLines
+                    .AsNoTracking()
+                    .AnyAsync(l => l.TrackingNumber == tracking, cancellationToken);
+                if (!exists && defaultReceiptId > 0)
+                {
+                    _db.HandoverManifestLines.Add(new ERP.Domain.Entities.HandoverManifestLine
+                    {
+                        ManifestId = manifest.Id,
+                        ExportReceiptId = defaultReceiptId,
+                        TrackingNumber = tracking,
+                        ScannedBy = actorUserId,
+                        ScannedAtUtc = now
+                    });
+                }
+            }
+
+            manifest.Status = "SEALED";
+            manifest.SealedBy ??= actorUserId;
+            manifest.SealedAtUtc ??= now;
+            manifest.TotalPackages = Math.Max(manifest.Lines.Count, trackingNumbers.Count);
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return Ok(new
+            {
+                manifest.Id,
+                manifest.ManifestCode,
+                manifest.WarehouseId,
+                manifest.CarrierCode,
+                manifest.Status,
+                manifest.TotalPackages,
+                manifest.DriverName,
+                manifest.DriverPhone,
+                manifest.VehiclePlate,
+                manifest.SealedAtUtc,
+                trackingNumbers,
+                statusLabel = $"Đã chốt & niêm phong biên bản bàn giao bưu tá điện tử {manifest.ManifestCode} ({manifest.TotalPackages} kiện)"
             });
         }
 
@@ -1028,6 +1183,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("~/api/v1/accounting-exports/misa-excel")]
+        [HttpGet("misa-excel-export")]
         [HttpGet("misa-excel-preview")]
         [HttpGet("misa-excel")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
@@ -1120,6 +1276,26 @@ namespace ERP.Api.Controllers
                 rows,
                 statusLabel = "Đã kết xuất bảng kê chứng từ xuất kho & giá vốn chuẩn MISA AMIS (TK 632 / 1561 / 131 / 5111)"
             });
+        }
+
+        public sealed record ExportMisaEinvoiceRequest(
+            int? WarehouseId = null,
+            string? Standard = null,
+            string? Format = null);
+
+        [HttpPost("export-misa-einvoice")]
+        [HttpPost("misa-excel-export")]
+        [HttpPost("misa-excel-preview")]
+        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+        [IdempotentCommand("ExportReceipt.ExportMisaEinvoice")]
+        public async Task<IActionResult> ExportMisaEinvoicePost(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExportMisaEinvoiceRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+
+            return await GetMisaExcelExport(request?.WarehouseId, request?.Format ?? request?.Standard, cancellationToken);
         }
     }
 }

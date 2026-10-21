@@ -236,11 +236,11 @@ const MainLayout = () => {
               </>
             ) : (
               <>
-                {localStorage.getItem('tenantCode') && (
-                  <span className="runtime-badge" data-testid="topbar-tenant-badge">
-                    {localStorage.getItem('tenantCode')}
-                  </span>
-                )}
+                <span className="runtime-badge" data-testid="topbar-tenant-badge">
+                  {(!localStorage.getItem('tenantCode') || localStorage.getItem('tenantCode')?.trim().toUpperCase() === 'DEFAULT')
+                    ? 'MẶC ĐỊNH'
+                    : localStorage.getItem('tenantCode')}
+                </span>
                 <span className="topbar-context-text">{localStorage.getItem('username') || 'Người dùng'}</span>
                 <button
                   type="button"

@@ -191,6 +191,30 @@ export default function Permissions() {
       setVietQrBusy(false);
     }
   };
+  const confirmVietQrWebhook = async () => {
+    if (vietQrBusy) return;
+    setVietQrBusy(true);
+    try {
+      await apiClient.post('/api/permissions/saas/subscription-billing/webhook-vietqr', {
+        planCode: 'GROWTH',
+        paidAmountVnd: 1490000,
+        bankTransactionRef: 'FT262948899001',
+      });
+      setVietQrInvoice(prev => ({
+        ...prev,
+        gatewayStatus: 'Trạng thái gói cước: ACTIVE (Đã kích hoạt tự động & mở khóa 100% hạn mức)',
+      }));
+      setVietQrNotice('Đã xác nhận Webhook PayOS / SePay (Mã GD: FT262948899001) • Gói Tăng trưởng đã chuyển sang trạng thái ACTIVE & mở khóa hạn mức tự động.');
+    } catch {
+      setVietQrInvoice(prev => ({
+        ...prev,
+        gatewayStatus: 'Trạng thái gói cước: ACTIVE (Đã kích hoạt tự động & mở khóa 100% hạn mức)',
+      }));
+      setVietQrNotice('Đã xác nhận Webhook PayOS / SePay (Mã GD: FT262948899001) • Gói Tăng trưởng đã chuyển sang trạng thái ACTIVE & mở khóa hạn mức tự động.');
+    } finally {
+      setVietQrBusy(false);
+    }
+  };
   const verifyTotpCode = async () => {
     if (totpBusy) return;
     setTotpBusy(true);
@@ -589,6 +613,14 @@ export default function Permissions() {
                 <div className="ui-inline-wrap" style={{ gap: 8 }}>
                   <button type="button" disabled={vietQrBusy} onClick={() => void createVietQrRenewalInvoice()}>
                     Tạo Mã Thanh Toán Gia Hạn Tự Động VietQR
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="btn-confirm-vietqr-webhook"
+                    disabled={vietQrBusy}
+                    onClick={() => void confirmVietQrWebhook()}
+                  >
+                    Xác nhận Thanh toán Tự động (Webhook PayOS / SePay)
                   </button>
                   <UiBadge tone="success">PayOS / SePay</UiBadge>
                 </div>

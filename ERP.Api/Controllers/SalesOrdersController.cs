@@ -504,6 +504,7 @@ public sealed class SalesOrdersController(
     [HttpPost("~/api/v1/marketplace-shops")]
     [HttpPost("~/api/marketplace-shops")]
     [HttpPost("marketplace-shops")]
+    [HttpPost("marketplace-shops/connect")]
     [PermissionAuthorize(AppPermissions.SalesOrderCreate)]
     [IdempotentCommand("MarketplaceShop.Connect")]
     public async Task<IActionResult> ConnectMarketplaceShop(
@@ -619,7 +620,10 @@ public sealed class SalesOrdersController(
     [HttpPost("~/api/v1/marketplace-shops/sync-inventory")]
     [HttpPost("~/api/marketplace-shops/sync-inventory")]
     [HttpPost("marketplace-shops/sync-inventory")]
+    [HttpPost("~/api/v1/omnichannel/shops/sync-inventory")]
     [HttpPost("~/api/v1/integrations/marketplace/sync-inventory")]
+    [HttpPost("~/api/Reports/sync-marketplace-stock")]
+    [HttpPost("~/api/v1/reports/sync-marketplace-stock")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     [IdempotentCommand("MarketplaceShop.SyncInventory")]
     public async Task<IActionResult> SyncMarketplaceInventory(
@@ -795,12 +799,29 @@ public sealed class SalesOrdersController(
 
         return Ok(new
         {
+            shopCount = shops.Count,
+            syncedShopCount = shops.Count,
             syncedCount = pushedResults.Count,
             items = pushedResults,
             syncedAtUtc = now,
-            statusLabel = $"Đã đồng bộ tồn kho đa sàn ({pushedResults.Count} SKU) & kích hoạt cơ chế chống bán lố giờ Flash Sale"
+            statusLabel = $"Đã đồng bộ tồn kho đa sàn ({shops.Count} gian hàng, {pushedResults.Count} SKU) & kích hoạt cơ chế chống bán lố giờ Flash Sale"
         });
     }
+
+    [HttpPost("marketplace-shops/{shopId:int}/sync-inventory")]
+    [HttpPost("~/api/v1/marketplace-shops/{shopId:int}/sync-inventory")]
+    [HttpPost("~/api/marketplace-shops/{shopId:int}/sync-inventory")]
+    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    [IdempotentCommand("MarketplaceShop.SyncInventoryByShop")]
+    public Task<IActionResult> SyncMarketplaceInventoryByShop(
+        int shopId,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncMarketplaceInventoryRequest? request = null,
+        CancellationToken cancellationToken = default) =>
+        SyncMarketplaceInventory(
+            request is null
+                ? new SyncMarketplaceInventoryRequest(ShopId: shopId)
+                : request with { ShopId = request.ShopId ?? shopId },
+            cancellationToken);
 
     [HttpPost("webhook-buyer-cancellation")]
     [HttpPost("~/api/v1/integrations/webhooks/{channelCode}/buyer-cancel")]
@@ -976,9 +997,20 @@ public sealed class SalesOrdersController(
                 }
             }
 
+            var validAuditUserId = await db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == actorUserId)
+                .Select(u => (int?)u.Id)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? await db.Users
+                    .AsNoTracking()
+                    .OrderBy(u => u.Id)
+                    .Select(u => (int?)u.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
-                UserId = actorUserId,
+                UserId = validAuditUserId,
                 WarehouseId = targetWarehouseId,
                 Action = "SalesOrder.WebhookBuyerCancellation.PendingPutback",
                 EntityName = order != null ? "SalesOrder" : "ExportReceipt",
@@ -1081,9 +1113,20 @@ public sealed class SalesOrdersController(
             receipt.Status = ERP.Domain.Enums.ReceiptStatus.Cancelled;
         }
 
+        var validCancelAuditUserId = await db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == actorUserId)
+            .Select(u => (int?)u.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? await db.Users
+                .AsNoTracking()
+                .OrderBy(u => u.Id)
+                .Select(u => (int?)u.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
         db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
         {
-            UserId = actorUserId,
+            UserId = validCancelAuditUserId,
             WarehouseId = targetWarehouseId,
             Action = "SalesOrder.WebhookBuyerCancellation.Accepted",
             EntityName = order != null ? "SalesOrder" : "ExportReceipt",
@@ -1107,8 +1150,23 @@ public sealed class SalesOrdersController(
         });
     }
 
+    [HttpPost("{id:int}/webhook-buyer-cancellation")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCancel)]
+    [IdempotentCommand("SalesOrder.WebhookBuyerCancellationByOrder")]
+    public Task<IActionResult> WebhookBuyerCancellationByOrder(
+        int id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] BuyerCancellationWebhookRequest? request = null,
+        CancellationToken cancellationToken = default) =>
+        WebhookBuyerCancellation(
+            null,
+            request is null
+                ? new BuyerCancellationWebhookRequest(SalesOrderId: id)
+                : request with { SalesOrderId = request.SalesOrderId ?? id },
+            cancellationToken);
+
     [HttpGet("~/api/v1/promotions/gift-rules")]
     [HttpGet("promotions/gift-rules")]
+    [HttpGet("promotion-gift-rules")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public IActionResult GetPromotionGiftRules([FromQuery] int? warehouseId = null)
     {
@@ -1206,4 +1264,17 @@ public sealed class SalesOrdersController(
                 : "Tồn kho quà tặng đã hết (0) — Tự động bỏ qua quà tặng để không làm kẹt đơn hàng chính"
         });
     }
+
+    [HttpPost("{id:int}/evaluate-promotion-gifts")]
+    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    [IdempotentCommand("PromotionGiftRule.EvaluateByOrder")]
+    public Task<IActionResult> EvaluatePromotionGiftRulesByOrder(
+        int id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateGiftRulesRequest? request = null,
+        CancellationToken cancellationToken = default) =>
+        EvaluatePromotionGiftRules(
+            request is null
+                ? new EvaluateGiftRulesRequest(SalesOrderId: id)
+                : request with { SalesOrderId = request.SalesOrderId ?? id },
+            cancellationToken);
 }

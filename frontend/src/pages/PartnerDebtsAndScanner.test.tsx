@@ -224,7 +224,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     const input = view.getByRole('searchbox', {
       name: /Quét mã vạch (Thiết bị Cầm tay|Mobile \/ RF)/i,
     });
-    expect(view.getByPlaceholderText('Nhập hoặc quét mã Bin, SKU, Lot, Serial, LPN...')).toBeTruthy();
+    expect(view.getByPlaceholderText('Nhập hoặc quét mã kệ, mã SP, số lô, số sê-ri, mã kiện...')).toBeTruthy();
 
     fireEvent.change(input, { target: { value: '  BIN-STAGE-01\r\n ' } });
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
@@ -246,7 +246,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
       );
     });
 
-    expect(await view.findByText(/Vị trí kệ \(Bin\): BIN-STAGE-01 — Vị trí Staging 01/)).toBeTruthy();
+    expect(await view.findByText(/Vị trí kệ: BIN-STAGE-01 — Vị trí Staging 01/)).toBeTruthy();
 
     fireEvent.click(view.getByText('Bật Camera Quét'));
     expect(await view.findByText('Điền mã mẫu')).toBeTruthy();

@@ -692,7 +692,9 @@ namespace ERP.Api.Controllers
             string? CarrierCode = null,
             List<CodSettlementItemRequest>? Items = null);
 
+        [HttpGet("cod-reconciliation")]
         [HttpGet("cod-and-settlement-reconciliation")]
+        [HttpGet("~/api/v1/reports/cod-reconciliation")]
         [HttpGet("~/api/v1/reports/cod-and-settlement-reconciliation")]
         [PermissionAuthorize(AppPermissions.InventoryRead)]
         public async Task<IActionResult> GetCodAndSettlementReconciliation(
@@ -757,8 +759,12 @@ namespace ERP.Api.Controllers
             });
         }
 
+        [HttpPost("cod-reconciliation/verify")]
         [HttpPost("cod-and-settlement-reconciliation/verify")]
+        [HttpPost("reconcile-cod-settlement")]
+        [HttpPost("~/api/v1/reports/cod-reconciliation/verify")]
         [HttpPost("~/api/v1/reports/cod-and-settlement-reconciliation/verify")]
+        [HttpPost("~/api/v1/reports/cod-reconciliation/import")]
         [HttpPost("~/api/v1/finance/cod-reconciliation/import")]
         [PermissionAuthorize(AppPermissions.InventoryRead)]
         [IdempotentCommand("Report.VerifyCodAndSettlementReconciliation")]
@@ -882,7 +888,9 @@ namespace ERP.Api.Controllers
         }
 
         [HttpGet("owner-gross-profit")]
+        [HttpGet("owner-pnl-summary")]
         [HttpGet("~/api/v1/reports/owner-gross-profit")]
+        [HttpGet("~/api/v1/reports/owner-pnl-summary")]
         [HttpGet("~/api/v1/reports/gross-profit-by-sku")]
         [PermissionAuthorize(AppPermissions.InventoryRead)]
         public async Task<IActionResult> GetOwnerGrossProfit(

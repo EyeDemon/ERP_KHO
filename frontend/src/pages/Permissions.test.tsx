@@ -135,5 +135,17 @@ describe('quản trị quyền truy cập', () => {
 
     fireEvent.click(view.getByRole('button', { name: 'Tạo Mã Thanh Toán Gia Hạn Tự Động VietQR' }));
     expect(await view.findByText(/Đã khởi tạo mã thanh toán VietQR tự động/)).toBeTruthy();
+
+    const webhookBtn = view.getByTestId('btn-confirm-vietqr-webhook');
+    expect(webhookBtn.textContent).toContain('Xác nhận Thanh toán Tự động (Webhook PayOS / SePay)');
+    fireEvent.click(webhookBtn);
+    expect(await view.findByText(/Trạng thái gói cước: ACTIVE/)).toBeTruthy();
+    expect(post).toHaveBeenCalledWith(
+      '/api/permissions/saas/subscription-billing/webhook-vietqr',
+      expect.objectContaining({
+        planCode: 'GROWTH',
+        paidAmountVnd: 1490000,
+      }),
+    );
   });
 });

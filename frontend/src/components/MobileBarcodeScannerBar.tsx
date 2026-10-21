@@ -73,10 +73,10 @@ export interface MobileBarcodeScannerBarProps {
 }
 
 const ENTITY_LABELS: Record<string, string> = {
-  Location: 'Vị trí kệ (Bin)',
-  HandlingUnit: 'Đơn vị đóng gói (HU/Pallet)',
-  Serial: 'Số Serial',
-  Lot: 'Số Lô (Lot)',
+  Location: 'Vị trí kệ',
+  HandlingUnit: 'Đơn vị đóng gói (Kiện/Pallet)',
+  Serial: 'Số sê-ri',
+  Lot: 'Số lô',
   Product: 'Sản phẩm (SKU)',
   Unknown: 'Chưa nhận diện',
 };
@@ -85,7 +85,7 @@ const SAMPLE_GS1_CODE = '(01)08938505000517(10)LOT-QA-002(17)271231(21)SER-QA-01
 
 export function MobileBarcodeScannerBar({
   label = 'Quét mã vạch Thiết bị Cầm tay (Camera hoặc Súng quét)',
-  placeholder = 'Nhập hoặc quét mã Bin, SKU, Lot, Serial, LPN...',
+  placeholder = 'Nhập hoặc quét mã kệ, mã SP, số lô, số sê-ri, mã kiện...',
   sampleCode = 'BIN-A01',
   warehouseId,
   disabled = false,
@@ -407,7 +407,7 @@ export function MobileBarcodeScannerBar({
       {cameraActive && (
         <div style={{ maxWidth: 360, border: '1px solid #cbd5e1', borderRadius: 8, padding: 8, background: '#ffffff' }}>
           <video ref={videoRef} muted playsInline style={{ width: '100%', borderRadius: 6 }} />
-          <small className="ui-muted-text">Hướng camera về phía mã vạch kệ (Bin) hoặc sản phẩm (SKU)...</small>
+          <small className="ui-muted-text">Hướng camera về phía mã vạch kệ hoặc sản phẩm (SKU)...</small>
         </div>
       )}
     </section>

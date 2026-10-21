@@ -303,6 +303,7 @@ public sealed class PermissionsController(
     [HttpGet("~/api/v1/saas/setup-wizard")]
     [HttpGet("~/api/saas/setup-wizard")]
     [HttpGet("saas/setup-wizard")]
+    [HttpGet("saas-setup-wizard")]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
     public async Task<IActionResult> GetSaaSSetupWizard(CancellationToken ct = default)
     {
@@ -335,6 +336,8 @@ public sealed class PermissionsController(
     [HttpPost("~/api/v1/saas/demo-seed")]
     [HttpPost("~/api/saas/demo-seed")]
     [HttpPost("saas/demo-seed")]
+    [HttpPost("saas/demo-data/seed")]
+    [HttpPost("saas-demo-seed")]
     [HttpPost("~/api/v1/saas/onboarding/seed-industry-template")]
     [HttpPost("~/api/v1/saas/onboarding/purge-demo-data")]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
@@ -365,7 +368,9 @@ public sealed class PermissionsController(
         });
     }
 
+    [HttpGet("saas/subscription-billing")]
     [HttpGet("saas-subscription-billing")]
+    [HttpGet("~/api/v1/saas/subscriptions/billing")]
     [HttpGet("~/api/v1/saas/subscriptions/current")]
     [HttpGet("~/api/saas/subscriptions/current")]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
@@ -453,7 +458,10 @@ public sealed class PermissionsController(
         });
     }
 
+    [HttpPost("saas/subscription-billing/enforce-quota")]
+    [HttpPost("saas-subscription-billing/enforce-quota")]
     [HttpPost("saas-subscription-billing/enforce-quota-check")]
+    [HttpPost("~/api/v1/saas/subscriptions/enforce-quota")]
     [HttpPost("~/api/v1/saas/subscriptions/enforce-quota-check")]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
     [IdempotentCommand("SaaS.EnforceQuotaCheck")]
@@ -503,6 +511,9 @@ public sealed class PermissionsController(
         });
     }
 
+    [HttpPost("saas/subscription-billing/vietqr-invoice")]
+    [HttpPost("saas-subscription-billing/vietqr-invoice")]
+    [HttpPost("saas/subscription-billing/create-vietqr-invoice")]
     [HttpPost("saas-subscription-billing/create-vietqr-invoice")]
     [HttpPost("~/api/v1/saas/subscriptions/create-vietqr-invoice")]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
@@ -552,8 +563,10 @@ public sealed class PermissionsController(
         });
     }
 
-    [HttpPost("~/api/v1/webhooks/billing/vietqr")]
+    [HttpPost("saas/subscription-billing/webhook-vietqr")]
     [HttpPost("saas-subscription-billing/webhook-vietqr")]
+    [HttpPost("~/api/v1/saas/subscriptions/webhook-vietqr")]
+    [HttpPost("~/api/v1/webhooks/billing/vietqr")]
     [HttpPost("webhooks/billing/vietqr")]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
     [IdempotentCommand("SaaS.VietQrBillingWebhook")]
@@ -568,6 +581,9 @@ public sealed class PermissionsController(
         var tenantId = db?.CurrentTenantId ?? 1;
         var targetPlan = string.IsNullOrWhiteSpace(request?.PlanCode) ? "PRO" : request.PlanCode.Trim().ToUpperInvariant();
         var newQuota = targetPlan == "ENTERPRISE" ? 100000 : 10000;
+        var resolvedInvoiceCode = !string.IsNullOrWhiteSpace(request?.InvoiceCode)
+            ? request.InvoiceCode.Trim()
+            : $"INV-VQR-{now:yyyyMMdd}-PAID";
 
         if (db != null)
         {
@@ -577,14 +593,44 @@ public sealed class PermissionsController(
                 var code = request.InvoiceCode.Trim();
                 invoice = await db.SaasBillingInvoices.FirstOrDefaultAsync(i => i.InvoiceCode == code, ct);
             }
-            invoice ??= await db.SaasBillingInvoices.OrderByDescending(i => i.Id).FirstOrDefaultAsync(ct);
+            invoice ??= await db.SaasBillingInvoices
+                .Where(i => i.TenantId == tenantId && i.Status != "PAID")
+                .OrderByDescending(i => i.Id)
+                .FirstOrDefaultAsync(ct);
+            invoice ??= await db.SaasBillingInvoices
+                .Where(i => i.TenantId == tenantId)
+                .OrderByDescending(i => i.Id)
+                .FirstOrDefaultAsync(ct);
 
             if (invoice != null)
             {
                 invoice.Status = "PAID";
                 invoice.PaidAtUtc = now;
-                targetPlan = invoice.PlanCode;
+                if (!string.IsNullOrWhiteSpace(invoice.PlanCode))
+                {
+                    targetPlan = invoice.PlanCode;
+                }
                 newQuota = targetPlan == "ENTERPRISE" ? 100000 : 10000;
+                resolvedInvoiceCode = invoice.InvoiceCode;
+            }
+            else
+            {
+                var paidAmt = request?.PaidAmountVnd is > 0m
+                    ? request.PaidAmountVnd.Value
+                    : (targetPlan == "ENTERPRISE" ? 4990000m : 1490000m);
+                invoice = new SaasBillingInvoice
+                {
+                    TenantId = tenantId,
+                    InvoiceCode = resolvedInvoiceCode,
+                    PlanCode = targetPlan,
+                    AmountVnd = paidAmt,
+                    PaymentProvider = "VIETQR",
+                    Status = "PAID",
+                    QrPayload = $"00020101021238570010A00000072701270006970436011319038889999990208QRIBFTTA530370454{paidAmt:0}5802VN62{resolvedInvoiceCode}",
+                    PaidAtUtc = now,
+                    CreatedAtUtc = now
+                };
+                db.SaasBillingInvoices.Add(invoice);
             }
 
             var sub = await db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
@@ -614,9 +660,15 @@ public sealed class PermissionsController(
                 sub.UpdatedAtUtc = now;
             }
 
+            var validAuditUserId = await db.Users
+                .AsNoTracking()
+                .OrderBy(u => u.Id)
+                .Select(u => (int?)u.Id)
+                .FirstOrDefaultAsync(ct);
+
             db.AuditLogs.Add(new AuditLog
             {
-                UserId = 1,
+                UserId = validAuditUserId,
                 EntityName = "TenantSubscription",
                 EntityId = tenantId,
                 Action = "SaaS.VietQrBillingWebhook.Paid",
@@ -632,7 +684,7 @@ public sealed class PermissionsController(
         return Ok(new
         {
             tenantId,
-            invoiceCode = request?.InvoiceCode ?? "INV-VQR-PAID",
+            invoiceCode = resolvedInvoiceCode,
             upgradedPlanCode = targetPlan,
             subscriptionStatus = "ACTIVE",
             newMonthlyOrderQuota = newQuota,

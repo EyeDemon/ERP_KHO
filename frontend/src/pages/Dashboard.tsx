@@ -434,7 +434,7 @@ const Dashboard = () => {
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Đã trừ đơn hoàn &amp; đơn hủy sàn</div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
-              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Giá vốn bình quân (COGS)</div>
+              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Giá vốn hàng bán bình quân</div>
               <strong style={{ fontSize: 15, color: '#0f172a' }}>92.400.000 đ</strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Bình quân gia quyền di động</div>
             </div>
@@ -468,7 +468,7 @@ const Dashboard = () => {
               type="button"
               onClick={() => {
                 void Promise.resolve(
-                  apiClient.post('/api/Reports/sync-marketplace-stock', {
+                  apiClient.post('/api/sales-orders/marketplace-shops/sync-inventory', {
                     channels: ['SHOPEE', 'TIKTOK_SHOP'],
                     safetyBufferPercent: 5,
                   }),
@@ -487,7 +487,7 @@ const Dashboard = () => {
               type="button"
               onClick={() => {
                 void Promise.resolve(
-                  apiClient.post('/api/Reports/reconcile-cod-settlement', {
+                  apiClient.post('/api/v1/reports/cod-reconciliation/verify', {
                     reconcileMode: 'THREE_WAY_COD_AND_MARKETPLACE_FEE',
                   }),
                 )

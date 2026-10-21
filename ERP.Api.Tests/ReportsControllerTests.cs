@@ -6285,5 +6285,315 @@ namespace ERP.Api.Tests
             var anonymizedReceipt = await db.ExportReceipts.SingleAsync(r => r.Id == 801);
             anonymizedReceipt.CustomerNameSnapshot.Should().StartWith("ANONYMIZED_PII_");
         }
+
+        [Fact]
+        public async Task Wave46_Permissions_SaaSSubscriptionBillingAliases_CreateVietQrInvoice_WebhookVietQr_And_SetupWizard_Return200WithDbBackedData()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase($"Wave46_Permissions_SaaS_{Guid.NewGuid():N}")
+                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+                .Options;
+
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Tổng W46", IsActive = true });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 10,
+                WarehouseId = 1,
+                Code = "PICK-01",
+                Name = "Kệ Nhặt 01",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true,
+                IsReceivable = true
+            });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 101,
+                Code = "SKU-W46-01",
+                Name = "Sản phẩm SaaS W46",
+                UnitId = 1,
+                MovingAverageCost = 90000m,
+                IsActive = true
+            });
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 1,
+                WarehouseId = 1,
+                ProductId = 101,
+                LocationId = 10,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 50m,
+                MovingAverageCost = 90000m
+            });
+            db.MarketplaceShops.Add(new ERP.Domain.Entities.MarketplaceShop
+            {
+                Id = 1,
+                ChannelCode = "SHOPEE",
+                ShopCode = "SHOPEE-W46",
+                ShopName = "Gian hàng Shopee W46",
+                DefaultWarehouseId = 1,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            var permController = new PermissionsController(db);
+
+            // 1. Setup Wizard 5-Step Progress
+            var wizRes = await permController.GetSaaSSetupWizard(default);
+            using var wizDoc = System.Text.Json.JsonSerializer.SerializeToDocument(wizRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            wizDoc.RootElement.GetProperty("totalSteps").GetInt32().Should().Be(5);
+            wizDoc.RootElement.GetProperty("completedSteps").GetInt32().Should().Be(5);
+            wizDoc.RootElement.GetProperty("completionPct").GetInt32().Should().Be(100);
+            wizDoc.RootElement.GetProperty("statusLabel").GetString().Should().Contain("Tiến độ hướng dẫn thiết lập nhanh 5 bước");
+
+            // 2. Get SaaS Subscription Billing auto-seeds TenantSubscription
+            var subRes = await permController.GetSaaSSubscriptionBilling(null, null, default);
+            using var subDoc = System.Text.Json.JsonSerializer.SerializeToDocument(subRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            subDoc.RootElement.GetProperty("planCode").GetString().Should().Be("STARTER");
+            subDoc.RootElement.GetProperty("subscriptionStatus").GetString().Should().Be("ACTIVE");
+            subDoc.RootElement.GetProperty("quotaTierCode").GetString().Should().Be("NORMAL");
+            (await db.TenantSubscriptions.CountAsync()).Should().Be(1);
+
+            // 3. Create VietQR Invoice & Webhook VietQR (including auto-matching latest pending invoice when InvoiceCode omitted)
+            var invRes = await permController.CreateVietQrInvoice(
+                new PermissionsController.CreateVietQrInvoiceRequest(PlanCode: "PRO", AmountVnd: 1490000m),
+                default);
+            using var invDoc = System.Text.Json.JsonSerializer.SerializeToDocument(invRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            var invCode = invDoc.RootElement.GetProperty("invoiceCode").GetString()!;
+            invCode.Should().StartWith("INV-VQR-");
+            invDoc.RootElement.GetProperty("status").GetString().Should().Be("UNPAID");
+
+            var whRes = await permController.HandleVietQrBillingWebhook(
+                new PermissionsController.VietQrWebhookRequest(InvoiceCode: null, PlanCode: "PRO", PaidAmountVnd: 1490000m),
+                default);
+            using var whDoc = System.Text.Json.JsonSerializer.SerializeToDocument(whRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            whDoc.RootElement.GetProperty("invoiceCode").GetString().Should().Be(invCode);
+            whDoc.RootElement.GetProperty("upgradedPlanCode").GetString().Should().Be("PRO");
+            whDoc.RootElement.GetProperty("subscriptionStatus").GetString().Should().Be("ACTIVE");
+            whDoc.RootElement.GetProperty("newMonthlyOrderQuota").GetInt32().Should().Be(10000);
+            whDoc.RootElement.GetProperty("statusLabel").GetString().Should().Contain("Đã xác nhận thanh toán VietQR");
+
+            var dbInvoice = await db.SaasBillingInvoices.SingleAsync();
+            dbInvoice.Status.Should().Be("PAID");
+        }
+
+        [Fact]
+        public async Task Wave46_ExportReceipts_MisaExcelAliases_And_BatchPrintAwb_DefaultDbReceiptsVsExplicitReprintGuard()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase($"Wave46_Export_Misa_Awb_{Guid.NewGuid():N}")
+                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+                .Options;
+
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Tổng W46", IsActive = true });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 10,
+                WarehouseId = 1,
+                Code = "A-01-01",
+                Name = "Kệ Nhặt A-01-01",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true,
+                IsReceivable = true
+            });
+            var prod = new ERP.Domain.Entities.Product
+            {
+                Id = 201,
+                Code = "SKU-MISA-201",
+                Name = "Kem Chống Nắng MISA",
+                UnitId = 1,
+                MovingAverageCost = 85000m,
+                IsActive = true
+            };
+            db.Products.Add(prod);
+            db.ExportReceipts.Add(new ERP.Domain.Entities.ExportReceipt
+            {
+                Id = 701,
+                Code = "PXK-W46-701",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Approved,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow,
+                Details =
+                [
+                    new ERP.Domain.Entities.ExportReceiptDetail
+                    {
+                        Id = 7011,
+                        ProductId = 201,
+                        Product = prod,
+                        Quantity = 4m,
+                        UnitPrice = 150000m
+                    }
+                ]
+            });
+            await db.SaveChangesAsync();
+
+            var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db);
+
+            // 1. Default BatchPrintAwb without explicit ReceiptIds (returns 200 OK with DB-backed thermal labels)
+            var firstPrint = await expController.BatchPrintAwb(new ExportReceiptsController.BatchPrintAwbRequest(WarehouseId: 1), default);
+            using var firstDoc = System.Text.Json.JsonSerializer.SerializeToDocument(firstPrint.Should().BeOfType<OkObjectResult>().Subject.Value);
+            firstDoc.RootElement.GetProperty("paperSize").GetString().Should().Be("100x150mm");
+            firstDoc.RootElement.GetProperty("printedCount").GetInt32().Should().Be(1);
+            firstDoc.RootElement.GetProperty("labels")[0].GetProperty("pickingSummaryFooter").GetString()
+                .Should().Contain("[Kệ: A-01-01 | SKU: SKU-MISA-201 x 4]");
+
+            // Calling default quick-print without explicit ReceiptIds continues to return 200 OK smoothly
+            var quickPrintAgain = await expController.BatchPrintAwb(new ExportReceiptsController.BatchPrintAwbRequest(WarehouseId: 1, EnforceReprintReason: true), default);
+            quickPrintAgain.Should().BeOfType<OkObjectResult>();
+
+            // 2. Explicit ReceiptIds with EnforceReprintReason=true and empty ReprintReason returns 409 REPRINT_REASON_REQUIRED
+            var blockedReprint = await expController.BatchPrintAwb(
+                new ExportReceiptsController.BatchPrintAwbRequest(WarehouseId: 1, ReceiptIds: [701], EnforceReprintReason: true, ReprintReason: ""),
+                default);
+            using var blockedDoc = System.Text.Json.JsonSerializer.SerializeToDocument(blockedReprint.Should().BeOfType<ConflictObjectResult>().Subject.Value);
+            blockedDoc.RootElement.GetProperty("errorCode").GetString().Should().Be("REPRINT_REASON_REQUIRED");
+
+            // 3. MISA AMIS Accounting Excel Export (GET & POST export-misa-einvoice) + ConfirmCarrierHandover
+            var misaRes = await expController.GetMisaExcelExport(1, "json", default);
+            using var misaDoc = System.Text.Json.JsonSerializer.SerializeToDocument(misaRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            misaDoc.RootElement.GetProperty("templateStandard").GetString().Should().Be("MISA_AMIS_ACT_200");
+            misaDoc.RootElement.GetProperty("defaultDebitCogsAccount").GetString().Should().Be("632");
+            misaDoc.RootElement.GetProperty("defaultCreditInventoryAccount").GetString().Should().Be("1561");
+            misaDoc.RootElement.GetProperty("rowCount").GetInt32().Should().Be(1);
+            misaDoc.RootElement.GetProperty("rows")[0].GetProperty("thanhTienGiaVon").GetDecimal().Should().Be(340000m);
+            misaDoc.RootElement.GetProperty("rows")[0].GetProperty("doanhThu").GetDecimal().Should().Be(600000m);
+
+            var misaPostRes = await expController.ExportMisaEinvoicePost(
+                new ExportReceiptsController.ExportMisaEinvoiceRequest(WarehouseId: 1, Standard: "MISA_ND70_2025"),
+                default);
+            misaPostRes.Should().BeOfType<OkObjectResult>();
+
+            var confirmHandoverRes = await expController.ConfirmCarrierHandover(
+                new ExportReceiptsController.ConfirmCarrierHandoverRequest(
+                    WarehouseId: 1,
+                    CarrierCode: "GHN",
+                    TrackingNumbers: ["GHN84920188", "VTP99201122"]),
+                default);
+            using var confirmDoc = System.Text.Json.JsonSerializer.SerializeToDocument(confirmHandoverRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            confirmDoc.RootElement.GetProperty("Status").GetString().Should().Be("SEALED");
+            confirmDoc.RootElement.GetProperty("TotalPackages").GetInt32().Should().BeGreaterThanOrEqualTo(2);
+        }
+
+        [Fact]
+        public async Task Wave46_SalesOrders_SyncMarketplaceInventoryWithoutShopId_And_Reports_CodVerifyAliases_OwnerPnlAliases_Return200WithDbBackedData()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase($"Wave46_Sync_Cod_Pnl_{Guid.NewGuid():N}")
+                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+                .Options;
+
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho Tổng W46", IsActive = true });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 10,
+                WarehouseId = 1,
+                Code = "PICK-01",
+                Name = "Kệ Nhặt 01",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true,
+                IsReceivable = true
+            });
+            var prod = new ERP.Domain.Entities.Product
+            {
+                Id = 301,
+                Code = "SKU-SYNC-301",
+                Name = "Tinh Chất Nghệ W46",
+                UnitId = 1,
+                MovingAverageCost = 70000m,
+                IsActive = true
+            };
+            db.Products.Add(prod);
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 1,
+                WarehouseId = 1,
+                ProductId = 301,
+                LocationId = 10,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 50m,
+                ReservedQuantity = 10m,
+                MovingAverageCost = 70000m
+            });
+            db.ExportReceipts.Add(new ERP.Domain.Entities.ExportReceipt
+            {
+                Id = 901,
+                Code = "PXK-PNL-901",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Dispatched,
+                CreatedBy = 1,
+                CreatedAt = DateTime.UtcNow,
+                Details =
+                [
+                    new ERP.Domain.Entities.ExportReceiptDetail
+                    {
+                        Id = 9011,
+                        ProductId = 301,
+                        Product = prod,
+                        Quantity = 10m,
+                        UnitPrice = 150000m
+                    }
+                ]
+            });
+            await db.SaveChangesAsync();
+
+            // 1. SyncMarketplaceInventory without ShopId (and SyncMarketplaceInventoryByShop delegate)
+            var soController = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, db);
+            var syncRes = await soController.SyncMarketplaceInventory(
+                new SalesOrdersController.SyncMarketplaceInventoryRequest(WarehouseId: 1, ShopId: null),
+                default);
+            using var syncDoc = System.Text.Json.JsonSerializer.SerializeToDocument(syncRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            syncDoc.RootElement.GetProperty("shopCount").GetInt32().Should().Be(1);
+            syncDoc.RootElement.GetProperty("syncedCount").GetInt32().Should().Be(1);
+            syncDoc.RootElement.GetProperty("items")[0].GetProperty("atpBaseQty").GetDecimal().Should().Be(40m);
+            syncDoc.RootElement.GetProperty("items")[0].GetProperty("pushedQuantity").GetDecimal().Should().Be(36m);
+
+            var syncByShopRes = await soController.SyncMarketplaceInventoryByShop(1, null, default);
+            syncByShopRes.Should().BeOfType<OkObjectResult>();
+
+            // 2. VerifyCodAndSettlementReconciliation & GetCodAndSettlementReconciliation
+            var reportsController = new ReportsController(new Mock<IReportService>().Object, db);
+            var codVerifyRes = await reportsController.VerifyCodAndSettlementReconciliation(
+                new ReportsController.VerifyCodSettlementRequest(
+                    WarehouseId: 1,
+                    CarrierCode: "GHN",
+                    Items:
+                    [
+                        new ReportsController.CodSettlementItemRequest(
+                            TrackingNumber: "GHN-W46-901",
+                            CarrierCode: "GHN",
+                            ExportReceiptId: 901,
+                            ExpectedCodAmount: 1500000m,
+                            ActualCodCollected: 1500000m,
+                            EstimatedShippingFee: 25000m,
+                            ActualShippingFee: 35000m,
+                            PlatformCommissionFee: 105000m,
+                            ReturnFee: 0m)
+                    ]),
+                default);
+            using var codVerifyDoc = System.Text.Json.JsonSerializer.SerializeToDocument(codVerifyRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            codVerifyDoc.RootElement.GetProperty("discrepancyCount").GetInt32().Should().Be(1);
+
+            var codGetRes = await reportsController.GetCodAndSettlementReconciliation(1, "GHN", default);
+            using var codGetDoc = System.Text.Json.JsonSerializer.SerializeToDocument(codGetRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            codGetDoc.RootElement.GetProperty("totalExpectedCod").GetDecimal().Should().Be(1500000m);
+            codGetDoc.RootElement.GetProperty("totalFeeOverchargeVariance").GetDecimal().Should().Be(10000m);
+            codGetDoc.RootElement.GetProperty("totalNetPayout").GetDecimal().Should().Be(1360000m);
+
+            // 3. GetOwnerGrossProfit
+            var pnlRes = await reportsController.GetOwnerGrossProfit(1, default);
+            using var pnlDoc = System.Text.Json.JsonSerializer.SerializeToDocument(pnlRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            pnlDoc.RootElement.GetProperty("grossRevenue").GetDecimal().Should().Be(1500000m);
+            pnlDoc.RootElement.GetProperty("movingAverageCogs").GetDecimal().Should().Be(700000m);
+            pnlDoc.RootElement.GetProperty("platformCommissionFee").GetDecimal().Should().Be(105000m);
+            pnlDoc.RootElement.GetProperty("shippingFeeDifferentials").GetDecimal().Should().Be(10000m);
+            pnlDoc.RootElement.GetProperty("packagingCost").GetDecimal().Should().Be(25000m);
+            pnlDoc.RootElement.GetProperty("netPocketProfit").GetDecimal().Should().Be(660000m);
+        }
     }
 }
