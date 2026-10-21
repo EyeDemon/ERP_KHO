@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using ERP.Domain.Entities;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,9 @@ namespace ERP.Infrastructure.Persistence;
 
 public class ErpKhoDbContext : DbContext
 {
+    private static readonly ConcurrentDictionary<string, byte> _wave44SchemaSyncedDatabases = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object _wave44SchemaSyncLock = new();
+
     private readonly ERP.Application.Interfaces.IRequestMetadata? _requestMetadata;
     private readonly ERP.Application.Interfaces.ITenantContext? _tenantContext;
     private int? _ambientTenantOverride;
@@ -21,6 +25,7 @@ public class ErpKhoDbContext : DbContext
     {
         _requestMetadata = requestMetadata;
         _tenantContext = tenantContext;
+        EnsureWave44SchemaSyncedIfNeeded();
     }
 
     public int CurrentTenantId => _ambientTenantOverride ?? (_tenantContext?.TenantId > 0 ? _tenantContext.TenantId : 1);
@@ -35,6 +40,215 @@ public class ErpKhoDbContext : DbContext
         }
 
         _ambientTenantOverride = tenantId;
+    }
+
+    public void EnsureWave44SchemaSyncedIfNeeded()
+    {
+        try
+        {
+            if (!Database.IsRelational() || !Database.IsSqlServer())
+            {
+                return;
+            }
+
+            var connectionString = Database.GetConnectionString();
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                return;
+            }
+
+            var builder = new SqlConnectionStringBuilder(connectionString);
+            var cacheKey = $"{builder.DataSource}|{builder.InitialCatalog}";
+            if (_wave44SchemaSyncedDatabases.ContainsKey(cacheKey))
+            {
+                return;
+            }
+
+            lock (_wave44SchemaSyncLock)
+            {
+                if (_wave44SchemaSyncedDatabases.ContainsKey(cacheKey))
+                {
+                    return;
+                }
+
+                using var connection = new SqlConnection(connectionString);
+                connection.Open();
+
+                using var checkCmd = connection.CreateCommand();
+                checkCmd.CommandText = "SELECT CASE WHEN OBJECT_ID(N'dbo.InventoryStocks', N'U') IS NOT NULL THEN 1 ELSE 0 END;";
+                var hasInventoryStocks = Convert.ToInt32(checkCmd.ExecuteScalar()) == 1;
+                if (!hasInventoryStocks)
+                {
+                    return;
+                }
+
+                using var patchCmd = connection.CreateCommand();
+                patchCmd.CommandTimeout = 60;
+                patchCmd.CommandText = @"
+IF COL_LENGTH('dbo.InventoryStocks', 'AllocatedQuantity') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD AllocatedQuantity decimal(19,4) NOT NULL CONSTRAINT DF_InventoryStocks_AllocatedQuantity DEFAULT(0);
+IF COL_LENGTH('dbo.InventoryStocks', 'LockedQuantity') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD LockedQuantity decimal(19,4) NOT NULL CONSTRAINT DF_InventoryStocks_LockedQuantity DEFAULT(0);
+IF COL_LENGTH('dbo.InventoryStocks', 'HandlingUnitId') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD HandlingUnitId int NULL;
+IF COL_LENGTH('dbo.InventoryStocks', 'OwnerId') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD OwnerId int NULL;
+IF COL_LENGTH('dbo.InventoryStocks', 'MovingAverageCost') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD MovingAverageCost decimal(19,4) NOT NULL CONSTRAINT DF_InventoryStocks_MovingAverageCost DEFAULT(0);
+IF COL_LENGTH('dbo.InventoryStocks', 'GrainHash') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD GrainHash varbinary(32) NULL;
+IF COL_LENGTH('dbo.InventoryStocks', 'CanonicalHandlingUnitId') IS NULL
+    EXEC(N'ALTER TABLE dbo.InventoryStocks ADD CanonicalHandlingUnitId AS COALESCE([HandlingUnitId], 0) PERSISTED;');
+IF COL_LENGTH('dbo.InventoryStocks', 'CanonicalOwnerId') IS NULL
+    EXEC(N'ALTER TABLE dbo.InventoryStocks ADD CanonicalOwnerId AS COALESCE([OwnerId], 0) PERSISTED;');
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.index_columns ic
+    JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE i.object_id = OBJECT_ID('dbo.InventoryStocks')
+      AND i.name = 'IX_InventoryStocks_CanonicalBucket'
+      AND c.name = 'CanonicalHandlingUnitId'
+)
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.InventoryStocks') AND name = 'IX_InventoryStocks_CanonicalBucket')
+        EXEC(N'DROP INDEX IX_InventoryStocks_CanonicalBucket ON dbo.InventoryStocks;');
+    EXEC(N'CREATE UNIQUE INDEX IX_InventoryStocks_CanonicalBucket ON dbo.InventoryStocks (TenantId, ProductId, WarehouseId, Status, CanonicalLocationId, CanonicalLotId, CanonicalSerialId, CanonicalHandlingUnitId, CanonicalOwnerId);');
+END;
+
+IF OBJECT_ID(N'dbo.PutawayTasks', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.PutawayTasks', 'TaskType') IS NULL
+        ALTER TABLE dbo.PutawayTasks ADD TaskType nvarchar(32) NOT NULL CONSTRAINT DF_PutawayTasks_TaskType DEFAULT(N'PutawayTask');
+END;
+
+IF OBJECT_ID(N'dbo.InventoryTransactions', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.InventoryTransactions', 'HandlingUnitId') IS NULL
+        ALTER TABLE dbo.InventoryTransactions ADD HandlingUnitId int NULL;
+    IF COL_LENGTH('dbo.InventoryTransactions', 'OwnerId') IS NULL
+        ALTER TABLE dbo.InventoryTransactions ADD OwnerId int NULL;
+    IF COL_LENGTH('dbo.InventoryTransactions', 'UnitCost') IS NULL
+        ALTER TABLE dbo.InventoryTransactions ADD UnitCost decimal(19,4) NOT NULL CONSTRAINT DF_InventoryTransactions_UnitCost DEFAULT(0);
+    IF COL_LENGTH('dbo.InventoryTransactions', 'SourceDocumentLineId') IS NULL
+        ALTER TABLE dbo.InventoryTransactions ADD SourceDocumentLineId int NULL;
+END;
+
+IF OBJECT_ID(N'dbo.Products', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.Products', 'MovingAverageCost') IS NULL
+        ALTER TABLE dbo.Products ADD MovingAverageCost decimal(19,4) NOT NULL CONSTRAINT DF_Products_MovingAverageCost DEFAULT(0);
+END;
+
+IF OBJECT_ID(N'dbo.StockAllocations', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.StockAllocations', 'HandlingUnitId') IS NULL
+        ALTER TABLE dbo.StockAllocations ADD HandlingUnitId int NULL;
+    IF COL_LENGTH('dbo.StockAllocations', 'OwnerId') IS NULL
+        ALTER TABLE dbo.StockAllocations ADD OwnerId int NULL;
+END;
+
+IF OBJECT_ID(N'dbo.StockReservations', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.StockReservations', 'BaseUomIdSnapshot') IS NULL
+        ALTER TABLE dbo.StockReservations ADD BaseUomIdSnapshot int NOT NULL CONSTRAINT DF_StockReservations_BaseUomIdSnapshot DEFAULT(1);
+    IF COL_LENGTH('dbo.StockReservations', 'BaseUomCodeSnapshot') IS NULL
+        ALTER TABLE dbo.StockReservations ADD BaseUomCodeSnapshot nvarchar(32) NOT NULL CONSTRAINT DF_StockReservations_BaseUomCodeSnapshot DEFAULT(N'THÙNG');
+    IF COL_LENGTH('dbo.StockReservations', 'BaseUomDecimalPlacesSnapshot') IS NULL
+        ALTER TABLE dbo.StockReservations ADD BaseUomDecimalPlacesSnapshot int NOT NULL CONSTRAINT DF_StockReservations_BaseUomDecimalPlacesSnapshot DEFAULT(0);
+END;
+
+IF OBJECT_ID(N'dbo.ExportReceipts', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.ExportReceipts', 'MarketplaceOrderId') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD MarketplaceOrderId nvarchar(64) NULL;
+    IF COL_LENGTH('dbo.ExportReceipts', 'CarrierCode') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD CarrierCode nvarchar(32) NULL;
+    IF COL_LENGTH('dbo.ExportReceipts', 'TrackingNumber') IS NULL
+        ALTER TABLE dbo.ExportReceipts ADD TrackingNumber nvarchar(64) NULL;
+END;
+
+IF OBJECT_ID(N'dbo.IntegrationOutboxMessages', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.IntegrationOutboxMessages (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationOutboxMessages PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_IntegrationOutboxMessages_TenantId DEFAULT(1),
+        EventId nvarchar(64) NOT NULL,
+        EventType nvarchar(100) NOT NULL,
+        AggregateType nvarchar(64) NOT NULL,
+        AggregateId int NULL,
+        PayloadJson nvarchar(max) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        RetryCount int NOT NULL CONSTRAINT DF_IntegrationOutboxMessages_RetryCount DEFAULT(0),
+        LastError nvarchar(1000) NULL,
+        CreatedAt datetime2 NOT NULL,
+        NextRetryAt datetime2 NULL,
+        PublishedAt datetime2 NULL
+    );
+    CREATE UNIQUE INDEX UX_IntegrationOutboxMessages_TenantId_EventId ON dbo.IntegrationOutboxMessages(TenantId, EventId);
+    CREATE INDEX IX_IntegrationOutboxMessages_TenantId_Status_NextRetryAt ON dbo.IntegrationOutboxMessages(TenantId, Status, NextRetryAt);
+END;
+
+IF OBJECT_ID(N'dbo.IntegrationInboxMessages', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.IntegrationInboxMessages (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationInboxMessages PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_IntegrationInboxMessages_TenantId DEFAULT(1),
+        SourceSystem nvarchar(64) NOT NULL,
+        ExternalMessageId nvarchar(128) NOT NULL,
+        EventType nvarchar(100) NOT NULL,
+        PayloadJson nvarchar(max) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        ReceivedAt datetime2 NOT NULL,
+        ProcessedAt datetime2 NULL,
+        ErrorMessage nvarchar(1000) NULL
+    );
+    CREATE UNIQUE INDEX UX_IntegrationInboxMessages_TenantId_SourceSystem_ExternalMessageId ON dbo.IntegrationInboxMessages(TenantId, SourceSystem, ExternalMessageId);
+END;
+
+IF OBJECT_ID(N'dbo.ProductBundleComponents', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductBundleComponents (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_ProductBundleComponents PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_ProductBundleComponents_TenantId DEFAULT(1),
+        ParentProductId int NOT NULL,
+        ComponentProductId int NOT NULL,
+        ComponentQuantity decimal(19,4) NOT NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_ProductBundleComponents_IsActive DEFAULT(1),
+        CreatedAt datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_ProductBundleComponents_TenantId_Parent_Component ON dbo.ProductBundleComponents(TenantId, ParentProductId, ComponentProductId);
+END;
+
+IF OBJECT_ID(N'dbo.Permissions', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.Roles', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.RolePermissions', N'U') IS NOT NULL
+BEGIN
+    EXEC(N'
+        IF NOT EXISTS (SELECT 1 FROM dbo.Permissions WHERE Code = N''inventory.cost.read'')
+        BEGIN
+            INSERT INTO dbo.Permissions (Code, Description, CreatedAt)
+            VALUES (N''inventory.cost.read'', N''Xem đơn giá, giá vốn bình quân và giá trị tồn kho'', SYSUTCDATETIME());
+        END;
+
+        DECLARE @costPermId int = (SELECT TOP 1 Id FROM dbo.Permissions WHERE Code = N''inventory.cost.read'');
+        IF @costPermId IS NOT NULL
+        BEGIN
+            INSERT INTO dbo.RolePermissions (RoleId, PermissionId, GrantedAt)
+            SELECT r.Id, @costPermId, SYSUTCDATETIME()
+            FROM dbo.Roles r
+            WHERE r.RoleName IN (N''Admin'', N''Manager'', N''Accountant'')
+              AND NOT EXISTS (SELECT 1 FROM dbo.RolePermissions rp WHERE rp.RoleId = r.Id AND rp.PermissionId = @costPermId);
+        END;
+    ');
+END;
+";
+                patchCmd.ExecuteNonQuery();
+                _wave44SchemaSyncedDatabases.TryAdd(cacheKey, 1);
+            }
+        }
+        catch
+        {
+            // Ignore bootstrap check if database does not exist yet or connection cannot be opened during model inspection.
+        }
     }
 
     public Task AcquireInventoryAllocationLocksAsync(
@@ -104,7 +318,7 @@ FROM dbo.InventoryStocks WITH (INDEX(IX_InventoryStocks_CanonicalBucket), UPDLOC
 WHERE TenantId = {tenantId}
   AND ProductId = {productId}
   AND WarehouseId = {warehouseId}
-ORDER BY Id;", cancellationToken);
+ORDER BY TenantId ASC, WarehouseId ASC, LocationId ASC, ProductId ASC, LotId ASC, SerialId ASC, HandlingUnitId ASC, Status ASC, OwnerId ASC, Id ASC;", cancellationToken);
                 _lockedAllocationScopes.Add((tenantId, warehouseId, productId));
             }
         }
@@ -207,6 +421,9 @@ WHERE TenantId = {tenantId}
     public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
     public DbSet<SalesOrderLine> SalesOrderLines => Set<SalesOrderLine>();
     public DbSet<Backorder> Backorders => Set<Backorder>();
+    public DbSet<IntegrationOutboxMessage> IntegrationOutboxMessages => Set<IntegrationOutboxMessage>();
+    public DbSet<IntegrationInboxMessage> IntegrationInboxMessages => Set<IntegrationInboxMessage>();
+    public DbSet<ProductBundleComponent> ProductBundleComponents => Set<ProductBundleComponent>();
 
     public override int SaveChanges() => SaveChanges(acceptAllChangesOnSuccess: true);
 
@@ -730,6 +947,11 @@ WHERE TenantId = {tenantId}
                 method.MakeGenericMethod(entityType.ClrType).Invoke(this, [modelBuilder]);
             }
         }
+    }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        optionsBuilder.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -36,6 +36,7 @@ public static class PermissionMigrationBootstrap
         finally
         {
             await db.Database.CloseConnectionAsync();
+            db.EnsureWave44SchemaSyncedIfNeeded();
         }
     }
 

@@ -26,6 +26,9 @@ public class ExportReceipt : ITenantEntity
     public int? ShipmentId { get; set; }
     public string? CustomerCodeSnapshot { get; set; }
     public string? CustomerNameSnapshot { get; set; }
+    public string? MarketplaceOrderId { get; set; }
+    public string? CarrierCode { get; set; }
+    public string? TrackingNumber { get; set; }
     public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
 
     // Navigation

@@ -17,6 +17,7 @@ namespace ERP.Api.Controllers
     [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/stocktakes")]
     public class StocktakesController : ControllerBase
     {
         private readonly IStocktakeService _stocktakeService;
@@ -358,23 +359,23 @@ namespace ERP.Api.Controllers
                 await _db.SaveChangesAsync(cancellationToken);
                 proposalAuditId = log.Id;
 
-                if (request?.ExecuteImmediately == true && deltaQuantity != 0m && resolvedWarehouseId.HasValue && resolvedProductId.HasValue)
+                if ((request?.ExecuteImmediately == true || Math.Abs(deltaQuantity) <= 1m) && deltaQuantity != 0m && resolvedWarehouseId.HasValue && resolvedProductId.HasValue)
                 {
                     var execResult = await ExecuteProposalAdjustmentCoreAsync(
                         log.Id,
                         proposalCode,
                         reasonCode,
-                        request.Note?.Trim() ?? reasonCode,
+                        request?.Note?.Trim() ?? reasonCode,
                         string.IsNullOrWhiteSpace(productCode) ? null : productCode,
                         resolvedWarehouseId.Value,
                         resolvedProductId.Value,
-                        request.LocationId ?? (!string.IsNullOrWhiteSpace(request.LocationCode)
+                        request?.LocationId ?? (!string.IsNullOrWhiteSpace(request?.LocationCode)
                             ? await _db.WarehouseLocations.AsNoTracking()
                                 .Where(l => l.WarehouseId == resolvedWarehouseId.Value && l.Code == request.LocationCode.Trim())
                                 .Select(l => (int?)l.Id)
                                 .FirstOrDefaultAsync(cancellationToken)
                             : null),
-                        request.LotNumber,
+                        request?.LotNumber,
                         deltaQuantity,
                         userId,
                         cancellationToken);

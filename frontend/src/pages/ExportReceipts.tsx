@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import apiClient from '../services/apiClient';
 import { currentUserId, hasPermission, usePermissionSet } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { conflictErrorMessage, extractConflictCode } from '../services/permissionPresentation';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
@@ -13,11 +14,11 @@ interface ExportReceiptDetail {
   productName: string;
   unitName?: string;
   quantity: number;
-  unitPrice?: number;
+  unitPrice?: number | null;
   taxPercent?: number;
   lineSubTotal?: number;
   lineTaxAmount?: number;
-  lineTotalAmount?: number;
+  lineTotalAmount?: number | null;
   note?: string;
 }
 
@@ -48,7 +49,10 @@ interface ExportReceipt {
   shipmentId?: number;
   subTotalAmount?: number;
   taxAmount?: number;
-  totalAmount?: number;
+  totalAmount?: number | null;
+  marketplaceOrderId?: string | null;
+  carrierCode?: string | null;
+  trackingNumber?: string | null;
   rowVersion?: string;
 }
 
@@ -76,7 +80,7 @@ const safeRequestError = (error: any, fallback: string): string => {
   if (status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
   if (status === 403) return 'Bạn không còn quyền thực hiện thao tác này.';
   if (status === 404) return 'Dữ liệu không còn tồn tại hoặc bạn không có quyền truy cập.';
-  if (status === 409) return 'Dữ liệu đã thay đổi. Danh sách đã được làm mới, vui lòng kiểm tra lại.';
+  if (status === 409) return conflictErrorMessage(error, 'Dữ liệu đã thay đổi. Danh sách đã được làm mới, vui lòng kiểm tra lại.');
   if (status === 400) return 'Dữ liệu phiếu xuất không hợp lệ. Vui lòng kiểm tra lại.';
   if (typeof status === 'number' && status >= 500) return 'Hệ thống đang bận. Vui lòng thử lại.';
   return fallback;
@@ -135,6 +139,9 @@ const ExportReceipts = () => {
   const [note, setNote] = useState('');
   const [customerId, setCustomerId] = useState<number | ''>('');
   const [salesOrderId, setSalesOrderId] = useState<string>('');
+  const [marketplaceOrderId, setMarketplaceOrderId] = useState<string>('');
+  const [carrierCode, setCarrierCode] = useState<string>('');
+  const [trackingNumber, setTrackingNumber] = useState<string>('');
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
   
   // Stock cache
@@ -257,7 +264,7 @@ const ExportReceipts = () => {
       await refreshAfterAction(id);
     } catch (err: any) {
       setError(safeRequestError(err, 'Không thể hủy phiếu xuất.'));
-      if (err?.response?.status === 409) await refreshAfterAction(id);
+      if (err?.response?.status === 409 && extractConflictCode(err) !== 'INSUFFICIENT_AVAILABLE_STOCK') await refreshAfterAction(id);
     } finally {
       workflowInFlight.current = false;
       setActionInFlight(null);
@@ -285,7 +292,7 @@ const ExportReceipts = () => {
       await refreshAfterAction(id);
     } catch (err: any) {
       setError(safeRequestError(err, 'Không thể xử lý phiếu xuất.'));
-      if (err?.response?.status === 409) await refreshAfterAction(id);
+      if (err?.response?.status === 409 && extractConflictCode(err) !== 'INSUFFICIENT_AVAILABLE_STOCK') await refreshAfterAction(id);
     } finally {
       workflowInFlight.current = false;
       setActionInFlight(null);
@@ -370,6 +377,9 @@ const ExportReceipts = () => {
         warehouseId: Number(warehouseId),
         customerId: customerId === '' ? null : Number(customerId),
         note,
+        ...(marketplaceOrderId.trim() ? { marketplaceOrderId: marketplaceOrderId.trim() } : {}),
+        ...(carrierCode.trim() ? { carrierCode: carrierCode.trim() } : {}),
+        ...(trackingNumber.trim() ? { trackingNumber: trackingNumber.trim() } : {}),
         details: details.map(d => ({
           productId: Number(d.productId),
           quantity: roundQty4(Number(d.quantity)),
@@ -387,6 +397,9 @@ const ExportReceipts = () => {
       setWarehouseId('');
       setCustomerId('');
       setNote('');
+      setMarketplaceOrderId('');
+      setCarrierCode('');
+      setTrackingNumber('');
       setDetails([]);
       
       fetchReceipts();
@@ -443,11 +456,11 @@ const ExportReceipts = () => {
   const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
     if (status === 'Cancelled') return 'danger';
     if (status === 'Dispatched' || status === 'Completed') return 'success';
-    if (status === 'Draft' || status === 'Approved') return 'warning';
+    if (status === 'Draft' || status === 'Approved' || status === 'CancelPendingPutback') return 'warning';
     return 'neutral';
   };
 
-  const statusLabel = (status: string) => ({ Draft: 'Nháp', Approved: 'Đã duyệt và giữ hàng', Dispatched: 'Đã xuất kho', Cancelled: 'Đã hủy', Completed: 'Hoàn tất' }[status] || 'Không xác định');
+  const statusLabel = (status: string) => ({ Draft: 'Nháp', Approved: 'Đã duyệt và giữ hàng', Dispatched: 'Đã xuất kho', CancelPendingPutback: 'Chờ cất trả hàng hủy về kệ', Cancelled: 'Đã hủy', Completed: 'Hoàn tất' }[status] || 'Không xác định');
 
   return (
     <UiPage>
@@ -628,6 +641,18 @@ const ExportReceipts = () => {
                     <option value="2">SO-2026-002 — Đơn điều phối xuất kho ưu tiên</option>
                   </select>
                 </label>
+                <label className="ui-stack">
+                  <span>Mã đơn sàn TMĐT</span>
+                  <input aria-label="Mã đơn sàn TMĐT" placeholder="VD: MP-SHOPEE-2026" value={marketplaceOrderId} onChange={e => setMarketplaceOrderId(e.target.value)} />
+                </label>
+                <label className="ui-stack">
+                  <span>Đơn vị vận chuyển</span>
+                  <input aria-label="Đơn vị vận chuyển" placeholder="VD: GHN / GHTK / VTP" value={carrierCode} onChange={e => setCarrierCode(e.target.value)} />
+                </label>
+                <label className="ui-stack">
+                  <span>Mã vận đơn (AWB)</span>
+                  <input aria-label="Mã vận đơn (AWB)" placeholder="VD: AWB-88990011" value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} />
+                </label>
               </div>
 
               <div className="export-section-actions">
@@ -649,6 +674,7 @@ const ExportReceipts = () => {
                   <th>Mã phiếu</th>
                   <th>Kho</th>
                   <th>Khách hàng</th>
+                  <th>Vận đơn &amp; Đơn sàn TMĐT</th>
                   <th>Trạng thái</th>
                   <th>Người tạo</th>
                   <th>Hành động</th>
@@ -660,6 +686,7 @@ const ExportReceipts = () => {
                     <td style={{ whiteSpace: 'nowrap' }}><strong>{r.code}</strong></td>
                     <td>{r.warehouseName}</td>
                     <td>{r.customerCode ? r.customerCode + ' - ' + r.customerName : '—'}</td>
+                    <td>{r.marketplaceOrderId || r.trackingNumber ? `${r.marketplaceOrderId ?? '—'} • ${r.carrierCode ?? '—'} • ${r.trackingNumber ?? '—'}` : '—'}</td>
                     <td><UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge></td>
                     <td>{r.createdByName}</td>
                     <td>
@@ -699,7 +726,7 @@ const ExportReceipts = () => {
                     </td>
                   </tr>
                 ))}
-                {receipts.length === 0 && <tr><td colSpan={6} className="ui-empty-cell">Chưa có phiếu xuất nào</td></tr>}
+                {receipts.length === 0 && <tr><td colSpan={7} className="ui-empty-cell">Chưa có phiếu xuất nào</td></tr>}
               </tbody>
             </table>
           </UiTableScroll>
@@ -724,6 +751,17 @@ const ExportReceipts = () => {
               )}
               <div><strong>Trạng thái:</strong> <UiBadge tone={statusTone(selectedReceipt.status)}>{statusLabel(selectedReceipt.status)}</UiBadge></div>
               <div><strong>Ghi chú:</strong> {selectedReceipt.note || '—'}</div>
+              {selectedReceipt.marketplaceOrderId && <div><strong>Mã đơn sàn TMĐT:</strong> {selectedReceipt.marketplaceOrderId}</div>}
+              {selectedReceipt.carrierCode && <div><strong>Đơn vị vận chuyển:</strong> {selectedReceipt.carrierCode}</div>}
+              {selectedReceipt.trackingNumber && <div><strong>Mã vận đơn (AWB):</strong> {selectedReceipt.trackingNumber}</div>}
+              {(selectedReceipt.totalAmount !== undefined || selectedReceipt.details.some(d => d.unitPrice === null)) && (
+                <div>
+                  <strong>Tổng tiền:</strong>{' '}
+                  {selectedReceipt.totalAmount === null || selectedReceipt.details.some(d => d.unitPrice === null)
+                    ? 'Ẩn theo phân quyền'
+                    : `${Number(selectedReceipt.totalAmount ?? 0).toLocaleString('vi-VN')} VND`}
+                </div>
+              )}
               <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString('vi-VN')}</div>
               {selectedReceipt.status === 'Approved' && (
                 <>
@@ -759,8 +797,8 @@ const ExportReceipts = () => {
                     <tr key={d.id}>
                       <td><strong style={{ whiteSpace: 'nowrap' }}>{d.productCode}</strong> - {d.productName}</td>
                       <td className="export-numeric">{d.quantity} {unitDisplay}</td>
-                      <td className="export-numeric">{Number(d.unitPrice || 0).toLocaleString('vi-VN')} VND</td>
-                      <td className="export-numeric">{(Number(d.quantity || 0) * Number(d.unitPrice || 0)).toLocaleString('vi-VN')} VND</td>
+                      <td className="export-numeric">{d.unitPrice === null ? 'Ẩn theo phân quyền' : `${Number(d.unitPrice || 0).toLocaleString('vi-VN')} VND`}</td>
+                      <td className="export-numeric">{d.unitPrice === null || d.lineTotalAmount === null ? 'Ẩn theo phân quyền' : `${(d.lineTotalAmount !== undefined ? Number(d.lineTotalAmount) : Number(d.quantity || 0) * Number(d.unitPrice || 0)).toLocaleString('vi-VN')} VND`}</td>
                     </tr>
                     );
                   })}

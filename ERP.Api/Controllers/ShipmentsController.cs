@@ -12,6 +12,7 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/shipments")]
+[Route("api/v1/shipments")]
 [Authorize]
 public sealed class ShipmentsController(
     IShipmentService service,
@@ -279,6 +280,130 @@ public sealed class ShipmentsController(
         ShipmentStateCommandDto request,
         CancellationToken cancellationToken) =>
         Ok(await service.CompleteAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/complete-rts-return")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate)]
+    [IdempotentCommand("Shipment.CompleteRtsReturn")]
+    public async Task<IActionResult> CompleteRtsReturn(
+        int id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CompleteShipmentRtsReturnRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (db == null)
+            return Ok(await service.GetAsync(id, cancellationToken));
+
+        var shipment = await db.Shipments
+            .Include(s => s.HandlingUnits)
+                .ThenInclude(shu => shu.HandlingUnit)
+                    .ThenInclude(hu => hu.Contents)
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+        if (shipment == null)
+            return NotFound(new { code = "NOT_FOUND", message = $"Không tìm thấy lô hàng vận chuyển #{id}." });
+
+        if (warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(shipment.WarehouseId, cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : 1;
+
+        var quarantineLocationId = request?.QuarantineLocationId ?? await db.WarehouseLocations.AsNoTracking()
+            .Where(l => l.WarehouseId == shipment.WarehouseId && l.IsActive)
+            .OrderByDescending(l => l.LocationType == WarehouseLocationType.Receiving)
+            .ThenBy(l => l.Id)
+            .Select(l => (int?)l.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var rtsItems = shipment.HandlingUnits
+            .SelectMany(shu => shu.HandlingUnit.Contents)
+            .Select(c => (c.ProductId, LotId: (int?)null, SerialId: (int?)null, Quantity: c.Quantity))
+            .ToList();
+        if (rtsItems.Count == 0 && request is { ProductId: not null, Quantity: > 0m })
+        {
+            rtsItems.Add((request.ProductId.Value, null, null, request.Quantity.Value));
+        }
+
+        var ledgerIds = new List<int>();
+        foreach (var item in rtsItems)
+        {
+            var returnQty = item.Quantity;
+            if (returnQty <= 0m) continue;
+
+            var stock = await db.InventoryStocks.FirstOrDefaultAsync(
+                s => s.WarehouseId == shipment.WarehouseId &&
+                     s.ProductId == item.ProductId &&
+                     s.LocationId == quarantineLocationId &&
+                     s.LotId == item.LotId &&
+                     s.SerialId == item.SerialId &&
+                     s.Status == InventoryStatus.Quarantine,
+                cancellationToken);
+            if (stock == null)
+            {
+                stock = new ERP.Domain.Entities.InventoryStock
+                {
+                    WarehouseId = shipment.WarehouseId,
+                    ProductId = item.ProductId,
+                    LocationId = quarantineLocationId,
+                    LotId = item.LotId,
+                    SerialId = item.SerialId,
+                    Status = InventoryStatus.Quarantine,
+                    Quantity = returnQty,
+                    ReservedQuantity = 0m,
+                    LastUpdated = now
+                };
+                db.InventoryStocks.Add(stock);
+            }
+            else
+            {
+                stock.Quantity += returnQty;
+                stock.LastUpdated = now;
+            }
+
+            var rtsTx = new ERP.Domain.Entities.InventoryTransaction
+            {
+                ProductId = item.ProductId,
+                WarehouseId = shipment.WarehouseId,
+                LocationId = quarantineLocationId,
+                ToLocationId = quarantineLocationId,
+                LotId = item.LotId,
+                SerialId = item.SerialId,
+                InventoryStatus = InventoryStatus.Quarantine,
+                ToInventoryStatus = InventoryStatus.Quarantine,
+                TransactionType = TransactionType.Import,
+                Quantity = returnQty,
+                ReferenceId = shipment.Id,
+                ReferenceType = "ShipmentRtsReturn",
+                TransactionDate = now,
+                CreatedBy = actorUserId,
+                Note = $"RTS-{shipment.ShipmentCode}: Nhập hoàn hàng giao thất bại vào khu vực biệt trữ chờ kiểm định"
+            };
+            db.InventoryTransactions.Add(rtsTx);
+            await db.SaveChangesAsync(cancellationToken);
+            ledgerIds.Add(rtsTx.Id);
+        }
+
+        shipment.Status = ShipmentStatus.Completed;
+        shipment.CompletedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            shipmentId = shipment.Id,
+            shipmentCode = shipment.ShipmentCode,
+            warehouseId = shipment.WarehouseId,
+            quarantineLocationId,
+            status = shipment.Status.ToString(),
+            statusLabel = "Đã hoàn tất tiếp nhận hàng hoàn trả (RTS) vào khu vực biệt trữ",
+            ledgerTransactionIds = ledgerIds,
+            completedAtUtc = now
+        });
+    }
 }
 
 public sealed record SyncTmsManifestRequest(int? WarehouseId, string? CarrierCode);
+public sealed record CompleteShipmentRtsReturnRequest(
+    int? QuarantineLocationId = null,
+    int? ProductId = null,
+    decimal? Quantity = null,
+    string? Note = null);

@@ -87,13 +87,13 @@ public sealed class InventoryStatusService(
                 LocationId = x.LocationId ?? 0,
                 LocationCode = x.Location == null ? string.Empty : x.Location.Code.Trim(),
                 Status = x.StatusDefinition != null ? x.StatusDefinition.Code.Trim() : x.Status.ToString().Trim(),
-                IsReservable = x.StatusDefinition.IsReservable &&
+                IsReservable = x.StatusDefinition!.IsReservable &&
                                (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
-                IsAllocatable = x.StatusDefinition.IsAllocatable &&
+                IsAllocatable = x.StatusDefinition!.IsAllocatable &&
                                 (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
-                IsPickable = x.StatusDefinition.IsPickable &&
+                IsPickable = x.StatusDefinition!.IsPickable &&
                              (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
-                IsShippable = x.StatusDefinition.IsShippable &&
+                IsShippable = x.StatusDefinition!.IsShippable &&
                               (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today),
                 LotId = x.LotId,
                 LotNumber = x.Lot == null ? null : x.Lot.LotNumber.Trim(),
@@ -103,9 +103,10 @@ public sealed class InventoryStatusService(
                 SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber.Trim(),
                 OnHandQuantity = x.Quantity,
                 ReservedQuantity = x.ReservedQuantity,
-                AvailableQuantity = x.StatusDefinition.IsAvailable &&
+                AvailableQuantity = x.StatusDefinition!.IsAvailable &&
+                                    (x.Location == null || (x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable && x.Location.LocationType != WarehouseLocationType.Receiving)) &&
                                     (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today)
-                    ? x.Quantity - x.ReservedQuantity
+                    ? Math.Max(0m, x.Quantity - (x.ReservedQuantity >= x.AllocatedQuantity ? x.ReservedQuantity : x.AllocatedQuantity) - x.LockedQuantity)
                     : 0,
                 LastUpdated = x.LastUpdated
             })
@@ -150,7 +151,7 @@ public sealed class InventoryStatusService(
                 if (source.Status == toStatus)
                     throw new BusinessRuleException("Status đích phải khác status nguồn.");
                 ValidateTransition(source.Status, toStatus);
-                if (source.Quantity - source.ReservedQuantity < request.Quantity)
+                if (source.Quantity - Math.Max(source.ReservedQuantity, source.AllocatedQuantity) - source.LockedQuantity < request.Quantity)
                     throw Conflict("INV_STATUS_CHANGE_NOT_ALLOWED", "Không thể đổi status phần tồn đang reserved/allocation.");
                 if (!await context.InventoryStatusDefinitions.AnyAsync(x => x.Id == toStatus, cancellationToken))
                     throw new BusinessRuleException("Inventory status đích chưa được cấu hình.");
@@ -172,8 +173,10 @@ public sealed class InventoryStatusService(
                          x.SerialId == source.SerialId,
                     cancellationToken);
 
+                var nowUtc = DateTime.UtcNow;
+                var fromStatus = source.Status;
                 source.Quantity -= request.Quantity;
-                source.LastUpdated = DateTime.UtcNow;
+                source.LastUpdated = nowUtc;
                 if (destination is null)
                 {
                     destination = new InventoryStock
@@ -183,38 +186,69 @@ public sealed class InventoryStatusService(
                         LocationId = source.LocationId,
                         LotId = source.LotId,
                         SerialId = source.SerialId,
+                        HandlingUnitId = source.HandlingUnitId,
+                        OwnerId = source.OwnerId,
                         Status = toStatus,
                         Quantity = request.Quantity,
                         ReservedQuantity = 0,
-                        LastUpdated = DateTime.UtcNow
+                        MovingAverageCost = source.MovingAverageCost,
+                        LastUpdated = nowUtc
                     };
                     context.InventoryStocks.Add(destination);
                 }
                 else
                 {
                     destination.Quantity += request.Quantity;
-                    destination.LastUpdated = DateTime.UtcNow;
+                    destination.LastUpdated = nowUtc;
                 }
 
-                var ledger = new InventoryTransaction
+                var ledgerOut = new InventoryTransaction
                 {
                     ProductId = source.ProductId,
                     WarehouseId = source.WarehouseId,
                     LocationId = source.LocationId,
+                    FromLocationId = source.LocationId,
+                    ToLocationId = source.LocationId,
                     LotId = source.LotId,
                     SerialId = source.SerialId,
-                    InventoryStatus = toStatus,
-                    FromInventoryStatus = source.Status,
+                    HandlingUnitId = source.HandlingUnitId,
+                    OwnerId = source.OwnerId,
+                    InventoryStatus = fromStatus,
+                    FromInventoryStatus = fromStatus,
                     ToInventoryStatus = toStatus,
                     TransactionType = TransactionType.StatusChange,
-                    Quantity = request.Quantity,
+                    Quantity = -request.Quantity,
+                    UnitCost = source.MovingAverageCost,
                     ReferenceId = source.Id,
                     ReferenceType = "InventoryStatusChange",
-                    TransactionDate = DateTime.UtcNow,
+                    TransactionDate = nowUtc,
                     CreatedBy = currentUser.UserId,
                     Note = request.Reason.Trim()
                 };
-                context.InventoryTransactions.Add(ledger);
+                var ledgerIn = new InventoryTransaction
+                {
+                    ProductId = source.ProductId,
+                    WarehouseId = source.WarehouseId,
+                    LocationId = source.LocationId,
+                    FromLocationId = source.LocationId,
+                    ToLocationId = source.LocationId,
+                    LotId = source.LotId,
+                    SerialId = source.SerialId,
+                    HandlingUnitId = source.HandlingUnitId,
+                    OwnerId = source.OwnerId,
+                    InventoryStatus = toStatus,
+                    FromInventoryStatus = fromStatus,
+                    ToInventoryStatus = toStatus,
+                    TransactionType = TransactionType.StatusChange,
+                    Quantity = request.Quantity,
+                    UnitCost = source.MovingAverageCost,
+                    ReferenceId = source.Id,
+                    ReferenceType = "InventoryStatusChange",
+                    TransactionDate = nowUtc,
+                    CreatedBy = currentUser.UserId,
+                    Note = request.Reason.Trim()
+                };
+                context.InventoryTransactions.AddRange(ledgerOut, ledgerIn);
                 context.AuditLogs.Add(new AuditLog
                 {
                     UserId = currentUser.UserId,
@@ -222,8 +256,8 @@ public sealed class InventoryStatusService(
                     EntityName = "InventoryStock",
                     EntityId = source.Id,
                     WarehouseId = source.WarehouseId,
-                    Timestamp = DateTime.UtcNow,
-                    OldValues = $"Status: {source.Status}; Quantity: {source.Quantity + request.Quantity}",
+                    Timestamp = nowUtc,
+                    OldValues = $"Status: {fromStatus}; Quantity: {source.Quantity + request.Quantity}",
                     NewValues = $"Status: {toStatus}; MovedQuantity: {request.Quantity}; LotId: {source.LotId}; SerialId: {source.SerialId}",
                     Reason = request.Reason.Trim(),
                     Result = "Success",
@@ -235,8 +269,8 @@ public sealed class InventoryStatusService(
                 {
                     SourceStockId = source.Id,
                     DestinationStockId = destination.Id,
-                    TransactionId = ledger.Id,
-                    FromStatus = source.Status.ToString(),
+                    TransactionId = ledgerIn.Id,
+                    FromStatus = fromStatus.ToString(),
                     ToStatus = toStatus.ToString(),
                     Quantity = request.Quantity,
                     ProductId = source.ProductId,
@@ -312,8 +346,32 @@ public sealed class InventoryStatusService(
 
                 if (source.Status == InventoryStatus.Available)
                     throw Conflict("INV_DISPOSITION_NOT_ALLOWED", "Disposition chỉ áp dụng cho nhóm tồn không ở trạng thái AVAILABLE.");
-                if (source.Quantity - source.ReservedQuantity < request.Quantity)
+                if (source.Quantity - Math.Max(source.ReservedQuantity, source.AllocatedQuantity) - source.LockedQuantity < request.Quantity)
                     throw Conflict("INV_INSUFFICIENT_ON_HAND", "Không đủ tồn khả dụng chưa giữ để xử lý disposition.");
+
+                if (isScrap)
+                {
+                    var scrapValuation = request.Quantity * source.MovingAverageCost;
+                    if (scrapValuation > 500_000m || request.Reason.Contains("[SOD]", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var lastQualityHoldCreatorId = await context.InventoryTransactions.AsNoTracking()
+                            .Where(x => x.WarehouseId == source.WarehouseId &&
+                                        x.ProductId == source.ProductId &&
+                                        x.LocationId == source.LocationId &&
+                                        x.ToInventoryStatus == source.Status &&
+                                        x.TransactionType == TransactionType.StatusChange)
+                            .OrderByDescending(x => x.Id)
+                            .Select(x => (int?)x.CreatedBy)
+                            .FirstOrDefaultAsync(cancellationToken);
+
+                        if (lastQualityHoldCreatorId.HasValue && lastQualityHoldCreatorId.Value == currentUser.UserId)
+                        {
+                            throw Conflict(
+                                "SOD_MAKER_CHECKER_VIOLATION",
+                                "Bắt buộc phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm khi hủy/thanh lý.");
+                        }
+                    }
+                }
 
                 var targetLocationId = source.LocationId;
                 if (isRelease)
@@ -374,8 +432,9 @@ public sealed class InventoryStatusService(
                              x.SerialId == source.SerialId,
                         cancellationToken);
 
+                    var nowUtc = DateTime.UtcNow;
                     source.Quantity -= request.Quantity;
-                    source.LastUpdated = DateTime.UtcNow;
+                    source.LastUpdated = nowUtc;
                     if (destination is null)
                     {
                         destination = new InventoryStock
@@ -385,19 +444,45 @@ public sealed class InventoryStatusService(
                             LocationId = targetLocationId,
                             LotId = source.LotId,
                             SerialId = source.SerialId,
+                            HandlingUnitId = source.HandlingUnitId,
+                            OwnerId = source.OwnerId,
                             Status = InventoryStatus.Available,
                             Quantity = request.Quantity,
                             ReservedQuantity = 0,
-                            LastUpdated = DateTime.UtcNow
+                            MovingAverageCost = source.MovingAverageCost,
+                            LastUpdated = nowUtc
                         };
                         context.InventoryStocks.Add(destination);
                     }
                     else
                     {
                         destination.Quantity += request.Quantity;
-                        destination.LastUpdated = DateTime.UtcNow;
+                        destination.LastUpdated = nowUtc;
                     }
 
+                    var ledgerOut = new InventoryTransaction
+                    {
+                        ProductId = source.ProductId,
+                        WarehouseId = source.WarehouseId,
+                        LocationId = source.LocationId,
+                        FromLocationId = source.LocationId,
+                        ToLocationId = targetLocationId,
+                        LotId = source.LotId,
+                        SerialId = source.SerialId,
+                        HandlingUnitId = source.HandlingUnitId,
+                        OwnerId = source.OwnerId,
+                        InventoryStatus = fromStatus,
+                        FromInventoryStatus = fromStatus,
+                        ToInventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.StatusChange,
+                        Quantity = -request.Quantity,
+                        UnitCost = source.MovingAverageCost,
+                        ReferenceId = source.Id,
+                        ReferenceType = "QualityDispositionRelease",
+                        TransactionDate = nowUtc,
+                        CreatedBy = currentUser.UserId,
+                        Note = request.Reason.Trim()
+                    };
                     ledger = new InventoryTransaction
                     {
                         ProductId = source.ProductId,
@@ -407,18 +492,21 @@ public sealed class InventoryStatusService(
                         ToLocationId = targetLocationId,
                         LotId = source.LotId,
                         SerialId = source.SerialId,
+                        HandlingUnitId = source.HandlingUnitId,
+                        OwnerId = source.OwnerId,
                         InventoryStatus = InventoryStatus.Available,
                         FromInventoryStatus = fromStatus,
                         ToInventoryStatus = InventoryStatus.Available,
                         TransactionType = TransactionType.StatusChange,
                         Quantity = request.Quantity,
+                        UnitCost = source.MovingAverageCost,
                         ReferenceId = source.Id,
                         ReferenceType = "QualityDispositionRelease",
-                        TransactionDate = DateTime.UtcNow,
+                        TransactionDate = nowUtc,
                         CreatedBy = currentUser.UserId,
                         Note = request.Reason.Trim()
                     };
-                    context.InventoryTransactions.Add(ledger);
+                    context.InventoryTransactions.AddRange(ledgerOut, ledger);
                     context.AuditLogs.Add(new AuditLog
                     {
                         UserId = currentUser.UserId,
@@ -426,7 +514,7 @@ public sealed class InventoryStatusService(
                         EntityName = "InventoryStock",
                         EntityId = source.Id,
                         WarehouseId = source.WarehouseId,
-                        Timestamp = DateTime.UtcNow,
+                        Timestamp = nowUtc,
                         OldValues = $"Status: {fromStatus}; LocationId: {source.LocationId}; Quantity: {source.Quantity + request.Quantity}",
                         NewValues = $"Status: {InventoryStatus.Available}; LocationId: {targetLocationId}; ReleasedQuantity: {request.Quantity}; LotId: {source.LotId}; SerialId: {source.SerialId}",
                         Reason = request.Reason.Trim(),
@@ -450,11 +538,14 @@ public sealed class InventoryStatusService(
                         LocationId = source.LocationId,
                         LotId = source.LotId,
                         SerialId = source.SerialId,
+                        HandlingUnitId = source.HandlingUnitId,
+                        OwnerId = source.OwnerId,
                         InventoryStatus = fromStatus,
                         FromInventoryStatus = fromStatus,
                         ToInventoryStatus = null,
                         TransactionType = TransactionType.AdjustmentDecrease,
                         Quantity = request.Quantity,
+                        UnitCost = source.MovingAverageCost,
                         ReferenceId = source.Id,
                         ReferenceType = "QualityDispositionScrap",
                         TransactionDate = DateTime.UtcNow,
@@ -585,8 +676,9 @@ public sealed class InventoryStatusService(
                                                x.SerialId == source.SerialId,
                                           cancellationToken);
 
+                    var nowUtc = DateTime.UtcNow;
                     source.Quantity -= moveQty;
-                    source.LastUpdated = DateTime.UtcNow;
+                    source.LastUpdated = nowUtc;
 
                     if (destination is null)
                     {
@@ -597,37 +689,69 @@ public sealed class InventoryStatusService(
                             LocationId = source.LocationId,
                             LotId = source.LotId,
                             SerialId = source.SerialId,
+                            HandlingUnitId = source.HandlingUnitId,
+                            OwnerId = source.OwnerId,
                             Status = InventoryStatus.RecallBlocked,
                             Quantity = moveQty,
                             ReservedQuantity = 0,
-                            LastUpdated = DateTime.UtcNow
+                            MovingAverageCost = source.MovingAverageCost,
+                            LastUpdated = nowUtc
                         };
                         context.InventoryStocks.Add(destination);
                     }
                     else
                     {
                         destination.Quantity += moveQty;
-                        destination.LastUpdated = DateTime.UtcNow;
+                        destination.LastUpdated = nowUtc;
                     }
 
-                    context.InventoryTransactions.Add(new InventoryTransaction
-                    {
-                        ProductId = source.ProductId,
-                        WarehouseId = source.WarehouseId,
-                        LocationId = source.LocationId,
-                        LotId = source.LotId,
-                        SerialId = source.SerialId,
-                        InventoryStatus = InventoryStatus.RecallBlocked,
-                        FromInventoryStatus = fromStatus,
-                        ToInventoryStatus = InventoryStatus.RecallBlocked,
-                        TransactionType = TransactionType.StatusChange,
-                        Quantity = moveQty,
-                        ReferenceId = source.Id,
-                        ReferenceType = "RecallCampaignBlock",
-                        TransactionDate = DateTime.UtcNow,
-                        CreatedBy = currentUser.UserId,
-                        Note = cleanReason
-                    });
+                    context.InventoryTransactions.AddRange(
+                        new InventoryTransaction
+                        {
+                            ProductId = source.ProductId,
+                            WarehouseId = source.WarehouseId,
+                            LocationId = source.LocationId,
+                            FromLocationId = source.LocationId,
+                            ToLocationId = source.LocationId,
+                            LotId = source.LotId,
+                            SerialId = source.SerialId,
+                            HandlingUnitId = source.HandlingUnitId,
+                            OwnerId = source.OwnerId,
+                            InventoryStatus = fromStatus,
+                            FromInventoryStatus = fromStatus,
+                            ToInventoryStatus = InventoryStatus.RecallBlocked,
+                            TransactionType = TransactionType.StatusChange,
+                            Quantity = -moveQty,
+                            UnitCost = source.MovingAverageCost,
+                            ReferenceId = source.Id,
+                            ReferenceType = "RecallCampaignBlock",
+                            TransactionDate = nowUtc,
+                            CreatedBy = currentUser.UserId,
+                            Note = cleanReason
+                        },
+                        new InventoryTransaction
+                        {
+                            ProductId = source.ProductId,
+                            WarehouseId = source.WarehouseId,
+                            LocationId = source.LocationId,
+                            FromLocationId = source.LocationId,
+                            ToLocationId = source.LocationId,
+                            LotId = source.LotId,
+                            SerialId = source.SerialId,
+                            HandlingUnitId = source.HandlingUnitId,
+                            OwnerId = source.OwnerId,
+                            InventoryStatus = InventoryStatus.RecallBlocked,
+                            FromInventoryStatus = fromStatus,
+                            ToInventoryStatus = InventoryStatus.RecallBlocked,
+                            TransactionType = TransactionType.StatusChange,
+                            Quantity = moveQty,
+                            UnitCost = source.MovingAverageCost,
+                            ReferenceId = source.Id,
+                            ReferenceType = "RecallCampaignBlock",
+                            TransactionDate = nowUtc,
+                            CreatedBy = currentUser.UserId,
+                            Note = cleanReason
+                        });
 
                     totalBlocked += moveQty;
                     affectedCount++;

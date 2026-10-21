@@ -18,10 +18,11 @@ public class StockReservationConfiguration : IEntityTypeConfiguration<StockReser
         builder.Property(x => x.SourceType).HasMaxLength(50).IsRequired();
         builder.Property(x => x.SourceCode).HasMaxLength(50);
         builder.Property(x => x.ReleaseReason).HasMaxLength(500);
-        builder.Property(x => x.Quantity).HasPrecision(18, 4);
-        builder.Property(x => x.ConsumedQuantity).HasPrecision(18, 4);
-        builder.Property(x => x.ReleasedQuantity).HasPrecision(18, 4);
-        builder.Property(x => x.AllocatedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.BaseUomCodeSnapshot).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.Quantity).HasPrecision(19, 4);
+        builder.Property(x => x.ConsumedQuantity).HasPrecision(19, 4);
+        builder.Property(x => x.ReleasedQuantity).HasPrecision(19, 4);
+        builder.Property(x => x.AllocatedQuantity).HasPrecision(19, 4);
         builder.Property(x => x.AllocationVersion).IsConcurrencyToken();
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.HasIndex(x => new { x.TenantId, x.ReservationCode }).IsUnique().HasDatabaseName("UX_StockReservations_TenantId_ReservationCode");

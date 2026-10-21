@@ -13,6 +13,7 @@ namespace ERP.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/inventory")]
+[Route("api/v1/inventory")]
 public sealed class InventoryStatusController(
     IInventoryStatusService service,
     ErpKhoDbContext db = null!,

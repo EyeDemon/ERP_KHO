@@ -31,7 +31,7 @@ namespace ERP.Infrastructure.Queries
                 .Where(s =>
                     s.Status == InventoryStatus.Available &&
                     (s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value >= today) &&
-                    (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)));
+                    (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable && s.Location.LocationType != WarehouseLocationType.Receiving)));
             if (_warehouseAuthorization is not null)
             {
                 if (warehouseId.HasValue)
@@ -63,7 +63,9 @@ namespace ERP.Infrastructure.Queries
             {
                 ProductId = g.Key.ProductId, ProductCode=g.Key.Code, ProductName=g.Key.Name, UnitName=g.Key.UnitName,
                 WarehouseId=g.Key.WarehouseId, WarehouseName=g.Key.WarehouseName, Quantity=g.Sum(s=>s.Quantity), OnHandQuantity=g.Sum(s=>s.Quantity),
-                ReservedQuantity=g.Sum(s=>s.ReservedQuantity), AvailableQuantity=g.Sum(s=>s.Quantity-s.ReservedQuantity), LastUpdated=g.Max(s=>s.LastUpdated)
+                ReservedQuantity=g.Sum(s=>s.ReservedQuantity),
+                AvailableQuantity=g.Sum(s=>s.Quantity - (s.ReservedQuantity >= s.AllocatedQuantity ? s.ReservedQuantity : s.AllocatedQuantity) - s.LockedQuantity),
+                LastUpdated=g.Max(s=>s.LastUpdated)
             });
 
             if (lowStockThreshold.HasValue)

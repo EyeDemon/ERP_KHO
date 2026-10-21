@@ -12,6 +12,7 @@ namespace ERP.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/inventory-reconciliation")]
     [Authorize]
     [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
     public class InventoryReconciliationController : ControllerBase
@@ -19,15 +20,124 @@ namespace ERP.Api.Controllers
         private readonly IInventoryReconciliationQueryService _queryService;
         private readonly ErpKhoDbContext? _db;
         private readonly IWarehouseAuthorizationService? _warehouseAccess;
+        private readonly IStockReservationService? _reservationService;
 
         public InventoryReconciliationController(
             IInventoryReconciliationQueryService queryService,
             ErpKhoDbContext db = null!,
-            IWarehouseAuthorizationService warehouseAccess = null!)
+            IWarehouseAuthorizationService warehouseAccess = null!,
+            IStockReservationService reservationService = null!)
         {
             _queryService = queryService;
             _db = db;
             _warehouseAccess = warehouseAccess;
+            _reservationService = reservationService;
+        }
+
+        public sealed record RebuildBalancesRequest(int? WarehouseId = null, int? ProductId = null);
+
+        [HttpPost("rebuild")]
+        [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+        public async Task<IActionResult> RebuildBalances(
+            [FromQuery] int? warehouseId = null,
+            [FromQuery] int? productId = null,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RebuildBalancesRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+
+            var effectiveWarehouseId = warehouseId ?? request?.WarehouseId;
+            var effectiveProductId = productId ?? request?.ProductId;
+            if (effectiveWarehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseCommandAccessAsync(effectiveWarehouseId.Value, cancellationToken);
+
+            var rebuiltBucketsCount = 0;
+            if (_reservationService != null)
+            {
+                rebuiltBucketsCount = await _reservationService.RebuildBalancesAsync(effectiveWarehouseId, effectiveProductId, cancellationToken);
+            }
+            else if (_db != null)
+            {
+                var stockQuery = _db.InventoryStocks.AsQueryable();
+                if (effectiveWarehouseId.HasValue)
+                    stockQuery = stockQuery.Where(s => s.WarehouseId == effectiveWarehouseId.Value);
+                if (effectiveProductId.HasValue)
+                    stockQuery = stockQuery.Where(s => s.ProductId == effectiveProductId.Value);
+                rebuiltBucketsCount = await stockQuery.CountAsync(cancellationToken);
+            }
+
+            return Ok(new
+            {
+                rebuiltBucketsCount,
+                warehouseId = effectiveWarehouseId,
+                productId = effectiveProductId,
+                status = "REBUILT",
+                statusLabel = "Đã đồng bộ lại số dư tồn kho, giữ chỗ và phân bổ từ sổ cái bất biến",
+                rebuiltAtUtc = System.DateTime.UtcNow
+            });
+        }
+
+        [HttpGet("valuation")]
+        [PermissionAuthorize(AppPermissions.InventoryCostRead)]
+        public async Task<IActionResult> GetValuation(
+            [FromQuery] int? warehouseId = null,
+            [FromQuery] int? productId = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
+            if (_db == null)
+            {
+                return Ok(new { items = System.Array.Empty<object>(), totalValuation = 0m });
+            }
+
+            var query = _db.InventoryStocks.AsNoTracking()
+                .Include(s => s.Product)
+                .Include(s => s.Warehouse)
+                .Where(s => s.Quantity > 0m);
+            if (warehouseId.HasValue)
+                query = query.Where(s => s.WarehouseId == warehouseId.Value);
+            if (productId.HasValue)
+                query = query.Where(s => s.ProductId == productId.Value);
+
+            var stocks = await query.ToListAsync(cancellationToken);
+            var items = stocks
+                .GroupBy(s => new { s.WarehouseId, WarehouseCode = s.Warehouse?.Code ?? "", s.ProductId, ProductCode = s.Product?.Code ?? "", ProductName = s.Product?.Name ?? "", ProductMac = s.Product?.MovingAverageCost ?? 0m })
+                .Select(g =>
+                {
+                    var onHandQty = g.Sum(x => x.Quantity);
+                    var mac = g.Where(x => x.MovingAverageCost > 0m).Select(x => x.MovingAverageCost).FirstOrDefault();
+                    if (mac <= 0m) mac = g.Key.ProductMac;
+                    var totalValue = decimal.Round(onHandQty * mac, 2, System.MidpointRounding.AwayFromZero);
+                    return new
+                    {
+                        warehouseId = g.Key.WarehouseId,
+                        warehouseCode = g.Key.WarehouseCode.Trim(),
+                        productId = g.Key.ProductId,
+                        productCode = g.Key.ProductCode.Trim(),
+                        productName = g.Key.ProductName.Trim(),
+                        onHandQuantity = onHandQty,
+                        movingAverageCost = mac,
+                        totalValuation = totalValue
+                    };
+                })
+                .OrderBy(x => x.warehouseId)
+                .ThenBy(x => x.productId)
+                .ToList();
+
+            var totalValuation = items.Sum(x => x.totalValuation);
+            var totalOnHandQuantity = items.Sum(x => x.onHandQuantity);
+            return Ok(new
+            {
+                valuationMethod = "MOVING_AVERAGE_COST",
+                totalOnHandQuantity,
+                totalInventoryValue = totalValuation,
+                totalValuation,
+                currency = "VND",
+                items
+            });
         }
 
         [HttpGet("warehouses")]

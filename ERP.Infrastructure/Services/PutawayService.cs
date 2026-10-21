@@ -627,7 +627,10 @@ public sealed class PutawayService(
                         LocationId = destination.Id,
                         LotId = sourceBucket.LotId,
                         SerialId = sourceBucket.SerialId,
+                        HandlingUnitId = sourceBucket.HandlingUnitId,
+                        OwnerId = sourceBucket.OwnerId,
                         Quantity = chunk,
+                        MovingAverageCost = sourceBucket.MovingAverageCost,
                         LastUpdated = nowUtc
                     });
                 }
@@ -656,24 +659,56 @@ public sealed class PutawayService(
                     CreatedBy = currentUser.UserId
                 });
 
-                context.InventoryTransactions.Add(new InventoryTransaction
-                {
-                    ProductId = item.ProductId,
-                    WarehouseId = task.WarehouseId,
-                    LocationId = destination.Id,
-                    FromLocationId = item.SourceLocationId,
-                    ToLocationId = destination.Id,
-                    InventoryStatus = item.InventoryStatus,
-                    LotId = sourceBucket.LotId,
-                    SerialId = sourceBucket.SerialId,
-                    TransactionType = TransactionType.Move,
-                    Quantity = chunk,
-                    ReferenceId = task.Id,
-                    ReferenceType = "PutawayTask",
-                    TransactionDate = nowUtc,
-                    CreatedBy = currentUser.UserId,
-                    Note = $"Putaway từ {item.SourceLocation?.Code ?? "RECEIVING"} sang {destination.Code}"
-                });
+                var noteText = $"Putaway từ {item.SourceLocation?.Code ?? "RECEIVING"} sang {destination.Code}";
+                context.InventoryTransactions.AddRange(
+                    new InventoryTransaction
+                    {
+                        ProductId = item.ProductId,
+                        WarehouseId = task.WarehouseId,
+                        LocationId = item.SourceLocationId,
+                        FromLocationId = item.SourceLocationId,
+                        ToLocationId = destination.Id,
+                        InventoryStatus = item.InventoryStatus,
+                        FromInventoryStatus = item.InventoryStatus,
+                        ToInventoryStatus = item.InventoryStatus,
+                        LotId = sourceBucket.LotId,
+                        SerialId = sourceBucket.SerialId,
+                        HandlingUnitId = sourceBucket.HandlingUnitId,
+                        OwnerId = sourceBucket.OwnerId,
+                        TransactionType = TransactionType.Move,
+                        Quantity = -chunk,
+                        UnitCost = sourceBucket.MovingAverageCost,
+                        ReferenceId = task.Id,
+                        ReferenceType = "PutawayTask",
+                        SourceDocumentLineId = item.ReceiptLineId,
+                        TransactionDate = nowUtc,
+                        CreatedBy = currentUser.UserId,
+                        Note = noteText
+                    },
+                    new InventoryTransaction
+                    {
+                        ProductId = item.ProductId,
+                        WarehouseId = task.WarehouseId,
+                        LocationId = destination.Id,
+                        FromLocationId = item.SourceLocationId,
+                        ToLocationId = destination.Id,
+                        InventoryStatus = item.InventoryStatus,
+                        FromInventoryStatus = item.InventoryStatus,
+                        ToInventoryStatus = item.InventoryStatus,
+                        LotId = sourceBucket.LotId,
+                        SerialId = sourceBucket.SerialId,
+                        HandlingUnitId = sourceBucket.HandlingUnitId,
+                        OwnerId = sourceBucket.OwnerId,
+                        TransactionType = TransactionType.Move,
+                        Quantity = chunk,
+                        UnitCost = sourceBucket.MovingAverageCost,
+                        ReferenceId = task.Id,
+                        ReferenceType = "PutawayTask",
+                        SourceDocumentLineId = item.ReceiptLineId,
+                        TransactionDate = nowUtc,
+                        CreatedBy = currentUser.UserId,
+                        Note = noteText
+                    });
 
                 remainingToMove -= chunk;
             }

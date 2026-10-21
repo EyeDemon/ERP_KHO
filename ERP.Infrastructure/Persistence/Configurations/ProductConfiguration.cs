@@ -19,6 +19,7 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(x => x.UnitWeightKg).HasPrecision(18, 6);
         builder.Property(x => x.UnitVolumeM3).HasPrecision(18, 8);
         builder.Property(x => x.UnitPalletEquivalent).HasPrecision(18, 8);
+        builder.Property(x => x.MovingAverageCost).HasPrecision(19, 4);
         builder.Property(x => x.TrackingType).HasConversion<int>();
         builder.ToTable(t => t.HasCheckConstraint(
             "CK_Products_TrackingPolicy",

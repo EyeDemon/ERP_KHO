@@ -18,9 +18,12 @@ public class ExportReceiptConfiguration : IEntityTypeConfiguration<ExportReceipt
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.CustomerCodeSnapshot).HasMaxLength(50);
         builder.Property(x => x.CustomerNameSnapshot).HasMaxLength(200);
+        builder.Property(x => x.MarketplaceOrderId).HasMaxLength(64);
+        builder.Property(x => x.CarrierCode).HasMaxLength(32);
+        builder.Property(x => x.TrackingNumber).HasMaxLength(64);
         builder.HasOne(x => x.Customer).WithMany(x => x.ExportReceipts).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
-        builder.Ignore(x => x.SalesOrder);
-        builder.Ignore(x => x.Shipment);
+        builder.HasOne(x => x.SalesOrder).WithMany().HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne(x => x.Shipment).WithMany().HasForeignKey(x => x.ShipmentId).OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(x => x.SalesOrderId);
         builder.HasIndex(x => x.ShipmentId);
 

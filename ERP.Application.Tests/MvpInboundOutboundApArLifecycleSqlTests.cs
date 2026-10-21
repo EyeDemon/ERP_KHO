@@ -361,7 +361,8 @@ public sealed class MvpInboundOutboundApArLifecycleSqlTests
                         x.ProductId == state.ProductId &&
                         x.TransactionType == TransactionType.Move &&
                         x.ReferenceType == "PutawayTask" &&
-                        x.ReferenceId == state.PutawayTaskId);
+                        x.ReferenceId == state.PutawayTaskId &&
+                        x.Quantity > 0);
                 moveTx.Quantity.Should().Be(100m);
                 moveTx.FromLocationId.Should().NotBeNull();
                 moveTx.ToLocationId.Should().Be(state.StorageBinId);

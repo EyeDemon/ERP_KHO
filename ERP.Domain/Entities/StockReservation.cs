@@ -14,6 +14,9 @@ public class StockReservation : ITenantEntity
     public decimal ConsumedQuantity { get; set; }
     public decimal ReleasedQuantity { get; set; }
     public decimal AllocatedQuantity { get; set; }
+    public int BaseUomIdSnapshot { get; set; } = 1;
+    public string BaseUomCodeSnapshot { get; set; } = "THÙNG";
+    public int BaseUomDecimalPlacesSnapshot { get; set; }
     public int AllocationVersion { get; set; }
     public StockReservationStatus Status { get; set; }
     public string SourceType { get; set; } = string.Empty;

@@ -306,6 +306,7 @@ namespace ERP.Infrastructure.Repositories
                     .ExecuteUpdateAsync(update => update
                         .SetProperty(x => x.Quantity, x => x.Quantity - quantity)
                         .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - quantity)
+                        .SetProperty(x => x.AllocatedQuantity, x => x.AllocatedQuantity >= quantity ? x.AllocatedQuantity - quantity : 0m)
                         .SetProperty(x => x.LastUpdated, now), cancellationToken);
                 return affected == 1;
             }

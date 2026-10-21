@@ -12,6 +12,7 @@ public interface IStockReservationService
     Task ReleaseAsync(int id, ReleaseStockReservationDto request, CancellationToken cancellationToken = default);
     Task<int> ExpireAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ReservationReconciliationIssueDto>> ReconcileAsync(CancellationToken cancellationToken = default);
+    Task<int> RebuildBalancesAsync(int? warehouseId = null, int? productId = null, CancellationToken cancellationToken = default);
     Task<StockReservation> ReserveForExportAsync(int exportReceiptId, string exportCode, int warehouseId, int productId, decimal quantity, int userId, CancellationToken cancellationToken = default);
     Task<StockReservation> ReserveForSourceAsync(string sourceType, int sourceId, string sourceCode, int warehouseId, int productId, decimal quantity, int userId, CancellationToken cancellationToken = default);
     Task<StockReservation> IncreaseSourceReservationAsync(string sourceType, int sourceId, string sourceCode, int warehouseId, int productId, decimal additionalQuantity, int userId, CancellationToken cancellationToken = default);

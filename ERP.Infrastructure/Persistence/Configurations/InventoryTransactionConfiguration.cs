@@ -10,7 +10,8 @@ public class InventoryTransactionConfiguration : IEntityTypeConfiguration<Invent
     {
         builder.ToTable("InventoryTransactions");
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Quantity).HasPrecision(18, 4);
+        builder.Property(x => x.Quantity).HasPrecision(19, 4);
+        builder.Property(x => x.UnitCost).HasPrecision(19, 4);
         builder.Property(x => x.ReferenceType).HasMaxLength(50);
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.ReasonCode).HasMaxLength(40);

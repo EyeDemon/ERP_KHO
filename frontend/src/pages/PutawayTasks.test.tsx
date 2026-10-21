@@ -106,4 +106,23 @@ describe('Cất hàng',()=>{
    expect(v.queryByText(/QA_UNIT/)).toBeNull();
    expect(v.getByText(/10 THÙNG/)).toBeTruthy();
  });
+ it('renders CancelPendingPutback and PutbackTask labels in Vietnamese and keeps detail form open on 409 INSUFFICIENT_AVAILABLE_STOCK',async()=>{
+   const pendingPutback={...detail,id:9,receiptCode:'PN-PUTBACK',status:'CancelPendingPutback',taskType:'PutbackTask'};
+   const activePutback={...detail,id:1,receiptCode:'PN-1',status:'InProgress',taskType:'PutbackTask'};
+   vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/putaway-tasks'?[pendingPutback,activePutback]:url.includes('destinations')?destinations:activePutback}) as never);
+   vi.mocked(apiClient.post).mockRejectedValueOnce({response:{status:409,data:{code:'INSUFFICIENT_AVAILABLE_STOCK'}}});
+   const v=render(<PutawayTasks/>);
+   await v.findByText('PN-1');
+   expect(v.getAllByText('Chờ cất trả hàng hủy về kệ').length).toBeGreaterThanOrEqual(1);
+   expect(v.getAllByText('Cất trả hàng hủy về kệ').length).toBeGreaterThanOrEqual(1);
+   fireEvent.click(v.getByText('PN-1'));
+   const qtyInput=await v.findByLabelText('Số lượng cất SP1') as HTMLInputElement;
+   fireEvent.change(v.getByLabelText('Vị trí đích SP1'),{target:{value:'3'}});
+   fireEvent.change(qtyInput,{target:{value:'6'}});
+   fireEvent.click(v.getByText('Xác nhận số lượng'));
+   expect(await v.findByRole('alert')).toBeTruthy();
+   expect(v.getByRole('alert').textContent).toBe('Tồn kho khả dụng tại vị trí chọn không đủ để thực hiện thao tác. Vui lòng điều chỉnh số lượng hoặc chọn vị trí khác.');
+   expect((v.getByLabelText('Số lượng cất SP1') as HTMLInputElement).value).toBe('6');
+ });
 });
+

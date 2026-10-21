@@ -13,6 +13,8 @@ namespace ERP.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/inventory")]
+[Route("api/v1/inventory")]
+[Route("api/v1/inventory-control")]
 public sealed class InventoryControlController(
     IInventoryLockService lockService,
     IInventoryMovementService movementService,
@@ -381,6 +383,26 @@ public sealed class InventoryControlController(
                                 targetResultingQuantity = targetStock.Quantity;
                             }
 
+                            var moveOutTx = new ERP.Domain.Entities.InventoryTransaction
+                            {
+                                ProductId = sourceStock.ProductId,
+                                WarehouseId = targetWarehouseId,
+                                LocationId = sourceStock.LocationId,
+                                FromLocationId = sourceStock.LocationId,
+                                ToLocationId = resolvedToLocationId.Value,
+                                LotId = sourceStock.LotId,
+                                SerialId = sourceStock.SerialId,
+                                InventoryStatus = InventoryStatus.Available,
+                                FromInventoryStatus = InventoryStatus.Available,
+                                ToInventoryStatus = InventoryStatus.Available,
+                                TransactionType = TransactionType.Move,
+                                Quantity = -moveQty,
+                                ReferenceId = sourceStock.Id,
+                                ReferenceType = "Replenishment",
+                                TransactionDate = now,
+                                CreatedBy = actorUserId ?? 1,
+                                Note = $"{replenishmentId}: Bổ sung kệ nhặt từ {resolvedFromCode} sang {resolvedToCode}"
+                            };
                             var moveTx = new ERP.Domain.Entities.InventoryTransaction
                             {
                                 ProductId = sourceStock.ProductId,
@@ -401,6 +423,7 @@ public sealed class InventoryControlController(
                                 CreatedBy = actorUserId ?? 1,
                                 Note = $"{replenishmentId}: Bổ sung kệ nhặt từ {resolvedFromCode} sang {resolvedToCode}"
                             };
+                            effectiveDb.InventoryTransactions.Add(moveOutTx);
                             effectiveDb.InventoryTransactions.Add(moveTx);
                             await effectiveDb.SaveChangesAsync(cancellationToken);
 

@@ -15,5 +15,6 @@ public enum ReceiptStatus
     DiscrepancySubmitted = 10,
     DiscrepancyPendingApproval = 11,
     DiscrepancyResolved = 12,
-    DiscrepancyRejected = 13
+    DiscrepancyRejected = 13,
+    CancelPendingPutback = 14
 }

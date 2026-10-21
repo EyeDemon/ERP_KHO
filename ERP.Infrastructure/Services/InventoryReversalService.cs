@@ -65,6 +65,7 @@ public sealed class InventoryReversalService(
                 && (!transactionId.HasValue || x.Id == transactionId.Value)
                 && (normalizedProductCode == null || x.Product.Code.StartsWith(normalizedProductCode))
                 && (x.TransactionType == TransactionType.Move || x.TransactionType == TransactionType.StatusChange)
+                && x.Quantity > 0
                 // A corrective leg already belongs to an immutable reversal chain.
                 && !context.InventoryTransactions.Any(marker => marker.CorrectiveTransactionId == x.Id));
 
@@ -203,6 +204,7 @@ public sealed class InventoryReversalService(
                         "INV_REVERSAL_CORRECTIVE_NOT_ALLOWED",
                         "Giao dịch hiệu chỉnh thuộc một chuỗi đảo đã ghi sổ; không được đảo riêng lẻ. Hãy thực hiện quy trình hiệu chỉnh mới có kiểm soát.");
 
+                var originalQty = Math.Abs(original.Quantity);
                 var reason = request.Reason.Trim();
                 int? fromLocationId = null;
                 int? toLocationId = null;
@@ -241,7 +243,7 @@ public sealed class InventoryReversalService(
                     FromInventoryStatus = fromStatus,
                     ToInventoryStatus = toStatus,
                     TransactionType = TransactionType.Reversal,
-                    Quantity = original.Quantity,
+                    Quantity = originalQty,
                     ReferenceId = original.Id,
                     ReferenceType = "InventoryReversal",
                     ReversalOfTransactionId = original.Id,
@@ -266,7 +268,7 @@ public sealed class InventoryReversalService(
                         cancellationToken)
                         ?? throw Conflict("INV_REVERSAL_SOURCE_NOT_FOUND", "Không còn nhóm tồn kho tại vị trí đích của giao dịch MOVE gốc để thực hiện đảo giao dịch.");
 
-                    if (source.Quantity - source.ReservedQuantity < original.Quantity)
+                    if (source.Quantity - source.ReservedQuantity < originalQty)
                         throw Conflict("INV_REVERSAL_INSUFFICIENT_STOCK",
                             "Tồn khả dụng tại vị trí/trạng thái đích không đủ để đảo toàn bộ giao dịch. Hãy kiểm tra các nghiệp vụ đã phát sinh sau giao dịch gốc.");
 
@@ -274,7 +276,7 @@ public sealed class InventoryReversalService(
                     {
                         InventoryStockId = source.Id,
                         DestinationLocationId = original.FromLocationId!.Value,
-                        Quantity = original.Quantity,
+                        Quantity = originalQty,
                         Reason = $"Đảo giao dịch {original.Id}: {reason}"
                     }, cancellationToken);
 
@@ -292,14 +294,14 @@ public sealed class InventoryReversalService(
                         cancellationToken)
                         ?? throw Conflict("INV_REVERSAL_SOURCE_NOT_FOUND", "Không còn nhóm tồn kho ở trạng thái đích của giao dịch gốc để thực hiện đảo giao dịch.");
 
-                    if (source.Quantity - source.ReservedQuantity < original.Quantity)
+                    if (source.Quantity - source.ReservedQuantity < originalQty)
                         throw Conflict("INV_REVERSAL_INSUFFICIENT_STOCK",
                             "Tồn khả dụng tại vị trí/trạng thái đích không đủ để đảo toàn bộ giao dịch. Hãy kiểm tra các nghiệp vụ đã phát sinh sau giao dịch gốc.");
 
                     var correction = await statusService.ChangeAsync(new CreateInventoryStatusChangeDto
                     {
                         InventoryStockId = source.Id,
-                        Quantity = original.Quantity,
+                        Quantity = originalQty,
                         ToStatus = original.FromInventoryStatus!.Value.ToString(),
                         Reason = $"Đảo giao dịch {original.Id}: {reason}"
                     }, cancellationToken);
@@ -317,24 +319,11 @@ public sealed class InventoryReversalService(
                              x.SerialId == original.SerialId,
                         cancellationToken);
 
-                    if (source is null || source.Quantity - source.ReservedQuantity < original.Quantity)
-                    {
-                        source = await context.InventoryStocks
-                            .Where(x => x.ProductId == original.ProductId &&
-                                        x.WarehouseId == original.WarehouseId &&
-                                        x.Status == original.InventoryStatus &&
-                                        x.LotId == original.LotId &&
-                                        x.SerialId == original.SerialId &&
-                                        x.Quantity - x.ReservedQuantity >= original.Quantity)
-                            .OrderByDescending(x => x.Quantity - x.ReservedQuantity)
-                            .FirstOrDefaultAsync(cancellationToken);
-                    }
+                    if (source is null || source.Quantity - source.ReservedQuantity - source.LockedQuantity < originalQty)
+                        throw Conflict("INSUFFICIENT_AVAILABLE_STOCK",
+                            "Không đủ tồn kho khả dụng tại vị trí gốc để hoàn tác giao dịch nhập kho. Hãy kiểm tra các nghiệp vụ điều chuyển/xuất/giữ chỗ đã phát sinh.");
 
-                    if (source is null || source.Quantity - source.ReservedQuantity < original.Quantity)
-                        throw Conflict("INV_REVERSAL_INSUFFICIENT_STOCK",
-                            "Tồn khả dụng không đủ để đảo giao dịch nhập kho. Hãy kiểm tra các nghiệp vụ xuất/giữ chỗ đã phát sinh.");
-
-                    source.Quantity -= original.Quantity;
+                    source.Quantity -= originalQty;
                     source.LastUpdated = DateTime.UtcNow;
 
                     var corrective = new InventoryTransaction
@@ -346,7 +335,7 @@ public sealed class InventoryReversalService(
                         SerialId = original.SerialId,
                         InventoryStatus = original.InventoryStatus,
                         TransactionType = TransactionType.Export,
-                        Quantity = original.Quantity,
+                        Quantity = originalQty,
                         ReferenceId = marker.Id,
                         ReferenceType = "InventoryReversal",
                         TransactionDate = DateTime.UtcNow,
@@ -379,7 +368,7 @@ public sealed class InventoryReversalService(
                             Status = original.InventoryStatus,
                             LotId = original.LotId,
                             SerialId = original.SerialId,
-                            Quantity = original.Quantity,
+                            Quantity = originalQty,
                             ReservedQuantity = 0m,
                             LastUpdated = DateTime.UtcNow
                         };
@@ -387,7 +376,7 @@ public sealed class InventoryReversalService(
                     }
                     else
                     {
-                        targetStock.Quantity += original.Quantity;
+                        targetStock.Quantity += originalQty;
                         targetStock.LastUpdated = DateTime.UtcNow;
                     }
 
@@ -400,7 +389,7 @@ public sealed class InventoryReversalService(
                         SerialId = original.SerialId,
                         InventoryStatus = original.InventoryStatus,
                         TransactionType = TransactionType.Import,
-                        Quantity = original.Quantity,
+                        Quantity = originalQty,
                         ReferenceId = marker.Id,
                         ReferenceType = "InventoryReversal",
                         TransactionDate = DateTime.UtcNow,
@@ -432,7 +421,7 @@ public sealed class InventoryReversalService(
                     EntityId = original.Id,
                     WarehouseId = original.WarehouseId,
                     Timestamp = DateTime.UtcNow,
-                    OldValues = $"OriginalTransactionId: {original.Id}; Type: {original.TransactionType}; Quantity: {original.Quantity}",
+                    OldValues = $"OriginalTransactionId: {original.Id}; Type: {original.TransactionType}; Quantity: {originalQty}",
                     NewValues = $"ReversalTransactionId: {marker.Id}; CorrectiveTransactionId: {correctiveTransactionId}; ReversalType: {original.TransactionType}; ReasonCode: {reasonCode}",
                     Reason = reason,
                     Result = "Success",
@@ -451,7 +440,7 @@ public sealed class InventoryReversalService(
                     OriginalTransactionType = original.TransactionType.ToString(),
                     WarehouseId = original.WarehouseId,
                     ProductId = original.ProductId,
-                    Quantity = original.Quantity,
+                    Quantity = originalQty,
                     FromLocationId = fromLocationId,
                     ToLocationId = toLocationId,
                     FromInventoryStatus = fromStatus?.ToString(),

@@ -90,14 +90,51 @@ const actions: Record<string, string> = {
   confirm: 'Xác nhận',
 };
 
-export const permissionLabel = (code: string) => {
+
+export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
+  'inventory.cost.read': 'Cho phép xem đơn giá mua/bán, giá vốn bình quân (MAC) và giá trị chênh lệch kiểm kê trên các chứng từ và báo cáo kho.',
+};
+
+export const CONFLICT_ERROR_MESSAGES: Record<string, string> = {
+  CONCURRENCY_CONFLICT: 'Dữ liệu vừa được cập nhật bởi phiên làm việc khác. Hệ thống đã tải lại số liệu mới nhất.',
+  INSUFFICIENT_AVAILABLE_STOCK: 'Tồn kho khả dụng tại vị trí chọn không đủ để thực hiện thao tác. Vui lòng điều chỉnh số lượng hoặc chọn vị trí khác.',
+  DOCUMENT_OWNED_RESERVATION: 'Bản ghi giữ hàng này thuộc quyền quản lý của chứng từ gốc. Vui lòng thao tác trực tiếp trên Phiếu xuất hoặc Đơn hàng.',
+  INVALID_STATE_TRANSITION: 'Trạng thái chứng từ đã thay đổi, không thể thực hiện thao tác này. Đang đồng bộ lại trạng thái...',
+  ORDER_CANCELLED_PUTBACK_REQUIRED: 'Đơn hàng đã bị hủy giữa chừng và đang chờ cất trả hàng về kệ lưu trữ (Putback). Không thể tiếp tục đóng gói hoặc xuất kho.',
+};
+
+export const extractConflictCode = (error: unknown): string | undefined => {
+  const data = (error as { response?: { status?: number; data?: { code?: string; errorCode?: string; error?: { code?: string } } } })?.response?.data;
+  return data?.code || data?.errorCode || data?.error?.code;
+};
+
+export const conflictErrorMessage = (
+  error: unknown,
+  fallback409 = 'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.',
+): string => {
+  const code = extractConflictCode(error);
+  if (code && CONFLICT_ERROR_MESSAGES[code]) return CONFLICT_ERROR_MESSAGES[code];
+  return fallback409;
+
+};
+
+export const permissionDescription = (code: string, fallbackDescription?: string): string =>
+  PERMISSION_DESCRIPTIONS[code] || fallbackDescription || 'Quyền truy cập hệ thống';
+
+export const permissionLabel = (code: string): string => {
   if (code === 'permission.assign') return 'Cấp và thu hồi quyền truy cập';
+  if (code === 'inventory.cost.read') return 'Xem đơn giá, giá vốn và giá trị tồn kho';
   const [resource, action] = code.split('.');
   return resources[resource] && actions[action] ? `${actions[action]} ${resources[resource]}` : 'Quyền chưa có diễn giải';
 };
 export const roleLabel = (name: string) => ({ Admin: 'Quản trị viên', Manager: 'Quản lý', Viewer: 'Người xem', WarehouseStaff: 'Nhân viên kho' }[name] || 'Vai trò khác');
 export const permissionError = (error: unknown, fallback = 'Không thể xử lý yêu cầu. Vui lòng thử lại.') => {
-  const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+  const status = axios.isAxiosError(error) ? error.response?.status : (error as { response?: { status?: number } })?.response?.status;
+  if (status === 409) {
+    const code = extractConflictCode(error);
+    if (code && CONFLICT_ERROR_MESSAGES[code]) return CONFLICT_ERROR_MESSAGES[code];
+    return 'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.';
+  }
   return ({ 401: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 403: 'Bạn không có quyền thực hiện thao tác này.',
     404: 'Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.', 409: 'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.' } as Record<number, string>)[status || 0] || fallback;
 };

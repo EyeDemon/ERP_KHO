@@ -12,6 +12,8 @@ namespace ERP.Api.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/import-receipts")]
+    [Route("api/v1/import-receipts")]
     public class ImportReceiptsController : ControllerBase
     {
         private readonly IImportReceiptService _importReceiptService;
@@ -250,11 +252,113 @@ namespace ERP.Api.Controllers
                 ? "RMA-AUTO"
                 : request.RmaReferenceCode.Trim();
 
+            int? rmaLedgerTransactionId = null;
+            decimal? quarantineStockQuantity = null;
             if (_db != null)
             {
                 var actorUserId = int.TryParse(
                     User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                     out var uid) ? uid : (int?)null;
+
+                if (request != null && request.Quantity.GetValueOrDefault() > 0m &&
+                    (request.ProductId.HasValue || !string.IsNullOrWhiteSpace(request.ProductCode)))
+                {
+                    var resolvedProductId = request.ProductId;
+                    if (!resolvedProductId.HasValue && !string.IsNullOrWhiteSpace(request.ProductCode))
+                    {
+                        var code = request.ProductCode.Trim();
+                        resolvedProductId = await _db.Products.AsNoTracking()
+                            .Where(p => p.Code == code)
+                            .Select(p => (int?)p.Id)
+                            .FirstOrDefaultAsync(cancellationToken);
+                    }
+
+                    if (resolvedProductId.HasValue)
+                    {
+                        var targetWhId = warehouseId ?? accessibleIds?.FirstOrDefault() ?? 1;
+                        var resolvedLocationId = request.LocationId;
+                        if (!resolvedLocationId.HasValue && !string.IsNullOrWhiteSpace(request.LocationCode))
+                        {
+                            var locCode = request.LocationCode.Trim();
+                            resolvedLocationId = await _db.WarehouseLocations.AsNoTracking()
+                                .Where(l => l.WarehouseId == targetWhId && l.Code == locCode)
+                                .Select(l => (int?)l.Id)
+                                .FirstOrDefaultAsync(cancellationToken);
+                        }
+                        resolvedLocationId ??= await _db.WarehouseLocations.AsNoTracking()
+                            .Where(l => l.WarehouseId == targetWhId && l.IsActive)
+                            .OrderByDescending(l => l.LocationType == ERP.Domain.Enums.WarehouseLocationType.Receiving)
+                            .ThenBy(l => l.Id)
+                            .Select(l => (int?)l.Id)
+                            .FirstOrDefaultAsync(cancellationToken);
+
+                        int? resolvedLotId = null;
+                        if (!string.IsNullOrWhiteSpace(request.LotNumber))
+                        {
+                            var lotNo = request.LotNumber.Trim();
+                            resolvedLotId = await _db.InventoryLots.AsNoTracking()
+                                .Where(l => l.ProductId == resolvedProductId.Value && l.LotNumber == lotNo)
+                                .Select(l => (int?)l.Id)
+                                .FirstOrDefaultAsync(cancellationToken);
+                        }
+
+                        var qty = request.Quantity!.Value;
+                        var quarantineStock = await _db.InventoryStocks.FirstOrDefaultAsync(
+                            s => s.WarehouseId == targetWhId &&
+                                 s.ProductId == resolvedProductId.Value &&
+                                 s.LocationId == resolvedLocationId &&
+                                 s.LotId == resolvedLotId &&
+                                 s.SerialId == null &&
+                                 s.Status == ERP.Domain.Enums.InventoryStatus.Quarantine,
+                            cancellationToken);
+
+                        if (quarantineStock == null)
+                        {
+                            quarantineStock = new ERP.Domain.Entities.InventoryStock
+                            {
+                                WarehouseId = targetWhId,
+                                ProductId = resolvedProductId.Value,
+                                LocationId = resolvedLocationId,
+                                LotId = resolvedLotId,
+                                Status = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                                Quantity = qty,
+                                ReservedQuantity = 0m,
+                                LastUpdated = now
+                            };
+                            _db.InventoryStocks.Add(quarantineStock);
+                            await _db.SaveChangesAsync(cancellationToken);
+                            quarantineBucketCount++;
+                        }
+                        else
+                        {
+                            quarantineStock.Quantity += qty;
+                            quarantineStock.LastUpdated = now;
+                        }
+
+                        var rmaTx = new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = resolvedProductId.Value,
+                            WarehouseId = targetWhId,
+                            LocationId = resolvedLocationId,
+                            ToLocationId = resolvedLocationId,
+                            LotId = resolvedLotId,
+                            InventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                            ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                            TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                            Quantity = qty,
+                            ReferenceId = quarantineStock.Id,
+                            ReferenceType = "RmaInspection",
+                            TransactionDate = now,
+                            CreatedBy = actorUserId ?? 1,
+                            Note = $"{rmaInspectionCode}: Tiếp nhận hàng trả về (RMA) vào khu vực biệt trữ"
+                        };
+                        _db.InventoryTransactions.Add(rmaTx);
+                        await _db.SaveChangesAsync(cancellationToken);
+                        rmaLedgerTransactionId = rmaTx.Id;
+                        quarantineStockQuantity = quarantineStock.Quantity;
+                    }
+                }
+
                 _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                 {
                     UserId = actorUserId,
@@ -283,6 +387,8 @@ namespace ERP.Api.Controllers
                 pendingQcOrRmaReceiptsCount,
                 openStocktakesCount,
                 activeCountFreezeLocksCount,
+                ledgerTransactionId = rmaLedgerTransactionId,
+                quarantineStockQuantity,
                 targetBucket = "Khu vực biệt trữ chờ kiểm định",
                 nextStep = "Chuyển trạm kiểm định chất lượng đầu vào",
                 dispositionSummary = $"Đã tiếp nhận kiểm định hàng trả về ({pendingQcOrRmaReceiptsCount} phiếu chờ kiểm định, {quarantineBucketCount} vị trí biệt trữ)",
@@ -510,6 +616,27 @@ namespace ERP.Api.Controllers
                         var effectiveFromStatus = fromStatus == ERP.Domain.Enums.InventoryStatus.Available
                             ? ERP.Domain.Enums.InventoryStatus.Quarantine
                             : fromStatus;
+                        var effectiveQty = moveQty > 0m ? moveQty : 1m;
+                        var statusTxOut = new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = stock.ProductId,
+                            WarehouseId = stock.WarehouseId,
+                            LocationId = stock.LocationId,
+                            FromLocationId = stock.LocationId,
+                            ToLocationId = stock.LocationId,
+                            LotId = stock.LotId,
+                            SerialId = stock.SerialId,
+                            InventoryStatus = effectiveFromStatus,
+                            FromInventoryStatus = effectiveFromStatus,
+                            ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                            TransactionType = ERP.Domain.Enums.TransactionType.StatusChange,
+                            Quantity = -effectiveQty,
+                            ReferenceId = stock.Id,
+                            ReferenceType = "InventoryStatusChange",
+                            TransactionDate = now,
+                            CreatedBy = actorUserId ?? 1,
+                            Note = $"{dispositionCode}: Tân trang & chuyển về hàng khả dụng"
+                        };
                         var statusTx = new ERP.Domain.Entities.InventoryTransaction
                         {
                             ProductId = stock.ProductId,
@@ -523,13 +650,14 @@ namespace ERP.Api.Controllers
                             FromInventoryStatus = effectiveFromStatus,
                             ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
                             TransactionType = ERP.Domain.Enums.TransactionType.StatusChange,
-                            Quantity = moveQty > 0m ? moveQty : 1m,
+                            Quantity = effectiveQty,
                             ReferenceId = stock.Id,
                             ReferenceType = "InventoryStatusChange",
                             TransactionDate = now,
                             CreatedBy = actorUserId ?? 1,
                             Note = $"{dispositionCode}: Tân trang & chuyển về hàng khả dụng"
                         };
+                        _db.InventoryTransactions.Add(statusTxOut);
                         _db.InventoryTransactions.Add(statusTx);
                         await _db.SaveChangesAsync(cancellationToken);
 

@@ -36,7 +36,16 @@ public sealed class IdempotentCommandFilter(
             actionContext.ActionArguments.TryGetValue("userId", out var target) && target is int targetId &&
             !await context.Users.AsNoTracking().AnyAsync(u => u.Id == targetId, actionContext.HttpContext.RequestAborted))
         {
-            actionContext.Result = new NotFoundObjectResult(new { message = "Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập." });
+            actionContext.Result = new NotFoundObjectResult(new
+            {
+                code = "RESOURCE_NOT_FOUND",
+                message = "Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.",
+                error = new
+                {
+                    code = "RESOURCE_NOT_FOUND",
+                    message = "Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập."
+                }
+            });
             return;
         }
 
@@ -93,7 +102,16 @@ public sealed class IdempotentCommandFilter(
                 actionContext.HttpContext.RequestAborted);
             if (existing is null || existing.RequestFingerprint != fingerprint || existing.Status != IdempotencyStatus.Completed)
             {
-                actionContext.Result = new ConflictObjectResult(new { message = "Idempotency-Key đang được xử lý hoặc đã được dùng cho yêu cầu khác." });
+                actionContext.Result = new ConflictObjectResult(new
+                {
+                    code = "IDEMPOTENCY_CONFLICT",
+                    message = "Idempotency-Key đang được xử lý hoặc đã được dùng cho yêu cầu khác.",
+                    error = new
+                    {
+                        code = "IDEMPOTENCY_CONFLICT",
+                        message = "Idempotency-Key đang được xử lý hoặc đã được dùng cho yêu cầu khác."
+                    }
+                });
                 return;
             }
             await ReauthorizeWarehouses(existing, actionContext.HttpContext.RequestAborted);

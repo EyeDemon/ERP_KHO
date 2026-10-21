@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { beginPermissionRefresh, setCurrentPermissions, usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { permissionError, permissionLabel, roleLabel } from '../services/permissionPresentation';
+import { permissionDescription, permissionError, permissionLabel, roleLabel } from '../services/permissionPresentation';
 import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 import { BarcodeSvg } from '../components/BarcodeSvg';
 
@@ -886,7 +886,7 @@ export default function Permissions() {
           <UiTableScroll>
             <table className="permissions-table ui-table-compact" aria-label="Danh mục quyền truy cập">
               <thead><tr><th>Quyền</th><th>Mô tả</th></tr></thead>
-              <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td>{permission.description || 'Quyền truy cập hệ thống'}</td></tr>)}</tbody>
+              <tbody>{catalog.map(permission => <tr key={permission.code}><td>{permissionLabel(permission.code)}</td><td>{permissionDescription(permission.code, permission.description)}</td></tr>)}</tbody>
             </table>
           </UiTableScroll>
         </div>

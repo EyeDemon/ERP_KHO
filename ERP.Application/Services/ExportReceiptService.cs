@@ -98,6 +98,9 @@ namespace ERP.Application.Services
                 Status = ReceiptStatus.Draft,
                 Note = dto.Note,
                 CustomerId = dto.CustomerId,
+                MarketplaceOrderId = dto.MarketplaceOrderId?.Trim(),
+                CarrierCode = dto.CarrierCode?.Trim(),
+                TrackingNumber = dto.TrackingNumber?.Trim(),
                 CreatedBy = userId,
                 CreatedAt = DateTime.UtcNow,
                 Details = new List<ERP.Domain.Entities.ExportReceiptDetail>()
@@ -380,6 +383,8 @@ namespace ERP.Application.Services
                     InventoryStatus = consumption.Status,
                     TransactionType = TransactionType.Export,
                     Quantity = consumption.Quantity,
+                    UnitCost = detail.Product?.MovingAverageCost is > 0m ? detail.Product.MovingAverageCost : detail.UnitPrice,
+                    SourceDocumentLineId = detail.Id,
                     ReferenceId = receipt.Id,
                     ReferenceType = "ExportReceipt",
                     TransactionDate = DateTime.UtcNow,
@@ -504,10 +509,11 @@ namespace ERP.Application.Services
         private ExportReceiptDto MapToDto(ERP.Domain.Entities.ExportReceipt receipt)
         {
             var viewer = string.Equals(_currentUser?.Role, "Viewer", StringComparison.Ordinal);
+            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role is "Admin" or "Manager" or "Accountant";
             var details = (receipt.Details ?? []).Select(d =>
             {
-                var lineSub = viewer ? 0m : decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero);
-                var lineTax = viewer ? 0m : decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                var lineSub = canReadCost ? decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero) : 0m;
+                var lineTax = canReadCost ? decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
                 var baseUomCode = NormalizeUomValue(!string.IsNullOrWhiteSpace(d.BaseUomCodeSnapshot) ? d.BaseUomCodeSnapshot : d.Product?.Unit?.Code);
                 var baseUomName = NormalizeUomValue(!string.IsNullOrWhiteSpace(d.BaseUomNameSnapshot) ? d.BaseUomNameSnapshot : d.Product?.Unit?.Name);
                 if (baseUomCode == "THÙNG") baseUomName = "THÙNG";
@@ -519,11 +525,11 @@ namespace ERP.Application.Services
                     ProductName = d.Product?.Name?.Trim(),
                     UnitName = baseUomName,
                     Quantity = d.Quantity,
-                    UnitPrice = viewer ? null : d.UnitPrice,
+                    UnitPrice = canReadCost ? d.UnitPrice : null,
                     TaxPercent = d.TaxPercent,
-                    LineSubTotal = lineSub,
-                    LineTaxAmount = lineTax,
-                    LineTotal = lineSub + lineTax,
+                    LineSubTotal = canReadCost ? lineSub : null,
+                    LineTaxAmount = canReadCost ? lineTax : null,
+                    LineTotal = canReadCost ? lineSub + lineTax : null,
                     Note = viewer ? null : d.Note?.Trim(),
                     BaseUomIdSnapshot = d.BaseUomIdSnapshot ?? d.Product?.UnitId,
                     BaseUomCodeSnapshot = baseUomCode,
@@ -532,8 +538,8 @@ namespace ERP.Application.Services
                 };
             }).ToList();
 
-            var subTotal = details.Sum(x => x.LineSubTotal);
-            var taxAmount = details.Sum(x => x.LineTaxAmount);
+            var subTotal = details.Sum(x => x.LineSubTotal ?? 0m);
+            var taxAmount = details.Sum(x => x.LineTaxAmount ?? 0m);
 
             return new ExportReceiptDto
             {
@@ -559,9 +565,12 @@ namespace ERP.Application.Services
                 CustomerName = (!string.IsNullOrWhiteSpace(receipt.CustomerNameSnapshot) ? receipt.CustomerNameSnapshot : receipt.Customer?.Name)?.Trim(),
                 SalesOrderId = receipt.SalesOrderId,
                 ShipmentId = receipt.ShipmentId,
-                SubTotalAmount = subTotal,
-                TaxAmount = taxAmount,
-                TotalAmount = subTotal + taxAmount,
+                MarketplaceOrderId = receipt.MarketplaceOrderId?.Trim(),
+                CarrierCode = receipt.CarrierCode?.Trim(),
+                TrackingNumber = receipt.TrackingNumber?.Trim(),
+                SubTotalAmount = canReadCost ? subTotal : null,
+                TaxAmount = canReadCost ? taxAmount : null,
+                TotalAmount = canReadCost ? subTotal + taxAmount : null,
                 RowVersion = receipt.RowVersion is { Length: > 0 } ? Convert.ToBase64String(receipt.RowVersion) : null,
                 AllowPerReceiptDispatchMode = _options.AllowPerReceiptDispatchMode,
                 AllowWarehouseStaffDirectDispatch = _options.AllowWarehouseStaffDirectDispatch,

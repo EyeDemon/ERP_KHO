@@ -14,6 +14,8 @@ public class StockAllocation : ITenantEntity
     public int LocationId { get; set; }
     public int? LotId { get; set; }
     public int? SerialId { get; set; }
+    public int? HandlingUnitId { get; set; }
+    public int? OwnerId { get; set; }
     public InventoryStatus InventoryStatus { get; set; } = InventoryStatus.Available;
     public decimal Quantity { get; set; }
     public StockAllocationStatus Status { get; set; } = StockAllocationStatus.Active;

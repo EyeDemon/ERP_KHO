@@ -57,7 +57,7 @@ export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose 
     Dispatched: 'Đã xuất kho', Received: 'Đã nhận — chưa ghi tồn', ReadyToPost: 'Sẵn sàng ghi nhận tồn kho',
     Posted: 'Đã ghi nhận tồn kho', QcPending: 'Chờ kết quả kiểm tra chất lượng', QcCompleted: 'Kiểm tra chất lượng đã hoàn tất — chờ duyệt',
     DiscrepancyPending: 'Chờ xử lý sai lệch', DiscrepancySubmitted: 'Đã gửi xử lý sai lệch', DiscrepancyPendingApproval: 'Chờ duyệt sai lệch',
-    DiscrepancyResolved: 'Sai lệch đã xử lý', DiscrepancyRejected: 'Sai lệch bị trả lại' } as Record<string, string>)[receipt.status] || 'Trạng thái chưa xác định';
+    DiscrepancyResolved: 'Sai lệch đã xử lý', DiscrepancyRejected: 'Sai lệch bị trả lại', CancelPendingPutback: 'Chờ cất trả hàng hủy về kệ' } as Record<string, string>)[receipt.status] || 'Trạng thái chưa xác định';
   return <div ref={dialogRef} tabIndex={-1} className="receipt-print-overlay" role="dialog" aria-modal="true" aria-label={`Bản in ${receipt.code}`} onKeyDown={e => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); onClose(); } }}>
     <div className="receipt-print-actions">
       <span>Bản in dùng dữ liệu đã lưu trên hệ thống.</span>

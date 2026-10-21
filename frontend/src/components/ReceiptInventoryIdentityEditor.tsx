@@ -44,8 +44,9 @@ const receiptStatusLabels:Record<string,string>={
   Draft:'Nháp',
   Approved:'Đã duyệt',
   Received:'Đã nhận hàng',
-  QcPending:'Chờ kiểm định QC',
-  QcCompleted:'Hoàn tất QC',
+  QcPending:'Chờ kiểm định chất lượng',
+  QcCompleted:'Hoàn tất kiểm định chất lượng',
+
   Cancelled:'Đã hủy',
 };
 

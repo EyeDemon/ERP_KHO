@@ -1182,10 +1182,7 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
     {
         if (tx.TransactionType == TransactionType.Move)
         {
-            var delta = 0m;
-            if (tx.FromLocationId == locationId) delta -= tx.Quantity;
-            if (tx.ToLocationId == locationId) delta += tx.Quantity;
-            return delta;
+            return tx.LocationId == locationId ? tx.Quantity : 0m;
         }
 
         if (tx.LocationId != locationId)

@@ -57,11 +57,20 @@ describe('StockReservations production UI', () => {
     expect(view.queryByRole('button', { name: /Dọn hết hạn/ })).toBeNull();
   });
 
-  it('releases an active reservation once and refreshes the current page', async () => {
+  it('releases an active Manual reservation once and refreshes the current page', async () => {
     localStorage.setItem('role', 'Manager');
+    get.mockResolvedValue({
+      data: {
+        items: [{ ...reservation, sourceType: 'Manual', sourceCode: undefined }],
+        totalRecords: 1,
+        pageIndex: 1,
+        pageSize: 20,
+      },
+    } as never);
 
     const view = render(<StockReservations />);
     await view.findByText('RSV-2026-0007');
+    expect(view.getByText('Giữ hàng thủ công')).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: 'Giải phóng RSV-2026-0007' }));
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
@@ -70,4 +79,40 @@ describe('StockReservations production UI', () => {
     });
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
   });
+
+  it('shows Theo chứng từ gốc badge for document-owned reservations, hides Giải phóng button, and maps 409 DOCUMENT_OWNED_RESERVATION', async () => {
+    localStorage.setItem('role', 'Manager');
+    get.mockResolvedValue({
+      data: {
+        items: [
+          reservation,
+          { ...reservation, id: 8, reservationCode: 'RSV-2026-0008', sourceType: 'OutboundOrder', sourceCode: 'OB-2026-01' },
+        ],
+        totalRecords: 2,
+        pageIndex: 1,
+        pageSize: 20,
+      },
+    } as never);
+
+    const view = render(<StockReservations />);
+    await view.findByText('RSV-2026-0007');
+    expect(view.queryByRole('button', { name: 'Giải phóng RSV-2026-0007' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Giải phóng RSV-2026-0008' })).toBeNull();
+    expect(view.getAllByText('Quản lý theo chứng từ').length).toBe(2);
+    expect(view.getByText(/Đơn xuất hàng \/ OB-2026-01/)).toBeTruthy();
+
+    post.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: { code: 'DOCUMENT_OWNED_RESERVATION' },
+      },
+    });
+    fireEvent.click(view.getByRole('button', { name: /Dọn hết hạn/ }));
+    expect(
+      await view.findByText(
+        'Bản ghi giữ hàng này thuộc quyền quản lý của chứng từ gốc. Vui lòng thao tác trực tiếp trên Phiếu xuất hoặc Đơn hàng.',
+      ),
+    ).toBeTruthy();
+  });
 });
+

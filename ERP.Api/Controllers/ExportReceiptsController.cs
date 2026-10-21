@@ -12,6 +12,8 @@ namespace ERP.Api.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/export-receipts")]
+    [Route("api/v1/export-receipts")]
     public class ExportReceiptsController : ControllerBase
     {
         private readonly IExportReceiptService _exportReceiptService;

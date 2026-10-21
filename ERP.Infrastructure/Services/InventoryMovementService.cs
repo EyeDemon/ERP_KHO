@@ -74,7 +74,7 @@ public sealed class InventoryMovementService(
                 ValidateQuantityPrecision(source, request.Quantity);
                 if (source.SerialId.HasValue && request.Quantity != 1m)
                     throw Validation("SERIAL_QUANTITY_INVALID", "Inventory theo Serial chỉ được di chuyển đúng 1 base unit.");
-                if (source.Quantity - source.ReservedQuantity < request.Quantity)
+                if (source.Quantity - Math.Max(source.ReservedQuantity, source.AllocatedQuantity) - source.LockedQuantity < request.Quantity)
                     throw Conflict("INV_INSUFFICIENT_AVAILABLE", "Không thể di chuyển phần tồn đang reserved/allocation.");
 
                 await locks.EnsureBucketUnlockedAsync(
@@ -105,8 +105,9 @@ public sealed class InventoryMovementService(
                          x.SerialId == source.SerialId,
                     cancellationToken);
 
+                var nowUtc = DateTime.UtcNow;
                 source.Quantity -= request.Quantity;
-                source.LastUpdated = DateTime.UtcNow;
+                source.LastUpdated = nowUtc;
                 if (destination is null)
                 {
                     destination = new InventoryStock
@@ -116,17 +117,20 @@ public sealed class InventoryMovementService(
                         LocationId = destinationLocation.Id,
                         LotId = source.LotId,
                         SerialId = source.SerialId,
+                        HandlingUnitId = source.HandlingUnitId,
+                        OwnerId = source.OwnerId,
                         Status = source.Status,
                         Quantity = request.Quantity,
                         ReservedQuantity = 0,
-                        LastUpdated = DateTime.UtcNow
+                        MovingAverageCost = source.MovingAverageCost,
+                        LastUpdated = nowUtc
                     };
                     context.InventoryStocks.Add(destination);
                 }
                 else
                 {
                     destination.Quantity += request.Quantity;
-                    destination.LastUpdated = DateTime.UtcNow;
+                    destination.LastUpdated = nowUtc;
                 }
 
                 var rawUnitCode = (source.Product.Unit?.Code ?? source.Product.Unit?.Name ?? string.Empty).Trim();
@@ -149,13 +153,13 @@ public sealed class InventoryMovementService(
                     EnteredUnitCode = normalizedUnitCode,
                     ReferenceType = "InventoryMove",
                     CreatedBy = currentUser.UserId,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = nowUtc
                 };
                 context.InventoryLocationMovements.Add(movement);
                 await context.SaveChangesAsync(cancellationToken);
 
                 movement.ReferenceId = movement.Id;
-                var ledger = new InventoryTransaction
+                var ledgerOut = new InventoryTransaction
                 {
                     ProductId = source.ProductId,
                     WarehouseId = source.WarehouseId,
@@ -164,16 +168,44 @@ public sealed class InventoryMovementService(
                     ToLocationId = destinationLocation.Id,
                     LotId = source.LotId,
                     SerialId = source.SerialId,
+                    HandlingUnitId = source.HandlingUnitId,
+                    OwnerId = source.OwnerId,
                     InventoryStatus = source.Status,
+                    FromInventoryStatus = source.Status,
+                    ToInventoryStatus = source.Status,
                     TransactionType = TransactionType.Move,
-                    Quantity = request.Quantity,
+                    Quantity = -request.Quantity,
+                    UnitCost = source.MovingAverageCost,
                     ReferenceId = movement.Id,
                     ReferenceType = "InventoryMove",
-                    TransactionDate = DateTime.UtcNow,
+                    TransactionDate = nowUtc,
                     CreatedBy = currentUser.UserId,
                     Note = request.Reason.Trim()
                 };
-                context.InventoryTransactions.Add(ledger);
+                var ledgerIn = new InventoryTransaction
+                {
+                    ProductId = source.ProductId,
+                    WarehouseId = source.WarehouseId,
+                    LocationId = destinationLocation.Id,
+                    FromLocationId = source.LocationId,
+                    ToLocationId = destinationLocation.Id,
+                    LotId = source.LotId,
+                    SerialId = source.SerialId,
+                    HandlingUnitId = source.HandlingUnitId,
+                    OwnerId = source.OwnerId,
+                    InventoryStatus = source.Status,
+                    FromInventoryStatus = source.Status,
+                    ToInventoryStatus = source.Status,
+                    TransactionType = TransactionType.Move,
+                    Quantity = request.Quantity,
+                    UnitCost = source.MovingAverageCost,
+                    ReferenceId = movement.Id,
+                    ReferenceType = "InventoryMove",
+                    TransactionDate = nowUtc,
+                    CreatedBy = currentUser.UserId,
+                    Note = request.Reason.Trim()
+                };
+                context.InventoryTransactions.AddRange(ledgerOut, ledgerIn);
                 context.AuditLogs.Add(new AuditLog
                 {
                     UserId = currentUser.UserId,
@@ -181,7 +213,7 @@ public sealed class InventoryMovementService(
                     EntityName = "InventoryLocationMovement",
                     EntityId = movement.Id,
                     WarehouseId = source.WarehouseId,
-                    Timestamp = DateTime.UtcNow,
+                    Timestamp = nowUtc,
                     OldValues = $"StockId: {source.Id}; LocationId: {source.LocationId}; QuantityBefore: {source.Quantity + request.Quantity}",
                     NewValues = $"DestinationStockId: {destination.Id}; ToLocationId: {destinationLocation.Id}; Quantity: {request.Quantity}; Status: {source.Status}; LotId: {source.LotId}; SerialId: {source.SerialId}",
                     Reason = request.Reason.Trim(),
@@ -194,7 +226,7 @@ public sealed class InventoryMovementService(
                 return new InventoryMoveResultDto
                 {
                     MovementId = movement.Id,
-                    TransactionId = ledger.Id,
+                    TransactionId = ledgerIn.Id,
                     SourceStockId = source.Id,
                     DestinationStockId = destination.Id,
                     WarehouseId = source.WarehouseId,

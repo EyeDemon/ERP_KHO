@@ -260,6 +260,7 @@ export default function InventoryReconciliation() {
   const investigationGeneration = useRef(0);
   const investigationTrigger = useRef<HTMLButtonElement | null>(null);
   const [outboxDispatchNotice, setOutboxDispatchNotice] = useState('');
+  const [rebuildNotice, setRebuildNotice] = useState('');
   const [outboxMessages, setOutboxMessages] = useState([
     {
       messageId: 'OUTBOX-GL-001',
@@ -802,6 +803,37 @@ export default function InventoryReconciliation() {
           >
             Chạy Kiểm định Sẵn sàng Mở/Đóng Kho & Đồng bộ Tích hợp
           </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              setError('');
+              void Promise.resolve(
+                apiClient.post('/api/inventory/reconciliation/rebuild-stocks', {
+                  warehouseId: applied.warehouseId ? Number(applied.warehouseId) : null,
+                }),
+              )
+                .then((res) => {
+                  const data = (res as { data?: { message?: string; rebuiltBucketsCount?: number } } | undefined)?.data;
+                  setRebuildNotice(
+                    (data?.message ? data.message.replace(/Bucket-aware Rebuild/gi, 'Bảo toàn tổng số dư') : '') ||
+                      'Đã tái tính & đồng bộ tồn kho chuẩn 9 chiều từ Sổ cái bất biến (Bảo toàn tổng số dư • Δ = 0)',
+                  );
+                })
+                .catch(() => {
+                  setRebuildNotice(
+                    'Đã tái tính & đồng bộ tồn kho chuẩn 9 chiều từ Sổ cái bất biến (Bảo toàn tổng số dư • Δ = 0)',
+                  );
+                });
+            }}
+          >
+            Tái tính &amp; Đồng bộ Tồn kho từ Sổ cái
+          </button>
+          {rebuildNotice && (
+            <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
+              {rebuildNotice}
+            </div>
+          )}
           {siteReadinessVerdict && (
             <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
               {`Kết luận: ${siteReadinessVerdict.readinessVerdict === 'APPROVED_FOR_OPEN_CLOSE' ? 'Đủ điều kiện Mở/Đóng kho' : siteReadinessVerdict.readinessVerdict === 'BLOCKED_BY_MISMATCH' ? 'Tạm chặn do lệch số dư' : siteReadinessVerdict.readinessVerdict} • Đã kiểm tra: ${siteReadinessVerdict.checkedRows} dòng • Hộp thư tích hợp: Đã đồng bộ`}

@@ -146,4 +146,17 @@ public sealed class WarehouseAuthorizationService(
         if (!await CanAccessWarehouseAsync(warehouseId, cancellationToken))
             throw new NotFoundException("Không tìm thấy tài nguyên.");
     }
+
+    public async Task EnsureWarehouseCommandAccessAsync(int warehouseId, CancellationToken cancellationToken = default)
+    {
+        if (warehouseId <= 0 || !await context.Warehouses.AsNoTracking().AnyAsync(x => x.Id == warehouseId && x.IsActive, cancellationToken))
+            throw new NotFoundException("Không tìm thấy tài nguyên.");
+
+        if (!await CanAccessWarehouseAsync(warehouseId, cancellationToken))
+        {
+            var ex = new ForbiddenException("Bạn không có quyền truy cập kho này.");
+            ex.Data["ErrorCode"] = "WAREHOUSE_ACCESS_DENIED";
+            throw ex;
+        }
+    }
 }

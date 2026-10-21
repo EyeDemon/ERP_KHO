@@ -34,7 +34,8 @@ public sealed class PutawayTaskItemConfiguration : IEntityTypeConfiguration<Puta
     {
         b.ToTable("PutawayTaskItems");
         b.HasKey(x => x.Id); b.Ignore(x => x.RemainingBaseQuantity); b.Property(x => x.RowVersion).IsRowVersion();
-        foreach (var p in new[] { nameof(PutawayTaskItem.ConversionFactorSnapshot), nameof(PutawayTaskItem.RequiredOperationQuantity), nameof(PutawayTaskItem.RequiredBaseQuantity), nameof(PutawayTaskItem.MovedBaseQuantity) }) b.Property(p).HasPrecision(18,4);
+        b.Property(x => x.ConversionFactorSnapshot).HasPrecision(18, 8);
+        foreach (var p in new[] { nameof(PutawayTaskItem.RequiredOperationQuantity), nameof(PutawayTaskItem.RequiredBaseQuantity), nameof(PutawayTaskItem.MovedBaseQuantity) }) b.Property(p).HasPrecision(18,4);
         b.HasIndex(x => new { x.PutawayTaskId, x.ReceiptLineId, x.InventoryStatus }).IsUnique();
         b.HasOne(x => x.PutawayTask).WithMany(x => x.Items).HasForeignKey(x => x.PutawayTaskId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.ReceiptLine).WithMany().HasForeignKey(x => x.ReceiptLineId).OnDelete(DeleteBehavior.Restrict);

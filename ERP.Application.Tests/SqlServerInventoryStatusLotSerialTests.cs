@@ -79,7 +79,7 @@ public sealed class SqlServerInventoryStatusLotSerialTests
             buckets.Single(x => x.Status == "QUARANTINE").AvailableQuantity.Should().Be(0);
 
             var ledger = await verify.InventoryTransactions.AsNoTracking()
-                .SingleAsync(x => x.ProductId == fixture.ProductId && x.TransactionType == TransactionType.StatusChange);
+                .SingleAsync(x => x.ProductId == fixture.ProductId && x.TransactionType == TransactionType.StatusChange && x.Quantity > 0);
             ledger.Quantity.Should().Be(4);
             ledger.FromInventoryStatus.Should().Be(InventoryStatus.Available);
             ledger.ToInventoryStatus.Should().Be(InventoryStatus.Quarantine);

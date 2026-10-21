@@ -11,9 +11,14 @@ namespace ERP.Api.Controllers;
 
 public sealed record ExpediteBackorderRequest(int? WarehouseId, string? OrderNumber);
 public sealed record EvaluateAtpRoutingRequest(int? WarehouseId = null);
+public sealed record ConfirmCancelPutbackRequest(
+    int? SourceLocationId = null,
+    int? DestinationLocationId = null,
+    string? Note = null);
 
 [ApiController]
 [Route("api/sales-orders")]
+[Route("api/v1/sales-orders")]
 [Authorize]
 public sealed class SalesOrdersController(
     ISalesOrderBackorderService service,
@@ -301,4 +306,96 @@ public sealed class SalesOrdersController(
         SalesOrderStateCommandDto request,
         CancellationToken cancellationToken) =>
         Ok(await service.CancelSalesOrderAsync(id, request, cancellationToken));
+
+    [HttpPost("{id:int}/confirm-cancel-putback")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCancel)]
+    [IdempotentCommand("SalesOrder.ConfirmCancelPutback")]
+    public async Task<IActionResult> ConfirmCancelPutback(
+        int id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ConfirmCancelPutbackRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (db == null)
+            return Ok(await service.GetSalesOrderAsync(id, cancellationToken));
+
+        var order = await db.SalesOrders
+            .Include(o => o.Lines)
+            .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+        if (order == null)
+            return NotFound(new { code = "NOT_FOUND", message = $"Không tìm thấy đơn bán hàng #{id}." });
+
+        if (warehouseAccess != null)
+            await warehouseAccess.EnsureWarehouseAccessAsync(order.WarehouseId, cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : 1;
+
+        var activeAllocations = await db.StockAllocations
+            .Include(a => a.Reservation)
+            .Where(a => a.Reservation != null &&
+                        a.Reservation.SourceType == "SalesOrder" &&
+                        a.Reservation.SourceId == order.Id &&
+                        (a.Status == ERP.Domain.Enums.StockAllocationStatus.Active ||
+                         a.Status == ERP.Domain.Enums.StockAllocationStatus.Picked))
+            .ToListAsync(cancellationToken);
+
+        foreach (var alloc in activeAllocations)
+        {
+            var remaining = alloc.Quantity;
+            if (remaining > 0m)
+            {
+                var bucket = await db.InventoryStocks.FirstOrDefaultAsync(
+                    s => s.WarehouseId == alloc.WarehouseId &&
+                         s.ProductId == alloc.ProductId &&
+                         s.LocationId == alloc.LocationId &&
+                         s.LotId == alloc.LotId &&
+                         s.SerialId == alloc.SerialId &&
+                         s.Status == alloc.InventoryStatus,
+                    cancellationToken);
+                if (bucket != null)
+                {
+                    bucket.AllocatedQuantity = Math.Max(0m, bucket.AllocatedQuantity - remaining);
+                    bucket.ReservedQuantity = Math.Max(bucket.AllocatedQuantity, bucket.ReservedQuantity - remaining);
+                    bucket.LastUpdated = now;
+                }
+            }
+            alloc.Status = ERP.Domain.Enums.StockAllocationStatus.Released;
+            alloc.ReleasedBy = actorUserId;
+            alloc.ReleasedAt = now;
+            alloc.ReleaseReason = request?.Note ?? "Hoàn tất cất trả hàng đã soạn khi hủy đơn bán hàng";
+            if (alloc.Reservation != null)
+            {
+                alloc.Reservation.Status = ERP.Domain.Enums.StockReservationStatus.Released;
+                alloc.Reservation.ReleasedAt = now;
+                alloc.Reservation.ReleasedBy = actorUserId;
+                alloc.Reservation.ReleaseReason = alloc.ReleaseReason;
+            }
+        }
+
+        order.Status = ERP.Domain.Enums.SalesOrderStatus.Cancelled;
+        order.CancellationReason ??= request?.Note ?? "Hoàn tất cất trả hàng đã soạn (Cancel Putback)";
+        order.CancelledAt ??= now;
+        foreach (var line in order.Lines)
+        {
+            line.CancelledQuantity = line.OrderedQuantity;
+        }
+
+        db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+        {
+            UserId = actorUserId,
+            WarehouseId = order.WarehouseId,
+            Action = "SalesOrder.ConfirmCancelPutback",
+            EntityName = "SalesOrder",
+            EntityId = order.Id,
+            NewValues = order.Status.ToString(),
+            Reason = request?.Note ?? "Xác nhận hoàn tất cất trả hàng đã soạn về kệ lưu trữ và hủy đơn bán hàng",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(await service.GetSalesOrderAsync(id, cancellationToken));
+    }
 }

@@ -166,6 +166,19 @@ public sealed class StockAllocationService(
             allocation.ReleaseReason = request.Reason.Trim();
             allocation.Version++;
 
+            var bucketStock = await context.InventoryStocks.FirstOrDefaultAsync(
+                x => x.ProductId == allocation.ProductId &&
+                     x.WarehouseId == allocation.WarehouseId &&
+                     x.LocationId == allocation.LocationId &&
+                     x.Status == allocation.InventoryStatus &&
+                     x.LotId == allocation.LotId &&
+                     x.SerialId == allocation.SerialId,
+                token);
+            if (bucketStock is not null)
+            {
+                bucketStock.AllocatedQuantity = Math.Max(0m, bucketStock.AllocatedQuantity - allocation.Quantity);
+            }
+
             var reservation = allocation.Reservation;
             reservation.AllocatedQuantity -= allocation.Quantity;
             if (reservation.AllocatedQuantity < 0)
@@ -212,6 +225,20 @@ public sealed class StockAllocationService(
             original.ReleasedBy = currentUser.UserId;
             original.ReleaseReason = request.Reason.Trim();
             original.Version++;
+
+            var oldBucketStock = await context.InventoryStocks.FirstOrDefaultAsync(
+                x => x.ProductId == original.ProductId &&
+                     x.WarehouseId == original.WarehouseId &&
+                     x.LocationId == original.LocationId &&
+                     x.Status == original.InventoryStatus &&
+                     x.LotId == original.LotId &&
+                     x.SerialId == original.SerialId,
+                token);
+            if (oldBucketStock is not null)
+            {
+                oldBucketStock.AllocatedQuantity = Math.Max(0m, oldBucketStock.AllocatedQuantity - original.Quantity);
+            }
+
             await context.SaveChangesAsync(token);
 
             var strategy = request.LocationId.HasValue ? AllocationStrategy.FixedLocation : AllocationStrategy.LocationOrder;
@@ -224,6 +251,7 @@ public sealed class StockAllocationService(
             if (created.Count == 0)
                 throw new ConcurrencyException("Không tìm thấy vị trí phù hợp để phân bổ lại.");
 
+            await SynchronizeBucketAllocationAndReservationAsync(original.Reservation, created, token);
             original.Reservation.AllocationVersion++;
             context.StockAllocations.AddRange(created);
             await context.SaveChangesAsync(token);
@@ -262,9 +290,10 @@ public sealed class StockAllocationService(
 
             var candidates = await BuildCandidatesAsync(reservation, fixedLocationId, excludedLocationId, token);
             if (candidates.Sum(x => x.AllocatableQuantity) < request.Quantity)
-                throw new ConcurrencyException("Không đủ bucket đã giữ hàng để tạo Allocation.");
+                throw new ConcurrencyException("Không đủ bucket đã giữ hàng để tạo Allocation.", "INSUFFICIENT_AVAILABLE_STOCK");
 
             var rows = CreateRows(reservation, request.Quantity, strategy, candidates);
+            await SynchronizeBucketAllocationAndReservationAsync(reservation, rows, token);
             reservation.AllocatedQuantity = activeAllocated + request.Quantity;
             reservation.AllocationVersion++;
             UpdateReservationStatus(reservation);
@@ -277,6 +306,45 @@ public sealed class StockAllocationService(
                 await pickingTaskIntegration.EnsureForReservationAsync(reservation.Id, currentUser.UserId, token);
             return await LoadDtosAsync(rows.Select(x => x.Id).ToArray(), token);
         }, cancellationToken);
+    }
+
+    private async Task SynchronizeBucketAllocationAndReservationAsync(
+        StockReservation reservation,
+        IReadOnlyList<StockAllocation> createdAllocations,
+        CancellationToken cancellationToken)
+    {
+        var warehouseStocks = await context.InventoryStocks
+            .Where(x => x.WarehouseId == reservation.WarehouseId && x.ProductId == reservation.ProductId)
+            .OrderBy(x => x.LocationId)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var alloc in createdAllocations)
+        {
+            var targetStock = warehouseStocks.FirstOrDefault(x =>
+                x.LocationId == alloc.LocationId &&
+                x.Status == alloc.InventoryStatus &&
+                x.LotId == alloc.LotId &&
+                x.SerialId == alloc.SerialId &&
+                x.HandlingUnitId == alloc.HandlingUnitId &&
+                x.OwnerId == alloc.OwnerId);
+            if (targetStock is null) continue;
+
+            targetStock.AllocatedQuantity += alloc.Quantity;
+            if (targetStock.ReservedQuantity < targetStock.AllocatedQuantity)
+            {
+                var deficit = targetStock.AllocatedQuantity - targetStock.ReservedQuantity;
+                foreach (var donor in warehouseStocks.Where(x => x.Id != targetStock.Id && x.ReservedQuantity > x.AllocatedQuantity))
+                {
+                    if (deficit <= 0) break;
+                    var shift = Math.Min(deficit, donor.ReservedQuantity - donor.AllocatedQuantity);
+                    if (shift <= 0) continue;
+                    donor.ReservedQuantity -= shift;
+                    targetStock.ReservedQuantity += shift;
+                    deficit -= shift;
+                }
+            }
+        }
     }
 
     private async Task<StockReservation> GetReservationAsync(
@@ -313,6 +381,7 @@ public sealed class StockAllocationService(
         CancellationToken cancellationToken)
     {
         var today = DateTime.UtcNow.Date;
+        var allowRebalanceFromPool = fixedLocationId.HasValue || excludedLocationId.HasValue;
         var query = context.InventoryStocks.AsNoTracking()
             .UnlockedAt(context, DateTime.UtcNow)
             .Where(x => x.ProductId == reservation.ProductId &&
@@ -323,7 +392,7 @@ public sealed class StockAllocationService(
                         x.Location.IsActive &&
                         !x.Location.IsBlocked &&
                         x.Location.IsPickable &&
-                        x.ReservedQuantity > 0 &&
+                        (allowRebalanceFromPool ? x.Quantity - x.LockedQuantity > 0 : x.ReservedQuantity > 0) &&
                         (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today));
 
         if (fixedLocationId.HasValue) query = query.Where(x => x.LocationId == fixedLocationId.Value);
@@ -347,6 +416,8 @@ public sealed class StockAllocationService(
                 ExpiryDate = x.Lot == null ? null : x.Lot.ExpiryDate,
                 x.SerialId,
                 SerialNumber = x.Serial == null ? null : x.Serial.SerialNumber,
+                x.Quantity,
+                x.LockedQuantity,
                 x.ReservedQuantity,
                 AllocatedQuantity = context.StockAllocations
                     .Where(a => a.WarehouseId == x.WarehouseId &&
@@ -376,7 +447,9 @@ public sealed class StockAllocationService(
                 SerialNumber = x.SerialNumber?.Trim(),
                 ReservedQuantity = x.ReservedQuantity,
                 AllocatedQuantity = x.AllocatedQuantity,
-                AllocatableQuantity = Math.Max(0, x.ReservedQuantity - x.AllocatedQuantity),
+                AllocatableQuantity = allowRebalanceFromPool
+                    ? Math.Max(0, x.Quantity - x.LockedQuantity - x.AllocatedQuantity)
+                    : Math.Max(0, x.ReservedQuantity - x.AllocatedQuantity),
                 Rank = index + 1,
                 Reason = fixedLocationId.HasValue
                     ? "Vị trí cố định; bucket vẫn tuân status/Lot/Serial eligibility."

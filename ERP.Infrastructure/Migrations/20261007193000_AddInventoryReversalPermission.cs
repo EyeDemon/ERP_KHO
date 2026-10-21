@@ -17,10 +17,14 @@ IF NOT EXISTS (SELECT 1 FROM Permissions WHERE Code='inventory_reversal.create')
     INSERT Permissions(Code,Description,CreatedAt)
     VALUES('inventory_reversal.create',N'Tạo controlled inventory reversal/corrective posting',SYSUTCDATETIME());
 
+IF NOT EXISTS (SELECT 1 FROM Permissions WHERE Code='inventory.cost.read')
+    INSERT Permissions(Code,Description,CreatedAt)
+    VALUES('inventory.cost.read',N'Xem đơn giá, giá vốn bình quân và giá trị tồn kho',SYSUTCDATETIME());
+
 INSERT RolePermissions(RoleId,PermissionId,GrantedAt,GrantedByUserId)
 SELECT r.Id,p.Id,SYSUTCDATETIME(),NULL
 FROM Roles r
-JOIN Permissions p ON p.Code='inventory_reversal.create'
+JOIN Permissions p ON p.Code IN ('inventory_reversal.create','inventory.cost.read')
 WHERE LOWER(LTRIM(RTRIM(r.RoleName))) IN ('admin','manager')
   AND NOT EXISTS (
       SELECT 1 FROM RolePermissions rp
@@ -35,10 +39,10 @@ WHERE LOWER(LTRIM(RTRIM(r.RoleName))) IN ('admin','manager')
 DELETE rp
 FROM RolePermissions rp
 JOIN Permissions p ON p.Id=rp.PermissionId
-WHERE p.Code='inventory_reversal.create';
+WHERE p.Code IN ('inventory_reversal.create','inventory.cost.read');
 
 DELETE FROM Permissions
-WHERE Code='inventory_reversal.create';
+WHERE Code IN ('inventory_reversal.create','inventory.cost.read');
 """);
     }
 }

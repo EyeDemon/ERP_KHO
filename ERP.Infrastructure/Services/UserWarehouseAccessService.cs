@@ -11,7 +11,8 @@ namespace ERP.Infrastructure.Services;
 
 public sealed class UserWarehouseAccessService(
     ErpKhoDbContext context,
-    ICurrentUser currentUser) : IUserWarehouseAccessService
+    ICurrentUser currentUser,
+    IWarehouseAuthorizationService? warehouseAuthorization = null) : IUserWarehouseAccessService
 {
     public async Task<UserWarehouseAccessSetDto> GetForUserAsync(int userId, CancellationToken cancellationToken = default)
     {
@@ -56,6 +57,7 @@ public sealed class UserWarehouseAccessService(
         await context.SaveChangesAsync(cancellationToken);
         await PermissionAdministrationGuard.EnsureAdministratorAsync(context, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        warehouseAuthorization?.InvalidateWarehouseAccessCache(userId);
     }
 
     public async Task RevokeAsync(int userId, int warehouseId, string? rowVersion, CancellationToken cancellationToken = default)
@@ -77,6 +79,7 @@ public sealed class UserWarehouseAccessService(
         await context.SaveChangesAsync(cancellationToken);
         await PermissionAdministrationGuard.EnsureAdministratorAsync(context, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        warehouseAuthorization?.InvalidateWarehouseAccessCache(userId);
     }
 
     private static string Token(long revision)

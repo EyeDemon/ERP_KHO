@@ -7,7 +7,8 @@ public enum SalesOrderStatus
     Released = 2,
     PartiallyFulfilled = 3,
     Fulfilled = 4,
-    Cancelled = 5
+    Cancelled = 5,
+    CancelPendingPutback = 6
 }
 
 public enum BackorderStatus

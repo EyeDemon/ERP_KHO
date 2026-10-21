@@ -345,8 +345,8 @@ public sealed class SqlServerInventoryLockMoveTests
     [Fact]
     public void InternalLedgerEvents_AreWarehouseNeutralForAsOfReporting()
     {
-        TransactionType.Move.ApplySign(7m).Should().Be(0);
-        TransactionType.StatusChange.ApplySign(7m).Should().Be(0);
+        (TransactionType.Move.ApplySign(-7m) + TransactionType.Move.ApplySign(7m)).Should().Be(0);
+        (TransactionType.StatusChange.ApplySign(-7m) + TransactionType.StatusChange.ApplySign(7m)).Should().Be(0);
         TransactionType.Reversal.ApplySign(7m).Should().Be(0);
     }
 
@@ -461,7 +461,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 x.TransactionType == TransactionType.Reversal)).Should().Be(0);
             (await verify.InventoryTransactions.CountAsync(x =>
                 x.ProductId == fixture.ProductId &&
-                x.TransactionType == TransactionType.Move)).Should().Be(2);
+                x.TransactionType == TransactionType.Move && x.Quantity > 0)).Should().Be(2);
             (await verify.AuditLogs.CountAsync(x =>
                 x.UserId == fixture.UserId && x.Action == "Inventory.Reversed")).Should().Be(0);
             var stocks = await verify.InventoryStocks.AsNoTracking()
@@ -571,7 +571,7 @@ public sealed class SqlServerInventoryLockMoveTests
             original.CorrectiveTransactionId.Should().Be(reversal.CorrectiveTransactionId);
             result.Events.Single(x => x.TransactionId == reversal.CorrectiveTransactionId)
                 .ReversalTransactionId.Should().Be(reversal.ReversalTransactionId);
-            result.Events.Count(x => x.TransactionType == nameof(TransactionType.Move)).Should().Be(2);
+            result.Events.Count(x => x.TransactionType == nameof(TransactionType.Move) && x.Quantity > 0).Should().Be(2);
         }
         finally { await CleanupAsync(fixture); }
     }

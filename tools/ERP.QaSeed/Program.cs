@@ -72,7 +72,131 @@ foreach (var connStr in candidateConnections)
         await context.Database.MigrateAsync();
     }
 
+    await EnsureWave44CanonicalSchemaAsync(context);
     await ApplyQaSeedToDatabaseAsync(context, ds);
+}
+
+static async Task EnsureWave44CanonicalSchemaAsync(ErpKhoDbContext context)
+{
+    await context.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH('dbo.InventoryStocks', 'AllocatedQuantity') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD AllocatedQuantity decimal(19,4) NOT NULL CONSTRAINT DF_InventoryStocks_AllocatedQuantity DEFAULT (0);
+IF COL_LENGTH('dbo.InventoryStocks', 'LockedQuantity') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD LockedQuantity decimal(19,4) NOT NULL CONSTRAINT DF_InventoryStocks_LockedQuantity DEFAULT (0);
+IF COL_LENGTH('dbo.InventoryStocks', 'HandlingUnitId') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD HandlingUnitId int NULL;
+IF COL_LENGTH('dbo.InventoryStocks', 'OwnerId') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD OwnerId int NULL;
+IF COL_LENGTH('dbo.InventoryStocks', 'MovingAverageCost') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD MovingAverageCost decimal(19,4) NOT NULL CONSTRAINT DF_InventoryStocks_MovingAverageCost DEFAULT (0);
+IF COL_LENGTH('dbo.InventoryStocks', 'GrainHash') IS NULL
+    ALTER TABLE dbo.InventoryStocks ADD GrainHash varbinary(32) NULL;
+
+IF COL_LENGTH('dbo.InventoryStocks', 'CanonicalHandlingUnitId') IS NULL
+    EXEC(N'ALTER TABLE dbo.InventoryStocks ADD CanonicalHandlingUnitId AS COALESCE([HandlingUnitId], 0) PERSISTED;');
+IF COL_LENGTH('dbo.InventoryStocks', 'CanonicalOwnerId') IS NULL
+    EXEC(N'ALTER TABLE dbo.InventoryStocks ADD CanonicalOwnerId AS COALESCE([OwnerId], 0) PERSISTED;');
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.index_columns ic
+    JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE i.object_id = OBJECT_ID('dbo.InventoryStocks')
+      AND i.name = 'IX_InventoryStocks_CanonicalBucket'
+      AND c.name = 'CanonicalHandlingUnitId'
+)
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.InventoryStocks') AND name = 'IX_InventoryStocks_CanonicalBucket')
+        EXEC(N'DROP INDEX IX_InventoryStocks_CanonicalBucket ON dbo.InventoryStocks;');
+    EXEC(N'CREATE UNIQUE INDEX IX_InventoryStocks_CanonicalBucket ON dbo.InventoryStocks (TenantId, ProductId, WarehouseId, Status, CanonicalLocationId, CanonicalLotId, CanonicalSerialId, CanonicalHandlingUnitId, CanonicalOwnerId);');
+END;
+
+IF COL_LENGTH('dbo.InventoryTransactions', 'HandlingUnitId') IS NULL
+    ALTER TABLE dbo.InventoryTransactions ADD HandlingUnitId int NULL;
+IF COL_LENGTH('dbo.InventoryTransactions', 'OwnerId') IS NULL
+    ALTER TABLE dbo.InventoryTransactions ADD OwnerId int NULL;
+IF COL_LENGTH('dbo.InventoryTransactions', 'UnitCost') IS NULL
+    ALTER TABLE dbo.InventoryTransactions ADD UnitCost decimal(19,4) NOT NULL CONSTRAINT DF_InventoryTransactions_UnitCost DEFAULT (0);
+IF COL_LENGTH('dbo.InventoryTransactions', 'SourceDocumentLineId') IS NULL
+    ALTER TABLE dbo.InventoryTransactions ADD SourceDocumentLineId int NULL;
+
+IF COL_LENGTH('dbo.Products', 'MovingAverageCost') IS NULL
+    ALTER TABLE dbo.Products ADD MovingAverageCost decimal(19,4) NOT NULL CONSTRAINT DF_Products_MovingAverageCost DEFAULT (0);
+
+IF COL_LENGTH('dbo.StockAllocations', 'HandlingUnitId') IS NULL
+    ALTER TABLE dbo.StockAllocations ADD HandlingUnitId int NULL;
+IF COL_LENGTH('dbo.StockAllocations', 'OwnerId') IS NULL
+    ALTER TABLE dbo.StockAllocations ADD OwnerId int NULL;
+
+IF COL_LENGTH('dbo.StockReservations', 'BaseUomIdSnapshot') IS NULL
+    ALTER TABLE dbo.StockReservations ADD BaseUomIdSnapshot int NOT NULL CONSTRAINT DF_StockReservations_BaseUomIdSnapshot DEFAULT (1);
+IF COL_LENGTH('dbo.StockReservations', 'BaseUomCodeSnapshot') IS NULL
+    ALTER TABLE dbo.StockReservations ADD BaseUomCodeSnapshot nvarchar(32) NOT NULL CONSTRAINT DF_StockReservations_BaseUomCodeSnapshot DEFAULT (N'THÙNG');
+IF COL_LENGTH('dbo.StockReservations', 'BaseUomDecimalPlacesSnapshot') IS NULL
+    ALTER TABLE dbo.StockReservations ADD BaseUomDecimalPlacesSnapshot int NOT NULL CONSTRAINT DF_StockReservations_BaseUomDecimalPlacesSnapshot DEFAULT (0);
+
+IF COL_LENGTH('dbo.ExportReceipts', 'MarketplaceOrderId') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD MarketplaceOrderId nvarchar(64) NULL;
+IF COL_LENGTH('dbo.ExportReceipts', 'CarrierCode') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD CarrierCode nvarchar(32) NULL;
+IF COL_LENGTH('dbo.ExportReceipts', 'TrackingNumber') IS NULL
+    ALTER TABLE dbo.ExportReceipts ADD TrackingNumber nvarchar(64) NULL;
+
+IF COL_LENGTH('dbo.PutawayTasks', 'TaskType') IS NULL
+    ALTER TABLE dbo.PutawayTasks ADD TaskType nvarchar(32) NOT NULL CONSTRAINT DF_PutawayTasks_TaskType DEFAULT (N'PutawayTask');
+
+IF OBJECT_ID(N'dbo.IntegrationOutboxMessages', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.IntegrationOutboxMessages (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationOutboxMessages PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_IntegrationOutboxMessages_TenantId DEFAULT(1),
+        EventId nvarchar(64) NOT NULL,
+        EventType nvarchar(100) NOT NULL,
+        AggregateType nvarchar(64) NOT NULL,
+        AggregateId int NULL,
+        PayloadJson nvarchar(max) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        RetryCount int NOT NULL CONSTRAINT DF_IntegrationOutboxMessages_RetryCount DEFAULT(0),
+        LastError nvarchar(1000) NULL,
+        CreatedAt datetime2 NOT NULL,
+        NextRetryAt datetime2 NULL,
+        PublishedAt datetime2 NULL
+    );
+    CREATE UNIQUE INDEX UX_IntegrationOutboxMessages_TenantId_EventId ON dbo.IntegrationOutboxMessages(TenantId, EventId);
+    CREATE INDEX IX_IntegrationOutboxMessages_TenantId_Status_NextRetryAt ON dbo.IntegrationOutboxMessages(TenantId, Status, NextRetryAt);
+END;
+
+IF OBJECT_ID(N'dbo.IntegrationInboxMessages', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.IntegrationInboxMessages (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationInboxMessages PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_IntegrationInboxMessages_TenantId DEFAULT(1),
+        SourceSystem nvarchar(64) NOT NULL,
+        ExternalMessageId nvarchar(128) NOT NULL,
+        EventType nvarchar(100) NOT NULL,
+        PayloadJson nvarchar(max) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        ReceivedAt datetime2 NOT NULL,
+        ProcessedAt datetime2 NULL,
+        ErrorMessage nvarchar(1000) NULL
+    );
+    CREATE UNIQUE INDEX UX_IntegrationInboxMessages_TenantId_SourceSystem_ExternalMessageId ON dbo.IntegrationInboxMessages(TenantId, SourceSystem, ExternalMessageId);
+END;
+
+IF OBJECT_ID(N'dbo.ProductBundleComponents', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ProductBundleComponents (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_ProductBundleComponents PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_ProductBundleComponents_TenantId DEFAULT(1),
+        ParentProductId int NOT NULL,
+        ComponentProductId int NOT NULL,
+        ComponentQuantity decimal(19,4) NOT NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_ProductBundleComponents_IsActive DEFAULT(1),
+        CreatedAt datetime2 NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_ProductBundleComponents_TenantId_Parent_Component ON dbo.ProductBundleComponents(TenantId, ParentProductId, ComponentProductId);
+END;
+");
 }
 
 static async Task<bool> CanConnectToLocalErpKhoAsync(string connectionString)
@@ -97,7 +221,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 {
     await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
-    var roleNames = new[] { "Admin", "Manager", "WarehouseStaff", "Viewer" };
+    var roleNames = new[] { "Admin", "Manager", "Accountant", "WarehouseStaff", "Viewer" };
     var roles = new Dictionary<string, Role>(StringComparer.Ordinal);
     foreach (var roleName in roleNames)
     {
@@ -105,6 +229,44 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         var role = matches.FirstOrDefault() ?? new Role { RoleName = roleName, Description = $"Local QA role: {roleName}" };
         if (role.Id == 0) context.Roles.Add(role);
         roles.Add(roleName, role);
+    }
+    await context.SaveChangesAsync();
+
+    var costReadPerm = await context.Permissions.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(p => p.Code == "inventory.cost.read");
+    if (costReadPerm is null)
+    {
+        costReadPerm = new Permission("inventory.cost.read", "Xem đơn giá, giá vốn bình quân và giá trị tồn kho");
+        context.Permissions.Add(costReadPerm);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        costReadPerm.Description = "Xem đơn giá, giá vốn bình quân và giá trị tồn kho";
+        await context.SaveChangesAsync();
+    }
+
+    foreach (var costRoleName in new[] { "Admin", "Manager", "Accountant" })
+    {
+        var targetRole = roles[costRoleName];
+        if (!await context.RolePermissions.IgnoreQueryFilters()
+                .AnyAsync(rp => rp.RoleId == targetRole.Id && rp.PermissionId == costReadPerm.Id))
+        {
+            context.RolePermissions.Add(new RolePermission
+            {
+                RoleId = targetRole.Id,
+                PermissionId = costReadPerm.Id,
+                GrantedAt = DateTime.UtcNow
+            });
+        }
+    }
+    var restrictedRoleIds = new[] { roles["WarehouseStaff"].Id, roles["Viewer"].Id };
+    var forbiddenCostRolePerms = await context.RolePermissions.IgnoreQueryFilters()
+        .Where(rp => restrictedRoleIds.Contains(rp.RoleId) && rp.PermissionId == costReadPerm.Id)
+        .ToListAsync();
+    if (forbiddenCostRolePerms.Count > 0)
+    {
+        context.RolePermissions.RemoveRange(forbiddenCostRolePerms);
     }
     await context.SaveChangesAsync();
 
@@ -3641,11 +3803,18 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             var delta = actualQty - expectedQty;
             if (delta != 0m)
             {
+                var dominantBucket = pairStocks
+                    .Where(s => s.Status == status)
+                    .OrderByDescending(s => s.Quantity)
+                    .FirstOrDefault();
                 context.InventoryTransactions.Add(new InventoryTransaction
                 {
                     TenantId = tenantId,
                     WarehouseId = warehouseId,
                     ProductId = productId,
+                    LocationId = dominantBucket?.LocationId ?? storageBin.Id,
+                    LotId = dominantBucket?.LotId,
+                    SerialId = dominantBucket?.SerialId,
                     InventoryStatus = status,
                     TransactionType = delta > 0m ? TransactionType.Import : TransactionType.AdjustmentDecrease,
                     Quantity = Math.Abs(delta),
@@ -3659,6 +3828,47 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             }
         }
     }
+    await context.SaveChangesAsync();
+
+    // 7b. Populate Wave-44 Canonical columns & tables (MAC, UnitCost, UoM Snapshot, E-commerce AWB, ProductBundleComponents, IntegrationOutboxMessages)
+    await context.Database.ExecuteSqlInterpolatedAsync($@"
+UPDATE dbo.Products SET MovingAverageCost = 250000 WHERE Id = {product.Id};
+UPDATE dbo.Products SET MovingAverageCost = 420000 WHERE Id = {lotProduct.Id};
+UPDATE dbo.Products SET MovingAverageCost = 250000 WHERE MovingAverageCost <= 0;
+
+UPDATE dbo.InventoryStocks SET MovingAverageCost = 250000 WHERE ProductId = {product.Id};
+UPDATE dbo.InventoryStocks SET MovingAverageCost = 420000 WHERE ProductId = {lotProduct.Id};
+UPDATE dbo.InventoryStocks SET MovingAverageCost = 250000 WHERE MovingAverageCost <= 0;
+
+UPDATE dbo.InventoryTransactions SET UnitCost = 250000 WHERE ProductId = {product.Id} AND UnitCost <= 0;
+UPDATE dbo.InventoryTransactions SET UnitCost = 420000 WHERE ProductId = {lotProduct.Id} AND UnitCost <= 0;
+
+UPDATE dbo.StockReservations
+SET BaseUomIdSnapshot = {unit.Id},
+    BaseUomCodeSnapshot = N'THÙNG',
+    BaseUomDecimalPlacesSnapshot = 0
+WHERE BaseUomIdSnapshot <= 0 OR BaseUomCodeSnapshot IS NULL OR BaseUomCodeSnapshot = '';
+
+UPDATE dbo.ExportReceipts
+SET MarketplaceOrderId = N'SHOPEE-VN-20261021-01',
+    CarrierCode = N'VTP',
+    TrackingNumber = N'VTP8938505001'
+WHERE Code = 'ER-QA-001';
+
+UPDATE dbo.ExportReceipts
+SET MarketplaceOrderId = N'LAZADA-VN-20261021-02',
+    CarrierCode = N'GHN',
+    TrackingNumber = N'GHN8938505002'
+WHERE Code = 'ER-QA-002';
+
+DELETE FROM dbo.IntegrationOutboxMessages WHERE TenantId = 1 AND EventId IN (N'OUTBOX-GL-001', N'OUTBOX-TMS-002', N'OUTBOX-APAR-003', N'OUTBOX-WMS-004');
+INSERT INTO dbo.IntegrationOutboxMessages (TenantId, EventId, EventType, AggregateType, AggregateId, PayloadJson, Status, RetryCount, CreatedAt, PublishedAt)
+VALUES
+(1, N'OUTBOX-GL-001', N'Kết chuyển Bút toán Sổ cái Chung', N'ImportReceipt', {irQa001.Id}, N'{{""documentCode"":""IR-QA-001"",""targetSystem"":""Phân hệ Kế toán Tài chính"",""valuationAmount"":27300000}}', N'DISPATCHED', 0, DATEADD(MINUTE, -18, SYSUTCDATETIME()), DATEADD(MINUTE, -15, SYSUTCDATETIME())),
+(1, N'OUTBOX-TMS-002', N'Điều phối Vận đơn & Xuất bến', N'Shipment', {shipment.Id}, N'{{""documentCode"":""SHP-QA-001"",""targetSystem"":""Hệ thống Quản lý Vận tải"",""carrierCode"":""VTP""}}', N'DISPATCHED', 0, DATEADD(MINUTE, -14, SYSUTCDATETIME()), DATEADD(MINUTE, -12, SYSUTCDATETIME())),
+(1, N'OUTBOX-APAR-003', N'Hạch toán Hóa đơn Công nợ', N'PartnerDebtInvoice', {apInvoice.Id}, N'{{""documentCode"":""AP-IR-QA0001"",""targetSystem"":""Sổ phụ Công nợ Đối tác"",""totalAmount"":27500000}}', N'DISPATCHED', 0, DATEADD(MINUTE, -10, SYSUTCDATETIME()), DATEADD(MINUTE, -8, SYSUTCDATETIME())),
+(1, N'OUTBOX-WMS-004', N'Chốt Số dư Sổ cái Kho Cuối kỳ', N'Stocktake', {stocktake.Id}, N'{{""documentCode"":""STK-QA-001"",""targetSystem"":""Kho Dữ liệu Đối soát Tập trung"",""totalOnHand"":220}}', N'DISPATCHED', 0, DATEADD(MINUTE, -6, SYSUTCDATETIME()), DATEADD(MINUTE, -4, SYSUTCDATETIME()));
+");
 
     var dualPartner = allPartners.FirstOrDefault(p => p.Code == "DT-QA-01" || (p.IsSupplier && p.IsCustomer && p.IsActive));
     if (dualPartner is null)

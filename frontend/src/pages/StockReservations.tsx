@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Unlock } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { currentRole } from '../services/authorization';
+import { conflictErrorMessage, extractConflictCode } from '../services/permissionPresentation';
 import {
   UiBadge,
   UiCard,
@@ -41,7 +42,9 @@ type Page = {
 };
 
 const messageOf = (failure: unknown, fallback: string) => {
-  const response = failure as { response?: { data?: { message?: string } } };
+  const response = failure as { response?: { status?: number; data?: { message?: string; code?: string; errorCode?: string; error?: { code?: string } } } };
+  if (response.response?.status === 403) return 'Bạn không có quyền thực hiện thao tác này.';
+  if (response.response?.status === 409) return conflictErrorMessage(failure, response.response?.data?.message || fallback);
   return response.response?.data?.message || fallback;
 };
 
@@ -67,6 +70,8 @@ const sourceTypeLabel = (sourceType: string) => ({
   ExportReceipt: 'Phiếu xuất kho',
   SalesOrder: 'Đơn bán hàng',
   StockTransfer: 'Phiếu điều chuyển',
+  OutboundOrder: 'Đơn xuất hàng',
+  Manual: 'Giữ hàng thủ công',
 }[sourceType] ?? sourceType);
 
 export default function StockReservations() {
@@ -132,6 +137,9 @@ export default function StockReservations() {
       await load(data.pageIndex);
     } catch (failure) {
       setError(messageOf(failure, 'Không thể giải phóng giữ hàng.'));
+      if (['CONCURRENCY_CONFLICT', 'INVALID_STATE_TRANSITION'].includes(extractConflictCode(failure) || '')) {
+        await load(data.pageIndex);
+      }
     } finally {
       setBusy(false);
     }
@@ -257,7 +265,7 @@ export default function StockReservations() {
                   <td>{new Date(item.expiresAt).toLocaleString('vi-VN')}</td>
                   <td style={{ whiteSpace: 'nowrap' }}><UiBadge tone={toneOf(item.status)}>{reservationStatusLabel(item.status)}</UiBadge></td>
                   {canOperate && <td style={{ whiteSpace: 'nowrap' }}>
-                    {['Active', 'PartiallyConsumed', 'PartiallyAllocated', 'Allocated'].includes(item.status) ? (
+                    {item.status === 'Active' && item.sourceType === 'Manual' ? (
                       <button
                         type="button"
                         disabled={busy}
@@ -267,6 +275,10 @@ export default function StockReservations() {
                       >
                         <Unlock size={16} aria-hidden="true" /> Giải phóng
                       </button>
+                    ) : ['Active', 'PartiallyConsumed', 'PartiallyAllocated', 'Allocated'].includes(item.status) && item.sourceType !== 'Manual' ? (
+                      <span title="Bản ghi giữ hàng này thuộc quyền quản lý của chứng từ gốc. Vui lòng thao tác trực tiếp trên Phiếu xuất hoặc Đơn hàng.">
+                        <UiBadge tone="neutral">Quản lý theo chứng từ</UiBadge>
+                      </span>
                     ) : '—'}
                   </td>}
                 </tr>

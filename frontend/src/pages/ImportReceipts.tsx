@@ -4,7 +4,7 @@ import { usePermission, currentUserId, hasPermission } from '../services/authori
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 import ReceiptInventoryIdentityEditor from '../components/ReceiptInventoryIdentityEditor';
-import { permissionError } from '../services/permissionPresentation';
+import { conflictErrorMessage, extractConflictCode, permissionError } from '../services/permissionPresentation';
 import { roundQty4 } from './productCatalog';
 import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
@@ -19,7 +19,7 @@ interface ImportReceiptDetail {
   expectedQuantity: number; receivedQuantity: number; acceptedQuantity: number; damagedQuantity: number; rejectedQuantity: number;
   postedQuantity: number; baseExpectedQuantity: number; baseReceivedQuantity: number; baseAcceptedQuantity: number; baseDamagedQuantity?: number; baseRejectedQuantity?: number; basePostedQuantity: number;
   trackingType?: 'None' | 'Lot' | 'Serial'; expiryControl?: boolean; shelfLifeDays?: number | null;
-  unitPrice?: number; taxPercent?: number; lineSubTotal?: number; lineTaxAmount?: number; lineTotalAmount?: number;
+  unitPrice?: number | null; taxPercent?: number | null; lineSubTotal?: number | null; lineTaxAmount?: number | null; lineTotalAmount?: number | null;
   note: string;
   requiresQc: boolean; qcState: string; qcPolicyId?: number; qcPolicyVersion?: number; qcPolicySource?: string;
   qcDispositionReasonCode?: string; qcDispositionNote?: string;
@@ -42,9 +42,9 @@ interface ImportReceipt {
   supplierId?: number;
   supplierCode?: string;
   supplierName?: string;
-  subTotalAmount?: number;
-  taxAmount?: number;
-  totalAmount?: number;
+  subTotalAmount?: number | null;
+  taxAmount?: number | null;
+  totalAmount?: number | null;
   rowVersion?: string;
   requiresQc: boolean;
   details: ImportReceiptDetail[];
@@ -287,8 +287,8 @@ const ImportReceipts = () => {
       completeIdempotentAction(action); setSuccessMsg('Đã ghi nhận số lượng thực tế. Tồn kho chưa thay đổi.');
       await fetchReceipts(); if(selectedReceipt?.id===id) await handleViewDetails(id);
     } catch(err:any) {
-      if(err.response && selectedReceipt?.id===id) setSelectedReceipt(null);
-      setError(err.response?.status===409?'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.':permissionError(err)||err.message||'Không thể ghi nhận số lượng.');
+      if(err.response && selectedReceipt?.id===id && extractConflictCode(err) !== 'INSUFFICIENT_AVAILABLE_STOCK') setSelectedReceipt(null);
+      setError(err.response?.status===409?conflictErrorMessage(err, 'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.'):permissionError(err)||err.message||'Không thể ghi nhận số lượng.');
     } finally { workflowInFlight.current=null; setWorkflowId(null); }
   };
 
@@ -305,7 +305,7 @@ const ImportReceipts = () => {
       await fetchReceipts(); await handleViewDetails(selectedReceipt.id);
     } catch(err:any) {
       if(err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status===409?'Phương án xử lý đã thay đổi. Vui lòng tải lại phiếu.':permissionError(err)||err.message||'Không thể gửi phương án xử lý.');
+      setError(err.response?.status===409?conflictErrorMessage(err, 'Phương án xử lý đã thay đổi. Vui lòng tải lại phiếu.'):permissionError(err)||err.message||'Không thể gửi phương án xử lý.');
     } finally { workflowInFlight.current=null; setWorkflowId(null); }
   };
 
@@ -319,7 +319,7 @@ const ImportReceipts = () => {
       completeIdempotentAction(action); await fetchReceipts(); await handleViewDetails(selectedReceipt.id);
     } catch(err:any) {
       if(err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status===409?'Phương án xử lý đã thay đổi. Vui lòng tải lại phiếu.':permissionError(err)||'Không thể duyệt phương án xử lý.');
+      setError(err.response?.status===409?conflictErrorMessage(err, 'Phương án xử lý đã thay đổi. Vui lòng tải lại phiếu.'):permissionError(err)||'Không thể duyệt phương án xử lý.');
     } finally { workflowInFlight.current=null; setWorkflowId(null); }
   };
 
@@ -334,7 +334,7 @@ const ImportReceipts = () => {
       completeIdempotentAction(action); await handleViewDetails(selectedReceipt.id);
     } catch(err:any) {
       if(err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status===409?'Số lượng quan sát đã thay đổi. Vui lòng tải lại phiếu.':permissionError(err)||'Không thể kiểm đếm lại.');
+      setError(err.response?.status===409?conflictErrorMessage(err, 'Số lượng quan sát đã thay đổi. Vui lòng tải lại phiếu.'):permissionError(err)||'Không thể kiểm đếm lại.');
     } finally { workflowInFlight.current=null; setWorkflowId(null); }
   };
 
@@ -437,7 +437,7 @@ const ImportReceipts = () => {
       setSuccessMsg(command === 'receive' ? 'Đã hoàn tất nhận hàng. Tồn kho chưa thay đổi.' : command === 'qc-disposition' ? 'Đã ghi nhận kết quả kiểm tra chất lượng. Tồn kho chưa thay đổi.' : 'Đã ghi nhận tồn kho phiếu theo từng trạng thái tồn kho.');
       await fetchReceipts();
       if (selectedReceipt?.id === id) await handleViewDetails(id);
-    } catch (err: any) { if (err.response && selectedReceipt?.id === id) setSelectedReceipt(null); setError(err.response?.status === 409 ? 'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.' : permissionError(err) || 'Không thể xử lý phiếu nhập'); }
+    } catch (err: any) { if (err.response && selectedReceipt?.id === id && extractConflictCode(err) !== 'INSUFFICIENT_AVAILABLE_STOCK') setSelectedReceipt(null); if (['CONCURRENCY_CONFLICT', 'INVALID_STATE_TRANSITION'].includes(extractConflictCode(err) || '')) void fetchReceipts(); setError(err.response?.status === 409 ? conflictErrorMessage(err, 'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.') : permissionError(err) || 'Không thể xử lý phiếu nhập'); }
     finally { workflowInFlight.current = null; setWorkflowId(null); }
   };
 
@@ -846,6 +846,14 @@ const ImportReceipts = () => {
                 </>
               )}
               <div><strong>Ghi chú:</strong> {selectedReceipt.note || '—'}</div>
+              {(selectedReceipt.totalAmount !== undefined || selectedReceipt.details.some(d => d.unitPrice === null)) && (
+                <div>
+                  <strong>Tổng giá trị:</strong>{' '}
+                  {selectedReceipt.totalAmount === null || selectedReceipt.details.some(d => d.unitPrice === null)
+                    ? 'Ẩn theo phân quyền'
+                    : `${Number(selectedReceipt.totalAmount ?? 0).toLocaleString('vi-VN')} VND`}
+                </div>
+              )}
             </div>
 
             <UiTableScroll>
@@ -857,6 +865,7 @@ const ImportReceipts = () => {
                     <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Dự kiến</th>
                     <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Nhận / Chấp nhận</th>
                     <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn vị cơ sở</th>
+                    <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn giá</th>
                     <th>Ghi chú</th>
                   </tr>
                 </thead>
@@ -898,6 +907,7 @@ const ImportReceipts = () => {
                         )}
                       </td>
                       <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>× {d.conversionFactor} (v{d.conversionVersion})<br />{selectedReceipt.status === 'Draft' ? roundQty4((receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor) : d.baseAcceptedQuantity || d.baseExpectedQuantity} {baseUnit}</td>
+                      <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null ? 'Ẩn theo phân quyền' : `${Number(d.unitPrice ?? 0).toLocaleString('vi-VN')} VND`}</td>
                       <td>{d.note}</td>
                     </tr>
                     );

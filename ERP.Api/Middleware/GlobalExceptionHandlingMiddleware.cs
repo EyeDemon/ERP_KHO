@@ -58,13 +58,30 @@ public class GlobalExceptionHandlingMiddleware
         }
 
         var publicMessage = ResolvePublicMessage(exception.Message, statusCode, isSqlServerConcurrencyError);
+        var errorCode = exception.Data["ErrorCode"] as string
+            ?? (exception is ConcurrencyException ce && !string.IsNullOrWhiteSpace(ce.ErrorCode) ? ce.ErrorCode : null)
+            ?? statusCode switch
+            {
+                (int)HttpStatusCode.NotFound => "RESOURCE_NOT_FOUND",
+                (int)HttpStatusCode.Forbidden => "WAREHOUSE_ACCESS_DENIED",
+                (int)HttpStatusCode.Unauthorized => "UNAUTHORIZED",
+                (int)HttpStatusCode.Conflict => "CONCURRENCY_CONFLICT",
+                (int)HttpStatusCode.BadRequest => "BUSINESS_RULE_VIOLATION",
+                _ => "INTERNAL_SERVER_ERROR"
+            };
+
         var response = new ErrorResponse
         {
             Success = false,
             Message = publicMessage,
-            Code = exception.Data["ErrorCode"] as string,
+            Code = errorCode,
             StatusCode = statusCode,
-            Detail = statusCode == (int)HttpStatusCode.InternalServerError ? null : publicMessage
+            Detail = statusCode == (int)HttpStatusCode.InternalServerError ? null : publicMessage,
+            Error = new ErrorDetailEnvelope
+            {
+                Code = errorCode,
+                Message = publicMessage
+            }
         };
 
         context.Response.ContentType = "application/json";

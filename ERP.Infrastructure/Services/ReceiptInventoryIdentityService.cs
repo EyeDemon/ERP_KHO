@@ -191,6 +191,9 @@ public sealed class ReceiptInventoryIdentityService(
                          x.SerialId == (serial == null ? null : serial.Id),
                     cancellationToken);
             }
+
+            var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1m;
+            var baseUnitCost = factor > 0 ? decimal.Round(detail.UnitPrice / factor, 4, MidpointRounding.AwayFromZero) : detail.UnitPrice;
             if (stock is null)
             {
                 stock = new InventoryStock
@@ -202,6 +205,7 @@ public sealed class ReceiptInventoryIdentityService(
                     Lot = lot,
                     Serial = serial,
                     Quantity = identity.BaseQuantity,
+                    MovingAverageCost = baseUnitCost,
                     LastUpdated = DateTime.UtcNow
                 };
                 context.InventoryStocks.Add(stock);
@@ -210,8 +214,17 @@ public sealed class ReceiptInventoryIdentityService(
             {
                 if (product.TrackingType == ProductTrackingType.Serial && stock.Quantity + identity.BaseQuantity > 1m)
                     throw Conflict("SERIAL_ALREADY_ON_HAND", $"Serial {identity.SerialNumber} không thể có tồn kho > 1.");
+                var oldQty = Math.Max(0m, stock.Quantity);
+                var oldMac = stock.MovingAverageCost > 0m ? stock.MovingAverageCost : baseUnitCost;
+                stock.MovingAverageCost = oldQty + identity.BaseQuantity > 0m
+                    ? decimal.Round(((oldQty * oldMac) + (identity.BaseQuantity * baseUnitCost)) / (oldQty + identity.BaseQuantity), 4, MidpointRounding.AwayFromZero)
+                    : baseUnitCost;
                 stock.Quantity += identity.BaseQuantity;
                 stock.LastUpdated = DateTime.UtcNow;
+            }
+            if (baseUnitCost > 0m)
+            {
+                product.MovingAverageCost = stock.MovingAverageCost > 0m ? stock.MovingAverageCost : baseUnitCost;
             }
 
             context.InventoryTransactions.Add(new InventoryTransaction

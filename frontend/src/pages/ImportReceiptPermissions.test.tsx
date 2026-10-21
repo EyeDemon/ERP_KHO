@@ -125,4 +125,52 @@ describe('quyền độc lập trên phiếu nhập', () => {
     expect(view.queryByRole('dialog')).toBeNull();
     expect(view.queryByText('STALE_PRIVATE_PRINT')).toBeNull();
   });
+
+  it('hiển thị Ẩn theo phân quyền khi unitPrice và totalAmount là null (thiếu inventory.cost.read) và ánh xạ đúng thông báo 409 Conflict', async () => {
+    const { permissionLabel, permissionDescription, conflictErrorMessage } = await import('../services/permissionPresentation');
+    expect(permissionLabel('inventory.cost.read')).toBe('Xem đơn giá, giá vốn và giá trị tồn kho');
+    expect(permissionDescription('inventory.cost.read')).toBe(
+      'Cho phép xem đơn giá mua/bán, giá vốn bình quân (MAC) và giá trị chênh lệch kiểm kê trên các chứng từ và báo cáo kho.',
+    );
+    expect(conflictErrorMessage({ response: { status: 409, data: { code: 'CONCURRENCY_CONFLICT' } } })).toBe(
+      'Dữ liệu vừa được cập nhật bởi phiên làm việc khác. Hệ thống đã tải lại số liệu mới nhất.',
+    );
+    expect(conflictErrorMessage({ response: { status: 409, data: { code: 'INVALID_STATE_TRANSITION' } } })).toBe(
+      'Trạng thái chứng từ đã thay đổi, không thể thực hiện thao tác này. Đang đồng bộ lại trạng thái...',
+    );
+
+    const maskedReceipt = {
+      ...receipt,
+      totalAmount: null,
+      details: [
+        {
+          id: 91,
+          productId: 1,
+          productCode: 'SP-MASK-01',
+          productName: 'Sản phẩm ẩn giá vốn',
+          requiresQc: false,
+          qcState: 'None',
+          expectedQuantity: 10,
+          receivedQuantity: 10,
+          acceptedQuantity: 10,
+          damagedQuantity: 0,
+          rejectedQuantity: 0,
+          conversionFactor: 1,
+          conversionVersion: 1,
+          operationUnitCode: 'THÙNG',
+          baseUnitCode: 'THÙNG',
+          unitPrice: null,
+          lineTotalAmount: null,
+          note: '',
+        },
+      ],
+    };
+    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [maskedReceipt] : maskedReceipt }) as never);
+    const view = render(<ImportReceipts />);
+    await view.findByText('QA_RECEIPT');
+    fireEvent.click(view.getByText('Chi tiết'));
+    expect(await view.findByText('SP-MASK-01')).toBeTruthy();
+    expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(2);
+  });
 });
+

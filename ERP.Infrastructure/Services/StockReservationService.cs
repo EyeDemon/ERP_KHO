@@ -7,6 +7,7 @@ using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Queries;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,6 +34,36 @@ public class StockReservationService(
         await unitOfWork.BeginTransactionAsync();
         try
         {
+            var bundleComponents = await context.ProductBundleComponents.AsNoTracking()
+                .Where(x => x.ParentProductId == request.ProductId && x.IsActive)
+                .OrderBy(x => x.ComponentProductId)
+                .ToListAsync(cancellationToken);
+
+            var hasDirectStock = await context.InventoryStocks.AsNoTracking()
+                .AnyAsync(x => x.ProductId == request.ProductId && x.WarehouseId == request.WarehouseId && x.Quantity > 0, cancellationToken);
+
+            if (bundleComponents.Count > 0 && !hasDirectStock)
+            {
+                StockReservation? primaryReservation = null;
+                foreach (var component in bundleComponents)
+                {
+                    var componentQty = decimal.Round(request.Quantity * component.ComponentQuantity, 4, MidpointRounding.AwayFromZero);
+                    var rsv = await ReserveCoreAsync(
+                        "Manual",
+                        null,
+                        $"BUNDLE:{request.ProductId}",
+                        request.WarehouseId,
+                        component.ComponentProductId,
+                        componentQty,
+                        currentUser.UserId,
+                        expiresAt,
+                        cancellationToken);
+                    if (primaryReservation is null) primaryReservation = rsv;
+                }
+                await unitOfWork.CommitTransactionAsync();
+                return await GetAsync(primaryReservation!.Id, cancellationToken);
+            }
+
             var reservation = await ReserveCoreAsync("Manual", null, null, request.WarehouseId, request.ProductId, request.Quantity, currentUser.UserId, expiresAt, cancellationToken);
             await unitOfWork.CommitTransactionAsync();
             return await GetAsync(reservation.Id, cancellationToken);
@@ -155,7 +186,7 @@ public class StockReservationService(
             throw new ConcurrencyException("Reservation nguồn không còn có thể tăng số lượng.");
 
         if (!await stockRepository.TryReserveAsync(productId, warehouseId, additionalQuantity, cancellationToken))
-            throw new ConcurrencyException("Không đủ tồn khả dụng để bổ sung reservation.");
+            throw new ConcurrencyException("Không đủ tồn khả dụng để bổ sung reservation.", "INSUFFICIENT_AVAILABLE_STOCK");
 
         reservation.Quantity += additionalQuantity;
         reservation.ExpiresAt = DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes);
@@ -204,13 +235,34 @@ public class StockReservationService(
             .ToListAsync(cancellationToken);
         foreach (var item in stale) await ReleaseCoreAsync(item, null, userId, "Expired before availability check", StockReservationStatus.Expired, cancellationToken);
         if (!await stockRepository.TryReserveAsync(productId, warehouseId, quantity, cancellationToken))
-            throw new ConcurrencyException("Không đủ tồn khả dụng để giữ hàng.");
+            throw new ConcurrencyException("Không đủ tồn khả dụng để giữ hàng.", "INSUFFICIENT_AVAILABLE_STOCK");
+
+        var productUom = await context.Products.AsNoTracking()
+            .Where(x => x.Id == productId)
+            .Select(x => new
+            {
+                x.UnitId,
+                UnitCode = x.Unit != null ? x.Unit.Code : "THÙNG",
+                DecimalPlaces = x.Unit != null ? x.Unit.DecimalPlaces : 0
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
         var reservation = new StockReservation
         {
             ReservationCode = $"RSV-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..34].ToUpperInvariant(),
-            ProductId = productId, WarehouseId = warehouseId, Quantity = quantity,
-            Status = StockReservationStatus.Active, SourceType = sourceType, SourceId = sourceId, SourceCode = sourceCode,
-            CreatedAt = DateTime.UtcNow, CreatedBy = userId, ExpiresAt = expiresAt
+            ProductId = productId,
+            WarehouseId = warehouseId,
+            Quantity = quantity,
+            BaseUomIdSnapshot = productUom?.UnitId ?? 1,
+            BaseUomCodeSnapshot = string.IsNullOrWhiteSpace(productUom?.UnitCode) ? "THÙNG" : productUom.UnitCode.Trim(),
+            BaseUomDecimalPlacesSnapshot = productUom?.DecimalPlaces ?? 0,
+            Status = StockReservationStatus.Active,
+            SourceType = sourceType,
+            SourceId = sourceId,
+            SourceCode = sourceCode,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = userId,
+            ExpiresAt = expiresAt
         };
         context.StockReservations.Add(reservation);
         await context.SaveChangesAsync(cancellationToken);
@@ -262,6 +314,22 @@ public class StockReservationService(
                         allocation.Quantity,
                         cancellationToken))
                     throw new ConcurrencyException("Bucket Allocation Lot/Serial/Status đã thay đổi trước khi tiêu thụ.");
+
+                if (!context.Database.IsRelational())
+                {
+                    var bucketStock = await context.InventoryStocks.FirstOrDefaultAsync(
+                        x => x.ProductId == reservation.ProductId &&
+                             x.WarehouseId == reservation.WarehouseId &&
+                             x.LocationId == allocation.LocationId &&
+                             x.Status == allocation.InventoryStatus &&
+                             x.LotId == allocation.LotId &&
+                             x.SerialId == allocation.SerialId,
+                        cancellationToken);
+                    if (bucketStock is not null)
+                    {
+                        bucketStock.AllocatedQuantity = Math.Max(0m, bucketStock.AllocatedQuantity - allocation.Quantity);
+                    }
+                }
 
                 consumed.Add(new InventoryStockConsumption(
                     allocation.LocationId,
@@ -340,7 +408,9 @@ public class StockReservationService(
                 var reservation = await ScopedQuery().FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
                     ?? throw new NotFoundException("Không tìm thấy reservation.");
                 if (!string.Equals(reservation.SourceType, "Manual", StringComparison.OrdinalIgnoreCase))
-                    throw new ConcurrencyException("Chỉ được giải phóng thủ công reservation Manual; reservation thuộc chứng từ xuất phải được xử lý theo vòng đời chứng từ.");
+                    throw new ConcurrencyException(
+                        "Chỉ được giải phóng thủ công reservation Manual; reservation thuộc chứng từ xuất phải được xử lý theo vòng đời chứng từ.",
+                        "DOCUMENT_OWNED_RESERVATION");
                 await context.AcquireInventoryAllocationLocksAsync([(reservation.WarehouseId, reservation.ProductId)], cancellationToken);
                 await ReleaseCoreAsync(reservation, request.Quantity, currentUser.UserId, request.Reason, StockReservationStatus.Released, cancellationToken);
                 await unitOfWork.CommitTransactionAsync();
@@ -447,6 +517,36 @@ public class StockReservationService(
             allocation.ReleasedBy = userId;
             allocation.ReleaseReason = reason;
             allocation.Version++;
+
+            if (context.Database.IsRelational())
+            {
+                await context.InventoryStocks
+                    .Where(x => x.ProductId == reservation.ProductId &&
+                                x.WarehouseId == reservation.WarehouseId &&
+                                x.LocationId == allocation.LocationId &&
+                                x.Status == allocation.InventoryStatus &&
+                                x.LotId == allocation.LotId &&
+                                x.SerialId == allocation.SerialId)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.AllocatedQuantity, x => x.AllocatedQuantity >= allocation.Quantity ? x.AllocatedQuantity - allocation.Quantity : 0m),
+                        cancellationToken);
+            }
+            else
+            {
+                var bucketStock = await context.InventoryStocks.FirstOrDefaultAsync(
+                    x => x.ProductId == reservation.ProductId &&
+                         x.WarehouseId == reservation.WarehouseId &&
+                         x.LocationId == allocation.LocationId &&
+                         x.Status == allocation.InventoryStatus &&
+                         x.LotId == allocation.LotId &&
+                         x.SerialId == allocation.SerialId,
+                    cancellationToken);
+                if (bucketStock is not null)
+                {
+                    bucketStock.AllocatedQuantity = Math.Max(0m, bucketStock.AllocatedQuantity - allocation.Quantity);
+                }
+            }
+
             context.AuditLogs.Add(new AuditLog
             {
                 UserId = userId,
@@ -594,6 +694,96 @@ public class StockReservationService(
             .ToListAsync(cancellationToken);
         issues.AddRange(invalidExportSources);
         return issues;
+    }
+
+    public async Task<int> RebuildBalancesAsync(int? warehouseId = null, int? productId = null, CancellationToken cancellationToken = default)
+    {
+        var allowed = await warehouseAuthorization.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        if (warehouseId.HasValue)
+        {
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            allowed = [warehouseId.Value];
+        }
+
+        var stocksQuery = context.InventoryStocks.Where(x => allowed.Contains(x.WarehouseId));
+        if (productId.HasValue)
+            stocksQuery = stocksQuery.Where(x => x.ProductId == productId.Value);
+
+        var stocks = await stocksQuery.OrderBy(x => x.WarehouseId).ThenBy(x => x.ProductId).ThenBy(x => x.Id).ToListAsync(cancellationToken);
+        if (stocks.Count == 0) return 0;
+
+        var activeAllocations = await context.StockAllocations.AsNoTracking()
+            .Where(x => allowed.Contains(x.WarehouseId) &&
+                        (!productId.HasValue || x.ProductId == productId.Value) &&
+                        (x.Status == StockAllocationStatus.Active ||
+                         x.Status == StockAllocationStatus.Picking ||
+                         x.Status == StockAllocationStatus.Picked))
+            .ToListAsync(cancellationToken);
+
+        var activeReservations = await context.StockReservations.AsNoTracking()
+            .Where(x => allowed.Contains(x.WarehouseId) &&
+                        (!productId.HasValue || x.ProductId == productId.Value) &&
+                        (x.Status == StockReservationStatus.Active ||
+                         x.Status == StockReservationStatus.PartiallyConsumed ||
+                         x.Status == StockReservationStatus.PartiallyAllocated ||
+                         x.Status == StockReservationStatus.Allocated))
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var activeLocks = await context.InventoryLocks.AsNoTracking()
+            .EffectiveAt(now)
+            .Where(x => allowed.Contains(x.WarehouseId) &&
+                        (!productId.HasValue || !x.ProductId.HasValue || x.ProductId == productId.Value))
+            .ToListAsync(cancellationToken);
+
+        foreach (var group in stocks.GroupBy(x => (x.WarehouseId, x.ProductId)))
+        {
+            var totalReservedTarget = activeReservations
+                .Where(r => r.WarehouseId == group.Key.WarehouseId && r.ProductId == group.Key.ProductId)
+                .Sum(r => Math.Max(0m, r.Quantity - r.ConsumedQuantity - r.ReleasedQuantity));
+
+            decimal allocatedSum = 0m;
+            foreach (var bucket in group)
+            {
+                var bucketAllocated = activeAllocations
+                    .Where(a => a.WarehouseId == bucket.WarehouseId &&
+                                a.ProductId == bucket.ProductId &&
+                                a.LocationId == bucket.LocationId &&
+                                a.InventoryStatus == bucket.Status &&
+                                a.LotId == bucket.LotId &&
+                                a.SerialId == bucket.SerialId)
+                    .Sum(a => a.Quantity);
+
+                var isLocked = activeLocks.Any(l =>
+                    l.WarehouseId == bucket.WarehouseId &&
+                    (!l.LocationId.HasValue || l.LocationId == bucket.LocationId) &&
+                    (!l.ProductId.HasValue || l.ProductId == bucket.ProductId) &&
+                    (!l.InventoryStatus.HasValue || l.InventoryStatus == bucket.Status) &&
+                    (!l.LotId.HasValue || l.LotId == bucket.LotId) &&
+                    (!l.SerialId.HasValue || l.SerialId == bucket.SerialId));
+
+                bucket.AllocatedQuantity = Math.Min(bucket.Quantity, bucketAllocated);
+                bucket.LockedQuantity = isLocked ? bucket.Quantity : 0m;
+                bucket.ReservedQuantity = bucket.AllocatedQuantity;
+                allocatedSum += bucket.AllocatedQuantity;
+            }
+
+            var remainingUnallocatedReserve = Math.Max(0m, totalReservedTarget - allocatedSum);
+            foreach (var bucket in group.Where(b => b.Status == InventoryStatus.Available && b.LockedQuantity == 0).OrderBy(b => b.LocationId).ThenBy(b => b.Id))
+            {
+                if (remainingUnallocatedReserve <= 0) break;
+                var freeCapacity = Math.Max(0m, bucket.Quantity - bucket.ReservedQuantity);
+                var add = Math.Min(remainingUnallocatedReserve, freeCapacity);
+                if (add > 0)
+                {
+                    bucket.ReservedQuantity += add;
+                    remainingUnallocatedReserve -= add;
+                }
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        return stocks.Count;
     }
 
     private IQueryable<StockReservation> ScopedQuery()

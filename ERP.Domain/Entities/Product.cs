@@ -15,6 +15,7 @@ public class Product : ITenantEntity
     public decimal? UnitWeightKg { get; set; }
     public decimal? UnitVolumeM3 { get; set; }
     public decimal? UnitPalletEquivalent { get; set; }
+    public decimal MovingAverageCost { get; set; }
     public ERP.Domain.Enums.ProductTrackingType TrackingType { get; set; } = ERP.Domain.Enums.ProductTrackingType.None;
     public bool ExpiryControl { get; set; }
     public int? ShelfLifeDays { get; set; }

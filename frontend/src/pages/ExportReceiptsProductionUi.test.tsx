@@ -177,4 +177,109 @@ describe('ExportReceipts shared production UI', () => {
     expect((view.getByRole('button', { name: 'Duyệt và giữ hàng' }) as HTMLButtonElement).disabled).toBe(true);
     expect((view.getByRole('button', { name: 'Duyệt và xuất ngay (tương thích)' }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('masks unitPrice and totalAmount as Ẩn theo phân quyền when null and displays MarketplaceOrderId, CarrierCode, TrackingNumber, and CancelPendingPutback', async () => {
+    localStorage.setItem('role', 'Viewer');
+    setCurrentPermissions(['export_receipt.read']);
+    const maskedReceipt = {
+      ...draftReceipt,
+      id: 24,
+      code: 'ER-2026-0024',
+      status: 'CancelPendingPutback',
+      marketplaceOrderId: 'MP-SHOPEE-9988',
+      carrierCode: 'GHN-EXPRESS',
+      trackingNumber: 'AWB-77665544',
+      totalAmount: null,
+      details: [
+        {
+          id: 501,
+          productCode: 'SKU-501',
+          productName: 'Hàng ẩn giá',
+          unitName: 'THÙNG',
+          quantity: 5,
+          unitPrice: null,
+          lineTotalAmount: null,
+        },
+      ],
+    };
+    get.mockImplementation(async (url) => {
+      if (url === '/api/exportreceipts') return { data: [maskedReceipt] } as never;
+      if (url === '/api/exportreceipts/24') return { data: maskedReceipt } as never;
+      return { data: [] } as never;
+    });
+
+    const view = render(<ExportReceipts />);
+    expect(await view.findByText('ER-2026-0024')).toBeTruthy();
+    expect(view.getByText('Chờ cất trả hàng hủy về kệ')).toBeTruthy();
+
+    fireEvent.click(view.getByRole('button', { name: 'Chi tiết' }));
+    expect(await view.findByText('MP-SHOPEE-9988')).toBeTruthy();
+    expect(view.getByText('GHN-EXPRESS')).toBeTruthy();
+    expect(view.getByText('AWB-77665544')).toBeTruthy();
+    expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('submits MarketplaceOrderId, CarrierCode, TrackingNumber, preserves form inputs on 409 INSUFFICIENT_AVAILABLE_STOCK, and maps 409 ORDER_CANCELLED_PUTBACK_REQUIRED', async () => {
+    const post = vi.mocked(apiClient.post);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    localStorage.setItem('role', 'Manager');
+    localStorage.setItem('userId', '99');
+    setCurrentPermissions(['export_receipt.read', 'export_receipt.create', 'export_receipt.approve', 'export_receipt.dispatch']);
+    const approvedReceipt = { ...draftReceipt, id: 25, code: 'ER-2026-0025', status: 'Approved', approvedBy: 5 };
+    get.mockImplementation(async (url) => {
+      if (url === '/api/exportreceipts') return { data: [approvedReceipt] } as never;
+      if (url === '/api/warehouses') return { data: [{ id: 1, name: 'Kho A' }] } as never;
+      if (url === '/api/products') return { data: [{ id: 7, code: 'SKU-7', name: 'Sản phẩm 7' }] } as never;
+      if (url === '/api/inventorystocks/current') return { data: [{ availableQuantity: 50 }] } as never;
+      return { data: [] } as never;
+    });
+
+    const view = render(<ExportReceipts />);
+    await view.findByText('Tạo Phiếu Xuất Kho');
+
+    fireEvent.change(view.getByLabelText('Mã phiếu'), { target: { value: 'EX-MP-01' } });
+    fireEvent.change(view.getByLabelText('Kho'), { target: { value: '1' } });
+    fireEvent.change(view.getByLabelText('Mã đơn sàn TMĐT'), { target: { value: 'MP-TIKTOK-01' } });
+    fireEvent.change(view.getByLabelText('Đơn vị vận chuyển'), { target: { value: 'GHTK' } });
+    fireEvent.change(view.getByLabelText('Mã vận đơn (AWB)'), { target: { value: 'AWB-112233' } });
+    fireEvent.click(view.getByRole('button', { name: '+ Thêm dòng' }));
+    fireEvent.change(view.getByLabelText('Sản phẩm dòng 1'), { target: { value: '7' } });
+    fireEvent.change(view.getByLabelText('Số lượng dòng 1'), { target: { value: '12' } });
+    fireEvent.change(view.getByLabelText('Đơn giá dòng 1'), { target: { value: '10000' } });
+
+    await view.findByText('Tồn: 50');
+    post.mockRejectedValueOnce({
+      response: { status: 409, data: { code: 'INSUFFICIENT_AVAILABLE_STOCK' } },
+    });
+    fireEvent.click(view.getByRole('button', { name: 'Tạo Phiếu Xuất' }));
+
+    expect(
+      await view.findByText(
+        'Tồn kho khả dụng tại vị trí chọn không đủ để thực hiện thao tác. Vui lòng điều chỉnh số lượng hoặc chọn vị trí khác.',
+      ),
+    ).toBeTruthy();
+    expect((view.getByLabelText('Mã phiếu') as HTMLInputElement).value).toBe('EX-MP-01');
+    expect((view.getByLabelText('Số lượng dòng 1') as HTMLInputElement).value).toBe('12');
+    expect((view.getByLabelText('Mã đơn sàn TMĐT') as HTMLInputElement).value).toBe('MP-TIKTOK-01');
+    expect(post).toHaveBeenCalledWith(
+      '/api/exportreceipts',
+      expect.objectContaining({
+        marketplaceOrderId: 'MP-TIKTOK-01',
+        carrierCode: 'GHTK',
+        trackingNumber: 'AWB-112233',
+      }),
+      expect.any(Object),
+    );
+
+    post.mockRejectedValueOnce({
+      response: { status: 409, data: { error: { code: 'ORDER_CANCELLED_PUTBACK_REQUIRED' } } },
+    });
+    fireEvent.click(view.getByRole('button', { name: 'Xác nhận xuất kho' }));
+    expect(
+      await view.findByText(
+        'Đơn hàng đã bị hủy giữa chừng và đang chờ cất trả hàng về kệ lưu trữ (Putback). Không thể tiếp tục đóng gói hoặc xuất kho.',
+      ),
+    ).toBeTruthy();
+  });
 });
+

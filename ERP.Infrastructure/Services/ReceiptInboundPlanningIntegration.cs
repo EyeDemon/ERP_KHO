@@ -116,7 +116,11 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
                     Math.Clamp(source.BaseUnitDecimalPlaces, 0, 4),
                     MidpointRounding.AwayFromZero);
                 if (baseExpected > max)
-                    throw Conflict("Số lượng dự kiến của phiếu nhập vượt giới hạn nhận của dòng PO.");
+                {
+                    var overEx = Conflict("Số lượng dự kiến của phiếu nhập vượt giới hạn nhận của dòng PO.");
+                    overEx.Data["ErrorCode"] = "OVER_RECEIPT_TOLERANCE_EXCEEDED";
+                    throw overEx;
+                }
 
                 var target = receipt.Details.ElementAt(index);
                 target.PurchaseOrderLineId = source.Id;
@@ -195,7 +199,11 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
                 Math.Clamp(line.BaseUnitDecimalPlaces, 0, 4),
                 MidpointRounding.AwayFromZero);
             if (previous + currentAccepted + currentDamaged > maximum)
-                throw Conflict($"Tổng số lượng POST vượt dung sai nhận của dòng PO {line.ExternalLineId}.");
+            {
+                var overEx = Conflict($"Tổng số lượng POST vượt dung sai nhận của dòng PO {line.ExternalLineId}.");
+                overEx.Data["ErrorCode"] = "OVER_RECEIPT_TOLERANCE_EXCEEDED";
+                throw overEx;
+            }
         }
 
         if (receipt.AsnId.HasValue)
@@ -208,6 +216,23 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
 
     public async Task ApplyPostedStateAsync(ImportReceipt receipt, int actorUserId, CancellationToken token = default)
     {
+        var outboxKey = $"VALUATION-IMP-{receipt.Id}";
+        if (!context.IntegrationOutboxMessages.Local.Any(x => x.EventId == outboxKey) &&
+            !await context.IntegrationOutboxMessages.AnyAsync(x => x.EventId == outboxKey, token))
+        {
+            context.IntegrationOutboxMessages.Add(new IntegrationOutboxMessage
+            {
+                TenantId = receipt.TenantId > 0 ? receipt.TenantId : 1,
+                EventId = outboxKey,
+                EventType = "InventoryValuationPosted",
+                AggregateType = "ImportReceipt",
+                AggregateId = receipt.Id,
+                PayloadJson = $"{{\"receiptId\":{receipt.Id},\"code\":\"{receipt.Code}\",\"warehouseId\":{receipt.WarehouseId}}}",
+                Status = "Pending",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
         if (receipt.AsnId.HasValue)
         {
             var asn = await context.Asns.SingleAsync(x => x.Id == receipt.AsnId.Value && x.WarehouseId == receipt.WarehouseId, token);

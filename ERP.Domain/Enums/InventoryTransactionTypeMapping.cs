@@ -41,5 +41,7 @@ public static class InventoryTransactionTypeMapping
     };
 
     public static decimal ApplySign(this TransactionType transactionType, decimal quantity) =>
-        transactionType.GetSign() * quantity;
+        transactionType is TransactionType.Move or TransactionType.StatusChange
+            ? quantity
+            : transactionType.GetSign() * quantity;
 }

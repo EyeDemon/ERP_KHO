@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission, currentUserId } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { conflictErrorMessage, extractConflictCode } from '../services/permissionPresentation';
 import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
 import './PutawayTasks.css';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type Item={id:number;productCode:string;productName:string;inventoryStatus:string;sourceLocationCode:string;operationUnitCode:string;baseUnitCode:string;requiredOperationQuantity:number;requiredBaseQuantity:number;movedBaseQuantity:number;remainingBaseQuantity:number};
-type Task={id:number;warehouseId?:number;receiptCode:string;warehouseName:string;status:string;assignedUserId:number|null;requiredBaseQuantity:number;movedBaseQuantity:number;rowVersion:string;exceptionReason?:string;items:Item[]};
+type Task={id:number;warehouseId?:number;receiptCode:string;warehouseName:string;status:string;taskType?:string;sourceType?:string;assignedUserId:number|null;requiredBaseQuantity:number;movedBaseQuantity:number;rowVersion:string;exceptionReason?:string;items:Item[]};
 type Location={id:number;code:string;name:string;locationType:string;isPickable:boolean};
-const states:Record<string,string>={Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang thực hiện',Completed:'Đã hoàn thành',Cancelled:'Đã hủy',Exception:'Cần xử lý'};
+const states:Record<string,string>={Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang thực hiện',Completed:'Đã hoàn thành',Cancelled:'Đã hủy',Exception:'Cần xử lý',CancelPendingPutback:'Chờ cất trả hàng hủy về kệ',PutbackTask:'Cất trả hàng hủy về kệ'};
+const taskTypes:Record<string,string>={PutawayTask:'Cất hàng nhập kho',PutbackTask:'Cất trả hàng hủy về kệ',CancelPendingPutback:'Chờ cất trả hàng hủy về kệ'};
 const inventory:Record<string,string>={Available:'Có thể sử dụng',Damaged:'Hư hỏng',Rejected:'Hàng bị từ chối'};
 const PUTAWAY_RANKING_CODES = [
   '1_EXACT_SKU_AFFINITY',
@@ -41,7 +43,7 @@ const PUTAWAY_RULE_LABELS: Record<string, string> = {
 };
 const formatPutawayRuleLabel = (code: string) =>
   PUTAWAY_RULE_LABELS[code] ?? code.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-const message=(e:unknown)=>{const response=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;const status=response?.status;const code=response?.data?.code;if(code==='PUTAWAY_WRONG_BIN'||code==='PUTAWAY_WRONG_PRODUCT')return response?.data?.message??'Mã vạch vị trí hoặc sản phẩm không khớp.';return status===403?'Bạn không có quyền thực hiện thao tác này.':status===404?'Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.':status===409?'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.':'Không thể lưu dữ liệu. Vui lòng thử lại.'};
+const message=(e:unknown)=>{const response=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;const status=response?.status;const code=response?.data?.code;if(code==='PUTAWAY_WRONG_BIN'||code==='PUTAWAY_WRONG_PRODUCT')return response?.data?.message??'Mã vạch vị trí hoặc sản phẩm không khớp.';return status===403?'Bạn không có quyền thực hiện thao tác này.':status===404?'Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.':status===409?conflictErrorMessage(e,'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.'):'Không thể lưu dữ liệu. Vui lòng thử lại.'};
 
 export default function PutawayTasks(){
  const [tasks,setTasks]=useState<Task[]>([]),[selected,setSelected]=useState<Task|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState('');
@@ -55,7 +57,7 @@ export default function PutawayTasks(){
  const load=async()=>{setLoading(true);setError('');try{setTasks((await apiClient.get('/api/putaway-tasks')).data)}catch{setTasks([]);setSelected(null);setError('Không thể tải dữ liệu. Vui lòng thử lại.')}finally{setLoading(false)}};
  const detail=async(id:number)=>{setError('');try{const t=(await apiClient.get(`/api/putaway-tasks/${id}`)).data as Task;setSelected(t);const entries=await Promise.all(t.items.filter(i=>i.remainingBaseQuantity>0).map(async i=>[i.id,(await apiClient.get(`/api/putaway-tasks/${id}/items/${i.id}/destinations`)).data] as const));setLocations(Object.fromEntries(entries))}catch{setSelected(null);setError('Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.')}};
  useEffect(()=>{void load()},[]);
- const mutate=async(key:string,path:string,body:object)=>{if(lock.current.has(key))return;lock.current.add(key);setBusy(key);setError('');try{const t=(await apiClient.post(path,body,{headers:idempotencyHeaders(key)})).data as Task;completeIdempotentAction(key);setSelected(t);await load();await detail(t.id)}catch(e){if((e as {response?:{status?:number}})?.response?.status===409)setSelected(null);setError(message(e))}finally{lock.current.delete(key);setBusy('')}};
+ const mutate=async(key:string,path:string,body:object)=>{if(lock.current.has(key))return;lock.current.add(key);setBusy(key);setError('');try{const t=(await apiClient.post(path,body,{headers:idempotencyHeaders(key)})).data as Task;completeIdempotentAction(key);setSelected(t);await load();await detail(t.id)}catch(e){if((e as {response?:{status?:number}})?.response?.status===409&&extractConflictCode(e)!=='INSUFFICIENT_AVAILABLE_STOCK'){setSelected(null);void load()}setError(message(e))}finally{lock.current.delete(key);setBusy('')}};
  const evaluateSlotting=async()=>{
    if(slottingBusy)return;
    setSlottingBusy(true);
@@ -171,6 +173,9 @@ export default function PutawayTasks(){
        <div className="ui-inline-wrap" style={{ marginTop: 4 }}>
          <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ & Khớp Bin</button>
        </div>
+       <div data-testid="putaway-ledger-pair-panel" style={{ marginTop: 6, padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 13 }}>
+         <strong>Bút toán Sổ cái Đối ứng 2 Dòng:</strong> Chân nguồn <code>-Q (RECEIVING)</code> tại vị trí tiếp nhận • Chân đích <code>+Q (STORAGE / BIN-A01-01)</code> tại vị trí lưu trữ — Bảo toàn tổng tồn kho toàn kho (<code>Δ = 0</code>).
+       </div>
        {slottingEvaluationResult&&(
          <div
            role="status"
@@ -218,6 +223,7 @@ export default function PutawayTasks(){
                </button>
                <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>
                  {task.warehouseName}
+                 {(task.taskType==='PutbackTask'||task.sourceType==='PutbackTask')&&<div style={{ marginTop: 3 }}><UiBadge tone="warning">{taskTypes.PutbackTask}</UiBadge></div>}
                </div>
              </td>
              <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
@@ -242,6 +248,7 @@ export default function PutawayTasks(){
      {selected&&<UiCard title={'Chi tiết nhiệm vụ ' + selected.receiptCode}>
        <div className="ui-inline-wrap">
          <UiBadge tone={selected.status==='Completed'?'success':selected.status==='Exception'?'danger':selected.status==='InProgress'?'warning':'neutral'}>{states[selected.status]??'Không xác định'}</UiBadge>
+         {(selected.taskType==='PutbackTask'||selected.sourceType==='PutbackTask')&&<UiBadge tone="warning">{taskTypes.PutbackTask}</UiBadge>}
          <span className="ui-muted-text">Tiến độ {selected.movedBaseQuantity}/{selected.requiredBaseQuantity}</span>
        </div>
        {selected.exceptionReason&&<p><strong>Lý do cần xử lý:</strong> {selected.exceptionReason}</p>}

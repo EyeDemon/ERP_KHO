@@ -346,7 +346,12 @@ public sealed class InboundPlanningService(
             {
                 var existing=existingByPoLineId.GetValueOrDefault(poLine.Id);
                 var max=poLine.BaseOrderedQuantity*(1m+poLine.AllowedOverReceiptPct/100m);
-                if(existing+conversion.BaseQuantity>max) throw Conflict("Tổng số lượng ASN vượt giới hạn đơn mua.");
+                if(existing+conversion.BaseQuantity>max)
+                {
+                    var overEx = Conflict("Tổng số lượng ASN vượt giới hạn đơn mua.");
+                    overEx.Data["ErrorCode"] = "OVER_RECEIPT_TOLERANCE_EXCEEDED";
+                    throw overEx;
+                }
                 existingByPoLineId[poLine.Id]=existing+conversion.BaseQuantity;
             }
             entity.Lines.Add(new AsnLine

@@ -382,6 +382,26 @@ public sealed class DockYardController(
                         targetResultingQuantity = toStock.Quantity;
                     }
 
+                    var xdOutTx = new ERP.Domain.Entities.InventoryTransaction
+                    {
+                        ProductId = fromStock.ProductId,
+                        WarehouseId = targetWarehouseId,
+                        LocationId = fromStock.LocationId,
+                        FromLocationId = fromStock.LocationId,
+                        ToLocationId = resolvedToLocId.Value,
+                        LotId = fromStock.LotId,
+                        SerialId = fromStock.SerialId,
+                        InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                        FromInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                        ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                        TransactionType = ERP.Domain.Enums.TransactionType.Move,
+                        Quantity = -moveQty,
+                        ReferenceId = fromStock.Id,
+                        ReferenceType = "CrossDock",
+                        TransactionDate = now,
+                        CreatedBy = actorId,
+                        Note = $"{dispatchId}: Trung chuyển thẳng Cross-Dock ({inboundAppointmentCode} -> {outboundReferenceCode})"
+                    };
                     var xdTx = new ERP.Domain.Entities.InventoryTransaction
                     {
                         ProductId = fromStock.ProductId,
@@ -402,6 +422,7 @@ public sealed class DockYardController(
                         CreatedBy = actorId,
                         Note = $"{dispatchId}: Trung chuyển thẳng Cross-Dock ({inboundAppointmentCode} -> {outboundReferenceCode})"
                     };
+                    db.InventoryTransactions.Add(xdOutTx);
                     db.InventoryTransactions.Add(xdTx);
                     await db.SaveChangesAsync(token);
 

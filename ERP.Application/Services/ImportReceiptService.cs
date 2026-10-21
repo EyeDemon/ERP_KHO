@@ -263,7 +263,7 @@ namespace ERP.Application.Services
 
         private ImportReceiptDto MapToDto(ImportReceipt receipt)
         {
-            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role == "Manager";
+            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role is "Admin" or "Manager" or "Accountant";
             var details = receipt.Details.Select(d =>
             {
                 var factor = d.ConversionFactor > 0 ? d.ConversionFactor : 1m;
@@ -622,14 +622,32 @@ namespace ERP.Application.Services
             if (_inventoryIdentity is not null &&
                 await _inventoryIdentity.TryPostTrackedBucketAsync(receipt, detail, status, quantity, userId, locationId))
                 return;
+            var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1m;
+            var baseUnitCost = factor > 0 ? decimal.Round(detail.UnitPrice / factor, 4, MidpointRounding.AwayFromZero) : detail.UnitPrice;
             var stock = locationId.HasValue ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, receipt.WarehouseId, status, locationId.Value) : status == InventoryStatus.Available
                 ? await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId)
                 : await _inventoryStockRepository.GetByProductWarehouseAndStatusAsync(detail.ProductId, receipt.WarehouseId, status);
             var effectiveLocationId = locationId ?? stock?.LocationId;
             if (stock is null)
-                await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Status = status, LocationId = effectiveLocationId, Quantity = quantity, LastUpdated = DateTime.UtcNow });
-            else { stock.Quantity += quantity; stock.LastUpdated = DateTime.UtcNow; await _inventoryStockRepository.UpdateAsync(stock); }
-            await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, LocationId = effectiveLocationId, InventoryStatus = status, TransactionType = TransactionType.Import, Quantity = quantity, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = userId, Note = detail.Note });
+            {
+                await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Status = status, LocationId = effectiveLocationId, Quantity = quantity, MovingAverageCost = baseUnitCost, LastUpdated = DateTime.UtcNow });
+                if (detail.Product is not null && baseUnitCost > 0m && detail.Product.MovingAverageCost <= 0m)
+                    detail.Product.MovingAverageCost = baseUnitCost;
+            }
+            else
+            {
+                var oldQty = Math.Max(0m, stock.Quantity);
+                var oldMac = stock.MovingAverageCost > 0m ? stock.MovingAverageCost : baseUnitCost;
+                stock.MovingAverageCost = oldQty + quantity > 0m
+                    ? decimal.Round(((oldQty * oldMac) + (quantity * baseUnitCost)) / (oldQty + quantity), 4, MidpointRounding.AwayFromZero)
+                    : baseUnitCost;
+                stock.Quantity += quantity;
+                stock.LastUpdated = DateTime.UtcNow;
+                await _inventoryStockRepository.UpdateAsync(stock);
+                if (detail.Product is not null && stock.MovingAverageCost > 0m)
+                    detail.Product.MovingAverageCost = stock.MovingAverageCost;
+            }
+            await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, LocationId = effectiveLocationId, InventoryStatus = status, TransactionType = TransactionType.Import, Quantity = quantity, UnitCost = baseUnitCost, SourceDocumentLineId = detail.Id, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = userId, Note = detail.Note });
         }
 
         private static decimal ConvertToBase(decimal quantity, decimal factor, ImportReceiptDetail detail)
@@ -728,5 +746,3 @@ namespace ERP.Application.Services
         }
     }
 }
-
-

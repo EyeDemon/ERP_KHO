@@ -16,7 +16,7 @@ public sealed class StockAllocationConfiguration : IEntityTypeConfiguration<Stoc
         });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.AllocationCode).HasMaxLength(50).IsRequired();
-        builder.Property(x => x.Quantity).HasPrecision(18, 4);
+        builder.Property(x => x.Quantity).HasPrecision(19, 4);
         builder.Property(x => x.SelectionReason).HasMaxLength(500).IsRequired();
         builder.Property(x => x.ReleaseReason).HasMaxLength(500);
         builder.Property(x => x.Version).IsConcurrencyToken();
