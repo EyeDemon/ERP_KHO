@@ -1013,9 +1013,9 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Status = ReceiptStatus.Posted,
             Note = "Phiếu nhập kho lô hàng chờ cất kệ IR-QA-002",
             CreatedBy = qaAdmin.Id,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow.AddHours(-3),
             ApprovedBy = qaAdmin.Id,
-            ApprovedAt = DateTime.UtcNow,
+            ApprovedAt = DateTime.UtcNow.AddMinutes(-30),
             Details =
             [
                 new ImportReceiptDetail
@@ -1056,6 +1056,9 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         putawayReceipt.SupplierCodeSnapshot = supplier.Code;
         putawayReceipt.SupplierNameSnapshot = supplier.Name;
         putawayReceipt.Note = "Phiếu nhập kho lô hàng chờ cất kệ IR-QA-002";
+        putawayReceipt.CreatedAt = DateTime.UtcNow.AddHours(-3);
+        putawayReceipt.ApprovedBy ??= qaAdmin.Id;
+        putawayReceipt.ApprovedAt = DateTime.UtcNow.AddMinutes(-30);
     }
 
     var putawayReceiptLine = putawayReceipt.Details.First();
@@ -1110,7 +1113,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Quantity = 10m,
             ReferenceId = putawayReceipt.Id,
             ReferenceType = "ImportReceipt",
-            Note = "Tồn kho tại RECEIVING cho nhiệm vụ cất hàng PUT-QA-001",
+            Note = "Tồn kho tại khu tiếp nhận RECEIVING cho nhiệm vụ cất hàng PUT-QA-001",
             TransactionDate = DateTime.UtcNow,
             CreatedBy = qaAdmin.Id
         });
@@ -1936,7 +1939,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             CreatedBy = qaAdmin.Id,
             CreatedAt = DateTime.UtcNow.AddDays(-2),
             ApprovedBy = qaAdmin.Id,
-            ApprovedAt = DateTime.UtcNow.AddDays(-2),
+            ApprovedAt = DateTime.UtcNow.AddDays(-2).AddMinutes(150),
             Details =
             [
                 new ImportReceiptDetail
@@ -1979,6 +1982,9 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         irQa001.PurchaseOrderId = purchaseOrder.Id;
         irQa001.AsnId = asn.Id;
         irQa001.Note = "Phiếu nhập kho lô hàng thiết bị định kỳ IR-QA-001";
+        irQa001.CreatedAt = DateTime.UtcNow.AddDays(-2);
+        irQa001.ApprovedBy ??= qaAdmin.Id;
+        irQa001.ApprovedAt = DateTime.UtcNow.AddDays(-2).AddMinutes(150);
     }
 
     var otherNonPutaway = nonPutawayReceipts.Where(r => r.Id != irQa001.Id).ToList();
@@ -2002,6 +2008,14 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         if (r.CreatedBy <= 0 || !validUserIds.Contains(r.CreatedBy))
         {
             r.CreatedBy = defaultManagerId;
+        }
+        if (r.Status is ReceiptStatus.Posted or ReceiptStatus.Approved)
+        {
+            r.ApprovedBy ??= defaultManagerId;
+            if (!r.ApprovedAt.HasValue || (r.ApprovedAt.Value - r.CreatedAt).TotalMinutes < 30)
+            {
+                r.ApprovedAt = r.CreatedAt.AddMinutes(150);
+            }
         }
         foreach (var d in r.Details)
         {
@@ -2123,9 +2137,9 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             CreatedBy = qaAdmin.Id,
             CreatedAt = DateTime.UtcNow.AddDays(-1),
             ApprovedBy = qaAdmin.Id,
-            ApprovedAt = DateTime.UtcNow.AddDays(-1),
+            ApprovedAt = DateTime.UtcNow.AddDays(-1).AddMinutes(60),
             DispatchedBy = qaAdmin.Id,
-            DispatchedAt = DateTime.UtcNow.AddDays(-1),
+            DispatchedAt = DateTime.UtcNow.AddDays(-1).AddMinutes(90),
             Details =
             [
                 new ExportReceiptDetail
@@ -2154,6 +2168,20 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             er.CustomerId = customer.Id;
             er.CustomerCodeSnapshot = customer.Code;
             er.CustomerNameSnapshot = customer.Name;
+            if (er.CreatedAt < DateTime.UtcNow.AddDays(-15))
+            {
+                er.CreatedAt = DateTime.UtcNow.AddDays(-1);
+            }
+            if (er.Status is ReceiptStatus.Approved or ReceiptStatus.Posted or ReceiptStatus.Dispatched)
+            {
+                er.ApprovedBy ??= qaAdmin.Id;
+                er.ApprovedAt = er.CreatedAt.AddMinutes(60);
+                if (er.Status == ReceiptStatus.Dispatched)
+                {
+                    er.DispatchedBy ??= qaAdmin.Id;
+                    er.DispatchedAt = er.CreatedAt.AddMinutes(90);
+                }
+            }
             if (idx == 0)
             {
                 er.SalesOrderId = salesOrder.Id;
@@ -2702,7 +2730,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     else
     {
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE InventoryTransactions SET LocationId = {receivingLocation.Id}, LotId = {lotQa002.Id}, InventoryStatus = {(int)InventoryStatus.Available}, Quantity = 65, Note = N'Ghi sổ phiếu nhập kho IR-QA-001 cho lô cảm biến LOT-QA-002 tại khu tiếp nhận TIEP-NHAN' WHERE WarehouseId = {primaryWarehouse.Id} AND ProductId = {lotProduct.Id} AND TransactionType = {(int)TransactionType.Import} AND ReferenceType = 'ImportReceipt' AND ReferenceId = {irQa001.Id}");
+            $"UPDATE InventoryTransactions SET LocationId = {receivingLocation.Id}, LotId = {lotQa002.Id}, InventoryStatus = {(int)InventoryStatus.Available}, Quantity = 65, Note = N'Ghi sổ phiếu nhập kho IR-QA-001 cho lô cảm biến LOT-QA-002 tại khu tiếp nhận RECEIVING' WHERE WarehouseId = {primaryWarehouse.Id} AND ProductId = {lotProduct.Id} AND TransactionType = {(int)TransactionType.Import} AND ReferenceType = 'ImportReceipt' AND ReferenceId = {irQa001.Id}");
     }
 
     // Ensure ER-QA-001 -> RSV-QA-LOT-002 -> ALC-QA-LOT-002 -> PICK-QA-003 -> PACK-QA-002 -> HU-QA-002 -> SHP-QA-002 outbound genealogy for LOT-QA-002 (5 units)
@@ -2713,7 +2741,9 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     if (erQa001Lot is not null)
     {
         erQa001Lot.Status = ReceiptStatus.Dispatched;
-        erQa001Lot.DispatchedAt ??= DateTime.UtcNow.AddDays(-1);
+        erQa001Lot.ApprovedBy ??= qaAdmin.Id;
+        erQa001Lot.ApprovedAt = erQa001Lot.CreatedAt.AddMinutes(60);
+        erQa001Lot.DispatchedAt = erQa001Lot.CreatedAt.AddMinutes(90);
         erQa001Lot.DispatchedBy ??= qaAdmin.Id;
         if (!erQa001Lot.Details.Any(d => d.ProductId == lotProduct.Id))
         {
@@ -3279,9 +3309,12 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 
     await context.Database.ExecuteSqlRawAsync(
         "UPDATE InventoryLocationMovements SET EnteredUnitCode = N'THÙNG' WHERE EnteredUnitCode IN ('QA_UNIT', 'QA-PCS') OR EnteredUnitCode IS NULL; " +
-        "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 10 thùng linh kiện QA-01 từ khu tiếp nhận TIEP-NHAN vào kệ lưu trữ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9001; " +
-        "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) từ TIEP-NHAN vào kệ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9002; " +
-        "UPDATE InventoryTransactions SET Note = REPLACE(Note, N'(100% Match)', N'(Khớp 100%)') WHERE Note LIKE N'%(100% Match)%';");
+        "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 10 thùng linh kiện QA-01 từ khu tiếp nhận RECEIVING vào kệ lưu trữ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9001; " +
+        "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) từ khu tiếp nhận RECEIVING vào kệ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9002; " +
+        "UPDATE InventoryTransactions SET Note = N'Tồn kho tại khu tiếp nhận RECEIVING cho nhiệm vụ cất hàng PUT-QA-001' WHERE Note = N'Tồn kho tại RECEIVING cho nhiệm vụ cất hàng PUT-QA-001'; " +
+        "UPDATE InventoryTransactions SET Note = REPLACE(Note, N'(100% Match)', N'(Khớp 100%)') WHERE Note LIKE N'%(100% Match)%'; " +
+        "UPDATE ImportReceipts SET ApprovedAt = DATEADD(MINUTE, 150, CreatedAt) WHERE Status IN (1, 2) AND (ApprovedAt IS NULL OR DATEDIFF(MINUTE, CreatedAt, ApprovedAt) < 30); " +
+        "UPDATE ExportReceipts SET ApprovedAt = DATEADD(MINUTE, 60, CreatedAt), DispatchedAt = DATEADD(MINUTE, 90, CreatedAt) WHERE Status IN (1, 2, 4) AND (DispatchedAt IS NULL OR DATEDIFF(MINUTE, CreatedAt, DispatchedAt) < 30);");
 
     // 6. Idempotent PartnerDebtInvoices ("AP-IR-QA0001" and "AR-ER-QA0001") & PartnerDebtLedgers
     var nowUtc = DateTime.UtcNow;

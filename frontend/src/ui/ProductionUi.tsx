@@ -56,7 +56,7 @@ export const UiBadge = ({
   tone = 'neutral',
 }: {
   children: ReactNode;
-  tone?: 'neutral' | 'success' | 'warning' | 'danger';
+  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 }) => <span className={'ui-badge ' + (tone === 'neutral' ? '' : tone)}>{children}</span>;
 
 export const UiEmptyState = ({

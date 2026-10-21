@@ -3709,5 +3709,332 @@ namespace ERP.Api.Tests
                 first.GetProperty("ExpiryStatusLabel").GetString().Should().Be("Cận hạn sử dụng");
             }
         }
+
+        [Fact]
+        public async Task Wave38_GetExpiryAgingReport_EnforcesZeroAvailableQuantity_ForNonAvailableOrExpiredBuckets()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var today = DateTime.UtcNow.Date;
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse
+            {
+                Id = 1,
+                Code = "WH01",
+                Name = "Kho Trung Tâm WH01",
+                IsActive = true
+            });
+            db.WarehouseLocations.Add(new ERP.Domain.Entities.WarehouseLocation
+            {
+                Id = 10,
+                WarehouseId = 1,
+                Code = "A-01-01",
+                Name = "Kệ A1",
+                LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                IsActive = true,
+                IsPickable = true
+            });
+            db.Units.Add(new ERP.Domain.Entities.Unit
+            {
+                Id = 1,
+                Code = "THÙNG",
+                Name = "THÙNG",
+                IsActive = true
+            });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 380,
+                Code = "SKU-W38-01",
+                Name = "Sản phẩm kiểm thử FEFO Wave 38",
+                UnitId = 1,
+                IsActive = true
+            });
+            db.InventoryLots.AddRange(
+                new ERP.Domain.Entities.InventoryLot
+                {
+                    Id = 3801,
+                    ProductId = 380,
+                    LotNumber = "LOT-VALID-01",
+                    ManufactureDate = today.AddDays(-20),
+                    ExpiryDate = today.AddDays(45)
+                },
+                new ERP.Domain.Entities.InventoryLot
+                {
+                    Id = 3802,
+                    ProductId = 380,
+                    LotNumber = "LOT-EXPIRED-02",
+                    ManufactureDate = today.AddDays(-120),
+                    ExpiryDate = today.AddDays(-5)
+                });
+
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3811,
+                    WarehouseId = 1,
+                    ProductId = 380,
+                    LocationId = 10,
+                    LotId = 3801,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 100m,
+                    ReservedQuantity = 15m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3812,
+                    WarehouseId = 1,
+                    ProductId = 380,
+                    LocationId = 10,
+                    LotId = 3802,
+                    Status = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 60m,
+                    ReservedQuantity = 5m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3813,
+                    WarehouseId = 1,
+                    ProductId = 380,
+                    LocationId = 10,
+                    LotId = 3801,
+                    Status = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                    Quantity = 40m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3814,
+                    WarehouseId = 1,
+                    ProductId = 380,
+                    LocationId = 10,
+                    LotId = 3801,
+                    Status = ERP.Domain.Enums.InventoryStatus.Damaged,
+                    Quantity = 25m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3815,
+                    WarehouseId = 1,
+                    ProductId = 380,
+                    LocationId = 10,
+                    LotId = 3801,
+                    Status = ERP.Domain.Enums.InventoryStatus.QcHold,
+                    Quantity = 30m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                },
+                new ERP.Domain.Entities.InventoryStock
+                {
+                    Id = 3816,
+                    WarehouseId = 1,
+                    ProductId = 380,
+                    LocationId = 10,
+                    LotId = 3801,
+                    Status = ERP.Domain.Enums.InventoryStatus.RecallBlocked,
+                    Quantity = 50m,
+                    ReservedQuantity = 0m,
+                    LastUpdated = DateTime.UtcNow
+                });
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var controller = new ReportsController(_mockService.Object, db, warehouseAuth.Object);
+            var res = await controller.GetExpiryAgingReport(
+                db,
+                warehouseAuth.Object,
+                warehouseId: 1,
+                productId: 380,
+                nearExpiryDays: 30,
+                cancellationToken: default);
+            var ok = res.Should().BeOfType<OkObjectResult>().Subject;
+
+            using var doc = System.Text.Json.JsonSerializer.SerializeToDocument(ok.Value);
+            var items = doc.RootElement.EnumerateArray().ToList();
+            items.Should().HaveCount(6);
+
+            var byStockId = items.ToDictionary(
+                x => x.GetProperty("InventoryStockId").GetInt32(),
+                x => x);
+
+            byStockId[3811].GetProperty("AvailableQuantity").GetDecimal().Should().Be(85m);
+            byStockId[3811].GetProperty("ExpiryStatusLabel").GetString().Should().Be("Còn hạn tốt");
+
+            byStockId[3812].GetProperty("AvailableQuantity").GetDecimal().Should().Be(0m);
+            byStockId[3812].GetProperty("ExpiryStatus").GetString().Should().Be("EXPIRED");
+            byStockId[3812].GetProperty("ExpiryStatusLabel").GetString().Should().Be("Đã hết hạn");
+
+            byStockId[3813].GetProperty("AvailableQuantity").GetDecimal().Should().Be(0m);
+            byStockId[3813].GetProperty("StatusLabel").GetString().Should().Be("Cách ly");
+
+            byStockId[3814].GetProperty("AvailableQuantity").GetDecimal().Should().Be(0m);
+            byStockId[3814].GetProperty("StatusLabel").GetString().Should().Be("Hư hỏng");
+
+            byStockId[3815].GetProperty("AvailableQuantity").GetDecimal().Should().Be(0m);
+            byStockId[3815].GetProperty("StatusLabel").GetString().Should().Be("Tạm giữ chờ kiểm định");
+
+            byStockId[3816].GetProperty("AvailableQuantity").GetDecimal().Should().Be(0m);
+            byStockId[3816].GetProperty("StatusLabel").GetString().Should().Be("Phong tỏa thu hồi");
+        }
+
+        [Fact]
+        public async Task Wave38_GetAnalyticsSummary_ComputesRealTurnaroundHours_AndVietnameseMovementClassLabels()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            var now = DateTime.UtcNow;
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse
+            {
+                Id = 1,
+                Code = "WH01",
+                Name = "Kho Trung Tâm WH01",
+                IsActive = true
+            });
+            db.Units.Add(new ERP.Domain.Entities.Unit
+            {
+                Id = 1,
+                Code = "QA_UNIT",
+                Name = "QA_UNIT",
+                IsActive = true
+            });
+            db.Products.AddRange(
+                new ERP.Domain.Entities.Product { Id = 381, Code = "SKU-FAST-38", Name = "Sản phẩm nhanh 38", UnitId = 1, IsActive = true },
+                new ERP.Domain.Entities.Product { Id = 382, Code = "SKU-NORM-38", Name = "Sản phẩm thường 38", UnitId = 1, IsActive = true },
+                new ERP.Domain.Entities.Product { Id = 383, Code = "SKU-SLOW-38", Name = "Sản phẩm chậm 38", UnitId = 1, IsActive = true },
+                new ERP.Domain.Entities.Product { Id = 384, Code = "SKU-IDLE-38", Name = "Sản phẩm đứng 38", UnitId = 1, IsActive = true });
+
+            db.InventoryStocks.AddRange(
+                new ERP.Domain.Entities.InventoryStock { Id = 3821, WarehouseId = 1, ProductId = 381, Status = ERP.Domain.Enums.InventoryStatus.Available, Quantity = 100m, ReservedQuantity = 0m },
+                new ERP.Domain.Entities.InventoryStock { Id = 3822, WarehouseId = 1, ProductId = 382, Status = ERP.Domain.Enums.InventoryStatus.Available, Quantity = 100m, ReservedQuantity = 0m },
+                new ERP.Domain.Entities.InventoryStock { Id = 3823, WarehouseId = 1, ProductId = 383, Status = ERP.Domain.Enums.InventoryStatus.Available, Quantity = 100m, ReservedQuantity = 0m },
+                new ERP.Domain.Entities.InventoryStock { Id = 3824, WarehouseId = 1, ProductId = 384, Status = ERP.Domain.Enums.InventoryStatus.Available, Quantity = 100m, ReservedQuantity = 0m });
+
+            db.InventoryTransactions.AddRange(
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 3831,
+                    WarehouseId = 1,
+                    ProductId = 381,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 50m,
+                    TransactionDate = now.AddDays(-2),
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 3832,
+                    WarehouseId = 1,
+                    ProductId = 382,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 20m,
+                    TransactionDate = now.AddDays(-2),
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 3833,
+                    WarehouseId = 1,
+                    ProductId = 383,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 5m,
+                    TransactionDate = now.AddDays(-2),
+                    CreatedBy = 1
+                });
+
+            db.ImportReceipts.AddRange(
+                new ERP.Domain.Entities.ImportReceipt
+                {
+                    Id = 3841,
+                    Code = "IR-W38-01",
+                    WarehouseId = 1,
+                    Status = ERP.Domain.Enums.ReceiptStatus.Posted,
+                    CreatedAt = now.AddHours(-10),
+                    ApprovedAt = now.AddHours(-8),
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.ImportReceipt
+                {
+                    Id = 3842,
+                    Code = "IR-W38-02",
+                    WarehouseId = 1,
+                    Status = ERP.Domain.Enums.ReceiptStatus.Posted,
+                    CreatedAt = now.AddHours(-9),
+                    ApprovedAt = now.AddHours(-6),
+                    CreatedBy = 1
+                });
+
+            db.ExportReceipts.AddRange(
+                new ERP.Domain.Entities.ExportReceipt
+                {
+                    Id = 3851,
+                    Code = "ER-W38-01",
+                    WarehouseId = 1,
+                    Status = ERP.Domain.Enums.ReceiptStatus.Dispatched,
+                    CreatedAt = now.AddHours(-12),
+                    ApprovedAt = now.AddHours(-10),
+                    DispatchedAt = now.AddHours(-8),
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.ExportReceipt
+                {
+                    Id = 3852,
+                    Code = "ER-W38-02",
+                    WarehouseId = 1,
+                    Status = ERP.Domain.Enums.ReceiptStatus.Dispatched,
+                    CreatedAt = now.AddHours(-14),
+                    ApprovedAt = now.AddHours(-11),
+                    DispatchedAt = now.AddHours(-8),
+                    CreatedBy = 1
+                });
+
+            await db.SaveChangesAsync();
+
+            var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
+            warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
+            warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
+
+            var controller = new ReportsController(_mockService.Object, db, warehouseAuth.Object);
+            var res = await controller.GetAnalyticsSummary(db, warehouseAuth.Object, warehouseId: 1, days: 30, cancellationToken: default);
+            var ok = res.Should().BeOfType<OkObjectResult>().Subject;
+
+            using var doc = System.Text.Json.JsonSerializer.SerializeToDocument(ok.Value);
+            var root = doc.RootElement;
+
+            root.GetProperty("avgInboundTurnaroundHours").GetDecimal().Should().Be(2.5m);
+            root.GetProperty("avgOutboundTurnaroundHours").GetDecimal().Should().Be(5.0m);
+            root.GetProperty("inboundOutboundSla").GetProperty("avgInboundTurnaroundHours").GetDecimal().Should().Be(2.5m);
+            root.GetProperty("inboundOutboundSla").GetProperty("avgOutboundTurnaroundHours").GetDecimal().Should().Be(5.0m);
+
+            var turnoverRows = root.GetProperty("turnoverRows").EnumerateArray().ToList();
+            turnoverRows.Should().HaveCount(4);
+
+            var byCode = turnoverRows.ToDictionary(
+                x => x.GetProperty("productCode").GetString()!,
+                x => x);
+
+            byCode["SKU-FAST-38"].GetProperty("movementClassLabel").GetString().Should().Be("Luân chuyển nhanh");
+            byCode["SKU-FAST-38"].GetProperty("unitName").GetString().Should().Be("THÙNG");
+
+            byCode["SKU-NORM-38"].GetProperty("movementClassLabel").GetString().Should().Be("Luân chuyển bình thường");
+            byCode["SKU-SLOW-38"].GetProperty("movementClassLabel").GetString().Should().Be("Luân chuyển chậm");
+            byCode["SKU-IDLE-38"].GetProperty("movementClassLabel").GetString().Should().Be("Chưa phát sinh xuất");
+        }
     }
 }

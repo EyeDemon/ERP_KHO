@@ -426,10 +426,10 @@ const Inventory = () => {
           windowDays: parsedDays,
           inboundOutboundSla: {
             completedReceiptsCount: Number(raw.inboundOutboundSla?.completedReceiptsCount ?? raw.inboundPostedCount ?? 0),
-            avgInboundLeadTimeHours: Number(raw.inboundOutboundSla?.avgInboundLeadTimeHours ?? 0),
+            avgInboundLeadTimeHours: Number(raw.inboundOutboundSla?.avgInboundLeadTimeHours ?? raw.inboundOutboundSla?.avgInboundTurnaroundHours ?? raw.avgInboundTurnaroundHours ?? 0),
             openPutawayBacklogCount: Number(raw.inboundOutboundSla?.openPutawayBacklogCount ?? raw.putawayOpenCount ?? 0),
             dispatchedExportsCount: Number(raw.inboundOutboundSla?.dispatchedExportsCount ?? raw.outboundShippedCount ?? 0),
-            avgOutboundLeadTimeHours: Number(raw.inboundOutboundSla?.avgOutboundLeadTimeHours ?? 0),
+            avgOutboundLeadTimeHours: Number(raw.inboundOutboundSla?.avgOutboundLeadTimeHours ?? raw.inboundOutboundSla?.avgOutboundTurnaroundHours ?? raw.avgOutboundTurnaroundHours ?? 0),
             openPickingBacklogCount: Number(raw.inboundOutboundSla?.openPickingBacklogCount ?? 0),
           },
           stocktakeAccuracy: {
@@ -675,7 +675,7 @@ const Inventory = () => {
           </UiToolbarField>
 
           <UiToolbarField label="Từ khóa SP">
-            <input aria-label="Từ khóa sản phẩm lịch sử" type="text" value={historyFilter.keyword} onChange={e => setHistoryFilter({ ...historyFilter, keyword: e.target.value })} />
+            <input aria-label="Từ khóa sản phẩm lịch sử" type="text" placeholder="Mã hoặc tên SP..." value={historyFilter.keyword} onChange={e => setHistoryFilter({ ...historyFilter, keyword: e.target.value })} />
           </UiToolbarField>
 
           <div className="inventory-toolbar-actions">
@@ -878,9 +878,9 @@ const Inventory = () => {
               />
             </UiToolbarField>
             <UiToolbarField label="Phạm vi lô hàng">
-              <label className="ui-checkbox-label">
+              <label className="ui-checkbox-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 38, height: 38, padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: 8, background: '#ffffff', width: '100%', boxSizing: 'border-box', margin: 0 }}>
                 <input
-                  type="checkbox"
+                  type="checkbox" style={{ width: 16, height: 16, minHeight: 16, margin: 0, flexShrink: 0 }}
                   checked={expiryFilter.onlyLots}
                   onChange={e => setExpiryFilter({ ...expiryFilter, onlyLots: e.target.checked })}
                 />
@@ -928,7 +928,7 @@ const Inventory = () => {
                       <td>{expiryBadge(row.expiryStatus, row.daysToExpiry)}</td>
                       <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.ageDays}</td>
                       <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.quantity} {formatUnitName(row.unitName)}</td>
-                      <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.availableQuantity} {formatUnitName(row.unitName)}</td>
+                      <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(['AVAILABLE', 'Available', 'Khả dụng'].includes(row.status) && row.expiryStatus !== 'EXPIRED' && !(row.daysToExpiry !== null && row.daysToExpiry !== undefined && row.daysToExpiry < 0) && !((row as { daysUntilExpiry?: number | null }).daysUntilExpiry !== null && (row as { daysUntilExpiry?: number | null }).daysUntilExpiry !== undefined && (row as { daysUntilExpiry?: number | null }).daysUntilExpiry! < 0) ? row.availableQuantity : 0)} {formatUnitName(row.unitName)}</td>
                     </tr>
                   ))
                 )}
@@ -942,9 +942,9 @@ const Inventory = () => {
 
   const renderAnalyticsTab = () => {
     const velocityBadge = (cls: string) => {
-      if (cls === 'FAST_MOVING') return <UiBadge tone="success">Luân chuyển nhanh</UiBadge>;
-      if (cls === 'NORMAL_MOVING' || cls === 'NORMAL') return <UiBadge tone="neutral">Luân chuyển bình thường</UiBadge>;
-      if (cls === 'DEAD_STOCK' || cls === 'NON_MOVING') return <UiBadge tone="danger">Tồn đọng / Không xuất</UiBadge>;
+      if (['FAST_MOVING', 'FastMoving', 'FAST', 'Luân chuyển nhanh'].includes(cls)) return <UiBadge tone="success">Luân chuyển nhanh</UiBadge>;
+      if (['NORMAL_MOVING', 'NormalMoving', 'NORMAL', 'MEDIUM_MOVING', 'Luân chuyển bình thường'].includes(cls)) return <UiBadge tone="info">Luân chuyển bình thường</UiBadge>;
+      if (['DEAD_STOCK', 'DeadStock', 'NON_MOVING', 'NonMoving', 'NO_MOVEMENT', 'ZERO_MOVEMENT', 'Chưa phát sinh xuất', 'Tồn đọng / Không xuất'].includes(cls)) return <UiBadge tone="danger">Chưa phát sinh xuất</UiBadge>;
       return <UiBadge tone="warning">Luân chuyển chậm</UiBadge>;
     };
 
@@ -1070,7 +1070,7 @@ const Inventory = () => {
               <div className="ui-stack-sm">
                 <div className="ui-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, width: '100%' }}>
                   <div>
-                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Phân nhóm ABC/XYZ & Điểm đặt hàng lại:</strong><div className="ui-stack-xs" style={{ marginTop: 6 }}><div>• Nhóm <strong>A (Luân chuyển cao)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'FAST_MOVING').length} mặt hàng</div><div>• Nhóm <strong>B (Luân chuyển vừa)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass === 'NORMAL_MOVING' || x.velocityClass === 'NORMAL').length} mặt hàng</div><div>• Nhóm <strong>C / Z (Chậm & Tồn đọng)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => x.velocityClass !== 'FAST_MOVING' && x.velocityClass !== 'NORMAL_MOVING' && x.velocityClass !== 'NORMAL').length} mặt hàng</div><div>• Đề xuất bổ sung Tồn an toàn (&lt; 50): <strong>{analyticsReport.turnoverAndDaysOnHand.filter(x => x.onHandQuantity < 50).length} mặt hàng</strong> cần tạo đơn mua / điều chuyển</div></div></div>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}><strong>Phân nhóm ABC/XYZ & Điểm đặt hàng lại:</strong><div className="ui-stack-xs" style={{ marginTop: 6 }}><div>• Nhóm <strong>A (Luân chuyển cao)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => ['FAST_MOVING', 'FastMoving', 'FAST', 'Luân chuyển nhanh'].includes(x.velocityClass)).length} mặt hàng</div><div>• Nhóm <strong>B (Luân chuyển vừa)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => ['NORMAL_MOVING', 'NormalMoving', 'NORMAL', 'MEDIUM_MOVING', 'Luân chuyển bình thường'].includes(x.velocityClass)).length} mặt hàng</div><div>• Nhóm <strong>C / Z (Chậm & Tồn đọng)</strong>: {analyticsReport.turnoverAndDaysOnHand.filter(x => !['FAST_MOVING', 'FastMoving', 'FAST', 'Luân chuyển nhanh', 'NORMAL_MOVING', 'NormalMoving', 'NORMAL', 'MEDIUM_MOVING', 'Luân chuyển bình thường'].includes(x.velocityClass)).length} mặt hàng</div><div>• Đề xuất bổ sung Tồn an toàn (&lt; 50): <strong>{analyticsReport.turnoverAndDaysOnHand.filter(x => x.onHandQuantity < 50).length} mặt hàng</strong> cần tạo đơn mua / điều chuyển</div></div></div>
                     <div className="ui-stack-xs">
                       <div>
 

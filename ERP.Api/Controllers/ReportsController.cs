@@ -1347,6 +1347,58 @@ namespace ERP.Api.Controllers
                 .ToList();
 
             var totalPutawayTasks = putawayCompletedCount + putawayOpenCount;
+            var openPickingBacklogCount = await db.PickingTasks.AsNoTracking()
+                .CountAsync(t => scopedIds.Contains(t.WarehouseId) && t.Status != PickingTaskStatus.Completed && t.Status != PickingTaskStatus.Cancelled, cancellationToken);
+
+            var inboundReceiptSamples = (await db.ImportReceipts.AsNoTracking()
+                .Where(r => scopedIds.Contains(r.WarehouseId) &&
+                            r.CreatedAt >= since &&
+                            (r.Status == ReceiptStatus.Posted || r.Status == ReceiptStatus.Approved) &&
+                            r.ApprovedAt.HasValue)
+                .Select(r => new { r.CreatedAt, EndAt = r.ApprovedAt!.Value })
+                .ToListAsync(cancellationToken))
+                .Where(x => x.EndAt > x.CreatedAt)
+                .ToList();
+
+            var inboundPutawaySamples = (await db.PutawayTasks.AsNoTracking()
+                .Where(t => scopedIds.Contains(t.WarehouseId) &&
+                            t.CreatedAt >= since &&
+                            t.Status == PutawayTaskStatus.Completed &&
+                            t.CompletedAt.HasValue)
+                .Select(t => new { t.CreatedAt, EndAt = t.CompletedAt!.Value })
+                .ToListAsync(cancellationToken))
+                .Where(x => x.EndAt > x.CreatedAt)
+                .ToList();
+
+            var effectiveInboundSamples = inboundReceiptSamples.Count > 0 ? inboundReceiptSamples : inboundPutawaySamples;
+            var avgInboundTurnaroundHours = effectiveInboundSamples.Count > 0
+                ? Math.Round((decimal)effectiveInboundSamples.Average(x => (x.EndAt - x.CreatedAt).TotalHours), 1)
+                : 0m;
+
+            var outboundExportSamples = (await db.ExportReceipts.AsNoTracking()
+                .Where(r => scopedIds.Contains(r.WarehouseId) &&
+                            r.CreatedAt >= since &&
+                            (r.Status == ReceiptStatus.Dispatched || r.Status == ReceiptStatus.Posted || r.Status == ReceiptStatus.Approved) &&
+                            (r.DispatchedAt.HasValue || r.ApprovedAt.HasValue))
+                .Select(r => new { r.CreatedAt, EndAt = r.DispatchedAt ?? r.ApprovedAt!.Value })
+                .ToListAsync(cancellationToken))
+                .Where(x => x.EndAt > x.CreatedAt)
+                .ToList();
+
+            var outboundShipmentSamples = (await db.Shipments.AsNoTracking()
+                .Where(s => scopedIds.Contains(s.WarehouseId) &&
+                            s.CreatedAt >= since &&
+                            (s.Status == ShipmentStatus.Delivered || s.Status == ShipmentStatus.Completed || s.Status == ShipmentStatus.Dispatched || s.Status == ShipmentStatus.InTransit) &&
+                            (s.CompletedAt.HasValue || s.DispatchedAt.HasValue))
+                .Select(s => new { s.CreatedAt, EndAt = s.CompletedAt ?? s.DispatchedAt!.Value })
+                .ToListAsync(cancellationToken))
+                .Where(x => x.EndAt > x.CreatedAt)
+                .ToList();
+
+            var effectiveOutboundSamples = outboundExportSamples.Count > 0 ? outboundExportSamples : outboundShipmentSamples;
+            var avgOutboundTurnaroundHours = effectiveOutboundSamples.Count > 0
+                ? Math.Round((decimal)effectiveOutboundSamples.Average(x => (x.EndAt - x.CreatedAt).TotalHours), 1)
+                : 0m;
             return Ok(new
             {
                 inboundPostedCount,
@@ -1359,10 +1411,19 @@ namespace ERP.Api.Controllers
                 stocktakeLineCount,
                 stocktakeAccurateLineCount,
                 stocktakeAccuracyRatePct,
+                avgInboundTurnaroundHours,
+                avgOutboundTurnaroundHours,
+                avgInboundLeadTimeHours = avgInboundTurnaroundHours,
+                avgOutboundLeadTimeHours = avgOutboundTurnaroundHours,
+                openPickingBacklogCount,
                 inboundOutboundSla = new
                 {
                     inboundTotalReceipts = inboundPostedCount,
                     inboundPostedReceipts = inboundPostedCount,
+                    completedReceiptsCount = inboundPostedCount,
+                    avgInboundTurnaroundHours,
+                    avgInboundLeadTimeHours = avgInboundTurnaroundHours,
+                    openPutawayBacklogCount = putawayOpenCount,
                     inboundCompletedPutawayTasks = putawayCompletedCount,
                     inboundTotalPutawayTasks = totalPutawayTasks,
                     inboundCompletionRatePercent = totalPutawayTasks > 0
@@ -1370,6 +1431,10 @@ namespace ERP.Api.Controllers
                         : 100m,
                     outboundTotalShipments = totalTrackedShipments,
                     outboundDeliveredShipments = deliveredShipments,
+                    dispatchedExportsCount = outboundPostedExportsWithoutShipment + deliveredShipments,
+                    avgOutboundTurnaroundHours,
+                    avgOutboundLeadTimeHours = avgOutboundTurnaroundHours,
+                    openPickingBacklogCount,
                     outboundDeliverySuccessRatePercent = deliverySuccessRatePct
                 },
                 stocktakeAccuracy = new
@@ -1380,7 +1445,8 @@ namespace ERP.Api.Controllers
                     accurateLinesCount = stocktakeAccurateLineCount,
                     lineAccuracyPercent = stocktakeAccuracyRatePct
                 },
-                turnoverItems
+                turnoverItems,
+                turnoverRows = turnoverItems
             });
         }
 
@@ -1477,7 +1543,11 @@ namespace ERP.Api.Controllers
                         r.ExpiryDate,
                         r.Quantity,
                         r.ReservedQuantity,
-                        r.AvailableQuantity,
+                        AvailableQuantity = (string.Equals((r.Status ?? string.Empty).Trim(), "Available", StringComparison.OrdinalIgnoreCase) ||
+                                             string.Equals((r.Status ?? string.Empty).Trim(), "Khả dụng", StringComparison.OrdinalIgnoreCase)) &&
+                                            (!r.ExpiryDate.HasValue || r.ExpiryDate.Value.Date >= today)
+                            ? Math.Max(0m, r.Quantity - r.ReservedQuantity)
+                            : 0m,
                         DaysToExpiry = daysToExpiry,
                         AgeDays = ageDays,
                         ExpiryStatus = expiryStatus,

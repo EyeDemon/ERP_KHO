@@ -495,6 +495,7 @@
   color: var(--ui-warning);
 }
 
+.production-ui .ui-badge.info { background: #E0F2FE; color: #0369A1; border: 1px solid #7DD3FC; }
 .production-ui .ui-badge.danger {
   background: var(--ui-danger-soft);
   color: var(--ui-danger);

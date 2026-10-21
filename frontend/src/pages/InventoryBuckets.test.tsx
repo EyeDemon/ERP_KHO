@@ -51,7 +51,7 @@ describe('InventoryBuckets',()=>{
     const view=render(<InventoryBuckets warehouses={warehouses}/>);
     expect(await view.findByText('LOT-A')).toBeTruthy();
     expect(within(view.getByRole('table',{name:'Nhóm tồn kho'})).getAllByText('Khả dụng').length).toBeGreaterThan(1);
-    expect(view.getByText(/Giữ:✓/)).toBeTruthy();
+    expect(view.getByText(/Giữ:\s*✓/)).toBeTruthy();
     expect(view.queryByText('Đổi trạng thái')).toBeNull();
   });
 

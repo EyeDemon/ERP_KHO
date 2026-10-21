@@ -212,7 +212,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
             </select>
           </UiToolbarField>
           <UiToolbarField label="ID sản phẩm">
-            <input aria-label="ID sản phẩm nhóm tồn" type="number" min="1" value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}/>
+            <input aria-label="ID sản phẩm nhóm tồn" type="number" min="1" placeholder="Nhập ID sản phẩm..." value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}/>
           </UiToolbarField>
           <UiToolbarField label="Trạng thái">
             <select aria-label="Lọc trạng thái tồn kho" value={filters.status} onChange={e=>setFilters(x=>({...x,status:e.target.value}))}>
@@ -248,8 +248,8 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
                 <td>{bucket.serialNumber||'—'}</td>
                 <td>
                   <small>
-                    Giữ:{bucket.isReservable?'✓':'—'} • Phân bổ:{bucket.isAllocatable?'✓':'—'} •
-                    Lấy:{bucket.isPickable?'✓':'—'} • Giao:{bucket.isShippable?'✓':'—'}
+                    Giữ: {bucket.isReservable?'✓':'—'} • Phân bổ: {bucket.isAllocatable?'✓':'—'} •
+                    Lấy: {bucket.isPickable?'✓':'—'} • Giao: {bucket.isShippable?'✓':'—'}
                   </small>
                 </td>
                 <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucket.onHandQuantity}</td>
