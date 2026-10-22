@@ -114,9 +114,15 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       expect.objectContaining({ tenantCode: 'TENANT-SME-2026' }),
     );
 
+    expect(view.getByText('Quản lý Gian hàng Sàn TMĐT & Ánh xạ Mã Sản phẩm Đa Sàn')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('Mapping');
+    const shopNameInput = view.getByLabelText('Tên gian hàng sàn') as HTMLInputElement;
+    expect(shopNameInput.value).toBe('Gian hàng Shopee Chính hãng');
+    expect(shopNameInput.maxLength).toBe(120);
+
     fireEvent.click(view.getByRole('button', { name: 'Liên kết Gian hàng & Ánh xạ SKU Sàn' }));
     expect(
-      await view.findByText(/Đã liên kết gian hàng Gian hàng Shopee Chính hãng WH01/),
+      await view.findByText(/Đã liên kết gian hàng Gian hàng Shopee Chính hãng \(SHOPEE\)/),
     ).toBeTruthy();
 
     fireEvent.click(view.getByRole('button', { name: 'Đồng bộ Tồn kho An toàn Đa Gian hàng' }));

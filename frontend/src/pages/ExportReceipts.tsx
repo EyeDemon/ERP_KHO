@@ -654,11 +654,12 @@ const ExportReceipts = () => {
                 <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>Mã vận đơn bàn giao (AWB):</span>
                 <input
                   type="search"
+                  data-testid="input-handover-awb-codes"
                   aria-label="Nhập hoặc quét mã vận đơn bàn giao"
                   value={handoverTrackingInput}
                   onChange={(e) => setHandoverTrackingInput(e.target.value)}
                   placeholder="Nhập hoặc quét mã vận đơn AWB..."
-                  style={{ minHeight: 36, flex: 1, padding: '4px 10px' }}
+                  style={{ minHeight: 36, minWidth: 340, width: 360, flex: 1, padding: '4px 10px' }}
                 />
               </label>
               {receipts.length > 0 && (

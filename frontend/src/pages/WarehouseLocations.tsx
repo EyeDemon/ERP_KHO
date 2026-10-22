@@ -210,6 +210,7 @@ const WarehouseLocations = () => {
     status: string;
   } | null>(null);
 
+  const [binBarcodeList, setBinBarcodeList] = useState('BIN-A01-01, BIN-A01-02');
   const loadWarehouses = useCallback(async () => {
     const response = await apiClient.get('/api/putaway-tasks/location-warehouses');
     const items = response.data as Warehouse[];
@@ -504,12 +505,12 @@ const WarehouseLocations = () => {
                 })
                 .catch((failure) => {
                   setTopologyAuditResult(null);
-                  setError(messageOf(failure, 'Không thể kiểm định cấu trúc Zone/Bin và giới hạn sức chứa.'));
+                  setError(messageOf(failure, 'Không thể kiểm định cấu trúc Khu vực / Vị trí Kệ và giới hạn sức chứa.'));
                 })
                 .finally(() => setTopologyAuditBusy(false));
             }}
           >
-            Kiểm định Cấu trúc Zone/Bin & Giới hạn Sức chứa
+            Kiểm định Cấu trúc Khu vực / Vị trí Kệ &amp; Giới hạn Sức chứa
           </button>
           <button
             type="button"
@@ -557,10 +558,19 @@ const WarehouseLocations = () => {
           >
             In Mã vạch Vị trí Kệ
           </button>
-          <div aria-label="Nhãn mã vạch vị trí kệ" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <div data-testid="bin-barcode-preview" aria-label="Nhãn mã vạch vị trí kệ" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <input
+              type="search"
+              aria-label="Danh sách mã vị trí kệ cần in"
+              value={binBarcodeList}
+              onChange={(e) => setBinBarcodeList(e.target.value)}
+              placeholder="VD: BIN-A01-01, BIN-A01-02"
+              style={{ minHeight: 38, minWidth: 240, padding: '6px 10px', boxSizing: 'border-box' }}
+            />
             <BarcodeSvg
-              value={filtered[0]?.code || locations[0]?.code || 'A01-R01-L01-B01'}
-              label={`Vị trí kệ: ${filtered[0]?.code || locations[0]?.code || 'A01-R01-L01-B01'}`}
+              value={(binBarcodeList.split(',')[0] || '').trim() || 'BIN-A01-01'}
+              qrCaption="Mã QR vị trí kệ"
+              label={`Vị trí kệ: ${(binBarcodeList.split(',')[0] || '').trim() || 'BIN-A01-01'}`}
             />
           </div>
         </div>

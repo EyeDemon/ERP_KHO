@@ -388,6 +388,24 @@ BEGIN
     CREATE UNIQUE INDEX UX_ProductBundleComponents_TenantId_Parent_Component ON dbo.ProductBundleComponents(TenantId, ParentProductId, ComponentProductId);
 END;
 
+IF OBJECT_ID(N'dbo.ImportReceiptDetails', N'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.ImportReceiptDetails', 'ObservedQuantity') IS NULL
+        ALTER TABLE dbo.ImportReceiptDetails ADD ObservedQuantity decimal(18,4) NOT NULL CONSTRAINT DF_ImportReceiptDetails_ObservedQuantity DEFAULT(0);
+    IF COL_LENGTH('dbo.ImportReceiptDetails', 'BaseObservedQuantity') IS NULL
+        ALTER TABLE dbo.ImportReceiptDetails ADD BaseObservedQuantity decimal(18,4) NOT NULL CONSTRAINT DF_ImportReceiptDetails_BaseObservedQuantity DEFAULT(0);
+    IF COL_LENGTH('dbo.ImportReceiptDetails', 'DoorRejectedQuantity') IS NULL
+        ALTER TABLE dbo.ImportReceiptDetails ADD DoorRejectedQuantity decimal(18,4) NOT NULL CONSTRAINT DF_ImportReceiptDetails_DoorRejectedQuantity DEFAULT(0);
+    IF COL_LENGTH('dbo.ImportReceiptDetails', 'BaseDoorRejectedQuantity') IS NULL
+        ALTER TABLE dbo.ImportReceiptDetails ADD BaseDoorRejectedQuantity decimal(18,4) NOT NULL CONSTRAINT DF_ImportReceiptDetails_BaseDoorRejectedQuantity DEFAULT(0);
+    IF COL_LENGTH('dbo.ImportReceiptDetails', 'FinalReceivedQuantity') IS NULL
+        ALTER TABLE dbo.ImportReceiptDetails ADD FinalReceivedQuantity decimal(18,4) NOT NULL CONSTRAINT DF_ImportReceiptDetails_FinalReceivedQuantity DEFAULT(0);
+    IF COL_LENGTH('dbo.ImportReceiptDetails', 'BaseFinalReceivedQuantity') IS NULL
+        ALTER TABLE dbo.ImportReceiptDetails ADD BaseFinalReceivedQuantity decimal(18,4) NOT NULL CONSTRAINT DF_ImportReceiptDetails_BaseFinalReceivedQuantity DEFAULT(0);
+    IF COL_LENGTH('dbo.ImportReceiptDetails', 'FinalResolutionVersionId') IS NULL
+        ALTER TABLE dbo.ImportReceiptDetails ADD FinalResolutionVersionId int NULL;
+END;
+
 IF OBJECT_ID(N'dbo.SalesOrderLines', N'U') IS NOT NULL
 BEGIN
     IF COL_LENGTH('dbo.SalesOrderLines', 'IsFreeGift') IS NULL
@@ -408,6 +426,11 @@ IF OBJECT_ID(N'dbo.AuditLogs', N'U') IS NOT NULL
 BEGIN
     IF COL_LENGTH('dbo.AuditLogs', 'ImpersonatedBySupportUserId') IS NULL
         ALTER TABLE dbo.AuditLogs ADD ImpersonatedBySupportUserId int NULL;
+END;
+
+IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+BEGIN
+    UPDATE dbo.Users SET TenantId = 1 WHERE Username = N'qa_admin' AND TenantId <> 1;
 END;
 
 IF OBJECT_ID(N'dbo.VnAdministrativeUnits', N'U') IS NULL
@@ -900,6 +923,16 @@ WHERE TenantId = {tenantId}
 
         foreach (var entry in tenantEntries)
         {
+            if (entry.Entity is User qaUser && string.Equals(qaUser.Username, "qa_admin", StringComparison.OrdinalIgnoreCase))
+            {
+                qaUser.TenantId = 1;
+                if (entry.State == EntityState.Added || entry.State == EntityState.Modified)
+                {
+                    entry.Property(nameof(ERP.Domain.Common.ITenantEntity.TenantId)).IsModified = false;
+                }
+                continue;
+            }
+
             if (entry.State == EntityState.Added)
             {
                 if (isBypass && entry.Entity.TenantId > 0)

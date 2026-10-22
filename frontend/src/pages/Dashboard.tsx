@@ -236,7 +236,7 @@ const Dashboard = () => {
   const [marketplaceSyncNotice, setMarketplaceSyncNotice] = useState<string | null>(null);
   const [codReconcileNotice, setCodReconcileNotice] = useState<string | null>(null);
   const [wizardProvisionNotice, setWizardProvisionNotice] = useState<string | null>(null);
-  const [shopNameInput, setShopNameInput] = useState('Gian hàng Shopee Chính hãng WH01');
+  const [shopNameInput, setShopNameInput] = useState('Gian hàng Shopee Chính hãng');
   const [shopPlatformInput, setShopPlatformInput] = useState('SHOPEE');
   const [marketplaceSkuInput, setMarketplaceSkuInput] = useState('SP-SKU-001');
   const [internalSkuInput, setInternalSkuInput] = useState('QA-E2E-001');
@@ -567,15 +567,16 @@ const Dashboard = () => {
 
           <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
             <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a', marginBottom: 8 }}>
-              Quản lý Gian hàng Sàn TMĐT &amp; Ánh xạ Mã Sản phẩm (Mapping SKU Đa Sàn):
+              Quản lý Gian hàng Sàn TMĐT &amp; Ánh xạ Mã Sản phẩm Đa Sàn
             </div>
             <div className="ui-inline-wrap" style={{ gap: 8 }}>
               <input
                 aria-label="Tên gian hàng sàn"
+                maxLength={120}
                 value={shopNameInput}
                 onChange={(e) => setShopNameInput(e.target.value)}
                 placeholder="Tên gian hàng sàn"
-                style={{ minHeight: 36, padding: '4px 10px' }}
+                style={{ minHeight: 36, minWidth: 280, width: 300, padding: '4px 10px' }}
               />
               <select
                 aria-label="Nền tảng sàn TMĐT"

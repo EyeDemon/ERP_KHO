@@ -173,6 +173,8 @@ describe('quyền độc lập trên phiếu nhập', () => {
     expect(await view.findByText('SP-MASK-01')).toBeTruthy();
     expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(2);
 
+    expect(view.getByText('Quét Mã Vận Đơn Hoàn Hàng Nhanh tại Cửa Kho')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('1-Scan RTS');
     fireEvent.change(view.getByLabelText('Quét mã vận đơn hoàn hàng nhanh'), {
       target: { value: 'GHN-RTS-889901' },
     });

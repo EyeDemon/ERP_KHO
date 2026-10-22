@@ -321,6 +321,11 @@ describe('ExportReceipts shared production UI', () => {
       }),
     );
 
+    const handoverInput = view.getByTestId('input-handover-awb-codes') as HTMLInputElement;
+    expect(handoverInput.style.minWidth).toBe('340px');
+    expect(handoverInput.style.width).toBe('360px');
+    expect(handoverInput.value).toBe('GHN84920188, VTP99201122');
+
     fireEvent.change(view.getByLabelText('Nhập hoặc quét mã vận đơn bàn giao'), {
       target: { value: 'GHN84920188, VTP99201122' },
     });

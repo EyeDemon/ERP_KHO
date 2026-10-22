@@ -274,8 +274,9 @@ const WarehouseStructure = () => {
                   In Mã vạch Vị trí Kệ
                 </button>
                 <BarcodeSvg
-                  value={selectedLocation?.code || allLocations[0]?.code || 'Z01-A01-R01-L01-B01'}
-                  label={`Vị trí kệ: ${selectedLocation?.code || allLocations[0]?.code || 'Z01-A01-R01-L01-B01'}`}
+                  value={selectedLocation?.code || allLocations[0]?.code || 'BIN-A01-01'}
+                  qrCaption="Mã QR vị trí kệ"
+                  label={`Vị trí kệ: ${selectedLocation?.code || allLocations[0]?.code || 'BIN-A01-01'}`}
                 />
                 {virtualVerification && (
                   <UiBadge tone="success">

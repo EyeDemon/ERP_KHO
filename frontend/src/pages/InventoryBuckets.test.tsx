@@ -8,6 +8,8 @@ vi.mock('../services/apiClient',()=>({default:{get:vi.fn(),post:vi.fn()}}));
 const permissionState=vi.hoisted(()=>({granted:new Set<string>()}));
 vi.mock('../services/authorization',()=>({
   usePermission:(code:string)=>permissionState.granted.has(code),
+  hasPermission:(code:string)=>permissionState.granted.has(code),
+  usePermissionSet:()=>permissionState.granted,
 }));
 const {completeIdempotentAction}=vi.hoisted(()=>({completeIdempotentAction:vi.fn()}));
 vi.mock('../services/idempotency',()=>({
@@ -99,5 +101,14 @@ describe('InventoryBuckets',()=>{
     fireEvent.change(view.getByLabelText('Lý do'),{target:{value:'Giữ do chất lượng'}});
     fireEvent.click(view.getByText('Xác nhận đổi trạng thái'));
     expect((await view.findByRole('alert')).textContent).toContain('được giữ hoặc phân bổ');
+  });
+
+  it('renders pure Vietnamese opening balance & weighted average cost title on Inventory page', async () => {
+    const { default: Inventory } = await import('./Inventory');
+    const view = render(<Inventory />);
+    expect(
+      await view.findByText('Nhập Tồn Kho Đầu Kỳ & Giá Vốn Bình Quân Gia Quyền (Tệp Excel Chuẩn)'),
+    ).toBeTruthy();
+    expect(view.container.textContent).not.toContain('(MAC)');
   });
 });

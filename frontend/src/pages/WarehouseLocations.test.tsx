@@ -167,5 +167,14 @@ describe('WarehouseLocations production UI', () => {
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
     expect(view.queryByText('Thêm vị trí')).toBeNull();
     expect(view.queryByText('Gắn cấu trúc / Sửa')).toBeNull();
+    expect(view.getByRole('button', { name: 'Kiểm định Cấu trúc Khu vực / Vị trí Kệ & Giới hạn Sức chứa' })).toBeTruthy();
+    expect(view.container.textContent).not.toContain('Zone/Bin');
+    const binInput = view.getByLabelText('Danh sách mã vị trí kệ cần in') as HTMLInputElement;
+    expect(binInput.value).toBe('BIN-A01-01, BIN-A01-02');
+    const preview = view.getByTestId('bin-barcode-preview');
+    expect(preview.textContent).toContain('BIN-A01-01');
+    expect(preview.textContent).toContain('Vị trí kệ: BIN-A01-01');
+    expect(preview.textContent).toContain('Mã QR vị trí kệ');
+    expect(preview.textContent).not.toContain('QR GS1');
   });
 });

@@ -516,7 +516,7 @@ const ImportReceipts = () => {
             {successMsg && (successMsg.includes('RMA') || successMsg.includes('hàng hoàn trả') || successMsg.includes('hậu cần thu hồi')) && <div role="status" className="ui-success-text" style={{ order: 99, flexBasis: '100%', width: '100%', marginTop: 12, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500, whiteSpace: 'normal', wordBreak: 'break-word' }}>{successMsg}</div>}
             <div style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Quét Mã Vận Đơn Hoàn Hàng Nhanh (1-Scan RTS)</strong>
+                <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Quét Mã Vận Đơn Hoàn Hàng Nhanh tại Cửa Kho</strong>
                 <span style={{ fontSize: 12, color: '#475569' }}>Quét mã vận đơn hoàn trả từ hãng vận chuyển (GHN / GHTK / ViettelPost / SPX) để phân luồng kiểm định tức thì</span>
               </div>
               <div className="ui-inline-wrap" style={{ gap: 8 }}>

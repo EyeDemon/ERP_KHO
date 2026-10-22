@@ -6751,6 +6751,41 @@ namespace ERP.Api.Tests
             var pendingProposal = await db.StocktakeAdjustmentProposals.OrderByDescending(p => p.Id).FirstAsync();
             pendingProposal.IsAutoApproved.Should().BeFalse();
             pendingProposal.Status.Should().Be("PENDING");
+
+            // 8. PermissionsController ProvisionSaaSTenant(AllocateNewTenant: true) preserves qa_admin on TenantId = 1
+            db.Roles.Add(new ERP.Domain.Entities.Role { Id = 1, RoleName = "Admin" });
+            db.Users.Add(new ERP.Domain.Entities.User
+            {
+                Id = 1,
+                TenantId = 1,
+                Username = "qa_admin",
+                FullName = "QA Admin",
+                PasswordHash = "HASH",
+                RoleId = 1,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            var permissionsController = new PermissionsController(db);
+            var provT1Res = await permissionsController.ProvisionSaaSTenant(
+                new PermissionsController.ProvisionTenantRequest("STARTER", "Tenant 1 Shop", "0310000001", AllocateNewTenant: false),
+                default);
+            provT1Res.Should().BeOfType<OkObjectResult>();
+
+            var provT2Res = await permissionsController.ProvisionSaaSTenant(
+                new PermissionsController.ProvisionTenantRequest("PRO", "Tenant 2 Shop", "0310000002", AllocateNewTenant: true),
+                default);
+            using var provT2Doc = System.Text.Json.JsonSerializer.SerializeToDocument(provT2Res.Should().BeOfType<OkObjectResult>().Subject.Value);
+            var allocatedTenantId = provT2Doc.RootElement.GetProperty("tenantId").GetInt32();
+            allocatedTenantId.Should().BeGreaterThan(1);
+
+            var qaAdminAfter = await db.Users.IgnoreQueryFilters().SingleAsync(u => u.Username == "qa_admin");
+            qaAdminAfter.TenantId.Should().Be(1);
+            db.CurrentTenantId.Should().Be(1);
+
+            var newTenantOwner = await db.Users.IgnoreQueryFilters().SingleOrDefaultAsync(u => u.Username == $"tenant_{allocatedTenantId}_owner");
+            newTenantOwner.Should().NotBeNull();
+            newTenantOwner!.TenantId.Should().Be(allocatedTenantId);
         }
     }
 }

@@ -607,7 +607,7 @@ const Inventory = () => {
   const renderStockTab = () => (
     <UiCard title="Tồn kho hiện tại">
       <div className="ui-subcard" style={{ marginBottom: 12 }}>
-        <div className="ui-subcard-title">Nhập Excel Tồn kho Đầu kỳ (Go-Live / Khởi tạo Sổ cái Kho)</div>
+        <div className="ui-subcard-title">Nhập Tồn Kho Đầu Kỳ &amp; Giá Vốn Bình Quân Gia Quyền (Tệp Excel Chuẩn)</div>
         <form onSubmit={handleOpeningBalanceImport} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             Tệp Excel tồn kho đầu kỳ (.xlsx)

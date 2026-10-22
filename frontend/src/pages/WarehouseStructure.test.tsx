@@ -30,6 +30,8 @@ describe('Cấu trúc vị trí kho mock-only', () => {
     expect(view.queryByText('Thêm cấu trúc vật lý')).toBeNull();
     expect(view.queryByText('Tạo vị trí')).toBeNull();
     expect(view.queryByText('Lưu vị trí')).toBeNull();
+    expect(view.getByText('Mã QR vị trí kệ')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('QR GS1');
   });
 
   it('filters local mock data without requiring an external API', () => {

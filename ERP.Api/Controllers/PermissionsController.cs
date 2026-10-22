@@ -248,7 +248,8 @@ public sealed class PermissionsController(
             return Forbid();
 
         var now = DateTime.UtcNow;
-        var tenantId = db?.CurrentTenantId ?? 1;
+        var originalTenantId = db?.CurrentTenantId > 0 ? db.CurrentTenantId : 1;
+        var tenantId = originalTenantId;
         var planCode = string.IsNullOrWhiteSpace(request?.PlanCode) ? "STARTER" : request.PlanCode.Trim().ToUpperInvariant();
         var companyName = string.IsNullOrWhiteSpace(request?.CompanyName) ? "Cửa hàng Thương mại Điện tử SME" : request.CompanyName.Trim();
 
@@ -258,77 +259,127 @@ public sealed class PermissionsController(
             {
                 var maxSubTenant = await db.TenantSubscriptions.IgnoreQueryFilters()
                     .MaxAsync(s => (int?)s.TenantId, ct) ?? 1;
-                tenantId = maxSubTenant + 1;
+                var maxWhTenant = await db.Warehouses.IgnoreQueryFilters()
+                    .MaxAsync(w => (int?)w.TenantId, ct) ?? 1;
+                tenantId = Math.Max(2, Math.Max(maxSubTenant, maxWhTenant) + 1);
             }
 
-            if (!await db.SaasPlans.AsNoTracking().AnyAsync(ct))
+            try
             {
-                db.SaasPlans.AddRange(
-                    new SaasPlan { PlanCode = "FREE_TRIAL", PlanName = "Gói Dùng Thử 14 Ngày", MonthlyOrderQuota = 300, MaxWarehouses = 1, MaxUsers = 3, MonthlyPriceVnd = 0m, IsActive = true },
-                    new SaasPlan { PlanCode = "STARTER", PlanName = "Gói Khởi Đầu (SME Starter)", MonthlyOrderQuota = 1500, MaxWarehouses = 2, MaxUsers = 10, MonthlyPriceVnd = 499000m, IsActive = true },
-                    new SaasPlan { PlanCode = "PRO", PlanName = "Gói Chuyên Nghiệp Đa Sàn (Omnichannel Pro)", MonthlyOrderQuota = 10000, MaxWarehouses = 5, MaxUsers = 30, MonthlyPriceVnd = 1490000m, IsActive = true },
-                    new SaasPlan { PlanCode = "ENTERPRISE", PlanName = "Gói Doanh Nghiệp Không Giới Hạn", MonthlyOrderQuota = 100000, MaxWarehouses = 20, MaxUsers = 200, MonthlyPriceVnd = 4990000m, IsActive = true }
-                );
-                await db.SaveChangesAsync(ct);
-            }
+                db.UseTenant(tenantId);
 
-            var sub = await db.TenantSubscriptions.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
-            if (sub == null)
-            {
-                sub = new TenantSubscription
+                if (!await db.SaasPlans.AsNoTracking().AnyAsync(ct))
                 {
-                    TenantId = tenantId,
-                    PlanCode = planCode,
-                    Status = "ACTIVE",
-                    MonthlyOrderQuota = planCode == "PRO" ? 10000 : 1500,
-                    CurrentMonthOrderCount = 0,
-                    MaxWarehouses = planCode == "PRO" ? 5 : 2,
-                    MaxUsers = planCode == "PRO" ? 30 : 10,
-                    TrialEndsAtUtc = now.AddDays(14),
-                    CurrentPeriodStartUtc = now,
-                    CurrentPeriodEndUtc = now.AddDays(30),
-                    UpdatedAtUtc = now
-                };
-                db.TenantSubscriptions.Add(sub);
-                await db.SaveChangesAsync(ct);
-            }
-
-            var defaultWhCode = tenantId == 1 ? "WH-MAIN" : $"WH-T{tenantId}";
-            var wh = await db.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.Code == defaultWhCode, ct);
-            if (wh == null)
-            {
-                wh = new Warehouse
-                {
-                    Code = defaultWhCode,
-                    Name = $"Kho Trung Tâm - {companyName}",
-                    Address = "Việt Nam",
-                    IsActive = true
-                };
-                db.Warehouses.Add(wh);
-                await db.SaveChangesAsync(ct);
-
-                var defaultLocations = new[]
-                {
-                    ("STAGE-IN", "Khu Tiếp Nhận Đầu Vào", ERP.Domain.Enums.WarehouseLocationType.Receiving),
-                    ("PICK-A01", "Kệ Nhặt Hàng A01", ERP.Domain.Enums.WarehouseLocationType.Storage),
-                    ("PACK-01", "Bàn Đóng Gói 01", ERP.Domain.Enums.WarehouseLocationType.Staging),
-                    ("STAGE-OUT", "Khu Tập Kết Xuất Kho", ERP.Domain.Enums.WarehouseLocationType.Staging),
-                    ("QUARANTINE", "Khu Biệt Trữ Kiểm Định", ERP.Domain.Enums.WarehouseLocationType.Damaged)
-                };
-                foreach (var (code, name, locType) in defaultLocations)
-                {
-                    db.WarehouseLocations.Add(new WarehouseLocation
-                    {
-                        WarehouseId = wh.Id,
-                        Code = code,
-                        Name = name,
-                        LocationType = locType,
-                        IsActive = true,
-                        IsPickable = locType == ERP.Domain.Enums.WarehouseLocationType.Storage,
-                        IsReceivable = locType == ERP.Domain.Enums.WarehouseLocationType.Receiving
-                    });
+                    db.SaasPlans.AddRange(
+                        new SaasPlan { PlanCode = "FREE_TRIAL", PlanName = "Gói Dùng Thử 14 Ngày", MonthlyOrderQuota = 300, MaxWarehouses = 1, MaxUsers = 3, MonthlyPriceVnd = 0m, IsActive = true },
+                        new SaasPlan { PlanCode = "STARTER", PlanName = "Gói Khởi Đầu (SME Starter)", MonthlyOrderQuota = 1500, MaxWarehouses = 2, MaxUsers = 10, MonthlyPriceVnd = 499000m, IsActive = true },
+                        new SaasPlan { PlanCode = "PRO", PlanName = "Gói Chuyên Nghiệp Đa Sàn (Omnichannel Pro)", MonthlyOrderQuota = 10000, MaxWarehouses = 5, MaxUsers = 30, MonthlyPriceVnd = 1490000m, IsActive = true },
+                        new SaasPlan { PlanCode = "ENTERPRISE", PlanName = "Gói Doanh Nghiệp Không Giới Hạn", MonthlyOrderQuota = 100000, MaxWarehouses = 20, MaxUsers = 200, MonthlyPriceVnd = 4990000m, IsActive = true }
+                    );
+                    await db.SaveChangesAsync(ct);
                 }
-                await db.SaveChangesAsync(ct);
+
+                var sub = await db.TenantSubscriptions.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+                if (sub == null)
+                {
+                    sub = new TenantSubscription
+                    {
+                        TenantId = tenantId,
+                        PlanCode = planCode,
+                        Status = "ACTIVE",
+                        MonthlyOrderQuota = planCode == "PRO" ? 10000 : 1500,
+                        CurrentMonthOrderCount = 0,
+                        MaxWarehouses = planCode == "PRO" ? 5 : 2,
+                        MaxUsers = planCode == "PRO" ? 30 : 10,
+                        TrialEndsAtUtc = now.AddDays(14),
+                        CurrentPeriodStartUtc = now,
+                        CurrentPeriodEndUtc = now.AddDays(30),
+                        UpdatedAtUtc = now
+                    };
+                    db.TenantSubscriptions.Add(sub);
+                    await db.SaveChangesAsync(ct);
+                }
+
+                var defaultWhCode = tenantId == 1 ? "WH-MAIN" : $"WH-T{tenantId}";
+                var wh = await db.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.TenantId == tenantId && w.Code == defaultWhCode, ct);
+                if (wh == null)
+                {
+                    wh = new Warehouse
+                    {
+                        TenantId = tenantId,
+                        Code = defaultWhCode,
+                        Name = $"Kho Trung Tâm - {companyName}",
+                        Address = "Việt Nam",
+                        IsActive = true
+                    };
+                    db.Warehouses.Add(wh);
+                    await db.SaveChangesAsync(ct);
+
+                    var defaultLocations = new[]
+                    {
+                        ("STAGE-IN", "Khu Tiếp Nhận Đầu Vào", ERP.Domain.Enums.WarehouseLocationType.Receiving),
+                        ("PICK-A01", "Kệ Nhặt Hàng A01", ERP.Domain.Enums.WarehouseLocationType.Storage),
+                        ("PACK-01", "Bàn Đóng Gói 01", ERP.Domain.Enums.WarehouseLocationType.Staging),
+                        ("STAGE-OUT", "Khu Tập Kết Xuất Kho", ERP.Domain.Enums.WarehouseLocationType.Staging),
+                        ("QUARANTINE", "Khu Biệt Trữ Kiểm Định", ERP.Domain.Enums.WarehouseLocationType.Damaged)
+                    };
+                    foreach (var (code, name, locType) in defaultLocations)
+                    {
+                        db.WarehouseLocations.Add(new WarehouseLocation
+                        {
+                            TenantId = tenantId,
+                            WarehouseId = wh.Id,
+                            Code = code,
+                            Name = name,
+                            LocationType = locType,
+                            IsActive = true,
+                            IsPickable = locType == ERP.Domain.Enums.WarehouseLocationType.Storage,
+                            IsReceivable = locType == ERP.Domain.Enums.WarehouseLocationType.Receiving
+                        });
+                    }
+                    await db.SaveChangesAsync(ct);
+                }
+
+                if (tenantId > 1)
+                {
+                    var ownerUsername = $"tenant_{tenantId}_owner";
+                    var hasOwner = await db.Users.IgnoreQueryFilters()
+                        .AnyAsync(u => u.TenantId == tenantId && u.Username == ownerUsername, ct);
+                    if (!hasOwner)
+                    {
+                        var adminRoleId = await db.Roles.AsNoTracking()
+                            .Where(r => r.RoleName == AppRoles.Admin)
+                            .Select(r => (int?)r.Id)
+                            .FirstOrDefaultAsync(ct)
+                            ?? await db.Roles.AsNoTracking().Select(r => (int?)r.Id).FirstOrDefaultAsync(ct);
+                        if (adminRoleId.HasValue)
+                        {
+                            db.Users.Add(new User
+                            {
+                                TenantId = tenantId,
+                                Username = ownerUsername,
+                                FullName = $"Chủ shop - {companyName}",
+                                Email = $"owner.t{tenantId}@erpkho.local",
+                                PasswordHash = "PROVISIONED_TENANT_OWNER",
+                                RoleId = adminRoleId.Value,
+                                IsActive = true,
+                                CreatedAt = now
+                            });
+                            await db.SaveChangesAsync(ct);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                db.UseTenant(originalTenantId);
+            }
+
+            if (db.Database.IsRelational())
+            {
+                await db.Users.IgnoreQueryFilters()
+                    .Where(u => u.Username == "qa_admin" && u.TenantId != 1)
+                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.TenantId, 1), ct);
             }
         }
 
