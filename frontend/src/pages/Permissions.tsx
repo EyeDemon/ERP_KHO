@@ -165,9 +165,105 @@ export default function Permissions() {
     gatewayStatus: 'Đối soát tự động PayOS / SePay: Sẵn sàng kích hoạt tức thì (< 5 giây)',
   });
   const [vietQrNotice, setVietQrNotice] = useState<string | null>(null);
+  const [supportSessions, setSupportSessions] = useState<Array<{
+    id: number;
+    targetUserId: number;
+    supportAgentName: string;
+    ticketReference: string;
+    status: string;
+    expiresAtUtc: string;
+  }>>([]);
+  const [supportBusy, setSupportBusy] = useState(false);
+  const [supportTicketRef, setSupportTicketRef] = useState('ZALO-SUP-2026-001');
+  const [supportNotice, setSupportNotice] = useState('');
+
+  const loadSupportImpersonationSessions = async () => {
+    if (supportBusy) return;
+    setSupportBusy(true);
+    setError('');
+    setSupportNotice('');
+    try {
+      const res = await apiClient.get('/api/account-security/support-impersonation/sessions');
+      const raw = Array.isArray(res?.data) ? res.data : (Array.isArray((res?.data as { items?: unknown[] } | undefined)?.items) ? (res.data as { items: unknown[] }).items : []);
+      setSupportSessions(
+        raw.map((item: Record<string, unknown>, idx: number) => ({
+          id: Number(item.id ?? item.sessionId ?? idx + 1),
+          targetUserId: Number(item.targetUserId ?? item.userId ?? 1),
+          supportAgentName: String(item.supportAgentName ?? 'Chuyên viên Kỹ thuật ERP KHO'),
+          ticketReference: String(item.ticketReference ?? 'ZALO-SUP-2026-001'),
+          status: String(item.status ?? 'ACTIVE').toUpperCase().includes('REVOKE') ? 'Đã thu hồi' : 'Đang hoạt động (TTL 30 phút)',
+          expiresAtUtc: String(item.expiresAtUtc ?? new Date(Date.now() + 30 * 60000).toISOString()),
+        }))
+      );
+      setSupportNotice(`Đã tải ${raw.length} phiên cấp quyền hỗ trợ kỹ thuật tạm thời.`);
+    } catch (failure) {
+      setError(permissionError(failure));
+    } finally {
+      setSupportBusy(false);
+    }
+  };
+
+  const grantSupportImpersonationSession = async () => {
+    if (supportBusy) return;
+    setSupportBusy(true);
+    setError('');
+    setSupportNotice('');
+    const uid = Number(targetUserIdInput) > 0 ? Number(targetUserIdInput) : 1;
+    const ticket = supportTicketRef.trim() || 'ZALO-SUP-2026-001';
+    try {
+      const res = await apiClient.post<Record<string, unknown>>(`/api/account-security/${uid}/support-impersonation`, {
+        supportAgentName: 'Chuyên viên Kỹ thuật ERP KHO',
+        ticketReference: ticket,
+        ttlMinutes: 30,
+        reason: 'Hỗ trợ kỹ thuật qua Zalo OA',
+      });
+      const d = res?.data;
+      const newId = Number(d?.id ?? d?.sessionId ?? Date.now());
+      const expiresAt = typeof d?.expiresAtUtc === 'string' && d.expiresAtUtc ? d.expiresAtUtc : new Date(Date.now() + 30 * 60000).toISOString();
+      setSupportSessions(prev => [
+        {
+          id: newId,
+          targetUserId: uid,
+          supportAgentName: String(d?.supportAgentName ?? 'Chuyên viên Kỹ thuật ERP KHO'),
+          ticketReference: String(d?.ticketReference ?? ticket),
+          status: 'Đang hoạt động (TTL 30 phút)',
+          expiresAtUtc: expiresAt,
+        },
+        ...prev,
+      ]);
+      setSupportNotice(`Đã cấp phiên hỗ trợ kỹ thuật tạm thời (#${newId}, TTL 30 phút) cho phiếu ${ticket}.`);
+    } catch (failure) {
+      setError(permissionError(failure));
+    } finally {
+      setSupportBusy(false);
+    }
+  };
+
+  const revokeSupportImpersonationSession = async (sessionId: number) => {
+    if (supportBusy) return;
+    setSupportBusy(true);
+    setError('');
+    setSupportNotice('');
+    try {
+      await apiClient.post(`/api/account-security/support-impersonation/${sessionId}/revoke`, {
+        reason: 'Chủ shop thu hồi phiên hỗ trợ kỹ thuật',
+      });
+      setSupportSessions(prev =>
+        prev.map(s => (s.id === sessionId ? { ...s, status: 'Đã thu hồi' } : s))
+      );
+      setSupportNotice(`Đã thu hồi tức thì phiên hỗ trợ kỹ thuật #${sessionId}.`);
+    } catch (failure) {
+      setError(permissionError(failure));
+    } finally {
+      setSupportBusy(false);
+    }
+  };
+
   const createVietQrRenewalInvoice = async () => {
     if (vietQrBusy) return;
     setVietQrBusy(true);
+    setError('');
+    setVietQrNotice(null);
     try {
       void Promise.resolve(apiClient.get('/api/permissions/saas-subscription-billing')).catch(() => null);
       const res = await apiClient.post<Record<string, unknown>>('/api/permissions/saas-subscription-billing/create-vietqr-invoice', {
@@ -185,8 +281,9 @@ export default function Permissions() {
         gatewayStatus: 'Đối soát tự động PayOS / SePay: Đã tạo lệnh thanh toán & sẵn sàng kích hoạt tự động',
       });
       setVietQrNotice(`Đã khởi tạo mã thanh toán VietQR tự động (${transferRef}) • Cổng đối soát PayOS / SePay.`);
-    } catch {
-      setVietQrNotice(`Đã khởi tạo mã thanh toán VietQR tự động (${vietQrInvoice.transferReference}) • Cổng đối soát PayOS / SePay.`);
+    } catch (failure) {
+      setVietQrNotice(null);
+      setError(permissionError(failure));
     } finally {
       setVietQrBusy(false);
     }
@@ -194,6 +291,8 @@ export default function Permissions() {
   const confirmVietQrWebhook = async () => {
     if (vietQrBusy) return;
     setVietQrBusy(true);
+    setError('');
+    setVietQrNotice(null);
     try {
       const res = await apiClient.post<Record<string, unknown>>('/api/permissions/saas/subscription-billing/webhook-vietqr', {
         planCode: 'GROWTH',
@@ -210,12 +309,9 @@ export default function Permissions() {
         gatewayStatus: `Trạng thái gói cước: ${statusLabel} (Đã kích hoạt tự động & mở khóa 100% hạn mức)`,
       }));
       setVietQrNotice(rawMsg);
-    } catch {
-      setVietQrInvoice(prev => ({
-        ...prev,
-        gatewayStatus: 'Trạng thái gói cước: Đang hoạt động (Đã kích hoạt tự động & mở khóa 100% hạn mức)',
-      }));
-      setVietQrNotice('Đã xác nhận Webhook PayOS / SePay (Mã GD: FT262948899001) • Gói Tăng trưởng đã chuyển sang trạng thái Đang hoạt động & mở khóa hạn mức tự động.');
+    } catch (failure) {
+      setVietQrNotice(null);
+      setError(permissionError(failure));
     } finally {
       setVietQrBusy(false);
     }
@@ -223,6 +319,8 @@ export default function Permissions() {
   const verifyTotpCode = async () => {
     if (totpBusy) return;
     setTotpBusy(true);
+    setError('');
+    setTotpSetupNotice('');
     const codeToVerify = (totpVerifyInput || totpState.verificationCode || '893850').trim();
     const uid = Number(targetUserIdInput) > 0 ? Number(targetUserIdInput) : 1;
     try {
@@ -231,8 +329,9 @@ export default function Permissions() {
         code: codeToVerify,
       });
       setTotpSetupNotice(`Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số (${codeToVerify}) theo chuẩn RFC 6238`);
-    } catch {
-      setTotpSetupNotice(`Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số (${codeToVerify}) theo chuẩn RFC 6238`);
+    } catch (failure) {
+      setTotpSetupNotice('');
+      setError(permissionError(failure));
     } finally {
       setTotpBusy(false);
     }
@@ -240,6 +339,8 @@ export default function Permissions() {
   const setupTotpMfa = async () => {
     if (totpBusy) return;
     setTotpBusy(true);
+    setError('');
+    setTotpSetupNotice('');
     try {
       const res = await apiClient.post<Record<string, unknown>>('/api/account-security/1/totp/setup', {});
       const d = res?.data;
@@ -249,8 +350,9 @@ export default function Permissions() {
       setTotpState({ secretKeyBase32: secret, otpauthUri: uri, verificationCode: code });
       setTotpVerifyInput(code);
       setTotpSetupNotice(`Đã khởi tạo khóa bảo mật 2 lớp chuẩn RFC 6238 • Khóa Base32: ${secret} • Mã xác thực 6 chữ số: ${code}`);
-    } catch {
-      setTotpSetupNotice(`Đã khởi tạo khóa bảo mật 2 lớp chuẩn RFC 6238 • Khóa Base32: ${totpState.secretKeyBase32} • Mã xác thực 6 chữ số: ${totpState.verificationCode}`);
+    } catch (failure) {
+      setTotpSetupNotice('');
+      setError(permissionError(failure));
     } finally {
       setTotpBusy(false);
     }
@@ -642,6 +744,86 @@ export default function Permissions() {
                 <BarcodeSvg value={vietQrInvoice.qrPayload} format="QR" captionLabel="Mã VietQR" />
               </div>
             </div>
+          </div>
+
+          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Phiên Cấp quyền Hỗ trợ Kỹ thuật Tạm thời (TTL 30 phút)</strong>
+              <UiBadge tone="warning">Tự động thu hồi sau 30 phút • Ghi nhận kiểm toán 100%</UiBadge>
+            </div>
+            <div className="ui-inline-wrap" style={{ gap: 8 }}>
+              <input
+                type="search"
+                aria-label="Mã phiếu yêu cầu hỗ trợ Zalo"
+                value={supportTicketRef}
+                onChange={e => setSupportTicketRef(e.target.value)}
+                placeholder="VD: ZALO-SUP-2026-001"
+                style={{ height: 38, minHeight: 38, width: 220, padding: '6px 10px', boxSizing: 'border-box' }}
+              />
+              <button
+                type="button"
+                data-testid="btn-grant-support-impersonation"
+                disabled={supportBusy}
+                onClick={() => void grantSupportImpersonationSession()}
+              >
+                Cấp Quyền Hỗ Trợ Tạm Thời (30 Phút)
+              </button>
+              <button
+                type="button"
+                className="ui-btn-secondary"
+                data-testid="btn-load-support-impersonation"
+                disabled={supportBusy}
+                onClick={() => void loadSupportImpersonationSessions()}
+              >
+                Tải Danh Sách Phiên Hỗ Trợ
+              </button>
+            </div>
+            {supportNotice && (
+              <div role="status" style={{ padding: '6px 10px', borderRadius: 6, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 12.5 }}>
+                {supportNotice}
+              </div>
+            )}
+            {supportSessions.length > 0 && (
+              <UiTableScroll>
+                <table className="ui-table-compact" aria-label="Bảng phiên cấp quyền hỗ trợ kỹ thuật tạm thời">
+                  <thead>
+                    <tr>
+                      <th>Mã phiên</th>
+                      <th>Chuyên viên hỗ trợ</th>
+                      <th>Mã phiếu Zalo</th>
+                      <th>Hết hạn lúc</th>
+                      <th>Trạng thái</th>
+                      <th>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {supportSessions.map(s => (
+                      <tr key={s.id}>
+                        <td><code>#{s.id}</code></td>
+                        <td>{s.supportAgentName}</td>
+                        <td><code>{s.ticketReference}</code></td>
+                        <td>{new Date(s.expiresAtUtc).toLocaleString('vi-VN')}</td>
+                        <td>
+                          <UiBadge tone={s.status.includes('Đã thu hồi') ? 'neutral' : 'success'}>
+                            {s.status}
+                          </UiBadge>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            data-testid={`btn-revoke-support-${s.id}`}
+                            disabled={supportBusy || s.status.includes('Đã thu hồi')}
+                            onClick={() => void revokeSupportImpersonationSession(s.id)}
+                          >
+                            Thu hồi tức thì
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </UiTableScroll>
+            )}
           </div>
         </UiCard>
       )}

@@ -199,7 +199,9 @@ public sealed class InventoryStatusController(
                 .ToList();
 
             activeLocksCount = activeLockTypes.Count;
-            recallLocksCount = activeLockTypes.Count(t => t.Contains("Recall", StringComparison.OrdinalIgnoreCase));
+            recallLocksCount = activeLockTypes.Count(t =>
+                t.Contains("Recall", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("Investigation", StringComparison.OrdinalIgnoreCase));
             qualityHoldLocksCount = activeLockTypes.Count(t =>
                 t.Contains("Quality", StringComparison.OrdinalIgnoreCase)
                 || t.Contains("Qc", StringComparison.OrdinalIgnoreCase)

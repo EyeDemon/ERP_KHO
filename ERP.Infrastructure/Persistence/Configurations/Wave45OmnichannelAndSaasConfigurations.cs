@@ -175,3 +175,151 @@ public sealed class ShipmentFinancialLedgerConfiguration : IEntityTypeConfigurat
                .OnDelete(DeleteBehavior.NoAction);
     }
 }
+
+public sealed class VnAdministrativeUnitConfiguration : IEntityTypeConfiguration<VnAdministrativeUnit>
+{
+    public void Configure(EntityTypeBuilder<VnAdministrativeUnit> builder)
+    {
+        builder.ToTable("VnAdministrativeUnits");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.ProvinceCode).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.ProvinceName).HasMaxLength(128).IsRequired();
+        builder.Property(x => x.DistrictCode).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.DistrictName).HasMaxLength(128).IsRequired();
+        builder.Property(x => x.WardCode).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.WardName).HasMaxLength(128).IsRequired();
+        builder.Property(x => x.Keywords).HasMaxLength(500).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.ProvinceCode, x.DistrictCode, x.WardCode })
+               .IsUnique()
+               .HasDatabaseName("UX_VnAdministrativeUnits_TenantId_Codes");
+    }
+}
+
+public sealed class CarrierLocationMappingConfiguration : IEntityTypeConfiguration<CarrierLocationMapping>
+{
+    public void Configure(EntityTypeBuilder<CarrierLocationMapping> builder)
+    {
+        builder.ToTable("CarrierLocationMappings");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.CarrierCode).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.CarrierProvinceId).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.CarrierDistrictId).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.CarrierWardCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.SortingHubCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.RouteCode).HasMaxLength(64).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.AdministrativeUnitId, x.CarrierCode })
+               .IsUnique()
+               .HasDatabaseName("UX_CarrierLocationMappings_TenantId_AdminUnit_Carrier");
+        builder.HasOne(x => x.AdministrativeUnit)
+               .WithMany(u => u.CarrierMappings)
+               .HasForeignKey(x => x.AdministrativeUnitId)
+               .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class PackingVideoEvidenceConfiguration : IEntityTypeConfiguration<PackingVideoEvidence>
+{
+    public void Configure(EntityTypeBuilder<PackingVideoEvidence> builder)
+    {
+        builder.ToTable("PackingVideoEvidences");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.TrackingNumber).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.OrderCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.CameraStationId).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.VideoHashSha256).HasMaxLength(128).IsRequired();
+        builder.Property(x => x.StorageUrl).HasMaxLength(500).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.TrackingNumber })
+               .HasDatabaseName("IX_PackingVideoEvidences_TenantId_TrackingNumber");
+    }
+}
+
+public sealed class PromotionGiftRuleConfiguration : IEntityTypeConfiguration<PromotionGiftRule>
+{
+    public void Configure(EntityTypeBuilder<PromotionGiftRule> builder)
+    {
+        builder.ToTable("PromotionGiftRules");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.RuleCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.RuleName).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.MinOrderAmount).HasPrecision(18, 2);
+        builder.Property(x => x.MinTriggerQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.GiftQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.GiftUnitPrice).HasPrecision(18, 2);
+        builder.HasIndex(x => new { x.TenantId, x.RuleCode })
+               .IsUnique()
+               .HasDatabaseName("UX_PromotionGiftRules_TenantId_RuleCode");
+    }
+}
+
+public sealed class SupportImpersonationSessionConfiguration : IEntityTypeConfiguration<SupportImpersonationSession>
+{
+    public void Configure(EntityTypeBuilder<SupportImpersonationSession> builder)
+    {
+        builder.ToTable("SupportImpersonationSessions");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.SessionCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.SupportTicketCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.Status).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.TokenHash).HasMaxLength(256).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.SessionCode })
+               .IsUnique()
+               .HasDatabaseName("UX_SupportImpersonationSessions_TenantId_SessionCode");
+    }
+}
+
+public sealed class CustomerReturnConfiguration : IEntityTypeConfiguration<CustomerReturn>
+{
+    public void Configure(EntityTypeBuilder<CustomerReturn> builder)
+    {
+        builder.ToTable("CustomerReturns");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.ReturnCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.TrackingNumber).HasMaxLength(64);
+        builder.Property(x => x.OrderNumber).HasMaxLength(64);
+        builder.Property(x => x.ReturnReason).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.Status).HasMaxLength(32).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.ReturnCode })
+               .IsUnique()
+               .HasDatabaseName("UX_CustomerReturns_TenantId_ReturnCode");
+    }
+}
+
+public sealed class CustomerReturnLineConfiguration : IEntityTypeConfiguration<CustomerReturnLine>
+{
+    public void Configure(EntityTypeBuilder<CustomerReturnLine> builder)
+    {
+        builder.ToTable("CustomerReturnLines");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Quantity).HasPrecision(18, 4);
+        builder.Property(x => x.UnitCost).HasPrecision(18, 4);
+        builder.Property(x => x.PackagingQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.Condition).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.Disposition).HasMaxLength(32).IsRequired();
+        builder.HasOne(x => x.CustomerReturn)
+               .WithMany(r => r.Lines)
+               .HasForeignKey(x => x.CustomerReturnId)
+               .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class StocktakeAdjustmentProposalConfiguration : IEntityTypeConfiguration<StocktakeAdjustmentProposal>
+{
+    public void Configure(EntityTypeBuilder<StocktakeAdjustmentProposal> builder)
+    {
+        builder.ToTable("StocktakeAdjustmentProposals");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.ProposalCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.ReasonCode).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.SystemQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.CountedQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.DeltaQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.UnitCost).HasPrecision(18, 4);
+        builder.Property(x => x.VariancePct).HasPrecision(18, 4);
+        builder.Property(x => x.VarianceValue).HasPrecision(18, 2);
+        builder.Property(x => x.Status).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.Note).HasMaxLength(500);
+        builder.HasIndex(x => new { x.TenantId, x.ProposalCode })
+               .IsUnique()
+               .HasDatabaseName("UX_StocktakeAdjustmentProposals_TenantId_ProposalCode");
+    }
+}

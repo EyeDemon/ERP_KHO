@@ -12,6 +12,7 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/stock-reservations")]
+[Route("api/v1/stock-reservations")]
 [Authorize(Roles = AppRoles.AllRoles)]
 public class StockReservationsController(
     IStockReservationService service,

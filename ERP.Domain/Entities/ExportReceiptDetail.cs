@@ -16,6 +16,8 @@ public class ExportReceiptDetail : ITenantEntity
     public string? BaseUomCodeSnapshot { get; set; }
     public string? BaseUomNameSnapshot { get; set; }
     public int? BaseUomDecimalPlacesSnapshot { get; set; }
+    public bool IsFreeGift { get; set; }
+    public int? ParentBundleProductId { get; set; }
 
     // Navigation
     public ExportReceipt ExportReceipt { get; set; } = null!;

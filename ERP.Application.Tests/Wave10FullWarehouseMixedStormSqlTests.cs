@@ -911,7 +911,7 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
                         LocationId = binB2Id,
                         ProductId = skuBId,
                         InventoryStatus = "Available",
-                        LockType = nameof(InventoryLockType.QualityHold),
+                        LockType = nameof(InventoryLockType.InvestigationHold),
                         Reason = "Wave-10 transient inspection hold"
                     });
                     await svc.ReleaseAsync(created.Id, new ReleaseInventoryLockDto

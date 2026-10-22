@@ -13,6 +13,7 @@ public sealed record EscalateOverdueApprovalsRequest(int? WarehouseId);
 
 [ApiController]
 [Route("api/approvals")]
+[Route("api/v1/approvals")]
 [Authorize]
 [ApprovalAuthorize]
 public sealed class ApprovalsController(

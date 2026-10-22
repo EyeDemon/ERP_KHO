@@ -25,9 +25,9 @@ namespace ERP.Application.DTOs
         public string? SupplierCode { get; set; }
         public string? SupplierName { get; set; }
         public bool RequiresQc { get; set; }
-        public decimal SubTotalAmount { get; set; }
-        public decimal TaxAmount { get; set; }
-        public decimal TotalAmount { get; set; }
+        public decimal? SubTotalAmount { get; set; }
+        public decimal? TaxAmount { get; set; }
+        public decimal? TotalAmount { get; set; }
         public string? RowVersion { get; set; }
         public List<ImportReceiptDetailDto> Details { get; set; } = new();
     }
@@ -70,9 +70,9 @@ namespace ERP.Application.DTOs
         public decimal BaseFinalReceivedQuantity { get; set; }
         public decimal? UnitPrice { get; set; }
         public decimal TaxPercent { get; set; }
-        public decimal LineSubTotal { get; set; }
-        public decimal LineTaxAmount { get; set; }
-        public decimal LineTotal { get; set; }
+        public decimal? LineSubTotal { get; set; }
+        public decimal? LineTaxAmount { get; set; }
+        public decimal? LineTotal { get; set; }
         public string? Note { get; set; }
         public bool RequiresQc { get; set; }
         public string QcState { get; set; } = string.Empty;
@@ -83,7 +83,7 @@ namespace ERP.Application.DTOs
         public string? QcDispositionReasonCode { get; set; }
         public string? QcDispositionNote { get; set; }
     }
-    
+
     public class CreateImportReceiptDto
     {
         public string Code { get; set; } = string.Empty;

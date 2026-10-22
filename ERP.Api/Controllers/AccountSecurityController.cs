@@ -18,6 +18,7 @@ public sealed record ResetPasswordAdminRequest(
 [ApiController]
 [Route("api/users/{userId:int}/security")]
 [Route("api/account-security/{userId:int}")]
+[Route("api/v1/account-security/{userId:int}")]
 [Authorize]
 [PermissionAuthorize(AppPermissions.UserManage)]
 public sealed class AccountSecurityController(
@@ -386,7 +387,8 @@ public sealed class AccountSecurityController(
     public sealed record GrantSupportImpersonationRequest(
         string? SupportTicketCode = null,
         int? ExpiresInMinutes = null,
-        bool ReadOnlyScope = true);
+        bool ReadOnlyScope = true,
+        int? SupportAgentUserId = null);
 
     public sealed record AnonymizeBuyerPiiRequest(
         int? RetentionDays = null,
@@ -407,14 +409,34 @@ public sealed class AccountSecurityController(
         var expiresAtUtc = now.AddMinutes(expiresMinutes);
         var ticketCode = string.IsNullOrWhiteSpace(request?.SupportTicketCode) ? $"SUP-{now:yyyyMMdd}-01" : request.SupportTicketCode.Trim();
         var supportToken = $"IMP-{Guid.NewGuid():N}".ToUpperInvariant();
+        int? sessionId = null;
 
         if (db is not null)
         {
+            var actorId = ResolveActorUserId();
+            var session = new ERP.Domain.Entities.SupportImpersonationSession
+            {
+                TenantId = db.CurrentTenantId,
+                SessionCode = $"IMP-SES-{now:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..32].ToUpperInvariant(),
+                SupportTicketCode = ticketCode,
+                TokenHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(supportToken))),
+                GrantedByUserId = actorId ?? 1,
+                SupportAgentUserId = request?.SupportAgentUserId ?? (actorId ?? 1),
+                ReadOnlyScope = request?.ReadOnlyScope ?? true,
+                GrantedAtUtc = now,
+                ExpiresAtUtc = expiresAtUtc,
+                Status = "ACTIVE"
+            };
+            db.SupportImpersonationSessions.Add(session);
+            await db.SaveChangesAsync(cancellationToken);
+            sessionId = session.Id;
+
             db.AuditLogs.Add(new AuditLog
             {
-                UserId = ResolveActorUserId(),
+                UserId = actorId,
+                ImpersonatedBySupportUserId = request?.SupportAgentUserId ?? actorId,
                 EntityName = "SupportImpersonationConsent",
-                EntityId = db.CurrentTenantId,
+                EntityId = sessionId ?? db.CurrentTenantId,
                 Action = "AccountSecurity.GrantSupportImpersonation",
                 NewValues = $"Ticket={ticketCode}; ExpiresAtUtc={expiresAtUtc:O}; ReadOnly={request?.ReadOnlyScope ?? true}",
                 Reason = $"Chủ shop cấp quyền hỗ trợ kỹ thuật tạm thời ({expiresMinutes} phút) cho mã yêu cầu {ticketCode}",
@@ -426,6 +448,7 @@ public sealed class AccountSecurityController(
 
         return Ok(new
         {
+            sessionId,
             supportTicketCode = ticketCode,
             supportImpersonationToken = supportToken,
             readOnlyScope = request?.ReadOnlyScope ?? true,
@@ -433,6 +456,64 @@ public sealed class AccountSecurityController(
             grantedAtUtc = now,
             expiresAtUtc,
             statusLabel = $"Đã cấp quyền hỗ trợ kỹ thuật có thời hạn ({expiresMinutes} phút) kèm nhật ký AuditLog bất biến"
+        });
+    }
+
+    [HttpGet("~/api/v1/security/support-impersonation/sessions")]
+    [HttpGet("~/api/security/support-impersonation/sessions")]
+    public async Task<IActionResult> ListSupportImpersonationSessions(CancellationToken cancellationToken = default)
+    {
+        if (db is null)
+            return Ok(Array.Empty<object>());
+
+        var sessions = await db.SupportImpersonationSessions
+            .AsNoTracking()
+            .OrderByDescending(s => s.Id)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        return Ok(sessions);
+    }
+
+    [HttpPost("~/api/v1/security/support-impersonation/{sessionId:int}/revoke")]
+    [HttpPost("~/api/security/support-impersonation/{sessionId:int}/revoke")]
+    [IdempotentCommand("AccountSecurity.RevokeSupportImpersonation")]
+    public async Task<IActionResult> RevokeSupportImpersonation(int sessionId, CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        if (db is null)
+            return NotFound();
+
+        var session = await db.SupportImpersonationSessions.FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken);
+        if (session == null)
+            return NotFound(new { message = "Không tìm thấy phiên hỗ trợ kỹ thuật." });
+
+        session.Status = "REVOKED";
+        session.RevokedAtUtc = DateTime.UtcNow;
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = ResolveActorUserId(),
+            ImpersonatedBySupportUserId = session.SupportAgentUserId,
+            EntityName = "SupportImpersonationConsent",
+            EntityId = session.Id,
+            Action = "AccountSecurity.RevokeSupportImpersonation",
+            NewValues = $"SessionId={session.Id}; Status=REVOKED",
+            Reason = $"Thu hồi quyền hỗ trợ kỹ thuật tạm thời cho phiếu {session.SupportTicketCode}",
+            Result = "Success",
+            Timestamp = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            sessionId = session.Id,
+            supportTicketCode = session.SupportTicketCode,
+            status = session.Status,
+            revokedAtUtc = session.RevokedAtUtc,
+            statusLabel = $"Đã thu hồi phiên hỗ trợ kỹ thuật #{session.Id} ({session.SupportTicketCode})"
         });
     }
 

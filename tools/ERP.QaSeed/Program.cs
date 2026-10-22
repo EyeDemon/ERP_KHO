@@ -366,24 +366,185 @@ BEGIN
     CREATE UNIQUE INDEX UX_ShipmentFinancialLedgers_TenantId_TrackingNumber ON dbo.ShipmentFinancialLedgers(TenantId, TrackingNumber);
 END;
 
+IF OBJECT_ID(N'dbo.PromotionGiftRules', N'U') IS NOT NULL AND COL_LENGTH('dbo.PromotionGiftRules', 'MinOrderAmount') IS NULL
+BEGIN
+    DROP TABLE dbo.PromotionGiftRules;
+END;
+
 IF OBJECT_ID(N'dbo.PromotionGiftRules', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.PromotionGiftRules (
         Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_PromotionGiftRules PRIMARY KEY,
         TenantId int NOT NULL CONSTRAINT DF_PromotionGiftRules_TenantId DEFAULT(1),
         RuleCode nvarchar(64) NOT NULL,
-        RuleName nvarchar(128) NOT NULL,
-        MinOrderValueVnd decimal(19,4) NOT NULL,
+        RuleName nvarchar(200) NOT NULL,
+        WarehouseId int NULL,
         TriggerProductId int NULL,
+        MinOrderAmount decimal(18,2) NOT NULL,
+        MinTriggerQuantity decimal(18,4) NOT NULL,
         GiftProductId int NOT NULL,
-        GiftQuantity decimal(19,4) NOT NULL,
-        RemainingQuota int NOT NULL,
-        ValidFromUtc datetime2 NOT NULL,
-        ValidToUtc datetime2 NOT NULL,
-        IsActive bit NOT NULL CONSTRAINT DF_PromotionGiftRules_IsActive DEFAULT(1)
+        GiftQuantity decimal(18,4) NOT NULL,
+        GiftUnitPrice decimal(18,2) NOT NULL,
+        AutoSkipWhenOutOfStock bit NOT NULL CONSTRAINT DF_PromotionGiftRules_AutoSkip DEFAULT(1),
+        IsActive bit NOT NULL CONSTRAINT DF_PromotionGiftRules_IsActive DEFAULT(1),
+        CreatedAtUtc datetime2 NOT NULL
     );
     CREATE UNIQUE INDEX UX_PromotionGiftRules_TenantId_RuleCode ON dbo.PromotionGiftRules(TenantId, RuleCode);
 END;
+
+IF OBJECT_ID(N'dbo.VnAdministrativeUnits', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.VnAdministrativeUnits (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_VnAdministrativeUnits PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_VnAdministrativeUnits_TenantId DEFAULT(1),
+        ProvinceCode nvarchar(32) NOT NULL,
+        ProvinceName nvarchar(128) NOT NULL,
+        DistrictCode nvarchar(32) NOT NULL,
+        DistrictName nvarchar(128) NOT NULL,
+        WardCode nvarchar(32) NOT NULL,
+        WardName nvarchar(128) NOT NULL,
+        Keywords nvarchar(500) NOT NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_VnAdministrativeUnits_IsActive DEFAULT(1),
+        CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_VnAdministrativeUnits_CreatedAtUtc DEFAULT(SYSUTCDATETIME())
+    );
+    CREATE UNIQUE INDEX UX_VnAdministrativeUnits_TenantId_Codes ON dbo.VnAdministrativeUnits(TenantId, ProvinceCode, DistrictCode, WardCode);
+END;
+
+IF OBJECT_ID(N'dbo.CarrierLocationMappings', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CarrierLocationMappings (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_CarrierLocationMappings PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_CarrierLocationMappings_TenantId DEFAULT(1),
+        AdministrativeUnitId int NOT NULL,
+        CarrierCode nvarchar(32) NOT NULL,
+        CarrierProvinceId nvarchar(64) NOT NULL,
+        CarrierDistrictId nvarchar(64) NOT NULL,
+        CarrierWardCode nvarchar(64) NOT NULL,
+        SortingHubCode nvarchar(64) NOT NULL,
+        RouteCode nvarchar(64) NOT NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_CarrierLocationMappings_IsActive DEFAULT(1)
+    );
+    CREATE UNIQUE INDEX UX_CarrierLocationMappings_TenantId_AdminUnit_Carrier ON dbo.CarrierLocationMappings(TenantId, AdministrativeUnitId, CarrierCode);
+END;
+
+IF OBJECT_ID(N'dbo.PackingVideoEvidences', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PackingVideoEvidences (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_PackingVideoEvidences PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_PackingVideoEvidences_TenantId DEFAULT(1),
+        PackingSessionId int NULL,
+        ExportReceiptId int NULL,
+        TrackingNumber nvarchar(64) NOT NULL,
+        OrderCode nvarchar(64) NOT NULL,
+        CameraStationId nvarchar(64) NOT NULL,
+        StartedAtUtc datetime2 NOT NULL,
+        EndedAtUtc datetime2 NOT NULL,
+        DurationSeconds int NOT NULL,
+        VideoHashSha256 nvarchar(128) NOT NULL,
+        StorageUrl nvarchar(500) NOT NULL,
+        RecordedByUserId int NULL,
+        RecordedAtUtc datetime2 NOT NULL
+    );
+    CREATE INDEX IX_PackingVideoEvidences_TenantId_TrackingNumber ON dbo.PackingVideoEvidences(TenantId, TrackingNumber);
+END;
+
+IF OBJECT_ID(N'dbo.SupportImpersonationSessions', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SupportImpersonationSessions (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_SupportImpersonationSessions PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_SupportImpersonationSessions_TenantId DEFAULT(1),
+        SessionCode nvarchar(64) NOT NULL,
+        SupportTicketCode nvarchar(64) NOT NULL,
+        GrantedByUserId int NOT NULL,
+        SupportAgentUserId int NOT NULL,
+        ReadOnlyScope bit NOT NULL CONSTRAINT DF_SupportImpersonationSessions_ReadOnly DEFAULT(1),
+        Status nvarchar(32) NOT NULL,
+        TokenHash nvarchar(256) NOT NULL,
+        GrantedAtUtc datetime2 NOT NULL,
+        ExpiresAtUtc datetime2 NOT NULL,
+        RevokedAtUtc datetime2 NULL
+    );
+    CREATE UNIQUE INDEX UX_SupportImpersonationSessions_TenantId_SessionCode ON dbo.SupportImpersonationSessions(TenantId, SessionCode);
+END;
+
+IF OBJECT_ID(N'dbo.CustomerReturns', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CustomerReturns (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_CustomerReturns PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_CustomerReturns_TenantId DEFAULT(1),
+        ReturnCode nvarchar(64) NOT NULL,
+        WarehouseId int NOT NULL,
+        SalesOrderId int NULL,
+        ExportReceiptId int NULL,
+        TrackingNumber nvarchar(64) NULL,
+        OrderNumber nvarchar(64) NULL,
+        ReturnReason nvarchar(500) NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        CreatedBy int NOT NULL,
+        CreatedAtUtc datetime2 NOT NULL,
+        CompletedAtUtc datetime2 NULL
+    );
+    CREATE UNIQUE INDEX UX_CustomerReturns_TenantId_ReturnCode ON dbo.CustomerReturns(TenantId, ReturnCode);
+END;
+
+IF OBJECT_ID(N'dbo.CustomerReturnLines', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CustomerReturnLines (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_CustomerReturnLines PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_CustomerReturnLines_TenantId DEFAULT(1),
+        CustomerReturnId int NOT NULL,
+        ProductId int NOT NULL,
+        QuarantineLocationId int NULL,
+        TargetLocationId int NULL,
+        Quantity decimal(18,4) NOT NULL,
+        UnitCost decimal(18,4) NOT NULL,
+        Condition nvarchar(32) NOT NULL,
+        Disposition nvarchar(32) NOT NULL,
+        PackagingProductId int NULL,
+        PackagingQuantity decimal(18,4) NOT NULL
+    );
+END;
+
+IF OBJECT_ID(N'dbo.StocktakeAdjustmentProposals', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.StocktakeAdjustmentProposals (
+        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_StocktakeAdjustmentProposals PRIMARY KEY,
+        TenantId int NOT NULL CONSTRAINT DF_StocktakeAdjustmentProposals_TenantId DEFAULT(1),
+        ProposalCode nvarchar(64) NOT NULL,
+        WarehouseId int NOT NULL,
+        StocktakeId int NULL,
+        ProductId int NOT NULL,
+        LocationId int NULL,
+        ReasonCode nvarchar(32) NOT NULL,
+        SystemQuantity decimal(18,4) NOT NULL,
+        CountedQuantity decimal(18,4) NOT NULL,
+        DeltaQuantity decimal(18,4) NOT NULL,
+        UnitCost decimal(18,4) NOT NULL,
+        VariancePct decimal(18,4) NOT NULL,
+        VarianceValue decimal(18,2) NOT NULL,
+        IsAutoApproved bit NOT NULL,
+        Status nvarchar(32) NOT NULL,
+        CreatedBy int NOT NULL,
+        CreatedAtUtc datetime2 NOT NULL,
+        ApprovedBy int NULL,
+        ApprovedAtUtc datetime2 NULL,
+        Note nvarchar(500) NULL
+    );
+    CREATE UNIQUE INDEX UX_StocktakeAdjustmentProposals_TenantId_ProposalCode ON dbo.StocktakeAdjustmentProposals(TenantId, ProposalCode);
+END;
+
+IF COL_LENGTH('dbo.SalesOrderLines', 'IsFreeGift') IS NULL
+    ALTER TABLE dbo.SalesOrderLines ADD IsFreeGift bit NOT NULL CONSTRAINT DF_SalesOrderLines_IsFreeGift DEFAULT(0);
+IF COL_LENGTH('dbo.SalesOrderLines', 'ParentBundleProductId') IS NULL
+    ALTER TABLE dbo.SalesOrderLines ADD ParentBundleProductId int NULL;
+IF COL_LENGTH('dbo.ExportReceiptDetails', 'IsFreeGift') IS NULL
+    ALTER TABLE dbo.ExportReceiptDetails ADD IsFreeGift bit NOT NULL CONSTRAINT DF_ExportReceiptDetails_IsFreeGift DEFAULT(0);
+IF COL_LENGTH('dbo.ExportReceiptDetails', 'ParentBundleProductId') IS NULL
+    ALTER TABLE dbo.ExportReceiptDetails ADD ParentBundleProductId int NULL;
+IF COL_LENGTH('dbo.AuditLogs', 'ImpersonatedBySupportUserId') IS NULL
+    ALTER TABLE dbo.AuditLogs ADD ImpersonatedBySupportUserId int NULL;
+IF COL_LENGTH('dbo.ImportReceiptDetails', 'DoorRejectedQuantity') IS NULL
+    ALTER TABLE dbo.ImportReceiptDetails ADD DoorRejectedQuantity decimal(18,4) NOT NULL CONSTRAINT DF_ImportReceiptDetails_DoorRejectedQuantity DEFAULT(0);
 ");
 }
 
@@ -4131,9 +4292,58 @@ VALUES
 (1, {shipment.Id}, ISNULL(@er01Id, 1), N'SPX8938505003', N'SPX', 6200000, 0, 35000, 35000, 372000, 0, 0, 0, N'PENDING', DATEADD(DAY, -9, SYSUTCDATETIME()), NULL);
 
 DELETE FROM dbo.PromotionGiftRules WHERE TenantId = 1;
-INSERT INTO dbo.PromotionGiftRules (TenantId, RuleCode, RuleName, MinOrderValueVnd, TriggerProductId, GiftProductId, GiftQuantity, RemainingQuota, ValidFromUtc, ValidToUtc, IsActive)
+INSERT INTO dbo.PromotionGiftRules (TenantId, RuleCode, RuleName, WarehouseId, TriggerProductId, MinOrderAmount, MinTriggerQuantity, GiftProductId, GiftQuantity, GiftUnitPrice, AutoSkipWhenOutOfStock, IsActive, CreatedAtUtc)
 VALUES
-(1, N'PROMO-10-10-GIFT', N'Tặng 1 Cảm biến QA-02 cho đơn hàng từ 5.000.000đ', 5000000, {product.Id}, {lotProduct.Id}, 1, 45, DATEADD(DAY, -10, SYSUTCDATETIME()), DATEADD(DAY, 20, SYSUTCDATETIME()), 1);
+(1, N'PROMO-10-10-GIFT', N'Tặng 1 Cảm biến QA-02 cho đơn hàng từ 5.000.000đ', {primaryWarehouse.Id}, {product.Id}, 5000000, 1, {lotProduct.Id}, 1, 0, 1, 1, SYSUTCDATETIME()),
+(1, N'GIFT-ORDER-500K', N'Đơn từ 500.000đ tặng 1 Túi Canvas / Sample Mini (0đ)', {primaryWarehouse.Id}, NULL, 500000, 1, {lotProduct.Id}, 1, 0, 1, 1, SYSUTCDATETIME());
+
+DECLARE @packSessionId int = (SELECT TOP 1 Id FROM dbo.PackingSessions ORDER BY Id DESC);
+DELETE FROM dbo.PackingVideoEvidences WHERE TenantId = 1;
+INSERT INTO dbo.PackingVideoEvidences (TenantId, PackingSessionId, ExportReceiptId, TrackingNumber, OrderCode, CameraStationId, StartedAtUtc, EndedAtUtc, DurationSeconds, VideoHashSha256, StorageUrl, RecordedByUserId, RecordedAtUtc)
+VALUES
+(1, @packSessionId, ISNULL(@er01Id, 1), N'GHN84920188', N'SO-QA-001', N'CAM-PACK-STATION-01', DATEADD(MINUTE, -35, SYSUTCDATETIME()), DATEADD(MINUTE, -34, SYSUTCDATETIME()), 48, N'8F9C2E4A1B7D6035A9E2F8C1D4B7A0E3F6C9D2B5A8E1F4C7D0B3A6E9F2C5D8A1', N'https://cdn.erp-kho.vn/packing-evidence/2026/10/22/GHN84920188.mp4', {qaAdmin.Id}, DATEADD(MINUTE, -34, SYSUTCDATETIME())),
+(1, @packSessionId, ISNULL(@er02Id, 1), N'VTP99201122', N'SO-QA-002', N'CAM-PACK-STATION-02', DATEADD(MINUTE, -20, SYSUTCDATETIME()), DATEADD(MINUTE, -19, SYSUTCDATETIME()), 52, N'3A7B9C1D5E2F8A4B6C0D9E3F1A5B7C2D8E4F0A6B1C3D5E7F9A2B4C6D8E0F1A3B', N'https://cdn.erp-kho.vn/packing-evidence/2026/10/22/VTP99201122.mp4', {qaAdmin.Id}, DATEADD(MINUTE, -19, SYSUTCDATETIME()));
+
+DELETE FROM dbo.SupportImpersonationSessions WHERE TenantId = 1;
+INSERT INTO dbo.SupportImpersonationSessions (TenantId, SessionCode, SupportTicketCode, GrantedByUserId, SupportAgentUserId, ReadOnlyScope, Status, TokenHash, GrantedAtUtc, ExpiresAtUtc, RevokedAtUtc)
+VALUES
+(1, N'SUP-SES-20261022-01', N'SUP-VN-2026-001', {qaAdmin.Id}, {qaAdmin.Id}, 1, N'ACTIVE', N'SHA256-SUPPORT-TOKEN-ACTIVE-001', DATEADD(MINUTE, -10, SYSUTCDATETIME()), DATEADD(MINUTE, 50, SYSUTCDATETIME()), NULL),
+(1, N'SUP-SES-20261021-02', N'SUP-VN-2026-000', {qaAdmin.Id}, {qaAdmin.Id}, 1, N'REVOKED', N'SHA256-SUPPORT-TOKEN-REVOKED-002', DATEADD(DAY, -1, SYSUTCDATETIME()), DATEADD(HOUR, -23, SYSUTCDATETIME()), DATEADD(HOUR, -23, SYSUTCDATETIME()));
+
+DELETE FROM dbo.CustomerReturnLines WHERE TenantId = 1;
+DELETE FROM dbo.CustomerReturns WHERE TenantId = 1;
+INSERT INTO dbo.CustomerReturns (TenantId, ReturnCode, WarehouseId, SalesOrderId, ExportReceiptId, TrackingNumber, OrderNumber, ReturnReason, Status, CreatedBy, CreatedAtUtc, CompletedAtUtc)
+VALUES
+(1, N'RMA-INSP-20261022-01', {primaryWarehouse.Id}, {salesOrder.Id}, ISNULL(@er01Id, 1), N'GHN84920188', N'SO-QA-001', N'Khách đổi size / Kiểm định bao bì móp nhẹ khi vận chuyển', N'COMPLETED', {qaAdmin.Id}, DATEADD(HOUR, -3, SYSUTCDATETIME()), DATEADD(HOUR, -2, SYSUTCDATETIME()));
+DECLARE @seedReturnId int = SCOPE_IDENTITY();
+IF @seedReturnId IS NOT NULL
+BEGIN
+    INSERT INTO dbo.CustomerReturnLines (TenantId, CustomerReturnId, ProductId, QuarantineLocationId, TargetLocationId, Quantity, UnitCost, Condition, Disposition, PackagingProductId, PackagingQuantity)
+    VALUES
+    (1, @seedReturnId, {product.Id}, {receivingLocation.Id}, {storageBin.Id}, 2, 120000, N'GOOD_RESELLABLE', N'RESTOCK_AVAILABLE', NULL, 0);
+END;
+
+DELETE FROM dbo.StocktakeAdjustmentProposals WHERE TenantId = 1;
+INSERT INTO dbo.StocktakeAdjustmentProposals (TenantId, ProposalCode, WarehouseId, StocktakeId, ProductId, LocationId, ReasonCode, SystemQuantity, CountedQuantity, DeltaQuantity, UnitCost, VariancePct, VarianceValue, IsAutoApproved, Status, CreatedBy, CreatedAtUtc, ApprovedBy, ApprovedAtUtc, Note)
+VALUES
+(1, N'ADJ-20261022-001', {primaryWarehouse.Id}, {stocktake.Id}, {product.Id}, {storageBin.Id}, N'COUNT_VARIANCE', 200, 199, -1, 120000, 0.5000, 120000, 1, N'APPROVED', {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), N'AUTO_APPROVE_UNDER_1PCT_500K | Tự động duyệt lệch kiểm kê < 1% và <= 500.000đ');
+
+IF NOT EXISTS (SELECT 1 FROM dbo.VnAdministrativeUnits)
+BEGIN
+    INSERT INTO dbo.VnAdministrativeUnits (TenantId, ProvinceCode, ProvinceName, DistrictCode, DistrictName, WardCode, WardName, Keywords, IsActive, CreatedAtUtc)
+    VALUES
+    (1, N'79', N'TP. Hồ Chí Minh', N'769', N'Thành phố Thủ Đức', N'27100', N'Phường An Khánh', N'an khanh, thu duc, hcm, tphcm, q2', 1, SYSUTCDATETIME()),
+    (1, N'79', N'TP. Hồ Chí Minh', N'760', N'Quận 1', N'26734', N'Phường Bến Nghé', N'ben nghe, quan 1, q.1, q1, hcm, tphcm', 1, SYSUTCDATETIME()),
+    (1, N'79', N'TP. Hồ Chí Minh', N'766', N'Quận Tân Bình', N'26974', N'Phường 2', N'phuong 2, tan binh, san bay, hcm', 1, SYSUTCDATETIME()),
+    (1, N'01', N'Thành phố Hà Nội', N'005', N'Quận Cầu Giấy', N'00166', N'Phường Dịch Vọng Hậu', N'dich vong hau, cau giay, ha noi, hn', 1, SYSUTCDATETIME()),
+    (1, N'01', N'Thành phố Hà Nội', N'002', N'Quận Hoàn Kiếm', N'00058', N'Phường Hàng Bài', N'hang bai, hoan kiem, ha noi, hn', 1, SYSUTCDATETIME()),
+    (1, N'48', N'Thành phố Đà Nẵng', N'492', N'Quận Hải Châu', N'20242', N'Phường Thạch Thang', N'thach thang, hai chau, da nang, dn', 1, SYSUTCDATETIME());
+
+    INSERT INTO dbo.CarrierLocationMappings (TenantId, AdministrativeUnitId, CarrierCode, CarrierProvinceId, CarrierDistrictId, CarrierWardCode, SortingHubCode, RouteCode, IsActive)
+    SELECT 1, u.Id, c.CarrierCode, CONCAT(c.CarrierCode, N'-P-', u.ProvinceCode), CONCAT(c.CarrierCode, N'-D-', u.DistrictCode), CONCAT(c.CarrierCode, N'-W-', u.WardCode), CONCAT(N'HUB-', c.CarrierCode, N'-', u.ProvinceCode), CONCAT(N'RT-', c.CarrierCode, N'-', u.DistrictCode), 1
+    FROM dbo.VnAdministrativeUnits u
+    CROSS JOIN (VALUES (N'GHN'), (N'GHTK'), (N'VTPOST'), (N'SPX')) AS c(CarrierCode);
+END;
 
 DELETE FROM dbo.IntegrationOutboxMessages WHERE TenantId = 1 AND EventId IN (N'OUTBOX-GL-001', N'OUTBOX-TMS-002', N'OUTBOX-APAR-003', N'OUTBOX-WMS-004');
 INSERT INTO dbo.IntegrationOutboxMessages (TenantId, EventId, EventType, AggregateType, AggregateId, PayloadJson, Status, RetryCount, CreatedAt, PublishedAt)

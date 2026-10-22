@@ -23,6 +23,7 @@ public class AuditLog : ITenantEntity
     public string? IdempotencyKeyHash { get; set; }
     public string? RequestFingerprint { get; set; }
     public string Severity { get; set; } = "Information";
+    public int? ImpersonatedBySupportUserId { get; set; }
 
     // Navigation
     public User? User { get; set; }

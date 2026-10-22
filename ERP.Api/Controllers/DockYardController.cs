@@ -44,6 +44,7 @@ public sealed record DispatchCrossdockRequest(
 [Authorize]
 [ApiController]
 [Route("api/dock-yard")]
+[Route("api/v1/dock-yard")]
 public sealed class DockYardController(
     IDockYardService service,
     ErpKhoDbContext db = null!,

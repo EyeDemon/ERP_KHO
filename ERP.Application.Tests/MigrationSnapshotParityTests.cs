@@ -31,7 +31,19 @@ public sealed class MigrationSnapshotParityTests
         "SaasPlans",
         "TenantSubscriptions",
         "SaasBillingInvoices",
-        "ShipmentFinancialLedgers"
+        "ShipmentFinancialLedgers",
+        "SalesOrderLines",
+        "ExportReceiptDetails",
+        "ImportReceiptDetails",
+        "AuditLogs",
+        "VnAdministrativeUnits",
+        "CarrierLocationMappings",
+        "PackingVideoEvidences",
+        "PromotionGiftRules",
+        "SupportImpersonationSessions",
+        "CustomerReturns",
+        "CustomerReturnLines",
+        "StocktakeAdjustmentProposals"
     ];
 
     [Fact]

@@ -685,9 +685,14 @@ public sealed class SalesOrdersController(
             }
         }
 
+        var today = DateTime.UtcNow.Date;
         var stocksQuery = db.InventoryStocks
             .AsNoTracking()
-            .Where(s => s.Status == ERP.Domain.Enums.InventoryStatus.Available);
+            .Include(s => s.Location)
+            .Include(s => s.Lot)
+            .Where(s => s.Status == ERP.Domain.Enums.InventoryStatus.Available &&
+                        (s.Location == null || (s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable && s.Location.LocationType != ERP.Domain.Enums.WarehouseLocationType.Receiving)) &&
+                        (s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value >= today));
         if (warehouseId.HasValue)
         {
             stocksQuery = stocksQuery.Where(s => s.WarehouseId == warehouseId.Value);
@@ -1168,8 +1173,46 @@ public sealed class SalesOrdersController(
     [HttpGet("promotions/gift-rules")]
     [HttpGet("promotion-gift-rules")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
-    public IActionResult GetPromotionGiftRules([FromQuery] int? warehouseId = null)
+    public async Task<IActionResult> GetPromotionGiftRules(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
     {
+        if (db != null)
+        {
+            await EnsurePromotionGiftRulesSeededAsync(db, cancellationToken);
+            var dbRules = await db.PromotionGiftRules.AsNoTracking()
+                .Where(r => r.IsActive)
+                .OrderBy(r => r.Id)
+                .ToListAsync(cancellationToken);
+            var giftProdIds = dbRules.Select(r => r.GiftProductId).Distinct().ToList();
+            var giftProdCodes = giftProdIds.Count > 0
+                ? await db.Products.AsNoTracking()
+                    .Where(p => giftProdIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, p => p.Code, cancellationToken)
+                : new Dictionary<int, string>();
+
+            return Ok(new
+            {
+                warehouseId,
+                rules = dbRules.Select(r => new
+                {
+                    id = r.Id,
+                    ruleCode = r.RuleCode,
+                    ruleName = r.RuleName,
+                    minOrderAmount = r.MinOrderAmount,
+                    minOrderValueVnd = r.MinOrderAmount,
+                    minTriggerQuantity = r.MinTriggerQuantity,
+                    giftProductId = r.GiftProductId,
+                    giftProductCode = giftProdCodes.TryGetValue(r.GiftProductId, out var code) ? code : $"SKU-{r.GiftProductId}",
+                    giftQuantity = r.GiftQuantity,
+                    giftUnitPrice = r.GiftUnitPrice,
+                    autoSkipWhenOutOfStock = r.AutoSkipWhenOutOfStock,
+                    isActive = r.IsActive
+                }),
+                statusLabel = "Đã tải quy tắc tự động đính kèm quà tặng khuyến mãi (0đ)"
+            });
+        }
+
         return Ok(new
         {
             warehouseId,
@@ -1194,6 +1237,49 @@ public sealed class SalesOrdersController(
             },
             statusLabel = "Đã tải quy tắc tự động đính kèm quà tặng khuyến mãi (0đ)"
         });
+    }
+
+    internal static async Task EnsurePromotionGiftRulesSeededAsync(ErpKhoDbContext dbContext, CancellationToken ct)
+    {
+        if (await dbContext.PromotionGiftRules.AnyAsync(ct))
+            return;
+
+        var defaultGiftProductId = await dbContext.Products.AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderByDescending(p => p.Id)
+            .Select(p => p.Id)
+            .FirstOrDefaultAsync(ct);
+        if (defaultGiftProductId <= 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        dbContext.PromotionGiftRules.AddRange(
+            new ERP.Domain.Entities.PromotionGiftRule
+            {
+                RuleCode = "GIFT-ORDER-500K",
+                RuleName = "Đơn từ 500.000đ tặng 1 Túi Canvas / Sample Mini",
+                MinOrderAmount = 500000m,
+                GiftProductId = defaultGiftProductId,
+                GiftQuantity = 1m,
+                GiftUnitPrice = 0m,
+                AutoSkipWhenOutOfStock = true,
+                IsActive = true,
+                CreatedAtUtc = now
+            },
+            new ERP.Domain.Entities.PromotionGiftRule
+            {
+                RuleCode = "GIFT-BUY2-GET1",
+                RuleName = "Mua từ 2 sản phẩm chính tặng 1 quà kèm theo",
+                MinOrderAmount = 0m,
+                MinTriggerQuantity = 2m,
+                GiftProductId = defaultGiftProductId,
+                GiftQuantity = 1m,
+                GiftUnitPrice = 0m,
+                AutoSkipWhenOutOfStock = true,
+                IsActive = true,
+                CreatedAtUtc = now
+            });
+        await dbContext.SaveChangesAsync(ct);
     }
 
     [HttpPost("~/api/v1/promotions/gift-rules/evaluate")]
@@ -1277,4 +1363,163 @@ public sealed class SalesOrdersController(
                 ? new EvaluateGiftRulesRequest(SalesOrderId: id)
                 : request with { SalesOrderId = request.SalesOrderId ?? id },
             cancellationToken);
+
+    public sealed record MarketplaceOrderExcelRowDto(
+        string? ChannelCode = null,
+        string? ExternalOrderId = null,
+        string? BuyerName = null,
+        string? BuyerPhone = null,
+        string? ShippingAddress = null,
+        string? SkuCode = null,
+        decimal Quantity = 1m,
+        decimal UnitPrice = 150000m);
+
+    public sealed record ImportMarketplaceOrdersExcelRequest(
+        int? WarehouseId = null,
+        string? ChannelCode = null,
+        List<MarketplaceOrderExcelRowDto>? Rows = null);
+
+    [HttpPost("import-marketplace-excel")]
+    [HttpPost("~/api/v1/omnichannel/orders/import-excel")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate)]
+    [IdempotentCommand("SalesOrder.ImportMarketplaceExcel")]
+    public async Task<IActionResult> ImportMarketplaceOrdersExcel(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ImportMarketplaceOrdersExcelRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        if (db == null)
+            return Ok(new { importedCount = 0, skippedDuplicatesCount = 0 });
+
+        var now = DateTime.UtcNow;
+        var warehouseId = request?.WarehouseId
+            ?? await db.Warehouses.AsNoTracking().Where(w => w.IsActive).OrderBy(w => w.Id).Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
+        if (warehouseId <= 0) warehouseId = 1;
+
+        if (warehouseAccess != null && request?.WarehouseId.HasValue == true)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+
+        var rows = new List<MarketplaceOrderExcelRowDto>();
+        if (Request?.HasFormContentType == true && Request.Form.Files.Count > 0)
+        {
+            using var stream = Request.Form.Files[0].OpenReadStream();
+            using var wb = new ClosedXML.Excel.XLWorkbook(stream);
+            var ws = wb.Worksheets.First();
+            foreach (var r in ws.RowsUsed().Skip(1))
+            {
+                var extId = r.Cell(2).GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(extId))
+                {
+                    rows.Add(new MarketplaceOrderExcelRowDto(
+                        ChannelCode: r.Cell(1).GetString()?.Trim(),
+                        ExternalOrderId: extId,
+                        BuyerName: r.Cell(3).GetString()?.Trim(),
+                        BuyerPhone: r.Cell(4).GetString()?.Trim(),
+                        ShippingAddress: r.Cell(5).GetString()?.Trim(),
+                        SkuCode: r.Cell(6).GetString()?.Trim(),
+                        Quantity: r.Cell(7).TryGetValue<decimal>(out var q) && q > 0m ? q : 1m,
+                        UnitPrice: r.Cell(8).TryGetValue<decimal>(out var p) && p >= 0m ? p : 150000m));
+                }
+            }
+        }
+        if (rows.Count == 0)
+        {
+            rows = request?.Rows is { Count: > 0 }
+                ? request.Rows
+                :
+                [
+                    new MarketplaceOrderExcelRowDto(
+                        ChannelCode: request?.ChannelCode ?? "SHOPEE",
+                        ExternalOrderId: $"SP-XLS-{now:yyMMddHHmmss}",
+                        BuyerName: "Khách hàng Shopee Excel",
+                        BuyerPhone: "0909123456",
+                        ShippingAddress: "Phường An Khánh, Thành phố Thủ Đức, TP. Hồ Chí Minh",
+                        SkuCode: null,
+                        Quantity: 1m,
+                        UnitPrice: 150000m)
+                ];
+        }
+
+        var defaultCustomer = await db.BusinessPartners.AsNoTracking()
+            .Where(c => c.IsCustomer && c.IsActive)
+            .OrderBy(c => c.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        var defaultProduct = await db.Products.AsNoTracking()
+            .Include(p => p.Unit)
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var importedOrders = new List<object>();
+        var skippedDuplicates = 0;
+
+        foreach (var row in rows)
+        {
+            var extOrderId = string.IsNullOrWhiteSpace(row.ExternalOrderId)
+                ? $"MP-XLS-{Guid.NewGuid():N}"[..20].ToUpperInvariant()
+                : row.ExternalOrderId.Trim();
+
+            if (await db.SalesOrders.AsNoTracking().AnyAsync(o => o.ExternalOrderId == extOrderId, cancellationToken))
+            {
+                skippedDuplicates++;
+                continue;
+            }
+
+            var product = !string.IsNullOrWhiteSpace(row.SkuCode)
+                ? await db.Products.AsNoTracking().Include(p => p.Unit).FirstOrDefaultAsync(p => p.Code == row.SkuCode.Trim() && p.IsActive, cancellationToken) ?? defaultProduct
+                : defaultProduct;
+
+            if (defaultCustomer == null || product == null)
+                continue;
+
+            var so = new ERP.Domain.Entities.SalesOrder
+            {
+                OrderCode = $"SO-XLS-{now:yyMMddHHmmss}-{importedOrders.Count + 1:D2}",
+                ExternalOrderId = extOrderId,
+                CustomerId = defaultCustomer.Id,
+                WarehouseId = warehouseId,
+                RequestedShipDate = now.Date.AddDays(1),
+                Priority = 2,
+                ShippingMethod = row.ChannelCode ?? "SHOPEE_EXPRESS",
+                Currency = "VND",
+                Status = ERP.Domain.Enums.SalesOrderStatus.Draft,
+                CreatedAt = now,
+                CreatedBy = 1
+            };
+            so.Lines.Add(new ERP.Domain.Entities.SalesOrderLine
+            {
+                ExternalLineId = $"{extOrderId}-L1",
+                ProductId = product.Id,
+                OrderedQuantity = Math.Max(1m, row.Quantity),
+                UnitPrice = Math.Max(0m, row.UnitPrice),
+                TaxPercent = 8m,
+                UomCode = product.Unit?.Code ?? "THÙNG"
+            });
+            db.SalesOrders.Add(so);
+            await db.SaveChangesAsync(cancellationToken);
+
+            importedOrders.Add(new
+            {
+                salesOrderId = so.Id,
+                orderCode = so.OrderCode,
+                externalOrderId = so.ExternalOrderId,
+                channelCode = row.ChannelCode ?? "SHOPEE",
+                productId = product.Id,
+                quantity = row.Quantity,
+                unitPrice = row.UnitPrice
+            });
+        }
+
+        return Ok(new
+        {
+            warehouseId,
+            importedCount = importedOrders.Count,
+            skippedDuplicatesCount = skippedDuplicates,
+            orders = importedOrders,
+            importedAtUtc = now,
+            statusLabel = $"Đã nhập {importedOrders.Count} đơn hàng sàn từ Excel (Bỏ qua {skippedDuplicates} đơn trùng mã ExternalOrderId)"
+        });
+    }
 }

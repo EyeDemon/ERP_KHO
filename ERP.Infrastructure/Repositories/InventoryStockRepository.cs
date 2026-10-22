@@ -120,9 +120,9 @@ namespace ERP.Infrastructure.Repositories
                 .UnlockedAt(_context, DateTime.UtcNow)
                 .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
                     x.StatusDefinition.IsReservable &&
-                    x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable &&
+                    x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable && x.Location.LocationType != WarehouseLocationType.Receiving &&
                     (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today))
-                .SumAsync(x => x.Quantity - x.ReservedQuantity, cancellationToken);
+                .SumAsync(x => x.Quantity - (x.ReservedQuantity > x.AllocatedQuantity ? x.ReservedQuantity : x.AllocatedQuantity) - x.LockedQuantity, cancellationToken);
         }
 
         public async Task<bool> TryReserveAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
@@ -163,7 +163,7 @@ namespace ERP.Infrastructure.Repositories
                     .UnlockedAt(_context, DateTime.UtcNow)
                     .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
                         x.StatusDefinition.IsShippable && x.LocationId.HasValue &&
-                        x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable &&
+                        x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable && x.Location.LocationType != WarehouseLocationType.Receiving &&
                         (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today))
                     .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
                     .ThenBy(x => x.Lot == null ? null : x.Lot.ExpiryDate)
@@ -258,7 +258,7 @@ namespace ERP.Infrastructure.Repositories
                             x.WarehouseId == warehouseId &&
                             x.LocationId == locationId &&
                             x.StatusDefinition.IsShippable &&
-                            x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable &&
+                            x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable && x.Location.LocationType != WarehouseLocationType.Receiving &&
                             (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today) &&
                             x.ReservedQuantity >= quantity &&
                             x.Quantity >= quantity)

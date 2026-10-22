@@ -38,4 +38,12 @@ public interface IPartnerDebtService
         int actorUserId,
         string? currency = "VND",
         CancellationToken ct = default);
+
+    Task EnqueueValuationOutboxEventAsync(
+        string aggregateType,
+        int aggregateId,
+        string referenceCode,
+        int warehouseId,
+        decimal totalAmount = 0m,
+        CancellationToken ct = default) => Task.CompletedTask;
 }

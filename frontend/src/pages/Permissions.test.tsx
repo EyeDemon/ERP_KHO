@@ -149,5 +149,31 @@ describe('quản trị quyền truy cập', () => {
         paidAmountVnd: 1490000,
       }),
     );
+
+    post.mockResolvedValueOnce({
+      data: {
+        id: 501,
+        supportAgentName: 'Chuyên viên Kỹ thuật ERP KHO',
+        ticketReference: 'ZALO-SUP-2026-001',
+        expiresAtUtc: '2026-10-22T12:30:00Z',
+      },
+    } as never);
+    fireEvent.click(view.getByTestId('btn-grant-support-impersonation'));
+    expect(await view.findByText(/Đã cấp phiên hỗ trợ kỹ thuật tạm thời \(#501, TTL 30 phút\)/)).toBeTruthy();
+    expect(post).toHaveBeenCalledWith(
+      '/api/account-security/1/support-impersonation',
+      expect.objectContaining({
+        ticketReference: 'ZALO-SUP-2026-001',
+        ttlMinutes: 30,
+      }),
+    );
+
+    post.mockResolvedValueOnce({ data: {} } as never);
+    fireEvent.click(view.getByTestId('btn-revoke-support-501'));
+    expect(await view.findByText(/Đã thu hồi tức thì phiên hỗ trợ kỹ thuật #501/)).toBeTruthy();
+    expect(post).toHaveBeenCalledWith(
+      '/api/account-security/support-impersonation/501/revoke',
+      expect.objectContaining({ reason: 'Chủ shop thu hồi phiên hỗ trợ kỹ thuật' }),
+    );
   });
 });

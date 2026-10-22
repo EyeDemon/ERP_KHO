@@ -78,7 +78,9 @@ namespace ERP.Application.Services
             if (dto.WarehouseId <= 0)
                 throw new BusinessRuleException("Kho xuất không hợp lệ");
 
-            if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(dto.WarehouseId);
+            if (_warehouseAuthorization is not null)
+                await (_warehouseAuthorization.EnsureWarehouseCommandAccessAsync(dto.WarehouseId)
+                    ?? _warehouseAuthorization.EnsureWarehouseAccessAsync(dto.WarehouseId));
 
             if (dto.Details == null || !dto.Details.Any())
                 throw new BusinessRuleException("Phiếu xuất phải có ít nhất 1 sản phẩm");
@@ -243,17 +245,22 @@ namespace ERP.Application.Services
                     else receipt.Status = ReceiptStatus.Approved;
 
                     await _exportReceiptRepository.UpdateAsync(receipt);
-                    if (mode == ExportDispatchMode.DispatchOnApproval && _partnerDebt is not null && receipt.CustomerId.HasValue)
+                    if (mode == ExportDispatchMode.DispatchOnApproval && _partnerDebt is not null)
                     {
                         var (subTotal, taxAmount) = CalculateReceiptTotals(receipt);
-                        await _partnerDebt.RecordOutboundArDebtAsync(
-                            receipt.CustomerId.Value,
-                            "ExportReceipt",
-                            receipt.Id,
-                            receipt.Code,
-                            subTotal,
-                            taxAmount,
-                            approvedByUserId);
+                        var outboxTask = _partnerDebt.EnqueueValuationOutboxEventAsync("ExportReceipt", receipt.Id, receipt.Code, receipt.WarehouseId, subTotal + taxAmount);
+                        if (outboxTask is not null) await outboxTask;
+                        if (receipt.CustomerId.HasValue)
+                        {
+                            await _partnerDebt.RecordOutboundArDebtAsync(
+                                receipt.CustomerId.Value,
+                                "ExportReceipt",
+                                receipt.Id,
+                                receipt.Code,
+                                subTotal,
+                                taxAmount,
+                                approvedByUserId);
+                        }
                     }
                     await _auditLogRepository.AddAsync(new ERP.Domain.Entities.AuditLog
                     {
@@ -297,6 +304,13 @@ namespace ERP.Application.Services
                     var receipt = await _exportReceiptRepository.GetByIdWithDetailsAsync(id);
                     if (receipt is null) throw new NotFoundException($"Không tìm thấy phiếu xuất id {id}");
                     if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                    if (receipt.Status == ReceiptStatus.CancelPendingPutback ||
+                        receipt.SalesOrder?.Status is SalesOrderStatus.Cancelled or SalesOrderStatus.CancelPendingPutback)
+                    {
+                        var cancelEx = new ConcurrencyException("Đơn hàng đã bị hủy trên sàn hoặc đang chờ cất trả kệ (CancelPendingPutback). Không thể xác nhận xuất kho.");
+                        cancelEx.Data["ErrorCode"] = "ORDER_CANCELLED_PUTBACK_REQUIRED";
+                        throw cancelEx;
+                    }
                     if (receipt.Status != ReceiptStatus.Approved || receipt.DispatchMode != ExportDispatchMode.RequireSeparateDispatch)
                         throw new ConcurrencyException("Phiếu xuất không ở trạng thái có thể xác nhận xuất.");
                     if (_options.RequireDifferentDispatcher && receipt.ApprovedBy == userId)
@@ -324,17 +338,22 @@ namespace ERP.Application.Services
                     receipt.DispatchedBy = userId;
                     receipt.DispatchedAt = DateTime.UtcNow;
                     await _exportReceiptRepository.UpdateAsync(receipt);
-                    if (_partnerDebt is not null && receipt.CustomerId.HasValue)
+                    if (_partnerDebt is not null)
                     {
                         var (subTotal, taxAmount) = CalculateReceiptTotals(receipt);
-                        await _partnerDebt.RecordOutboundArDebtAsync(
-                            receipt.CustomerId.Value,
-                            "ExportReceipt",
-                            receipt.Id,
-                            receipt.Code,
-                            subTotal,
-                            taxAmount,
-                            userId);
+                        var outboxTask = _partnerDebt.EnqueueValuationOutboxEventAsync("ExportReceipt", receipt.Id, receipt.Code, receipt.WarehouseId, subTotal + taxAmount);
+                        if (outboxTask is not null) await outboxTask;
+                        if (receipt.CustomerId.HasValue)
+                        {
+                            await _partnerDebt.RecordOutboundArDebtAsync(
+                                receipt.CustomerId.Value,
+                                "ExportReceipt",
+                                receipt.Id,
+                                receipt.Code,
+                                subTotal,
+                                taxAmount,
+                                userId);
+                        }
                     }
                     await _auditLogRepository.AddAsync(new ERP.Domain.Entities.AuditLog
                     {
@@ -513,7 +532,7 @@ namespace ERP.Application.Services
         private ExportReceiptDto MapToDto(ERP.Domain.Entities.ExportReceipt receipt)
         {
             var viewer = string.Equals(_currentUser?.Role, "Viewer", StringComparison.Ordinal);
-            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role is "Admin" or "Manager" or "Accountant";
+            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role is "Admin" or "Manager" or "Accountant" || _currentUser.HasPermission("inventory.cost.read");
             var details = (receipt.Details ?? []).Select(d =>
             {
                 var lineSub = canReadCost ? decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero) : 0m;

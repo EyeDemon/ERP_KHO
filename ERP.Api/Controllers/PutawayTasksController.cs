@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
-[ApiController, Route("api/putaway-tasks"), Authorize]
+[ApiController, Route("api/putaway-tasks"), Route("api/v1/putaway-tasks"), Authorize]
 public sealed class PutawayTasksController(
     IPutawayService service,
     ErpKhoDbContext db = null!,

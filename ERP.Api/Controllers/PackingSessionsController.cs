@@ -480,8 +480,27 @@ public sealed class PackingSessionsController(
             ? $"https://cdn.erp-kho.vn/packing-evidence/{now:yyyy/MM/dd}/{trackingNumber}.mp4"
             : request.StorageUrl.Trim();
 
+        int? evidenceId = null;
         if (db != null)
         {
+            var durationSecs = Math.Max(1, (int)(endedAt - startedAt).TotalSeconds);
+            var evidenceEntity = new ERP.Domain.Entities.PackingVideoEvidence
+            {
+                PackingSessionId = request?.PackingSessionId,
+                ExportReceiptId = request?.ExportReceiptId,
+                TrackingNumber = trackingNumber,
+                OrderCode = string.IsNullOrWhiteSpace(request?.OrderCode) ? $"SO-{trackingNumber}" : request.OrderCode.Trim(),
+                CameraStationId = cameraStationId,
+                StartedAtUtc = startedAt,
+                EndedAtUtc = endedAt,
+                DurationSeconds = durationSecs,
+                VideoHashSha256 = videoHashSha256,
+                StorageUrl = storageUrl,
+                RecordedByUserId = 1,
+                RecordedAtUtc = now
+            };
+            db.PackingVideoEvidences.Add(evidenceEntity);
+
             var payload = System.Text.Json.JsonSerializer.Serialize(new
             {
                 trackingNumber,
@@ -491,7 +510,7 @@ public sealed class PackingSessionsController(
                 cameraStationId,
                 startedAtUtc = startedAt,
                 endedAtUtc = endedAt,
-                durationSeconds = Math.Max(1, (int)(endedAt - startedAt).TotalSeconds),
+                durationSeconds = durationSecs,
                 videoHashSha256,
                 storageUrl,
                 recordedAtUtc = now
@@ -510,10 +529,12 @@ public sealed class PackingSessionsController(
                 Timestamp = now
             });
             await db.SaveChangesAsync(cancellationToken);
+            evidenceId = evidenceEntity.Id;
         }
 
         return Ok(new
         {
+            evidenceId,
             trackingNumber,
             packingSessionId = request?.PackingSessionId,
             exportReceiptId = request?.ExportReceiptId,
@@ -527,6 +548,36 @@ public sealed class PackingSessionsController(
         });
     }
 
+    [HttpGet("video-evidence")]
+    [PermissionAuthorize(AppPermissions.PackingRead)]
+    public async Task<IActionResult> ListPackingVideoEvidences(
+        [FromQuery] string? trackingNumber = null,
+        [FromQuery] string? orderCode = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (db == null)
+            return Ok(Array.Empty<object>());
+
+        var query = db.PackingVideoEvidences.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(trackingNumber))
+        {
+            var t = trackingNumber.Trim();
+            query = query.Where(e => e.TrackingNumber == t);
+        }
+        if (!string.IsNullOrWhiteSpace(orderCode))
+        {
+            var o = orderCode.Trim();
+            query = query.Where(e => e.OrderCode == o);
+        }
+
+        var items = await query
+            .OrderByDescending(e => e.Id)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        return Ok(items);
+    }
+
     [HttpGet("video-evidence/{trackingNumber}")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<IActionResult> GetPackingVideoEvidence(
@@ -534,6 +585,7 @@ public sealed class PackingSessionsController(
         CancellationToken cancellationToken = default)
     {
         var normalized = trackingNumber.Trim();
+        int? evidenceId = null;
         string? videoHashSha256 = null;
         string? cameraStationId = "CAM-PACK-STATION-01";
         string? storageUrl = $"https://cdn.erp-kho.vn/packing-evidence/{normalized}.mp4";
@@ -541,22 +593,39 @@ public sealed class PackingSessionsController(
 
         if (db != null)
         {
-            var log = await db.AuditLogs
+            var entity = await db.PackingVideoEvidences
                 .AsNoTracking()
-                .Where(a => a.EntityName == "PackingVideoEvidence" && a.OldValues == normalized)
-                .OrderByDescending(a => a.Id)
+                .Where(e => e.TrackingNumber == normalized || e.OrderCode == normalized)
+                .OrderByDescending(e => e.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (log != null && !string.IsNullOrWhiteSpace(log.NewValues))
+            if (entity != null)
             {
-                recordedAtUtc = log.Timestamp;
-                using var doc = System.Text.Json.JsonDocument.Parse(log.NewValues);
-                if (doc.RootElement.TryGetProperty("videoHashSha256", out var h))
-                    videoHashSha256 = h.GetString();
-                if (doc.RootElement.TryGetProperty("cameraStationId", out var c))
-                    cameraStationId = c.GetString();
-                if (doc.RootElement.TryGetProperty("storageUrl", out var u))
-                    storageUrl = u.GetString();
+                evidenceId = entity.Id;
+                videoHashSha256 = entity.VideoHashSha256;
+                cameraStationId = entity.CameraStationId;
+                storageUrl = entity.StorageUrl;
+                recordedAtUtc = entity.RecordedAtUtc;
+            }
+            else
+            {
+                var log = await db.AuditLogs
+                    .AsNoTracking()
+                    .Where(a => a.EntityName == "PackingVideoEvidence" && a.OldValues == normalized)
+                    .OrderByDescending(a => a.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (log != null && !string.IsNullOrWhiteSpace(log.NewValues))
+                {
+                    recordedAtUtc = log.Timestamp;
+                    using var doc = System.Text.Json.JsonDocument.Parse(log.NewValues);
+                    if (doc.RootElement.TryGetProperty("videoHashSha256", out var h))
+                        videoHashSha256 = h.GetString();
+                    if (doc.RootElement.TryGetProperty("cameraStationId", out var c))
+                        cameraStationId = c.GetString();
+                    if (doc.RootElement.TryGetProperty("storageUrl", out var u))
+                        storageUrl = u.GetString();
+                }
             }
         }
 
@@ -565,6 +634,7 @@ public sealed class PackingSessionsController(
 
         return Ok(new
         {
+            evidenceId,
             trackingNumber = normalized,
             cameraStationId,
             videoHashSha256,

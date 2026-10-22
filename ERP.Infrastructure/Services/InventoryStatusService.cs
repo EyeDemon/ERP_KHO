@@ -759,7 +759,7 @@ public sealed class InventoryStatusService(
 
                 var recallLock = new InventoryLock
                 {
-                    LockType = InventoryLockType.RecallHold,
+                    LockType = InventoryLockType.InvestigationHold,
                     Status = InventoryLockStatus.Active,
                     WarehouseId = request.WarehouseId,
                     ProductId = request.ProductId,

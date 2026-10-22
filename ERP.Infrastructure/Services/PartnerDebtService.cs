@@ -381,11 +381,48 @@ public sealed class PartnerDebtService(
         });
     }
 
+    public async Task EnqueueValuationOutboxEventAsync(
+        string aggregateType,
+        int aggregateId,
+        string referenceCode,
+        int warehouseId,
+        decimal totalAmount = 0m,
+        CancellationToken ct = default)
+    {
+        var eventId = $"OUTBOX-VAL-{aggregateType.ToUpperInvariant()}-{aggregateId}";
+        var exists = await context.IntegrationOutboxMessages
+            .AnyAsync(x => x.EventId == eventId, ct);
+        if (exists)
+            return;
+
+        context.IntegrationOutboxMessages.Add(new IntegrationOutboxMessage
+        {
+            EventId = eventId,
+            EventType = "InventoryValuationPosted",
+            AggregateType = aggregateType,
+            AggregateId = aggregateId,
+            PayloadJson = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                aggregateType,
+                aggregateId,
+                referenceCode,
+                warehouseId,
+                totalAmount,
+                targetSystem = "ACCOUNTING_ERP_GL",
+                occurredAtUtc = DateTime.UtcNow
+            }),
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync(ct);
+    }
+
     public async Task<PartnerDebtInvoiceDto?> RecordImportReceiptApDebtAsync(
         ImportReceipt receipt,
         int actorUserId,
         CancellationToken ct = default)
     {
+        await EnqueueValuationOutboxEventAsync("ImportReceipt", receipt.Id, receipt.Code, receipt.WarehouseId, 0m, ct);
         if (!receipt.SupplierId.HasValue || receipt.Details.Count == 0)
             return null;
 

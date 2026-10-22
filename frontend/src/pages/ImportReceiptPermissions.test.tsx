@@ -173,10 +173,19 @@ describe('quyền độc lập trên phiếu nhập', () => {
     expect(await view.findByText('SP-MASK-01')).toBeTruthy();
     expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(2);
 
+    fireEvent.change(view.getByLabelText('Quét mã vận đơn hoàn hàng nhanh'), {
+      target: { value: 'GHN-RTS-889901' },
+    });
     fireEvent.click(view.getByRole('button', { name: 'Khởi tạo Hồ sơ Kiểm định Hàng hoàn trả' }));
     const notice = await view.findByText(/Đã khởi tạo hồ sơ kiểm định hàng hoàn trả \(HS-KD-/);
     expect(notice).toBeTruthy();
     expect(notice.textContent).not.toContain('RMA');
+    expect(vi.mocked(apiClient.post)).toHaveBeenCalledWith(
+      '/api/ImportReceipts/initiate-rma-inspection',
+      expect.objectContaining({
+        rmaReferenceCode: 'GHN-RTS-889901',
+      }),
+    );
   });
 });
 

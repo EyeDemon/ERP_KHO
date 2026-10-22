@@ -3515,7 +3515,7 @@ namespace ERP.Api.Tests
                     Id = 3701,
                     WarehouseId = 1,
                     ProductId = 370,
-                    LockType = ERP.Domain.Enums.InventoryLockType.RecallHold,
+                    LockType = ERP.Domain.Enums.InventoryLockType.InvestigationHold,
                     Status = ERP.Domain.Enums.InventoryLockStatus.Active,
                     Reason = "Thu hồi lô hàng kiểm định Wave 37",
                     CreatedBy = 1
@@ -6120,7 +6120,7 @@ namespace ERP.Api.Tests
             sealDoc.RootElement.GetProperty("Status").GetString().Should().Be("SEALED");
 
             // 6. Carrier 3-tier address mapping
-            var addrRes = expController.GetCarrierAddressMappings("TP. Hồ Chí Minh", "Thành phố Thủ Đức", "Phường An Khánh");
+            var addrRes = await expController.GetCarrierAddressMappings("TP. Hồ Chí Minh", "Thành phố Thủ Đức", "Phường An Khánh");
             addrRes.Should().BeOfType<OkObjectResult>();
         }
 
@@ -6164,7 +6164,7 @@ namespace ERP.Api.Tests
             using var wizDoc = System.Text.Json.JsonSerializer.SerializeToDocument(wizRes.Should().BeOfType<OkObjectResult>().Subject.Value);
             wizDoc.RootElement.GetProperty("totalSteps").GetInt32().Should().Be(5);
 
-            var seedRes = permController.SeedSaaSDemoData(new PermissionsController.SeedDemoDataRequest(IndustryTemplate: "COSMETICS_FEFO"));
+            var seedRes = await permController.SeedSaaSDemoData(new PermissionsController.SeedDemoDataRequest(IndustryTemplate: "COSMETICS_FEFO"));
             seedRes.Should().BeOfType<OkObjectResult>();
 
             // 3-Tier Quota check: 110% (Soft Burst Allowed) vs 120% (> 115% Hard Cap ForbiddenException SUBSCRIPTION_QUOTA_EXCEEDED)
@@ -6594,6 +6594,163 @@ namespace ERP.Api.Tests
             pnlDoc.RootElement.GetProperty("shippingFeeDifferentials").GetDecimal().Should().Be(10000m);
             pnlDoc.RootElement.GetProperty("packagingCost").GetDecimal().Should().Be(25000m);
             pnlDoc.RootElement.GetProperty("netPocketProfit").GetDecimal().Should().Be(660000m);
+        }
+
+        [Fact]
+        public async Task Wave48To50_FullFiveLayerClosure_PersistsAll8Entities_ExcelTemplates_ThermalAwb_AndEnforcesInvariants()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            // 1. ImportTemplatesController real .xlsx binary download
+            var templatesController = new ImportTemplatesController();
+            foreach (var tplType in new[] { "products", "opening-balance", "marketplace-orders", "partners" })
+            {
+                var fileRes = templatesController.DownloadTemplate(tplType).Should().BeOfType<FileContentResult>().Subject;
+                fileRes.ContentType.Should().Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                fileRes.FileContents.Length.Should().BeGreaterThan(1000);
+            }
+
+            // 2. ShipmentsController VN 3-level administrative units & address normalization
+            var shipmentsController = new ShipmentsController(new Mock<IShipmentService>().Object, db);
+            var vnRes = await shipmentsController.GetVnAdministrativeUnits("79", null, "Bến Nghé", default);
+            vnRes.Should().BeOfType<OkObjectResult>();
+            (await db.VnAdministrativeUnits.CountAsync()).Should().BeGreaterThan(0);
+            (await db.CarrierLocationMappings.CountAsync()).Should().BeGreaterThan(0);
+
+            var normRes = await shipmentsController.NormalizeVietnameseAddress(
+                new NormalizeVnAddressRequest(RawAddress: "123 Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh", CarrierCode: "GHN"),
+                default);
+            using var normDoc = System.Text.Json.JsonSerializer.SerializeToDocument(normRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            normDoc.RootElement.GetProperty("matched").GetBoolean().Should().BeTrue();
+            normDoc.RootElement.GetProperty("provinceCode").GetString().Should().Be("79");
+
+            // 3. ExportReceiptsController Thermal Print 100x150mm HTML + PDF Base64 + Reprint Watermark
+            db.ExportReceipts.Add(new ERP.Domain.Entities.ExportReceipt
+            {
+                Id = 951,
+                Code = "XK-AWB-951",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Approved,
+                TrackingNumber = "GHN-AWB-951",
+                CarrierCode = "GHN",
+                AwbPrintCount = 1,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var exportController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db);
+            var awbRes = await exportController.BatchPrintAwb(
+                new ExportReceiptsController.BatchPrintAwbRequest(ReceiptIds: new List<int> { 951 }, ReprintReason: "Rách tem nhiệt"),
+                default);
+            using var awbDoc = System.Text.Json.JsonSerializer.SerializeToDocument(awbRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            awbDoc.RootElement.GetProperty("printHtmlDocument").GetString().Should().Contain("100mm 150mm").And.Contain("REPRINT - BẢN SAO");
+            awbDoc.RootElement.GetProperty("pdfBase64").GetString().Should().NotBeNullOrWhiteSpace();
+
+            // 4. PackingSessionsController PackingVideoEvidence table persistence
+            var packingController = new PackingSessionsController(new Mock<IPackingService>().Object, db);
+            var recVideoRes = await packingController.RecordPackingVideoEvidence(
+                new PackingSessionsController.RecordPackingVideoEvidenceRequest(
+                    TrackingNumber: "GHN-VID-501",
+                    OrderCode: "SO-VID-501",
+                    CameraStationId: "CAM-PACK-02"),
+                default);
+            recVideoRes.Should().BeOfType<OkObjectResult>();
+            (await db.PackingVideoEvidences.CountAsync(e => e.TrackingNumber == "GHN-VID-501")).Should().Be(1);
+
+            var getVideoRes = await packingController.GetPackingVideoEvidence("GHN-VID-501", default);
+            using var getVideoDoc = System.Text.Json.JsonSerializer.SerializeToDocument(getVideoRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            getVideoDoc.RootElement.GetProperty("cameraStationId").GetString().Should().Be("CAM-PACK-02");
+
+            // 5. ImportReceiptsController CustomerReturns & CustomerReturnLines persistence
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = 501,
+                Code = "SKU-RMA-501",
+                Name = "Sản phẩm RMA 501",
+                CategoryId = 1,
+                UnitId = 1,
+                MovingAverageCost = 100000m,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+
+            var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db);
+            var rmaIntakeRes = await importController.RmaIntakeCheck(
+                new ImportReceiptsController.RmaIntakeCheckRequest(
+                    WarehouseId: 1,
+                    ProductId: 501,
+                    Quantity: 3m,
+                    ReturnReference: "RET-TRACK-501",
+                    ReasonCode: "DEFECTIVE_PACKAGING"),
+                default);
+            rmaIntakeRes.Should().BeOfType<OkObjectResult>();
+            (await db.CustomerReturns.CountAsync()).Should().Be(1);
+            (await db.CustomerReturnLines.CountAsync()).Should().Be(1);
+
+            var listReturnsRes = await importController.GetCustomerReturns(1, default);
+            listReturnsRes.Should().BeOfType<OkObjectResult>();
+
+            // 6. AccountSecurityController SupportImpersonationSession persistence & revoke
+            var securityController = new AccountSecurityController(
+                new Mock<IAccountAdminService>().Object,
+                new Mock<IUserSessionService>().Object,
+                db);
+            var grantRes = await securityController.GrantSupportImpersonation(
+                new AccountSecurityController.GrantSupportImpersonationRequest("SUP-501", 30, true, 99),
+                default);
+            using var grantDoc = System.Text.Json.JsonSerializer.SerializeToDocument(grantRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+            var sessionId = grantDoc.RootElement.GetProperty("sessionId").GetInt32();
+            sessionId.Should().BeGreaterThan(0);
+
+            var revokeRes = await securityController.RevokeSupportImpersonation(sessionId, default);
+            revokeRes.Should().BeOfType<OkObjectResult>();
+            var revokedSession = await db.SupportImpersonationSessions.FindAsync(sessionId);
+            revokedSession!.Status.Should().Be("REVOKED");
+
+            // 7. StocktakesController StocktakeAdjustmentProposals & OD-14 (< 1% AND <= 500,000 VND)
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                WarehouseId = 1,
+                ProductId = 501,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 1000m,
+                MovingAverageCost = 100000m,
+                LastUpdated = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var stocktakesController = new StocktakesController(
+                new Mock<IStocktakeService>().Object,
+                new Mock<IStocktakeQueryService>().Object,
+                db);
+            var propRes = await stocktakesController.CreateAdjustmentProposal(
+                new StocktakesController.CreateAdjustmentProposalRequest(
+                    WarehouseId: 1,
+                    ProductId: 501,
+                    DeltaQuantity: 1m, // 1 / 1000 = 0.1% (< 1%) and 1 * 100,000 = 100,000 VND (<= 500,000 VND) -> auto-approved!
+                    ReasonCode: "COUNT_VARIANCE",
+                    Note: "Chênh lệch nhỏ dưới 1% và dưới 500k"),
+                default);
+            propRes.Should().BeOfType<OkObjectResult>();
+            var autoProposal = await db.StocktakeAdjustmentProposals.OrderByDescending(p => p.Id).FirstAsync();
+            autoProposal.IsAutoApproved.Should().BeTrue();
+            autoProposal.Status.Should().Be("APPROVED");
+
+            var propHighValRes = await stocktakesController.CreateAdjustmentProposal(
+                new StocktakesController.CreateAdjustmentProposalRequest(
+                    WarehouseId: 1,
+                    ProductId: 501,
+                    DeltaQuantity: 6m, // 6 * 100,000 = 600,000 VND (> 500,000 VND) -> NOT auto-approved!
+                    ReasonCode: "COUNT_VARIANCE",
+                    Note: "Chênh lệch 600k vượt ngưỡng 500k"),
+                default);
+            propHighValRes.Should().BeOfType<OkObjectResult>();
+            var pendingProposal = await db.StocktakeAdjustmentProposals.OrderByDescending(p => p.Id).FirstAsync();
+            pendingProposal.IsAutoApproved.Should().BeFalse();
+            pendingProposal.Status.Should().Be("PENDING");
         }
     }
 }

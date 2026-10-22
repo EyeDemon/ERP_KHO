@@ -118,11 +118,32 @@ namespace ERP.Api.Controllers
         [HttpPost]
         [IdempotentCommand("ExportReceipt.Create")]
         [PermissionAuthorize(AppPermissions.ExportReceiptCreate)]
-        public async Task<IActionResult> Create([FromBody] ERP.Application.DTOs.CreateExportReceiptDto dto)
+        public async Task<IActionResult> Create([FromBody] ERP.Application.DTOs.CreateExportReceiptDto dto, CancellationToken cancellationToken = default)
         {
             if (!TryGetUserId(out var userId))
             {
                 return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
+            }
+
+            if (_db != null)
+            {
+                var tenantId = _db.CurrentTenantId;
+                var sub = await _db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
+                if (sub != null)
+                {
+                    var quota = sub.MonthlyOrderQuota > 0 ? sub.MonthlyOrderQuota : 1500;
+                    var usagePct = decimal.Round((sub.CurrentMonthOrderCount * 100m) / quota, 2);
+                    var isExpiredPastDue = string.Equals(sub.Status, "PAST_DUE", StringComparison.OrdinalIgnoreCase) &&
+                                           sub.CurrentPeriodEndUtc.AddHours(72) < DateTime.UtcNow;
+                    if (usagePct > 115m || isExpiredPastDue)
+                    {
+                        return StatusCode(403, new
+                        {
+                            errorCode = "SUBSCRIPTION_QUOTA_EXCEEDED",
+                            message = $"Thuê bao đã vượt ngưỡng cứng 115% hạn ngạch đơn hàng tháng ({sub.CurrentMonthOrderCount}/{quota} đơn - {usagePct}%) hoặc quá hạn thanh toán 72h. Hệ thống chuyển sang chế độ Chỉ Đọc cho đơn mới."
+                        });
+                    }
+                }
             }
 
             try
@@ -436,6 +457,7 @@ namespace ERP.Api.Controllers
 
             var validAuditUserId = await ResolveValidAuditUserIdAsync(cancellationToken);
             var labels = new List<object>();
+            var htmlPages = new List<string>();
             var seq = 1;
             foreach (var item in enriched)
             {
@@ -445,6 +467,29 @@ namespace ERP.Api.Controllers
                 r.AwbFirstPrintedAtUtc ??= now;
 
                 var footer = $"[Kệ: {item.PrimaryPickLocationCode} | SKU: {item.PrimaryProductCode} x {item.TotalQuantity:0.##}]";
+                var watermarkHtml = wasReprint
+                    ? $"<div class=\"watermark\">REPRINT - BẢN SAO LẦN {r.AwbPrintCount} ({System.Net.WebUtility.HtmlEncode(request?.ReprintReason ?? "In lại")})</div>"
+                    : string.Empty;
+                var codAmount = r.Details.Sum(d => decimal.Round(d.Quantity * (d.UnitPrice > 0m ? d.UnitPrice : 125000m), 0));
+                var labelHtml = $@"<section class=""awb-page"">
+  {watermarkHtml}
+  <header class=""awb-header"">
+    <div><strong>{r.CarrierCode} EXPRESS</strong><br/><span>Mã đơn sàn: {r.MarketplaceOrderId ?? $"MP-{r.Code}"}</span></div>
+    <div class=""hub-box"">HUB-{r.CarrierCode}-01</div>
+  </header>
+  <div class=""barcode-block"">
+    <svg width=""260"" height=""48"" viewBox=""0 0 260 48"" xmlns=""http://www.w3.org/2000/svg""><rect x=""4"" y=""4"" width=""6"" height=""40"" fill=""#000""/><rect x=""14"" y=""4"" width=""3"" height=""40"" fill=""#000""/><rect x=""22"" y=""4"" width=""9"" height=""40"" fill=""#000""/><rect x=""36"" y=""4"" width=""4"" height=""40"" fill=""#000""/><rect x=""46"" y=""4"" width=""8"" height=""40"" fill=""#000""/><rect x=""60"" y=""4"" width=""3"" height=""40"" fill=""#000""/><rect x=""70"" y=""4"" width=""10"" height=""40"" fill=""#000""/><rect x=""86"" y=""4"" width=""5"" height=""40"" fill=""#000""/><rect x=""98"" y=""4"" width=""7"" height=""40"" fill=""#000""/><rect x=""112"" y=""4"" width=""4"" height=""40"" fill=""#000""/><rect x=""122"" y=""4"" width=""9"" height=""40"" fill=""#000""/></svg>
+    <div class=""tracking-code"">{r.TrackingNumber}</div>
+  </div>
+  <div class=""addr-grid"">
+    <div><strong>Người gửi:</strong> Kho trung tâm ERP (#{r.WarehouseId})</div>
+    <div><strong>Người nhận:</strong> {System.Net.WebUtility.HtmlEncode(r.CustomerNameSnapshot ?? "Khách hàng TMĐT")}</div>
+  </div>
+  <div class=""cod-box"">Thu hộ COD: <strong>{codAmount:N0} VND</strong></div>
+  <footer class=""pick-footer"">{System.Net.WebUtility.HtmlEncode(footer)}</footer>
+</section>";
+                htmlPages.Add(labelHtml);
+
                 labels.Add(new
                 {
                     sequence = seq++,
@@ -461,7 +506,8 @@ namespace ERP.Api.Controllers
                     awbPrintCount = r.AwbPrintCount,
                     awbFirstPrintedAtUtc = r.AwbFirstPrintedAtUtc,
                     isReprint = wasReprint,
-                    reprintReason = wasReprint ? request?.ReprintReason : null
+                    reprintReason = wasReprint ? request?.ReprintReason : null,
+                    labelHtml
                 });
 
                 _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
@@ -482,6 +528,21 @@ namespace ERP.Api.Controllers
 
             await _db.SaveChangesAsync(cancellationToken);
             var batchCode = $"AWB-BATCH-{now:yyyyMMdd-HHmmss}";
+            var printHtmlDocument = $@"<!DOCTYPE html>
+<html lang=""vi""><head><meta charset=""utf-8""/><title>{batchCode} - Thermal AWB 100x150mm</title>
+<style>
+@page {{ size: 100mm 150mm; margin: 0; }}
+body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
+.awb-page {{ width: 100mm; height: 150mm; box-sizing: border-box; padding: 4mm; border-bottom: 1px dashed #000; page-break-after: always; position: relative; }}
+.watermark {{ position: absolute; top: 45%; left: 8%; transform: rotate(-28deg); font-size: 16px; font-weight: bold; color: rgba(200,0,0,0.35); border: 2px solid rgba(200,0,0,0.35); padding: 4px 8px; }}
+.awb-header {{ display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 4px; }}
+.hub-box {{ font-size: 16px; font-weight: bold; border: 2px solid #000; padding: 2px 6px; }}
+.barcode-block {{ text-align: center; margin: 6px 0; }}
+.tracking-code {{ font-size: 14px; font-weight: bold; letter-spacing: 1px; }}
+.cod-box {{ margin: 8px 0; padding: 6px; border: 2px solid #000; font-size: 14px; }}
+.pick-footer {{ margin-top: 10px; padding-top: 6px; border-top: 1px dashed #000; font-weight: bold; font-size: 11px; }}
+</style></head><body>{string.Join("\n", htmlPages)}</body></html>";
+            var pdfBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(printHtmlDocument));
 
             return Ok(new
             {
@@ -490,6 +551,8 @@ namespace ERP.Api.Controllers
                 sortStrategy = "PrimaryPickLocationCode ASC, ProductCode ASC",
                 printedCount = labels.Count,
                 duplicatePrintBlocked = true,
+                printHtmlDocument,
+                pdfBase64,
                 labels,
                 printedAtUtc = now,
                 statusLabel = $"Đã kết xuất lô in nhiệt {labels.Count} vận đơn 100x150mm theo thứ tự tuyến kệ nhặt"
@@ -953,18 +1016,27 @@ namespace ERP.Api.Controllers
         [HttpGet("~/api/carriers/address-mappings")]
         [HttpGet("carriers/address-mappings")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
-        public IActionResult GetCarrierAddressMappings(
+        public async Task<IActionResult> GetCarrierAddressMappings(
             [FromQuery] string? province = null,
             [FromQuery] string? district = null,
-            [FromQuery] string? ward = null)
+            [FromQuery] string? ward = null,
+            CancellationToken cancellationToken = default)
         {
             var normalizedProvince = string.IsNullOrWhiteSpace(province) ? "TP. Hồ Chí Minh" : province.Trim();
             var normalizedDistrict = string.IsNullOrWhiteSpace(district) ? "Thành phố Thủ Đức" : district.Trim();
             var normalizedWard = string.IsNullOrWhiteSpace(ward) ? "Phường An Khánh" : ward.Trim();
 
+            var dbUnitsCount = 0;
+            if (_db != null)
+            {
+                await ShipmentsController.EnsureVnAdministrativeSeededAsync(_db, cancellationToken);
+                dbUnitsCount = await _db.VnAdministrativeUnits.AsNoTracking().CountAsync(cancellationToken);
+            }
+
             return Ok(new
             {
                 input = new { province = normalizedProvince, district = normalizedDistrict, ward = normalizedWard },
+                persistedUnitsCount = dbUnitsCount,
                 normalized = new
                 {
                     provinceName = normalizedProvince,
@@ -993,12 +1065,14 @@ namespace ERP.Api.Controllers
                     {
                         templateCode = "OPENING_BALANCE_EXCEL",
                         templateName = "Mẫu Excel Nhập Tồn Kho Đầu Kỳ & Giá Vốn Bình Quân (MAC)",
+                        downloadUrl = "/api/v1/import-templates/opening-balance",
                         requiredColumns = new[] { "ProductCode", "LocationCode", "Quantity", "UnitCost", "LotNumber", "ExpiryDate" }
                     },
                     new
                     {
                         templateCode = "PRODUCT_MASTER_EXCEL",
                         templateName = "Mẫu Excel Danh Mục Sản Phẩm & Quy Đổi ĐVT",
+                        downloadUrl = "/api/v1/import-templates/products",
                         requiredColumns = new[] { "ProductCode", "ProductName", "BaseUomCode", "Barcode", "MovingAverageCost" }
                     }
                 },
@@ -1033,16 +1107,36 @@ namespace ERP.Api.Controllers
                 await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
             }
 
-            var items = request?.Items is { Count: > 0 }
-                ? request.Items
-                :
-                [
-                    new OpeningBalanceItemRequest(
-                        ProductId: request?.ProductId,
-                        LocationId: request?.LocationId,
-                        Quantity: request?.Quantity ?? 50m,
-                        UnitCost: request?.UnitCost ?? 120000m)
-                ];
+            var items = new List<OpeningBalanceItemRequest>();
+            if (Request?.HasFormContentType == true && Request.Form.Files.Count > 0)
+            {
+                using var stream = Request.Form.Files[0].OpenReadStream();
+                using var wb = new ClosedXML.Excel.XLWorkbook(stream);
+                var ws = wb.Worksheets.First();
+                foreach (var row in ws.RowsUsed().Skip(1))
+                {
+                    var pCode = row.Cell(1).GetString()?.Trim();
+                    var qtyVal = row.Cell(3).TryGetValue<decimal>(out var q) ? q : 10m;
+                    var costVal = row.Cell(4).TryGetValue<decimal>(out var c) ? c : 85000m;
+                    if (!string.IsNullOrWhiteSpace(pCode))
+                    {
+                        items.Add(new OpeningBalanceItemRequest(ProductCode: pCode, Quantity: qtyVal, UnitCost: costVal));
+                    }
+                }
+            }
+            if (items.Count == 0)
+            {
+                items = request?.Items is { Count: > 0 }
+                    ? request.Items
+                    :
+                    [
+                        new OpeningBalanceItemRequest(
+                            ProductId: request?.ProductId,
+                            LocationId: request?.LocationId,
+                            Quantity: request?.Quantity ?? 50m,
+                            UnitCost: request?.UnitCost ?? 120000m)
+                    ];
+            }
 
             var defaultLocId = request?.LocationId ?? await _db.WarehouseLocations
                 .AsNoTracking()
@@ -1264,6 +1358,52 @@ namespace ERP.Api.Controllers
                 });
             }
 
+            using var workbook = new ClosedXML.Excel.XLWorkbook();
+            var sheet = workbook.Worksheets.Add("MISA_AMIS_ACT_200");
+            var headers = new[]
+            {
+                "SoChungTu", "NgayHachToan", "MaHang", "TenHang",
+                "TKNoGiaVon", "TKCoKho", "SoLuong", "DonGiaVonMAC", "ThanhTienGiaVon",
+                "TKNoCongNo", "TKCoDoanhThu", "DonGiaBan", "DoanhThu",
+                "EInvoiceStatus", "EInvoiceProvider"
+            };
+            for (var c = 0; c < headers.Length; c++)
+                sheet.Cell(1, c + 1).Value = headers[c];
+            sheet.Row(1).Style.Font.Bold = true;
+
+            var rowIdx = 2;
+            foreach (dynamic row in rows)
+            {
+                sheet.Cell(rowIdx, 1).Value = (string)row.soChungTu;
+                sheet.Cell(rowIdx, 2).Value = (string)row.ngayHachToan;
+                sheet.Cell(rowIdx, 3).Value = (string)row.maHang;
+                sheet.Cell(rowIdx, 4).Value = (string)row.tenHang;
+                sheet.Cell(rowIdx, 5).Value = (string)row.tkNoGiaVon;
+                sheet.Cell(rowIdx, 6).Value = (string)row.tkCoKho;
+                sheet.Cell(rowIdx, 7).Value = (decimal)row.soLuong;
+                sheet.Cell(rowIdx, 8).Value = (decimal)row.donGiaVonMac;
+                sheet.Cell(rowIdx, 9).Value = (decimal)row.thanhTienGiaVon;
+                sheet.Cell(rowIdx, 10).Value = (string)row.tkNoCongNo;
+                sheet.Cell(rowIdx, 11).Value = (string)row.tkCoDoanhThu;
+                sheet.Cell(rowIdx, 12).Value = (decimal)row.donGiaBan;
+                sheet.Cell(rowIdx, 13).Value = (decimal)row.doanhThu;
+                sheet.Cell(rowIdx, 14).Value = (string)row.eInvoiceStatus;
+                sheet.Cell(rowIdx, 15).Value = (string)row.eInvoiceProvider;
+                rowIdx++;
+            }
+            using var ms = new System.IO.MemoryStream();
+            workbook.SaveAs(ms);
+            var xlsxBytes = ms.ToArray();
+
+            if (string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(format, "binary", StringComparison.OrdinalIgnoreCase))
+            {
+                return File(
+                    xlsxBytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "Bang_Ke_Xuat_Kho_MISA_AMIS.xlsx");
+            }
+
             return Ok(new
             {
                 templateStandard = "MISA_AMIS_ACT_200",
@@ -1273,6 +1413,8 @@ namespace ERP.Api.Controllers
                 defaultDebitReceivableAccount = "131",
                 defaultCreditRevenueAccount = "5111",
                 rowCount = rows.Count,
+                downloadUrl = "/api/v1/export-receipts/misa-excel-export?format=xlsx",
+                excelBase64 = Convert.ToBase64String(xlsxBytes),
                 rows,
                 statusLabel = "Đã kết xuất bảng kê chứng từ xuất kho & giá vốn chuẩn MISA AMIS (TK 632 / 1561 / 131 / 5111)"
             });

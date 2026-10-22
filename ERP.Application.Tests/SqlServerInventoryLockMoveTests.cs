@@ -39,7 +39,7 @@ public sealed class SqlServerInventoryLockMoveTests
                 });
                 second = await service.CreateAsync(new()
                 {
-                    LockType = nameof(InventoryLockType.QualityHold),
+                    LockType = nameof(InventoryLockType.InvestigationHold),
                     WarehouseId = fixture.WarehouseId,
                     LocationId = fixture.SourceLocationId,
                     ProductId = fixture.ProductId,
@@ -106,7 +106,7 @@ public sealed class SqlServerInventoryLockMoveTests
             {
                 await CreateLockService(lockDb, fixture.UserId).CreateAsync(new()
                 {
-                    LockType = nameof(InventoryLockType.QualityHold),
+                    LockType = nameof(InventoryLockType.InvestigationHold),
                     WarehouseId = fixture.WarehouseId,
                     ProductId = fixture.ProductId,
                     Reason = "quality hold"

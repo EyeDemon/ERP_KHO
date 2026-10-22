@@ -143,4 +143,30 @@ describe('Products category and barcode UI (mocked API)', () => {
     expect(view.queryByText('Thêm danh mục')).toBeNull();
     expect(view.getByText('Thêm mã vạch')).toBeTruthy();
   });
+
+  it('saves and loads ProductBundleComponents (Combo/Kit) and PromotionGiftRules (0đ gifts)', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { id: 101 } } as never);
+    const view = render(<Products />);
+    await view.findByText('P001');
+
+    fireEvent.change(view.getByLabelText('Số lượng thành phần trên 1 bộ Kit'), { target: { value: '3' } });
+    fireEvent.click(view.getByRole('button', { name: 'Lưu định mức Combo / Kit' }));
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/Products/1/bundle-components',
+        expect.objectContaining({ parentProductId: 1, quantity: 3 }),
+      ),
+    );
+    expect(await view.findByRole('table', { name: 'Danh sách thành phần Combo / Kit' })).toBeTruthy();
+
+    fireEvent.change(view.getByLabelText('Giá trị đơn hàng tối thiểu (VNĐ)'), { target: { value: '600000' } });
+    fireEvent.click(view.getByRole('button', { name: 'Lưu quy tắc Quà tặng 0đ' }));
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/sales-orders/promotion-gift-rules',
+        expect.objectContaining({ minOrderValue: 600000, unitPrice: 0 }),
+      ),
+    );
+    expect(await view.findByRole('table', { name: 'Danh sách quy tắc quà tặng 0đ' })).toBeTruthy();
+  });
 });

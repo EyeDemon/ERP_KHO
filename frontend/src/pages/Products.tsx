@@ -133,38 +133,162 @@ const Products = () => {
           conversionFactorToBase: factor,
           conversionFactor: factor,
         });
-      } catch {
-        // Cập nhật trực tiếp quy đổi ĐVT trên danh sách sản phẩm khi máy chủ ở chế độ mô phỏng
+        setProducts(prev => prev.map(item => item.id === targetProduct.id ? {
+          ...item,
+          uoms: [
+            ...(item.uoms || []).filter(u => u.unitId !== (selectedUnit?.id || Number(uomUnitId) || 1)),
+            {
+              id: Date.now(),
+              unitId: selectedUnit?.id || Number(uomUnitId) || 1,
+              unitCode: selectedUnit?.code || 'BOX',
+              unitName: selectedUnit?.name || 'Thùng',
+              conversionFactor: factor,
+              conversionFactorToBase: factor,
+            },
+          ],
+        } : item));
+        setNotice(`Đã cập nhật quy đổi ĐVT cho sản phẩm ${targetProduct.code}.`);
+      } catch (err) {
+        setError(messageOf(err, 'Không thể cập nhật quy đổi đơn vị tính.'));
       }
-      setProducts(prev => prev.map(item => item.id === targetProduct.id ? {
-        ...item,
-        uoms: [
-          ...(item.uoms || []).filter(u => u.unitId !== (selectedUnit?.id || Number(uomUnitId) || 1)),
-          {
-            id: Date.now(),
-            unitId: selectedUnit?.id || Number(uomUnitId) || 1,
-            unitCode: selectedUnit?.code || 'BOX',
-            unitName: selectedUnit?.name || 'Thùng',
-            conversionFactor: factor,
-            conversionFactorToBase: factor,
-          },
-        ],
-      } : item));
-      setNotice(`Đã cập nhật quy đổi ĐVT cho sản phẩm ${targetProduct.code}.`);
     });
   };
   const removeProductUom = async (productId: number, uomIdOrUnitId: number) => {
     await mutate(async () => {
       try {
         await apiClient.delete(`/api/products/${productId}/uoms/${uomIdOrUnitId}`);
-      } catch {
-        // Cho phép gỡ quy đổi cục bộ
+        setProducts(prev => prev.map(item => item.id === productId ? {
+          ...item,
+          uoms: (item.uoms || []).filter(u => (u.id ?? u.unitId) !== uomIdOrUnitId),
+        } : item));
+        setNotice('Đã xóa quy đổi đơn vị tính phụ.');
+      } catch (err) {
+        setError(messageOf(err, 'Không thể xóa quy đổi đơn vị tính phụ.'));
       }
-      setProducts(prev => prev.map(item => item.id === productId ? {
-        ...item,
-        uoms: (item.uoms || []).filter(u => (u.id ?? u.unitId) !== uomIdOrUnitId),
-      } : item));
-      setNotice('Đã xóa quy đổi đơn vị tính phụ.');
+    });
+  };
+  const [bundleParentId, setBundleParentId] = useState<number>(0);
+  const [bundleChildId, setBundleChildId] = useState<number>(0);
+  const [bundleQuantity, setBundleQuantity] = useState<string>('2');
+  const [bundleComponents, setBundleComponents] = useState<Array<{ id: number; parentProductId: number; childProductId: number; childProductCode: string; childProductName: string; quantity: number }>>([]);
+  const [giftRuleName, setGiftRuleName] = useState<string>('Tặng kèm quà 0đ đơn từ 500.000đ');
+  const [giftMinOrderValue, setGiftMinOrderValue] = useState<string>('500000');
+  const [giftProductId, setGiftProductId] = useState<number>(0);
+  const [giftQuantity, setGiftQuantity] = useState<string>('1');
+  const [giftRules, setGiftRules] = useState<Array<{ id: number; ruleName: string; minOrderValue: number; giftProductId: number; giftProductCode: string; giftProductName: string; giftQuantity: number; isActive: boolean }>>([]);
+
+  const loadBundleComponents = async () => {
+    const targetParent = products.find(p => p.id === (bundleParentId || activeUomProduct?.id)) || products[0];
+    const parentId = targetParent?.id || bundleParentId || 1;
+    await mutate(async () => {
+      try {
+        const res = await apiClient.get(`/api/Products/${parentId}/bundle-components`);
+        const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.items) ? res.data.items : []);
+        setBundleComponents(items.map((item: Record<string, unknown>, idx: number) => ({
+          id: Number(item.id ?? idx + 1),
+          parentProductId: Number(item.parentProductId ?? parentId),
+          childProductId: Number(item.childProductId ?? item.componentProductId ?? 1),
+          childProductCode: String(item.childProductCode ?? item.componentProductCode ?? 'SKU-COMP'),
+          childProductName: String(item.childProductName ?? item.componentProductName ?? 'Thành phần Kit'),
+          quantity: Number(item.quantity ?? 1),
+        })));
+        setNotice(`Đã tải cấu phần Combo / Kit cho sản phẩm ${targetParent?.code || `#${parentId}`}.`);
+      } catch (err) {
+        setError(messageOf(err, 'Không thể tải cấu phần Combo / Kit.'));
+      }
+    });
+  };
+
+  const saveBundleComponent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetParent = products.find(p => p.id === (bundleParentId || activeUomProduct?.id)) || products[0];
+    const targetChild = products.find(p => p.id === bundleChildId) || products[1] || products[0];
+    const parentId = targetParent?.id || bundleParentId || 1;
+    const childId = targetChild?.id || bundleChildId || 2;
+    const qty = Math.max(1, Number(bundleQuantity) || 1);
+    await mutate(async () => {
+      try {
+        const res = await apiClient.post(`/api/Products/${parentId}/bundle-components`, {
+          parentProductId: parentId,
+          childProductId: childId,
+          quantity: qty,
+          components: [{ childProductId: childId, quantity: qty }],
+        });
+        const returned = res?.data;
+        setBundleComponents(prev => [
+          ...prev.filter(item => item.childProductId !== childId),
+          {
+            id: Number(returned?.id ?? Date.now()),
+            parentProductId: parentId,
+            childProductId: childId,
+            childProductCode: String(returned?.childProductCode ?? targetChild?.code ?? `SKU-${childId}`),
+            childProductName: String(returned?.childProductName ?? targetChild?.name ?? 'Sản phẩm thành phần'),
+            quantity: Number(returned?.quantity ?? qty),
+          },
+        ]);
+        setNotice(`Đã lưu định mức Combo / Kit cho ${targetParent?.code || `#${parentId}`}.`);
+      } catch (err) {
+        setError(messageOf(err, 'Không thể lưu định mức Combo / Kit.'));
+      }
+    });
+  };
+
+  const loadPromotionGiftRules = async () => {
+    await mutate(async () => {
+      try {
+        const res = await apiClient.get('/api/sales-orders/promotion-gift-rules');
+        const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.items) ? res.data.items : []);
+        setGiftRules(items.map((item: Record<string, unknown>, idx: number) => ({
+          id: Number(item.id ?? idx + 1),
+          ruleName: String(item.ruleName ?? item.name ?? 'Chương trình quà tặng 0đ'),
+          minOrderValue: Number(item.minOrderValue ?? item.minOrderAmount ?? 0),
+          giftProductId: Number(item.giftProductId ?? 1),
+          giftProductCode: String(item.giftProductCode ?? 'SKU-GIFT'),
+          giftProductName: String(item.giftProductName ?? 'Quà tặng khuyến mãi 0đ'),
+          giftQuantity: Number(item.giftQuantity ?? item.quantity ?? 1),
+          isActive: item.isActive !== false,
+        })));
+        setNotice('Đã tải danh sách quy tắc quà tặng kèm 0đ.');
+      } catch (err) {
+        setError(messageOf(err, 'Không thể tải danh sách quy tắc quà tặng kèm 0đ.'));
+      }
+    });
+  };
+
+  const savePromotionGiftRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetGift = products.find(p => p.id === giftProductId) || products[0];
+    const resolvedGiftId = targetGift?.id || giftProductId || 1;
+    const minVal = Math.max(0, Number(giftMinOrderValue) || 0);
+    const giftQty = Math.max(1, Number(giftQuantity) || 1);
+    await mutate(async () => {
+      try {
+        const res = await apiClient.post('/api/sales-orders/promotion-gift-rules', {
+          ruleName: giftRuleName.trim() || 'Chương trình quà tặng 0đ',
+          minOrderValue: minVal,
+          giftProductId: resolvedGiftId,
+          giftQuantity: giftQty,
+          unitPrice: 0,
+          isActive: true,
+        });
+        const returned = res?.data;
+        setGiftRules(prev => [
+          ...prev,
+          {
+            id: Number(returned?.id ?? Date.now()),
+            ruleName: String(returned?.ruleName ?? giftRuleName.trim()),
+            minOrderValue: Number(returned?.minOrderValue ?? minVal),
+            giftProductId: resolvedGiftId,
+            giftProductCode: String(returned?.giftProductCode ?? targetGift?.code ?? `SKU-${resolvedGiftId}`),
+            giftProductName: String(returned?.giftProductName ?? targetGift?.name ?? 'Quà tặng 0đ'),
+            giftQuantity: Number(returned?.giftQuantity ?? giftQty),
+            isActive: true,
+          },
+        ]);
+        setNotice('Đã lưu quy tắc quà tặng kèm 0đ theo giá trị đơn hàng.');
+      } catch (err) {
+        setError(messageOf(err, 'Không thể lưu quy tắc quà tặng kèm 0đ.'));
+      }
     });
   };
   const deleteProduct = async (id: number) => { if (!canDeactivate || !window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return; await mutate(async () => { try { await apiClient.delete(`/api/products/${id}`); setNotice('Đã xóa sản phẩm.'); await load(); } catch (e) { setError(messageOf(e, 'Không thể xóa sản phẩm.')); } }); };
@@ -449,6 +573,154 @@ const Products = () => {
         )}
       </UiCard>
     )}
+    <UiCard title="Cấu hình Combo / Kit Ảo (Định mức Phân rã Tự động khi Xuất kho)">
+      <form onSubmit={saveBundleComponent} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+        <UiToolbarField label="Sản phẩm cha Combo / Kit">
+          <select
+            aria-label="Sản phẩm cha Combo / Kit"
+            value={bundleParentId || activeUomProduct?.id || products[0]?.id || 0}
+            onChange={e => setBundleParentId(Number(e.target.value))}
+            style={{ height: 38, boxSizing: 'border-box' }}
+          >
+            {products.length === 0 ? <option value={0}>Chưa có sản phẩm</option> : null}
+            {products.map(item => (
+              <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
+            ))}
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Sản phẩm thành phần trong Kit">
+          <select
+            aria-label="Sản phẩm thành phần trong Kit"
+            value={bundleChildId || products[1]?.id || products[0]?.id || 0}
+            onChange={e => setBundleChildId(Number(e.target.value))}
+            style={{ height: 38, boxSizing: 'border-box' }}
+          >
+            {products.length === 0 ? <option value={0}>Chưa có sản phẩm thành phần</option> : null}
+            {products.map(item => (
+              <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
+            ))}
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Số lượng thành phần / 1 bộ Kit">
+          <input
+            aria-label="Số lượng thành phần trên 1 bộ Kit"
+            type="number"
+            min="1"
+            step="1"
+            value={bundleQuantity}
+            onChange={e => setBundleQuantity(e.target.value)}
+            style={{ height: 38, boxSizing: 'border-box', width: 120 }}
+          />
+        </UiToolbarField>
+        <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+          Lưu định mức Combo / Kit
+        </button>
+        <button type="button" className="ui-btn-secondary" disabled={mutating} onClick={() => void loadBundleComponents()} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+          Tải cấu phần Combo / Kit
+        </button>
+      </form>
+      {bundleComponents.length > 0 && (
+        <UiTableScroll>
+          <table aria-label="Danh sách thành phần Combo / Kit" className="ui-table-compact" style={{ marginTop: 10 }}>
+            <thead>
+              <tr>
+                <th>Mã thành phần</th>
+                <th>Tên thành phần</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Định mức / Bộ Kit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bundleComponents.map(item => (
+                <tr key={item.id}>
+                  <td><strong>{item.childProductCode}</strong></td>
+                  <td>{item.childProductName}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.quantity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </UiTableScroll>
+      )}
+    </UiCard>
+
+    <UiCard title="Cấu hình Quà tặng Kèm 0đ Tự động theo Giá trị Đơn hàng">
+      <form onSubmit={savePromotionGiftRule} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+        <UiToolbarField label="Tên chương trình khuyến mãi">
+          <input
+            aria-label="Tên chương trình khuyến mãi quà tặng"
+            value={giftRuleName}
+            onChange={e => setGiftRuleName(e.target.value)}
+            placeholder="VD: Tặng quà đơn từ 500.000đ"
+            style={{ height: 38, boxSizing: 'border-box' }}
+          />
+        </UiToolbarField>
+        <UiToolbarField label="Giá trị đơn tối thiểu (VNĐ)">
+          <input
+            aria-label="Giá trị đơn hàng tối thiểu (VNĐ)"
+            type="number"
+            min="0"
+            step="1000"
+            value={giftMinOrderValue}
+            onChange={e => setGiftMinOrderValue(e.target.value)}
+            style={{ height: 38, boxSizing: 'border-box', width: 150 }}
+          />
+        </UiToolbarField>
+        <UiToolbarField label="Sản phẩm quà tặng 0đ">
+          <select
+            aria-label="Sản phẩm quà tặng 0đ"
+            value={giftProductId || products[0]?.id || 0}
+            onChange={e => setGiftProductId(Number(e.target.value))}
+            style={{ height: 38, boxSizing: 'border-box' }}
+          >
+            {products.length === 0 ? <option value={0}>Chưa có sản phẩm quà tặng</option> : null}
+            {products.map(item => (
+              <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
+            ))}
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Số lượng tặng kèm">
+          <input
+            aria-label="Số lượng quà tặng kèm"
+            type="number"
+            min="1"
+            step="1"
+            value={giftQuantity}
+            onChange={e => setGiftQuantity(e.target.value)}
+            style={{ height: 38, boxSizing: 'border-box', width: 110 }}
+          />
+        </UiToolbarField>
+        <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+          Lưu quy tắc Quà tặng 0đ
+        </button>
+        <button type="button" className="ui-btn-secondary" disabled={mutating} onClick={() => void loadPromotionGiftRules()} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+          Tải danh sách Quy tắc Quà tặng 0đ
+        </button>
+      </form>
+      {giftRules.length > 0 && (
+        <UiTableScroll>
+          <table aria-label="Danh sách quy tắc quà tặng 0đ" className="ui-table-compact" style={{ marginTop: 10 }}>
+            <thead>
+              <tr>
+                <th>Chương trình</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Giá trị đơn tối thiểu</th>
+                <th>Quà tặng kèm (Đơn giá 0đ)</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng tặng</th>
+              </tr>
+            </thead>
+            <tbody>
+              {giftRules.map(rule => (
+                <tr key={rule.id}>
+                  <td><strong>{rule.ruleName}</strong></td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rule.minOrderValue.toLocaleString('vi-VN')} đ</td>
+                  <td>{rule.giftProductCode} – {rule.giftProductName}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rule.giftQuantity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </UiTableScroll>
+      )}
+    </UiCard>
   </UiPage>;
 };
 export default Products;

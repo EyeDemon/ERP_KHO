@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
-[ApiController, Route("api/permissions"), Authorize]
+[ApiController, Route("api/permissions"), Route("api/v1/permissions"), Authorize]
 public sealed class PermissionsController(
     ErpKhoDbContext db,
     ERP.Application.Interfaces.IWarehouseAuthorizationService? warehouseAuth = null) : ControllerBase
@@ -210,7 +210,8 @@ public sealed class PermissionsController(
         string? TaxCode = null,
         string? OwnerEmail = null,
         string? IndustryTemplate = null,
-        string? PlanCode = null);
+        string? PlanCode = null,
+        bool AllocateNewTenant = false);
 
     public sealed record SeedDemoDataRequest(
         string? IndustryTemplate = null,
@@ -253,6 +254,13 @@ public sealed class PermissionsController(
 
         if (db != null)
         {
+            if (request?.AllocateNewTenant == true)
+            {
+                var maxSubTenant = await db.TenantSubscriptions.IgnoreQueryFilters()
+                    .MaxAsync(s => (int?)s.TenantId, ct) ?? 1;
+                tenantId = maxSubTenant + 1;
+            }
+
             if (!await db.SaasPlans.AsNoTracking().AnyAsync(ct))
             {
                 db.SaasPlans.AddRange(
@@ -264,7 +272,7 @@ public sealed class PermissionsController(
                 await db.SaveChangesAsync(ct);
             }
 
-            var sub = await db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+            var sub = await db.TenantSubscriptions.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
             if (sub == null)
             {
                 sub = new TenantSubscription
@@ -284,6 +292,44 @@ public sealed class PermissionsController(
                 db.TenantSubscriptions.Add(sub);
                 await db.SaveChangesAsync(ct);
             }
+
+            var defaultWhCode = tenantId == 1 ? "WH-MAIN" : $"WH-T{tenantId}";
+            var wh = await db.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.Code == defaultWhCode, ct);
+            if (wh == null)
+            {
+                wh = new Warehouse
+                {
+                    Code = defaultWhCode,
+                    Name = $"Kho Trung Tâm - {companyName}",
+                    Address = "Việt Nam",
+                    IsActive = true
+                };
+                db.Warehouses.Add(wh);
+                await db.SaveChangesAsync(ct);
+
+                var defaultLocations = new[]
+                {
+                    ("STAGE-IN", "Khu Tiếp Nhận Đầu Vào", ERP.Domain.Enums.WarehouseLocationType.Receiving),
+                    ("PICK-A01", "Kệ Nhặt Hàng A01", ERP.Domain.Enums.WarehouseLocationType.Storage),
+                    ("PACK-01", "Bàn Đóng Gói 01", ERP.Domain.Enums.WarehouseLocationType.Staging),
+                    ("STAGE-OUT", "Khu Tập Kết Xuất Kho", ERP.Domain.Enums.WarehouseLocationType.Staging),
+                    ("QUARANTINE", "Khu Biệt Trữ Kiểm Định", ERP.Domain.Enums.WarehouseLocationType.Damaged)
+                };
+                foreach (var (code, name, locType) in defaultLocations)
+                {
+                    db.WarehouseLocations.Add(new WarehouseLocation
+                    {
+                        WarehouseId = wh.Id,
+                        Code = code,
+                        Name = name,
+                        LocationType = locType,
+                        IsActive = true,
+                        IsPickable = locType == ERP.Domain.Enums.WarehouseLocationType.Storage,
+                        IsReceivable = locType == ERP.Domain.Enums.WarehouseLocationType.Receiving
+                    });
+                }
+                await db.SaveChangesAsync(ct);
+            }
         }
 
         return Ok(new
@@ -292,7 +338,7 @@ public sealed class PermissionsController(
             companyName,
             taxCode = request?.TaxCode ?? "0318889999",
             planCode,
-            defaultWarehouseCode = "WH-MAIN",
+            defaultWarehouseCode = tenantId == 1 ? "WH-MAIN" : $"WH-T{tenantId}",
             defaultBins = new[] { "STAGE-IN", "PICK-A01", "PACK-01", "STAGE-OUT", "QUARANTINE" },
             defaultRoles = new[] { "Chủ shop (Admin)", "Thủ kho (Manager)", "Nhân viên Đóng gói (Staff)", "Kế toán (Accountant)" },
             provisionedAtUtc = now,
@@ -342,8 +388,9 @@ public sealed class PermissionsController(
     [HttpPost("~/api/v1/saas/onboarding/purge-demo-data")]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
     [IdempotentCommand("SaaS.SeedDemoData")]
-    public IActionResult SeedSaaSDemoData(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SeedDemoDataRequest? request = null)
+    public async Task<IActionResult> SeedSaaSDemoData(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SeedDemoDataRequest? request = null,
+        CancellationToken ct = default)
     {
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
@@ -352,6 +399,54 @@ public sealed class PermissionsController(
             ? "COSMETICS_FEFO"
             : request.IndustryTemplate.Trim().ToUpperInvariant();
         var purged = request?.PurgeDemoData == true;
+
+        if (db != null)
+        {
+            if (purged)
+            {
+                var demoProducts = await db.Products
+                    .Where(p => p.Code.StartsWith("DEMO-SKU-"))
+                    .ToListAsync(ct);
+                foreach (var dp in demoProducts)
+                {
+                    dp.IsActive = false;
+                }
+                await db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                var categoryId = await db.ProductCategories.AsNoTracking().Select(c => (int?)c.Id).FirstOrDefaultAsync(ct);
+                var unitId = await db.Units.AsNoTracking().Select(u => (int?)u.Id).FirstOrDefaultAsync(ct);
+                if (categoryId.HasValue && unitId.HasValue)
+                {
+                    var demoCode = $"DEMO-SKU-{template}-01";
+                    var existingDemo = await db.Products.FirstOrDefaultAsync(p => p.Code == demoCode, ct);
+                    if (existingDemo == null)
+                    {
+                        db.Products.Add(new Product
+                        {
+                            Code = demoCode,
+                            Name = $"[DEMO] Sản phẩm mẫu ngành {template}",
+                            CategoryId = categoryId.Value,
+                            UnitId = unitId.Value,
+                            MovingAverageCost = 110000m,
+                            TrackingType = template == "COSMETICS_FEFO"
+                                ? ERP.Domain.Enums.ProductTrackingType.Lot
+                                : ERP.Domain.Enums.ProductTrackingType.None,
+                            ExpiryControl = template == "COSMETICS_FEFO",
+                            ShelfLifeDays = template == "COSMETICS_FEFO" ? 365 : null,
+                            IsActive = true
+                        });
+                        await db.SaveChangesAsync(ct);
+                    }
+                    else
+                    {
+                        existingDemo.IsActive = true;
+                        await db.SaveChangesAsync(ct);
+                    }
+                }
+            }
+        }
 
         return Ok(new
         {

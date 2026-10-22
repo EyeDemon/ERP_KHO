@@ -63,7 +63,7 @@ public sealed class InventoryLockService(
     {
         if (request.WarehouseId <= 0) throw new BusinessRuleException("Warehouse là bắt buộc.");
         if (string.IsNullOrWhiteSpace(request.Reason)) throw new BusinessRuleException("Lý do khóa tồn là bắt buộc.");
-        if (!Enum.TryParse<InventoryLockType>(request.LockType?.Trim(), true, out var lockType))
+        var lockTypeInput = request.LockType?.Trim() is "QualityHold" or "RecallHold" ? nameof(InventoryLockType.InvestigationHold) : request.LockType?.Trim(); if (!Enum.TryParse<InventoryLockType>(lockTypeInput, true, out var lockType))
             throw new BusinessRuleException("Loại Inventory Lock không hợp lệ.");
         await warehouseAuthorization.EnsureWarehouseAccessAsync(request.WarehouseId, cancellationToken);
 

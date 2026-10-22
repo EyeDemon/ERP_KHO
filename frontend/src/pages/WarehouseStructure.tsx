@@ -14,6 +14,7 @@ import {
   UiToolbarField,
 } from '../ui/ProductionUi';
 import './WarehouseStructure.css';
+import BarcodeSvg from '../components/BarcodeSvg';
 
 type DemoLocation = {
   id: number;
@@ -261,6 +262,21 @@ const WarehouseStructure = () => {
                 <button type="button" onClick={() => void verifyVirtualLocations()}>
                   Kiểm định Hệ thống Kho chuẩn &amp; 9 Vị trí Ảo Bắt buộc
                 </button>
+                <button
+                  type="button"
+                  className="ui-btn-secondary"
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && typeof window.print === 'function') {
+                      window.print();
+                    }
+                  }}
+                >
+                  In Mã vạch Vị trí Kệ
+                </button>
+                <BarcodeSvg
+                  value={selectedLocation?.code || allLocations[0]?.code || 'Z01-A01-R01-L01-B01'}
+                  label={`Vị trí kệ: ${selectedLocation?.code || allLocations[0]?.code || 'Z01-A01-R01-L01-B01'}`}
+                />
                 {virtualVerification && (
                   <UiBadge tone="success">
                     {virtualVerification.verificationId} • {virtualVerification.status}

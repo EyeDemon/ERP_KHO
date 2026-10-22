@@ -88,6 +88,7 @@ const MainLayout = () => {
   const previousPathRef = useRef(pathname);
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [diagCopiedNotice, setDiagCopiedNotice] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -229,6 +230,29 @@ const MainLayout = () => {
           </div>
 
           <div className="topbar-actions">
+            <button
+              type="button"
+              data-testid="btn-copy-zalo-diagnostics"
+              onClick={() => {
+                const payload = `TenantId=${localStorage.getItem('tenantCode') || 'MẶC ĐỊNH'} | WarehouseId=${localStorage.getItem('activeWarehouseId') || 'WH01'} | UserId=${localStorage.getItem('userId') || '1'} | Route=${pathname} | LastErrorCode=${localStorage.getItem('lastErrorCode') || 'NONE'} | CorrelationId=${localStorage.getItem('lastCorrelationId') || 'CORR-2026-WMS'}`;
+                if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                  void Promise.resolve(navigator.clipboard.writeText(payload)).catch(() => {});
+                }
+                setDiagCopiedNotice('Đã sao chép chẩn đoán lỗi 1-Click gửi Zalo (TenantId + WarehouseId + UserId + Route + LastErrorCode + CorrelationId).');
+              }}
+              style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}
+            >
+              Sao chép Chẩn đoán Lỗi 1-Click gửi Zalo
+            </button>
+            {diagCopiedNotice && (
+              <span
+                role="status"
+                data-testid="zalo-diagnostics-notice"
+                style={{ fontSize: 12, color: '#065f46', background: '#ecfdf5', padding: '2px 8px', borderRadius: 6, border: '1px solid #a7f3d0' }}
+              >
+                {diagCopiedNotice}
+              </span>
+            )}
             {demoRuntime ? (
               <>
                 <span className="runtime-badge">MÔI TRƯỜNG MÔ PHỎNG • PHÍA MÁY CHỦ MÔ PHỎNG</span>

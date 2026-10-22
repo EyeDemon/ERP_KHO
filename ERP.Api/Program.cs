@@ -207,6 +207,7 @@ builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPutawayService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<ERP.Api.Hosting.BuyerPiiRetentionAnonymizerJob>();
 var approvalAgingOptions = builder.Configuration.GetSection("ApprovalAging").Get<ERP.Application.Options.ApprovalAgingOptions>() ?? new ERP.Application.Options.ApprovalAgingOptions();
 approvalAgingOptions.Validate();
 builder.Services.AddSingleton(approvalAgingOptions);

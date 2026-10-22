@@ -97,6 +97,22 @@ public sealed class SalesOrderBackorderService(
             ValidateQuantityPrecision(products[line.ProductId].Unit.DecimalPlaces, line.OrderedQuantity);
 
         var now = DateTime.UtcNow;
+        var tenantSub = await context.TenantSubscriptions
+            .FirstOrDefaultAsync(s => s.TenantId == context.CurrentTenantId, cancellationToken);
+        if (tenantSub != null)
+        {
+            var quotaTier = tenantSub.EvaluateQuotaTier();
+            var isExpiredPastDue = string.Equals(tenantSub.Status, "PAST_DUE", StringComparison.OrdinalIgnoreCase)
+                && tenantSub.CurrentPeriodEndUtc.AddHours(72) < now;
+            if (quotaTier == "READ_ONLY_OVER_115" || isExpiredPastDue)
+            {
+                var quotaEx = new ForbiddenException("Gói cước SaaS đã vượt ngưỡng 115% sản lượng đơn hàng tháng hoặc quá hạn thanh toán. Vui lòng nâng cấp gói để tiếp tục tạo đơn mới.");
+                quotaEx.Data["ErrorCode"] = "SUBSCRIPTION_QUOTA_EXCEEDED";
+                throw quotaEx;
+            }
+            tenantSub.CurrentMonthOrderCount += 1;
+        }
+
         var order = new SalesOrder
         {
             OrderCode = $"SO-{now:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..33].ToUpperInvariant(),
@@ -124,6 +140,42 @@ public sealed class SalesOrderBackorderService(
                 TaxPercent = line.TaxPercent,
                 UomCode = NormalizeUomCode(product.Unit.Code, null)
             });
+        }
+
+        var orderSubtotal = order.Lines.Sum(l => l.OrderedQuantity * l.UnitPrice);
+        var activeGiftRules = await context.PromotionGiftRules
+            .Where(r => r.IsActive && (!r.WarehouseId.HasValue || r.WarehouseId.Value == request.WarehouseId))
+            .OrderBy(r => r.Id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var rule in activeGiftRules)
+        {
+            if (orderSubtotal < rule.MinOrderAmount)
+                continue;
+            if (rule.TriggerProductId.HasValue && !order.Lines.Any(l => l.ProductId == rule.TriggerProductId.Value && l.OrderedQuantity >= rule.MinTriggerQuantity))
+                continue;
+            if (order.Lines.Any(l => l.ProductId == rule.GiftProductId && l.IsFreeGift))
+                continue;
+
+            var giftAvailable = await stockRepository.GetAvailableQuantityAsync(rule.GiftProductId, request.WarehouseId, cancellationToken);
+            if (giftAvailable >= rule.GiftQuantity)
+            {
+                var giftProd = await context.Products.AsNoTracking().Include(p => p.Unit)
+                    .FirstOrDefaultAsync(p => p.Id == rule.GiftProductId && p.IsActive, cancellationToken);
+                if (giftProd != null)
+                {
+                    order.Lines.Add(new SalesOrderLine
+                    {
+                        ExternalLineId = $"GIFT-{rule.RuleCode}",
+                        ProductId = giftProd.Id,
+                        OrderedQuantity = rule.GiftQuantity,
+                        UnitPrice = rule.GiftUnitPrice,
+                        TaxPercent = 0m,
+                        UomCode = NormalizeUomCode(giftProd.Unit?.Code ?? "THÙNG", null),
+                        IsFreeGift = true
+                    });
+                }
+            }
         }
 
         context.SalesOrders.Add(order);

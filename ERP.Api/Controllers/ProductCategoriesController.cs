@@ -11,6 +11,7 @@ namespace ERP.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/product-categories")]
+[Route("api/v1/product-categories")]
 public sealed class ProductCategoriesController(
     IProductCatalogService service,
     ErpKhoDbContext db = null!) : ControllerBase

@@ -41,6 +41,8 @@ public sealed class SalesOrderLine : ITenantEntity
     public decimal UnitPrice { get; set; }
     public decimal TaxPercent { get; set; }
     public string UomCode { get; set; } = string.Empty;
+    public bool IsFreeGift { get; set; }
+    public int? ParentBundleProductId { get; set; }
 
     public SalesOrder SalesOrder { get; set; } = null!;
     public Product Product { get; set; } = null!;

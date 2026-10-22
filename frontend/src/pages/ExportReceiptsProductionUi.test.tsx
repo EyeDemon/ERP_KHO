@@ -50,7 +50,7 @@ describe('ExportReceipts shared production UI', () => {
 
     const view = render(<ExportReceipts />);
 
-    expect(await view.findByText('ER-2026-0021')).toBeTruthy();
+    expect((await view.findAllByText('ER-2026-0021')).length).toBeGreaterThan(0);
     expect(view.getByRole('table', { name: 'Danh sách phiếu xuất' })).toBeTruthy();
     expect(view.getByText('Nháp')).toBeTruthy();
     expect(view.queryByText('Tạo Phiếu Xuất Kho')).toBeNull();
@@ -106,7 +106,7 @@ describe('ExportReceipts shared production UI', () => {
     });
 
     const view = render(<ExportReceipts />);
-    await view.findByText('ER-2026-0022');
+    await view.findAllByText('ER-2026-0022');
     fireEvent.click(view.getByRole('button', { name: 'Chi tiết' }));
 
     expect(await view.findByText('Duyệt và giữ hàng → xác nhận xuất kho')).toBeTruthy();
@@ -143,7 +143,7 @@ describe('ExportReceipts shared production UI', () => {
     });
 
     const view = render(<ExportReceipts />);
-    await view.findByText('ER-2026-0023');
+    await view.findAllByText('ER-2026-0023');
     fireEvent.click(view.getByRole('button', { name: 'Xem bản in' }));
 
     const printDialog = await view.findByRole('dialog', { name: 'Bản in ER-2026-0023' });
@@ -209,7 +209,7 @@ describe('ExportReceipts shared production UI', () => {
     });
 
     const view = render(<ExportReceipts />);
-    expect(await view.findByText('ER-2026-0024')).toBeTruthy();
+    expect((await view.findAllByText('ER-2026-0024')).length).toBeGreaterThan(0);
     expect(view.getByText('Chờ cất trả hàng hủy về kệ')).toBeTruthy();
 
     fireEvent.click(view.getByRole('button', { name: 'Chi tiết' }));
@@ -321,12 +321,21 @@ describe('ExportReceipts shared production UI', () => {
       }),
     );
 
+    fireEvent.change(view.getByLabelText('Nhập hoặc quét mã vận đơn bàn giao'), {
+      target: { value: 'GHN84920188, VTP99201122' },
+    });
     fireEvent.click(view.getByRole('button', { name: 'Chốt Biên Bản Bàn Giao Bưu Tá Điện Tử' }));
     expect(
       await view.findByText(
         'Đã chốt Biên bản Bàn giao Bưu tá Điện tử (2 vận đơn: GHN84920188, VTP99201122 • Đã chặn cứng 0 đơn hủy trên sàn).',
       ),
     ).toBeTruthy();
+    expect(vi.mocked(apiClient.post)).toHaveBeenCalledWith(
+      '/api/ExportReceipts/confirm-carrier-handover',
+      expect.objectContaining({
+        trackingNumbers: ['GHN84920188', 'VTP99201122'],
+      }),
+    );
 
     fireEvent.click(
       view.getByRole('button', { name: 'Kết xuất Bảng kê Excel Chuẩn MISA & Hóa đơn Điện tử NĐ 70/2025' }),
@@ -336,6 +345,14 @@ describe('ExportReceipts shared production UI', () => {
         'Đã kết xuất Bảng kê Excel chuẩn MISA & phát hành Hóa đơn điện tử NĐ 70/2025 (Viettel SInvoice • Mẫu 1/001 • C26TAA).',
       ),
     ).toBeTruthy();
+
+    vi.mocked(apiClient.post).mockRejectedValueOnce({
+      response: { status: 500, data: { message: 'Lỗi máy in nhiệt' } },
+    });
+    fireEvent.click(
+      view.getByRole('button', { name: 'In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm (Sắp xếp theo Kệ A→Z)' }),
+    );
+    expect(await view.findByRole('alert')).toBeTruthy();
   });
 });
 

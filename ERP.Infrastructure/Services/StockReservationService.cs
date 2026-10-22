@@ -25,7 +25,8 @@ public class StockReservationService(
     public async Task<StockReservationDto> CreateAsync(CreateStockReservationDto request, CancellationToken cancellationToken = default)
     {
         Validate(request);
-        await warehouseAuthorization.EnsureWarehouseAccessAsync(request.WarehouseId, cancellationToken);
+        await (warehouseAuthorization.EnsureWarehouseCommandAccessAsync(request.WarehouseId, cancellationToken)
+            ?? warehouseAuthorization.EnsureWarehouseAccessAsync(request.WarehouseId, cancellationToken));
         var exists = await context.Products.AnyAsync(x => x.Id == request.ProductId && x.IsActive, cancellationToken);
         if (!exists) throw new NotFoundException("Không tìm thấy sản phẩm.");
         var expiresAt = request.ExpiresAt ?? DateTime.UtcNow.AddMinutes(options.DefaultExpiryMinutes);
@@ -109,7 +110,8 @@ public class StockReservationService(
     {
         if (string.IsNullOrWhiteSpace(sourceType) || sourceId <= 0 || string.IsNullOrWhiteSpace(sourceCode) || quantity <= 0)
             throw new BusinessRuleException("Nguồn reservation và số lượng phải hợp lệ.");
-        await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+        await (warehouseAuthorization.EnsureWarehouseCommandAccessAsync(warehouseId, cancellationToken)
+            ?? warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, cancellationToken));
 
         var existing = await context.StockReservations.FirstOrDefaultAsync(
             x => x.SourceType == sourceType &&
@@ -736,8 +738,17 @@ public class StockReservationService(
                         (!productId.HasValue || !x.ProductId.HasValue || x.ProductId == productId.Value))
             .ToListAsync(cancellationToken);
 
+        var ledgerTransactions = await context.InventoryTransactions.AsNoTracking()
+            .Where(x => allowed.Contains(x.WarehouseId) &&
+                        (!productId.HasValue || x.ProductId == productId.Value))
+            .ToListAsync(cancellationToken);
+
         foreach (var group in stocks.GroupBy(x => (x.WarehouseId, x.ProductId)))
         {
+            var groupTxs = ledgerTransactions
+                .Where(t => t.WarehouseId == group.Key.WarehouseId && t.ProductId == group.Key.ProductId)
+                .ToList();
+
             var totalReservedTarget = activeReservations
                 .Where(r => r.WarehouseId == group.Key.WarehouseId && r.ProductId == group.Key.ProductId)
                 .Sum(r => Math.Max(0m, r.Quantity - r.ConsumedQuantity - r.ReleasedQuantity));
@@ -745,6 +756,47 @@ public class StockReservationService(
             decimal allocatedSum = 0m;
             foreach (var bucket in group)
             {
+                var bucketTxs = groupTxs.Where(t =>
+                    t.LocationId == bucket.LocationId &&
+                    t.LotId == bucket.LotId &&
+                    t.SerialId == bucket.SerialId &&
+                    (t.InventoryStatus == bucket.Status ||
+                     t.FromInventoryStatus == bucket.Status ||
+                     t.ToInventoryStatus == bucket.Status)).ToList();
+
+                if (bucketTxs.Count > 0)
+                {
+                    decimal ledgerQty = 0m;
+                    foreach (var tx in bucketTxs)
+                    {
+                        if (tx.TransactionType == TransactionType.TransferAdjustment || tx.TransactionType == TransactionType.Reversal)
+                            continue;
+                        if (tx.TransactionType == TransactionType.StatusChange)
+                        {
+                            if (tx.ToInventoryStatus == bucket.Status && tx.Quantity > 0)
+                                ledgerQty += tx.Quantity;
+                            else if (tx.FromInventoryStatus == bucket.Status)
+                                ledgerQty -= Math.Abs(tx.Quantity);
+                        }
+                        else if (tx.TransactionType == TransactionType.Move)
+                        {
+                            if (tx.InventoryStatus == bucket.Status)
+                                ledgerQty += tx.Quantity;
+                        }
+                        else if (tx.InventoryStatus == bucket.Status && tx.Quantity >= 0)
+                        {
+                            ledgerQty += tx.TransactionType.ApplySign(tx.Quantity);
+                        }
+                    }
+
+                    if (ledgerQty >= 0m && (bucket.Quantity < 0m || group.Count() == 1))
+                        bucket.Quantity = ledgerQty;
+                }
+                else if (bucket.Quantity < 0m)
+                {
+                    bucket.Quantity = 0m;
+                }
+
                 var bucketAllocated = activeAllocations
                     .Where(a => a.WarehouseId == bucket.WarehouseId &&
                                 a.ProductId == bucket.ProductId &&

@@ -7,4 +7,6 @@ public interface ICurrentUser
     bool IsAuthenticated { get; }
     bool IsGlobalAdmin { get; }
     string Role => string.Empty;
+    bool HasPermission(string permissionCode) =>
+        IsGlobalAdmin || Role is "Admin" or "Manager" or "Accountant";
 }

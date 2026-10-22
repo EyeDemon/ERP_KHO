@@ -453,7 +453,7 @@ public sealed class PutawayServiceTests : IDisposable
         recallBlockedBucket.Quantity.Should().Be(10);
 
         (await db.InventoryLocks.AsNoTracking()
-            .AnyAsync(x => x.Id == result.InventoryLockId && x.LotId == recallLot.Id && x.LockType == InventoryLockType.RecallHold))
+            .AnyAsync(x => x.Id == result.InventoryLockId && x.LotId == recallLot.Id && x.LockType == InventoryLockType.InvestigationHold))
             .Should().BeTrue();
     }
 

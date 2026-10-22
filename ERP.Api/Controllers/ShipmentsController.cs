@@ -399,7 +399,187 @@ public sealed class ShipmentsController(
             completedAtUtc = now
         });
     }
+
+    [HttpGet("vn-administrative-units")]
+    [PermissionAuthorize(AppPermissions.ShipmentRead)]
+    public async Task<IActionResult> GetVnAdministrativeUnits(
+        [FromQuery] string? provinceCode = null,
+        [FromQuery] string? districtCode = null,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (db == null)
+            return Ok(new { totalCount = 0, items = Array.Empty<object>() });
+
+        await EnsureVnAdministrativeSeededAsync(db, cancellationToken);
+
+        var query = db.VnAdministrativeUnits.AsNoTracking()
+            .Include(u => u.CarrierMappings)
+            .Where(u => u.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(provinceCode))
+        {
+            var p = provinceCode.Trim();
+            query = query.Where(u => u.ProvinceCode == p || u.ProvinceName.Contains(p));
+        }
+        if (!string.IsNullOrWhiteSpace(districtCode))
+        {
+            var d = districtCode.Trim();
+            query = query.Where(u => u.DistrictCode == d || u.DistrictName.Contains(d));
+        }
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim();
+            query = query.Where(u =>
+                u.ProvinceName.Contains(s) ||
+                u.DistrictName.Contains(s) ||
+                u.WardName.Contains(s) ||
+                (u.Keywords != null && u.Keywords.Contains(s)));
+        }
+
+        var units = await query
+            .OrderBy(u => u.ProvinceCode)
+            .ThenBy(u => u.DistrictCode)
+            .ThenBy(u => u.WardCode)
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            totalCount = units.Count,
+            items = units.Select(u => new
+            {
+                u.Id,
+                u.ProvinceCode,
+                u.ProvinceName,
+                u.DistrictCode,
+                u.DistrictName,
+                u.WardCode,
+                u.WardName,
+                searchKeywords = u.Keywords,
+                ghnDistrictId = u.CarrierMappings.FirstOrDefault(m => m.CarrierCode == "GHN")?.CarrierDistrictId ?? $"GHN-D-{u.DistrictCode}",
+                ghtkRouteCode = u.CarrierMappings.FirstOrDefault(m => m.CarrierCode == "GHTK")?.RouteCode ?? $"RT-GHTK-{u.DistrictCode}",
+                carrierMappings = u.CarrierMappings.Select(m => new
+                {
+                    m.CarrierCode,
+                    carrierProvinceCode = m.CarrierProvinceId,
+                    carrierDistrictCode = m.CarrierDistrictId,
+                    m.CarrierWardCode,
+                    hubRoutingCode = m.SortingHubCode,
+                    m.RouteCode,
+                    isDeliverable = m.IsActive
+                })
+            }),
+            statusLabel = $"Đã tải {units.Count} đơn vị hành chính 3 cấp Việt Nam & bảng ánh xạ hãng vận chuyển"
+        });
+    }
+
+    [HttpPost("normalize-address")]
+    [HttpPost("normalize-vn-address")]
+    [PermissionAuthorize(AppPermissions.ShipmentRead)]
+    public async Task<IActionResult> NormalizeVietnameseAddress(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] NormalizeVnAddressRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (db == null)
+            return Ok(new { normalized = false });
+
+        await EnsureVnAdministrativeSeededAsync(db, cancellationToken);
+
+        var raw = $"{request?.RawAddress} {request?.Ward} {request?.District} {request?.Province}".Trim();
+        var units = await db.VnAdministrativeUnits.AsNoTracking()
+            .Include(u => u.CarrierMappings)
+            .Where(u => u.IsActive)
+            .ToListAsync(cancellationToken);
+
+        var matched = units.FirstOrDefault(u =>
+            (!string.IsNullOrWhiteSpace(request?.Ward) && u.WardName.Contains(request.Ward.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrWhiteSpace(raw) && (
+                raw.Contains(u.WardName, StringComparison.OrdinalIgnoreCase) ||
+                (u.Keywords != null && u.Keywords.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Any(k => raw.Contains(k.Trim(), StringComparison.OrdinalIgnoreCase))))))
+            ?? units.FirstOrDefault(u =>
+                !string.IsNullOrWhiteSpace(raw) && raw.Contains(u.DistrictName, StringComparison.OrdinalIgnoreCase))
+            ?? units.First();
+
+        var mappings = matched.CarrierMappings.ToDictionary(
+            m => m.CarrierCode.ToUpperInvariant(),
+            m => new
+            {
+                m.CarrierCode,
+                carrierProvinceCode = m.CarrierProvinceId,
+                carrierDistrictCode = m.CarrierDistrictId,
+                m.CarrierWardCode,
+                hubRoutingCode = m.SortingHubCode,
+                m.RouteCode,
+                isDeliverable = m.IsActive
+            });
+
+        return Ok(new
+        {
+            matched = true,
+            matchedUnitId = matched.Id,
+            provinceCode = matched.ProvinceCode,
+            provinceName = matched.ProvinceName,
+            districtCode = matched.DistrictCode,
+            districtName = matched.DistrictName,
+            wardCode = matched.WardCode,
+            wardName = matched.WardName,
+            normalizedFullAddress = $"{matched.WardName}, {matched.DistrictName}, {matched.ProvinceName}",
+            carrierMappings = mappings,
+            statusLabel = $"Đã chuẩn hóa địa chỉ sang {matched.WardName}, {matched.DistrictName}, {matched.ProvinceName}"
+        });
+    }
+
+    internal static async Task EnsureVnAdministrativeSeededAsync(ErpKhoDbContext dbContext, CancellationToken ct)
+    {
+        if (await dbContext.VnAdministrativeUnits.AnyAsync(ct))
+            return;
+
+        var seedUnits = new[]
+        {
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "79", ProvinceName = "TP. Hồ Chí Minh", DistrictCode = "769", DistrictName = "Thành phố Thủ Đức", WardCode = "27100", WardName = "Phường An Khánh", Keywords = "an khanh, thu duc, hcm, tphcm, q2" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "79", ProvinceName = "TP. Hồ Chí Minh", DistrictCode = "760", DistrictName = "Quận 1", WardCode = "26734", WardName = "Phường Bến Nghé", Keywords = "ben nghe, quan 1, q.1, q1, hcm, tphcm" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "79", ProvinceName = "TP. Hồ Chí Minh", DistrictCode = "766", DistrictName = "Quận Tân Bình", WardCode = "26974", WardName = "Phường 2", Keywords = "phuong 2, tan binh, san bay, hcm" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "01", ProvinceName = "Thành phố Hà Nội", DistrictCode = "005", DistrictName = "Quận Cầu Giấy", WardCode = "00166", WardName = "Phường Dịch Vọng Hậu", Keywords = "dich vong hau, cau giay, ha noi, hn" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "01", ProvinceName = "Thành phố Hà Nội", DistrictCode = "002", DistrictName = "Quận Hoàn Kiếm", WardCode = "00058", WardName = "Phường Hàng Bài", Keywords = "hang bai, hoan kiem, ha noi, hn" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "48", ProvinceName = "Thành phố Đà Nẵng", DistrictCode = "492", DistrictName = "Quận Hải Châu", WardCode = "20242", WardName = "Phường Thạch Thang", Keywords = "thach thang, hai chau, da nang, dn" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "31", ProvinceName = "Thành phố Hải Phòng", DistrictCode = "304", DistrictName = "Quận Ngô Quyền", WardCode = "11329", WardName = "Phường Đông Khê", Keywords = "dong khe, ngo quyen, hai phong, hp" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "92", ProvinceName = "Thành phố Cần Thơ", DistrictCode = "916", DistrictName = "Quận Ninh Kiều", WardCode = "31144", WardName = "Phường Tân An", Keywords = "tan an, ninh kieu, can tho, ct" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "74", ProvinceName = "Tỉnh Bình Dương", DistrictCode = "724", DistrictName = "Thành phố Dĩ An", WardCode = "25942", WardName = "Phường Đông Hòa", Keywords = "dong hoa, di an, binh duong, bd" },
+            new ERP.Domain.Entities.VnAdministrativeUnit { ProvinceCode = "75", ProvinceName = "Tỉnh Đồng Nai", DistrictCode = "731", DistrictName = "Thành phố Biên Hòa", WardCode = "26020", WardName = "Phường Tân Hiệp", Keywords = "tan hiep, bien hoa, dong nai" }
+        };
+
+        dbContext.VnAdministrativeUnits.AddRange(seedUnits);
+        await dbContext.SaveChangesAsync(ct);
+
+        var carriers = new[] { "GHN", "GHTK", "VTPOST", "SPX" };
+        foreach (var u in seedUnits)
+        {
+            foreach (var carrier in carriers)
+            {
+                dbContext.CarrierLocationMappings.Add(new ERP.Domain.Entities.CarrierLocationMapping
+                {
+                    AdministrativeUnitId = u.Id,
+                    CarrierCode = carrier,
+                    CarrierProvinceId = $"{carrier}-P-{u.ProvinceCode}",
+                    CarrierDistrictId = $"{carrier}-D-{u.DistrictCode}",
+                    CarrierWardCode = $"{carrier}-W-{u.WardCode}",
+                    SortingHubCode = $"HUB-{carrier}-{u.ProvinceCode}-{u.DistrictCode}",
+                    RouteCode = $"RT-{carrier}-{u.DistrictCode}",
+                    IsActive = true
+                });
+            }
+        }
+        await dbContext.SaveChangesAsync(ct);
+    }
 }
+
+public sealed record NormalizeVnAddressRequest(
+    string? RawAddress = null,
+    string? Province = null,
+    string? District = null,
+    string? Ward = null,
+    string? CarrierCode = null);
 
 public sealed record SyncTmsManifestRequest(int? WarehouseId, string? CarrierCode);
 public sealed record CompleteShipmentRtsReturnRequest(

@@ -190,7 +190,7 @@ public class Wave5SectorARemediationTests
             ProductId = 1,
             LotId = 1,
             Status = InventoryLockStatus.Active,
-            LockType = InventoryLockType.QualityHold,
+            LockType = InventoryLockType.InvestigationHold,
             Reason = "Hold Receipt 1 Lot",
             CreatedBy = 1,
             CreatedAt = DateTime.UtcNow.AddMinutes(-5)

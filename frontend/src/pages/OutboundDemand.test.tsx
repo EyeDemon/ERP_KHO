@@ -111,4 +111,29 @@ describe('Outbound demand and backorder workbench',()=>{
     expect(second.getByLabelText('Khách hàng Sales Order')).toBeTruthy();
     expect(second.getByLabelText('SKU Sales Order 1')).toBeTruthy();
   });
+
+  it('imports marketplace Excel orders, downloads template, and normalizes 3-tier VN address',async()=>{
+    vi.mocked(apiClient.post).mockImplementation(async url=>{
+      if(url==='/api/v1/sales-orders/import-marketplace-excel'){
+        return {data:{importBatchId:'IMP-MKT-99',importedOrders:8,channel:'Shopee',status:'Đã đồng bộ 8 đơn Shopee'}} as never;
+      }
+      if(url==='/api/shipments/normalize-vn-address'){
+        return {data:{provinceName:'TP. Hồ Chí Minh',districtName:'Quận 1',wardName:'Phường Bến Nghé',wardCode:'26734',normalizedFullAddress:'Số 12 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh'}} as never;
+      }
+      return {data:{}} as never;
+    });
+    const view=render(<OutboundDemand/>);
+    await view.findByText('SO-0088');
+
+    fireEvent.click(view.getByRole('button',{name:'Nhập Excel Đơn hàng Sàn'}));
+    expect(await view.findByText(/IMP-MKT-99/)).toBeTruthy();
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/sales-orders/import-marketplace-excel',expect.objectContaining({channel:'Shopee'}));
+
+    fireEvent.click(view.getByRole('button',{name:'Tải file mẫu .xlsx'}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/v1/import-templates/marketplace-orders',{responseType:'blob'}));
+
+    fireEvent.click(view.getByRole('button',{name:'Chuẩn hóa Địa chỉ 3 Cấp VN'}));
+    expect(await view.findByText(/Phường Bến Nghé \(Mã: 26734\)/)).toBeTruthy();
+    expect(apiClient.post).toHaveBeenCalledWith('/api/shipments/normalize-vn-address',expect.objectContaining({rawAddress:expect.any(String)}));
+  });
 });

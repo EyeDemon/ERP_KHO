@@ -11,6 +11,7 @@ namespace ERP.Api.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/products")]
     public class ProductsController : ControllerBase
     {
         private readonly IProductService _productService;

@@ -13,6 +13,7 @@ import {
   UiToolbarField,
 } from '../ui/ProductionUi';
 import './WarehouseLocations.css';
+import BarcodeSvg from '../components/BarcodeSvg';
 
 type Warehouse = {
   id: number;
@@ -542,6 +543,27 @@ const WarehouseLocations = () => {
             {`9 Vị trí Ảo: ${virtualVerification.status === 'ALL_9_VIRTUAL_LOCATIONS_READY' ? 'Đã kích hoạt đầy đủ 9 vị trí ảo' : virtualVerification.status} (${virtualVerification.verificationId})`}
           </div>
         )}
+        <div className="ui-inline-wrap" style={{ marginTop: 8, alignItems: 'center' }}>
+          <button
+            type="button"
+            className="ui-btn-secondary"
+            onClick={() => {
+              setError('');
+              setSuccess('Đã tạo nhãn mã vạch vị trí kệ sẵn sàng in.');
+              if (typeof window !== 'undefined' && typeof window.print === 'function') {
+                window.print();
+              }
+            }}
+          >
+            In Mã vạch Vị trí Kệ
+          </button>
+          <div aria-label="Nhãn mã vạch vị trí kệ" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <BarcodeSvg
+              value={filtered[0]?.code || locations[0]?.code || 'A01-R01-L01-B01'}
+              label={`Vị trí kệ: ${filtered[0]?.code || locations[0]?.code || 'A01-R01-L01-B01'}`}
+            />
+          </div>
+        </div>
       </UiCard>
 
       <UiToolbar>

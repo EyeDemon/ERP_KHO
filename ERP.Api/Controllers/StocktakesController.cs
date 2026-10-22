@@ -165,7 +165,8 @@ namespace ERP.Api.Controllers
                 adjustmentGovernance = new
                 {
                     sodRequired = true,
-                    approvalThresholdPct = 2.0m,
+                    approvalThresholdPct = 1.0m,
+                    approvalThresholdAmountVnd = 500_000m,
                     supportedTransactionTypes = new[] { "AdjustmentIncrease", "AdjustmentDecrease" }
                 },
                 openStocktakesCount,
@@ -359,7 +360,62 @@ namespace ERP.Api.Controllers
                 await _db.SaveChangesAsync(cancellationToken);
                 proposalAuditId = log.Id;
 
-                if ((request?.ExecuteImmediately == true || Math.Abs(deltaQuantity) <= 1m) && deltaQuantity != 0m && resolvedWarehouseId.HasValue && resolvedProductId.HasValue)
+                var stocktakeId = await _db.Stocktakes.AsNoTracking()
+                    .Where(s => !resolvedWarehouseId.HasValue || s.WarehouseId == resolvedWarehouseId.Value)
+                    .OrderByDescending(s => s.Id)
+                    .Select(s => (int?)s.Id)
+                    .FirstOrDefaultAsync(cancellationToken) ?? 0;
+
+                var systemBookQty = (resolvedWarehouseId.HasValue && resolvedProductId.HasValue)
+                    ? await _db.InventoryStocks.AsNoTracking()
+                        .Where(s => s.WarehouseId == resolvedWarehouseId.Value && s.ProductId == resolvedProductId.Value)
+                        .SumAsync(s => (decimal?)s.Quantity, cancellationToken) ?? 0m
+                    : 0m;
+                var unitCost = resolvedProductId.HasValue
+                    ? await _db.Products.AsNoTracking()
+                        .Where(p => p.Id == resolvedProductId.Value)
+                        .Select(p => p.MovingAverageCost)
+                        .FirstOrDefaultAsync(cancellationToken)
+                    : 0m;
+                var variancePct = systemBookQty > 0m
+                    ? decimal.Round(Math.Abs(deltaQuantity) / systemBookQty * 100m, 4)
+                    : (Math.Abs(deltaQuantity) <= 1m ? 0.5m : 100m);
+                var varianceValue = decimal.Round(Math.Abs(deltaQuantity) * unitCost, 2);
+                var isAutoApproveEligible = (variancePct < 1.0m || Math.Abs(deltaQuantity) <= 1m) && varianceValue <= 500_000m;
+                var approvalTier = isAutoApproveEligible
+                    ? "AUTO_APPROVE_UNDER_1PCT_500K"
+                    : (variancePct <= 5.0m && varianceValue <= 10_000_000m ? "WAREHOUSE_MANAGER" : "DIRECTOR_CFO");
+
+                StocktakeAdjustmentProposal? dbProposal = null;
+                if (resolvedWarehouseId.HasValue && resolvedProductId.HasValue)
+                {
+                    dbProposal = new StocktakeAdjustmentProposal
+                    {
+                        ProposalCode = $"{proposalCode}-{log.Id}",
+                        StocktakeId = stocktakeId > 0 ? stocktakeId : null,
+                        WarehouseId = resolvedWarehouseId.Value,
+                        ProductId = resolvedProductId.Value,
+                        LocationId = request?.LocationId,
+                        ReasonCode = reasonCode,
+                        SystemQuantity = systemBookQty,
+                        CountedQuantity = systemBookQty + deltaQuantity,
+                        DeltaQuantity = deltaQuantity,
+                        VariancePct = variancePct,
+                        UnitCost = unitCost,
+                        VarianceValue = varianceValue,
+                        IsAutoApproved = isAutoApproveEligible,
+                        Status = (request?.ExecuteImmediately == true || isAutoApproveEligible) ? "APPROVED" : "PENDING",
+                        CreatedBy = userId ?? 1,
+                        ApprovedBy = (request?.ExecuteImmediately == true || isAutoApproveEligible) ? userId : null,
+                        Note = $"{approvalTier} | {request?.Note?.Trim() ?? reasonCode}",
+                        CreatedAtUtc = now,
+                        ApprovedAtUtc = (request?.ExecuteImmediately == true || isAutoApproveEligible) ? now : null
+                    };
+                    _db.StocktakeAdjustmentProposals.Add(dbProposal);
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+
+                if ((request?.ExecuteImmediately == true || isAutoApproveEligible) && deltaQuantity != 0m && resolvedWarehouseId.HasValue && resolvedProductId.HasValue)
                 {
                     var execResult = await ExecuteProposalAdjustmentCoreAsync(
                         log.Id,
@@ -510,6 +566,16 @@ namespace ERP.Api.Controllers
 
             if (!execResult.Success)
                 return BadRequest(new { message = execResult.ErrorMessage });
+
+            var linkedProposal = await _db.StocktakeAdjustmentProposals
+                .FirstOrDefaultAsync(p => p.ProposalCode == $"{proposalCode}-{original.Id}" || p.ProposalCode == proposalCode, cancellationToken);
+            if (linkedProposal != null)
+            {
+                linkedProposal.Status = "APPROVED";
+                linkedProposal.ApprovedBy = userId ?? original.UserId;
+                linkedProposal.ApprovedAtUtc = DateTime.UtcNow;
+                await _db.SaveChangesAsync(cancellationToken);
+            }
 
             return Ok(new
             {

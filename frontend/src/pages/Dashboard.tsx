@@ -235,6 +235,23 @@ const Dashboard = () => {
   const [liveError, setLiveError] = useState('');
   const [marketplaceSyncNotice, setMarketplaceSyncNotice] = useState<string | null>(null);
   const [codReconcileNotice, setCodReconcileNotice] = useState<string | null>(null);
+  const [wizardProvisionNotice, setWizardProvisionNotice] = useState<string | null>(null);
+  const [shopNameInput, setShopNameInput] = useState('Gian hàng Shopee Chính hãng WH01');
+  const [shopPlatformInput, setShopPlatformInput] = useState('SHOPEE');
+  const [marketplaceSkuInput, setMarketplaceSkuInput] = useState('SP-SKU-001');
+  const [internalSkuInput, setInternalSkuInput] = useState('QA-E2E-001');
+  const [provisionTenantCode, setProvisionTenantCode] = useState('TENANT-SME-2026');
+  const [provisionWarehouseName, setProvisionWarehouseName] = useState('Kho Trung tâm SME WH01');
+  const [ownerFinance, setOwnerFinance] = useState({
+    netRevenue: 148500 * 1000,
+    cogsAmount: 92400 * 1000,
+    grossProfit: 41250 * 1000,
+    grossMarginPct: 27.8,
+    pendingCodAmount: 36800 * 1000,
+    receivedCodAmount: 111700 * 1000,
+    codWarningCount: 3,
+  });
+  const formatCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} đ`;
 
   const acknowledgeException = async (code: string) => {
     if (acknowledgingCode === code) return;
@@ -288,6 +305,31 @@ const Dashboard = () => {
       })
       .finally(() => {
         if (active) setLiveLoading(false);
+        void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/owner-gross-profit'))
+          .then((res) => {
+            if (!active || !res?.data) return;
+            const d = res.data;
+            setOwnerFinance((prev) => ({
+              ...prev,
+              netRevenue: typeof d.netRevenue === 'number' ? d.netRevenue : (typeof d.totalDispatchedRevenue === 'number' ? d.totalDispatchedRevenue : prev.netRevenue),
+              cogsAmount: typeof d.totalCogs === 'number' ? d.totalCogs : (typeof d.cogsAmount === 'number' ? d.cogsAmount : prev.cogsAmount),
+              grossProfit: typeof d.estimatedGrossProfit === 'number' ? d.estimatedGrossProfit : (typeof d.grossProfit === 'number' ? d.grossProfit : prev.grossProfit),
+              grossMarginPct: typeof d.grossMarginPercent === 'number' ? d.grossMarginPercent : (typeof d.grossMarginPct === 'number' ? d.grossMarginPct : prev.grossMarginPct),
+            }));
+          })
+          .catch(() => null);
+        void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/finance/cod-reconciliation'))
+          .then((res) => {
+            if (!active || !res?.data) return;
+            const d = res.data;
+            setOwnerFinance((prev) => ({
+              ...prev,
+              pendingCodAmount: typeof d.pendingCodAmount === 'number' ? d.pendingCodAmount : (typeof d.totalCodPending === 'number' ? d.totalCodPending : prev.pendingCodAmount),
+              receivedCodAmount: typeof d.receivedFromCarrierAmount === 'number' ? d.receivedFromCarrierAmount : prev.receivedCodAmount,
+              codWarningCount: typeof d.discrepancyWarningCount === 'number' ? d.discrepancyWarningCount : prev.codWarningCount,
+            }));
+          })
+          .catch(() => null);
       });
     return () => {
       active = false;
@@ -429,24 +471,24 @@ const Dashboard = () => {
         <div className="ui-stack" style={{ gap: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
-              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Doanh thu đơn đã xuất</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>148.500.000 đ</strong>
+              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Doanh thu đơn đã xuất (Doanh thu thuần)</div>
+              <strong style={{ fontSize: 15, color: '#0f172a' }}>{formatCurrencyVnd(ownerFinance.netRevenue)}</strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Đã trừ đơn hoàn &amp; đơn hủy sàn</div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Giá vốn hàng bán bình quân</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>92.400.000 đ</strong>
+              <strong style={{ fontSize: 15, color: '#0f172a' }}>{formatCurrencyVnd(ownerFinance.cogsAmount)}</strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Bình quân gia quyền di động</div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Lợi nhuận gộp ước tính</div>
-              <strong style={{ fontSize: 15, color: '#065f46' }}>41.250.000 đ • Biên lãi gộp 27,8%</strong>
+              <strong style={{ fontSize: 15, color: '#065f46' }}>{`${formatCurrencyVnd(ownerFinance.grossProfit)} • Biên lãi gộp ${String(ownerFinance.grossMarginPct).replace('.', ',')}%`}</strong>
               <div style={{ fontSize: 12, color: '#047857', marginTop: 2 }}>Vốn tồn đọng &gt; 60 ngày: 12,4tr • Hàng cận hạn &lt; 30 ngày: 2 lô</div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>Tiền thu hộ COD chờ đối soát</div>
-              <strong style={{ fontSize: 15, color: '#92400e' }}>36.800.000 đ • 3 cảnh báo lệch phí/chậm hoàn</strong>
-              <div style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>Đối soát 3 chiều: Phiếu xuất — ĐVVC — Quyết toán sàn</div>
+              <strong style={{ fontSize: 15, color: '#92400e' }}>{`${formatCurrencyVnd(ownerFinance.pendingCodAmount)} • ${ownerFinance.codWarningCount} cảnh báo lệch phí/chậm hoàn`}</strong>
+              <div style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>{`Thực nhận từ ĐVVC: ${formatCurrencyVnd(ownerFinance.receivedCodAmount)} • Đối soát 3 chiều`}</div>
             </div>
           </div>
 
@@ -461,12 +503,138 @@ const Dashboard = () => {
               <UiBadge tone="success">Bước 4: Liên kết gian hàng Shopee / TikTok Shop</UiBadge>
               <UiBadge tone="success">Bước 5: In gộp tem nhiệt &amp; xuất đơn đầu tiên</UiBadge>
             </div>
+            <div className="ui-inline-wrap" style={{ gap: 8, marginTop: 10 }}>
+              <input
+                aria-label="Mã thuê bao doanh nghiệp mới"
+                value={provisionTenantCode}
+                onChange={(e) => setProvisionTenantCode(e.target.value)}
+                placeholder="Mã thuê bao (Tenant)"
+                style={{ minHeight: 36, padding: '4px 10px' }}
+              />
+              <input
+                aria-label="Tên kho khởi tạo nhanh"
+                value={provisionWarehouseName}
+                onChange={(e) => setProvisionWarehouseName(e.target.value)}
+                placeholder="Tên kho khởi tạo"
+                style={{ minHeight: 36, padding: '4px 10px' }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setLiveError('');
+                  setWizardProvisionNotice(null);
+                  void Promise.resolve(
+                    apiClient.post('/api/permissions/saas-tenants/provision', {
+                      tenantCode: provisionTenantCode.trim() || 'TENANT-SME-2026',
+                      warehouseName: provisionWarehouseName.trim() || 'Kho Trung tâm SME WH01',
+                    }),
+                  )
+                    .then(() => {
+                      setWizardProvisionNotice(`Đã khởi tạo thuê bao ${provisionTenantCode} và phân bổ sơ đồ kho mẫu (${provisionWarehouseName}).`);
+                    })
+                    .catch((err: any) => {
+                      setWizardProvisionNotice(null);
+                      setLiveError(err?.response?.data?.message || 'Không thể khởi tạo thuê bao doanh nghiệp mới.');
+                    });
+                }}
+              >
+                Khởi tạo Thuê bao &amp; Kho Mẫu
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLiveError('');
+                  setWizardProvisionNotice(null);
+                  void Promise.resolve(
+                    apiClient.post('/api/v1/reports/onboarding-wizard/quick-start', {
+                      tenantCode: provisionTenantCode.trim() || 'TENANT-SME-2026',
+                      warehouseName: provisionWarehouseName.trim() || 'Kho Trung tâm SME WH01',
+                    }),
+                  )
+                    .then(() => {
+                      setWizardProvisionNotice(`Đã kích hoạt hoàn tất 5 bước thiết lập kho nhanh cho ${provisionWarehouseName}.`);
+                    })
+                    .catch((err: any) => {
+                      setWizardProvisionNotice(null);
+                      setLiveError(err?.response?.data?.message || 'Không thể kích hoạt 5 bước thiết lập kho nhanh.');
+                    });
+                }}
+              >
+                Kích hoạt Nhanh 5 Bước Thiết lập Kho
+              </button>
+            </div>
+          </div>
+
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a', marginBottom: 8 }}>
+              Quản lý Gian hàng Sàn TMĐT &amp; Ánh xạ Mã Sản phẩm (Mapping SKU Đa Sàn):
+            </div>
+            <div className="ui-inline-wrap" style={{ gap: 8 }}>
+              <input
+                aria-label="Tên gian hàng sàn"
+                value={shopNameInput}
+                onChange={(e) => setShopNameInput(e.target.value)}
+                placeholder="Tên gian hàng sàn"
+                style={{ minHeight: 36, padding: '4px 10px' }}
+              />
+              <select
+                aria-label="Nền tảng sàn TMĐT"
+                value={shopPlatformInput}
+                onChange={(e) => setShopPlatformInput(e.target.value)}
+                style={{ minHeight: 36, padding: '4px 10px' }}
+              >
+                <option value="SHOPEE">Shopee Mall / Shopee</option>
+                <option value="TIKTOK_SHOP">TikTok Shop</option>
+              </select>
+              <input
+                aria-label="Mã SKU trên sàn"
+                value={marketplaceSkuInput}
+                onChange={(e) => setMarketplaceSkuInput(e.target.value)}
+                placeholder="Mã SKU sàn"
+                style={{ minHeight: 36, padding: '4px 10px' }}
+              />
+              <input
+                aria-label="Mã sản phẩm nội bộ kho"
+                value={internalSkuInput}
+                onChange={(e) => setInternalSkuInput(e.target.value)}
+                placeholder="Mã SP nội bộ"
+                style={{ minHeight: 36, padding: '4px 10px' }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setLiveError('');
+                  setMarketplaceSyncNotice(null);
+                  void Promise.resolve(
+                    apiClient.post('/api/sales-orders/marketplace-shops/sync-inventory', {
+                      shopName: shopNameInput,
+                      platform: shopPlatformInput,
+                      marketplaceSku: marketplaceSkuInput,
+                      internalProductCode: internalSkuInput,
+                      channels: [shopPlatformInput],
+                      safetyBufferPercent: 5,
+                    }),
+                  )
+                    .then(() => {
+                      setMarketplaceSyncNotice(`Đã liên kết gian hàng ${shopNameInput} (${shopPlatformInput}) & ánh xạ mã ${marketplaceSkuInput} → ${internalSkuInput}.`);
+                    })
+                    .catch((err: any) => {
+                      setMarketplaceSyncNotice(null);
+                      setLiveError(err?.response?.data?.message || 'Không thể liên kết gian hàng và ánh xạ SKU sàn.');
+                    });
+                }}
+              >
+                Liên kết Gian hàng &amp; Ánh xạ SKU Sàn
+              </button>
+            </div>
           </div>
 
           <div className="ui-inline-wrap" style={{ gap: 8 }}>
             <button
               type="button"
               onClick={() => {
+                setLiveError('');
+                setMarketplaceSyncNotice(null);
                 void Promise.resolve(
                   apiClient.post('/api/sales-orders/marketplace-shops/sync-inventory', {
                     channels: ['SHOPEE', 'TIKTOK_SHOP'],
@@ -476,8 +644,9 @@ const Dashboard = () => {
                   .then(() => {
                     setMarketplaceSyncNotice('Đã đồng bộ tồn kho an toàn đa gian hàng (Shopee, TikTok Shop • Đệm an toàn chống bán lố 100%).');
                   })
-                  .catch(() => {
-                    setMarketplaceSyncNotice('Đã đồng bộ tồn kho an toàn đa gian hàng (Shopee, TikTok Shop • Đệm an toàn chống bán lố 100%).');
+                  .catch((err: any) => {
+                    setMarketplaceSyncNotice(null);
+                    setLiveError(err?.response?.data?.message || 'Không thể đồng bộ tồn kho an toàn đa gian hàng.');
                   });
               }}
             >
@@ -486,6 +655,8 @@ const Dashboard = () => {
             <button
               type="button"
               onClick={() => {
+                setLiveError('');
+                setCodReconcileNotice(null);
                 void Promise.resolve(
                   apiClient.post('/api/v1/reports/cod-reconciliation/verify', {
                     reconcileMode: 'THREE_WAY_COD_AND_MARKETPLACE_FEE',
@@ -494,8 +665,9 @@ const Dashboard = () => {
                   .then(() => {
                     setCodReconcileNotice('Đã chạy đối soát 3 chiều tiền thu hộ COD & quyết toán phí sàn: Khớp 98,4% vận đơn, phát hiện 3 cảnh báo lệch phí vận chuyển.');
                   })
-                  .catch(() => {
-                    setCodReconcileNotice('Đã chạy đối soát 3 chiều tiền thu hộ COD & quyết toán phí sàn: Khớp 98,4% vận đơn, phát hiện 3 cảnh báo lệch phí vận chuyển.');
+                  .catch((err: any) => {
+                    setCodReconcileNotice(null);
+                    setLiveError(err?.response?.data?.message || 'Không thể chạy đối soát 3 chiều tiền thu hộ COD.');
                   });
               }}
             >
@@ -503,6 +675,11 @@ const Dashboard = () => {
             </button>
           </div>
 
+          {wizardProvisionNotice && (
+            <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
+              {wizardProvisionNotice}
+            </div>
+          )}
           {marketplaceSyncNotice && (
             <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
               {marketplaceSyncNotice}

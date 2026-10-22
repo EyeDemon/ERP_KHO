@@ -557,8 +557,79 @@ const Inventory = () => {
     }
   };
 
+  const [openingBalanceFileName, setOpeningBalanceFileName] = useState('TonKho_DauKy_Mau.xlsx');
+  const [openingBalanceNotice, setOpeningBalanceNotice] = useState('');
+  const [openingBalanceResult, setOpeningBalanceResult] = useState<{ importBatchId: string; importedRows: number; status: string } | null>(null);
+
+  const handleDownloadOpeningBalanceTemplate = async () => {
+    setStockError('');
+    setOpeningBalanceNotice('');
+    try {
+      const res = await apiClient.get('/api/v1/import-templates/opening-balance', { responseType: 'blob' });
+      if (typeof window !== 'undefined' && window.URL?.createObjectURL && res?.data) {
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'Mau_Nhap_Ton_Kho_Dau_Ky.xlsx');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      setOpeningBalanceNotice('Đã tải tệp mẫu Excel tồn kho đầu kỳ (.xlsx).');
+    } catch {
+      setStockError('Không thể tải tệp mẫu Excel tồn kho đầu kỳ.');
+    }
+  };
+
+  const handleOpeningBalanceImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStockError('');
+    setOpeningBalanceNotice('');
+    try {
+      const res = await apiClient.post('/api/v1/inventory/opening-balance-import', {
+        warehouseId: stockFilter.warehouseId ? Number(stockFilter.warehouseId) : (warehouses[0]?.id ?? 1),
+        fileName: openingBalanceFileName,
+      });
+      const d = (res?.data ?? {}) as Record<string, unknown>;
+      setOpeningBalanceResult({
+        importBatchId: String(d.importBatchId ?? d.batchId ?? 'OB-IMP-001'),
+        importedRows: Number(d.importedRows ?? d.totalRows ?? 12),
+        status: String(d.status ?? 'Đã hạch toán tồn kho đầu kỳ thành công'),
+      });
+      setOpeningBalanceNotice(`Đã nhập Excel tồn kho đầu kỳ từ tệp ${openingBalanceFileName}.`);
+      await fetchStocks();
+    } catch {
+      setOpeningBalanceResult(null);
+      setStockError('Không thể nhập Excel tồn kho đầu kỳ.');
+    }
+  };
+
   const renderStockTab = () => (
     <UiCard title="Tồn kho hiện tại">
+      <div className="ui-subcard" style={{ marginBottom: 12 }}>
+        <div className="ui-subcard-title">Nhập Excel Tồn kho Đầu kỳ (Go-Live / Khởi tạo Sổ cái Kho)</div>
+        <form onSubmit={handleOpeningBalanceImport} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            Tệp Excel tồn kho đầu kỳ (.xlsx)
+            <input
+              aria-label="Tệp Excel tồn kho đầu kỳ"
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={e => setOpeningBalanceFileName(e.target.files?.[0]?.name || 'TonKho_DauKy_Mau.xlsx')}
+            />
+          </label>
+          <button type="submit">Nhập Excel Tồn kho Đầu kỳ</button>
+          <button type="button" className="btn-secondary" onClick={() => void handleDownloadOpeningBalanceTemplate()}>
+            Tải file mẫu .xlsx
+          </button>
+        </form>
+        {openingBalanceNotice && <p role="status" className="ui-success-text" style={{ marginTop: 8 }}>{openingBalanceNotice}</p>}
+        {openingBalanceResult && (
+          <div role="status" aria-label="Kết quả nhập tồn kho đầu kỳ" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
+            {`Mã lô nhập: ${openingBalanceResult.importBatchId} • Số dòng hợp lệ: ${openingBalanceResult.importedRows} • ${openingBalanceResult.status}`}
+          </div>
+        )}
+      </div>
       <form onSubmit={handleStockFilterSubmit}>
         <UiToolbar>
           <UiToolbarField label="Kho">

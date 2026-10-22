@@ -158,6 +158,8 @@ const ExportReceipts = () => {
   const [batchAwbNotice, setBatchAwbNotice] = useState<string | null>(null);
   const [handoverManifestNotice, setHandoverManifestNotice] = useState<string | null>(null);
   const [misaEinvoiceNotice, setMisaEinvoiceNotice] = useState<string | null>(null);
+  const [handoverTrackingInput, setHandoverTrackingInput] = useState('GHN84920188, VTP99201122');
+  const [selectedHandoverReceiptIds, setSelectedHandoverReceiptIds] = useState<number[]>([]);
   const [awbLabels, setAwbLabels] = useState<Array<{
     awbCode: string;
     carrierName: string;
@@ -591,8 +593,9 @@ const ExportReceipts = () => {
                       }
                       setBatchAwbNotice('Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z): GHN84920188, VTP99201122.');
                     })
-                    .catch(() => {
-                      setBatchAwbNotice('Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z): GHN84920188, VTP99201122.');
+                    .catch((err) => {
+                      setBatchAwbNotice(null);
+                      setError(safeRequestError(err, 'Không thể kết xuất lô phiếu gửi hàng nhiệt 100x150mm.'));
                     });
                 }}
               >
@@ -602,16 +605,23 @@ const ExportReceipts = () => {
                 type="button"
                 onClick={() => {
                   setError('');
+                  const parsedTracking = handoverTrackingInput
+                    .split(/[,\s;]+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  const trackingList = parsedTracking.length > 0 ? parsedTracking : awbLabels.map((l) => l.awbCode);
                   void Promise.resolve(
                     apiClient.post('/api/ExportReceipts/confirm-carrier-handover', {
-                      trackingNumbers: ['GHN84920188', 'VTP99201122'],
+                      trackingNumbers: trackingList,
+                      exportReceiptIds: selectedHandoverReceiptIds,
                     }),
                   )
                     .then(() => {
-                      setHandoverManifestNotice('Đã chốt Biên bản Bàn giao Bưu tá Điện tử (2 vận đơn: GHN84920188, VTP99201122 • Đã chặn cứng 0 đơn hủy trên sàn).');
+                      setHandoverManifestNotice(`Đã chốt Biên bản Bàn giao Bưu tá Điện tử (${trackingList.length} vận đơn: ${trackingList.join(', ')} • Đã chặn cứng 0 đơn hủy trên sàn).`);
                     })
-                    .catch(() => {
-                      setHandoverManifestNotice('Đã chốt Biên bản Bàn giao Bưu tá Điện tử (2 vận đơn: GHN84920188, VTP99201122 • Đã chặn cứng 0 đơn hủy trên sàn).');
+                    .catch((err) => {
+                      setHandoverManifestNotice(null);
+                      setError(safeRequestError(err, 'Không thể chốt Biên bản Bàn giao Bưu tá Điện tử.'));
                     });
                 }}
               >
@@ -629,13 +639,49 @@ const ExportReceipts = () => {
                     .then(() => {
                       setMisaEinvoiceNotice('Đã kết xuất Bảng kê Excel chuẩn MISA & phát hành Hóa đơn điện tử NĐ 70/2025 (Viettel SInvoice • Mẫu 1/001 • C26TAA).');
                     })
-                    .catch(() => {
-                      setMisaEinvoiceNotice('Đã kết xuất Bảng kê Excel chuẩn MISA & phát hành Hóa đơn điện tử NĐ 70/2025 (Viettel SInvoice • Mẫu 1/001 • C26TAA).');
+                    .catch((err) => {
+                      setMisaEinvoiceNotice(null);
+                      setError(safeRequestError(err, 'Không thể kết xuất Bảng kê Excel chuẩn MISA & Hóa đơn điện tử NĐ 70/2025.'));
                     });
                 }}
               >
                 Kết xuất Bảng kê Excel Chuẩn MISA &amp; Hóa đơn Điện tử NĐ 70/2025
               </button>
+            </div>
+
+            <div className="ui-inline-wrap" style={{ gap: 10, alignItems: 'center' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: '1 1 320px' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>Mã vận đơn bàn giao (AWB):</span>
+                <input
+                  type="search"
+                  aria-label="Nhập hoặc quét mã vận đơn bàn giao"
+                  value={handoverTrackingInput}
+                  onChange={(e) => setHandoverTrackingInput(e.target.value)}
+                  placeholder="Nhập hoặc quét mã vận đơn AWB..."
+                  style={{ minHeight: 36, flex: 1, padding: '4px 10px' }}
+                />
+              </label>
+              {receipts.length > 0 && (
+                <div className="ui-inline-wrap" style={{ gap: 8 }} aria-label="Danh sách chọn phiếu xuất bàn giao">
+                  {receipts.slice(0, 5).map((r) => (
+                    <label key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedHandoverReceiptIds.includes(r.id)}
+                        onChange={(e) => {
+                          setSelectedHandoverReceiptIds((prev) =>
+                            e.target.checked ? [...prev, r.id] : prev.filter((id) => id !== r.id),
+                          );
+                          if (r.trackingNumber && e.target.checked && !handoverTrackingInput.includes(r.trackingNumber)) {
+                            setHandoverTrackingInput((prev) => (prev ? `${prev}, ${r.trackingNumber}` : r.trackingNumber!));
+                          }
+                        }}
+                      />
+                      <span>Phiếu {r.code}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>

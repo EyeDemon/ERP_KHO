@@ -104,4 +104,36 @@ describe('Packing workbench',()=>{
     expect(huSelect.closest('label')?.style.flexDirection).toBe('column');
     expect(huSelect.closest('.ui-subcard')).toBeTruthy();
   });
+
+  it('records packing video evidence with SHA-256 hash and searches video evidence by AWB code',async()=>{
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data:{
+        id:301,
+        sessionId:77,
+        sessionCode:'PACK-2026-0077',
+        awbCode:'SPXVN058291042',
+        durationSeconds:48,
+        fileSizeMb:14.6,
+        sha256Hash:'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        cameraStation:'CAM-PACK-01',
+      }
+    } as never);
+    const view=render(<PackingSessions/>);
+    await view.findByText('PACK-2026-0077');
+
+    fireEvent.click(view.getByRole('button',{name:'Ghi nhận Video Đóng gói & Ký số SHA-256'}));
+    expect(await view.findByText(/Đã lưu bằng chứng video đóng gói cho mã vận đơn SPXVN058291042/)).toBeTruthy();
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/packing-sessions/77/video-evidence',
+      expect.objectContaining({
+        awbCode:'SPXVN058291042',
+        cameraStation:'CAM-PACK-01',
+      }),
+    );
+    expect(view.getByRole('table',{name:'Danh sách bằng chứng video đóng gói'})).toBeTruthy();
+
+    fireEvent.change(view.getByLabelText('Tra cứu video theo mã vận đơn AWB'),{target:{value:'SPXVN058291042'}});
+    fireEvent.click(view.getByRole('button',{name:'Tra cứu Video theo Mã vận đơn (AWB)'}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/packing-sessions/video-evidences',{params:{awbCode:'SPXVN058291042'}}));
+  });
 });

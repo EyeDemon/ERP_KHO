@@ -11,6 +11,7 @@ namespace ERP.Api.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/units")]
     public class UnitsController : ControllerBase
     {
         private readonly IUnitService _unitService;

@@ -44,6 +44,25 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
           },
         } as never;
       }
+      if (url === '/api/v1/reports/owner-gross-profit') {
+        return {
+          data: {
+            netRevenue: 148500000,
+            totalCogs: 92400000,
+            estimatedGrossProfit: 41250000,
+            grossMarginPercent: 27.8,
+          },
+        } as never;
+      }
+      if (url === '/api/v1/finance/cod-reconciliation') {
+        return {
+          data: {
+            pendingCodAmount: 36800000,
+            receivedFromCarrierAmount: 111700000,
+            discrepancyWarningCount: 3,
+          },
+        } as never;
+      }
       return { data: [] } as never;
     });
     post.mockResolvedValue({ data: {} } as never);
@@ -77,6 +96,29 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
     expect(view.getByText('Bước 4: Liên kết gian hàng Shopee / TikTok Shop')).toBeTruthy();
     expect(view.getByText('Bước 5: In gộp tem nhiệt & xuất đơn đầu tiên')).toBeTruthy();
 
+    fireEvent.click(view.getByRole('button', { name: 'Khởi tạo Thuê bao & Kho Mẫu' }));
+    expect(
+      await view.findByText(/Đã khởi tạo thuê bao TENANT-SME-2026 và phân bổ sơ đồ kho mẫu/),
+    ).toBeTruthy();
+    expect(post).toHaveBeenCalledWith(
+      '/api/permissions/saas-tenants/provision',
+      expect.objectContaining({ tenantCode: 'TENANT-SME-2026' }),
+    );
+
+    fireEvent.click(view.getByRole('button', { name: 'Kích hoạt Nhanh 5 Bước Thiết lập Kho' }));
+    expect(
+      await view.findByText(/Đã kích hoạt hoàn tất 5 bước thiết lập kho nhanh/),
+    ).toBeTruthy();
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/reports/onboarding-wizard/quick-start',
+      expect.objectContaining({ tenantCode: 'TENANT-SME-2026' }),
+    );
+
+    fireEvent.click(view.getByRole('button', { name: 'Liên kết Gian hàng & Ánh xạ SKU Sàn' }));
+    expect(
+      await view.findByText(/Đã liên kết gian hàng Gian hàng Shopee Chính hãng WH01/),
+    ).toBeTruthy();
+
     fireEvent.click(view.getByRole('button', { name: 'Đồng bộ Tồn kho An toàn Đa Gian hàng' }));
     expect(
       await view.findByText(
@@ -98,5 +140,21 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       '/api/v1/reports/cod-reconciliation/verify',
       expect.objectContaining({ reconcileMode: 'THREE_WAY_COD_AND_MARKETPLACE_FEE' }),
     );
+  });
+
+  it('shows error alert instead of fake success when marketplace sync or COD reconciliation fails', async () => {
+    const view = render(
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>,
+    );
+    await view.findByText(
+      'Báo cáo Lợi nhuận Gộp Ước tính Chủ Shop, Đối soát Tiền Thu Hộ (COD) & Đồng bộ Tồn kho Đa Sàn',
+    );
+
+    post.mockRejectedValueOnce({ response: { data: { message: 'Lỗi kết nối cổng đồng bộ sàn.' } } });
+    fireEvent.click(view.getByRole('button', { name: 'Đồng bộ Tồn kho An toàn Đa Gian hàng' }));
+    expect((await view.findByRole('alert')).textContent).toContain('Lỗi kết nối cổng đồng bộ sàn.');
+    expect(view.queryByText(/Đã đồng bộ tồn kho an toàn đa gian hàng/)).toBeNull();
   });
 });

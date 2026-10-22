@@ -23,4 +23,10 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
     public bool IsGlobalAdmin => string.Equals(Role, AppRoles.Admin, StringComparison.Ordinal);
     public string Role => httpContextAccessor.HttpContext?.Items[EffectiveRoleKey] as string
         ?? User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+    public bool HasPermission(string permissionCode) =>
+        IsGlobalAdmin
+        || Role is "Admin" or "Manager" or "Accountant"
+        || User.Claims.Any(c => (c.Type is "permission" or "permissions")
+            && string.Equals(c.Value, permissionCode, StringComparison.OrdinalIgnoreCase));
 }

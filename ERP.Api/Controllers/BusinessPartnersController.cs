@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
-[ApiController,Route("api/business-partners"),Authorize]
+[ApiController,Route("api/business-partners"),Route("api/v1/business-partners"),Authorize]
 public sealed class BusinessPartnersController(
     IBusinessPartnerService service,
     ErpKhoDbContext db = null!):ControllerBase

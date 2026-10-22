@@ -254,11 +254,27 @@ namespace ERP.Api.Controllers
 
             int? rmaLedgerTransactionId = null;
             decimal? quarantineStockQuantity = null;
+            int? customerReturnId = null;
             if (_db != null)
             {
                 var actorUserId = int.TryParse(
                     User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                     out var uid) ? uid : (int?)null;
+
+                var targetWhId = warehouseId ?? accessibleIds?.FirstOrDefault() ?? 1;
+                var customerReturn = new ERP.Domain.Entities.CustomerReturn
+                {
+                    ReturnCode = rmaInspectionCode,
+                    WarehouseId = targetWhId,
+                    TrackingNumber = string.IsNullOrWhiteSpace(request?.ReturnReference) ? rmaReferenceCode : request.ReturnReference.Trim(),
+                    ReturnReason = string.IsNullOrWhiteSpace(request?.ReasonCode) ? "RMA_INSPECTION" : request.ReasonCode.Trim(),
+                    Status = "QUARANTINED",
+                    CreatedBy = actorUserId ?? 1,
+                    CreatedAtUtc = now
+                };
+                _db.CustomerReturns.Add(customerReturn);
+                await _db.SaveChangesAsync(cancellationToken);
+                customerReturnId = customerReturn.Id;
 
                 if (request != null && request.Quantity.GetValueOrDefault() > 0m &&
                     (request.ProductId.HasValue || !string.IsNullOrWhiteSpace(request.ProductCode)))
@@ -275,7 +291,6 @@ namespace ERP.Api.Controllers
 
                     if (resolvedProductId.HasValue)
                     {
-                        var targetWhId = warehouseId ?? accessibleIds?.FirstOrDefault() ?? 1;
                         var resolvedLocationId = request.LocationId;
                         if (!resolvedLocationId.HasValue && !string.IsNullOrWhiteSpace(request.LocationCode))
                         {
@@ -353,6 +368,16 @@ namespace ERP.Api.Controllers
                             Note = $"{rmaInspectionCode}: Tiếp nhận hàng trả về (RMA) vào khu vực biệt trữ"
                         };
                         _db.InventoryTransactions.Add(rmaTx);
+                        _db.CustomerReturnLines.Add(new ERP.Domain.Entities.CustomerReturnLine
+                        {
+                            CustomerReturnId = customerReturn.Id,
+                            ProductId = resolvedProductId.Value,
+                            QuarantineLocationId = resolvedLocationId,
+                            TargetLocationId = resolvedLocationId,
+                            Quantity = qty,
+                            Condition = "DEFECTIVE",
+                            Disposition = "PENDING"
+                        });
                         await _db.SaveChangesAsync(cancellationToken);
                         rmaLedgerTransactionId = rmaTx.Id;
                         quarantineStockQuantity = quarantineStock.Quantity;
@@ -365,6 +390,7 @@ namespace ERP.Api.Controllers
                     WarehouseId = warehouseId,
                     Action = "ImportReceipt.RmaIntakeCheck",
                     EntityName = "RmaInspection",
+                    EntityId = customerReturnId,
                     OldValues = "QUARANTINE",
                     NewValues = rmaInspectionCode,
                     Reason = string.IsNullOrWhiteSpace(request?.ReasonCode)
@@ -378,6 +404,7 @@ namespace ERP.Api.Controllers
 
             return Ok(new
             {
+                customerReturnId,
                 rmaCode = $"RMA-{now:yyyyMMdd}-01",
                 rmaInspectionCode,
                 rmaReferenceCode,
@@ -396,6 +423,55 @@ namespace ERP.Api.Controllers
                 statusLabel = "Đã khởi tạo phiếu kiểm định hàng trả về & định tuyến biệt trữ",
                 queuedAtUtc = now
             });
+        }
+
+        [HttpGet("customer-returns")]
+        [PermissionAuthorize(AppPermissions.ReceiptRead)]
+        public async Task<IActionResult> GetCustomerReturns(
+            [FromQuery] int? warehouseId = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (_db == null)
+                return Ok(Array.Empty<object>());
+
+            var query = _db.CustomerReturns.AsNoTracking().Include(r => r.Lines).AsQueryable();
+            if (warehouseId.HasValue)
+                query = query.Where(r => r.WarehouseId == warehouseId.Value);
+
+            var items = await query
+                .OrderByDescending(r => r.Id)
+                .Take(100)
+                .Select(r => new
+                {
+                    r.Id,
+                    r.ReturnCode,
+                    r.WarehouseId,
+                    r.SalesOrderId,
+                    r.ExportReceiptId,
+                    r.TrackingNumber,
+                    r.OrderNumber,
+                    r.ReturnReason,
+                    r.Status,
+                    r.CreatedBy,
+                    r.CreatedAtUtc,
+                    r.CompletedAtUtc,
+                    lines = r.Lines.Select(l => new
+                    {
+                        l.Id,
+                        l.ProductId,
+                        l.QuarantineLocationId,
+                        l.TargetLocationId,
+                        l.Quantity,
+                        l.UnitCost,
+                        l.Condition,
+                        l.Disposition,
+                        l.PackagingProductId,
+                        l.PackagingQuantity
+                    }).ToList()
+                })
+                .ToListAsync(cancellationToken);
+
+            return Ok(items);
         }
 
         public sealed record ExecuteRtvRefurbishRequest(
@@ -676,6 +752,7 @@ namespace ERP.Api.Controllers
             }
 
             var nonAvailableBucketsCount = 0;
+            int? dispositionReturnId = null;
             if (_db != null)
             {
                 var query = _db.InventoryStocks.AsNoTracking()
@@ -686,12 +763,43 @@ namespace ERP.Api.Controllers
                     query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
                 nonAvailableBucketsCount = await query.CountAsync(cancellationToken);
 
+                var dispReturn = new ERP.Domain.Entities.CustomerReturn
+                {
+                    ReturnCode = dispositionCode,
+                    WarehouseId = warehouseId ?? accessibleIds?.FirstOrDefault() ?? 1,
+                    ReturnReason = string.IsNullOrWhiteSpace(request?.ReasonCode) ? rawAction : request.ReasonCode.Trim(),
+                    Status = "COMPLETED",
+                    CreatedBy = actorUserId ?? 1,
+                    CreatedAtUtc = now,
+                    CompletedAtUtc = now
+                };
+                _db.CustomerReturns.Add(dispReturn);
+                await _db.SaveChangesAsync(cancellationToken);
+                dispositionReturnId = dispReturn.Id;
+
+                if (resolvedProductId.HasValue)
+                {
+                    var mutatedQty = request?.Quantity > 0m ? request.Quantity : 1m;
+                    var isRtv = rawAction.StartsWith("RTV", StringComparison.Ordinal) && !rawAction.Contains("REFURBISH", StringComparison.Ordinal);
+                    var isScrap = rawAction.StartsWith("SCRAP", StringComparison.Ordinal);
+                    _db.CustomerReturnLines.Add(new ERP.Domain.Entities.CustomerReturnLine
+                    {
+                        CustomerReturnId = dispReturn.Id,
+                        ProductId = resolvedProductId.Value,
+                        TargetLocationId = resolvedLocationId,
+                        Quantity = mutatedQty,
+                        Condition = isRtv || isScrap ? "DEFECTIVE" : "DAMAGED_BOX",
+                        Disposition = isRtv ? "RTV_VENDOR" : (isScrap ? "SCRAP_DISPOSAL" : "REFURBISH_REPACK")
+                    });
+                }
+
                 _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                 {
                     UserId = actorUserId,
                     WarehouseId = warehouseId,
                     Action = "ImportReceipt.ExecuteRtvRefurbish",
                     EntityName = "RtvRefurbish",
+                    EntityId = dispositionReturnId,
                     NewValues = dispositionCode,
                     Reason = $"Thực thi xử lý hàng biệt trữ ({rawAction})",
                     Result = "Success",
@@ -708,6 +816,7 @@ namespace ERP.Api.Controllers
 
             return Ok(new
             {
+                customerReturnId = dispositionReturnId,
                 dispositionCode,
                 warehouseId,
                 nonAvailableBucketsCount,

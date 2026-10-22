@@ -62,7 +62,7 @@ public sealed class InventoryAvailableStatusQueryTests
             WarehouseId = 1,
             ProductId = 1,
             LocationId = 2,
-            LockType = InventoryLockType.QualityHold,
+            LockType = InventoryLockType.InvestigationHold,
             Reason = "QC_HOLD",
             Status = InventoryLockStatus.Active,
             CreatedAt = DateTime.UtcNow.AddMinutes(-5),

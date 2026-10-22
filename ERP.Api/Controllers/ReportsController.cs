@@ -696,6 +696,8 @@ namespace ERP.Api.Controllers
         [HttpGet("cod-and-settlement-reconciliation")]
         [HttpGet("~/api/v1/reports/cod-reconciliation")]
         [HttpGet("~/api/v1/reports/cod-and-settlement-reconciliation")]
+        [HttpGet("~/api/v1/finance/cod-reconciliation")]
+        [HttpGet("~/api/finance/cod-reconciliation")]
         [PermissionAuthorize(AppPermissions.InventoryRead)]
         public async Task<IActionResult> GetCodAndSettlementReconciliation(
             [FromQuery] int? warehouseId = null,

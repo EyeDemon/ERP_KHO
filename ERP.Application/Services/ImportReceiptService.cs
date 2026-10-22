@@ -110,7 +110,9 @@ namespace ERP.Application.Services
             if (dto.WarehouseId <= 0)
                 throw new BusinessRuleException("Kho nhập không hợp lệ");
 
-            if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(dto.WarehouseId);
+            if (_warehouseAuthorization is not null)
+                await (_warehouseAuthorization.EnsureWarehouseCommandAccessAsync(dto.WarehouseId)
+                    ?? _warehouseAuthorization.EnsureWarehouseAccessAsync(dto.WarehouseId));
 
             var warehouse = await _warehouseRepository.GetByIdAsync(dto.WarehouseId);
             if (warehouse == null)
@@ -263,7 +265,7 @@ namespace ERP.Application.Services
 
         private ImportReceiptDto MapToDto(ImportReceipt receipt)
         {
-            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role is "Admin" or "Manager" or "Accountant";
+            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role is "Admin" or "Manager" or "Accountant" || _currentUser.HasPermission("inventory.cost.read");
             var details = receipt.Details.Select(d =>
             {
                 var factor = d.ConversionFactor > 0 ? d.ConversionFactor : 1m;
@@ -329,9 +331,9 @@ namespace ERP.Application.Services
                     BaseFinalReceivedQuantity = d.BaseFinalReceivedQuantity > 0 ? d.BaseFinalReceivedQuantity : d.BaseReceivedQuantity,
                     UnitPrice = canReadCost ? d.UnitPrice : null,
                     TaxPercent = d.TaxPercent,
-                    LineSubTotal = lineSub,
-                    LineTaxAmount = lineTax,
-                    LineTotal = lineSub + lineTax,
+                    LineSubTotal = canReadCost ? lineSub : null,
+                    LineTaxAmount = canReadCost ? lineTax : null,
+                    LineTotal = canReadCost ? lineSub + lineTax : null,
                     Note = d.Note?.Trim(),
                     RequiresQc = d.RequiresQc,
                     QcState = d.QcState.ToString(),
@@ -344,8 +346,8 @@ namespace ERP.Application.Services
                 };
             }).ToList();
 
-            var subTotal = details.Sum(x => x.LineSubTotal);
-            var taxAmount = details.Sum(x => x.LineTaxAmount);
+            var subTotal = details.Sum(x => x.LineSubTotal ?? 0m);
+            var taxAmount = details.Sum(x => x.LineTaxAmount ?? 0m);
 
             return new ImportReceiptDto
             {
@@ -370,9 +372,9 @@ namespace ERP.Application.Services
                 SupplierCode = (!string.IsNullOrWhiteSpace(receipt.SupplierCodeSnapshot) ? receipt.SupplierCodeSnapshot : receipt.Supplier?.Code)?.Trim(),
                 SupplierName = (!string.IsNullOrWhiteSpace(receipt.SupplierNameSnapshot) ? receipt.SupplierNameSnapshot : receipt.Supplier?.Name)?.Trim(),
                 RequiresQc = receipt.Details.Any(x => x.RequiresQc),
-                SubTotalAmount = subTotal,
-                TaxAmount = taxAmount,
-                TotalAmount = subTotal + taxAmount,
+                SubTotalAmount = canReadCost ? subTotal : null,
+                TaxAmount = canReadCost ? taxAmount : null,
+                TotalAmount = canReadCost ? subTotal + taxAmount : null,
                 RowVersion = receipt.RowVersion is { Length: > 0 } ? Convert.ToBase64String(receipt.RowVersion) : null,
                 Details = details
             };

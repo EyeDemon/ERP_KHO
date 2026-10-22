@@ -11,6 +11,7 @@ namespace ERP.Api.Controllers
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/warehouses")]
     public class WarehousesController : ControllerBase
     {
         private readonly IWarehouseService _warehouseService;
